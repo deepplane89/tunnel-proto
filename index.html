@@ -1,54 +1,476 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Tunnel Proto</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { overflow:hidden; background:#000; touch-action:none; }
-  canvas { display:block; width:100vw; height:100vh; }
-  #hud {
-    position:fixed; top:20px; left:50%; transform:translateX(-50%);
-    color:#fff; font:bold 18px/1 'Segoe UI',sans-serif; text-align:center;
-    pointer-events:none; z-index:10; text-shadow:0 0 10px rgba(0,200,255,0.5);
+  <!--
+     ______                            __
+    / ____/___  ____ ___  ____  __  __/ /____  _____
+   / /   / __ \/ __ `__ \/ __ \/ / / / __/ _ \/ ___/
+  / /___/ /_/ / / / / / / /_/ / /_/ / /_/  __/ /
+  \____/\____/_/ /_/ /_/ .___/\__,_/\__/\___/_/
+                      /_/
+          Created with Perplexity Computer
+          https://www.perplexity.ai/computer
+  -->
+  <meta name="generator" content="Perplexity Computer">
+  <meta name="author" content="Perplexity Computer">
+  <meta property="og:see_also" content="https://www.perplexity.ai/computer">
+  <link rel="author" href="https://www.perplexity.ai/computer">
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <!-- PWA / iOS fullscreen -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#03070f" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+  <title>Jet Horizon</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Zain:wght@300;400;700&family=Silkscreen&family=Audiowide&family=Aldrich&family=Rajdhani:wght@300;400;600;700&family=Permanent+Marker&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/"
+    }
   }
-  #prompt {
-    position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
-    color:rgba(255,255,255,0.6); font:16px/1 'Segoe UI',sans-serif;
-    pointer-events:none; z-index:10; transition:opacity 0.3s;
-  }
-  #death-overlay {
-    position:fixed; inset:0; background:rgba(0,0,0,0.7);
-    display:none; align-items:center; justify-content:center; flex-direction:column;
-    z-index:20; color:#fff; font-family:'Segoe UI',sans-serif;
-  }
-  #death-overlay.show { display:flex; }
-  #death-overlay h2 { font-size:28px; margin-bottom:12px; }
-  #death-overlay p { font-size:16px; opacity:0.7; }
-  #death-overlay button {
-    margin-top:24px; padding:12px 32px; font-size:16px; font-weight:bold;
-    background:rgba(0,200,255,0.2); color:#0cf; border:1px solid #0cf;
-    border-radius:8px; cursor:pointer;
-  }
-</style>
+  </script>
 </head>
 <body>
-<div id="hud">TUNNEL PROTO</div>
-<div id="prompt">Swipe or arrow keys to turn</div>
-<div id="death-overlay">
-  <h2>CRASHED</h2>
-  <p>Wrong turn or too slow</p>
-  <button onclick="restartGame()">RETRY</button>
+
+<!-- ── TITLE SCREEN ─────────────────────────────── -->
+<div id="title-screen" class="overlay">
+  <!-- Top HUD — Row 1: level + icons  Row 2: currencies -->
+  <div class="title-top-bar">
+    <div class="title-hud-row1">
+      <div class="title-level-bar">
+        <div class="title-level-badge">LV <span id="title-level-num">1</span></div>
+        <div class="title-xp-bar-wrap">
+          <div class="title-xp-bar-fill" id="title-xp-fill" style="width: 0%"></div>
+          <div class="title-xp-bar-glow" id="title-xp-glow"></div>
+        </div>
+      </div>
+      <div class="title-icons-bar">
+        <button id="streak-btn" class="streak-icon-btn" aria-label="Daily Streak" onclick="openStreak()"><img src="flame-icon.png" style="width:24px;height:24px;object-fit:contain;"><span id="streak-day-label" class="streak-day-label"></span></button>
+        <button id="missions-btn" class="missions-icon-btn" aria-label="Missions" onclick="openMissions()"><img src="mission-icon.png" style="width:24px;height:24px;object-fit:contain;"></button>
+        <button id="lb-icon-btn" class="lb-icon-btn" aria-label="Leaderboard" onclick="toggleLeaderboard()"><img src="trophy-icon.png" style="width:24px;height:24px;object-fit:contain;"></button>
+        <button id="settings-btn" class="settings-btn" aria-label="Settings"><img src="gear-icon.png" style="width:24px;height:24px;object-fit:contain;"></button>
+      </div>
+    </div>
+    <div class="title-hud-row2">
+      <div class="title-coin-display">
+        <img src="single-coin-icon.png" class="hud-coin-icon" style="width:20px;height:20px;object-fit:contain;vertical-align:middle;">
+        <span id="title-coin-count">0</span>
+      </div>
+      <div class="hud-currency-divider"></div>
+      <div class="title-fuelcell-display">
+        <img src="fuelcell-icon-new.png" class="fuelcell-icon" style="width:20px;height:20px;object-fit:contain;vertical-align:middle;">
+        <span id="title-fuelcell-count">0</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="title-content">
+    <h1 class="game-title" style="position:relative;z-index:0;transform:translateY(40px);font-size:clamp(68px,15.3vw,144px);">JET<br>HORIZON</h1>
+
+    <!-- Ship showcase area — arrows flank the 3D ship -->
+    <div class="ship-showcase">
+      <button id="skin-prev" class="skin-nav skin-nav-left" aria-label="Previous skin">‹</button>
+      <div class="ship-showcase-center">
+        <!-- title-ship-canvas inserted here by JS -->
+        <img src="platform-pad.png" class="platform-pad" alt="" style="bottom:-19px;left:calc(50% + 1px);width:201px;" />
+      </div>
+      <button id="skin-next" class="skin-nav skin-nav-right" aria-label="Next skin">›</button>
+    </div>
+
+    <!-- Skin name + buy action below ship -->
+    <div id="skin-viewer" class="skin-viewer">
+      <div class="skin-viewer-info">
+        <div id="skin-viewer-label" class="skin-viewer-label" style="transform:translate(9px,-99px);">RUNNER</div>
+      </div>
+      <div id="skin-viewer-action" class="skin-viewer-action"></div>
+    </div>
+
+    <!-- Mode buttons -->
+    <div class="title-mode-buttons">
+      <button id="start-btn" class="btn-mode btn-campaign">CAMPAIGN</button>
+      <button id="death-run-btn" class="btn-mode btn-deathrun">DEATH RUN</button>
+      <button id="shop-btn" class="btn-mode btn-shop" onclick="openShop()"><img src="shop-icon.png" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:6px;">SHOP</button>
+    </div>
+
+    <!-- Layout tuner (triple-tap RUNNER label to toggle) -->
+    <div id="layout-tuner" class="layout-tuner hidden">
+      <div class="tuner-title">LAYOUT TUNER</div>
+      <label>Ship Y <input type="range" id="tune-ship-y" min="-100" max="100" value="0"><span id="val-ship-y">0</span></label>
+      <label>Ship X <input type="range" id="tune-ship-x" min="-100" max="100" value="0"><span id="val-ship-x">0</span></label>
+      <label>Plat Y <input type="range" id="tune-plat-y" min="-100" max="100" value="0"><span id="val-plat-y">0</span></label>
+      <label>Plat X <input type="range" id="tune-plat-x" min="-100" max="100" value="0"><span id="val-plat-x">0</span></label>
+      <label>Plat Size <input type="range" id="tune-plat-size" min="80" max="300" value="180"><span id="val-plat-size">180</span></label>
+      <label>Label Y <input type="range" id="tune-label-y" min="-120" max="60" value="-30"><span id="val-label-y">-30</span></label>
+      <label>Label X <input type="range" id="tune-label-x" min="-100" max="100" value="0"><span id="val-label-x">0</span></label>
+    </div>
+
+    <!-- Admin panel (triple-tap title to show) -->
+    <div id="admin-panel" class="admin-panel hidden">
+      <div class="admin-label">ADMIN</div>
+      <div class="admin-level-btns">
+        <button class="level-btn" data-level="0">L1</button>
+        <button class="level-btn" data-level="1">L2</button>
+        <button class="level-btn" data-level="2">L3</button>
+        <button class="level-btn" data-level="3">L4</button>
+        <button class="level-btn" data-level="4">L5</button>
+      </div>
+      <div class="perf-toggle-wrap">
+        <span class="perf-label">FPS COUNTER</span>
+        <button id="fps-toggle" class="perf-toggle" aria-label="Toggle FPS counter" aria-pressed="false">
+          <span class="perf-knob"></span>
+        </button>
+      </div>
+      <div class="perf-toggle-wrap">
+        <span class="perf-label">PERF MODE</span>
+        <button id="perf-toggle" class="perf-toggle" aria-label="Toggle performance mode" aria-pressed="false">
+          <span class="perf-knob"></span>
+        </button>
+      </div>
+      <div class="admin-slider-wrap">
+        <span class="perf-label">SHIP Z: <span id="ship-z-val">4.5</span></span>
+        <input type="range" id="ship-z-slider" min="1" max="7" step="0.1" value="4.5" class="vol-slider" style="width:100%">
+      </div>
+      <div class="admin-slider-wrap">
+        <span class="perf-label">CAM PITCH: <span id="cam-pitch-val">2.8</span></span>
+        <input type="range" id="cam-pitch-slider" min="0.5" max="5.0" step="0.1" value="2.8" class="vol-slider" style="width:100%">
+      </div>
+      <div class="admin-slider-wrap">
+        <span class="perf-label">SHIP Y: <span id="ship-y-val">0.28</span></span>
+        <input type="range" id="ship-y-slider" min="-0.5" max="2.0" step="0.02" value="0.28" class="vol-slider" style="width:100%">
+      </div>
+      <button id="laser-test-mode-btn" style="width:100%;padding:8px;margin-top:8px;background:#112;color:#4af;border:1px solid #4af;border-radius:4px;font-family:Audiowide,sans-serif;font-size:12px;cursor:pointer;letter-spacing:1px">LASER TEST MODE</button>
+    </div>
+  </div>
 </div>
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-  }
-}
+
+<!-- ── GAME OVER SCREEN ──────────────────────────── -->
+<div id="gameover-screen" class="overlay hidden">
+  <div class="gameover-content">
+    <img src="gameover-icon.png" class="go-anim" style="width:64px;height:64px;object-fit:contain;--d:0;">
+    <h2 class="gameover-title go-anim" style="--d:0">GAME OVER</h2>
+    <div class="go-hero go-anim" style="--d:1">
+      <span class="go-hero-label">SCORE</span>
+      <span class="go-hero-val" id="go-score">0</span>
+    </div>
+    <div class="go-best go-anim" id="go-best-wrap" style="--d:2">
+      <span class="go-best-label">BEST</span>
+      <span class="go-best-val" id="go-best">0</span>
+    </div>
+    <!-- Coins earned (single line) -->
+    <div class="go-coins-line go-anim" style="--d:2.5">
+      <img src="single-coin-icon.png" class="hud-coin-icon" style="width:24px;height:24px;object-fit:contain;vertical-align:middle;"> <span class="go-coins-total-val" id="go-coins-total">+0</span>
+    </div>
+    <!-- Level bar -->
+    <div class="go-level-section go-anim" style="--d:3">
+      <div class="go-level-header">
+        <span id="go-level-label">LV 1</span>
+      </div>
+      <div class="go-xp-bar-wrap">
+        <div class="go-xp-bar-fill" id="go-xp-fill-end" style="width: 0%"></div>
+      </div>
+    </div>
+    <div class="go-levelup go-anim hidden" id="go-levelup-wrap" style="--d:3.3">
+      <div class="go-levelup-text">LEVEL 2</div>
+      <div class="go-levelup-unlock hidden"></div>
+    </div>
+    <!-- Ship Handling Bar -->
+    <div class="go-handling-section go-anim" style="--d:3.5">
+      <div class="go-handling-header">
+        <span id="go-handling-label">HANDLING</span>
+        <span id="go-handling-tier"></span>
+      </div>
+      <div class="go-handling-bar-wrap">
+        <div class="go-handling-bar-fill" id="go-handling-fill" style="width: 0%"></div>
+      </div>
+    </div>
+    <div class="go-handling-upgrade go-anim hidden" id="go-handling-upgrade-wrap" style="--d:3.8">
+      <div class="go-handling-upgrade-text"></div>
+    </div>
+    <!-- Repair Ship button -->
+    <div class="go-saveme go-anim" id="go-saveme-wrap" style="--d:4">
+      <button id="saveme-btn" class="btn-space btn-saveme">
+        <img src="fuelcell-icon-new.png" class="fuelcell-icon" style="width:24px;height:24px;object-fit:contain;vertical-align:middle;">
+        <span class="saveme-text">REPAIR SHIP</span>
+        <span class="saveme-cost" id="saveme-cost"><img src="fuelcell-icon-new.png" class="fuelcell-icon" style="width:24px;height:24px;object-fit:contain;vertical-align:middle;"> 50</span>
+      </button>
+    </div>
+    <div class="score-submit go-anim" id="score-submit" style="--d:4.5">
+      <input type="text" id="player-name" class="player-name-input" placeholder="YOUR NAME" maxlength="12" autocomplete="off" spellcheck="false" />
+      <button id="submit-confirm-btn" class="btn-space btn-submit-go">→</button>
+    </div>
+    <div class="go-actions go-anim" style="--d:5">
+      <button id="restart-btn" class="btn-space btn-retry">TRY AGAIN</button>
+      <button id="gameover-exit-btn" class="btn-space btn-exit">EXIT</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── REWARD WHEEL OVERLAY ──────────────────────────── -->
+<div id="reward-wheel-overlay" class="overlay hidden" style="z-index:150;">
+  <div class="wheel-container">
+    <div class="wheel-title">SIGNAL SALVAGE</div>
+    <div class="wheel-wrapper">
+      <div class="wheel-pointer">▼</div>
+      <div class="wheel-disc" id="wheel-disc">
+        <div class="wheel-segment" data-idx="0"><span class="ws-icon" style="color:#ffcc00">⬡⬡</span><span class="ws-label">+25</span></div>
+        <div class="wheel-segment" data-idx="1"><span class="ws-icon" style="color:#ffcc00">⬡⬡⬡</span><span class="ws-label">+75</span></div>
+        <div class="wheel-segment" data-idx="2"><span class="ws-icon" style="color:#4488ff">⚡</span><span class="ws-label">+15</span></div>
+        <div class="wheel-segment" data-idx="3"><span class="ws-icon" style="color:#4488ff">⚡⚡</span><span class="ws-label">+40</span></div>
+        <div class="wheel-segment" data-idx="4"><span class="ws-icon" style="color:#00ff88">🚀</span><span class="ws-label">FREE</span></div>
+        <div class="wheel-segment" data-idx="5"><span class="ws-icon ws-icon-2x" style="color:#ff4444">2X</span><span class="ws-label">NEXT RUN</span></div>
+      </div>
+    </div>
+    <div class="wheel-result hidden" id="wheel-result"></div>
+    <div class="wheel-tap-hint" id="wheel-tap-hint">TAP TO SKIP</div>
+  </div>
+</div>
+
+<!-- ── SHOP OVERLAY ────────────────────────────────── -->
+<div id="shop-overlay" class="overlay hidden">
+  <div class="shop-content">
+    <div class="shop-header">
+      <div style="display:flex;align-items:center;gap:8px;"><img src="shop-icon.png" style="width:40px;height:40px;object-fit:contain;"><h2 class="shop-title">SHOP</h2></div>
+      <div class="shop-coins"><img src="single-coin-icon.png" class="hud-coin-icon" style="width:24px;height:24px;object-fit:contain;vertical-align:middle;"> <span id="shop-coin-count">0</span></div>
+    </div>
+    <div class="shop-tab-content" id="shop-tab-powerups">
+      <div class="shop-cards" id="shop-powerup-cards"></div>
+    </div>
+    <!-- Detail view (hidden by default) -->
+    <div class="shop-detail hidden" id="shop-detail">
+      <button class="shop-back-btn" onclick="closeShopDetail()">&#9668; BACK</button>
+      <div id="shop-detail-content"></div>
+    </div>
+    <button class="btn-space btn-exit shop-close-btn" onclick="closeShop()">CLOSE</button>
+  </div>
+</div>
+
+<!-- ── MISSIONS OVERLAY ─────────────────────────────── -->
+<div id="missions-overlay" class="overlay hidden">
+  <div class="missions-content">
+    <div class="missions-header">
+      <h2 class="missions-title">MISSIONS</h2>
+      <div class="missions-fuel"><img src="fuelcell-icon-new.png" class="fuelcell-icon" style="width:24px;height:24px;object-fit:contain;vertical-align:middle;"> <span id="missions-fuel-count">0</span></div>
+    </div>
+    <div class="missions-ladder" id="missions-ladder"></div>
+    <button class="btn-space btn-exit missions-close-btn" onclick="closeMissions()">CLOSE</button>
+  </div>
+</div>
+
+<!-- ── DAILY STREAK OVERLAY ─────────────────────── -->
+<div id="streak-overlay" class="streak-overlay hidden">
+  <div class="streak-panel">
+    <button class="streak-close" id="streak-close-btn">&times;</button>
+    <div class="streak-circles" id="streak-circles"></div>
+  </div>
+</div>
+
+<!-- ── IN-RUN MISSION TOAST ───────────────────────── -->
+<div id="mission-toast" class="mission-toast"></div>
+
+<!-- ── LEVEL BANNER ──────────────────────────────── -->
+<div id="level-banner" class="level-banner hidden">
+  <span id="level-banner-text">LEVEL 2 — ULTRAVIOLET</span>
+</div>
+
+<!-- ── HUD ──────────────────────────────────────── -->
+<div id="fps-overlay" class="fps-overlay hidden">0 FPS</div>
+<div id="hud" class="hud hidden">
+  <div class="hud-left">
+    <div class="hud-label">SCORE</div>
+    <div id="hud-score" class="hud-value">0</div>
+    <div id="hud-multiplier" class="hud-mult hidden">✕2</div>
+    <div class="hud-coins-inline">
+      <img src="single-coin-icon.png" class="hud-coin-icon" style="width:24px;height:24px;object-fit:contain;vertical-align:middle;"><span id="hud-coins" class="hud-coin-val">0</span>
+    </div>
+  </div>
+  <!-- LEVEL and SPEED removed from HUD -->
+  <div id="hud-level" style="display:none">1</div>
+  <div id="hud-speed" style="display:none">1.0x</div>
+
+  <!-- Active power-up tray -->
+  <div id="powerup-tray" class="powerup-tray"></div>
+
+</div>
+
+<!-- Leaderboard overlay (button moved to title-top-bar) -->
+<div id="lb-overlay" class="lb-overlay hidden">
+  <div class="lb-overlay-header">
+    <span>TOP PILOTS</span>
+    <button class="lb-overlay-close" onclick="toggleLeaderboard()">✕</button>
+  </div>
+  <div class="leaderboard-list" id="leaderboard-list"></div>
+</div>
+
+<!-- Settings button moved to title-top-bar -->
+
+<!-- Settings panel (shared by title + pause) -->
+<div id="settings-overlay" class="settings-overlay hidden">
+  <div class="settings-panel">
+    <div class="settings-header">
+      <span>SETTINGS</span>
+      <button id="settings-close" class="settings-close">✕</button>
+    </div>
+    <div class="settings-row">
+      <label>Music</label>
+      <input type="range" id="vol-music" min="0" max="100" value="80" class="vol-slider">
+      <button id="mute-music" class="mute-toggle">♪</button>
+    </div>
+    <div class="settings-row">
+      <label>SFX</label>
+      <input type="range" id="vol-sfx" min="0" max="100" value="80" class="vol-slider">
+      <button id="mute-sfx" class="mute-toggle">♪</button>
+    </div>
+    <div class="settings-row">
+      <label>Haptics</label>
+      <button id="haptic-toggle" class="toggle-btn on">ON</button>
+    </div>
+
+    <div class="settings-row">
+      <label>Controls</label>
+      <button id="show-tutorial-btn" class="toggle-btn">HOW TO PLAY</button>
+    </div>
+    <div class="settings-row">
+      <label>Ship Z</label>
+      <input type="range" id="ship-z-settings" min="1" max="7" step="0.1" value="4.5" class="vol-slider">
+      <span id="ship-z-settings-val" style="color:rgba(255,255,255,0.5);font-size:11px;width:28px;text-align:right">4.5</span>
+    </div>
+    <div class="settings-row">
+      <label>Ship Y</label>
+      <input type="range" id="ship-y-settings" min="-0.5" max="2.0" step="0.02" value="0.28" class="vol-slider">
+      <span id="ship-y-settings-val" style="color:rgba(255,255,255,0.5);font-size:11px;width:28px;text-align:right">0.28</span>
+    </div>
+    <div class="settings-footer">
+      <a href="./privacy.html" target="_blank" class="settings-link">Privacy Policy</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── PAUSE OVERLAY ─────────────────────────────── -->
+<div id="pause-overlay" class="pause-overlay hidden">
+  <div class="pause-content">
+    <div class="pause-title">PAUSED</div>
+    <div class="pause-actions">
+      <button class="btn-space" onclick="playResumeSound(); togglePause()">CONTINUE</button>
+      <button class="btn-space" onclick="playExitSound(); returnToTitle()">EXIT</button>
+    </div>
+    <button id="pause-settings-btn" class="pause-gear" aria-label="Settings">⚙</button>
+  </div>
+</div>
+
+<!-- Onboarding overlay (first play only) -->
+<div id="onboarding-overlay" class="onboarding-overlay hidden">
+  <div class="onboarding-content">
+    <div class="onboarding-title">HOW TO PLAY</div>
+    <div class="onboarding-steps">
+      <div class="onboard-step">
+        <div class="onboard-icon">◁ ▷</div>
+        <div class="onboard-text">Tap left / right to steer<br><span class="onboard-sub">swipe up to roll</span></div>
+      </div>
+      <div class="onboard-step">
+        <div class="onboard-icon">△</div>
+        <div class="onboard-text">Swipe up to barrel roll<br><span class="onboard-sub">slip through tight gaps sideways</span></div>
+      </div>
+      <div class="onboard-step">
+        <div class="onboard-icon">⬡</div>
+        <div class="onboard-text">Collect coins to unlock new ships</div>
+      </div>
+    </div>
+    <button id="onboarding-dismiss" class="btn-mode btn-campaign" style="margin-top:18px;">GOT IT</button>
+  </div>
+</div>
+
+<!-- ── DEBUG OVERLAY ─────────────────────────────── -->
+<div id="debug-overlay" class="debug-overlay"></div>
+
+<!-- L1 cinematic intro overlay -->
+<div id="intro-overlay" style="display:none;"></div>
+
+<!-- ── BANNER TOAST CONTAINER ── -->
+<div id="banner-container" class="banner-container"></div>
+
+<!-- ── HEAD START PROMPT (shown briefly at run start) ── -->
+<div id="headstart-overlay" class="headstart-overlay" style="display:none;">
+  <div class="hs-buttons">
+    <button id="hs-basic-btn" class="hs-btn" style="display:none;"></button>
+    <button id="hs-mega-btn" class="hs-btn hs-mega" style="display:none;"></button>
+  </div>
+</div>
+
+<audio id="bgm" src="./spacewalk.mp3" loop preload="auto"></audio>
+<audio id="start-sound" src="./start.mp3" preload="auto"></audio>
+<audio id="crash-sound" src="./crash.mp3" preload="auto"></audio>
+
+<audio id="exit-sound" src="./exit.mp3" preload="auto"></audio>
+
+<audio id="title-music" src="./title.mp3" loop preload="auto"></audio>
+<audio id="l3-music" src="./l3music.mp3" loop preload="auto"></audio>
+<audio id="l4-music" src="./l4music.mp3" loop preload="auto"></audio>
+<audio id="lake-music" src="./lake.mp3" loop preload="auto"></audio>
+<audio id="wind-loop" src="./wind.mp3" loop preload="auto"></audio>
+<audio id="nearmiss-sfx" src="./nearmiss.mp3" preload="auto"></audio>
+<audio id="whoosh1" src="./whoosh2.mp3" preload="auto"></audio>
+<audio id="whoosh-release" src="./whoosh-release.mp3" preload="auto"></audio>
+<audio id="engine-start" src="./engine-start.mp3" preload="auto"></audio>
+<audio id="engine-roar" src="./engine-roar.mp3" preload="auto"></audio>
+<canvas id="game-canvas"></canvas>
+
+<!-- ── TOUCH CONTROLS ──────────────────────── -->
+<div id="touch-controls" class="touch-controls hidden">
+  <!-- Left zone: steer left -->
+  <div class="touch-left" id="touch-left"></div>
+  <!-- Right zone: steer right -->
+  <div class="touch-right" id="touch-right"></div>
+  <!-- Joystick removed — steer zones only -->
+  <div id="joystick-zone" style="display:none">
+  </div>
+  <!-- Pause button -->
+  <div class="touch-pause" id="touch-pause">❚❚</div>
+</div>
+
+<!-- ── iOS ADD TO HOME SCREEN NUDGE ─────────────────────────────────────── -->
+<div id="a2hs-banner" class="a2hs-banner hidden">
+  <div class="a2hs-content">
+    <span class="a2hs-text">For fullscreen, tap <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin:0 2px"><path d="M8 1v9M4.5 4.5L8 1l3.5 3.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 10v4h12v-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> then <strong>Add to Home Screen</strong></span>
+    <span class="a2hs-tap-hint">tap to dismiss</span>
+  </div>
+</div>
+
+<footer style="display:none">
+  <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer">Created with Perplexity Computer</a>
+</footer>
+
+<script>
+(function(){
+  var m={};
+  window._LS={getItem:function(k){return m[k]||null},setItem:function(k,v){m[k]=String(v)},removeItem:function(k){delete m[k]},clear:function(){for(var k in m)delete m[k]}};
+})();
 </script>
-<script type="module" src="tunnel.js"></script>
+<!-- Skin Tuner (outside title-screen so it stays visible) -->
+<div id="skin-tuner" style="display:none;position:fixed;top:0;right:0;width:300px;height:100%;background:rgba(0,0,0,0.92);overflow-y:auto;z-index:9999;font-family:monospace;font-size:11px;color:#ccc;padding:10px;box-sizing:border-box;-webkit-overflow-scrolling:touch;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <span style="font-size:14px;font-weight:bold;color:#0af;">SKIN TUNER</span>
+    <button onclick="toggleSkinTuner()" style="background:none;border:1px solid #555;color:#fff;padding:2px 8px;cursor:pointer;">X</button>
+  </div>
+  <div id="skin-tuner-current" style="color:#ff0;margin-bottom:8px;"></div>
+  <div id="skin-tuner-sliders"></div>
+  <button id="skin-tuner-dump" style="margin-top:12px;background:#0af;color:#000;border:none;padding:6px 12px;cursor:pointer;font-family:monospace;font-size:11px;width:100%;">DUMP VALUES TO CONSOLE</button>
+</div>
+<button id="skin-tuner-btn" onclick="toggleSkinTuner()" style="display:none;position:fixed;top:10px;right:10px;z-index:9998;background:rgba(0,170,255,0.3);border:1px solid #0af;color:#0af;padding:4px 10px;font-family:monospace;font-size:11px;cursor:pointer;">TUNER</button>
+
+<script type="module" src="./game.js?v=1774150200"></script>
 </body>
 </html>
