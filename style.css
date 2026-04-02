@@ -4187,10 +4187,10 @@ html, body {
 /* ── Mode buttons — thicker borders, inner glow, premium feel ── */
 .btn-mode {
   border-width: 2px;
-  font-size: 15px;
-  padding: 13px 0;
-  letter-spacing: 3px;
-  max-width: 280px;
+  font-size: 18px;
+  padding: 18px 0;
+  letter-spacing: 4px;
+  max-width: 320px;
 }
 .btn-campaign {
   border-color: #00eeff;
@@ -4200,7 +4200,7 @@ html, body {
 .btn-deathrun {
   border-color: #ff1a8c;
   color: #ff1a8c;
-  box-shadow: inset 0 0 12px rgba(255,26,140,0.08), 0 0 8px rgba(255,26,140,0.06);
+  box-shadow: inset 0 0 14px rgba(255,26,140,0.10), 0 0 12px rgba(255,26,140,0.10);
 }
 .btn-wormhole {
   border-color: #00ffcc;
@@ -4216,9 +4216,15 @@ html, body {
   background: rgba(212,148,58,0.12);
 }
 .title-mode-buttons {
+  position: fixed;
+  bottom: max(env(safe-area-inset-bottom, 32px), 32px);
+  left: 50%;
+  transform: translateX(-50%);
   gap: 10px;
-  margin: 8px 0 6px;
-  max-width: 280px;
+  margin: 0;
+  max-width: 320px;
+  width: 80%;
+  z-index: 101;
 }
 
 /* ── Skin viewer label ── */
@@ -4232,8 +4238,8 @@ html, body {
   .game-title { font-size: clamp(40px, 9vw, 72px); }
   #title-ship-canvas { width: 160px; height: 140px; }
   .ship-showcase { min-height: 90px; }
-  .btn-mode { padding: 11px 0; font-size: 14px; }
-  .title-mode-buttons { gap: 8px; margin: 4px 0; }
+  .btn-mode { padding: 14px 0; font-size: 16px; }
+  .title-mode-buttons { gap: 8px; bottom: max(env(safe-area-inset-bottom, 20px), 20px); }
 }
 
 @media (max-height: 580px) {
