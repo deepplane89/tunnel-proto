@@ -75,7 +75,6 @@
         <img src="fuelcell-icon-new.png" class="fuelcell-icon" style="width:20px;height:20px;object-fit:contain;vertical-align:middle;">
         <span id="title-fuelcell-count">0</span>
       </div>
-      <button onclick="openShop()" style="background:none;border:1px solid rgba(255,255,255,0.3);border-radius:50%;width:26px;height:26px;color:#fff;font-size:18px;line-height:24px;text-align:center;cursor:pointer;margin-left:8px;padding:0;">+</button>
     </div>
   </div>
 
@@ -85,7 +84,7 @@
     <!-- Ship showcase area — arrows flank the 3D ship -->
     <div class="ship-showcase">
       <button id="skin-prev" class="skin-nav skin-nav-left" aria-label="Previous skin">‹</button>
-      <div class="ship-showcase-center">
+      <div class="ship-showcase-center" onclick="if(typeof openShop==='function')openShop()" style="cursor:pointer;">
         <!-- title-ship-canvas inserted here by JS -->
         <img src="platform-pad.png" class="platform-pad" alt="" style="bottom:9px;left:calc(50% + 1px);width:180px;" />
       </div>
@@ -112,6 +111,7 @@
       <div class="tuner-title">LAYOUT TUNER</div>
       <label>Ship Y <input type="range" id="tune-ship-y" min="-100" max="100" value="0"><span id="val-ship-y">0</span></label>
       <label>Ship X <input type="range" id="tune-ship-x" min="-100" max="100" value="0"><span id="val-ship-x">0</span></label>
+      <label>Ship Size <input type="range" id="tune-ship-size" min="50" max="200" value="100"><span id="val-ship-size">100</span></label>
       <label>Plat Y <input type="range" id="tune-plat-y" min="-100" max="100" value="0"><span id="val-plat-y">0</span></label>
       <label>Plat X <input type="range" id="tune-plat-x" min="-100" max="100" value="0"><span id="val-plat-x">0</span></label>
       <label>Plat Size <input type="range" id="tune-plat-size" min="80" max="300" value="180"><span id="val-plat-size">180</span></label>
