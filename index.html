@@ -89,7 +89,7 @@
     <!-- Ship showcase area — arrows flank the 3D ship -->
     <div class="ship-showcase">
       <button id="skin-prev" class="skin-nav skin-nav-left" aria-label="Previous skin">‹</button>
-      <div class="ship-showcase-center">
+      <div class="ship-showcase-center" onclick="if(typeof openShop==='function')openShop()" style="cursor:pointer;">
         <!-- title-ship-canvas inserted here by JS -->
         <img src="platform-pad.png" class="platform-pad" alt="" style="bottom:9px;left:calc(50% + 1px);width:180px;cursor:pointer;" onclick="if(typeof openShop==='function')openShop()" />
       </div>
