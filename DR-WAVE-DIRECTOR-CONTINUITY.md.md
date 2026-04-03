@@ -505,6 +505,75 @@ Spawner (`spawnObstacles()`) reads `state._seqSpawnMode` to determine obstacle t
 - Landscape gameplay tuner IIFE — deleted
 - All `setTimeout` calls to deleted functions cleaned up
 
+#### Bugs Fixed Late in Session
+- **L4/L5 corridor double row increment**: `spawnL4CorridorRow()` and `spawnL5CorridorRow()` increment row counter internally, but DR spawn loop was ALSO incrementing — corridors ended at half length. Fixed by removing DR loop increment for L4 and L5. L3 was correct (no external increment).
+- **`tp` referenced before declaration**: In `_drSequencerTick`, the vibe transition check used `tp` (a `const` declared later). Changed to `stage.type`.
+- **Wobble not firing**: `currentLevelIdx` wasn't set during corridor visual-only vibe transitions (`applyDeathRunVibeTransition` doesn't set it). Wobble requires `currentLevelIdx >= 1`. Fixed by adding `state.currentLevelIdx = toVibe.sunShader` in corridor vibe path.
+- **DECEL coupled to physTier**: Higher physTier meant higher DECEL_BASE, killing the icy ship feel. Decoupled: DECEL_BASE fixed at 11.6 (tier-0 value). ACCEL and MAX_VEL still scale with tier. Handling upgrades still control decel via drift.
+- **Bob glitch**: `_jumpActive` threshold was 0.02, bob amplitude could exceed it, triggering jump system. Raised to 0.08.
+- **`_hoverBaseY` and `_camLookYOffset` used before `let` declaration**: Init code at top of file referenced variables declared later. Fixed by using hardcoded values at init, applying tuner defaults on game start.
+
+#### Ship Flight Tuner (T key during gameplay)
+Added to existing T-key panel:
+- ship Y (-1.0 to 3.0), ship Z, ship scale
+- rotX offset, rotZ offset (layer on top of gameplay animations)
+- cam lookY offset, cam pivotY offset, cam pivotZ offset (layer on top of base camera)
+- Yaw: `_yawMax=0.06`, `_yawSmoothing=4` (ship nose turns into steering direction)
+- Bank: `_bankMax=0.05`, `_bankSmoothing=8` (now tunable, was hardcoded 0.022)
+- Wobble: `_wobbleMaxAmp=0.22`, `_wobbleDamping=4` (now tunable)
+- Bob: `_bobAmplitude=0.03`, `_bobFrequency=0.60` (was 0/disabled)
+- Bob fixed from additive `+=` to absolute offset from `_hoverBaseY`
+
+#### Current Ship Defaults (from tuner screenshot)
+- `_hoverBaseY = 1.71` (was 0.28)
+- `_bobAmplitude = 0.03`, `_bobFrequency = 0.60`
+- `_shipRotXOffset = 0.09` (slight nose-up tilt)
+- `_bankMax = 0.05`
+- `_camLookYOffset = 0.80`, `_camPivotYOffset = 0.10`
+- Init position uses hardcoded 0.28 (can't reference `_hoverBaseY` before declaration)
+- Game start / restart applies `_hoverBaseY` and `_camLookYOffset`
+
+#### Escape Key
+- Escape now toggles pause (was returning to title screen)
+
+#### Shop
+- Ship shop HUD button click area restored on `.ship-showcase-center` (canvas transform broke hit area)
+- Ship handling progress bar added to shop (current tier, %, next unlock)
+- Platform pad onclick for shop (CSS `pointer-events: none` blocks it though — only canvas click works)
+
+#### Analytics
+- Upstash env vars added to Vercel (copied from jet-slide)
+- Session data includes `seqStage` and `seqStageIdx` on death
+- Each event includes `seq` (stage name)
+- `seq_advance` events logged on every stage transition
+- Endpoint: `tunnel-proto.vercel.app/api/analytics`
+
+#### Debug Hotkeys (Sequencer)
+| Key | Stage |
+|-----|-------|
+| 1 | T1 Warmup |
+| 2 | T2 Ramp-up |
+| 3 | T3a Cones + Zips |
+| 4 | T3b L3 Corridor Boss |
+| 5 | T4a Angled Walls |
+| 6 | T4b Lethal Rings |
+| 7 | T4c L4 Corridor Boss |
+| 8 | T5a Fat Cones |
+| Shift+1 | T5b Slalom + Zips |
+| Shift+2 | T5c L5 Corridor Boss |
+| Shift+3 | Endless Mix |
+| 9 | Toggle debug HUD |
+| 0 | Toggle hitboxes |
+| T | Flight physics tuner |
+| L/K/J/M/N/B | Force individual mechanics (still work) |
+
+#### Known Issues / TODO
+- Nothing populates after L3 corridor when using hotkeys — needs investigation (may be `_applyVibeTransition` setting `deathRunRestBeat = 2.5` on non-corridor stage entry)
+- T2 dense cones were creating impassable walls — reduced to 6 cones, gap 1.0 (may still need tuning)
+- L4 debug logging still in code (remove when confirmed working)
+- Handling upgrades: ACCEL/MAX_VEL boost with handling tier discussed but NOT implemented (only decel affected by handling)
+- Platform pad `pointer-events: none` in CSS conflicts with onclick in HTML
+
 #### Git HEAD
 Latest commit should be checked with `git log --oneline -1`
 
