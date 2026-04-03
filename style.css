@@ -1375,6 +1375,9 @@ html, body {
   .game-title {
     line-height: 0.9;
   }
+  .skin-nav {
+    transform: translateY(-15px);
+  }
   #title-ship-canvas {
     width: 200px !important;
     height: 180px !important;
