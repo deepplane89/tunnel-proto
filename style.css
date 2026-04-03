@@ -1375,10 +1375,12 @@ html, body {
   .game-title {
     font-size: clamp(36px, 8vw, 64px);
     line-height: 0.9;
+    transform: translateY(50px) !important;
   }
   #title-ship-canvas {
-    width: 80px !important;
-    height: 38px !important;
+    width: 200px !important;
+    height: 180px !important;
+    object-fit: contain;
   }
   .btn-space {
     padding: 10px 36px;
