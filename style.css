@@ -4055,20 +4055,6 @@ html, body {
   z-index: 0;
 }
 
-.platform-pad.has-shop-dot::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 18px;
-  height: 18px;
-  background: #ff4444;
-  border-radius: 50%;
-  border: 2px solid rgba(3,7,15,0.9);
-  animation: dotPulse 2s ease-in-out infinite;
-  pointer-events: none;
-}
-
 /* ── Layout tuner debug panel ── */
 .layout-tuner {
   position: fixed;
