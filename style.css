@@ -3017,6 +3017,15 @@ html, body {
   50% { opacity: 1; transform: scale(1.15); }
 }
 
+/* Smaller notification dot for HUD shop button */
+.hud-shop-btn.has-dot::after {
+  width: 10px;
+  height: 10px;
+  top: -3px;
+  right: -3px;
+  border-width: 1.5px;
+}
+
 /* Shop NEW badge */
 .shop-new-badge {
   position: absolute;
