@@ -263,7 +263,7 @@
       <button class="shop-back-btn" onclick="closeShopDetail()">&#9668; BACK</button>
       <div id="shop-detail-content"></div>
     </div>
-    <button class="btn-space btn-exit shop-close-btn" onclick="closeShop()">CLOSE</button>
+    <button class="btn-space btn-exit shop-close-btn" onclick="document.getElementById('shop-detail').classList.contains('hidden') ? closeShop() : closeShopDetail()">CLOSE</button>
   </div>
 </div>
 
@@ -436,6 +436,7 @@
 <audio id="whoosh-release" src="./whoosh-release.mp3" preload="auto"></audio>
 <audio id="engine-start" src="./engine-start.mp3" preload="auto"></audio>
 <audio id="engine-roar" src="./engine-roar.mp3" preload="auto"></audio>
+<audio id="laser-beam-sfx" src="./laser-beam.wav" preload="auto"></audio>
 <canvas id="game-canvas"></canvas>
 
 <!-- ── TOUCH CONTROLS ──────────────────────── -->
