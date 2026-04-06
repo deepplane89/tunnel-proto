@@ -2259,7 +2259,7 @@ html, body {
 /* Leaderboard overlay */
 .title-leaderboard {
   position: fixed;
-  top: 68%;
+  top: 68%; /* overridden by JS to sit 10px below skin label */
   bottom: 0%;
   left: 50%;
   transform: translateX(-50%);
