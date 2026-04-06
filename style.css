@@ -2275,6 +2275,9 @@ html, body {
   mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
 }
 .title-leaderboard.hidden { display: none; }
+#title-leaderboard-list {
+  pointer-events: auto; /* list itself is scrollable */
+}
 .title-lb-header {
   font-family: monospace;
   font-size: 11px;
