@@ -104,6 +104,11 @@ module.exports = async function handler(req, res) {
 
   // ── GET: return top 10 ──────────────────────────────────────────────────
   if (req.method === 'GET') {
+    // One-time admin cleanup: ?purge=jh2026
+    if (req.query && req.query.purge === 'jh2026') {
+      const spam = ['TEST_HUGE','PENTEST_1','SPAM_TEST','EXTRA_FIELDS','UNKNOWN','TEST_SPECIAL','AAAAAAAAAAAA'];
+      await redisPipeline(spam.map(m => ['ZREM', KEY, m]));
+    }
     const top = await getTop();
     res.status(200).json(top);
     return;
