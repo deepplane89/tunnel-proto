@@ -2268,8 +2268,9 @@ html, body {
   border: none;
   padding: 0 14px;
   z-index: 200;
-  overflow: hidden;
-  pointer-events: none;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  pointer-events: auto;
   -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
   mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
 }
