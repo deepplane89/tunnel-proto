@@ -106,8 +106,9 @@ module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     // One-time admin cleanup: ?purge=jh2026
     if (req.query && req.query.purge === 'jh2026') {
-      const spam = ['TEST_HUGE','PENTEST_1','SPAM_TEST','EXTRA_FIELDS','UNKNOWN','TEST_SPECIAL','AAAAAAAAAAAA'];
-      await redisPipeline(spam.map(m => ['ZREM', KEY, m]));
+      const allRaw2 = await redis('ZRANGE', KEY, 0, -1);
+      const toNuke = allRaw2.filter(m => /[<>"';]/.test(m) || /TEST_/i.test(m) || /DROP.TABL/i.test(m) || m === 'TEST_ZERO');
+      if (toNuke.length) await redisPipeline(toNuke.map(m => ['ZREM', KEY, m]));
     }
     const top = await getTop();
     res.status(200).json(top);
