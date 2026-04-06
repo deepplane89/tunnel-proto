@@ -1123,6 +1123,7 @@ html, body {
   pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  z-index: 201; /* above leaderboard (200) so tap-to-play always works */
 }
 .touch-left  { left: 0; }
 .touch-right { right: 0; }
