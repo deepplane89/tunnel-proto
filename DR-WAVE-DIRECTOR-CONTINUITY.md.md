@@ -346,7 +346,6 @@ Campaign mode uses 1-5 to skip between levels.
 - Upstash env vars on Vercel (copy from jet-slide)
 - Analytics dashboard page
 - Ring collection sound replacement
-- Tutorial / guided first run
 - Fuel cell economy for ship physics tuning
 - More custom patterns (only 1 exists)
 - More cosmetics
@@ -576,6 +575,98 @@ Added to existing T-key panel:
 
 #### Git HEAD
 Latest commit should be checked with `git log --oneline -1`
+
+---
+
+### Session Changes (Pre-April 6 — Previously Undocumented)
+
+#### Tutorial System (IMPLEMENTED)
+- Fires on first ever run only (`jh_tutorial_done` localStorage flag)
+- `state._tutorialActive` set true when flag not present
+- **Step 0**: `_tutShowInstructionBox()` full-screen dimmed overlay, tap/Enter to begin
+- **Step 0.5**: 6 dodge cones spawn. Tapping moves left/right = pass. Progress tracked via `_tutorialSubStep`
+- **Step 1**: instruction box for X-wing zip wall challenge
+- **Step 1.5**: zip wall spawns. Player must go perpendicular (up/down) to pass without dying
+- **Step 2**: end card "BUILD SHIP XP..." — tap dismisses, plays `droplet.wav`, calls `returnToTitle()`
+- **EXIT TUTORIAL** button top-right during action phases
+- Success chime: `playSFX(660) → playSFX(880)` on phase completions
+- `_tutShowHint()` for in-action hints (X-WING label)
+- `_noSpawnMode = true` during tutorial suppresses normal spawner
+- Reset tutorial: clear `jh_tutorial_done` from localStorage
+- Audio: `droplet.wav` on final banner dismiss
+
+#### DR Hotkeys (updated)
+| Key | Action |
+|-----|--------|
+| 1-8 | Jump to T1–T5A stages |
+| 0 | T5C L5BOSS (gold sun) |
+| P | ENDLESS |
+| L | Laser powerup |
+| S | Shield powerup |
+| I | Overdrive |
+| M | Magnet |
+| G / \` / ' | Toggle no-spawn mode |
+| 9 | Debug HUD |
+
+#### Laser System (IMPLEMENTED)
+- **T1–T3**: dual laser bolts (4 lanes at T3, spread=0.50, Y=-0.25)
+- **T4**: static unibeam (Y=1.20, Z=-72), loops `unibeam-sfx.wav`
+- **T5**: scanning unibeam ±45°, pivots from ship nose via `laserPivot` Three.js Group
+- T1–T3 SFX: `laser-beam.wav` loops for duration
+- Layout tuner T-key panel has "T1 BEAM" and "LASER BOLTS (T2+)" sections
+
+#### Music Flow (DR)
+- Launch → `spacewalk.mp3` (bg)
+- T3B L3BOSS entry → crossfade to `l4music.mp3`
+- RECOVERY_2 (after L4 boss) → crossfade to `keep-going.mp3`
+- `keep-going.mp3` ends → crossfade back to `l4music.mp3`
+- Death → `title.mp3` (Ethereal)
+- Pause → `title.mp3` (Ethereal)
+- `clearMusicTimers()` cleans all scheduled transitions on death/restart
+
+#### Vibes
+| VibeIdx | Name | Sun | Stage |
+|---------|------|-----|-------|
+| 0 | NEON DAWN | Orange | T1 |
+| 1 | ULTRAVIOLET | Violet | T2 |
+| 2 | ELECTRIC HORIZON | Orange + teal/magenta warp | T3 |
+| 3 | ICE STORM | Cyan/ice | T4 |
+| 4 | VOID SINGULARITY | Gold | T5/Endless |
+
+ELECTRIC HORIZON warp colors: dark=(0,0.01,0), mid=(0,1,0.77), bright=(0.83,0.06,0.37)
+
+**DO NOT TOUCH** the ice (T4) or gold (T5) sun warp effects — user has explicitly locked these.
+
+#### JET HORIZON Fix
+- `l5CorridorDone = true` set on timer exit to prevent JET HORIZON overlay showing after L5 corridor in DR
+- Guarded with `isDeathRun` checks throughout
+
+#### T4B Structure (LOCKED)
+- 30s angled walls → 30s lethal rings → 10s angled walls = 70s total
+
+#### Endless Mode Rotation (IMPLEMENTED)
+Explicit 9-type rotation, 20s blocks, 3s rest:
+1. random_cones → 2. angled_random → 3. lethal → 4. fat_cones → 5. angled_struct → 6. zipper → 7. slalom → 8. L3_CORRIDOR (after 3 waves) → 9. L4_SINE_CORRIDOR
+
+#### Speed Warning Beeps
+- 3 ascending beeps 1.5s before each REST stage ends
+
+#### Shop: Triple-Tap Skin Label
+- Triple-tap on skin label → unlocks all shop items + 99,999 fuel (admin cheat)
+
+#### Ship Physics (LOCKED — DO NOT TOUCH BANKING)
+- `_accelBase = 22`, `_accelSnap = 52`
+- ACCEL formula: `(22 + snap*52) * (0.75 + (1-drift)*0.25)` — 75% at stock, 100% at full control
+- `_decelBasePct = 0.02` (stock: long slide), `_decelFullPct = 0.05` (full control: brief slide)
+- DECEL only applies when NOT steering
+- Wobble: `drift * 2.5` multiplier → 0 at full control, 2.5x at stock
+- **NEVER touch banking**
+
+#### Portrait Mobile Layout (from screenshot)
+- Ship Y=-88, X=-1, Size=100, Plat Y=100, X=1, Size=180, Label Y=-111, X=9, Title Size=100, Title Y=-33
+
+#### Shop Close Behavior
+- When on shop detail page, close → back (not title)
 
 ---
 
