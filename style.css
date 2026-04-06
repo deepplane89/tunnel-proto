@@ -2259,7 +2259,7 @@ html, body {
 
 /* Leaderboard overlay */
 .title-leaderboard {
-  position: absolute;
+  position: fixed;
   top: 68%;
   bottom: 0;
   left: 50%;
@@ -2268,14 +2268,17 @@ html, body {
   background: rgba(0,0,0,0.25);
   border: none;
   padding: 0 14px;
-  z-index: 2;
+  z-index: 101;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  pointer-events: auto;
+  pointer-events: none; /* container is click-through */
   -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
   mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
 }
 .title-leaderboard.hidden { display: none; }
+#title-leaderboard-list {
+  pointer-events: auto;
+}
 .title-lb-header {
   font-family: monospace;
   font-size: 11px;
