@@ -2259,16 +2259,16 @@ html, body {
 
 /* Leaderboard overlay */
 .title-leaderboard {
-  position: fixed;
+  position: absolute;
   top: 68%;
-  bottom: 0%;
+  bottom: 0;
   left: 50%;
   transform: translateX(-50%);
   width: min(320px, 85vw);
   background: rgba(0,0,0,0.25);
   border: none;
   padding: 0 14px;
-  z-index: 99;
+  z-index: 2;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   pointer-events: auto;
