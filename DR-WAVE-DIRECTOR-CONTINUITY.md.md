@@ -577,6 +577,36 @@ Added to existing T-key panel:
 #### Git HEAD
 Latest commit should be checked with `git log --oneline -1`
 
+---
+
+### Session Changes (April 6, 2026)
+
+#### Title Screen Leaderboard
+- Inline leaderboard (`#title-leaderboard`) added to title screen in a previous session
+- **Transparency + fade**: `background: rgba(0,0,0,0.25)`, `mask-image: linear-gradient(to bottom, black 60%, transparent 100%)` — opaque at top, fades to transparent at bottom
+- **Position**: `top: 68%`, `bottom: 0%` (stretches to bottom edge, mask handles fade)
+- **Scrollable**: `overflow-y: auto`, `-webkit-overflow-scrolling: touch`, `pointer-events: auto`
+- **Touch guard**: `touchstart/touchmove/touchend` on element call `stopPropagation()` so scrolling doesn't trigger tap-to-play. Guard bound once via `_tlb._scrollGuarded = true` flag inside `fetchLeaderboard()` when phase === 'title'
+- **Mobile landscape**: leaderboard hidden via `updateLB()` called inside `applyDefaults()` — players use HUD button instead
+- **Portrait / Desktop Y**: 68%
+- **Layout tuner**: LB Y slider (`tune-lb-y`, range -200 to 200, default 68) wired via `bind()` → `updateLB()`; `applyDefaults()` calls `updateLB()` on resize/rotate
+
+#### Redis Leaderboard Cleanup
+- Spam entries purged from Upstash Redis sorted set key `jet-horizon:scores`
+- Removed: TEST_HUGE (9007199254740991), PENTEST_1 (99999), SPAM_TEST (500), EXTRA_FIELDS (200), UNKNOWN (100), TEST_SPECIAL (100), AAAAAAAAAAAA (100), TEST_ZERO (0), and all HTML/injection test strings
+- Real scores remaining: Barnes (9885), barnes (4256), Blm (459)
+- Cleanup used temporary `?purge=jh2026` GET handler (now removed from `api/scores.js`)
+
+#### Tutorial: Fuel Cell Rings Hidden
+- Bonus rings cleared at tutorial start: `if (state._tutorialActive) _ringRemoveAll()` added inside `startGame()` (~line 9815)
+- Rings do not re-spawn during tutorial — no auto-spawn triggers fire during tutorial flow
+
+#### Layout Tuner Defaults — Updated
+- Portrait: shipX -1, shipY -88, shipSize 100, platX 1, platY 100, platSize 180, labelX 9, labelY -111, titleSize 100, titleY -33
+- Landscape: shipX 2, shipY -52, shipSize 300, platX 1, platY 37, platSize 104, labelX 13, labelY -32, titleSize 102, titleY 87
+- Desktop: shipX 2, shipY -1, shipSize 239, platX 1, platY -17, platSize 166, labelX 13, labelY -26, titleSize 160, titleY 87
+- (Supersedes April 3 session values)
+
 ### Lore Direction
 - The grid is a system trying to stop the player from reaching "peace" / the other side
 - Each obstacle type is a defense layer deployed against the player
