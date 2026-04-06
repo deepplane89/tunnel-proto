@@ -668,6 +668,15 @@ Explicit 9-type rotation, 20s blocks, 3s rest:
 #### Shop Close Behavior
 - When on shop detail page, close → back (not title)
 
+#### Jump Mechanic (QUARANTINED)
+- Vertical thrust mechanic: hold Space to fly up, release to fall back to hover height
+- Code fully intact — vars, physics block, `triggerJump()` function all preserved
+- **Disabled by two commented-out lines** (search `JUMP QUARANTINED`):
+  - Keydown: `if (isSpace && phaseAtEvent === 'playing') triggerJump();`
+  - Keyup: `if (e.key === ' ') _thrustHeld = false;`
+- To restore: uncomment both lines
+- Space still works normally for title start / dead restart / unpause
+
 ---
 
 ### Session Changes (April 6, 2026)
