@@ -487,8 +487,15 @@
 
 <script>
 (function(){
-  var m={};
-  window._LS={getItem:function(k){return m[k]||null},setItem:function(k,v){m[k]=String(v)},removeItem:function(k){delete m[k]},clear:function(){for(var k in m)delete m[k]}};
+  try {
+    localStorage.setItem('_test','1');
+    localStorage.removeItem('_test');
+    window._LS = localStorage;
+  } catch(e) {
+    // Fallback to in-memory if localStorage is blocked
+    var m={};
+    window._LS={getItem:function(k){return m[k]||null},setItem:function(k,v){m[k]=String(v)},removeItem:function(k){delete m[k]},clear:function(){for(var k in m)delete m[k]}};
+  }
 })();
 </script>
 <!-- Skin Tuner (outside title-screen so it stays visible) -->
