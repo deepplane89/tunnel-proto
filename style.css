@@ -1210,6 +1210,7 @@ html, body {
   pointer-events: auto;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  z-index: 202; /* above touch zones (201) so pause tap is never intercepted */
 }
 
 /* ── L1 CINEMATIC INTRO ──────────────────────────────── */
