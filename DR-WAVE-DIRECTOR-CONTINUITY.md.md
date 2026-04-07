@@ -707,6 +707,181 @@ Explicit 9-type rotation, 20s blocks, 3s rest:
 - Desktop: shipX 2, shipY -1, shipSize 239, platX 1, platY -17, platSize 166, labelX 13, labelY -26, titleSize 160, titleY 87
 - (Supersedes April 3 session values)
 
+### Session Changes (April 7, 2026)
+
+#### DR Sequence — Speed Values (CORRECTED, NEVER DROPS)
+Speed never decreases at any point. All recovery stages hold the previous stage's speed:
+| Stage | Speed |
+|-------|-------|
+| T1_WARMUP | 1.0x |
+| T2_RAMPUP | 1.2x |
+| T3A_ZIPS | 1.35x |
+| T3B_L3BOSS | 2.0x |
+| RECOVERY_1 | 2.0x |
+| T4A_ANGLED | 2.0x |
+| T4B_LETHAL | 2.0x |
+| T4C_L4BOSS | 2.1x |
+| RECOVERY_2 | 2.1x |
+| T5A_FATCONES | 2.1x |
+| T5B_SLALOM_ZIP | 2.1x |
+| T5C_L5BOSS | 2.5x |
+| RECOVERY_3 | 2.5x |
+| ENDLESS | 2.5x |
+
+#### DR Sequence — T4B Structure (UPDATED)
+70s total with breathers:
+- 0–15s: random angled walls
+- 15–17s: breather
+- 17–32s: structured angled walls (burst mechanic)
+- 32–34s: breather
+- 34–49s: lethal rings
+- 49–51s: breather
+- 51–66s: lethal rings
+- 66–70s: 4s final breather
+
+#### DR Sequence — T4A Structure (UPDATED)
+30s with mid-breather:
+- 0–15s: random angled walls
+- 15–17s: breather
+- 17–30s: random angled walls
+
+#### T5B Slalom (UPDATED)
+- 0–15s: slalom (no background cones)
+- 15–17s: 2s breather
+- 17–30s: zip lines
+- Gap starts offset ±18 from ship center so player must dodge immediately
+- Gap maintains minimum distance of 14 units from ship at all times
+
+#### Double Spawner Bug Fixed (T4A)
+- T4A was running both the burst mechanic AND `_seqSpawnMode = 'angled'` simultaneously → double wall density
+- Fixed: T4A now only uses `_seqSpawnMode = 'angled'` (spawner only, no burst)
+
+#### Angled Walls — Z Spacing
+- `_awTuner.zSpacing = 38` (random walls only)
+- Structured walls use burst mechanic separately, not affected by zSpacing
+- All `angledWallSpawnZ` inits use `-_awTuner.zSpacing` (was hardcoded `-7`)
+
+#### Spawn from Horizon
+- Rings and angled walls now spawn from far horizon (Z = -160 / -60) not close-up (-7)
+- Matches cone fade-in behavior
+
+#### Speed Warning Beeps (FIXED)
+- Beeps fire 1.5s before ANY stage with a higher speed than the current one
+- Were broken because `_restBeepFired` was never reset between stages
+- Now reset in `_drSeqAdvance()` and `startDeathRun()`
+- Thruster roar fires at speed-up moment (0.25 volume)
+- Skip-prologue thruster roar bumped to 0.7 volume
+
+#### Zipper Row Spacing Fix
+- In endless, `zipperRowsLeft = 18-23` but formula used `ZIPPER_ROWS=13` as denominator
+- `rowsDone` was going negative → first rows spawned slower than intended
+- Fixed: `rowsDone = Math.max(0, ZIPPER_ROWS - state.zipperRowsLeft)`
+
+#### Endless Mode (UPDATED)
+- Block duration: **15s** (was 20s)
+- Breather: **4s** (was 3s)
+- `_seqSpawnMode = 'none'` set immediately at block end — clean breather
+- Vibe cycles through ALL 16 vibes on each wave via `_applyVibeTransition()`
+- `state._endlessVibeIdx` tracks position in cycle, starts at 4 (VOID SINGULARITY)
+- `random_cones` → `_seqSpawnMode = 'cones'`
+- `angled_random` → `_seqSpawnMode = 'angled'`
+- `angled_struct` and `slalom` always run full 15s (added to exclusion list)
+- Slalom gets same gap offset fix as T5B (gapX = ±18 from center)
+
+#### Pause Button Fix
+- `.touch-pause` z-index raised to 202 (above touch zones at 201)
+
+#### localStorage Fix
+- `window._LS` was an in-memory mock — all data lost on refresh
+- Now wired to real `localStorage` with try/catch fallback for private/blocked contexts
+- All progression (XP, coins, skins, tutorial flag, upgrades) now persists across sessions
+
+#### Distance Tracking (NEW)
+- `state.distance` accumulates `effectiveSpeed * dt` every frame while playing
+- Resets to 0 on `startDeathRun()` (fresh run)
+- **Does NOT reset on repair ship** — distance keeps accumulating as reward for surviving
+- Score multiplier on death: every 5,000 distance = +0.1x multiplier
+- Shows as "Distance bonus ×X.X" under score on game over screen
+- XP bonus: `+1 XP per 100 distance units` on top of score-based XP
+- Distance per stage reference:
+  - T3B reached: ~9,162 units
+  - T4B reached: ~16,506 units
+  - Endless entry: ~30,700 units
+
+#### Repair Ship — Score Reset
+- Using repair ship (saveme-btn on game over) resets `state.score` and `state.playerScore` to 0
+- Disqualifies from leaderboard high score
+- Distance does NOT reset
+
+#### Tutorial (OVERHAULED)
+Full flow:
+1. Tutorial starts → no prologue text → **DODGE** box appears immediately (100ms delay)
+2. Tap dismiss → cone spawns at ship X, player taps left/right once → cone flies past naturally
+3. **SIGNAL RECEIVED...** flash (white, Knewave font, center screen, fades at 600ms)
+4. 2.5s delay → **YOU WON'T SURVIVE** box: "Unless you can adapt. Some walls can't be dodged — they must be threaded. Swipe up to roll."
+5. Tap dismiss → player swipes up → ship rolls → signal flash
+6. 2.5s delay → **LEVEL OUT** box: "Swipe down to come back flat."
+7. Tap dismiss → player must have rolled first, then swipe down → signal flash
+8. 2.5s delay → **THREAD THE NEEDLE** box (no body text)
+9. Tap dismiss → zip wall comes → player rolls through → signal flash
+10. 2.5s delay → **CHASE THE HORIZON** end card: "Collect coins, fuel cells, and level up your ship to push further toward the horizon each run"
+11. Tap dismiss → `returnToTitle()`
+
+Key details:
+- Prologue suppressed in both `startGame()` and `startDeathRun()` when `_tutorialActive`
+- Rings blocked at source: `_ringSpawnRow()` returns immediately if `_tutorialActive`
+- Main spawner blocked: `!state._tutorialActive` guard in nextSpawnZ spawner
+- Cone flies past naturally after dodge (not immediately removed)
+- `_tutWasRolled` flag prevents level-out step firing before player has actually rolled
+- Step -1 holding state on init, setTimeout 100ms fires step 0
+- All instruction boxes use **Knewave** font (loaded from Google Fonts)
+- Knewave font added to `<head>` in index.html
+- Settings panel has **TUTORIAL** button — clears `jh_tutorial_done` and calls `startDeathRun()` directly
+- `_tutSignal()` function: creates/reuses `#tut-signal-flash` div, z-index 19000
+- Signal flash held 600ms then CSS transition fades out (0.15s)
+- At 2.5s mark: force `opacity:0` + `transition:none` before showing next box
+
+#### ELECTRIC HORIZON Warp Colors (UPDATED)
+- dark=(1,1,1) mid=(0.05,0,0) bright=(0,0,0.08)
+- (Was: dark=(0,0.01,0) mid=(0,1,0.77) bright=(0.83,0.06,0.37) — the green one)
+
+#### VOID SINGULARITY Warp Colors (NEW)
+- dark=(0.23,1,0) mid=(0,0.14,0.10) bright=(0.13,0.45,0)
+- Used for T5/Endless stages
+
+#### Tutorial End Card Text
+- **"CHASE THE HORIZON"** — "Collect coins, fuel cells, and level up your ship to push further toward the horizon each run"
+- (Was: "BUILD SHIP XP")
+
+#### DR Hotkeys (CURRENT — supersedes all previous)
+| Key | Stage/Action |
+|-----|-------------|
+| 1 | T1_WARMUP |
+| 2 | T2_RAMPUP |
+| 3 | T3A_ZIPS |
+| 4 | T3B_L3BOSS |
+| 5 | T4A_ANGLED |
+| 6 | T4B_LETHAL |
+| 7 | T4C_L4BOSS |
+| 8 | T5A_FATCONES |
+| Shift+1 | T5B_SLALOM_ZIP |
+| Shift+2 | T5C_L5BOSS |
+| Shift+3 | ENDLESS |
+| 9 | Debug HUD |
+| L | Laser powerup |
+| S | Shield powerup |
+| I | Overdrive |
+| M | Magnet |
+| G/`/' | Toggle no-spawn mode |
+
+#### Future: Ghost Ships (PLANNED, NOT BUILT)
+- Show faded static ships at positions where other leaderboard players' scores were crossed
+- Max 3 ghosts: player just above, player just below, own last high score
+- Positioned by score — when your current score crosses another player's best, their ghost appears
+- Distance tracking is the groundwork for this
+
+---
+
 ### Lore Direction
 - The grid is a system trying to stop the player from reaching "peace" / the other side
 - Each obstacle type is a defense layer deployed against the player
