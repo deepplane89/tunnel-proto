@@ -3304,7 +3304,8 @@ html, body {
   font-family: 'Silkscreen', monospace;
   font-size: 13px;
   letter-spacing: 2px;
-  padding: 10px 20px;
+  padding: 16px 28px;
+  min-width: 120px;
   border: 1px solid rgba(255,200,0,0.4);
   border-radius: 6px;
   background: rgba(0,0,0,0.65);
@@ -3313,10 +3314,12 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   transition: background 0.15s, border-color 0.15s, transform 0.1s;
   backdrop-filter: blur(4px);
+  transform: scale(1);
 }
 .hs-btn:active {
   background: rgba(255,200,0,0.15);
   border-color: rgba(255,200,0,0.7);
+  transform: scale(0.94);
 }
 .hs-btn.hs-mega {
   border-color: rgba(255,120,0,0.5);
@@ -3325,6 +3328,7 @@ html, body {
 .hs-btn.hs-mega:active {
   background: rgba(255,120,0,0.15);
   border-color: rgba(255,120,0,0.8);
+  transform: scale(0.94);
 }
 .hs-btn .hs-free {
   color: #44ff88;
