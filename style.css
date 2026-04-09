@@ -1118,7 +1118,7 @@ html, body {
 .touch-right {
   position: absolute;
   top: 0;
-  bottom: 0;
+  bottom: 180px; /* TEMP: leave gap at bottom for shield test button */
   width: 50%;
   pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
