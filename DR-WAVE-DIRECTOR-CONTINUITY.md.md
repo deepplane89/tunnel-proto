@@ -882,11 +882,79 @@ Key details:
 
 ---
 
+### Session Changes (April 9, 2026)
+
+#### Wormhole System — REMOVED
+- ~1,685 lines of wormhole code deleted from game.js
+- All injected guards cleaned: state vars, returnToTitle, keydown handler, touch handlers, render loop, resize handler, wormhole-btn click listener
+- `_whWasWormhole` and `state.wormholeActive` removed everywhere
+- Wormhole button (`wormhole-btn`) click listener removed
+- Dead/restart flow now: `if (state.isDeathRun) startDeathRun(); else startGame()` (no wormhole branch)
+- game.js is now **15,937 lines** (was 17,724)
+- Quarantine repo: `deepplane89/tunnel-quarantine` (wormhole code archived there)
+
+#### Flow Shield — IMPLEMENTED
+- Replaces old `MeshBasicMaterial` sphere + wireframe shield
+- Full hex flow `ShaderMaterial` — exact shader from `cortiz2894/flow-shield-effect` repo
+- Approach: `bloom.threshold = 1.0`, shield uses `toneMapped: true`, outputs HDR values above 1.0 so it's the only thing that catches bloom
+- Sun `emissiveIntensity` bumped from 0.9 → 1.1 to keep blooming at new threshold
+- Shield stays in main scene — correct depth testing against walls
+
+#### Shield Shader Uniforms (current defaults)
+```
+uHexScale: 2.2, uEdgeWidth: 0.10, uHexOpacity: 0.50
+uFresnelPower: 1.8, uFresnelStrength: 1.45, uOpacity: 1.09
+uFlashSpeed: 1.25, uFlashIntensity: 0.46
+uNoiseEdgeIntensity: 7.9, uNoiseEdgeSmoothness: 0.69
+uFlowScale: 1.9, uFlowSpeed: 0.25, uFlowIntensity: 1.2
+uHitRingSpeed: 5.0, uHitRingWidth: 0.5, uHitMaxRadius: 2.0
+uHitDuration: 1.5, uHitIntensity: 20.0, uHitImpactRadius: 1.0
+uFadeStart: 0.40, uDisplaceStrength: 0.03
+uColor: RGB(0.149, 0.54, 1.0) — blue
+uHitColor: RGB(1.0, 0.1, 0.1) — red ripple
+```
+
+#### Shield Color System
+- T1/T2: blue (`#26aeff` with G=0.54), `uLife` locked at 1.0 (no color shift on damage)
+- T3/T4/T5: teal (`#00f0cc`), `uLife` drops on hit → shifts toward pale blue
+- Hit ripple ring always flashes red (`uHitColor`) regardless of tier
+- Tier colors defined in `shieldTierColors = [0x26aeff, 0x26aeff, 0x00f0cc, 0x00f0cc, 0x00f0cc]`
+
+#### Shield Animations
+- **Build-up**: `uReveal` goes 1.0→0.0 over 0.8s (dissolve in)
+- **Hit ripple**: `uHitPos` + `uHitTime` trigger expanding ring + vertex displacement wave
+- **Vertex displacement**: traveling sine wave on sphere surface, returns to normal after wave passes (`uDisplaceStrength: 0.03`)
+- **Death ripple**: on final hit, `state._shieldBreakT = 0` starts — mesh stays visible for 0.6s while ripple plays, then `uReveal` animates 0→1 (dissolve out)
+- `shieldWire` hidden permanently — shader handles all visuals
+
+#### Shield Sounds
+- **Activate**: `shield-activate.mp3` (plays instead of default pickup tone)
+- **Hit**: `shield-hit.mp3` (plays on every hit including final break)
+- Original `playPickup()` skipped for shield: `if (def.id !== 'shield') playPickup(typeIdx)`
+
+#### Shield Tuner Sliders
+- Full SHIELD section in T-key tuner panel with sliders for all uniforms
+- Including: hex scale, edge width, hex opacity, fresnel pwr/str, opacity, flow intens/speed/scale, flash speed/intens, noise edge/smooth, hit ring spd/width/intens/radius/max r/duration, fade start, displace str, color RGB
+
+#### Angled Walls — Z Gap
+- `_awTuner.spacingZ = 5` (was 2) — gap between front and back wall within a row
+- Random angled walls only; structured walls use burst mechanic
+
+#### Hotkeys Updated (S key guard)
+- S key (shield) now requires `state.elapsed > 1.0` before firing to prevent freeze on game start
+- Try/catch added around `update()` in game loop to prevent infinite loop on throw
+
+#### Current Git State
+- Latest commit: `1b0918b` — wormhole cleanup
+- game.js: 15,937 lines
+- Bloom threshold: 1.0 (was 0.85)
+
+---
+
 ### Lore Direction
 - The grid is a system trying to stop the player from reaching "peace" / the other side
 - Each obstacle type is a defense layer deployed against the player
 - Tiers are escalating responses: sentinels (cones) → barriers (walls) → traps (rings) → the corridor (final containment) → full lockdown (mix)
-- The wormhole (Shift+W hidden feature) ties in as the real exit
 - Ship skins = salvaged from other pilots who didn't make it
 - Daily streak = pilot logging days of attempts
 - Transmissions come from someone/something ahead — another pilot? the destination?
