@@ -46,6 +46,7 @@ html, body {
   width: 100%;
   height: 100%;
   display: block;
+  touch-action: manipulation;
 }
 
 /* ── OVERLAYS ─────────────────────────────────────────── */
@@ -1123,6 +1124,7 @@ html, body {
   pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  touch-action: manipulation;
   z-index: 201; /* above leaderboard (200) so tap-to-play always works */
 }
 .touch-left  { left: 0; }
