@@ -289,6 +289,10 @@ Campaign mode uses 1-5 to skip between levels.
 
 ## Other Systems
 
+### Terminology
+- **Echos** — the lateral obstacle multipliers. When a mechanic (zipper, slalom, corridor, etc.) spawns a wall of cones, the cones that extend far beyond the playable lane area into the periphery are called echos. They fill the player's side vision so walls look infinite rather than ending abruptly.
+- **Repair Ship** — the game-over continue mechanic. When the player dies, a "REPAIR SHIP" button appears on the game-over screen. Costs fuel cells (default 50) to revive and continue the run from where they died. Code uses `saveme` internally (`#saveme-btn`, `state.saveme`, `go-saveme-wrap`). Saves corridor type on death (`state._deathCorridorType`) so the active corridor can restart from scratch after repair.
+
 ### Bonus Rings
 - Spawn during RECOVERY→RELEASE (60%) and after SUSTAIN→RECOVERY (always)
 - Settings: R=5.25, W=20, LEN=12, FREQ=3.5, cycling orange/cyan/purple
