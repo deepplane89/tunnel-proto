@@ -368,7 +368,7 @@ const SHIP_SKINS = [
       miniL:[-0.070,0.030,4.530], miniR:[0.070,0.070,4.570], thrusterScale:0.010 } },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
     glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
-      nozzleL:[-0.500,-0.760,0.700], nozzleR:[0.500,-0.750,0.700],
+      nozzleL:[-0.500,-0.660,0.700], nozzleR:[0.500,-0.660,0.700],
       miniL:[-0.220,-0.700,0.600], miniR:[0.220,-0.700,0.600], thrusterScale:1.0,
       matchDefault: true },
     laserConfig: { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 } },
