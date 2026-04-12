@@ -7416,10 +7416,10 @@ function initAudio() {
 let _speedWindSrc    = null;  // AudioBufferSourceNode (looping noise)
 let _speedWindFilter = null;  // BiquadFilterNode (bandpass)
 let _speedWindGain   = null;  // GainNode
-const _SW_MIN_FREQ = 250;    // bandpass freq at rest
-const _SW_MAX_FREQ = 4500;   // bandpass freq at max speed
-const _SW_MAX_VOL  = 0.12;   // max gain at top speed
-const _SW_Q        = 0.8;    // filter Q (wider = more airy)
+let _SW_MIN_FREQ = 250;    // bandpass freq at rest
+let _SW_MAX_FREQ = 4500;   // bandpass freq at max speed
+let _SW_MAX_VOL  = 0.12;   // max gain at top speed
+let _SW_Q        = 0.8;    // filter Q (wider = more airy)
 
 function _initSpeedWind() {
   if (!audioCtx || _speedWindSrc) return;
@@ -11499,6 +11499,7 @@ function startGame() {
   state.shieldActive   = false;
   state.laserActive    = false;
   state.magnetActive   = false;
+  _stopMagnetWhir();
   state.invincibleSpeedActive = false;
   state.multiplierTimer = 0;
   state.invincibleTimer = 0;
@@ -17572,6 +17573,12 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('wind maxVol', _windMaxVol, 0, 1.0, 0.01, v => { _windMaxVol = v; }, '#8cf'));
     panel.appendChild(makeSlider('wind basePitch', _windBasePitch, 0.5, 2.0, 0.05, v => { _windBasePitch = v; }, '#8cf'));
     panel.appendChild(makeSlider('wind pitchScale', _windPitchScale, 0, 1.0, 0.05, v => { _windPitchScale = v; }, '#8cf'));
+
+    panel.appendChild(makeHeader('SPEED WIND'));
+    panel.appendChild(makeSlider('max volume', _SW_MAX_VOL, 0, 0.5, 0.01, v => { _SW_MAX_VOL = v; }, '#6bf'));
+    panel.appendChild(makeSlider('min freq', _SW_MIN_FREQ, 50, 2000, 10, v => { _SW_MIN_FREQ = v; }, '#6bf'));
+    panel.appendChild(makeSlider('max freq', _SW_MAX_FREQ, 500, 10000, 100, v => { _SW_MAX_FREQ = v; }, '#6bf'));
+    panel.appendChild(makeSlider('filter Q', _SW_Q, 0.1, 5, 0.1, v => { _SW_Q = v; if (_speedWindFilter) _speedWindFilter.Q.value = v; }, '#6bf'));
 
     // SUN ELEMENTS
     panel.appendChild(makeHeader('SUN'));
