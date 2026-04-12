@@ -374,7 +374,8 @@ const SHIP_SKINS = [
   { name: 'SCORPION',        price: 0,    description: 'Heavy gunship',     glbFile: 'scorpion_ship.glb',
     glbConfig: { posX:0, posY:0, posZ:3.000, rotX:0, rotY:3.142, rotZ:0, scale:0.351,
       nozzleL:[-0.620,0.050,4.670], nozzleR:[0.730,-0.050,4.530],
-      miniL:[-0.170,0.420,4.900], miniR:[0.090,0.420,4.900], thrusterScale:1.0 } },
+      miniL:[-0.170,0.420,4.900], miniR:[0.090,0.420,4.900], thrusterScale:1.0,
+      keepMaterials: true } },
 ];
 
 let activeSkinIdx = 0;
@@ -5585,6 +5586,7 @@ function _loadAltShip(glbFile, skinDef, callback) {
     const _altMeshes = [];
     const _cfg = skinDef && skinDef.glbConfig;
     const _stripTex = _cfg && _cfg.stripTextures;
+    const _keepMats = _cfg && _cfg.keepMaterials; // trust GLB materials as-is, no overrides
     const _hasEmissiveTex = _cfg && _cfg.animated && !_stripTex; // animated models have proper PBR, don't override (unless stripped)
     model.traverse(child => {
       if (!child.isMesh) return;
@@ -5595,7 +5597,10 @@ function _loadAltShip(glbFile, skinDef, callback) {
       child.userData._origMatName = 'alt_hull';
       _altMeshes.push(child);
       if (child.material) {
-        if (_stripTex) {
+        if (_keepMats) {
+          // Trust the GLB's own materials — no overrides
+          child.material.needsUpdate = true;
+        } else if (_stripTex) {
           // Synthwave procedural material — dark hull + neon trim
           const mname = child.name || '';
           const origMat = Array.isArray(child.material) ? child.material[0] : child.material;
