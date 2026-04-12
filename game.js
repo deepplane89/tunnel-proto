@@ -9983,23 +9983,26 @@ function applyPowerup(typeIdx) {
           setTimeout(() => { _lsfx.loop = false; _lsfx.pause(); _lsfx.currentTime = 0; }, state.laserTimer * 1000);
         }
         // T1/T2: 2 lanes, narrow. T3: 4 lanes, wider spread
-        const _lc = SHIP_SKINS[activeSkinIdx] && SHIP_SKINS[activeSkinIdx].laserConfig;
-        if (_lc) {
-          state._laserBoltLanes  = _lc.lanes;
-          state._laserBoltSpread = _lc.spread;
-          state._laserBoltYOff   = _lc.yOff;
-          state._laserBoltZOff   = _lc.zOff;
-          state._laserBoltLen    = _lc.len;
-          state._laserBoltGlow   = _lc.glowLen;
-          state.laserFireRate    = _lc.fireRate;
-        } else {
-          state._laserBoltLanes  = tier <= 2 ? 2 : 4;
-          state._laserBoltSpread = tier <= 2 ? 0.35 : 0.50;
-          state._laserBoltYOff   = tier <= 2 ? 0 : -0.25;
-          state._laserBoltZOff   = -2;
-          state._laserBoltLen    = tier <= 2 ? 2.0 : 1.9;
-          state._laserBoltGlow   = tier <= 2 ? 2.5 : 2.7;
-          state.laserFireRate    = _lbFireRate; // use tuner value
+        // If scene tuner (T) is open, let slider values stay in control
+        if (!window._sceneTunerOpen) {
+          const _lc = SHIP_SKINS[activeSkinIdx] && SHIP_SKINS[activeSkinIdx].laserConfig;
+          if (_lc) {
+            state._laserBoltLanes  = _lc.lanes;
+            state._laserBoltSpread = _lc.spread;
+            state._laserBoltYOff   = _lc.yOff;
+            state._laserBoltZOff   = _lc.zOff;
+            state._laserBoltLen    = _lc.len;
+            state._laserBoltGlow   = _lc.glowLen;
+            state.laserFireRate    = _lc.fireRate;
+          } else {
+            state._laserBoltLanes  = tier <= 2 ? 2 : 4;
+            state._laserBoltSpread = tier <= 2 ? 0.35 : 0.50;
+            state._laserBoltYOff   = tier <= 2 ? 0 : -0.25;
+            state._laserBoltZOff   = -2;
+            state._laserBoltLen    = tier <= 2 ? 2.0 : 1.9;
+            state._laserBoltGlow   = tier <= 2 ? 2.5 : 2.7;
+            state.laserFireRate    = _lbFireRate;
+          }
         }
       } else if (tier === 4) {
         // T4: unibeam
@@ -17823,9 +17826,11 @@ function buildSkinTunerSliders() {
   }
 
   let visible = false;
+  window._sceneTunerOpen = false;
   document.addEventListener('keydown', e => {
     if (e.key === 't' || e.key === 'T') {
       visible = !visible;
+      window._sceneTunerOpen = visible;
       if (visible) { build(); panel.style.display = 'block'; }
       else panel.style.display = 'none';
     }
