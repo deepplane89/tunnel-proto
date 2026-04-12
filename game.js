@@ -375,7 +375,8 @@ const SHIP_SKINS = [
     glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
       nozzleL:[-0.50,0.12,5.20], nozzleR:[0.50,0.12,5.20],
       miniL:[-0.22,0.08,5.10], miniR:[0.22,0.08,5.10], thrusterScale:1.0,
-      matchDefault: true } },
+      matchDefault: true },
+    laserConfig: { lanes:3, spread:0.40, yOff:-0.70, zOff:0.00, len:6.10, glowLen:7.10, fireRate:19.00 } },
   { name: 'SCORPION',        price: 0,    description: 'Heavy gunship',     glbFile: 'scorpion_ship.glb',
     glbConfig: { posX:0, posY:0, posZ:3.000, rotX:-1.602, rotY:0.028, rotZ:-0.002, scale:0.591,
       nozzleL:[-0.500,0.050,4.550], nozzleR:[0.610,-0.190,4.340],
@@ -9982,13 +9983,24 @@ function applyPowerup(typeIdx) {
           setTimeout(() => { _lsfx.loop = false; _lsfx.pause(); _lsfx.currentTime = 0; }, state.laserTimer * 1000);
         }
         // T1/T2: 2 lanes, narrow. T3: 4 lanes, wider spread
-        state._laserBoltLanes  = tier <= 2 ? 2 : 4;
-        state._laserBoltSpread = tier <= 2 ? 0.35 : 0.50;
-        state._laserBoltYOff   = tier <= 2 ? 0 : -0.25;
-        state._laserBoltZOff   = -2;
-        state._laserBoltLen    = tier <= 2 ? 2.0 : 1.9;
-        state._laserBoltGlow   = tier <= 2 ? 2.5 : 2.7;
-        state.laserFireRate    = _lbFireRate; // use tuner value
+        const _lc = SHIP_SKINS[activeSkinIdx] && SHIP_SKINS[activeSkinIdx].laserConfig;
+        if (_lc) {
+          state._laserBoltLanes  = _lc.lanes;
+          state._laserBoltSpread = _lc.spread;
+          state._laserBoltYOff   = _lc.yOff;
+          state._laserBoltZOff   = _lc.zOff;
+          state._laserBoltLen    = _lc.len;
+          state._laserBoltGlow   = _lc.glowLen;
+          state.laserFireRate    = _lc.fireRate;
+        } else {
+          state._laserBoltLanes  = tier <= 2 ? 2 : 4;
+          state._laserBoltSpread = tier <= 2 ? 0.35 : 0.50;
+          state._laserBoltYOff   = tier <= 2 ? 0 : -0.25;
+          state._laserBoltZOff   = -2;
+          state._laserBoltLen    = tier <= 2 ? 2.0 : 1.9;
+          state._laserBoltGlow   = tier <= 2 ? 2.5 : 2.7;
+          state.laserFireRate    = _lbFireRate; // use tuner value
+        }
       } else if (tier === 4) {
         // T4: unibeam
         state.laserBoltTimer = 0;
