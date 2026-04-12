@@ -374,7 +374,8 @@ const SHIP_SKINS = [
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
     glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
       nozzleL:[-0.50,0.12,5.20], nozzleR:[0.50,0.12,5.20],
-      miniL:[-0.22,0.08,5.10], miniR:[0.22,0.08,5.10], thrusterScale:1.0 } },
+      miniL:[-0.22,0.08,5.10], miniR:[0.22,0.08,5.10], thrusterScale:1.0,
+      matchDefault: true } },
   { name: 'SCORPION',        price: 0,    description: 'Heavy gunship',     glbFile: 'scorpion_ship.glb',
     glbConfig: { posX:0, posY:0, posZ:3.000, rotX:-1.602, rotY:0.028, rotZ:-0.002, scale:0.591,
       nozzleL:[-0.500,0.050,4.550], nozzleR:[0.610,-0.190,4.340],
@@ -5599,6 +5600,7 @@ function _loadAltShip(glbFile, skinDef, callback) {
     const _cfg = skinDef && skinDef.glbConfig;
     const _stripTex = _cfg && _cfg.stripTextures;
     const _keepMats = _cfg && _cfg.keepMaterials; // trust GLB materials as-is, no overrides
+    const _matchDefault = _cfg && _cfg.matchDefault; // apply same materials as default ship
     const _hasEmissiveTex = _cfg && _cfg.animated && !_stripTex; // animated models have proper PBR, don't override (unless stripped)
     model.traverse(child => {
       if (!child.isMesh) return;
@@ -5612,6 +5614,29 @@ function _loadAltShip(glbFile, skinDef, callback) {
         if (_keepMats) {
           // Trust the GLB's own materials — no overrides
           child.material.needsUpdate = true;
+        } else if (_matchDefault) {
+          // Apply same materials as the default ship based on GLB material names
+          const matName = (child.material && child.material.name) ? child.material.name : '';
+          child.userData._origMatName = matName;
+          if (matName === 'nozzle') {
+            child.material = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.95, roughness: 0.12 });
+          } else if (matName === 'gray') {
+            child.material = new THREE.MeshStandardMaterial({ color: 0x888899, metalness: 0.6, roughness: 0.32 });
+          } else if (matName === 'rocket_light' || matName === 'rocket light') {
+            child.material = new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0033cc, emissiveIntensity: 2.5, metalness: 0.0, roughness: 0.05 });
+          } else if (matName === 'rocket_base' || matName === 'rocket base') {
+            child.material = new THREE.MeshStandardMaterial({ color: 0x0e1014, metalness: 0.90, roughness: 0.30 });
+            shipHullMats.push(child.material);
+          } else if (matName === 'fire' || matName === 'fire1') {
+            shipFireMeshes.push(child);
+          } else if (matName === 'white' || matName === 'white ') {
+            child.material = new THREE.MeshStandardMaterial({ color: 0xddeeff, metalness: 0.5, roughness: 0.08, emissive: 0x2255ff, emissiveIntensity: 0.6 });
+          } else if (matName === 'Light') {
+            child.material = new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0033cc, emissiveIntensity: 2.5, metalness: 0.0, roughness: 0.05 });
+          } else {
+            child.material = new THREE.MeshStandardMaterial({ color: 0x141820, metalness: 0.88, roughness: 0.25 });
+            shipHullMats.push(child.material);
+          }
         } else if (_stripTex) {
           // Synthwave procedural material — dark hull + neon trim
           const mname = child.name || '';
@@ -17124,6 +17149,62 @@ function buildSkinTunerSliders() {
   }
 
   // ═══════════════════════════════════════════════════
+  //  SHIP LIGHTING
+  // ═══════════════════════════════════════════════════
+  {
+    const lightHeader = document.createElement('div');
+    lightHeader.style.cssText = 'font-size:14px;font-weight:bold;color:#ff8;margin:16px 0 8px;border-top:2px solid #ff8;padding-top:8px;';
+    lightHeader.textContent = 'SHIP LIGHTING';
+    container.appendChild(lightHeader);
+
+    // Key Light
+    const keyLabel = document.createElement('div');
+    keyLabel.style.cssText = 'font-size:11px;font-weight:bold;color:#ff8;margin:8px 0 4px;';
+    keyLabel.textContent = 'Key Light';
+    container.appendChild(keyLabel);
+
+    container.appendChild(makeSlider('Intensity', _shipKeyLight.intensity, 0, 6, 0.1, v => { _shipKeyLight.intensity = v; }, '#ff8'));
+    container.appendChild(makeSlider('X', _shipKeyLight.position.x, -10, 10, 0.5, v => { _shipKeyLight.position.x = v; }, '#ff8'));
+    container.appendChild(makeSlider('Y', _shipKeyLight.position.y, -10, 10, 0.5, v => { _shipKeyLight.position.y = v; }, '#ff8'));
+    container.appendChild(makeSlider('Z', _shipKeyLight.position.z, -10, 10, 0.5, v => { _shipKeyLight.position.z = v; }, '#ff8'));
+
+    // Key light color hue
+    const kCol = _shipKeyLight.color;
+    const kHSL = {}; kCol.getHSL(kHSL);
+    container.appendChild(makeSlider('Hue', kHSL.h, 0, 1, 0.005, v => {
+      const h = {}; kCol.getHSL(h);
+      kCol.setHSL(v, h.s, h.l);
+    }, '#ff8'));
+    container.appendChild(makeSlider('Saturation', kHSL.s, 0, 1, 0.01, v => {
+      const h = {}; kCol.getHSL(h);
+      kCol.setHSL(h.h, v, h.l);
+    }, '#ff8'));
+
+    // Fill Light
+    const fillLabel = document.createElement('div');
+    fillLabel.style.cssText = 'font-size:11px;font-weight:bold;color:#8bf;margin:12px 0 4px;';
+    fillLabel.textContent = 'Fill Light';
+    container.appendChild(fillLabel);
+
+    container.appendChild(makeSlider('Intensity', _shipFillLight.intensity, 0, 4, 0.1, v => { _shipFillLight.intensity = v; }, '#8bf'));
+    container.appendChild(makeSlider('X', _shipFillLight.position.x, -10, 10, 0.5, v => { _shipFillLight.position.x = v; }, '#8bf'));
+    container.appendChild(makeSlider('Y', _shipFillLight.position.y, -10, 10, 0.5, v => { _shipFillLight.position.y = v; }, '#8bf'));
+    container.appendChild(makeSlider('Z', _shipFillLight.position.z, -10, 10, 0.5, v => { _shipFillLight.position.z = v; }, '#8bf'));
+
+    // Fill light color hue
+    const fCol = _shipFillLight.color;
+    const fHSL = {}; fCol.getHSL(fHSL);
+    container.appendChild(makeSlider('Hue', fHSL.h, 0, 1, 0.005, v => {
+      const h = {}; fCol.getHSL(h);
+      fCol.setHSL(v, h.s, h.l);
+    }, '#8bf'));
+    container.appendChild(makeSlider('Saturation', fHSL.s, 0, 1, 0.01, v => {
+      const h = {}; fCol.getHSL(h);
+      fCol.setHSL(h.h, v, h.l);
+    }, '#8bf'));
+  }
+
+  // ═══════════════════════════════════════════════════
   //  SHADER PATTERN CONTROLS (skin-specific)
   // ═══════════════════════════════════════════════════
   if (window._diamondUniforms && skinViewerIdx === 2) {
@@ -17713,20 +17794,20 @@ function buildSkinTunerSliders() {
 
     // LASER BOLTS
     panel.appendChild(makeHeader('LASER BOLTS (T2+)'));
-    panel.appendChild(makeSlider('lanes', _lbLanes, 1, 8, 1, v => _lbLanes = Math.round(v), '#f44'));
-    panel.appendChild(makeSlider('spread', _lbSpread, 0, 4, 0.05, v => _lbSpread = v, '#f44'));
-    panel.appendChild(makeSlider('Y offset', _lbYOffset, -2, 2, 0.05, v => _lbYOffset = v, '#f44'));
-    panel.appendChild(makeSlider('Z offset', _lbZOffset, -8, 0, 0.1, v => _lbZOffset = v, '#f44'));
+    panel.appendChild(makeSlider('lanes', _lbLanes, 1, 8, 1, v => { _lbLanes = Math.round(v); state._laserBoltLanes = Math.round(v); }, '#f44'));
+    panel.appendChild(makeSlider('spread', _lbSpread, 0, 4, 0.05, v => { _lbSpread = v; state._laserBoltSpread = v; }, '#f44'));
+    panel.appendChild(makeSlider('Y offset', _lbYOffset, -2, 2, 0.05, v => { _lbYOffset = v; state._laserBoltYOff = v; }, '#f44'));
+    panel.appendChild(makeSlider('Z offset', _lbZOffset, -8, 0, 0.1, v => { _lbZOffset = v; state._laserBoltZOff = v; }, '#f44'));
     panel.appendChild(makeSlider('length', _lbLength, 0.5, 10, 0.1, v => {
-      _lbLength = v;
+      _lbLength = v; state._laserBoltLen = v;
       // rescale all pooled bolts
       laserBolts.forEach(b => { const c = b.children[0]; if (c) c.scale.z = v / 2.0; });
     }, '#f44'));
     panel.appendChild(makeSlider('glow len', _lbGlowLen, 0.5, 12, 0.1, v => {
-      _lbGlowLen = v;
+      _lbGlowLen = v; state._laserBoltGlow = v;
       laserBolts.forEach(b => { const g = b.children[1]; if (g) g.scale.z = v / 2.5; });
     }, '#f44'));
-    panel.appendChild(makeSlider('fire rate', _lbFireRate, 1, 30, 0.5, v => _lbFireRate = v, '#f44'));
+    panel.appendChild(makeSlider('fire rate', _lbFireRate, 1, 30, 0.5, v => { _lbFireRate = v; state.laserFireRate = v; }, '#f44'));
   }
 
   let visible = false;
