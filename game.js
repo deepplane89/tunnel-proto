@@ -376,7 +376,7 @@ const SHIP_SKINS = [
       nozzleL:[-0.50,-0.66,0.70], nozzleR:[0.50,-0.66,0.70],
       miniL:[-0.22,-0.70,0.60], miniR:[0.22,-0.70,0.60], thrusterScale:1.0,
       matchDefault: true },
-    laserConfig: { lanes:3, spread:0.40, yOff:-0.70, zOff:0.00, len:6.10, glowLen:7.10, fireRate:19.00 } },
+    laserConfig: { lanes:2, spread:0.40, yOff:-0.70, zOff:0.00, len:6.10, glowLen:7.10, fireRate:19.00 } },
   { name: 'SCORPION',        price: 0,    description: 'Heavy gunship',     glbFile: 'scorpion_ship.glb',
     glbConfig: { posX:0, posY:0, posZ:3.000, rotX:-1.602, rotY:0.028, rotZ:-0.002, scale:0.591,
       nozzleL:[-0.500,0.050,4.550], nozzleR:[0.610,-0.190,4.340],
