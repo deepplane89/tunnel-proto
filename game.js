@@ -5007,6 +5007,14 @@ scene.add(shipGroup);
 shipGroup.position.set(0, 0.28, 3.9); // init position; _hoverBaseY applied on game start
 shipGroup.scale.setScalar(0.30);  // smaller ship, more like original
 
+// ── Ship studio lighting — key + fill so alt ships read in dark scene ──
+const _shipKeyLight = new THREE.DirectionalLight(0xffffff, 1.8);
+_shipKeyLight.position.set(2, 4, -3); // above-right-front
+shipGroup.add(_shipKeyLight);
+const _shipFillLight = new THREE.DirectionalLight(0x8899bb, 0.6);
+_shipFillLight.position.set(-2, 1, 2); // below-left-behind
+shipGroup.add(_shipFillLight);
+
 // Load GLB ship model — replaces hand-built geometry
 const shipEdgeLines = [];  // LineBasicMaterial refs — updated on level color change
 const shipHullMats  = [];  // MeshStandardMaterial refs — for emissive pulse animation
