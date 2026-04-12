@@ -374,8 +374,7 @@ const SHIP_SKINS = [
   { name: 'SCORPION',        price: 0,    description: 'Heavy gunship',     glbFile: 'scorpion_ship.glb',
     glbConfig: { posX:0, posY:0, posZ:3.000, rotX:0, rotY:3.142, rotZ:0, scale:0.351,
       nozzleL:[-0.620,0.050,4.670], nozzleR:[0.730,-0.050,4.530],
-      miniL:[-0.170,0.420,4.900], miniR:[0.090,0.420,4.900], thrusterScale:1.0,
-      stripTextures: true } },
+      miniL:[-0.170,0.420,4.900], miniR:[0.090,0.420,4.900], thrusterScale:1.0 } },
 ];
 
 let activeSkinIdx = 0;
