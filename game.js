@@ -366,7 +366,6 @@ const SHIP_SKINS = [
     glbConfig: { posX:0, posY:0.290, posZ:0, rotX:-0.052, rotY:-0.002, rotZ:0, scale:0.300,
       nozzleL:[-0.400,-0.060,4.600], nozzleR:[0.430,-0.250,4.310],
       miniL:[-0.070,0.020,4.900], miniR:[0.070,0.060,4.970], thrusterScale:0.100 } },
-  { name: 'PHOENIX',        price: 0,    description: 'Stellar Phoenix',  hidden: true },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
     glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
       nozzleL:[-0.500,-0.760,0.700], nozzleR:[0.500,-0.750,0.700],
