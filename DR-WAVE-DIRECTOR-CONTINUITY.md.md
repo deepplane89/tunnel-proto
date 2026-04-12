@@ -948,10 +948,57 @@ uHitColor: RGB(1.0, 0.1, 0.1) — red ripple
 - S key (shield) now requires `state.elapsed > 1.0` before firing to prevent freeze on game start
 - Try/catch added around `update()` in game loop to prevent infinite loop on throw
 
-#### Current Git State
+#### Current Git State (April 9)
 - Latest commit: `1b0918b` — wormhole cleanup
 - game.js: 15,937 lines
 - Bloom threshold: 1.0 (was 0.85)
+
+### Session Changes (April 11, 2026)
+
+#### Explosion System Overhaul
+- Removed hex shockwave disc (user asked to remove it)
+- `_spawnExplosion` — 20k particles with forward + lateral wrap velocity, slo-mo ramp (1x→0.3x→1x)
+- `_triggerFaceExplosion` — forward carry (-Z) + lateral, sqrt ease (replaced old cubic)
+- Drag grace period so particles don't immediately slow down
+- Particles shoot forward around the obstacle like a crash, not spray in all directions
+
+#### Retry / Camera Fixes
+- `_retryPending` flag prevents double-tap race condition on fast restart
+- `_expCamOrbitActive = false` killed in retry sweep — prevents off-center camera on fast restart
+- Saveme/repair snaps camera to center to prevent death orbit drift
+- Audited all death→gameplay paths for camera reset issues
+
+#### Audio — New SFX
+- `playRetryWhoosh()` (~line 7064) — filtered noise rising whoosh on retry sweep
+- `engine-roar` plays at 80% through sweep at volume 0.07 (uses shortened abridged thruster sample)
+- `_updateSpeedWind()` (~line 6935) — continuous filtered noise tied to ship speed for speed perception
+
+#### Rock Mound Obstacle System — NEW
+- Procedural mountain obstacles using `IcosahedronGeometry(1, 3)` with sin-hash noise displacement
+- Y squash 0.6 for mound shape, dark body (`MeshStandardMaterial`, color 0x0e0e14, flatShading)
+- **Neon glow edges**: `EdgesGeometry(geo, 30)` (30° threshold — only strong faceted edges)
+  - Core edge layer: `LineBasicMaterial`, bright neon color, 0.9 opacity
+  - Glow halo layer: second `LineSegments` clone, 1.04x scaled, `AdditiveBlending`, 0.25 opacity — fakes bloom without post-processing
+- `_rockTuner` object with: scale (30), xOffset (6), ySink (0.25), neonHex (#00eeff), edgeAlpha (0.9), glowAlpha (0.25), glowScale (1.04), zSpacing (80)
+- `_createRockMound(side)` / `_despawnRock(rock)` — spawn/cleanup
+- Continuous alternating-side spawning in tutorial (step -0.5)
+- Tuner panel on R hotkey: sliders for scale, X offset, Y sink, edge brightness, glow brightness, glow size, Z spacing + neon color picker
+- `_applyRockTuner()` live-updates all active rocks
+
+#### Tutorial Changes
+- Auto-start disabled (`state._tutorialActive = false` on first game start)
+- Access via Settings → "How to Play" which sets tutorial step -0.5 for rock spawning
+- Settings-only access while testing rock visuals
+
+#### Current Git State (April 11)
+- Latest commit: `d355a74` — neon glow edges on rocks
+- game.js: ~17,889 lines
+- Cache buster: `game.js?v=2393213321`
+
+#### External Contact
+- 3D artist "tkkjee" (Serbian, tkkjee@gmail.com) reached out offering lighting/atmosphere ideas for the game
+- User responded "Sure would love to hear it. I've been making it in three JS though."
+- Pending their response with specific suggestions
 
 ---
 
