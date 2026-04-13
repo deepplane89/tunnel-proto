@@ -369,9 +369,9 @@ const SHIP_SKINS = [
       thrusterScale:0.46, thrusterLength:3.9, noMiniThrusters:true, bloomScale:0.3 } },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
     glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
-      nozzleL:[-0.500,-0.660,0.700], nozzleR:[0.500,-0.660,0.700],
-      miniL:[-0.220,-0.700,0.600], miniR:[0.220,-0.700,0.600], thrusterScale:1.0,
-      matchDefault: true, autoTrackNozzles: true },
+      nozzleL:[-0.680,-0.050,5.200], nozzleR:[0.700,-0.060,5.200],
+      miniL:[-0.220,-0.030,5.100], miniR:[0.220,-0.030,5.100], thrusterScale:1.0,
+      matchDefault: true },
     laserConfig: { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 } },
   { name: 'SCORPION',        price: 0,    description: 'Heavy gunship',     glbFile: 'scorpion_ship.glb',
     glbConfig: { posX:0, posY:0, posZ:3.000, rotX:-1.602, rotY:0.028, rotZ:-0.002, scale:0.591,
@@ -5586,10 +5586,6 @@ const _altShip = {
 };
 // Baseline transform when nozzles were last tuned — used to auto-track
 const _nozzleBaseline = { scale: 1.0, posX: 0, posY: 0, posZ: 0 };
-// Auto-track: derive nozzle positions from mesh world positions (for matchDefault ships)
-let _autoTrackNozzles = false;
-let _altNozzleMeshes = [];   // fire / fire1 meshes on the alt model (left, right)
-const _nozzleWorldTmp = new THREE.Vector3();
 function _snapshotNozzleBaseline() {
   _nozzleBaseline.scale = _altShip.scale || 1.0;
   _nozzleBaseline.posX  = _altShip.posX;
@@ -5658,10 +5654,6 @@ function _loadAltShip(glbFile, skinDef, callback) {
           // Apply same materials as the default ship based on GLB material names
           const matName = (child.material && child.material.name) ? child.material.name : '';
           child.userData._origMatName = matName;
-          // Collect nozzle meshes for auto-tracking
-          if (_cfg && _cfg.autoTrackNozzles && (matName === 'fire' || matName === 'fire1')) {
-            child.userData._nozzleTag = matName; // tag for identification
-          }
           if (matName === 'nozzle') {
             child.material = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.95, roughness: 0.12 });
           } else if (matName === 'gray') {
@@ -5818,32 +5810,11 @@ function _showAltShip() {
   _altShipActive = true;
   // Cone thrusters default ON for LOW POLY, OFF for others
   window._coneThrustersEnabled = (activeSkinIdx === 4);
-  // Auto-track: collect fire meshes from model if skin has autoTrackNozzles
-  const _skinCfg = SHIP_SKINS[activeSkinIdx] && SHIP_SKINS[activeSkinIdx].glbConfig;
-  if (_skinCfg && _skinCfg.autoTrackNozzles) {
-    _altNozzleMeshes = [];
-    _altShipModel.traverse(c => {
-      if (c.isMesh && c.userData._nozzleTag) _altNozzleMeshes.push(c);
-    });
-    // Sort by X position: negative X (left) = index 0, positive X (right) = index 1
-    _altShipModel.updateMatrixWorld(true);
-    _altNozzleMeshes.sort((a, b) => {
-      const pa = new THREE.Vector3(); a.getWorldPosition(pa);
-      const pb = new THREE.Vector3(); b.getWorldPosition(pb);
-      return pa.x - pb.x;
-    });
-    _autoTrackNozzles = _altNozzleMeshes.length >= 2;
-  } else {
-    _autoTrackNozzles = false;
-    _altNozzleMeshes = [];
-  }
-  // Fallback nozzle offsets (used when auto-track is off)
-  if (!_autoTrackNozzles) {
-    NOZZLE_OFFSETS[0].copy(_altShip.nozzleL);
-    NOZZLE_OFFSETS[1].copy(_altShip.nozzleR);
-    MINI_NOZZLE_OFFSETS[0].copy(_altShip.miniL);
-    MINI_NOZZLE_OFFSETS[1].copy(_altShip.miniR);
-  }
+  // Override nozzle offsets for thrusters
+  NOZZLE_OFFSETS[0].copy(_altShip.nozzleL);
+  NOZZLE_OFFSETS[1].copy(_altShip.nozzleR);
+  MINI_NOZZLE_OFFSETS[0].copy(_altShip.miniL);
+  MINI_NOZZLE_OFFSETS[1].copy(_altShip.miniR);
   // Sync per-ship thruster globals
   window._prevThrusterScale = window._thrusterScale;  // stash to restore later
   window._prevThrusterLength = window._thrusterLength;
@@ -5863,8 +5834,6 @@ function _hideAltShip() {
   if (_altShipModel) _altShipModel.visible = false;
   if (window._shipModel) window._shipModel.visible = true;
   _altShipActive = false;
-  _autoTrackNozzles = false;
-  _altNozzleMeshes = [];
   window._coneThrustersEnabled = false; // default ships: cones off
   // Restore default nozzle offsets
   NOZZLE_OFFSETS[0].set(-0.50, 0.12, 5.20);
@@ -5886,27 +5855,12 @@ function _updateAltShipTransform() {
 }
 
 function _rebuildLocalNozzles() {
-  // ── Auto-track path: read nozzle positions directly from mesh world positions ──
-  if (_autoTrackNozzles && _altNozzleMeshes.length >= 2 && _altShipModel) {
-    // Ensure model matrices are up to date
-    _altShipModel.updateMatrixWorld(true);
-    for (let i = 0; i < 2; i++) {
-      _altNozzleMeshes[i].getWorldPosition(_nozzleWorldTmp);
-      shipGroup.worldToLocal(_nozzleWorldTmp);
-      _localNozzles[i].copy(_nozzleWorldTmp);
-    }
-    // Mini nozzles: derive from main nozzle positions (inboard 44% X, same Y/Z plane)
-    // Use midpoint Z and nudge slightly forward; Y stays same as main
-    const midZ = (_localNozzles[0].z + _localNozzles[1].z) * 0.5;
-    _localMiniNozzles[0].set(_localNozzles[0].x * 0.44, _localNozzles[0].y, midZ);
-    _localMiniNozzles[1].set(_localNozzles[1].x * 0.44, _localNozzles[1].y, midZ);
-    return;
-  }
-  // ── Manual offset path (default ship + non-auto-track alt ships) ──
   const sc = shipGroup.scale.x || 0.30;
+  // Reference origin: use alt ship config when active, else default ship offsets
   const refX = _altShipActive ? _altShip.posX : 0;
   const refY = _altShipActive ? _altShip.posY : 0.28;
   const refZ = _altShipActive ? _altShip.posZ : 4.5;
+  // Auto-track: scale ratio + position delta from baseline
   const sRatio = _altShipActive ? ((_altShip.scale || 1.0) / (_nozzleBaseline.scale || 1.0)) : 1.0;
   const dX = _altShipActive ? (_altShip.posX - _nozzleBaseline.posX) : 0;
   const dY = _altShipActive ? (_altShip.posY - _nozzleBaseline.posY) : 0;
@@ -16793,8 +16747,6 @@ function animate() {
   for (const fm of shipFireMeshes) fm.visible = state.thrusterPower > 0 && window._thrusterVisible !== false;
   // Tick alt ship animation mixer
   if (_altShipActive && _altShipMixer) _altShipMixer.update(rawDt);
-  // Auto-track: recompute nozzle positions from mesh every frame (follows animations)
-  if (_autoTrackNozzles) _rebuildLocalNozzles();
   // ── Death sky pivot camera (runs in animate so it works during dead phase) ──
   if (_expCamOrbitActive && state.phase === 'dead') {
     _expCamOrbitT = Math.min(1, _expCamOrbitT + _EXP_CAM_ORBIT_SPEED * rawDt);
