@@ -1421,6 +1421,7 @@ const _thrusterHazeShader = {
     uTime:      { value: 0.0 },
     uIntensity: { value: 0.0 },   // 0 = off, ~0.6-1.0 = visible
     uRadius:    { value: 0.06 },  // screen-space radius of haze area (tighter default)
+    uHazeDir:   { value: -1.0 },  // -1 = below nozzle, +1 = above, 0 = centered
     uAspect:    { value: 1.0 },
   },
   vertexShader: /* glsl */`
@@ -1437,16 +1438,15 @@ const _thrusterHazeShader = {
     uniform float uTime;
     uniform float uIntensity;
     uniform float uRadius;
+    uniform float uHazeDir;
     uniform float uAspect;
     varying vec2 vUv;
 
     float hazeField(vec2 uv, vec2 nozzle) {
       vec2 d = uv - nozzle;
       d.x *= uAspect;
-      // Haze trails BELOW nozzle in screen UV (toward camera = down in screen)
-      d.y -= uRadius * 0.8;
-      // Kill haze above the nozzle (exhaust side)
-      if (d.y > 0.0) return 0.0;
+      // Offset haze in the direction set by slider
+      d.y += uHazeDir * uRadius * 0.8;
       d.y *= 0.7;
       float dist = length(d);
       return smoothstep(uRadius, uRadius * 0.2, dist);
@@ -18788,6 +18788,9 @@ function buildSkinTunerSliders() {
     }));
     panel.appendChild(makeSlider('Haze Radius', _thrusterHazePass.uniforms.uRadius.value, 0.02, 0.4, 0.01, v => {
       _thrusterHazePass.uniforms.uRadius.value = v;
+    }));
+    panel.appendChild(makeSlider('Haze Direction', _thrusterHazePass.uniforms.uHazeDir.value, -3, 3, 0.1, v => {
+      _thrusterHazePass.uniforms.uHazeDir.value = v;
     }));
 
     // ── Material ──
