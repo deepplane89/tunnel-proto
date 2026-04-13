@@ -363,9 +363,10 @@ const SHIP_SKINS = [
   { name: 'BLACK MAMBA',   price: 800,  description: 'Stealth predator' },
   { name: 'CIPHER',        price: 1400, description: 'Voronoi hull plating' },
   { name: 'LOW POLY',      price: 0,    description: 'Low poly fighter',  glbFile: 'spaceship_low_poly.glb',
-    glbConfig: { posX:0, posY:0.011, posZ:-1.876, rotX:-0.052, rotY:-0.002, rotZ:-0.002, scale:0.260,
+    glbConfig: { posX:0, posY:0.850, posZ:3.000, rotX:-0.052, rotY:-0.002, rotZ:-0.002, scale:0.248,
       nozzleL:[-0.814,0.094,1.595], nozzleR:[0.814,0.094,1.595],
-      miniL:[-0.260,0.032,1.550], miniR:[0.260,0.032,1.550], thrusterScale:0.010 } },
+      miniL:[-0.260,0.032,1.550], miniR:[0.260,0.032,1.550],
+      thrusterScale:0.35, noMiniThrusters:true, bloomScale:0.3 } },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
     glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
       nozzleL:[-0.500,-0.660,0.700], nozzleR:[0.500,-0.660,0.700],
@@ -5514,6 +5515,8 @@ const _altShip = {
   miniL:   new THREE.Vector3(-0.18, 0.02, 4.90),
   miniR:   new THREE.Vector3( 0.18, 0.02, 4.90),
   thrusterScale: 1.0,
+  noMiniThrusters: false,
+  bloomScale: 1.0,
 };
 // Baseline transform when nozzles were last tuned — used to auto-track
 const _nozzleBaseline = { scale: 1.0, posX: 0, posY: 0, posZ: 0 };
@@ -5534,6 +5537,8 @@ function _applyGlbConfig(cfg) {
   if (cfg.miniL) _altShip.miniL.set(cfg.miniL[0], cfg.miniL[1], cfg.miniL[2]);
   if (cfg.miniR) _altShip.miniR.set(cfg.miniR[0], cfg.miniR[1], cfg.miniR[2]);
   _altShip.thrusterScale = cfg.thrusterScale != null ? cfg.thrusterScale : 1.0;
+  _altShip.noMiniThrusters = !!cfg.noMiniThrusters;
+  _altShip.bloomScale = cfg.bloomScale != null ? cfg.bloomScale : 1.0;
   _snapshotNozzleBaseline();
 }
 
@@ -6280,7 +6285,8 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       const _ts = window._thrusterScale || 1.0;
       const _nbs = window._nozzleBloomScale || 1.0;
       const _shipSc2 = shipGroup.scale.x;
-      const bloomSize = (0.6 + speedScale * 0.7) * _ts * _nbs * _shipSc2;
+      const _abs = _altShipActive ? (_altShip.bloomScale || 1.0) : 1.0;
+      const bloomSize = (0.6 + speedScale * 0.7) * _ts * _nbs * _shipSc2 * _abs;
       bloom.scale.setScalar(bloomSize);
       bloom.material.color.set(thrusterColor);
       const _nbo = window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34;
@@ -6294,8 +6300,9 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
   });
 
   // ── Mini thrusters ──
+  const _hideMini = _altShipActive && _altShip.noMiniThrusters;
   miniThrusterSystems.forEach((sys, idx) => {
-    sys.points.visible = playing && tp > 0.01 && window._thrusterVisible !== false;
+    sys.points.visible = !_hideMini && playing && tp > 0.01 && window._thrusterVisible !== false;
     const nw = nozzleWorld(_localMiniNozzles[idx]);
     const wx = nw.x;
     const wy = nw.y;
