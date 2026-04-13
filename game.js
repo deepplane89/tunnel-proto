@@ -14239,7 +14239,9 @@ function killPlayer() {
       shipGroup.visible = true;
       _killExplosion();
       // Snap camera back to center so it doesn't drift in from death orbit
-      cameraPivot.position.set(0, 2.8, 9 + _camPivotZOffset);
+      cameraPivot.position.set(0, 2.8 + _camPivotYOffset, 9 + _camPivotZOffset);
+      camera.rotation.set(0, 0, 0);
+      camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
       camera.fov = _baseFOV;
       camera.updateProjectionMatrix();
       if (_gameOverDelayTimer) { clearTimeout(_gameOverDelayTimer); _gameOverDelayTimer = null; }
