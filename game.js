@@ -371,7 +371,11 @@ const SHIP_SKINS = [
     glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
       nozzleL:[-0.500,-0.660,0.700], nozzleR:[0.500,-0.660,0.700],
       miniL:[-0.220,-0.700,0.600], miniR:[0.220,-0.700,0.600], thrusterScale:1.0,
-      matchDefault: true },
+      matchDefault: true,
+      mobileLandscapeNozzles: {
+        nozzleL:[-0.680,-0.050,5.200], nozzleR:[0.700,-0.060,5.200],
+        miniL:[-0.220,-0.030,5.100], miniR:[0.220,-0.030,5.100]
+      } },
     laserConfig: { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 } },
   { name: 'SCORPION',        price: 0,    description: 'Heavy gunship',     glbFile: 'scorpion_ship.glb',
     glbConfig: { posX:0, posY:0, posZ:3.000, rotX:-1.602, rotY:0.028, rotZ:-0.002, scale:0.591,
@@ -16829,6 +16833,23 @@ function updateCameraFOV() {
   cameraPivot.position.y = 2.8 + _camPivotYOffset;
   cameraPivot.position.z = 9 + _camPivotZOffset;
   camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
+  // ── Per-skin mobile landscape nozzle overrides ──
+  if (_altShipActive) {
+    const skinDef = SHIP_SKINS[activeSkinIdx];
+    const mln = skinDef && skinDef.glbConfig && skinDef.glbConfig.mobileLandscapeNozzles;
+    if (isMobile && isLandscape && mln) {
+      NOZZLE_OFFSETS[0].set(mln.nozzleL[0], mln.nozzleL[1], mln.nozzleL[2]);
+      NOZZLE_OFFSETS[1].set(mln.nozzleR[0], mln.nozzleR[1], mln.nozzleR[2]);
+      MINI_NOZZLE_OFFSETS[0].set(mln.miniL[0], mln.miniL[1], mln.miniL[2]);
+      MINI_NOZZLE_OFFSETS[1].set(mln.miniR[0], mln.miniR[1], mln.miniR[2]);
+    } else {
+      // Restore original glbConfig nozzles for portrait / desktop
+      NOZZLE_OFFSETS[0].copy(_altShip.nozzleL);
+      NOZZLE_OFFSETS[1].copy(_altShip.nozzleR);
+      MINI_NOZZLE_OFFSETS[0].copy(_altShip.miniL);
+      MINI_NOZZLE_OFFSETS[1].copy(_altShip.miniR);
+    }
+  }
   _rebuildLocalNozzles();
   camera.updateProjectionMatrix();
 }
