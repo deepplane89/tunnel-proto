@@ -18690,11 +18690,7 @@ function buildSkinTunerSliders() {
   function build() {
     panel.innerHTML = '<div style="color:#ff00ff;font-weight:bold;margin-bottom:6px;">SHIP GLB TUNER [G]</div>';
 
-    if (!_altShipActive) {
-      panel.appendChild(document.createTextNode('No GLB ship active — ship transform sliders hidden.'));
-    }
-
-    // ── Ship Transform (only when GLB skin active) ──
+    // ── Ship Transform ──
     if (_altShipActive) {
     const hdr1 = document.createElement('div');
     hdr1.style.cssText = 'color:#ff88ff;margin:8px 0 4px;font-weight:bold;';
@@ -18738,6 +18734,7 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('Mini R x', _altShip.miniR.x, -2, 2, 0.01, v => { _altShip.miniR.x = v; nozzleUpdate(); }));
     panel.appendChild(makeSlider('Mini R y', _altShip.miniR.y, -1, 1, 0.01, v => { _altShip.miniR.y = v; nozzleUpdate(); }));
     panel.appendChild(makeSlider('Mini R z', _altShip.miniR.z, 3, 7, 0.01, v => { _altShip.miniR.z = v; nozzleUpdate(); }));
+    } // end _altShipActive ship transform guard
 
     // ── Thruster Controls ──
     const hdr3 = document.createElement('div');
@@ -18760,10 +18757,10 @@ function buildSkinTunerSliders() {
     togWrap.appendChild(togBtn);
     panel.appendChild(togWrap);
 
-    panel.appendChild(makeSlider('Thruster Scale', _altShip.thrusterScale, 0.01, 5, 0.05, v => {
-      _altShip.thrusterScale = v;
+    panel.appendChild(makeSlider('Thruster Scale', window._thrusterScale || 1.0, 0.01, 5, 0.05, v => {
       window._thrusterScale = v;
       window._baseThrusterScale = v;
+      if (_altShipActive) _altShip.thrusterScale = v;
     }));
     panel.appendChild(makeSlider('Spread X (wider)', window._thrusterSpreadX || 1.0, 0.1, 10, 0.1, v => {
       window._thrusterSpreadX = v;
@@ -18790,7 +18787,6 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('Mini Bloom Size', window._miniBloomScale || 1.0, 0, 5, 0.1, v => {
       window._miniBloomScale = v;
     }));
-    } // end _altShipActive guard
 
     // ── Cone Thruster (low poly only) ──
     const hdrCone = document.createElement('div');
@@ -18827,6 +18823,7 @@ function buildSkinTunerSliders() {
     hdrHaze.textContent = '— HEAT HAZE —';
     panel.appendChild(hdrHaze);
 
+    if (typeof _thrusterHazePass !== 'undefined' && _thrusterHazePass && _thrusterHazePass.uniforms) {
     panel.appendChild(makeSlider('Haze Intensity', _thrusterHazePass.uniforms.uIntensity.value || 0.7, 0, 2, 0.05, v => {
       window._hazeBaseIntensity = v;
     }));
@@ -18836,6 +18833,9 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('Haze Direction', _thrusterHazePass.uniforms.uHazeDir.value, -3, 3, 0.1, v => {
       _thrusterHazePass.uniforms.uHazeDir.value = v;
     }));
+    } else {
+      panel.appendChild(document.createTextNode('(Haze pass not initialized — start a run first)'));
+    }
 
     // ── Material ──
     const hdr5 = document.createElement('div');
