@@ -10582,7 +10582,7 @@ window.addEventListener('keydown', e => {
     return; // consume key in DR mode
   }
   // toggle no-spawn test mode
-  if ((e.key === "'" || e.key === '`' || e.key === '\\' || e.key === 'g' || e.key === 'G') && state.phase === 'playing') {
+  if ((e.key === "'" || e.key === '`' || e.key === '\\' || e.key === 'n' || e.key === 'N') && state.phase === 'playing') {
     _noSpawnMode = !_noSpawnMode;
     // Flash HUD message so player knows it fired
     const _nsEl = document.createElement('div');
@@ -18690,26 +18690,12 @@ function buildSkinTunerSliders() {
   function build() {
     panel.innerHTML = '<div style="color:#ff00ff;font-weight:bold;margin-bottom:6px;">SHIP GLB TUNER [G]</div>';
 
-    // Toggle alt ship button
-    const toggleBtn = document.createElement('button');
-    toggleBtn.textContent = _altShipActive ? 'SWITCH TO DEFAULT' : 'SWITCH TO ALT SHIP';
-    toggleBtn.style.cssText = 'background:#222;color:#ff00ff;border:1px solid #ff00ff;padding:4px 12px;cursor:pointer;font:11px monospace;margin-bottom:8px;';
-    toggleBtn.addEventListener('click', () => {
-      if (_altShipActive) {
-        applySkin(0); // back to Runner
-      } else {
-        applySkin(SHIP_SKINS.length - 1); // alt ship is last
-      }
-      setTimeout(build, 100);
-    });
-    panel.appendChild(toggleBtn);
-
     if (!_altShipActive) {
-      panel.appendChild(document.createTextNode(' (Activate alt ship to see tuners)'));
-      return;
+      panel.appendChild(document.createTextNode('No GLB ship active — ship transform sliders hidden.'));
     }
 
-    // ── Ship Transform ──
+    // ── Ship Transform (only when GLB skin active) ──
+    if (_altShipActive) {
     const hdr1 = document.createElement('div');
     hdr1.style.cssText = 'color:#ff88ff;margin:8px 0 4px;font-weight:bold;';
     hdr1.textContent = '— SHIP TRANSFORM —';
@@ -18804,6 +18790,7 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('Mini Bloom Size', window._miniBloomScale || 1.0, 0, 5, 0.1, v => {
       window._miniBloomScale = v;
     }));
+    } // end _altShipActive guard
 
     // ── Cone Thruster (low poly only) ──
     const hdrCone = document.createElement('div');
