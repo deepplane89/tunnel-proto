@@ -6158,6 +6158,12 @@ const flameMeshes = NOZZLE_OFFSETS.map(() => {
 window._coneThruster = {
   length:       2.5,    // cone length (world units)
   radius:       0.18,   // base radius at nozzle
+  rotX:        -1.571,  // rotation X (default -PI/2 = point along +Z)
+  rotY:         0,      // rotation Y
+  rotZ:         0,      // rotation Z
+  offX:         0,      // position offset X from nozzle
+  offY:         0,      // position offset Y from nozzle
+  offZ:         0,      // position offset Z from nozzle
   neonPower:    2.0,    // neon ramp intensity exponent
   noiseSpeed:   1.5,    // noise scroll speed
   noiseStrength:0.25,   // how much noise eats into the gradient
@@ -6514,11 +6520,9 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
     const cone = _thrusterCones[idx];
     if (_isLP && playing && tp > 0.01 && window._thrusterVisible !== false) {
       cone.visible = true;
-      cone.position.set(wx, wy, wz);
-      // Orient cone so its +Y axis points along +Z (exhaust direction = backward)
-      cone.rotation.set(-Math.PI * 0.5, 0, 0);
-      // Unit geometry scaled to actual world size
       const ct = window._coneThruster;
+      cone.position.set(wx + ct.offX, wy + ct.offY, wz + ct.offZ);
+      cone.rotation.set(ct.rotX, ct.rotY, ct.rotZ);
       cone.scale.set(ct.radius, ct.length * tp, ct.radius);
       // Update shader uniforms from live slider values
       const u = cone.material.uniforms;
@@ -18771,6 +18775,12 @@ function buildSkinTunerSliders() {
     const ct = window._coneThruster;
     panel.appendChild(makeSlider('Cone Length', ct.length, 0.5, 8, 0.1, v => { ct.length = v; }));
     panel.appendChild(makeSlider('Cone Radius', ct.radius, 0.02, 1, 0.01, v => { ct.radius = v; }));
+    panel.appendChild(makeSlider('Cone Rot X', ct.rotX, -3.15, 3.15, 0.01, v => { ct.rotX = v; }));
+    panel.appendChild(makeSlider('Cone Rot Y', ct.rotY, -3.15, 3.15, 0.01, v => { ct.rotY = v; }));
+    panel.appendChild(makeSlider('Cone Rot Z', ct.rotZ, -3.15, 3.15, 0.01, v => { ct.rotZ = v; }));
+    panel.appendChild(makeSlider('Cone Off X', ct.offX, -2, 2, 0.01, v => { ct.offX = v; }));
+    panel.appendChild(makeSlider('Cone Off Y', ct.offY, -2, 2, 0.01, v => { ct.offY = v; }));
+    panel.appendChild(makeSlider('Cone Off Z', ct.offZ, -2, 2, 0.01, v => { ct.offZ = v; }));
     panel.appendChild(makeSlider('Neon Power', ct.neonPower, 0.5, 6, 0.1, v => { ct.neonPower = v; }));
     panel.appendChild(makeSlider('Noise Speed', ct.noiseSpeed, 0, 5, 0.1, v => { ct.noiseSpeed = v; }));
     panel.appendChild(makeSlider('Noise Strength', ct.noiseStrength, 0, 1, 0.01, v => { ct.noiseStrength = v; }));
