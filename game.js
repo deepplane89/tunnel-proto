@@ -364,9 +364,9 @@ const SHIP_SKINS = [
   { name: 'CIPHER',        price: 1400, description: 'Voronoi hull plating' },
   { name: 'LOW POLY',      price: 0,    description: 'Low poly fighter',  glbFile: 'spaceship_low_poly.glb',
     glbConfig: { posX:0, posY:0.850, posZ:3.000, rotX:-0.052, rotY:-0.002, rotZ:-0.002, scale:0.248,
-      nozzleL:[-0.814,0.094,1.595], nozzleR:[0.814,0.094,1.595],
-      miniL:[-0.260,0.032,1.550], miniR:[0.260,0.032,1.550],
-      thrusterScale:0.35, noMiniThrusters:true, bloomScale:0.3 } },
+      nozzleL:[-0.420,0.190,3.440], nozzleR:[0.420,0.170,3.390],
+      miniL:[-0.280,0.032,1.550], miniR:[0.260,0.032,1.550],
+      thrusterScale:0.46, thrusterLength:3.9, noMiniThrusters:true, bloomScale:0.3 } },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
     glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
       nozzleL:[-0.500,-0.660,0.700], nozzleR:[0.500,-0.660,0.700],
@@ -1411,6 +1411,64 @@ const bloom = new UnrealBloomPass(
   1.0    // threshold — only HDR emissives bloom (shield uses toneMapped:false)
 );
 composer.addPass(bloom);
+
+// ── LOCALIZED HEAT HAZE (thruster exhaust distortion — low poly only) ──
+const _thrusterHazeShader = {
+  uniforms: {
+    tDiffuse:   { value: null },
+    uNozzleL:   { value: new THREE.Vector2(0.5, 0.5) },
+    uNozzleR:   { value: new THREE.Vector2(0.5, 0.5) },
+    uTime:      { value: 0.0 },
+    uIntensity: { value: 0.0 },   // 0 = off, ~0.6-1.0 = visible
+    uRadius:    { value: 0.12 },  // screen-space radius of haze area
+    uAspect:    { value: 1.0 },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform vec2 uNozzleL;
+    uniform vec2 uNozzleR;
+    uniform float uTime;
+    uniform float uIntensity;
+    uniform float uRadius;
+    uniform float uAspect;
+    varying vec2 vUv;
+
+    float hazeField(vec2 uv, vec2 nozzle) {
+      vec2 d = uv - nozzle;
+      d.x *= uAspect;
+      // Elongate behind nozzle (+Y in screen = downward in UV, but exhaust goes away from camera = higher UV.y)
+      // Stretch the haze region behind the nozzle (toward higher Z = upward in screen)
+      d.y *= 0.4;  // stretch vertically (exhaust direction)
+      float dist = length(d);
+      return smoothstep(uRadius, 0.0, dist);
+    }
+
+    void main() {
+      if (uIntensity < 0.001) {
+        gl_FragColor = texture2D(tDiffuse, vUv);
+        return;
+      }
+      float haze = max(hazeField(vUv, uNozzleL), hazeField(vUv, uNozzleR));
+      float strength = haze * uIntensity;
+      // Animated sine distortion — two frequencies for richness
+      vec2 offset = vec2(
+        sin(vUv.y * 40.0 + uTime * 4.0) * 0.004 + sin(vUv.y * 80.0 + uTime * 7.0) * 0.002,
+        cos(vUv.x * 35.0 + uTime * 3.5) * 0.003 + cos(vUv.x * 70.0 + uTime * 6.0) * 0.0015
+      ) * strength;
+      gl_FragColor = texture2D(tDiffuse, vUv + offset);
+    }
+  `,
+};
+const _thrusterHazePass = new ShaderPass(_thrusterHazeShader);
+_thrusterHazePass.enabled = false;  // enabled per-frame only for LOW POLY
+composer.addPass(_thrusterHazePass);
 
 // ── RADIAL BLUR (speed streaks) — only active during wormhole
 const RadialBlurShader = {
@@ -5515,6 +5573,7 @@ const _altShip = {
   miniL:   new THREE.Vector3(-0.18, 0.02, 4.90),
   miniR:   new THREE.Vector3( 0.18, 0.02, 4.90),
   thrusterScale: 1.0,
+  thrusterLength: null,  // null = use global window._thrusterLength
   noMiniThrusters: false,
   bloomScale: 1.0,
 };
@@ -5537,6 +5596,7 @@ function _applyGlbConfig(cfg) {
   if (cfg.miniL) _altShip.miniL.set(cfg.miniL[0], cfg.miniL[1], cfg.miniL[2]);
   if (cfg.miniR) _altShip.miniR.set(cfg.miniR[0], cfg.miniR[1], cfg.miniR[2]);
   _altShip.thrusterScale = cfg.thrusterScale != null ? cfg.thrusterScale : 1.0;
+  _altShip.thrusterLength = cfg.thrusterLength != null ? cfg.thrusterLength : null;
   _altShip.noMiniThrusters = !!cfg.noMiniThrusters;
   _altShip.bloomScale = cfg.bloomScale != null ? cfg.bloomScale : 1.0;
   _snapshotNozzleBaseline();
@@ -6082,6 +6142,148 @@ const flameMeshes = NOZZLE_OFFSETS.map(() => {
   return mesh;
 });
 
+// ── Thruster exhaust CONE meshes (low poly only — neon ramp + noise dissolve) ──
+// Tunable globals for the cone shader — exposed via sliders
+window._coneThruster = {
+  length:       2.5,    // cone length (world units)
+  radius:       0.18,   // base radius at nozzle
+  neonPower:    2.0,    // neon ramp intensity exponent
+  noiseSpeed:   1.5,    // noise scroll speed
+  noiseStrength:0.25,   // how much noise eats into the gradient
+  fresnelPower: 2.0,    // edge softening strength
+  opacity:      0.85,   // master opacity
+};
+
+const _coneVertSrc = /* glsl */`
+  uniform float uLength;
+  varying float vHeight;  // 0 = nozzle base, 1 = tip
+  varying vec3 vNormal;
+  varying vec3 vViewDir;
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    vNormal = normalize(normalMatrix * normal);
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    vViewDir = -mvPos.xyz;
+    // Normalized height along cone axis
+    vHeight = clamp((position.y + uLength * 0.5) / uLength, 0.0, 1.0);
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+const _coneFragSrc = /* glsl */`
+  precision mediump float;
+  uniform float uTime;
+  uniform vec3  uColor;
+  uniform float uNeonPower;
+  uniform float uNoiseSpeed;
+  uniform float uNoiseStrength;
+  uniform float uFresnelPower;
+  uniform float uOpacity;
+  varying float vHeight;
+  varying vec3 vNormal;
+  varying vec3 vViewDir;
+  varying vec2 vUv;
+
+  // Hash-based simplex noise
+  vec2 hash(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+  }
+  float noise(vec2 p) {
+    const float K1 = 0.366025404;
+    const float K2 = 0.211324865;
+    vec2 i = floor(p + (p.x + p.y) * K1);
+    vec2 a = p - i + (i.x + i.y) * K2;
+    float m = step(a.y, a.x);
+    vec2 o = vec2(m, 1.0 - m);
+    vec2 b = a - o + K2;
+    vec2 c = a - 1.0 + 2.0 * K2;
+    vec3 h = max(0.5 - vec3(dot(a,a), dot(b,b), dot(c,c)), 0.0);
+    h = h * h * h * h;
+    vec3 n = h * vec3(dot(a, hash(i)), dot(b, hash(i + o)), dot(c, hash(i + 1.0)));
+    return dot(n, vec3(70.0));
+  }
+  float fbm(vec2 p) {
+    float f = 0.0;
+    f += 0.5000 * noise(p); p *= 2.02;
+    f += 0.2500 * noise(p); p *= 2.03;
+    f += 0.1250 * noise(p);
+    return f / 0.875;
+  }
+
+  // Neon color ramp from the article — hot white core → saturated color → dark
+  vec3 neonRamp(float value, vec3 color) {
+    float ramp = clamp(value, 0.0, 1.0);
+    vec3 out_color = vec3(0.0);
+    ramp = ramp * ramp;
+    out_color += pow(color, vec3(4.0)) * ramp;
+    ramp = ramp * ramp;
+    out_color += color * ramp;
+    ramp = ramp * ramp;
+    out_color += vec3(1.0) * ramp;
+    return out_color;
+  }
+
+  void main() {
+    // Gradient: 1.0 at nozzle base, 0.0 at tip
+    float grad = 1.0 - vHeight;
+
+    // Animated noise dissolve
+    vec2 noiseUV = vec2(vUv.x * 3.0, vUv.y * 0.6 - uTime * uNoiseSpeed);
+    float n = fbm(noiseUV) * uNoiseStrength;
+    grad = clamp(grad + n, 0.0, 1.0);
+
+    // Neon color ramp
+    vec3 col = neonRamp(pow(grad, uNeonPower), uColor);
+
+    // Fresnel edge softening
+    float fresnel = 1.0 - clamp(dot(normalize(vNormal), normalize(vViewDir)), 0.0, 1.0);
+    float edgeFade = 1.0 - pow(fresnel, uFresnelPower);
+
+    // Final alpha: gradient * edge fade * master opacity
+    float alpha = grad * edgeFade * uOpacity;
+
+    // Fade tip to zero
+    alpha *= smoothstep(0.0, 0.08, grad);
+
+    gl_FragColor = vec4(col, alpha);
+  }
+`;
+
+const _thrusterCones = NOZZLE_OFFSETS.map(() => {
+  const ct = window._coneThruster;
+  // ConeGeometry: radius at base, 0 at tip, height, segments
+  const geo = new THREE.ConeGeometry(ct.radius, ct.length, 16, 1, true);
+  // Shift so base (y = -length/2) sits at local origin — cone extends in +Y
+  geo.translate(0, ct.length * 0.5, 0);
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: _coneVertSrc,
+    fragmentShader: _coneFragSrc,
+    uniforms: {
+      uTime:          { value: 0 },
+      uColor:         { value: new THREE.Color(0x44aaff) },
+      uLength:        { value: ct.length },
+      uNeonPower:     { value: ct.neonPower },
+      uNoiseSpeed:    { value: ct.noiseSpeed },
+      uNoiseStrength: { value: ct.noiseStrength },
+      uFresnelPower:  { value: ct.fresnelPower },
+      uOpacity:       { value: ct.opacity },
+    },
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  mesh.visible = false;  // only shown for low poly
+  mesh.renderOrder = 9;
+  scene.add(mesh);
+  return mesh;
+});
+
 // Thruster FX excluded from water reflection via onBeforeRender patch on mirrorMesh (see Water section).
 
 // Per-level thruster colors — each level gets a unique exhaust hue
@@ -6213,7 +6415,7 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         // Velocity: mostly +Z (backward), very tight lateral — condensed needle look
         const _spX = window._thrusterSpreadX || 1.0;
         const _spY = window._thrusterSpreadY || 1.0;
-        const _len = window._thrusterLength || 1.0;
+        const _len = (_altShipActive && _altShip.thrusterLength != null) ? _altShip.thrusterLength : (window._thrusterLength || 1.0);
         sys.velocities[i].set(
           (Math.random() - 0.5) * 0.06 * _spX,
           (Math.random() - 0.5) * 0.06 * _spY - 0.02,
@@ -6297,6 +6499,32 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
 
     // Flame shader quads disabled — rigid quad can't bend with particle trail
     flameMeshes[idx].visible = false;
+
+    // ── Thruster cone mesh (low poly only) ──
+    const _isLP = _altShipActive && activeSkinIdx === 4;
+    const cone = _thrusterCones[idx];
+    if (_isLP && playing && tp > 0.01 && window._thrusterVisible !== false) {
+      cone.visible = true;
+      cone.position.set(wx, wy, wz);
+      // Orient cone so its +Y axis points along +Z (exhaust direction = backward)
+      cone.rotation.set(-Math.PI * 0.5, 0, 0);
+      // Scale by thruster power and ship scale
+      const _shipSc4 = shipGroup.scale.x;
+      const ct = window._coneThruster;
+      cone.scale.set(ct.radius * _shipSc4, ct.length * _shipSc4 * tp, ct.radius * _shipSc4);
+      // Update shader uniforms
+      const u = cone.material.uniforms;
+      u.uTime.value = performance.now() * 0.001;
+      u.uColor.value.copy(thrusterColor);
+      u.uLength.value = ct.length;
+      u.uNeonPower.value = ct.neonPower;
+      u.uNoiseSpeed.value = ct.noiseSpeed;
+      u.uNoiseStrength.value = ct.noiseStrength;
+      u.uFresnelPower.value = ct.fresnelPower;
+      u.uOpacity.value = ct.opacity * tp;
+    } else {
+      cone.visible = false;
+    }
   });
 
   // ── Mini thrusters ──
@@ -16481,6 +16709,25 @@ function animate() {
   _updateShockwave(rawDt);
   _updateSparks(rawDt);
   _updateFaceExplosion(rawDt);
+  // ── Update localized heat haze pass (low poly only) ──
+  {
+    const _isLowPoly = _altShipActive && activeSkinIdx === 4;
+    _thrusterHazePass.enabled = _isLowPoly && state.phase === 'playing' && state.thrusterPower > 0.01;
+    if (_thrusterHazePass.enabled) {
+      const _hzProj = new THREE.Vector3();
+      // Project left nozzle to screen UV
+      const nwL = nozzleWorld(_localNozzles[0]);
+      _hzProj.set(nwL.x, nwL.y, nwL.z).project(camera);
+      _thrusterHazePass.uniforms.uNozzleL.value.set(_hzProj.x * 0.5 + 0.5, _hzProj.y * 0.5 + 0.5);
+      // Project right nozzle to screen UV
+      const nwR = nozzleWorld(_localNozzles[1]);
+      _hzProj.set(nwR.x, nwR.y, nwR.z).project(camera);
+      _thrusterHazePass.uniforms.uNozzleR.value.set(_hzProj.x * 0.5 + 0.5, _hzProj.y * 0.5 + 0.5);
+      _thrusterHazePass.uniforms.uTime.value = performance.now() * 0.001;
+      _thrusterHazePass.uniforms.uIntensity.value = (window._hazeBaseIntensity != null ? window._hazeBaseIntensity : 0.7) * state.thrusterPower;
+      _thrusterHazePass.uniforms.uAspect.value = window.innerWidth / window.innerHeight;
+    }
+  }
   composer.render();
   if (_fpsOn) _lastDC = renderer.info.render.calls;
   updateDebug();
@@ -18500,6 +18747,34 @@ function buildSkinTunerSliders() {
     }));
     panel.appendChild(makeSlider('Mini Bloom Size', window._miniBloomScale || 1.0, 0, 5, 0.1, v => {
       window._miniBloomScale = v;
+    }));
+
+    // ── Cone Thruster (low poly only) ──
+    const hdrCone = document.createElement('div');
+    hdrCone.style.cssText = 'color:#ff6600;margin:8px 0 4px;font-weight:bold;';
+    hdrCone.textContent = '— CONE THRUSTER —';
+    panel.appendChild(hdrCone);
+
+    const ct = window._coneThruster;
+    panel.appendChild(makeSlider('Cone Length', ct.length, 0.5, 8, 0.1, v => { ct.length = v; }));
+    panel.appendChild(makeSlider('Cone Radius', ct.radius, 0.02, 1, 0.01, v => { ct.radius = v; }));
+    panel.appendChild(makeSlider('Neon Power', ct.neonPower, 0.5, 6, 0.1, v => { ct.neonPower = v; }));
+    panel.appendChild(makeSlider('Noise Speed', ct.noiseSpeed, 0, 5, 0.1, v => { ct.noiseSpeed = v; }));
+    panel.appendChild(makeSlider('Noise Strength', ct.noiseStrength, 0, 1, 0.01, v => { ct.noiseStrength = v; }));
+    panel.appendChild(makeSlider('Fresnel Power', ct.fresnelPower, 0.5, 6, 0.1, v => { ct.fresnelPower = v; }));
+    panel.appendChild(makeSlider('Cone Opacity', ct.opacity, 0, 1, 0.01, v => { ct.opacity = v; }));
+
+    // ── Heat Haze (low poly only) ──
+    const hdrHaze = document.createElement('div');
+    hdrHaze.style.cssText = 'color:#00ccff;margin:8px 0 4px;font-weight:bold;';
+    hdrHaze.textContent = '— HEAT HAZE —';
+    panel.appendChild(hdrHaze);
+
+    panel.appendChild(makeSlider('Haze Intensity', _thrusterHazePass.uniforms.uIntensity.value || 0.7, 0, 2, 0.05, v => {
+      window._hazeBaseIntensity = v;
+    }));
+    panel.appendChild(makeSlider('Haze Radius', _thrusterHazePass.uniforms.uRadius.value, 0.02, 0.4, 0.01, v => {
+      _thrusterHazePass.uniforms.uRadius.value = v;
     }));
 
     // ── Material ──
