@@ -8981,7 +8981,9 @@ function _spawnLethalRing(x, z) {
 // Tiles the same obstacle type outward to fill peripheral vision.
 const _ECHO_SHIFT = LANE_COUNT * LANE_WIDTH; // one full road width per copy (~67.2)
 const _ECHO_COPIES = 2; // copies per side (2 left + 2 right)
+const _ECHOES_ENABLED = false; // toggle — off until obstacle redesign
 function _spawnLateralEchoes(baseX, z, kind, opts) {
+  if (!_ECHOES_ENABLED) return;
   // kind: 'cone' | 'wall' | 'ring' | 'fatcone'
   for (let c = 1; c <= _ECHO_COPIES; c++) {
     const echoOpacity = 1 / Math.pow(2, c); // 0.5 for copy 1, 0.25 for copy 2
