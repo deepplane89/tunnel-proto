@@ -6404,7 +6404,8 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
 
   thrusterSystems.forEach((sys, idx) => {
     // Hide entire particle system when thrusters are off or toggled
-    sys.points.visible = playing && tp > 0.01 && window._thrusterVisible !== false;
+    const _oldOff = window._hideOldThrusters && _altShipActive && activeSkinIdx === 4;
+    sys.points.visible = !_oldOff && playing && tp > 0.01 && window._thrusterVisible !== false;
     const nw = nozzleWorld(_localNozzles[idx]);
     const wx = nw.x;
     const wy = nw.y;
@@ -6495,7 +6496,7 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
 
     // ── Bloom sprite for this nozzle ──
     const bloom = nozzleBloomSprites[idx];
-    if (playing && tp > 0.01 && window._thrusterVisible !== false) {
+    if (!_oldOff && playing && tp > 0.01 && window._thrusterVisible !== false) {
       bloom.visible = true;
       bloom.position.set(wx, wy, wz);
       // Sprites auto-billboard — just set size + color
@@ -18773,6 +18774,14 @@ function buildSkinTunerSliders() {
     panel.appendChild(hdrCone);
 
     const ct = window._coneThruster;
+    const hideOldBtn = document.createElement('button');
+    hideOldBtn.textContent = 'Toggle Old Thrusters';
+    hideOldBtn.style.cssText = 'background:#333;color:#ff6600;border:1px solid #ff6600;padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 0;';
+    hideOldBtn.addEventListener('click', () => {
+      window._hideOldThrusters = !window._hideOldThrusters;
+      hideOldBtn.textContent = window._hideOldThrusters ? 'Old Thrusters: OFF' : 'Old Thrusters: ON';
+    });
+    panel.appendChild(hideOldBtn);
     panel.appendChild(makeSlider('Cone Length', ct.length, 0.5, 8, 0.1, v => { ct.length = v; }));
     panel.appendChild(makeSlider('Cone Radius', ct.radius, 0.02, 1, 0.01, v => { ct.radius = v; }));
     panel.appendChild(makeSlider('Cone Rot X', ct.rotX, -3.15, 3.15, 0.01, v => { ct.rotX = v; }));
