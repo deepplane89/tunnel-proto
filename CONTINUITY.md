@@ -6,7 +6,7 @@
 - **Live:** `https://tunnel-proto.vercel.app`
 - **Working dir:** `/home/user/workspace/tunnel-proto-fresh/`
 - **Auto-deploy from git push is ON — do NOT run `npx vercel --prod`**
-- **Current HEAD:** `eb3cf64` — fix: MK II orientation-specific nozzle offsets
+- **Current HEAD:** `dac8047` — fix: correct MK II landscape nozzle values from user tuner
 
 ## Key Code Locations (approximate — lines shift with edits)
 - `SHIP_SKINS` array: ~line 360 (MK II at index 5, line 370)
@@ -36,10 +36,10 @@
 **Landscape** (calibrated in Chrome DevTools mobile landscape):
 | Nozzle | X | Y | Z |
 |--------|-------|-------|-------|
-| Noz L | -0.680 | -0.050 | 5.200 |
-| Noz R | 0.700 | -0.060 | 5.200 |
-| Mini L | -0.220 | -0.030 | 5.100 |
-| Mini R | 0.220 | -0.030 | 5.100 |
+| Noz L | -0.560 | -0.050 | 4.960 |
+| Noz R | 0.530 | -0.060 | 4.900 |
+| Mini L | -0.150 | 0.060 | 5.100 |
+| Mini R | 0.160 | 0.060 | 5.100 |
 
 **Portrait** (calibrated in Chrome DevTools mobile portrait):
 | Nozzle | X | Y | Z |
@@ -55,8 +55,25 @@
 - `nozzleWorld()` then does `shipGroup.localToWorld(_localNozzles[i])` to get world position
 - For non-matchDefault alt ships, uses dynamic scale/delta from `_nozzleBaseline`
 
+### Cone thruster values (landscape, user-calibrated)
+| Setting | Value |
+|---------|-------|
+| Cone Length | 3.400 |
+| Cone Radius | 0.140 |
+| Cone Rot X | 1.420 |
+| Cone Rot Y | 1.720 |
+| Cone Rot Z | 0.050 |
+| Cone Off X | 0.000 |
+| Cone Off Y | 0.000 |
+| Cone Off Z | 0.000 |
+| Neon Power | 1.500 |
+| Noise Speed | 0.800 |
+| Noise Strength | 0.130 |
+| Fresnel Power | 6.000 |
+| Cone Opacity | 1.000 |
+
 ### Desktop nozzles
-- Desktop does NOT have separate baked values yet — it uses whatever NOZZLE_OFFSETS are set (landscape values as default from glbConfig load)
+- Desktop does NOT have separate baked values yet — it uses landscape values since innerWidth > innerHeight on desktop
 - May need desktop-specific tuning in a future session
 
 ## Commits This Session
@@ -64,7 +81,8 @@
 - `f107253` → `0690952` → `995b667` → `ed6763a` → `d29beaa` → `86828d1` — various failed nozzle attempts
 - `49f9bc6` — matchDefault uses default refs + exact values
 - `39a40d1` — fixed scale 0.30 for matchDefault
-- `eb3cf64` — orientation-specific nozzle offsets (CURRENT)
+- `eb3cf64` — orientation-specific nozzle offsets
+- `dac8047` — correct landscape nozzle values from user tuner (CURRENT)
 
 ## Pending Items
 - Desktop nozzle tuning for MK II (no baked values yet)
