@@ -1443,7 +1443,10 @@ const _thrusterHazeShader = {
     float hazeField(vec2 uv, vec2 nozzle) {
       vec2 d = uv - nozzle;
       d.x *= uAspect;
-      // Slight vertical elongation for exhaust shape (1.0 = circle, <1 = taller)
+      // Haze trails BELOW nozzle in screen UV (toward camera = down in screen)
+      d.y -= uRadius * 0.8;
+      // Kill haze above the nozzle (exhaust side)
+      if (d.y > 0.0) return 0.0;
       d.y *= 0.7;
       float dist = length(d);
       return smoothstep(uRadius, uRadius * 0.2, dist);
