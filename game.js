@@ -5808,6 +5808,8 @@ function _showAltShip() {
   }
   _altShipModel.visible = true;
   _altShipActive = true;
+  // Cone thrusters default ON for LOW POLY, OFF for others
+  window._coneThrustersEnabled = (activeSkinIdx === 4);
   // Override nozzle offsets for thrusters
   NOZZLE_OFFSETS[0].copy(_altShip.nozzleL);
   NOZZLE_OFFSETS[1].copy(_altShip.nozzleR);
@@ -5832,6 +5834,7 @@ function _hideAltShip() {
   if (_altShipModel) _altShipModel.visible = false;
   if (window._shipModel) window._shipModel.visible = true;
   _altShipActive = false;
+  window._coneThrustersEnabled = false; // default ships: cones off
   // Restore default nozzle offsets
   NOZZLE_OFFSETS[0].set(-0.50, 0.12, 5.20);
   NOZZLE_OFFSETS[1].set( 0.50, 0.12, 5.20);
@@ -6158,7 +6161,9 @@ const flameMeshes = NOZZLE_OFFSETS.map(() => {
   return mesh;
 });
 
-// ── Thruster exhaust CONE meshes (low poly only — neon ramp + noise dissolve) ──
+// ── Thruster exhaust CONE meshes (neon ramp + noise dissolve) ──
+// Per-skin toggle: LOW POLY defaults ON, all others OFF
+window._coneThrustersEnabled = false; // set true by applySkin when idx===4
 // Tunable globals for the cone shader — exposed via sliders
 window._coneThruster = {
   length:       3.4,
@@ -6409,7 +6414,7 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
 
   thrusterSystems.forEach((sys, idx) => {
     // Hide entire particle system when thrusters are off or toggled
-    const _oldOff = window._hideOldThrusters && _altShipActive && activeSkinIdx === 4;
+    const _oldOff = window._hideOldThrusters && window._coneThrustersEnabled;
     sys.points.visible = !_oldOff && playing && tp > 0.01 && window._thrusterVisible !== false;
     const nw = nozzleWorld(_localNozzles[idx]);
     const wx = nw.x;
@@ -6521,10 +6526,9 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
     // Flame shader quads disabled — rigid quad can't bend with particle trail
     flameMeshes[idx].visible = false;
 
-    // ── Thruster cone mesh (low poly only) ──
-    const _isLP = _altShipActive && activeSkinIdx === 4;
+    // ── Thruster cone mesh ──
     const cone = _thrusterCones[idx];
-    if (_isLP && tp > 0.01 && window._thrusterVisible !== false) {
+    if (window._coneThrustersEnabled && tp > 0.01 && window._thrusterVisible !== false) {
       cone.visible = true;
       const ct = window._coneThruster;
       cone.position.set(wx + ct.offX, wy + ct.offY, wz + ct.offZ);
@@ -16761,8 +16765,7 @@ function animate() {
   _updateFaceExplosion(rawDt);
   // ── Update localized heat haze pass (low poly only) ──
   {
-    const _isLowPoly = _altShipActive && activeSkinIdx === 4;
-    _thrusterHazePass.enabled = _isLowPoly && state.phase === 'playing' && state.thrusterPower > 0.01;
+    _thrusterHazePass.enabled = window._coneThrustersEnabled && state.phase === 'playing' && state.thrusterPower > 0.01;
     if (_thrusterHazePass.enabled) {
       const _hzProj = new THREE.Vector3();
       let _hazeValid = true;
@@ -18734,7 +18737,29 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('Mini R x', _altShip.miniR.x, -2, 2, 0.01, v => { _altShip.miniR.x = v; nozzleUpdate(); }));
     panel.appendChild(makeSlider('Mini R y', _altShip.miniR.y, -1, 1, 0.01, v => { _altShip.miniR.y = v; nozzleUpdate(); }));
     panel.appendChild(makeSlider('Mini R z', _altShip.miniR.z, 3, 7, 0.01, v => { _altShip.miniR.z = v; nozzleUpdate(); }));
-    } // end _altShipActive ship transform guard
+    } else {
+    // Non-GLB ships: direct NOZZLE_OFFSETS sliders
+    const hdr2b = document.createElement('div');
+    hdr2b.style.cssText = 'color:#ff88ff;margin:8px 0 4px;font-weight:bold;';
+    hdr2b.textContent = '— THRUSTER NOZZLES —';
+    panel.appendChild(hdr2b);
+
+    const nozzleUpdateDirect = () => { _rebuildLocalNozzles(); };
+
+    panel.appendChild(makeSlider('Noz L x', NOZZLE_OFFSETS[0].x, -2, 2, 0.01, v => { NOZZLE_OFFSETS[0].x = v; nozzleUpdateDirect(); }));
+    panel.appendChild(makeSlider('Noz L y', NOZZLE_OFFSETS[0].y, -1, 1, 0.01, v => { NOZZLE_OFFSETS[0].y = v; nozzleUpdateDirect(); }));
+    panel.appendChild(makeSlider('Noz L z', NOZZLE_OFFSETS[0].z, -2, 7, 0.01, v => { NOZZLE_OFFSETS[0].z = v; nozzleUpdateDirect(); }));
+    panel.appendChild(makeSlider('Noz R x', NOZZLE_OFFSETS[1].x, -2, 2, 0.01, v => { NOZZLE_OFFSETS[1].x = v; nozzleUpdateDirect(); }));
+    panel.appendChild(makeSlider('Noz R y', NOZZLE_OFFSETS[1].y, -1, 1, 0.01, v => { NOZZLE_OFFSETS[1].y = v; nozzleUpdateDirect(); }));
+    panel.appendChild(makeSlider('Noz R z', NOZZLE_OFFSETS[1].z, -2, 7, 0.01, v => { NOZZLE_OFFSETS[1].z = v; nozzleUpdateDirect(); }));
+
+    panel.appendChild(makeSlider('Mini L x', MINI_NOZZLE_OFFSETS[0].x, -2, 2, 0.01, v => { MINI_NOZZLE_OFFSETS[0].x = v; nozzleUpdateDirect(); }));
+    panel.appendChild(makeSlider('Mini L y', MINI_NOZZLE_OFFSETS[0].y, -1, 1, 0.01, v => { MINI_NOZZLE_OFFSETS[0].y = v; nozzleUpdateDirect(); }));
+    panel.appendChild(makeSlider('Mini L z', MINI_NOZZLE_OFFSETS[0].z, -2, 7, 0.01, v => { MINI_NOZZLE_OFFSETS[0].z = v; nozzleUpdateDirect(); }));
+    panel.appendChild(makeSlider('Mini R x', MINI_NOZZLE_OFFSETS[1].x, -2, 2, 0.01, v => { MINI_NOZZLE_OFFSETS[1].x = v; nozzleUpdateDirect(); }));
+    panel.appendChild(makeSlider('Mini R y', MINI_NOZZLE_OFFSETS[1].y, -1, 1, 0.01, v => { MINI_NOZZLE_OFFSETS[1].y = v; nozzleUpdateDirect(); }));
+    panel.appendChild(makeSlider('Mini R z', MINI_NOZZLE_OFFSETS[1].z, -2, 7, 0.01, v => { MINI_NOZZLE_OFFSETS[1].z = v; nozzleUpdateDirect(); }));
+    } // end alt ship / default nozzle sliders
 
     // ── Thruster Controls ──
     const hdr3 = document.createElement('div');
@@ -18788,11 +18813,23 @@ function buildSkinTunerSliders() {
       window._miniBloomScale = v;
     }));
 
-    // ── Cone Thruster (low poly only) ──
+    // ── Cone Thruster ──
     const hdrCone = document.createElement('div');
     hdrCone.style.cssText = 'color:#ff6600;margin:8px 0 4px;font-weight:bold;';
     hdrCone.textContent = '— CONE THRUSTER —';
     panel.appendChild(hdrCone);
+
+    // Cone on/off toggle
+    const coneTogBtn = document.createElement('button');
+    coneTogBtn.textContent = window._coneThrustersEnabled ? 'Cone Thrusters: ON' : 'Cone Thrusters: OFF';
+    coneTogBtn.style.cssText = 'background:' + (window._coneThrustersEnabled ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._coneThrustersEnabled ? '#0f0' : '#f00') + ';padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 4px 4px 0;';
+    coneTogBtn.addEventListener('click', () => {
+      window._coneThrustersEnabled = !window._coneThrustersEnabled;
+      coneTogBtn.textContent = window._coneThrustersEnabled ? 'Cone Thrusters: ON' : 'Cone Thrusters: OFF';
+      coneTogBtn.style.background = window._coneThrustersEnabled ? '#040' : '#400';
+      coneTogBtn.style.borderColor = window._coneThrustersEnabled ? '#0f0' : '#f00';
+    });
+    panel.appendChild(coneTogBtn);
 
     const ct = window._coneThruster;
     const hideOldBtn = document.createElement('button');
