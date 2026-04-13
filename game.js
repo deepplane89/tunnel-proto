@@ -369,9 +369,13 @@ const SHIP_SKINS = [
       thrusterScale:0.46, thrusterLength:3.9, noMiniThrusters:true, bloomScale:0.3 } },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
     glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
-      nozzleL:[-0.680,-0.050,5.200], nozzleR:[0.700,-0.060,5.200],
-      miniL:[-0.220,-0.030,5.100], miniR:[0.220,-0.030,5.100], thrusterScale:1.0,
-      matchDefault: true },
+      nozzleL:[-0.500,-0.660,0.700], nozzleR:[0.500,-0.660,0.700],
+      miniL:[-0.220,-0.700,0.600], miniR:[0.220,-0.700,0.600], thrusterScale:1.0,
+      matchDefault: true,
+      nozzleOverrides: {
+        nozzleL:[-0.680,-0.050,5.200], nozzleR:[0.700,-0.060,5.200],
+        miniL:[-0.220,-0.030,5.100], miniR:[0.220,-0.030,5.100]
+      } },
     laserConfig: { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 } },
   { name: 'SCORPION',        price: 0,    description: 'Heavy gunship',     glbFile: 'scorpion_ship.glb',
     glbConfig: { posX:0, posY:0, posZ:3.000, rotX:-1.602, rotY:0.028, rotZ:-0.002, scale:0.591,
@@ -5811,23 +5815,27 @@ function _showAltShip() {
   // Cone thrusters default ON for LOW POLY, OFF for others
   window._coneThrustersEnabled = (activeSkinIdx === 4);
   // Override nozzle offsets for thrusters
-  NOZZLE_OFFSETS[0].copy(_altShip.nozzleL);
-  NOZZLE_OFFSETS[1].copy(_altShip.nozzleR);
-  MINI_NOZZLE_OFFSETS[0].copy(_altShip.miniL);
-  MINI_NOZZLE_OFFSETS[1].copy(_altShip.miniR);
+  const _skinDef = SHIP_SKINS[activeSkinIdx];
+  const _noz = _skinDef && _skinDef.glbConfig && _skinDef.glbConfig.nozzleOverrides;
+  if (_noz) {
+    // Direct NOZZLE_OFFSETS values (calibrated in-game, bypass alt ship transform)
+    NOZZLE_OFFSETS[0].set(_noz.nozzleL[0], _noz.nozzleL[1], _noz.nozzleL[2]);
+    NOZZLE_OFFSETS[1].set(_noz.nozzleR[0], _noz.nozzleR[1], _noz.nozzleR[2]);
+    MINI_NOZZLE_OFFSETS[0].set(_noz.miniL[0], _noz.miniL[1], _noz.miniL[2]);
+    MINI_NOZZLE_OFFSETS[1].set(_noz.miniR[0], _noz.miniR[1], _noz.miniR[2]);
+  } else {
+    NOZZLE_OFFSETS[0].copy(_altShip.nozzleL);
+    NOZZLE_OFFSETS[1].copy(_altShip.nozzleR);
+    MINI_NOZZLE_OFFSETS[0].copy(_altShip.miniL);
+    MINI_NOZZLE_OFFSETS[1].copy(_altShip.miniR);
+  }
   // Sync per-ship thruster globals
   window._prevThrusterScale = window._thrusterScale;  // stash to restore later
   window._prevThrusterLength = window._thrusterLength;
   window._thrusterScale = _altShip.thrusterScale;
   window._baseThrusterScale = _altShip.thrusterScale;
   if (_altShip.thrusterLength != null) window._thrusterLength = _altShip.thrusterLength;
-  console.log('[NOZZLE DEBUG] _altShip.nozzleL:', _altShip.nozzleL.x, _altShip.nozzleL.y, _altShip.nozzleL.z);
-  console.log('[NOZZLE DEBUG] NOZZLE_OFFSETS[0]:', NOZZLE_OFFSETS[0].x, NOZZLE_OFFSETS[0].y, NOZZLE_OFFSETS[0].z);
-  console.log('[NOZZLE DEBUG] baseline:', JSON.stringify(_nozzleBaseline));
-  console.log('[NOZZLE DEBUG] _altShip transform:', _altShip.posX, _altShip.posY, _altShip.posZ, 'scale:', _altShip.scale);
-  console.log('[NOZZLE DEBUG] shipGroup.scale:', shipGroup.scale.x);
   _rebuildLocalNozzles();
-  console.log('[NOZZLE DEBUG] _localNozzles[0]:', _localNozzles[0].x.toFixed(3), _localNozzles[0].y.toFixed(3), _localNozzles[0].z.toFixed(3));
 }
 
 function _hideAltShip() {
