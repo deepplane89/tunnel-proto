@@ -7335,6 +7335,7 @@ function spawnLaserBolt(side) {
   bolt.children[1].scale.z = _gLen;
   bolt.userData.vel = -140;
   bolt.userData.life = 0.6;
+  bolt.userData._side = side * _spread; // store lane offset for X tracking
   return bolt;
 }
 
@@ -15238,6 +15239,7 @@ function update(dt) {
   for (let bi = laserBolts.length - 1; bi >= 0; bi--) {
     const bolt = laserBolts[bi];
     if (!bolt.visible) continue;
+    bolt.position.x = state.shipX + (bolt.userData._side || 0);
     bolt.position.z += bolt.userData.vel * dt;
     bolt.userData.life -= dt;
     if (bolt.userData.life <= 0 || bolt.position.z < -200) {
