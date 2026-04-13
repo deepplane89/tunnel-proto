@@ -1002,7 +1002,64 @@ uHitColor: RGB(1.0, 0.1, 0.1) — red ripple
 
 ---
 
-### Session Changes (April 12, 2026)
+### Ship Skins Reference
+
+Skins are defined in the `SHIP_SKINS` array (~line 360). Index matters for code guards.
+
+| Idx | Name | Price | Model | Notes |
+|-----|------|-------|-------|-------|
+| 0 | RUNNER | 0 | Built-in (procedural) | Default ship. Hex bump shader. |
+| 1 | GHOST | 400 | Built-in | Clean glossy white variant |
+| 2 | BLACK MAMBA | 800 | Built-in | Stealth predator |
+| 3 | CIPHER | 1400 | Built-in | Voronoi hull plating |
+| 4 | LOW POLY | 0 | `spaceship_low_poly.glb` | GLB model. Has cone thrusters + heat haze (unique to this skin). `noMiniThrusters: true`, `bloomScale: 0.3`. Hex bump shader. |
+| 5 | RUNNER MK II | 0 | `spaceship_01.glb` | GLB model. Has laser bolts. `matchDefault: true` flag. |
+| 6 | SCORPION | 0 | `scorpion_ship.glb` | GLB model. `keepMaterials: true`. Hex bump shader. Heavy gunship. |
+
+- `activeSkinIdx` — currently active skin index during gameplay
+- `skinViewerIdx` — which skin is being previewed on title screen
+- GLB skins use `_altShipActive` / `_altShipModel` for the loaded mesh
+- Skins 0-3 are color/material variants of the same procedural mesh
+- Skins 4-6 load external GLB files with per-skin `glbConfig` for positioning, rotation, scale, nozzle positions
+- Each GLB skin can override `thrusterScale`, `thrusterLength`, `bloomScale`, `noMiniThrusters`
+
+---
+
+### Death → Restart / Repair Ship Transitions
+
+These are the two paths back to gameplay after dying:
+
+#### "Try Again" (Restart)
+- Triggered by: restart button on game over screen, OR any canvas tap while `state.phase === 'dead'`
+- Flow: `_triggerRetryWithSweep()` → fade to black (0.15s CSS) → during black: full game reset via `startGame()` or `startDeathRun()` → camera placed at establishing shot (`_RETRY_CAM_START` = Vector3(0, 7.5, 16), FOV 85) → fade from black → camera sweeps down to chase cam over 1.3s (`_RETRY_SWEEP_DUR`) with ease-in-out cubic
+- `_retrySweepActive` / `_retrySweepT` drive the animation in the render loop (~line 14790)
+- `_retryPending` flag prevents double-tap during the fade
+- `playRetryWhoosh()` plays during sweep, engine roar at 80% progress
+- `state.introActive = true` during sweep to block obstacle spawning
+
+#### "Repair Ship" (Continue)
+- Triggered by: saveme button on game over screen (costs fuel cells)
+- Flow: fade to black → during black: reset score (NOT distance), clear mechanics, respawn ship at center, apply 3s invincibility → camera placed at same establishing shot as retry → same sweep animation via `_retrySweepActive` → fade from black
+- Uses the exact same camera sweep as "Try Again" — identical visual transition
+- Code: saveme button handler (~line 14499) sets `_retryPending`, fades, resets state, then starts `_retrySweepActive`
+- `state.saveMeCount` tracks how many times used (escalating fuel cost: 50/100/150/200)
+- Corridor type saved on death (`state._deathCorridorType`) so active corridor restarts from scratch
+
+#### Game Over Tap Cooldown
+- `_gameOverTapReady` flag — starts `false` when game over screen appears
+- After the game over screen is shown (post-explosion delay), a 700ms cooldown (`_GO_TAP_COOLDOWN`) starts before `_gameOverTapReady = true`
+- Guards on: restart button, exit button, saveme button, AND the canvas touchstart handler
+- Prevents accidentally tapping through game over and missing the repair ship option
+
+#### Death Camera Orbit
+- On death: camera enters cinematic orbit (`_expCamOrbitActive`) — rises up and orbits laterally around crash site
+- `_expCamAnchorX/Y/Z` = camera position at moment of death
+- `_expCrashWorldPos` = ship position at crash for lookAt target
+- Orbit killed when retry or repair sweep starts
+
+---
+
+### Session Changes (April 12-13, 2026)
 
 #### Thruster Nozzle Auto-Track System
 - `_nozzleBaseline` + `_snapshotNozzleBaseline()` (~line 5522): snapshots ship transform when nozzles are configured so auto-tracking can compute deltas
@@ -1051,62 +1108,81 @@ glbConfig: {
 - Per-ship `thrusterLength` overrides global `window._thrusterLength` for particle velocity
 
 #### Repair Ship Camera Fix
-- Added `camera.rotation.set(0,0,0)` + `lookAt` reset (~line 14242) after death orbit ends
-- Prevents camera from staying in orbit position after using Repair Ship
+- Originally hard-snapped camera back to chase cam — jarring
+- Now uses same fade-to-black + establishing-shot sweep as "Try Again" (reuses `_retrySweepActive`)
 
-#### Thruster Cone Mesh — NEW (Low Poly Only)
-- `_thrusterCones` array (~line 6254): one `ConeGeometry` per nozzle with custom `ShaderMaterial`
-- **Neon color ramp**: from the article at gameidea.org — builds through `pow(color, 4.0)` stages for hot white core → saturated color → dark tips
+#### Thruster Cone Mesh — LOW POLY ONLY
+- `_thrusterCones` array (~line 6261): one unit `ConeGeometry` per nozzle with custom `ShaderMaterial`
+- **Neon color ramp**: inspired by gameidea.org sci-fi thrust article — `pow(color, 4.0)` stages for hot white core → saturated color → dark tips
 - **Noise dissolve**: animated fbm noise eats into the gradient for organic flickering edges
 - **Fresnel edge softening**: cone edges fade out so it doesn't look like a hard geometric shape
 - Only visible when LOW POLY ship is active (`activeSkinIdx === 4`)
-- Positioned at nozzle world position, oriented +Z (exhaust direction), scaled by thruster power
-- Particles still layer on top for loose sparks
+- Positioned at nozzle world position each frame, scaled by thruster power
+- Cone visibility guard relaxed — no longer requires `state.phase === 'playing'`, so cones track during liftoff and x-wing banking
+- Particles (old thrusters) can be toggled off via `_hideOldThrusters` flag for isolated cone viewing
 
-#### Cone Thruster Tunable Defaults
+#### Cone Thruster Defaults (CURRENT BAKED VALUES — user-tuned)
 ```
 window._coneThruster = {
-  length:        2.5,   // cone length (world units)
-  radius:        0.18,  // base radius at nozzle
-  neonPower:     2.0,   // neon ramp intensity exponent
-  noiseSpeed:    1.5,   // noise scroll speed
-  noiseStrength: 0.25,  // how much noise eats into the gradient
-  fresnelPower:  2.0,   // edge softening strength
-  opacity:       0.85,  // master opacity
+  length: 3.4,          // cone length (world units)
+  radius: 0.14,         // base radius at nozzle
+  rotX: 1.42,           // rotation around X axis
+  rotY: 1.72,           // rotation around Y axis
+  rotZ: 0.05,           // rotation around Z axis
+  offX: 0, offY: 0, offZ: 0,  // position offsets
+  neonPower: 1.5,       // neon ramp intensity exponent
+  noiseSpeed: 0.8,      // noise scroll speed
+  noiseStrength: 0.13,  // how much noise eats into gradient
+  fresnelPower: 6.0,    // edge softening strength
+  opacity: 1.0          // master opacity
 }
 ```
+- These were tuned by user via slider screenshots across 3 rounds
+- rotX/rotY/rotZ and offX/offY/offZ were added because initial cone orientation was wrong
 
-#### Heat Haze Distortion — NEW (Low Poly Only)
+#### Heat Haze Distortion — LOW POLY ONLY
 - `_thrusterHazePass`: localized post-process `ShaderPass` added to composer after bloom
 - Projects both nozzle positions to screen-space UV each frame
 - Applies animated sine distortion (two frequencies) in a soft elliptical radius around each nozzle
-- Elongated vertically (exhaust direction) via `d.y *= 0.4` in the haze field function
-- Only enabled when LOW POLY is active + playing + thruster power > 0
+- Only enabled when LOW POLY is active + thruster power > 0
 - NOT the same as the full-screen `_heatPass` in the weird FX panel — this is localized
 
-#### Heat Haze Tunable Defaults
+#### Heat Haze Defaults (CURRENT BAKED VALUES — user-tuned)
 ```
-uIntensity: 0.7 (multiplied by thrusterPower each frame)
-uRadius: 0.12 (screen-space radius of haze area)
-window._hazeBaseIntensity: 0.7 (slider override)
+uRadius: 0.02          // screen-space radius (was 0.12, tightened dramatically)
+uHazeDir: 0.6          // haze direction control
+base intensity: 0.10   // was 0.7, reduced to subtle
 ```
+- Original haze was way too strong and global-looking. Tightened radius and intensity.
+- `uHazeDir` uniform added so user could control haze stretch direction via slider
 
-#### Tuner Sliders Added (Nozzle Tuner Panel)
-- **CONE THRUSTER** section (orange header): Cone Length, Cone Radius, Neon Power, Noise Speed, Noise Strength, Fresnel Power, Cone Opacity
-- **HEAT HAZE** section (cyan header): Haze Intensity, Haze Radius
+#### Tuner Sliders (Nozzle Tuner Panel, ~line 18770)
+- **CONE THRUSTER** section (orange header): Cone Length, Cone Radius, Rot X/Y/Z, Offset X/Y/Z, Neon Power, Noise Speed, Noise Strength, Fresnel Power, Cone Opacity
+- **HEAT HAZE** section (cyan header): Haze Intensity, Haze Radius, Haze Direction
+- "Toggle Old Thrusters" button to hide particle thrusters while tuning cones
 - All sliders write to `window._coneThruster` or `_thrusterHazePass.uniforms` for live preview
+
+#### Game Over Tap Cooldown (April 13)
+- `_gameOverTapReady` / `_gameOverTapTimer` / `_GO_TAP_COOLDOWN` (700ms)
+- Guards on restart-btn, gameover-exit-btn, saveme-btn, AND canvas touchstart handler
+- Problem was canvas `touchstart` at ~line 10805 was calling `_triggerRetryWithSweep()` directly when `phase === 'dead'`, bypassing all button cooldowns
+
+#### Repair Ship Smooth Transition (April 13)
+- Replaced hard camera snap with fade-to-black + establishing-shot sweep (same as retry)
+- Repair ship handler now sets `_retryPending`, fades to black, resets state during black, positions camera at `_RETRY_CAM_START`, starts `_retrySweepActive`, fades from black
+- Removed separate `_repairSweep*` system — just reuses the retry sweep
 
 #### Git Corruption & Reclone
 - Original `/home/user/workspace/tunnel-proto/` had corrupted .git objects
 - Recloned to `/home/user/workspace/tunnel-proto-fresh/`
 - **IMPORTANT:** Working directory is now `tunnel-proto-fresh`
 
-#### Current Git State (April 12)
-- Latest commit: `689e3e7` — thruster VFX upgrade: neon cone mesh + heat haze distortion + sliders (low poly only)
-- game.js: ~18,854 lines
-- Cache buster: `game.js?v=1776048508`
+#### Current Git State (April 13)
+- Latest commit: `adffbaa` — fix: tap cooldown on canvas touch + repair ship uses retry sweep transition
+- game.js: ~18,927 lines
+- Cache buster: `game.js?v=1776310100`
 
-#### All Commits This Session
+#### All Commits (April 12-13 Sessions)
 1. `6f4b132` — rebuild nozzles on orientation change
 2. `98c3f19` — auto-scale thruster nozzles (BROKEN — reverted)
 3. `d06515f` — revert msc factor
@@ -1119,6 +1195,22 @@ window._hazeBaseIntensity: 0.7 (slider override)
 10. `5dd665f` — recenter poly ship + nozzles from GLB data
 11. `639f1cb` — poly ship: no mini thrusters, reduced bloom, tuner position
 12. `689e3e7` — thruster VFX upgrade: neon cone mesh + heat haze distortion + sliders
+13. `3802c94` — fix: cone unit geometry + haze tightened + thruster scale sync
+14. `d7d7aa` — hotfix: restore ct reference in cone material init
+15. `f0499fa` — fix: flip heat haze direction
+16. `f379a4f` — add haze direction slider
+17. `9e9f983` — add cone rot/offset sliders + haze direction slider
+18. `a8065fe` — add Toggle Old Thrusters button
+19. `cc1f275` — bake tuned cone + haze defaults from screenshot
+20. `cce7b19` — bake final tuned cone/haze defaults + relax cone visibility for liftoff tracking
+21. `fb650ba` — smooth repair-ship camera ease-back + game-over tap cooldown (first attempt)
+22. `adffbaa` — fix: tap cooldown on canvas touch + repair ship uses retry sweep transition
+
+#### Active Work / Known Issues
+- **Mobile thruster positioning**: Desktop-tuned cone/haze values don't translate well to mobile landscape or portrait. Cones may appear offset or mispositioned on smaller viewports. User noticed this but hasn't specified what approach to take yet (separate mobile defaults vs auto-scaling vs mobile sliders).
+- **Old thrusters toggled OFF**: User had particle thrusters hidden while tuning cones. May want to permanently replace old particles with cones, or blend them. Decision pending.
+- **Cone tracking during liftoff**: Relaxed visibility guard so cones don't require `state.phase === 'playing'`. If cones still drift during animations, may need to parent them to `shipGroup` instead of updating positions in the render loop.
+- **Stress testing / dev tools diagnostics**: User expressed interest in building automated viewport testing, skin cycling smoke tests, FPS monitoring, and visual regression tools. Not started yet.
 
 ---
 
