@@ -10093,6 +10093,16 @@ function returnToTitle() {
   state.phase = 'title';
   shipGroup.visible = true;
   _killExplosion();
+  // ── Hard camera reset: prevent stale death/retry camera leaking into title ──
+  _retrySweepActive = false;
+  _retrySweepT = 0;
+  cameraPivot.position.set(0, 2.8 + _camPivotYOffset, 9 + _camPivotZOffset);
+  cameraRoll = 0;
+  camera.rotation.z = 0;
+  camera.position.set(0, 0, 0);
+  camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
+  camera.fov = _baseFOV;
+  camera.updateProjectionMatrix();
   if (_gameOverDelayTimer) { clearTimeout(_gameOverDelayTimer); _gameOverDelayTimer = null; }
   clearMusicTimers();
   // Show inline leaderboard on title
@@ -16362,8 +16372,8 @@ function animate() {
   if (!_retrySweepActive) {
     const speedFrac = (state.phase === 'playing') ? Math.min(state.speed / 80, 1) : 0;
     let targetFOV = _baseFOV + _fovSpeedBoost * speedFrac;
-    // Death zoom-out: push FOV wider during explosion
-    if (_expDeathZoomActive) targetFOV = _expDeathZoomTarget;
+    // Death zoom-out: push FOV wider during explosion (only during dead phase)
+    if (_expDeathZoomActive && state.phase === 'dead') targetFOV = _expDeathZoomTarget;
     // Launch snap in first 0.5s, then moderate accel / gentle decel
     const fovDiff = targetFOV - camera.fov;
     const isLaunch = state.phase === 'playing' && (state.elapsed || 0) < 0.5;
@@ -16411,7 +16421,7 @@ function animate() {
   // Tick alt ship animation mixer
   if (_altShipActive && _altShipMixer) _altShipMixer.update(rawDt);
   // ── Death sky pivot camera (runs in animate so it works during dead phase) ──
-  if (_expCamOrbitActive) {
+  if (_expCamOrbitActive && state.phase === 'dead') {
     _expCamOrbitT = Math.min(1, _expCamOrbitT + _EXP_CAM_ORBIT_SPEED * rawDt);
     const easeT = 1 - Math.pow(1 - _expCamOrbitT, 3);
     cameraPivot.position.y = THREE.MathUtils.lerp(_expCamAnchorY, _expCamAnchorY + _EXP_CAM_RISE, easeT);
