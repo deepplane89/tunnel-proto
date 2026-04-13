@@ -5575,7 +5575,8 @@ function _loadAltShip(glbFile, skinDef, callback) {
       _altMeshes.push(child);
       if (child.material) {
         if (_keepMats) {
-          // Trust the GLB's own materials — no overrides
+          // Trust the GLB's own materials — add hex bump for panel detail
+          child.material.onBeforeCompile = _hexBumpShaderPatch;
           child.material.needsUpdate = true;
         } else if (_matchDefault) {
           // Apply same materials as the default ship based on GLB material names
@@ -5663,12 +5664,13 @@ function _loadAltShip(glbFile, skinDef, callback) {
           child.material.emissiveIntensity = Math.max(child.material.emissiveIntensity || 0, 1.5);
           child.material.needsUpdate = true;
         } else {
-          // Simple models without proper PBR — override for visibility
+          // Simple models without proper PBR — override for visibility + hex bump
           child.material.metalness = 0.3;
           child.material.roughness = 0.5;
           if (!child.material.emissive) child.material.emissive = new THREE.Color(0x333333);
           else child.material.emissive.set(0x333333);
           child.material.emissiveIntensity = 1.0;
+          child.material.onBeforeCompile = _hexBumpShaderPatch;
           child.material.needsUpdate = true;
         }
       }
@@ -6084,15 +6086,15 @@ const flameMeshes = NOZZLE_OFFSETS.map(() => {
 // L4 ICE STORM:       icy pale blue-white
 // L5 VOID SINGULARITY: warm gold
 const THRUSTER_COLORS = [
-  new THREE.Color(0xaaddff),  // L1 — cool white-blue (was turquoise — too cyan)
-  new THREE.Color(0xee00ff),  // L2 — vivid violet
-  new THREE.Color(0xff3300),  // L3 — fire orange-red
-  new THREE.Color(0x88ddff),  // L4 — icy pale blue
-  new THREE.Color(0xff9a00),  // L5 — warm orange-gold
+  new THREE.Color(0x44aaff),  // L1 — saturated sky-blue (lum 0.61)
+  new THREE.Color(0xee00ff),  // L2 — vivid violet       (lum 0.27)
+  new THREE.Color(0xff3300),  // L3 — fire orange-red     (lum 0.36)
+  new THREE.Color(0x33aaee),  // L4 — icy cyan-blue       (lum 0.59)
+  new THREE.Color(0xff9a00),  // L5 — warm orange-gold    (lum 0.65)
 ];
 
 // Level-tinted thruster color — updated each level transition
-let thrusterColor = new THREE.Color(0x00eeff);
+let thrusterColor = new THREE.Color(0x44aaff);
 let _flameYawMult = 0.04;      // how much flame quads yaw with lateral velocity
 let _flameLateralMult = 0.05;  // how much flame quads shift X with lateral velocity
 
