@@ -925,7 +925,6 @@ function openMissions() {
     const _roarP = document.getElementById('engine-roar');
     if (_engP && !_engP.paused) _engP.pause();
     if (_roarP && !_roarP.paused) _roarP.pause();
-    if (windLoop) windLoop.pause();
   } else {
     _missionsOpenedFromGameplay = false;
   }
@@ -949,7 +948,6 @@ function closeMissions() {
     const _roarP = document.getElementById('engine-roar');
     if (_engP && _engP.paused) _engP.play().catch(()=>{});
     if (_roarP && _roarP.paused) _roarP.play().catch(()=>{});
-    if (windLoop && !state.muted) windLoop.play().catch(()=>{});
   }
 }
 window.closeMissions = closeMissions;
@@ -2139,12 +2137,7 @@ let _waterFlowZ = 0;  // accumulator for forward water scroll
 let _waterFlowScale = 0.45;  // faster forward water flow, especially noticeable at L4/L5
 let _tunerSpeedOverride = -1; // -1 = off; >0 = override state.speed each frame (for tuning)
 
-// Wind loop tuner params
-let _windBasePitch  = 0.70; // playback rate at low speed — deeper, calmer
-let _windPitchScale = 0.50; // ramps to 1.95x at T5c — noticeably higher/rushier
-let _windMinVol     = 0.10; // audible floor even at T1
-let _windVolScale   = 0.14; // ramps up meaningfully per tier
-let _windMaxVol     = 0.45; // loud enough to hear over music at top speed
+
 
 // Convenience alias so existing uniform-update code keeps working
 const mirrorMat = mirrorMesh.material;
@@ -4739,12 +4732,12 @@ function updateAurora(dt) {
 }
 
 // ── Music system: Web Audio API gain nodes for smooth crossfades ─────────
-const TRACK_VOL = { title: 0.4, bg: 0.45, l3: 0.45, l4: 0.45, lake: 0.28, wind: 0.10, keepgoing: 0.7 };
+const TRACK_VOL = { title: 0.4, bg: 0.45, l3: 0.45, l4: 0.45, lake: 0.28, keepgoing: 0.7 };
 const trackGains = {};   // { title: GainNode, bg: GainNode, ... }
 let   _gainsReady = false;
 
 function allTracks() {
-  return { title: titleMusic, bg: bgMusic, l3: l3Music, l4: l4Music, lake: lakeMusic, wind: windLoop, keepgoing: keepGoingMusic };
+  return { title: titleMusic, bg: bgMusic, l3: l3Music, l4: l4Music, lake: lakeMusic, keepgoing: keepGoingMusic };
 }
 
 // Wire each <audio> element through a GainNode. Called once from initAudio.
@@ -4794,7 +4787,7 @@ function setActiveMusic(track) {
   initAudio();
   const all = allTracks();
   Object.entries(all).forEach(([k, el]) => {
-    if (!el || k === 'lake' || k === 'wind') return;
+    if (!el || k === 'lake') return;
     el.pause();
     el.currentTime = 0;
     setTrackVol(k, TRACK_VOL[k] || 0.45);
@@ -4844,7 +4837,7 @@ function musicFadeTo(toTrack, durationMs, outFadeMult) {
   const outDurSec = durSec * (outFadeMult || 1.0);
 
   if (state.muted) {
-    Object.entries(all).forEach(([k, el]) => { if (el && k !== toTrack && k !== 'lake' && k !== 'wind') el.pause(); });
+    Object.entries(all).forEach(([k, el]) => { if (el && k !== toTrack && k !== 'lake') el.pause(); });
     if (toEl.paused) { setTrackVol(toTrack, 0); toEl.play().catch(() => {}); }
     return;
   }
@@ -4852,16 +4845,16 @@ function musicFadeTo(toTrack, durationMs, outFadeMult) {
   if (toEl.paused) { setTrackVol(toTrack, 0); toEl.play().catch(() => {}); }
   // Ramp destination in
   rampTrackVol(toTrack, TRACK_VOL[toTrack], durSec);
-  // Ramp all others out (except lake & wind)
+  // Ramp all others out (except lake)
   Object.entries(all).forEach(([k, el]) => {
-    if (!el || k === toTrack || k === 'lake' || k === 'wind') return;
+    if (!el || k === toTrack || k === 'lake') return;
     rampTrackVol(k, 0, outDurSec);
   });
   // Schedule cleanup: pause faded-out tracks after ramp completes
   const cleanupMs = Math.max(durationMs, durationMs * (outFadeMult || 1.0)) + 100;
   setTimeout(() => {
     Object.entries(all).forEach(([k, el]) => {
-      if (!el || k === toTrack || k === 'lake' || k === 'wind') return;
+      if (!el || k === toTrack || k === 'lake') return;
       if (getTrackVol(k) < 0.01) el.pause();
     });
   }, cleanupMs);
@@ -5066,45 +5059,7 @@ gltfLoader.load('./default_ship.glb', (gltf) => {
         color: 0x0e1014, metalness: 0.90, roughness: 0.30,
         transparent: false, depthWrite: true,
       });
-      // Hex panel normal bump via world-space tiling
-      mat.onBeforeCompile = (shader) => {
-        // Inject vWorldPos varying — use begin_vertex (always present) not worldpos_vertex
-        shader.vertexShader = 'varying vec3 vWorldPos;\n' + shader.vertexShader;
-        shader.vertexShader = shader.vertexShader.replace(
-          '#include <begin_vertex>',
-          `#include <begin_vertex>
-vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`
-        );
-        shader.fragmentShader = 'varying vec3 vWorldPos;\n' + shader.fragmentShader;
-        shader.fragmentShader = shader.fragmentShader.replace(
-          '#include <normal_fragment_maps>',
-          `#include <normal_fragment_maps>
-// triplanar hex bump — sample XZ and XY planes, blend by normal facing
-float _sc = 2.0;  // tile scale — huge armor panels, <10 over whole ship
-vec2 _uvXZ = vWorldPos.xz * _sc;
-vec2 _uvXY = vWorldPos.xy * _sc;
-// XZ plane cell
-vec2 _g1xz = fract(_uvXZ) - 0.5; vec2 _g2xz = fract(_uvXZ + 0.5) - 0.5;
-float _cellXZ = min(length(_g1xz), length(_g2xz));
-float _edgeXZ = 1.0 - smoothstep(0.30, 0.46, _cellXZ);
-// XY plane cell
-vec2 _g1xy = fract(_uvXY) - 0.5; vec2 _g2xy = fract(_uvXY + 0.5) - 0.5;
-float _cellXY = min(length(_g1xy), length(_g2xy));
-float _edgeXY = 1.0 - smoothstep(0.30, 0.46, _cellXY);
-// blend by how much normal faces up (XZ) vs forward (XY)
-float _blendY = abs(normal.y);
-float _edge = mix(_edgeXY, _edgeXZ, _blendY);
-vec2 _hUV = mix(_uvXY, _uvXZ, _blendY);
-float _bumpStr = 0.22;
-vec2 _eps = vec2(0.008, 0.0);
-vec2 _hUV_dx = _hUV + _eps.xy; vec2 _g1dx = fract(_hUV_dx)-0.5; vec2 _g2dx = fract(_hUV_dx+0.5)-0.5;
-float _eDx = 1.0 - smoothstep(0.30,0.46, min(length(_g1dx),length(_g2dx)));
-vec2 _hUV_dy = _hUV + _eps.yx; vec2 _g1dy = fract(_hUV_dy)-0.5; vec2 _g2dy = fract(_hUV_dy+0.5)-0.5;
-float _eDy = 1.0 - smoothstep(0.30,0.46, min(length(_g1dy),length(_g2dy)));
-vec3 _bn = normalize(normal + vec3((_eDx-_edge)*_bumpStr, (_eDy-_edge)*_bumpStr, 0.0));
-normal = normalize(mix(normal, _bn, 0.65));`
-        );
-      };
+      mat.onBeforeCompile = _hexBumpShaderPatch;
       mat.needsUpdate = true;
       child.material = mat;
       shipHullMats.push(child.material);
@@ -5126,40 +5081,7 @@ normal = normalize(mix(normal, _bn, 0.65));`
         emissive: 0x000000, emissiveIntensity: 0,
         transparent: false, depthWrite: true,
       });
-      // Same hex panel bump as rocket_base
-      mat.onBeforeCompile = (shader) => {
-        shader.vertexShader = 'varying vec3 vWorldPos;\n' + shader.vertexShader;
-        shader.vertexShader = shader.vertexShader.replace(
-          '#include <begin_vertex>',
-          `#include <begin_vertex>
-vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`
-        );
-        shader.fragmentShader = 'varying vec3 vWorldPos;\n' + shader.fragmentShader;
-        shader.fragmentShader = shader.fragmentShader.replace(
-          '#include <normal_fragment_maps>',
-          `#include <normal_fragment_maps>
-float _sc = 2.0;  // huge armor panels, <10 over whole ship
-vec2 _uvXZ = vWorldPos.xz * _sc;
-vec2 _uvXY = vWorldPos.xy * _sc;
-vec2 _g1xz = fract(_uvXZ) - 0.5; vec2 _g2xz = fract(_uvXZ + 0.5) - 0.5;
-float _cellXZ = min(length(_g1xz), length(_g2xz));
-float _edgeXZ = 1.0 - smoothstep(0.30, 0.46, _cellXZ);
-vec2 _g1xy = fract(_uvXY) - 0.5; vec2 _g2xy = fract(_uvXY + 0.5) - 0.5;
-float _cellXY = min(length(_g1xy), length(_g2xy));
-float _edgeXY = 1.0 - smoothstep(0.30, 0.46, _cellXY);
-float _blendY = abs(normal.y);
-float _edge = mix(_edgeXY, _edgeXZ, _blendY);
-vec2 _hUV = mix(_uvXY, _uvXZ, _blendY);
-float _bumpStr = 0.22;
-vec2 _eps = vec2(0.008, 0.0);
-vec2 _hUV_dx = _hUV + _eps.xy; vec2 _g1dx = fract(_hUV_dx)-0.5; vec2 _g2dx = fract(_hUV_dx+0.5)-0.5;
-float _eDx = 1.0 - smoothstep(0.30,0.46, min(length(_g1dx),length(_g2dx)));
-vec2 _hUV_dy = _hUV + _eps.yx; vec2 _g1dy = fract(_hUV_dy)-0.5; vec2 _g2dy = fract(_hUV_dy+0.5)-0.5;
-float _eDy = 1.0 - smoothstep(0.30,0.46, min(length(_g1dy),length(_g2dy)));
-vec3 _bn = normalize(normal + vec3((_eDx-_edge)*_bumpStr, (_eDy-_edge)*_bumpStr, 0.0));
-normal = normalize(mix(normal, _bn, 0.65));`
-        );
-      };
+      mat.onBeforeCompile = _hexBumpShaderPatch;
       mat.needsUpdate = true;
       child.material = mat;
       shipHullMats.push(child.material);
@@ -5536,6 +5458,41 @@ function applySkin(skinIndex) {
   }
 }
 
+// Shared hex-panel bump shader patch (used by default ship + matchDefault alt ships)
+function _hexBumpShaderPatch(shader) {
+  shader.vertexShader = 'varying vec3 vWorldPos;\n' + shader.vertexShader;
+  shader.vertexShader = shader.vertexShader.replace(
+    '#include <begin_vertex>',
+    `#include <begin_vertex>
+vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`
+  );
+  shader.fragmentShader = 'varying vec3 vWorldPos;\n' + shader.fragmentShader;
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <normal_fragment_maps>',
+    `#include <normal_fragment_maps>
+float _sc = 2.0;
+vec2 _uvXZ = vWorldPos.xz * _sc;
+vec2 _uvXY = vWorldPos.xy * _sc;
+vec2 _g1xz = fract(_uvXZ) - 0.5; vec2 _g2xz = fract(_uvXZ + 0.5) - 0.5;
+float _cellXZ = min(length(_g1xz), length(_g2xz));
+float _edgeXZ = 1.0 - smoothstep(0.30, 0.46, _cellXZ);
+vec2 _g1xy = fract(_uvXY) - 0.5; vec2 _g2xy = fract(_uvXY + 0.5) - 0.5;
+float _cellXY = min(length(_g1xy), length(_g2xy));
+float _edgeXY = 1.0 - smoothstep(0.30, 0.46, _cellXY);
+float _blendY = abs(normal.y);
+float _edge = mix(_edgeXY, _edgeXZ, _blendY);
+vec2 _hUV = mix(_uvXY, _uvXZ, _blendY);
+float _bumpStr = 0.22;
+vec2 _eps = vec2(0.008, 0.0);
+vec2 _hUV_dx = _hUV + _eps.xy; vec2 _g1dx = fract(_hUV_dx)-0.5; vec2 _g2dx = fract(_hUV_dx+0.5)-0.5;
+float _eDx = 1.0 - smoothstep(0.30,0.46, min(length(_g1dx),length(_g2dx)));
+vec2 _hUV_dy = _hUV + _eps.yx; vec2 _g1dy = fract(_hUV_dy)-0.5; vec2 _g2dy = fract(_hUV_dy+0.5)-0.5;
+float _eDy = 1.0 - smoothstep(0.30,0.46, min(length(_g1dy),length(_g2dy)));
+vec3 _bn = normalize(normal + vec3((_eDx-_edge)*_bumpStr, (_eDy-_edge)*_bumpStr, 0.0));
+normal = normalize(mix(normal, _bn, 0.65));`
+  );
+}
+
 // ═══════════════════════════════════════════════════
 //  ALTERNATE GLB SHIP SYSTEM
 // ═══════════════════════════════════════════════════
@@ -5621,7 +5578,10 @@ function _loadAltShip(glbFile, skinDef, callback) {
           } else if (matName === 'rocket_light' || matName === 'rocket light') {
             child.material = new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0033cc, emissiveIntensity: 2.5, metalness: 0.0, roughness: 0.05 });
           } else if (matName === 'rocket_base' || matName === 'rocket base') {
-            child.material = new THREE.MeshStandardMaterial({ color: 0x0e1014, metalness: 0.90, roughness: 0.30 });
+            const _rbMat = new THREE.MeshStandardMaterial({ color: 0x0e1014, metalness: 0.90, roughness: 0.30 });
+            _rbMat.onBeforeCompile = _hexBumpShaderPatch;
+            _rbMat.needsUpdate = true;
+            child.material = _rbMat;
             shipHullMats.push(child.material);
           } else if (matName === 'fire' || matName === 'fire1') {
             shipFireMeshes.push(child);
@@ -5630,7 +5590,10 @@ function _loadAltShip(glbFile, skinDef, callback) {
           } else if (matName === 'Light') {
             child.material = new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0033cc, emissiveIntensity: 2.5, metalness: 0.0, roughness: 0.05 });
           } else {
-            child.material = new THREE.MeshStandardMaterial({ color: 0x141820, metalness: 0.88, roughness: 0.25 });
+            const _hMat = new THREE.MeshStandardMaterial({ color: 0x141820, metalness: 0.88, roughness: 0.25 });
+            _hMat.onBeforeCompile = _hexBumpShaderPatch;
+            _hMat.needsUpdate = true;
+            child.material = _hMat;
             shipHullMats.push(child.material);
           }
         } else if (_stripTex) {
@@ -7369,7 +7332,6 @@ let l3Music        = null;
 let l4Music        = null;
 let lakeMusic      = null;
 let keepGoingMusic = null;
-let windLoop   = null;
 let activeFadeIv = null;  // crossfade timer handle
 
 function initAudio() {
@@ -7386,7 +7348,6 @@ function initAudio() {
       if (state.isDeathRun && state.phase === 'playing') musicFadeTo('l4', 3000);
     });
   }
-  windLoop   = windLoop   || document.getElementById('wind-loop');
   initWhoosh();
 
   if (audioCtx) {
@@ -7408,55 +7369,9 @@ function initAudio() {
   // Pre-decode SFX into AudioBuffers for instant mobile playback
   _initSFXBuffers();
 
-  // ── Init speed wind: persistent filtered noise tied to ship speed ──
-  _initSpeedWind();
 }
 
-// ── Dynamic speed wind: filtered noise whose freq + volume track ship speed ──
-let _speedWindSrc    = null;  // AudioBufferSourceNode (looping noise)
-let _speedWindFilter = null;  // BiquadFilterNode (bandpass)
-let _speedWindGain   = null;  // GainNode
-let _SW_MIN_FREQ = 250;    // bandpass freq at rest
-let _SW_MAX_FREQ = 4500;   // bandpass freq at max speed
-let _SW_MAX_VOL  = 0.12;   // max gain at top speed
-let _SW_Q        = 0.8;    // filter Q (wider = more airy)
 
-function _initSpeedWind() {
-  if (!audioCtx || _speedWindSrc) return;
-  // Create a long looping noise buffer (2s, looped)
-  const len = audioCtx.sampleRate * 2;
-  const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-  _speedWindSrc = audioCtx.createBufferSource();
-  _speedWindSrc.buffer = buf;
-  _speedWindSrc.loop = true;
-  _speedWindFilter = audioCtx.createBiquadFilter();
-  _speedWindFilter.type = 'bandpass';
-  _speedWindFilter.Q.value = _SW_Q;
-  _speedWindFilter.frequency.value = _SW_MIN_FREQ;
-  _speedWindGain = audioCtx.createGain();
-  _speedWindGain.gain.value = 0;
-  _speedWindSrc.connect(_speedWindFilter).connect(_speedWindGain).connect(audioCtx.destination);
-  _speedWindSrc.start();
-}
-
-function _updateSpeedWind(speed, dt) {
-  if (!_speedWindGain || !_speedWindFilter) return;
-  const vol = typeof sfxMult === 'function' ? sfxMult() : 1;
-  if (state.muted || vol <= 0 || state.phase !== 'playing') {
-    _speedWindGain.gain.value += (0 - _speedWindGain.gain.value) * Math.min(1, dt * 8);
-    return;
-  }
-  const t = Math.min(1, Math.max(0, (speed - BASE_SPEED) / (BASE_SPEED * 0.85)));
-  const targetFreq = _SW_MIN_FREQ + t * (_SW_MAX_FREQ - _SW_MIN_FREQ);
-  const targetVol  = t * _SW_MAX_VOL * vol;
-  // Smooth lerp to avoid clicks
-  const cur = _speedWindGain.gain.value;
-  _speedWindGain.gain.value = cur + (targetVol - cur) * Math.min(1, dt * 3);
-  const curF = _speedWindFilter.frequency.value;
-  _speedWindFilter.frequency.value = curF + (targetFreq - curF) * Math.min(1, dt * 3);
-}
 
 // ── Magnet whir (continuous while magnet active) ──
 let _magnetWhirOsc  = null;
@@ -10165,13 +10080,11 @@ function togglePause() {
     if (_roarP && !_roarP.paused) _roarP.pause();
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
-    if (windLoop) windLoop.pause();
     if (state._tutorialActive) _tutHideText();
   } else if (state.phase === 'paused') {
     state.phase = 'playing';
     setPauseOverlay(false);
     resumeGameTrackInPlace(currentGameTrack());
-    if (windLoop && !state.muted) windLoop.play().catch(() => {});
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
   }
 }
@@ -10233,7 +10146,6 @@ function returnToTitle() {
   });
   // Stop lake ambience on return to title
   if (lakeMusic) { lakeMusic.pause(); lakeMusic.currentTime = 0; setTrackVol('lake', 0); }
-  if (windLoop) { windLoop.pause(); windLoop.currentTime = 0; setTrackVol('wind', 0); }
   // Stop engine SFX
   const _engR = document.getElementById('engine-start');
   const _roarR = document.getElementById('engine-roar');
@@ -11607,7 +11519,7 @@ function startGame() {
     const _eng = document.getElementById('engine-start');
     if (_eng) { _eng.volume = 0; _eng.play().then(() => { _eng.pause(); _eng.currentTime = 0; _eng.volume = 1; }).catch(() => { _eng.volume = 1; }); }
   }
-  [['l3', l3Music], ['l4', l4Music], ['wind', windLoop]].forEach(([k, el]) => {
+  [['l3', l3Music], ['l4', l4Music]].forEach(([k, el]) => {
     if (el && el.paused) { setTrackVol(k, 0); el.play().then(() => { el.pause(); el.currentTime = 0; }).catch(() => {}); }
   });
   // Hard-reset ALL tracks — kill title immediately, no overlap
@@ -11626,13 +11538,6 @@ function startGame() {
     setTrackVol(_startTrack, 0);
     _startEl.play().catch(() => {});
     musicFadeTo(_startTrack, 800);
-  }
-  // Start wind loop
-  if (windLoop && !state.muted) {
-    windLoop.currentTime = 0;
-    setTrackVol('wind', 0);
-    windLoop.playbackRate = 0.9;
-    windLoop.play().catch(() => {});
   }
   // Ensure lakeMusic element is bound before trying to play
   if (!lakeMusic) { lakeMusic = document.getElementById('lake-music'); }
@@ -14038,7 +13943,6 @@ function killPlayer() {
   if (titleMusic) titleMusic.currentTime = 0;  // always start title from top on game over
   // Stop lake ambience on game over
   if (lakeMusic) { lakeMusic.pause(); lakeMusic.currentTime = 0; setTrackVol('lake', 0); }
-  if (windLoop) { windLoop.pause(); windLoop.currentTime = 0; setTrackVol('wind', 0); }
   musicFadeTo('title', 2500);
 
   // Player-facing score — apply distance multiplier
@@ -14945,23 +14849,6 @@ function update(dt) {
           showMissionToast(_rung.desc);
         }
       }
-    }
-  }
-
-  // ── Dynamic speed wind (filtered noise) ──
-  _updateSpeedWind(effectiveSpeed, dt);
-
-  // ── Wind loop: pitch & volume track ship speed
-  if (windLoop && !windLoop.paused) {
-    const speedRatio = effectiveSpeed / BASE_SPEED;
-    windLoop.playbackRate = _windBasePitch + speedRatio * _windPitchScale;
-    const targetVol = state.muted ? 0 : Math.min(_windMaxVol, _windMinVol + speedRatio * _windVolScale);
-    // Direct gain set — avoid cancelScheduledValues overhead on hot path
-    const wg = trackGains['wind'];
-    if (wg) {
-      const cur = wg.gain.value;
-      const next = cur + (targetVol - cur) * Math.min(1, dt * 2);
-      if (Math.abs(next - cur) > 0.001) wg.gain.value = next;
     }
   }
 
@@ -16638,7 +16525,6 @@ document.addEventListener('visibilitychange', () => {
     // Pause all audio immediately regardless of game state
     const tracks = allTracks();
     Object.values(tracks).forEach(el => { if (el && !el.paused) el.pause(); });
-    if (windLoop && !windLoop.paused) windLoop.pause();
     const _engV = document.getElementById('engine-start');
     if (_engV && !_engV.paused) _engV.pause();
     if (audioCtx && audioCtx.state === 'running') audioCtx.suspend().catch(() => {});
@@ -17565,20 +17451,6 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('waterAlpha', mirrorMat.uniforms.alpha.value, 0, 1, 0.01, v => mirrorMat.uniforms.alpha.value = v, '#4af'));
     panel.appendChild(makeSlider('waterSize', mirrorMat.uniforms.size.value, 0, 20, 0.1, v => mirrorMat.uniforms.size.value = v, '#4af'));
     panel.appendChild(makeSlider('flowScale', _waterFlowScale, 0, 3, 0.05, v => { _waterFlowScale = v; }, '#4af'));
-
-    // WIND
-    panel.appendChild(makeHeader('WIND'));
-    panel.appendChild(makeSlider('wind minVol', _windMinVol, 0, 0.5, 0.01, v => { _windMinVol = v; }, '#8cf'));
-    panel.appendChild(makeSlider('wind volScale', _windVolScale, 0, 0.5, 0.01, v => { _windVolScale = v; }, '#8cf'));
-    panel.appendChild(makeSlider('wind maxVol', _windMaxVol, 0, 1.0, 0.01, v => { _windMaxVol = v; }, '#8cf'));
-    panel.appendChild(makeSlider('wind basePitch', _windBasePitch, 0.5, 2.0, 0.05, v => { _windBasePitch = v; }, '#8cf'));
-    panel.appendChild(makeSlider('wind pitchScale', _windPitchScale, 0, 1.0, 0.05, v => { _windPitchScale = v; }, '#8cf'));
-
-    panel.appendChild(makeHeader('SPEED WIND'));
-    panel.appendChild(makeSlider('max volume', _SW_MAX_VOL, 0, 0.5, 0.01, v => { _SW_MAX_VOL = v; }, '#6bf'));
-    panel.appendChild(makeSlider('min freq', _SW_MIN_FREQ, 50, 2000, 10, v => { _SW_MIN_FREQ = v; }, '#6bf'));
-    panel.appendChild(makeSlider('max freq', _SW_MAX_FREQ, 500, 10000, 100, v => { _SW_MAX_FREQ = v; }, '#6bf'));
-    panel.appendChild(makeSlider('filter Q', _SW_Q, 0.1, 5, 0.1, v => { _SW_Q = v; if (_speedWindFilter) _speedWindFilter.Q.value = v; }, '#6bf'));
 
     // SUN ELEMENTS
     panel.appendChild(makeHeader('SUN'));
