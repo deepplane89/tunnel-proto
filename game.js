@@ -1421,7 +1421,7 @@ const _thrusterHazeShader = {
     uTime:      { value: 0.0 },
     uIntensity: { value: 0.0 },   // 0 = off, ~0.6-1.0 = visible
     uRadius:    { value: 0.06 },  // screen-space radius of haze area (tighter default)
-    uHazeDir:   { value: -1.0 },  // -1 = below nozzle, +1 = above, 0 = centered
+    uHazeDir:   { value: 1.1 },   // slider-tuned direction
     uAspect:    { value: 1.0 },
   },
   vertexShader: /* glsl */`
@@ -6156,19 +6156,19 @@ const flameMeshes = NOZZLE_OFFSETS.map(() => {
 // ── Thruster exhaust CONE meshes (low poly only — neon ramp + noise dissolve) ──
 // Tunable globals for the cone shader — exposed via sliders
 window._coneThruster = {
-  length:       2.5,    // cone length (world units)
-  radius:       0.18,   // base radius at nozzle
-  rotX:        -1.571,  // rotation X (default -PI/2 = point along +Z)
-  rotY:         0,      // rotation Y
-  rotZ:         0,      // rotation Z
-  offX:         0,      // position offset X from nozzle
-  offY:         0,      // position offset Y from nozzle
-  offZ:         0,      // position offset Z from nozzle
-  neonPower:    2.0,    // neon ramp intensity exponent
-  noiseSpeed:   1.5,    // noise scroll speed
-  noiseStrength:0.25,   // how much noise eats into the gradient
-  fresnelPower: 2.0,    // edge softening strength
-  opacity:      0.85,   // master opacity
+  length:       2.5,
+  radius:       0.28,
+  rotX:         1.42,
+  rotY:         1.72,
+  rotZ:         0.05,
+  offX:         0,
+  offY:         0,
+  offZ:         0,
+  neonPower:    2.0,
+  noiseSpeed:   1.5,
+  noiseStrength:0.25,
+  fresnelPower: 2.0,
+  opacity:      0.85,
 };
 
 const _coneVertSrc = /* glsl */`
@@ -16741,7 +16741,7 @@ function animate() {
       _thrusterHazePass.uniforms.uTime.value = performance.now() * 0.001;
       // Kill haze if nozzles aren't on screen
       _thrusterHazePass.uniforms.uIntensity.value = _hazeValid
-        ? (window._hazeBaseIntensity != null ? window._hazeBaseIntensity : 0.7) * state.thrusterPower
+        ? (window._hazeBaseIntensity != null ? window._hazeBaseIntensity : 0.45) * state.thrusterPower
         : 0.0;
       _thrusterHazePass.uniforms.uAspect.value = window.innerWidth / window.innerHeight;
     }
