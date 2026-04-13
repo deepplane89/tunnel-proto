@@ -1002,6 +1002,126 @@ uHitColor: RGB(1.0, 0.1, 0.1) — red ripple
 
 ---
 
+### Session Changes (April 12, 2026)
+
+#### Thruster Nozzle Auto-Track System
+- `_nozzleBaseline` + `_snapshotNozzleBaseline()` (~line 5522): snapshots ship transform when nozzles are configured so auto-tracking can compute deltas
+- `_rebuildLocalNozzles()` (~line 5838): converts world-space nozzle offsets to shipGroup local space, applying scale ratio and position deltas from baseline
+- Called from `updateCameraFOV()` on orientation change so thrusters follow ship in landscape/portrait
+
+#### Thruster Color Rebalance
+- Audited all level thruster colors for luminance vs bloom interaction
+- `THRUSTER_COLORS` array (~line 6153):
+  - L1: `0x44aaff` — saturated sky-blue (lum 0.61)
+  - L2: `0xee00ff` — vivid violet (lum 0.27)
+  - L3: `0xff3300` — fire orange-red (lum 0.36)
+  - L4: `0x33aaee` — icy cyan-blue (lum 0.59)
+  - L5: `0xff9a00` — warm orange-gold (lum 0.65)
+- L1 was 0.83 lum and L4 was 0.81 — both were way too hot, rebalanced to 0.27-0.65 range
+
+#### Hex Bump Texture
+- `_hexBumpShaderPatch` (~line 5463): applies procedural hex bump normal perturbation to ship materials
+- Added to LOW POLY and SCORPION ships (was only on default RUNNER before)
+
+#### Laser Bolt Fix
+- Bolts now track `state.shipX` each frame (~line 15241) so they don't bend while strafing
+
+#### Prologue Steering Fix
+- `_introBlock` guard (~line 14465): blocks lateral input during `introActive` / `_introLiftActive`
+- Prevents ship settings from getting messed up if user holds left/right during liftoff animation
+
+#### LOW POLY Ship Config (CURRENT BAKED DEFAULTS)
+```
+glbConfig: {
+  posX: 0, posY: 0.850, posZ: 3.000,
+  rotX: -0.052, rotY: -0.002, rotZ: -0.002,
+  scale: 0.248,
+  nozzleL: [-0.420, 0.190, 3.440],
+  nozzleR: [0.420, 0.170, 3.390],
+  miniL: [-0.280, 0.032, 1.550],
+  miniR: [0.260, 0.032, 1.550],
+  thrusterScale: 0.46,
+  thrusterLength: 3.9,
+  noMiniThrusters: true,
+  bloomScale: 0.3
+}
+```
+- Per-ship `noMiniThrusters` flag hides mini thrusters (poly ship has no mini exhaust ports)
+- Per-ship `bloomScale` reduces nozzle bloom sprite size
+- Per-ship `thrusterLength` overrides global `window._thrusterLength` for particle velocity
+
+#### Repair Ship Camera Fix
+- Added `camera.rotation.set(0,0,0)` + `lookAt` reset (~line 14242) after death orbit ends
+- Prevents camera from staying in orbit position after using Repair Ship
+
+#### Thruster Cone Mesh — NEW (Low Poly Only)
+- `_thrusterCones` array (~line 6254): one `ConeGeometry` per nozzle with custom `ShaderMaterial`
+- **Neon color ramp**: from the article at gameidea.org — builds through `pow(color, 4.0)` stages for hot white core → saturated color → dark tips
+- **Noise dissolve**: animated fbm noise eats into the gradient for organic flickering edges
+- **Fresnel edge softening**: cone edges fade out so it doesn't look like a hard geometric shape
+- Only visible when LOW POLY ship is active (`activeSkinIdx === 4`)
+- Positioned at nozzle world position, oriented +Z (exhaust direction), scaled by thruster power
+- Particles still layer on top for loose sparks
+
+#### Cone Thruster Tunable Defaults
+```
+window._coneThruster = {
+  length:        2.5,   // cone length (world units)
+  radius:        0.18,  // base radius at nozzle
+  neonPower:     2.0,   // neon ramp intensity exponent
+  noiseSpeed:    1.5,   // noise scroll speed
+  noiseStrength: 0.25,  // how much noise eats into the gradient
+  fresnelPower:  2.0,   // edge softening strength
+  opacity:       0.85,  // master opacity
+}
+```
+
+#### Heat Haze Distortion — NEW (Low Poly Only)
+- `_thrusterHazePass`: localized post-process `ShaderPass` added to composer after bloom
+- Projects both nozzle positions to screen-space UV each frame
+- Applies animated sine distortion (two frequencies) in a soft elliptical radius around each nozzle
+- Elongated vertically (exhaust direction) via `d.y *= 0.4` in the haze field function
+- Only enabled when LOW POLY is active + playing + thruster power > 0
+- NOT the same as the full-screen `_heatPass` in the weird FX panel — this is localized
+
+#### Heat Haze Tunable Defaults
+```
+uIntensity: 0.7 (multiplied by thrusterPower each frame)
+uRadius: 0.12 (screen-space radius of haze area)
+window._hazeBaseIntensity: 0.7 (slider override)
+```
+
+#### Tuner Sliders Added (Nozzle Tuner Panel)
+- **CONE THRUSTER** section (orange header): Cone Length, Cone Radius, Neon Power, Noise Speed, Noise Strength, Fresnel Power, Cone Opacity
+- **HEAT HAZE** section (cyan header): Haze Intensity, Haze Radius
+- All sliders write to `window._coneThruster` or `_thrusterHazePass.uniforms` for live preview
+
+#### Git Corruption & Reclone
+- Original `/home/user/workspace/tunnel-proto/` had corrupted .git objects
+- Recloned to `/home/user/workspace/tunnel-proto-fresh/`
+- **IMPORTANT:** Working directory is now `tunnel-proto-fresh`
+
+#### Current Git State (April 12)
+- Latest commit: `689e3e7` — thruster VFX upgrade: neon cone mesh + heat haze distortion + sliders (low poly only)
+- game.js: ~18,854 lines
+- Cache buster: `game.js?v=1776048508`
+
+#### All Commits This Session
+1. `6f4b132` — rebuild nozzles on orientation change
+2. `98c3f19` — auto-scale thruster nozzles (BROKEN — reverted)
+3. `d06515f` — revert msc factor
+4. `1abacde` — auto-track thruster nozzles with baseline system
+5. `e0342ba` — bake tuned low poly scale 0.244 + nozzle positions
+6. `97f4560` — reset camera rotation + lookAt on repair ship resume
+7. `fd99d74` — rebalance thruster colors + hex bump on poly & scorpion
+8. `daab071` — lock laser bolts to ship X position
+9. `c008b40` — block lateral steering during prologue liftoff
+10. `5dd665f` — recenter poly ship + nozzles from GLB data
+11. `639f1cb` — poly ship: no mini thrusters, reduced bloom, tuner position
+12. `689e3e7` — thruster VFX upgrade: neon cone mesh + heat haze distortion + sliders
+
+---
+
 ### Lore Direction
 - The grid is a system trying to stop the player from reaching "peace" / the other side
 - Each obstacle type is a defense layer deployed against the player

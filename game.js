@@ -1420,7 +1420,7 @@ const _thrusterHazeShader = {
     uNozzleR:   { value: new THREE.Vector2(0.5, 0.5) },
     uTime:      { value: 0.0 },
     uIntensity: { value: 0.0 },   // 0 = off, ~0.6-1.0 = visible
-    uRadius:    { value: 0.12 },  // screen-space radius of haze area
+    uRadius:    { value: 0.06 },  // screen-space radius of haze area (tighter default)
     uAspect:    { value: 1.0 },
   },
   vertexShader: /* glsl */`
@@ -1443,11 +1443,10 @@ const _thrusterHazeShader = {
     float hazeField(vec2 uv, vec2 nozzle) {
       vec2 d = uv - nozzle;
       d.x *= uAspect;
-      // Elongate behind nozzle (+Y in screen = downward in UV, but exhaust goes away from camera = higher UV.y)
-      // Stretch the haze region behind the nozzle (toward higher Z = upward in screen)
-      d.y *= 0.4;  // stretch vertically (exhaust direction)
+      // Slight vertical elongation for exhaust shape (1.0 = circle, <1 = taller)
+      d.y *= 0.7;
       float dist = length(d);
-      return smoothstep(uRadius, 0.0, dist);
+      return smoothstep(uRadius, uRadius * 0.2, dist);
     }
 
     void main() {
@@ -5806,6 +5805,12 @@ function _showAltShip() {
   NOZZLE_OFFSETS[1].copy(_altShip.nozzleR);
   MINI_NOZZLE_OFFSETS[0].copy(_altShip.miniL);
   MINI_NOZZLE_OFFSETS[1].copy(_altShip.miniR);
+  // Sync per-ship thruster globals
+  window._prevThrusterScale = window._thrusterScale;  // stash to restore later
+  window._prevThrusterLength = window._thrusterLength;
+  window._thrusterScale = _altShip.thrusterScale;
+  window._baseThrusterScale = _altShip.thrusterScale;
+  if (_altShip.thrusterLength != null) window._thrusterLength = _altShip.thrusterLength;
   _rebuildLocalNozzles();
 }
 
@@ -5824,6 +5829,9 @@ function _hideAltShip() {
   NOZZLE_OFFSETS[1].set( 0.50, 0.12, 5.20);
   MINI_NOZZLE_OFFSETS[0].set(-0.22, 0.08, 5.10);
   MINI_NOZZLE_OFFSETS[1].set( 0.22, 0.08, 5.10);
+  // Restore stashed thruster globals
+  if (window._prevThrusterScale != null) { window._thrusterScale = window._prevThrusterScale; window._baseThrusterScale = window._prevThrusterScale; }
+  if (window._prevThrusterLength != null) window._thrusterLength = window._prevThrusterLength;
   _rebuildLocalNozzles();
 }
 
@@ -6155,7 +6163,6 @@ window._coneThruster = {
 };
 
 const _coneVertSrc = /* glsl */`
-  uniform float uLength;
   varying float vHeight;  // 0 = nozzle base, 1 = tip
   varying vec3 vNormal;
   varying vec3 vViewDir;
@@ -6165,8 +6172,8 @@ const _coneVertSrc = /* glsl */`
     vNormal = normalize(normalMatrix * normal);
     vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
     vViewDir = -mvPos.xyz;
-    // Normalized height along cone axis
-    vHeight = clamp((position.y + uLength * 0.5) / uLength, 0.0, 1.0);
+    // Unit geometry: base at y=0, tip at y=1 (after translate)
+    vHeight = clamp(position.y, 0.0, 1.0);
     gl_Position = projectionMatrix * mvPos;
   }
 `;
@@ -6252,18 +6259,16 @@ const _coneFragSrc = /* glsl */`
 `;
 
 const _thrusterCones = NOZZLE_OFFSETS.map(() => {
-  const ct = window._coneThruster;
-  // ConeGeometry: radius at base, 0 at tip, height, segments
-  const geo = new THREE.ConeGeometry(ct.radius, ct.length, 16, 1, true);
-  // Shift so base (y = -length/2) sits at local origin — cone extends in +Y
-  geo.translate(0, ct.length * 0.5, 0);
+  // Unit cone: radius=1, height=1 — scaled at runtime via cone.scale
+  const geo = new THREE.ConeGeometry(1, 1, 16, 1, true);
+  // Shift so base sits at local origin, tip extends in +Y
+  geo.translate(0, 0.5, 0);
   const mat = new THREE.ShaderMaterial({
     vertexShader: _coneVertSrc,
     fragmentShader: _coneFragSrc,
     uniforms: {
       uTime:          { value: 0 },
       uColor:         { value: new THREE.Color(0x44aaff) },
-      uLength:        { value: ct.length },
       uNeonPower:     { value: ct.neonPower },
       uNoiseSpeed:    { value: ct.noiseSpeed },
       uNoiseStrength: { value: ct.noiseStrength },
@@ -6508,15 +6513,13 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       cone.position.set(wx, wy, wz);
       // Orient cone so its +Y axis points along +Z (exhaust direction = backward)
       cone.rotation.set(-Math.PI * 0.5, 0, 0);
-      // Scale by thruster power and ship scale
-      const _shipSc4 = shipGroup.scale.x;
+      // Unit geometry scaled to actual world size
       const ct = window._coneThruster;
-      cone.scale.set(ct.radius * _shipSc4, ct.length * _shipSc4 * tp, ct.radius * _shipSc4);
-      // Update shader uniforms
+      cone.scale.set(ct.radius, ct.length * tp, ct.radius);
+      // Update shader uniforms from live slider values
       const u = cone.material.uniforms;
       u.uTime.value = performance.now() * 0.001;
       u.uColor.value.copy(thrusterColor);
-      u.uLength.value = ct.length;
       u.uNeonPower.value = ct.neonPower;
       u.uNoiseSpeed.value = ct.noiseSpeed;
       u.uNoiseStrength.value = ct.noiseStrength;
@@ -16715,16 +16718,22 @@ function animate() {
     _thrusterHazePass.enabled = _isLowPoly && state.phase === 'playing' && state.thrusterPower > 0.01;
     if (_thrusterHazePass.enabled) {
       const _hzProj = new THREE.Vector3();
+      let _hazeValid = true;
       // Project left nozzle to screen UV
       const nwL = nozzleWorld(_localNozzles[0]);
       _hzProj.set(nwL.x, nwL.y, nwL.z).project(camera);
+      if (_hzProj.z > 1 || _hzProj.z < -1) _hazeValid = false;
       _thrusterHazePass.uniforms.uNozzleL.value.set(_hzProj.x * 0.5 + 0.5, _hzProj.y * 0.5 + 0.5);
       // Project right nozzle to screen UV
       const nwR = nozzleWorld(_localNozzles[1]);
       _hzProj.set(nwR.x, nwR.y, nwR.z).project(camera);
+      if (_hzProj.z > 1 || _hzProj.z < -1) _hazeValid = false;
       _thrusterHazePass.uniforms.uNozzleR.value.set(_hzProj.x * 0.5 + 0.5, _hzProj.y * 0.5 + 0.5);
       _thrusterHazePass.uniforms.uTime.value = performance.now() * 0.001;
-      _thrusterHazePass.uniforms.uIntensity.value = (window._hazeBaseIntensity != null ? window._hazeBaseIntensity : 0.7) * state.thrusterPower;
+      // Kill haze if nozzles aren't on screen
+      _thrusterHazePass.uniforms.uIntensity.value = _hazeValid
+        ? (window._hazeBaseIntensity != null ? window._hazeBaseIntensity : 0.7) * state.thrusterPower
+        : 0.0;
       _thrusterHazePass.uniforms.uAspect.value = window.innerWidth / window.innerHeight;
     }
   }
