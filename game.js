@@ -368,9 +368,11 @@ const SHIP_SKINS = [
       miniL:[-0.280,0.032,1.550], miniR:[0.260,0.032,1.550],
       thrusterScale:0.46, thrusterLength:3.9, noMiniThrusters:true, bloomScale:0.3 } },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
-    glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
+    glbConfig: { posX:0, posY:-0.590, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
       nozzleL:[-0.680,-0.050,5.200], nozzleR:[0.700,-0.060,5.200],
       miniL:[-0.220,-0.030,5.100], miniR:[0.220,-0.030,5.100], thrusterScale:1.0,
+      portraitNozzleL:[-0.520,-0.020,5.020], portraitNozzleR:[0.570,-0.130,4.860],
+      portraitMiniL:[-0.140,0.070,5.100], portraitMiniR:[0.160,0.070,5.100],
       matchDefault: true },
     laserConfig: { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 } },
   { name: 'SCORPION',        price: 0,    description: 'Heavy gunship',     glbFile: 'scorpion_ship.glb',
@@ -5798,6 +5800,26 @@ function _loadAltShip(glbFile, skinDef, callback) {
   });
 }
 
+// Apply orientation-specific nozzle offsets for ships that have portrait/landscape variants
+function _applyOrientationNozzles() {
+  if (!_altShipActive) return;
+  const cfg = SHIP_SKINS[activeSkinIdx] && SHIP_SKINS[activeSkinIdx].glbConfig;
+  if (!cfg || !cfg.portraitNozzleL) return; // no portrait overrides → nothing to do
+  const isLandscape = window.innerWidth > window.innerHeight;
+  if (isLandscape) {
+    NOZZLE_OFFSETS[0].set(cfg.nozzleL[0], cfg.nozzleL[1], cfg.nozzleL[2]);
+    NOZZLE_OFFSETS[1].set(cfg.nozzleR[0], cfg.nozzleR[1], cfg.nozzleR[2]);
+    MINI_NOZZLE_OFFSETS[0].set(cfg.miniL[0], cfg.miniL[1], cfg.miniL[2]);
+    MINI_NOZZLE_OFFSETS[1].set(cfg.miniR[0], cfg.miniR[1], cfg.miniR[2]);
+  } else {
+    NOZZLE_OFFSETS[0].set(cfg.portraitNozzleL[0], cfg.portraitNozzleL[1], cfg.portraitNozzleL[2]);
+    NOZZLE_OFFSETS[1].set(cfg.portraitNozzleR[0], cfg.portraitNozzleR[1], cfg.portraitNozzleR[2]);
+    MINI_NOZZLE_OFFSETS[0].set(cfg.portraitMiniL[0], cfg.portraitMiniL[1], cfg.portraitMiniL[2]);
+    MINI_NOZZLE_OFFSETS[1].set(cfg.portraitMiniR[0], cfg.portraitMiniR[1], cfg.portraitMiniR[2]);
+  }
+  _rebuildLocalNozzles();
+}
+
 function _showAltShip() {
   if (!_altShipModel) return;
   // Hide default model
@@ -5821,7 +5843,11 @@ function _showAltShip() {
   window._thrusterScale = _altShip.thrusterScale;
   window._baseThrusterScale = _altShip.thrusterScale;
   if (_altShip.thrusterLength != null) window._thrusterLength = _altShip.thrusterLength;
-  _rebuildLocalNozzles();
+  // Apply orientation-specific nozzles if available, otherwise just rebuild
+  _applyOrientationNozzles();
+  if (!SHIP_SKINS[activeSkinIdx] || !SHIP_SKINS[activeSkinIdx].glbConfig || !SHIP_SKINS[activeSkinIdx].glbConfig.portraitNozzleL) {
+    _rebuildLocalNozzles();
+  }
 }
 
 function _hideAltShip() {
@@ -16832,6 +16858,7 @@ function updateCameraFOV() {
   cameraPivot.position.y = 2.8 + _camPivotYOffset;
   cameraPivot.position.z = 9 + _camPivotZOffset;
   camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
+  _applyOrientationNozzles(); // swap portrait/landscape nozzles if applicable
   _rebuildLocalNozzles();
   camera.updateProjectionMatrix();
 }
