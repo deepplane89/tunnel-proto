@@ -2719,13 +2719,6 @@ let _gameOverTapReady = false;
 let _gameOverTapTimer = null;
 const _GO_TAP_COOLDOWN = 700; // ms before taps are accepted on game over screen
 
-// ── Repair-ship camera ease-back ──
-let _repairSweepActive = false;
-let _repairSweepT = 0;
-const _REPAIR_SWEEP_DUR = 0.8; // seconds to ease camera back to chase cam
-let _repairCamStart = new THREE.Vector3();
-let _repairFovStart = 75;
-
 // ── Harvest ship mesh vertex positions in world space ──
 function _getShipVertices() {
   const verts = [];
@@ -10379,8 +10372,6 @@ function returnToTitle() {
   // ── Hard camera reset: prevent stale death/retry camera leaking into title ──
   _retrySweepActive = false;
   _retrySweepT = 0;
-  _repairSweepActive = false;
-  _repairSweepT = 0;
   cameraPivot.position.set(0, 2.8 + _camPivotYOffset, 9 + _camPivotZOffset);
   cameraRoll = 0;
   camera.rotation.set(0, 0, 0);
@@ -10802,7 +10793,10 @@ window.addEventListener('keyup', e => {
       // Enable steering while finger is down
       setSteer(true);
       if (isStartingTouch) {
-        if (ph === 'dead') { _triggerRetryWithSweep(); }
+        if (ph === 'dead') {
+          if (!_gameOverTapReady) return; // cooldown guard
+          _triggerRetryWithSweep();
+        }
         else startGame();
       }
     }, { passive: false });
@@ -11699,8 +11693,6 @@ function startGame() {
   // Reset camera to starting position (full reset — prevent stale death/retry state)
   _retrySweepActive = false;
   _retrySweepT = 0;
-  _repairSweepActive = false;
-  _repairSweepT = 0;
   cameraPivot.position.set(0, 2.8 + _camPivotYOffset, 9 + _camPivotZOffset);
   cameraRoll = 0;
   camera.rotation.set(0, 0, 0);
@@ -14174,7 +14166,6 @@ function killPlayer() {
   // Cancel retry/repair sweep if somehow active
   _retrySweepActive = false;
   _retryIsFromDead = false;
-  _repairSweepActive = false;
   _drLogEvent('death', `score=${state.score} tier=${state.deathRunSpeedTier}`);
   _drSaveSession('death');
   // [WHEEL DISABLED] if (!state.wheelEarned) state.wheelEarned = true;
@@ -14495,47 +14486,69 @@ function killPlayer() {
     newBtn.disabled = !canAfford;
     newBtn.addEventListener('click', () => {
       if (!_gameOverTapReady) return; // cooldown guard
+      if (_retryPending) return; // already fading
       if (loadFuelCells() < saveMeFuelCost) return;
       // Deduct fuel cells
       saveFuelCells(loadFuelCells() - saveMeFuelCost);
       updateTitleFuelCells();
       state.saveMeCount++;
-      // Reset score only — distance keeps accumulating as reward for survival
-      state.score = 0;
-      state.playerScore = 0;
-      state.startedFromL1 = false;
-      // Resume the run
-      state.phase = 'playing';
-      shipGroup.visible = true;
-      _killExplosion();
-      // Smooth camera ease-back from death orbit to chase cam
-      _expCamOrbitActive = false;
-      _expCamOrbitT = 0;
-      _repairCamStart.copy(cameraPivot.position);
-      _repairFovStart = camera.fov;
-      _repairSweepActive = true;
-      _repairSweepT = 0;
-      if (_gameOverDelayTimer) { clearTimeout(_gameOverDelayTimer); _gameOverDelayTimer = null; }
-      state.invincibleTimer = 3.0;
-      state.shipX = 0;
-      state.shipVelX = 0;
-      // Wipe everything on screen and reset all mechanic state
-      _clearAllMechanics();
-      state.deathRunRestBeat = 1.5; // brief clear before wave director picks next mechanic
-      // Corridor death: restart that corridor from scratch
-      if (state._deathCorridorType === 'l3') {
-        state.corridorMode = true; state.corridorSpawnZ = -7; state.corridorRowsDone = 0; state.corridorSineT = 0;
-      } else if (state._deathCorridorType === 'l4') {
-        state.l4CorridorActive = true; state.l4SpawnZ = -7; state.l4RowsDone = 0; state.l4SineT = 0;
-      } else if (state._deathCorridorType === 'l5') {
-        state.l5CorridorActive = true; state.l5CorridorSpawnZ = -7; state.l5CorridorRowsDone = 0;
-      }
-      state.invincibleSpeedActive = false; // no speed boost, just invincible visual
-      state.invincibleGrace = 3.0;
-      document.getElementById('gameover-screen').classList.add('hidden');
-      document.getElementById('hud').classList.remove('hidden');
-      // Re-engage the correct music track for wherever we are in the run
-      musicFadeTo(currentGameTrack(), 1500);
+      _retryPending = true;
+      const fadeEl = document.getElementById('retry-fade');
+      fadeEl.style.opacity = '1'; // fade to black
+      setTimeout(() => {
+        _retryPending = false;
+        // Reset score only — distance keeps accumulating as reward for survival
+        state.score = 0;
+        state.playerScore = 0;
+        state.startedFromL1 = false;
+        // Resume the run
+        state.phase = 'playing';
+        shipGroup.visible = true;
+        _killExplosion();
+        // Kill death camera orbit
+        _expCamOrbitActive = false;
+        _expCamOrbitT = 0;
+        if (_gameOverDelayTimer) { clearTimeout(_gameOverDelayTimer); _gameOverDelayTimer = null; }
+        state.invincibleTimer = 3.0;
+        state.shipX = 0;
+        state.shipVelX = 0;
+        shipGroup.position.x = 0;
+        // Wipe everything on screen and reset all mechanic state
+        _clearAllMechanics();
+        state.deathRunRestBeat = 1.5; // brief clear before wave director picks next mechanic
+        // Corridor death: restart that corridor from scratch
+        if (state._deathCorridorType === 'l3') {
+          state.corridorMode = true; state.corridorSpawnZ = -7; state.corridorRowsDone = 0; state.corridorSineT = 0;
+        } else if (state._deathCorridorType === 'l4') {
+          state.l4CorridorActive = true; state.l4SpawnZ = -7; state.l4RowsDone = 0; state.l4SineT = 0;
+        } else if (state._deathCorridorType === 'l5') {
+          state.l5CorridorActive = true; state.l5CorridorSpawnZ = -7; state.l5CorridorRowsDone = 0;
+        }
+        state.invincibleSpeedActive = false; // no speed boost, just invincible visual
+        state.invincibleGrace = 3.0;
+        document.getElementById('gameover-screen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        // Position camera at establishing shot (same as retry sweep)
+        killThrusterSputter();
+        state.introActive = true; // block obstacle spawning during sweep
+        state.thrusterPower = 1;
+        shipGroup.position.y = _hoverBaseY;
+        state._introLiftActive = false;
+        cameraPivot.position.copy(_RETRY_CAM_START);
+        camera.rotation.set(0, 0, 0);
+        camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
+        camera.fov = _RETRY_FOV_START;
+        camera.updateProjectionMatrix();
+        // Start the sweep
+        _retrySweepActive = true;
+        _retrySweepT = 0;
+        _retrySweepThrusterFired = false;
+        playRetryWhoosh();
+        // Re-engage the correct music track for wherever we are in the run
+        musicFadeTo(currentGameTrack(), 1500);
+        // Fade from black
+        fadeEl.style.opacity = '0';
+      }, 180); // wait for fade-to-black
     });
   }
 
@@ -14816,28 +14829,6 @@ function update(dt) {
       state.thrusterPower = 1;
       // Ensure camera is exactly at chase cam
       cameraPivot.position.set(0, _rsCamY, _rsCamZ);
-      camera.fov = _baseFOV;
-      camera.updateProjectionMatrix();
-    }
-  } else if (_repairSweepActive) {
-    // Repair-ship camera ease-back to chase cam
-    _repairSweepT = Math.min(1, _repairSweepT + dt / _REPAIR_SWEEP_DUR);
-    // Ease-out cubic (fast start, gentle land)
-    const rpt = 1 - Math.pow(1 - _repairSweepT, 3);
-    const _isLandscapeRP = (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) && window.innerWidth > window.innerHeight;
-    const _rpCamY = (_isLandscapeRP ? 2.0 : 2.8) + _camPivotYOffset;
-    const _rpCamZ = 9 + _camPivotZOffset;
-    cameraPivot.position.x = THREE.MathUtils.lerp(_repairCamStart.x, 0, rpt);
-    cameraPivot.position.y = THREE.MathUtils.lerp(_repairCamStart.y, _rpCamY, rpt);
-    cameraPivot.position.z = THREE.MathUtils.lerp(_repairCamStart.z, _rpCamZ, rpt);
-    camera.fov = THREE.MathUtils.lerp(_repairFovStart, _baseFOV, rpt);
-    camera.updateProjectionMatrix();
-    // Reset camera lookAt smoothly
-    camera.rotation.set(0, 0, 0);
-    camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
-    if (_repairSweepT >= 1) {
-      _repairSweepActive = false;
-      cameraPivot.position.set(0, _rpCamY, _rpCamZ);
       camera.fov = _baseFOV;
       camera.updateProjectionMatrix();
     }
