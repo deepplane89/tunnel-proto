@@ -6259,6 +6259,7 @@ const _coneFragSrc = /* glsl */`
 `;
 
 const _thrusterCones = NOZZLE_OFFSETS.map(() => {
+  const _ct = window._coneThruster;
   // Unit cone: radius=1, height=1 — scaled at runtime via cone.scale
   const geo = new THREE.ConeGeometry(1, 1, 16, 1, true);
   // Shift so base sits at local origin, tip extends in +Y
@@ -6269,11 +6270,11 @@ const _thrusterCones = NOZZLE_OFFSETS.map(() => {
     uniforms: {
       uTime:          { value: 0 },
       uColor:         { value: new THREE.Color(0x44aaff) },
-      uNeonPower:     { value: ct.neonPower },
-      uNoiseSpeed:    { value: ct.noiseSpeed },
-      uNoiseStrength: { value: ct.noiseStrength },
-      uFresnelPower:  { value: ct.fresnelPower },
-      uOpacity:       { value: ct.opacity },
+      uNeonPower:     { value: _ct.neonPower },
+      uNoiseSpeed:    { value: _ct.noiseSpeed },
+      uNoiseStrength: { value: _ct.noiseStrength },
+      uFresnelPower:  { value: _ct.fresnelPower },
+      uOpacity:       { value: _ct.opacity },
     },
     transparent: true,
     depthWrite: false,
