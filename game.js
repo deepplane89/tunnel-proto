@@ -5515,6 +5515,14 @@ const _altShip = {
   miniR:   new THREE.Vector3( 0.18, 0.02, 4.90),
   thrusterScale: 1.0,
 };
+// Baseline transform when nozzles were last tuned — used to auto-track
+const _nozzleBaseline = { scale: 1.0, posX: 0, posY: 0, posZ: 0 };
+function _snapshotNozzleBaseline() {
+  _nozzleBaseline.scale = _altShip.scale || 1.0;
+  _nozzleBaseline.posX  = _altShip.posX;
+  _nozzleBaseline.posY  = _altShip.posY;
+  _nozzleBaseline.posZ  = _altShip.posZ;
+}
 
 function _applyGlbConfig(cfg) {
   if (!cfg) return;
@@ -5526,6 +5534,7 @@ function _applyGlbConfig(cfg) {
   if (cfg.miniL) _altShip.miniL.set(cfg.miniL[0], cfg.miniL[1], cfg.miniL[2]);
   if (cfg.miniR) _altShip.miniR.set(cfg.miniR[0], cfg.miniR[1], cfg.miniR[2]);
   _altShip.thrusterScale = cfg.thrusterScale != null ? cfg.thrusterScale : 1.0;
+  _snapshotNozzleBaseline();
 }
 
 function _loadAltShip(glbFile, skinDef, callback) {
@@ -5765,18 +5774,29 @@ function _rebuildLocalNozzles() {
   const refX = _altShipActive ? _altShip.posX : 0;
   const refY = _altShipActive ? _altShip.posY : 0.28;
   const refZ = _altShipActive ? _altShip.posZ : 4.5;
+  // Auto-track: scale ratio + position delta from baseline
+  const sRatio = _altShipActive ? ((_altShip.scale || 1.0) / (_nozzleBaseline.scale || 1.0)) : 1.0;
+  const dX = _altShipActive ? (_altShip.posX - _nozzleBaseline.posX) : 0;
+  const dY = _altShipActive ? (_altShip.posY - _nozzleBaseline.posY) : 0;
+  const dZ = _altShipActive ? (_altShip.posZ - _nozzleBaseline.posZ) : 0;
   for (let i = 0; i < NOZZLE_OFFSETS.length; i++) {
+    const nx = NOZZLE_OFFSETS[i].x * sRatio + dX;
+    const ny = NOZZLE_OFFSETS[i].y * sRatio + dY;
+    const nz = NOZZLE_OFFSETS[i].z * sRatio + dZ;
     _localNozzles[i].set(
-      (NOZZLE_OFFSETS[i].x - refX) / sc,
-      (NOZZLE_OFFSETS[i].y - refY) / sc,
-      (NOZZLE_OFFSETS[i].z - refZ) / sc
+      (nx - refX) / sc,
+      (ny - refY) / sc,
+      (nz - refZ) / sc
     );
   }
   for (let i = 0; i < MINI_NOZZLE_OFFSETS.length; i++) {
+    const nx = MINI_NOZZLE_OFFSETS[i].x * sRatio + dX;
+    const ny = MINI_NOZZLE_OFFSETS[i].y * sRatio + dY;
+    const nz = MINI_NOZZLE_OFFSETS[i].z * sRatio + dZ;
     _localMiniNozzles[i].set(
-      (MINI_NOZZLE_OFFSETS[i].x - refX) / sc,
-      (MINI_NOZZLE_OFFSETS[i].y - refY) / sc,
-      (MINI_NOZZLE_OFFSETS[i].z - refZ) / sc
+      (nx - refX) / sc,
+      (ny - refY) / sc,
+      (nz - refZ) / sc
     );
   }
 }
@@ -18397,6 +18417,7 @@ function buildSkinTunerSliders() {
       NOZZLE_OFFSETS[1].copy(_altShip.nozzleR);
       MINI_NOZZLE_OFFSETS[0].copy(_altShip.miniL);
       MINI_NOZZLE_OFFSETS[1].copy(_altShip.miniR);
+      _snapshotNozzleBaseline(); // re-anchor baseline to current transform
       _rebuildLocalNozzles();
     };
 
