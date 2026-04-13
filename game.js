@@ -369,13 +369,9 @@ const SHIP_SKINS = [
       thrusterScale:0.46, thrusterLength:3.9, noMiniThrusters:true, bloomScale:0.3 } },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
     glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
-      nozzleL:[-0.500,-0.660,0.700], nozzleR:[0.500,-0.660,0.700],
-      miniL:[-0.220,-0.700,0.600], miniR:[0.220,-0.700,0.600], thrusterScale:1.0,
-      matchDefault: true,
-      nozzleOverrides: {
-        nozzleL:[-0.680,-0.050,5.200], nozzleR:[0.700,-0.060,5.200],
-        miniL:[-0.220,-0.030,5.100], miniR:[0.220,-0.030,5.100]
-      } },
+      nozzleL:[-0.680,-0.050,5.200], nozzleR:[0.700,-0.060,5.200],
+      miniL:[-0.220,-0.030,5.100], miniR:[0.220,-0.030,5.100], thrusterScale:1.0,
+      matchDefault: true },
     laserConfig: { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 } },
   { name: 'SCORPION',        price: 0,    description: 'Heavy gunship',     glbFile: 'scorpion_ship.glb',
     glbConfig: { posX:0, posY:0, posZ:3.000, rotX:-1.602, rotY:0.028, rotZ:-0.002, scale:0.591,
@@ -5815,20 +5811,10 @@ function _showAltShip() {
   // Cone thrusters default ON for LOW POLY, OFF for others
   window._coneThrustersEnabled = (activeSkinIdx === 4);
   // Override nozzle offsets for thrusters
-  const _skinDef = SHIP_SKINS[activeSkinIdx];
-  const _noz = _skinDef && _skinDef.glbConfig && _skinDef.glbConfig.nozzleOverrides;
-  if (_noz) {
-    // Direct NOZZLE_OFFSETS values (calibrated in-game, bypass alt ship transform)
-    NOZZLE_OFFSETS[0].set(_noz.nozzleL[0], _noz.nozzleL[1], _noz.nozzleL[2]);
-    NOZZLE_OFFSETS[1].set(_noz.nozzleR[0], _noz.nozzleR[1], _noz.nozzleR[2]);
-    MINI_NOZZLE_OFFSETS[0].set(_noz.miniL[0], _noz.miniL[1], _noz.miniL[2]);
-    MINI_NOZZLE_OFFSETS[1].set(_noz.miniR[0], _noz.miniR[1], _noz.miniR[2]);
-  } else {
-    NOZZLE_OFFSETS[0].copy(_altShip.nozzleL);
-    NOZZLE_OFFSETS[1].copy(_altShip.nozzleR);
-    MINI_NOZZLE_OFFSETS[0].copy(_altShip.miniL);
-    MINI_NOZZLE_OFFSETS[1].copy(_altShip.miniR);
-  }
+  NOZZLE_OFFSETS[0].copy(_altShip.nozzleL);
+  NOZZLE_OFFSETS[1].copy(_altShip.nozzleR);
+  MINI_NOZZLE_OFFSETS[0].copy(_altShip.miniL);
+  MINI_NOZZLE_OFFSETS[1].copy(_altShip.miniR);
   // Sync per-ship thruster globals
   window._prevThrusterScale = window._thrusterScale;  // stash to restore later
   window._prevThrusterLength = window._thrusterLength;
@@ -5870,15 +5856,17 @@ function _updateAltShipTransform() {
 
 function _rebuildLocalNozzles() {
   const sc = shipGroup.scale.x || 0.30;
-  // Reference origin: use alt ship config when active, else default ship offsets
-  const refX = _altShipActive ? _altShip.posX : 0;
-  const refY = _altShipActive ? _altShip.posY : 0.28;
-  const refZ = _altShipActive ? _altShip.posZ : 4.5;
-  // Auto-track: scale ratio + position delta from baseline
-  const sRatio = _altShipActive ? ((_altShip.scale || 1.0) / (_nozzleBaseline.scale || 1.0)) : 1.0;
-  const dX = _altShipActive ? (_altShip.posX - _nozzleBaseline.posX) : 0;
-  const dY = _altShipActive ? (_altShip.posY - _nozzleBaseline.posY) : 0;
-  const dZ = _altShipActive ? (_altShip.posZ - _nozzleBaseline.posZ) : 0;
+  // Reference origin: matchDefault ships use default ship refs so nozzle values
+  // are in the same coordinate space as NOZZLE_OFFSETS (what sliders show).
+  const _skinCfg2 = _altShipActive && SHIP_SKINS[activeSkinIdx] && SHIP_SKINS[activeSkinIdx].glbConfig;
+  const _useDefaultRefs = _skinCfg2 && _skinCfg2.matchDefault;
+  const refX = (_altShipActive && !_useDefaultRefs) ? _altShip.posX : 0;
+  const refY = (_altShipActive && !_useDefaultRefs) ? _altShip.posY : 0.28;
+  const refZ = (_altShipActive && !_useDefaultRefs) ? _altShip.posZ : 4.5;
+  const sRatio = (_altShipActive && !_useDefaultRefs) ? ((_altShip.scale || 1.0) / (_nozzleBaseline.scale || 1.0)) : 1.0;
+  const dX = (_altShipActive && !_useDefaultRefs) ? (_altShip.posX - _nozzleBaseline.posX) : 0;
+  const dY = (_altShipActive && !_useDefaultRefs) ? (_altShip.posY - _nozzleBaseline.posY) : 0;
+  const dZ = (_altShipActive && !_useDefaultRefs) ? (_altShip.posZ - _nozzleBaseline.posZ) : 0;
   for (let i = 0; i < NOZZLE_OFFSETS.length; i++) {
     const nx = NOZZLE_OFFSETS[i].x * sRatio + dX;
     const ny = NOZZLE_OFFSETS[i].y * sRatio + dY;
