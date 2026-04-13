@@ -364,8 +364,8 @@ const SHIP_SKINS = [
   { name: 'CIPHER',        price: 1400, description: 'Voronoi hull plating' },
   { name: 'LOW POLY',      price: 0,    description: 'Low poly fighter',  glbFile: 'spaceship_low_poly.glb',
     glbConfig: { posX:0, posY:0.290, posZ:3.000, rotX:-0.052, rotY:-0.002, rotZ:-0.002, scale:0.244,
-      nozzleL:[-0.360,-0.230,4.340], nozzleR:[0.400,-0.330,4.220],
-      miniL:[-0.070,0.090,4.450], miniR:[0.070,0.200,4.570], thrusterScale:0.010 } },
+      nozzleL:[-0.764,0.369,6.258], nozzleR:[0.764,0.369,6.258],
+      miniL:[-0.306,0.419,6.158], miniR:[0.306,0.419,6.158], thrusterScale:0.010 } },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
     glbConfig: { posX:0, posY:-0.5, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
       nozzleL:[-0.500,-0.660,0.700], nozzleR:[0.500,-0.660,0.700],
@@ -14462,8 +14462,9 @@ function update(dt) {
     : state.speed;
 
   // ── Ship movement
-  const steerLeft  = keys['ArrowLeft']  || keys['a'] || keys['A'] || touch.left;
-  const steerRight = keys['ArrowRight'] || keys['d'] || keys['D'] || touch.right;
+  const _introBlock = state.introActive || state._introLiftActive;
+  const steerLeft  = !_introBlock && (keys['ArrowLeft']  || keys['a'] || keys['A'] || touch.left);
+  const steerRight = !_introBlock && (keys['ArrowRight'] || keys['d'] || keys['D'] || touch.right);
   // Physics ramp: starts floaty at L1, gradually snappier by L5
   // Death Run: lateral physics matches independent speed ramp (not vibe)
   // DR: snappiness ramps L2→L5 but caps at L5 even as speed keeps climbing
