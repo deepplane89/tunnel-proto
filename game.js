@@ -2616,6 +2616,7 @@ const _EXP_DURATION = 2.8; // seconds before game over screen (longer for sky-pi
 let _expDeathZoomTarget = 0;
 let _expDeathZoomActive = false;
 let _gameOverDelayTimer = null;
+let _titleFadeTimer = null;     // stale-timer guard for title screen fade-out
 // Death camera — sky pivot: rise up and look down at crash site
 let _expCamOrbitActive = false;
 let _expCamOrbitT = 0;        // 0→1 progress
@@ -10104,6 +10105,7 @@ function returnToTitle() {
   camera.fov = _baseFOV;
   camera.updateProjectionMatrix();
   if (_gameOverDelayTimer) { clearTimeout(_gameOverDelayTimer); _gameOverDelayTimer = null; }
+  if (_titleFadeTimer) { clearTimeout(_titleFadeTimer); _titleFadeTimer = null; }
   clearMusicTimers();
   // Show inline leaderboard on title
   const _tlb = document.getElementById('title-leaderboard');
@@ -11506,7 +11508,11 @@ function startGame() {
   const titleEl = document.getElementById('title-screen');
   if (!_retryIsFromDead) {
     titleEl.classList.add('fading-out');
-    setTimeout(() => titleEl.classList.add('hidden'), 750);
+    if (_titleFadeTimer) clearTimeout(_titleFadeTimer);
+    _titleFadeTimer = setTimeout(() => {
+      _titleFadeTimer = null;
+      if (state.phase !== 'title') titleEl.classList.add('hidden');
+    }, 750);
   }
   // Hide standalone leaderboard (lives outside title-screen div)
   const _lb = document.getElementById('title-leaderboard');
