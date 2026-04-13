@@ -5761,22 +5761,23 @@ function _updateAltShipTransform() {
 
 function _rebuildLocalNozzles() {
   const sc = shipGroup.scale.x || 0.30;
-  // Reference origin: use alt ship config when active, else default ship offsets
+  // Reference origin & model scale: alt ship config when active, else defaults
+  const refX = _altShipActive ? _altShip.posX : 0;
   const refY = _altShipActive ? _altShip.posY : 0.28;
   const refZ = _altShipActive ? _altShip.posZ : 4.5;
-  const refX = _altShipActive ? _altShip.posX : 0;
+  const msc  = _altShipActive ? (_altShip.scale || 1.0) : 1.0; // model-level scale
   for (let i = 0; i < NOZZLE_OFFSETS.length; i++) {
     _localNozzles[i].set(
-      (NOZZLE_OFFSETS[i].x - refX) / sc,
-      (NOZZLE_OFFSETS[i].y - refY) / sc,
-      (NOZZLE_OFFSETS[i].z - refZ) / sc
+      (NOZZLE_OFFSETS[i].x - refX) / (sc * msc),
+      (NOZZLE_OFFSETS[i].y - refY) / (sc * msc),
+      (NOZZLE_OFFSETS[i].z - refZ) / (sc * msc)
     );
   }
   for (let i = 0; i < MINI_NOZZLE_OFFSETS.length; i++) {
     _localMiniNozzles[i].set(
-      (MINI_NOZZLE_OFFSETS[i].x - refX) / sc,
-      (MINI_NOZZLE_OFFSETS[i].y - refY) / sc,
-      (MINI_NOZZLE_OFFSETS[i].z - refZ) / sc
+      (MINI_NOZZLE_OFFSETS[i].x - refX) / (sc * msc),
+      (MINI_NOZZLE_OFFSETS[i].y - refY) / (sc * msc),
+      (MINI_NOZZLE_OFFSETS[i].z - refZ) / (sc * msc)
     );
   }
 }
