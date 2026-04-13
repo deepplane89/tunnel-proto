@@ -16489,6 +16489,7 @@ function updateCameraFOV() {
   cameraPivot.position.y = 2.8 + _camPivotYOffset;
   cameraPivot.position.z = 9 + _camPivotZOffset;
   camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
+  _rebuildLocalNozzles();
   camera.updateProjectionMatrix();
 }
 
