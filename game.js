@@ -10550,7 +10550,6 @@ window.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight') { let _ni = (skinViewerIdx + 1) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni + 1) % SHIP_SKINS.length; navigateToSkin(_ni); }
     return;
   }
-  if (phaseAtEvent === 'title' && !isSpace && !isMute && !isEnter) { playStartSound(); startGame(); }
   if (isSpace && phaseAtEvent === 'title')   { playStartSound(); startGame(); }
   // if (isSpace && phaseAtEvent === 'playing') triggerJump(); // JUMP QUARANTINED
   if (e.key === 'Escape' && phaseAtEvent === 'playing') togglePause();
@@ -10563,10 +10562,12 @@ window.addEventListener('keydown', e => {
     const _ov = document.getElementById('intro-overlay');
     if (_ov) { fadeOutIntroOverlay(_ov); }
     state.introActive = false;
-    // Skip-to-roar: play roar clip
+    beginThrusterSputter();
+    // Trigger lift so ship rises from 0.38 to cruise height
+    state._introLiftActive = true;
+    state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
     if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.7; _roar.play().catch(()=>{}); }
-    state.thrusterPower = 1;
   }
   // Escape now pauses (handled above) — no longer returns to title
   // Hold-to-spin roll — up/down keys spin ship on Z axis while held
@@ -10814,9 +10815,11 @@ window.addEventListener('keyup', e => {
         clearIntroTimers();
         if (_ov) fadeOutIntroOverlay(_ov);
         state.introActive = false;
+        beginThrusterSputter();
+        state._introLiftActive = true;
+        state._introLiftTimer = 0;
         const _roar = document.getElementById('engine-roar');
         if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.7; _roar.play().catch(()=>{}); }
-        state.thrusterPower = 1;
         return;
       }
       // Start game if on title/dead — mark this touch as game-starting (ignore swipes from it)
@@ -14075,6 +14078,8 @@ function showIntroText() {
     fadeOutIntroOverlay(overlay);
     state.introActive = false;
     beginThrusterSputter();
+    state._introLiftActive = true;
+    state._introLiftTimer = 0;
   }, { passive: false });
 
   // Line A fades in at 3s (3.5s duration → done ~6.5s)
