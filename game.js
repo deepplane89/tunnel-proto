@@ -5855,11 +5855,12 @@ function _updateAltShipTransform() {
 }
 
 function _rebuildLocalNozzles() {
-  const sc = shipGroup.scale.x || 0.30;
-  // matchDefault ships share the default ship's coordinate space for nozzle values,
-  // so slider values = config values with no conversion needed.
   const _skinCfg2 = _altShipActive && SHIP_SKINS[activeSkinIdx] && SHIP_SKINS[activeSkinIdx].glbConfig;
   const _matchDef = _skinCfg2 && _skinCfg2.matchDefault;
+  // matchDefault ships use fixed default scale (0.30) just like the default ship's
+  // initial _localNozzles computation — this keeps thrusters locked to the ship
+  // regardless of orientation/scale changes.
+  const sc = (_matchDef || !_altShipActive) ? 0.30 : (shipGroup.scale.x || 0.30);
   const refX = (_altShipActive && !_matchDef) ? _altShip.posX : 0;
   const refY = (_altShipActive && !_matchDef) ? _altShip.posY : 0.28;
   const refZ = (_altShipActive && !_matchDef) ? _altShip.posZ : 4.5;
