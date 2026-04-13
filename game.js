@@ -14781,12 +14781,7 @@ function update(dt) {
 
   // ── Ship movement
   const _introBlock = state.introActive || state._introLiftActive;
-  // Hard clamp: force ship centered during intro/lift — every ship, every frame
-  if (_introBlock) {
-    state.shipX = 0;
-    state.shipVelX = 0;
-    shipGroup.position.x = 0;
-  }
+  if (_introBlock) { state.shipX = 0; state.shipVelX = 0; shipGroup.position.x = 0; }
   const steerLeft  = !_introBlock && (keys['ArrowLeft']  || keys['a'] || keys['A'] || touch.left);
   const steerRight = !_introBlock && (keys['ArrowRight'] || keys['d'] || keys['D'] || touch.right);
   // Physics ramp: starts floaty at L1, gradually snappier by L5
