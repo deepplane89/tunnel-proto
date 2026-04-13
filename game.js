@@ -5856,17 +5856,17 @@ function _updateAltShipTransform() {
 
 function _rebuildLocalNozzles() {
   const sc = shipGroup.scale.x || 0.30;
-  // Reference origin: matchDefault ships use default ship refs so nozzle values
-  // are in the same coordinate space as NOZZLE_OFFSETS (what sliders show).
+  // matchDefault ships share the default ship's coordinate space for nozzle values,
+  // so slider values = config values with no conversion needed.
   const _skinCfg2 = _altShipActive && SHIP_SKINS[activeSkinIdx] && SHIP_SKINS[activeSkinIdx].glbConfig;
-  const _useDefaultRefs = _skinCfg2 && _skinCfg2.matchDefault;
-  const refX = (_altShipActive && !_useDefaultRefs) ? _altShip.posX : 0;
-  const refY = (_altShipActive && !_useDefaultRefs) ? _altShip.posY : 0.28;
-  const refZ = (_altShipActive && !_useDefaultRefs) ? _altShip.posZ : 4.5;
-  const sRatio = (_altShipActive && !_useDefaultRefs) ? ((_altShip.scale || 1.0) / (_nozzleBaseline.scale || 1.0)) : 1.0;
-  const dX = (_altShipActive && !_useDefaultRefs) ? (_altShip.posX - _nozzleBaseline.posX) : 0;
-  const dY = (_altShipActive && !_useDefaultRefs) ? (_altShip.posY - _nozzleBaseline.posY) : 0;
-  const dZ = (_altShipActive && !_useDefaultRefs) ? (_altShip.posZ - _nozzleBaseline.posZ) : 0;
+  const _matchDef = _skinCfg2 && _skinCfg2.matchDefault;
+  const refX = (_altShipActive && !_matchDef) ? _altShip.posX : 0;
+  const refY = (_altShipActive && !_matchDef) ? _altShip.posY : 0.28;
+  const refZ = (_altShipActive && !_matchDef) ? _altShip.posZ : 4.5;
+  const sRatio = (_altShipActive && !_matchDef) ? ((_altShip.scale || 1.0) / (_nozzleBaseline.scale || 1.0)) : 1.0;
+  const dX = (_altShipActive && !_matchDef) ? (_altShip.posX - _nozzleBaseline.posX) : 0;
+  const dY = (_altShipActive && !_matchDef) ? (_altShip.posY - _nozzleBaseline.posY) : 0;
+  const dZ = (_altShipActive && !_matchDef) ? (_altShip.posZ - _nozzleBaseline.posZ) : 0;
   for (let i = 0; i < NOZZLE_OFFSETS.length; i++) {
     const nx = NOZZLE_OFFSETS[i].x * sRatio + dX;
     const ny = NOZZLE_OFFSETS[i].y * sRatio + dY;
