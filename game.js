@@ -10098,7 +10098,7 @@ function returnToTitle() {
   _retrySweepT = 0;
   cameraPivot.position.set(0, 2.8 + _camPivotYOffset, 9 + _camPivotZOffset);
   cameraRoll = 0;
-  camera.rotation.z = 0;
+  camera.rotation.set(0, 0, 0);
   camera.position.set(0, 0, 0);
   camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
   camera.fov = _baseFOV;
@@ -11272,10 +11272,11 @@ function _triggerRetryWithSweep() {
     // Kill death camera orbit so it doesn't fight the sweep
     _expCamOrbitActive = false;
     _expCamOrbitT = 0;
-    // Reset camera lookAt from death sky-pivot back to gameplay
-    camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
     // Position camera at establishing shot (above + behind)
     cameraPivot.position.copy(_RETRY_CAM_START);
+    // Reset camera lookAt AFTER pivot move so rotation matches new position
+    camera.rotation.set(0, 0, 0);
+    camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
     camera.fov = _RETRY_FOV_START;
     camera.updateProjectionMatrix();
     // Start the sweep
@@ -11407,10 +11408,14 @@ function startGame() {
   state.l5RandomAfterCorridor = 0;
   state.zipperSpawnZ   = -7;
   camTargetX           = 0;
-  // Reset camera to starting position
-  cameraPivot.position.set(0, 2.8, 9 + _camPivotZOffset);
+  // Reset camera to starting position (full reset — prevent stale death/retry state)
+  _retrySweepActive = false;
+  _retrySweepT = 0;
+  cameraPivot.position.set(0, 2.8 + _camPivotYOffset, 9 + _camPivotZOffset);
   cameraRoll = 0;
-  camera.rotation.z = 0;
+  camera.rotation.set(0, 0, 0);
+  camera.position.set(0, 0, 0);
+  camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
   camera.fov = _baseFOV + 15; // start zoomed out so gameplay launch snaps inward
   camera.updateProjectionMatrix();
   // Reset thrust state
