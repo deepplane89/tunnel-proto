@@ -10832,7 +10832,7 @@ window.addEventListener('keyup', e => {
           if (!_gameOverTapReady) return; // cooldown guard
           _triggerRetryWithSweep();
         }
-        else startGame();
+        else if (ph === 'title') startGame();
       }
     }, { passive: false });
 
@@ -11566,6 +11566,7 @@ function toggleMute() {
 //  GAME STATE TRANSITIONS
 // ═══════════════════════════════════════════════════
 let _skipL1Intro = false;  // set by startDeathRun() so startGame() skips L1 cinematic
+let _gameStarting = false; // reentry lock — prevents double-fire from simultaneous inputs
 
 // ── Retry with cinematic camera sweep (from game over) ──
 let _retryPending = false; // guard against double-tap during fade
@@ -11606,10 +11607,12 @@ function _triggerRetryWithSweep() {
 }
 
 function startGame() {
+  if (_gameStarting) return; // reentry guard — ignore double-taps / simultaneous inputs
+  _gameStarting = true;
   const _tlb = document.getElementById('title-leaderboard');
   if (_tlb) _tlb.classList.add('hidden');
   // Show onboarding on very first play
-  if (maybeShowOnboarding()) return; // blocks game start until dismissed
+  if (maybeShowOnboarding()) { _gameStarting = false; return; } // blocks game start until dismissed
   // Reset title glow pulse on shared materials before gameplay
   for (const entry of _titleMeshMap) {
     const mat = entry.mesh.material;
@@ -11900,6 +11903,8 @@ function startGame() {
 
   // ── HEAD START PROMPT (skip on retry — camera sweep replaces it) ──
   if (!_retryIsFromDead) showHeadStartPrompt();
+  // Release reentry lock after one frame so simultaneous events have already fired
+  requestAnimationFrame(() => { _gameStarting = false; });
 }
 
 // ═══════════════════════════════════════════════════
