@@ -2714,6 +2714,18 @@ const _RETRY_FOV_START = 85;         // wide establishing FOV
 let _retryIsFromDead = false;        // flag to distinguish retry from fresh title start
 let _retrySweepThrusterFired = false; // one-shot flag for thruster SFX during sweep
 
+// ── Game-over tap cooldown: prevent accidental restart/exit ──
+let _gameOverTapReady = false;
+let _gameOverTapTimer = null;
+const _GO_TAP_COOLDOWN = 700; // ms before taps are accepted on game over screen
+
+// ── Repair-ship camera ease-back ──
+let _repairSweepActive = false;
+let _repairSweepT = 0;
+const _REPAIR_SWEEP_DUR = 0.8; // seconds to ease camera back to chase cam
+let _repairCamStart = new THREE.Vector3();
+let _repairFovStart = 75;
+
 // ── Harvest ship mesh vertex positions in world space ──
 function _getShipVertices() {
   const verts = [];
@@ -10367,6 +10379,8 @@ function returnToTitle() {
   // ── Hard camera reset: prevent stale death/retry camera leaking into title ──
   _retrySweepActive = false;
   _retrySweepT = 0;
+  _repairSweepActive = false;
+  _repairSweepT = 0;
   cameraPivot.position.set(0, 2.8 + _camPivotYOffset, 9 + _camPivotZOffset);
   cameraRoll = 0;
   camera.rotation.set(0, 0, 0);
@@ -11338,11 +11352,13 @@ document.getElementById('death-run-btn').addEventListener('click', () => {
   startDeathRun();
 });
 document.getElementById('restart-btn').addEventListener('click', () => {
+  if (!_gameOverTapReady) return; // cooldown guard
   initAudio();
   playStartSound();
   _triggerRetryWithSweep();
 });
 document.getElementById('gameover-exit-btn').addEventListener('click', () => {
+  if (!_gameOverTapReady) return; // cooldown guard
   playExitSound();
   // [WHEEL DISABLED] reward wheel quarantined — skip straight to title
   returnToTitle();
@@ -11683,6 +11699,8 @@ function startGame() {
   // Reset camera to starting position (full reset — prevent stale death/retry state)
   _retrySweepActive = false;
   _retrySweepT = 0;
+  _repairSweepActive = false;
+  _repairSweepT = 0;
   cameraPivot.position.set(0, 2.8 + _camPivotYOffset, 9 + _camPivotZOffset);
   cameraRoll = 0;
   camera.rotation.set(0, 0, 0);
@@ -14153,9 +14171,10 @@ function killPlayer() {
   state._deathCorridorType = state.l5CorridorActive ? 'l5' : state.l4CorridorActive ? 'l4' : state.corridorMode ? 'l3' : null;
 
   state.phase = 'dead';
-  // Cancel retry sweep if somehow active
+  // Cancel retry/repair sweep if somehow active
   _retrySweepActive = false;
   _retryIsFromDead = false;
+  _repairSweepActive = false;
   _drLogEvent('death', `score=${state.score} tier=${state.deathRunSpeedTier}`);
   _drSaveSession('death');
   // [WHEEL DISABLED] if (!state.wheelEarned) state.wheelEarned = true;
@@ -14475,6 +14494,7 @@ function killPlayer() {
     _saveMeBtn.parentNode.replaceChild(newBtn, _saveMeBtn);
     newBtn.disabled = !canAfford;
     newBtn.addEventListener('click', () => {
+      if (!_gameOverTapReady) return; // cooldown guard
       if (loadFuelCells() < saveMeFuelCost) return;
       // Deduct fuel cells
       saveFuelCells(loadFuelCells() - saveMeFuelCost);
@@ -14488,12 +14508,13 @@ function killPlayer() {
       state.phase = 'playing';
       shipGroup.visible = true;
       _killExplosion();
-      // Snap camera back to center so it doesn't drift in from death orbit
-      cameraPivot.position.set(0, 2.8 + _camPivotYOffset, 9 + _camPivotZOffset);
-      camera.rotation.set(0, 0, 0);
-      camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
-      camera.fov = _baseFOV;
-      camera.updateProjectionMatrix();
+      // Smooth camera ease-back from death orbit to chase cam
+      _expCamOrbitActive = false;
+      _expCamOrbitT = 0;
+      _repairCamStart.copy(cameraPivot.position);
+      _repairFovStart = camera.fov;
+      _repairSweepActive = true;
+      _repairSweepT = 0;
       if (_gameOverDelayTimer) { clearTimeout(_gameOverDelayTimer); _gameOverDelayTimer = null; }
       state.invincibleTimer = 3.0;
       state.shipX = 0;
@@ -14533,6 +14554,8 @@ function killPlayer() {
   document.getElementById('hud').classList.add('hidden');
   // Delay game over screen so explosion plays first
   if (_gameOverDelayTimer) clearTimeout(_gameOverDelayTimer);
+  _gameOverTapReady = false; // block taps until cooldown
+  if (_gameOverTapTimer) clearTimeout(_gameOverTapTimer);
   _gameOverDelayTimer = setTimeout(() => {
     _gameOverDelayTimer = null;
     document.getElementById('gameover-screen').classList.remove('hidden');
@@ -14542,6 +14565,8 @@ function killPlayer() {
       el.offsetHeight; // force reflow
       el.style.animation = '';
     });
+    // Start tap cooldown AFTER screen appears
+    _gameOverTapTimer = setTimeout(() => { _gameOverTapReady = true; }, _GO_TAP_COOLDOWN);
   }, _EXP_DURATION * 1000);
 
   // ── UPGRADES UNLOCKED banner (one-time, game over screen) ──
@@ -14791,6 +14816,28 @@ function update(dt) {
       state.thrusterPower = 1;
       // Ensure camera is exactly at chase cam
       cameraPivot.position.set(0, _rsCamY, _rsCamZ);
+      camera.fov = _baseFOV;
+      camera.updateProjectionMatrix();
+    }
+  } else if (_repairSweepActive) {
+    // Repair-ship camera ease-back to chase cam
+    _repairSweepT = Math.min(1, _repairSweepT + dt / _REPAIR_SWEEP_DUR);
+    // Ease-out cubic (fast start, gentle land)
+    const rpt = 1 - Math.pow(1 - _repairSweepT, 3);
+    const _isLandscapeRP = (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) && window.innerWidth > window.innerHeight;
+    const _rpCamY = (_isLandscapeRP ? 2.0 : 2.8) + _camPivotYOffset;
+    const _rpCamZ = 9 + _camPivotZOffset;
+    cameraPivot.position.x = THREE.MathUtils.lerp(_repairCamStart.x, 0, rpt);
+    cameraPivot.position.y = THREE.MathUtils.lerp(_repairCamStart.y, _rpCamY, rpt);
+    cameraPivot.position.z = THREE.MathUtils.lerp(_repairCamStart.z, _rpCamZ, rpt);
+    camera.fov = THREE.MathUtils.lerp(_repairFovStart, _baseFOV, rpt);
+    camera.updateProjectionMatrix();
+    // Reset camera lookAt smoothly
+    camera.rotation.set(0, 0, 0);
+    camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
+    if (_repairSweepT >= 1) {
+      _repairSweepActive = false;
+      cameraPivot.position.set(0, _rpCamY, _rpCamZ);
       camera.fov = _baseFOV;
       camera.updateProjectionMatrix();
     }
