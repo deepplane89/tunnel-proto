@@ -5821,7 +5821,13 @@ function _showAltShip() {
   window._thrusterScale = _altShip.thrusterScale;
   window._baseThrusterScale = _altShip.thrusterScale;
   if (_altShip.thrusterLength != null) window._thrusterLength = _altShip.thrusterLength;
+  console.log('[NOZZLE DEBUG] _altShip.nozzleL:', _altShip.nozzleL.x, _altShip.nozzleL.y, _altShip.nozzleL.z);
+  console.log('[NOZZLE DEBUG] NOZZLE_OFFSETS[0]:', NOZZLE_OFFSETS[0].x, NOZZLE_OFFSETS[0].y, NOZZLE_OFFSETS[0].z);
+  console.log('[NOZZLE DEBUG] baseline:', JSON.stringify(_nozzleBaseline));
+  console.log('[NOZZLE DEBUG] _altShip transform:', _altShip.posX, _altShip.posY, _altShip.posZ, 'scale:', _altShip.scale);
+  console.log('[NOZZLE DEBUG] shipGroup.scale:', shipGroup.scale.x);
   _rebuildLocalNozzles();
+  console.log('[NOZZLE DEBUG] _localNozzles[0]:', _localNozzles[0].x.toFixed(3), _localNozzles[0].y.toFixed(3), _localNozzles[0].z.toFixed(3));
 }
 
 function _hideAltShip() {
