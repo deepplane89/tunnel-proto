@@ -20388,13 +20388,19 @@ function startJetLightning() {
   // the prologue's own _launchDeathRun() clears introActive & _introLiftActive
   // when the player taps or the 18.5s auto-launch fires.
 
+  // Re-apply physics — startGame() resets to campaign defaults internally
+  _accelBase      = 60;
+  _accelSnap      = 100;
+  _maxVelBase     = 13;
+  _maxVelSnap     = 23;
+  _bankMax        = 0.04;
+  _bankSmoothing  = 8;
+
   _asteroidTuner.enabled   = true;
   _noSpawnMode             = false;
   _astTimer                = 2.0;  // 2s grace after liftoff
-  state.l4CorridorActive   = false; // hard kill — can't linger from prev run
-  state.l4CorridorDone     = true;  // prevent re-trigger for this session
-  // Start at L4 score threshold so level/speed is L4 from the jump
-  // Score will climb naturally to L5 (threshold 675) during play
+  state.l4CorridorActive   = false;
+  state.l4CorridorDone     = true;
   state.score         = 490; // LEVELS[3].scoreThreshold
   state.currentLevelIdx = 3;
   currentLevelDef     = LEVELS[3];
@@ -20666,7 +20672,7 @@ window._jlDebug = {
     function loop() {
       if (!_ltLoopActive) return;
       tick();
-      _ltLoopTimeout = setTimeout(loop, _LT.staggerGap * 1000 * _LT.salvoCount + 800);
+      _ltLoopTimeout = setTimeout(loop, _LT.frequency * 1000);
     }
     loop();
   }
@@ -20802,8 +20808,8 @@ window._jlDebug = {
       _ltTimer -= dt;
       if (_ltTimer <= 0) {
         _ltTimer = _LT.frequency * (0.8 + Math.random()*0.4) * Math.max(0.15, 1.0 - _funFloorIntensity * 0.85);
+        // Always one bolt at a time, aimed at ship's current X — no salvo, no batching
         if (_LT.pattern === 'stagger') {
-          // One bolt at a time, reads shipX live at the moment it fires
           _spawnLightning(state.shipX || 0);
         } else {
           _spawnLightning(_ltNextTargetX());
@@ -20994,7 +21000,7 @@ window._jlDebug = {
     const pats=[
       {label:'↯ RANDOM (loop)', color:'#6af', tick:()=>{ for(let c=0;c<Math.max(1,_LT.count);c++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(_ltNextTargetX()); },c*120); }},
       {label:'►◄ SWEEP (loop)', color:'#0df', tick:()=>{ const range=_LT.laneMax-_LT.laneMin,swOff=(_ltSweepX-0.5)*range; _ltSweepX+=_ltSweepDir*_LT.sweepSpeed*0.35; if(_ltSweepX>=1||_ltSweepX<=0){_ltSweepDir*=-1;_ltSweepX=Math.max(0,Math.min(1,_ltSweepX));} const n=Math.max(2,_LT.salvoCount); for(let i=0;i<n;i++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(state.shipX+swOff+(i/(n-1)-0.5)*range*0.5); },i*250); }},
-      {label:'▼ ▼▼ STAGGER (loop)', color:'#ff0', tick:()=>{ const s=Math.max(2,_LT.salvoCount); for(let si=0;si<s;si++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(state.shipX); },si*_LT.staggerGap*1000); }},
+      {label:'▼ ▼▼ STAGGER (loop)', color:'#ff0', tick:()=>{ if(state.phase==='playing') _spawnLightning(state.shipX); }},
       {label:'▼▼▼ SALVO (loop)', color:'#f80', tick:()=>{ const sx=state.shipX,n=Math.max(1,_LT.salvoCount),half=(_LT.laneMax-_LT.laneMin)*0.45; for(let si=0;si<n;si++) _spawnLightning(sx+(n===1?0:(si/(n-1)-0.5))*half*2); }},
       {label:'▷◁ PINCH (loop)', color:'#f0f', tick:()=>{ const sx=state.shipX,pairs=5,fh=(_LT.laneMax-_LT.laneMin)*0.5*_LT.pinchSpread; for(let pi=0;pi<pairs;pi++){ const hs=Math.max(0.3,fh*(1-pi/(pairs-1))),d=pi*300; (function(s,dl){const fn=()=>{ if(state.phase!=='playing')return; _spawnLightning(sx-s); _spawnLightning(sx+s); }; dl===0?fn():setTimeout(fn,dl);})(hs,d); } setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(sx); },pairs*300); }},
     ];
