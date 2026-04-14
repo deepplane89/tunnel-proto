@@ -20799,14 +20799,8 @@ window._jlDebug = {
       if (_ltTimer <= 0) {
         _ltTimer = _LT.frequency * (0.8 + Math.random()*0.4) * Math.max(0.15, 1.0 - _funFloorIntensity * 0.85);
         if (_LT.pattern === 'stagger') {
-          // Mirror asteroid stagger exactly: each shot reads shipX live at fire time
-          const steps = Math.max(1, Math.round(_LT.salvoCount));
-          for (let si = 0; si < steps; si++) {
-            setTimeout(() => {
-              if (state.phase !== 'playing' || !_LT.enabled) return;
-              _spawnLightning(state.shipX || 0);
-            }, si * _LT.staggerGap * 1000);
-          }
+          // One bolt at a time, reads shipX live at the moment it fires
+          _spawnLightning(state.shipX || 0);
         } else {
           _spawnLightning(_ltNextTargetX());
         }
