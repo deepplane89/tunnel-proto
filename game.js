@@ -10619,11 +10619,21 @@ window.addEventListener('keydown', e => {
     return; // consume key in DR mode
   }
   // toggle no-spawn test mode
-  if ((e.key === "'" || e.key === '`' || e.key === '\\' || e.key === 'n' || e.key === 'N') && state.phase === 'playing' && !state._tutorialActive) {
-    _noSpawnMode = !_noSpawnMode;
+  if ((e.key === "'" || e.key === '`' || e.key === '\\' || e.key === 'n' || e.key === 'N') && state.phase === 'playing') {
+    let _spawnLabel;
+    if (state._tutorialActive) {
+      // In tutorial: toggle asteroid spawner enabled
+      _asteroidTuner.enabled = !_asteroidTuner.enabled;
+      if (!_asteroidTuner.enabled) _clearAllAsteroids();
+      else _astTimer = 0.5;
+      _spawnLabel = _asteroidTuner.enabled ? 'ASTEROIDS ON' : 'ASTEROIDS OFF';
+    } else {
+      _noSpawnMode = !_noSpawnMode;
+      _spawnLabel = _noSpawnMode ? 'SPAWN OFF' : 'SPAWN ON';
+    }
     // Flash HUD message so player knows it fired
     const _nsEl = document.createElement('div');
-    _nsEl.textContent = _noSpawnMode ? 'SPAWN OFF' : 'SPAWN ON';
+    _nsEl.textContent = _spawnLabel;
     _nsEl.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-family:monospace;font-size:24px;font-weight:bold;pointer-events:none;z-index:9999;opacity:1;transition:opacity 1s';
     document.body.appendChild(_nsEl);
     setTimeout(() => { _nsEl.style.opacity = '0'; setTimeout(() => _nsEl.remove(), 1000); }, 500);
