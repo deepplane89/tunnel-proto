@@ -7954,6 +7954,67 @@ function playRetryWhoosh() {
   src.stop(now + dur);
 }
 
+// ── Lightning strike: buzzy arc + deep boom two-layer SFX ──
+function _playLightningStrike() {
+  if (!audioCtx || state.muted) return;
+  _ensureCtxRunning();
+  const vol = 0.22 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (vol <= 0) return;
+  const now = audioCtx.currentTime;
+
+  // ── Layer 1: Buzzy electrical arc ──
+  // Sawtooth with fast downward pitch sweep (high crack → dying buzz)
+  const arc = audioCtx.createOscillator();
+  arc.type = 'sawtooth';
+  arc.frequency.setValueAtTime(1800, now);
+  arc.frequency.exponentialRampToValueAtTime(120, now + 0.18);
+  arc.frequency.exponentialRampToValueAtTime(60, now + 0.55);
+  // Noise crackle layered on top via bandpass-filtered white noise
+  const crackleBuf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.45), audioCtx.sampleRate);
+  const cd = crackleBuf.getChannelData(0);
+  for (let i = 0; i < cd.length; i++) cd[i] = Math.random() * 2 - 1;
+  const crackleSrc = audioCtx.createBufferSource();
+  crackleSrc.buffer = crackleBuf;
+  const crackleFilter = audioCtx.createBiquadFilter();
+  crackleFilter.type = 'bandpass';
+  crackleFilter.frequency.setValueAtTime(2400, now);
+  crackleFilter.frequency.exponentialRampToValueAtTime(400, now + 0.45);
+  crackleFilter.Q.value = 2.5;
+  const crackleGain = audioCtx.createGain();
+  crackleGain.gain.setValueAtTime(vol * 0.55, now);
+  crackleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+  // Arc oscillator gain
+  const arcGain = audioCtx.createGain();
+  arcGain.gain.setValueAtTime(vol * 0.7, now);
+  arcGain.gain.exponentialRampToValueAtTime(vol * 0.15, now + 0.2);
+  arcGain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+  arc.connect(arcGain).connect(audioCtx.destination);
+  crackleSrc.connect(crackleFilter).connect(crackleGain).connect(audioCtx.destination);
+  arc.start(now); arc.stop(now + 0.55);
+  crackleSrc.start(now); crackleSrc.stop(now + 0.45);
+
+  // ── Layer 2: Deep boom ──
+  // Low sine rumble with slow attack + long decay for weight
+  const boom = audioCtx.createOscillator();
+  boom.type = 'sine';
+  boom.frequency.setValueAtTime(55, now);
+  boom.frequency.exponentialRampToValueAtTime(28, now + 0.9);
+  // Sub triangle layer for extra body
+  const sub = audioCtx.createOscillator();
+  sub.type = 'triangle';
+  sub.frequency.setValueAtTime(38, now);
+  sub.frequency.exponentialRampToValueAtTime(18, now + 1.1);
+  const boomGain = audioCtx.createGain();
+  boomGain.gain.setValueAtTime(0.001, now);
+  boomGain.gain.linearRampToValueAtTime(vol * 0.9, now + 0.04); // fast attack
+  boomGain.gain.exponentialRampToValueAtTime(vol * 0.4, now + 0.3);
+  boomGain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+  boom.connect(boomGain).connect(audioCtx.destination);
+  sub.connect(boomGain);
+  boom.start(now); boom.stop(now + 1.1);
+  sub.start(now);  sub.stop(now + 1.1);
+}
+
 function playPickup(typeIdx) {
   if (!audioCtx || state.muted) return;
   const freqs = [880, 1100, 660, 990, 770, 660];
@@ -21380,6 +21441,7 @@ window._jlDebug = {
           inst.flashMat.opacity = 1.0;
           inst.ringMat.opacity  = 0.9;
           _ltShakeTime = _LT.shakeDuration;
+          _playLightningStrike();
           // Rebuild bolt geometry at the final locked landX (ship pos at strike)
           _ltRejag(inst);
         }
