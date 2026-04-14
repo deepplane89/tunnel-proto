@@ -20003,13 +20003,12 @@ const _origUpdateShockwave = _updateShockwave;
         label: '▼ ▼▼ STAGGER (loop)',
         color: '#ff0',
         tick: () => {
-          const sx = state.shipX;
           const steps = Math.max(2, Math.round(T.salvoCount));
           const half = (T.laneMax - T.laneMin) * 0.45;
           for (let si = 0; si < steps; si++) {
             const frac = si / (steps - 1);
-            const x = sx + (frac - 0.5) * half * 2;
-            setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(x); }, si * T.staggerGap * 1000);
+            // re-read shipX at fire time so each shot locks on to current position
+            setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(state.shipX + (frac - 0.5) * half * 2); }, si * T.staggerGap * 1000);
           }
         },
       },
