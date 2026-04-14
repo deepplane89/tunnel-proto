@@ -19673,11 +19673,11 @@ function _tickAsteroidSpawner(dt) {
     T.staggerGap = _chaosStaggerGap(c);
     T.salvoCount = _chaosSalvo(c);
     T.staggerDual = c > 0.5;
-    if (typeof _LT !== 'undefined' && _LT.enabled) {
-      _LT.pattern    = 'stagger';
-      _LT.frequency  = _chaosLtFreq(c);
-      _LT.staggerGap = _chaosLtStaggerGap(c);
-      _LT.salvoCount = _chaosSalvo(c);
+    if (window._LT && window._LT.enabled) {
+      window._LT.pattern    = 'stagger';
+      window._LT.frequency  = _chaosLtFreq(c);
+      window._LT.staggerGap = _chaosLtStaggerGap(c);
+      window._LT.salvoCount = _chaosSalvo(c);
     }
   }
   // Pattern loop buttons handle their own spawning — don't double-fire
@@ -19878,13 +19878,12 @@ const _origUpdateShockwave = _updateShockwave;
         // Force both systems into stagger, enable lightning
         T.pattern = 'stagger';
         T.enabled = true;
-        if (typeof _LT !== 'undefined') { _LT.pattern = 'stagger'; _LT.enabled = true; }
+        if (window._LT) { window._LT.pattern = 'stagger'; window._LT.enabled = true; }
         _astTimer = 0.1; // spawn fast on enable
       } else {
         // Restore lightning to off when chaos ends
-        if (typeof _LT !== 'undefined') _LT.enabled = false;
+        if (window._LT) window._LT.enabled = false;
       }
-      build(); // rebuild panel to reflect pattern changes
     }, '#f0f'));
     panel.appendChild(makeSlider('chaos level', _chaosLevel, 0.0, 1.0, 0.01, v => {
       _chaosLevel = v;
@@ -19893,10 +19892,10 @@ const _origUpdateShockwave = _updateShockwave;
       T.staggerGap  = _chaosStaggerGap(v);
       T.salvoCount  = _chaosSalvo(v);
       T.staggerDual = v > 0.5;
-      if (typeof _LT !== 'undefined') {
-        _LT.frequency  = _chaosLtFreq(v);
-        _LT.staggerGap = _chaosLtStaggerGap(v);
-        _LT.salvoCount = _chaosSalvo(v);
+      if (window._LT) {
+        window._LT.frequency  = _chaosLtFreq(v);
+        window._LT.staggerGap = _chaosLtStaggerGap(v);
+        window._LT.salvoCount = _chaosSalvo(v);
       }
     }, '#f0f').row);
 
@@ -20548,6 +20547,10 @@ const _origUpdateShockwave = _updateShockwave;
     const cEl=document.createElement('div'); cEl.style.cssText='margin-top:6px;color:#888;font-size:10px;';
     const rc=()=>{ cEl.textContent='active: '+_ltActive.length; }; rc(); setInterval(rc,500); panel.appendChild(cEl);
   }
+
+  // Expose config + spawner so external systems (chaos mode) can drive lightning
+  window._LT             = _LT;
+  window._spawnLightning = _spawnLightning;
 
   let visible=false;
   document.addEventListener('keydown',e=>{
