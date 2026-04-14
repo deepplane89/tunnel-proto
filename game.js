@@ -7962,39 +7962,7 @@ function _playLightningStrike() {
   if (vol <= 0) return;
   const now = audioCtx.currentTime;
 
-  // ── Layer 1: Buzzy electrical arc ──
-  // Sawtooth with fast downward pitch sweep (high crack → dying buzz)
-  const arc = audioCtx.createOscillator();
-  arc.type = 'sawtooth';
-  arc.frequency.setValueAtTime(1800, now);
-  arc.frequency.exponentialRampToValueAtTime(120, now + 0.18);
-  arc.frequency.exponentialRampToValueAtTime(60, now + 0.55);
-  // Noise crackle layered on top via bandpass-filtered white noise
-  const crackleBuf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.45), audioCtx.sampleRate);
-  const cd = crackleBuf.getChannelData(0);
-  for (let i = 0; i < cd.length; i++) cd[i] = Math.random() * 2 - 1;
-  const crackleSrc = audioCtx.createBufferSource();
-  crackleSrc.buffer = crackleBuf;
-  const crackleFilter = audioCtx.createBiquadFilter();
-  crackleFilter.type = 'bandpass';
-  crackleFilter.frequency.setValueAtTime(2400, now);
-  crackleFilter.frequency.exponentialRampToValueAtTime(400, now + 0.45);
-  crackleFilter.Q.value = 2.5;
-  const crackleGain = audioCtx.createGain();
-  crackleGain.gain.setValueAtTime(vol * 0.55, now);
-  crackleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
-  // Arc oscillator gain
-  const arcGain = audioCtx.createGain();
-  arcGain.gain.setValueAtTime(vol * 0.7, now);
-  arcGain.gain.exponentialRampToValueAtTime(vol * 0.15, now + 0.2);
-  arcGain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
-  arc.connect(arcGain).connect(audioCtx.destination);
-  crackleSrc.connect(crackleFilter).connect(crackleGain).connect(audioCtx.destination);
-  arc.start(now); arc.stop(now + 0.55);
-  crackleSrc.start(now); crackleSrc.stop(now + 0.45);
-
-  // ── Layer 2: Deep boom ──
-  // Low sine rumble with slow attack + long decay for weight
+  // ── Deep boom ──
   const boom = audioCtx.createOscillator();
   boom.type = 'sine';
   boom.frequency.setValueAtTime(55, now);
@@ -20910,12 +20878,16 @@ function _tickJetLightningRamp(dt) {
       _jlRecenterActive = true;
       _jlRecenterT      = 0;
       const _side = Math.sign(state.shipX);
+      // Project where ship is heading: shipX + velocity offset so first asteroid
+      // leads the ship's current drift direction, funnelling them back to center
+      const _headingX = (state.shipX || 0) + Math.sign(state.shipVelX || _side) * 8;
       _T.pattern    = 'sweep';
       _T.sweepSpeed = 0.55;
-      _T.laneMin    = _side > 0 ?  0 : -60;
-      _T.laneMax    = _side > 0 ? 60 :   0;
-      _astSweepX    = _side > 0 ? 1.0 : 0.0;
-      _astSweepDir  = _side > 0 ? -1  :  1;
+      // Sweep starts at heading position and walks toward center (0)
+      _T.laneMin    = _side > 0 ?  0 : Math.min(_headingX, -4);
+      _T.laneMax    = _side > 0 ? Math.max(_headingX,  4) :  0;
+      _astSweepX    = _side > 0 ? 1.0 : 0.0;  // start at the far (heading) end
+      _astSweepDir  = _side > 0 ? -1  :  1;   // sweep toward center
     }
 
     if (_jlRecenterActive) {
