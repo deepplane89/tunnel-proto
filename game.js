@@ -20230,7 +20230,8 @@ const _origUpdateShockwave = _updateShockwave;
 //  difficulty over time. Physics tuned for high-speed lateral feel.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-let _jlRampTime = 0;   // seconds elapsed in Jet Lightning mode
+let _jlRampTime    = 0;   // seconds elapsed in Jet Lightning mode
+let _jlFatConeTimer = 0;  // independent timer for JL fat cone spawner
 
 function startJetLightning() {
   // ── Flag ──────────────────────────────────────────────────────────────────
@@ -20246,7 +20247,8 @@ function startJetLightning() {
   _bankSmoothing  = 8;
 
   // ── Reset ramp timer ──────────────────────────────────────────────────────
-  _jlRampTime = 0;
+  _jlRampTime     = 0;
+  _jlFatConeTimer  = 99; // start high so first cone doesn't fire instantly
 
   // ── Asteroids: on, stagger aimed at ship's current position ────────────────
   const T = _asteroidTuner;
@@ -20324,9 +20326,9 @@ function _tickJetLightningRamp(dt) {
     T.leadFactor = 0.0;
     if (window._LT) window._LT.enabled = false;
     const p = t / 45;
-    T.frequency  = 4.0 - p * 2.0;
-    T.staggerGap = 1.0 - p * 0.4;
-    T.salvoCount = Math.round(3 + p * 3);
+    T.frequency  = 4.0 - p * 3.5;  // 4.0 -> 0.5 (hits slider max by end of phase)
+    T.staggerGap = 1.0 - p * 0.5;  // 1.0 -> 0.5
+    T.salvoCount = Math.round(3 + p * 4); // 3 -> 7
     if      (t < 15) T.pattern = 'stagger';
     else if (t < 30) T.pattern = 'salvo';
     else             T.pattern = 'random';
@@ -20362,6 +20364,24 @@ function _tickJetLightningRamp(dt) {
     else                 { T.pattern = 'random';  T.staggerDual = false; }
     if (window._LT) {
       window._LT.frequency = Math.max(0.6, 1.8 - p * 1.2);
+    }
+
+    // Fat cones: random single oversized cones (300% normal size) mixed in from Phase 3 start
+    _jlFatConeTimer -= dt;
+    if (_jlFatConeTimer <= 0) {
+      const coneFreq = Math.max(3.0, 8.0 - p * 5.0); // 8s -> 3s interval
+      _jlFatConeTimer = coneFreq * (0.7 + Math.random() * 0.6);
+      const coneType = Math.floor(Math.random() * 3);
+      const fatObs = getPooledObstacle(coneType);
+      if (fatObs && state.phase === 'playing') {
+        const spawnX = state.shipX + (Math.random() - 0.5) * 10;
+        fatObs.position.set(spawnX, 0, SPAWN_Z);
+        fatObs.scale.set(12, 1, 12); // 300% of normal 4x scale
+        fatObs.userData.velX = 0;
+        fatObs.userData.slalomScaled = true;
+        fatObs.userData.isFatCone = true;
+        activeObstacles.push(fatObs);
+      }
     }
 
     // Terrain + ice at 150s
