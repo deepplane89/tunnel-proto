@@ -15482,7 +15482,7 @@ function update(dt) {
         }
       );
     }
-    _noSpawnMode = true; // suppress normal spawner during tutorial
+    if (!_chaosMode) _noSpawnMode = true; // suppress normal spawner during tutorial (chaos overrides this)
   }
 
   // ── T5 scanning beam: fan-ray destruction (runs before obstacle loop)
@@ -19733,7 +19733,6 @@ const _origUpdateShockwave = _updateShockwave;
     const dt = Math.min((now - _lastAstTime) * 0.001, 0.05);
     _lastAstTime = now;
     // Run during tutorial gameplay OR when chaos mode is active
-    if (window._dbgAstHookLog > 2) { window._dbgAstHookLog = 0; console.log('[AST-HOOK] phase:', state.phase, 'tutActive:', state._tutorialActive, '_chaosMode:', _chaosMode, 'T.enabled:', _asteroidTuner.enabled, '_noSpawnMode:', _noSpawnMode, '_astPatternLoopActive:', window._astPatternLoopActive, '_astTimer:', _astTimer.toFixed(2)); }
     if (state.phase === 'playing' && !state.introActive &&
         (state._tutorialActive || _chaosMode)) {
       _tickAsteroidSpawner(dt);
@@ -20484,7 +20483,6 @@ const _origUpdateShockwave = _updateShockwave;
     const now = performance.now();
     const dt  = Math.min((now - _ltLastTime)*0.001, 0.05);
     _ltLastTime = now;
-    if (window._dbgLtHookLog > 2) { window._dbgLtHookLog = 0; console.log('[LT-HOOK] phase:', state.phase, 'tutActive:', state._tutorialActive, '_chaosMode:', _chaosMode, 'LT.enabled:', _LT.enabled); }
     if (state.phase === 'playing' && !state.introActive &&
         (state._tutorialActive || _chaosMode)) {
       _updateLightning(dt);
