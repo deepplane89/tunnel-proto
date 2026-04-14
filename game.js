@@ -19256,13 +19256,14 @@ const _asteroidTuner = {
   chaseRampDuration: 90,   // seconds over which ramp plays out
   // Filler (decorative background asteroids)
   fillerEnabled:  false,   // toggle on/off
-  fillerFreq:     0.4,     // seconds between filler spawns
-  fillerLaneMin: -20,      // X range — wider than normal to sell depth
-  fillerLaneMax:  20,
-  fillerSizeMin:  0.15,    // scale at max distance from center
-  fillerSizeMax:  0.55,    // scale at center
-  fillerSpeedMin: 1.2,     // speed multiplier at max distance (fast = far)
-  fillerSpeedMax: 0.7,     // speed multiplier at center (slower = closer)
+  fillerFreq:      0.4,    // seconds between filler spawns
+  fillerLaneMin:  -20,     // X range — wider than normal to sell depth
+  fillerLaneMax:   20,
+  fillerSkyHeight: 25,     // spawn height (independent of main skyHeight)
+  fillerSizeMin:   0.15,   // scale at max distance from center
+  fillerSizeMax:   0.55,   // scale at center
+  fillerSpeedMin:  1.2,    // speed multiplier at max distance (fast = far)
+  fillerSpeedMax:  0.7,    // speed multiplier at center (slower = closer)
 };
 
 // ── Shaders ──────────────────────────────────────────────────────────────────
@@ -19847,7 +19848,7 @@ function _spawnFillerAsteroid() {
   const speedMult = T.fillerSpeedMax + (T.fillerSpeedMin - T.fillerSpeedMax) * distFrac;
   const speed = T.speed * speedMult;
 
-  const spawnY = T.skyHeight * 0.6; // slightly lower than real asteroids
+  const spawnY = T.fillerSkyHeight;
   const spawnZ = SPAWN_Z;
   const landZ  = shipGroup.position.z - 20; // land well ahead of ship — never reaches it
   const landY  = 0.15;
@@ -20416,6 +20417,7 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeHeader('FILLER (decorative)', '#88f'));
     panel.appendChild(makeToggle('enabled (JL stagger only)', () => T.fillerEnabled, v => { T.fillerEnabled = v; }));
     panel.appendChild(makeSlider('frequency (s)', T.fillerFreq, 0.05, 3.0, 0.05, v => T.fillerFreq = v, '#88f').row);
+    panel.appendChild(makeSlider('sky height', T.fillerSkyHeight, 1, 80, 1, v => T.fillerSkyHeight = v, '#88f').row);
     panel.appendChild(makeSlider('lane min', T.fillerLaneMin, -40, 0, 1, v => T.fillerLaneMin = v, '#8df').row);
     panel.appendChild(makeSlider('lane max', T.fillerLaneMax, 0, 40, 1, v => T.fillerLaneMax = v, '#8df').row);
     panel.appendChild(makeSlider('size near', T.fillerSizeMax, 0.05, 1.5, 0.05, v => T.fillerSizeMax = v, '#88f').row);
@@ -20585,7 +20587,7 @@ const _JL_TRACKS = [
     settings: {
       enabled: true, pattern: 'salvo', leadFactor: 0.0,
       frequency: 0.5, salvoCount: 4,
-      size: 1.35, sizeVariance: 0.55, laneMin: -6.5, laneMax: 7.5,
+      size: 1.35, sizeVariance: 0.55, laneMin: -7.5, laneMax: 7.5,
     },
   },
 
