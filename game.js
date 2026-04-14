@@ -495,6 +495,8 @@ let _decelFullPct    = 0.05; // DECEL % at full control (nice slide, stops clean
 let _decelOppScale   = 1.0;  // unused — kept for tuner slider (always start at -1 = live)
 let _maxVelBase      = 9;    // lateral velocity cap at L1
 let _maxVelSnap      = 13;   // extra cap added at max level (total = _maxVelBase + _maxVelSnap at L5)
+let _funFloorSpeed     = 1.0;  // speed multiplier applied at game start (1.0 = BASE_SPEED, 1.85 = L5)
+let _funFloorIntensity = 0.0;  // 0→1: scales asteroid + lightning frequency down at spawn (0=tuner defaults, 1=max chaos)
 function getHandlingDrift() {
   if (_handlingDriftOverride >= 0) return _handlingDriftOverride;
   const level = loadPlayerLevel();
@@ -12224,6 +12226,7 @@ function startDeathRun() {
   state._tutorialActive      = false; // disabled auto-start — settings-only access
   state._tutorialStep        = -1; // -1 = waiting for first frame before showing box
   if (state._tutorialActive) {
+    state.speed = BASE_SPEED * _funFloorSpeed; // fun floor: dial in starting speed via T tuner
     setTimeout(() => {
       state._tutorialStep = -0.5; // start with rock mounds
     }, 100);
@@ -18042,6 +18045,11 @@ function buildSkinTunerSliders() {
       }
     }, '#0ff'));
 
+    // FUN FLOOR
+    panel.appendChild(makeHeader('FUN FLOOR'));
+    panel.appendChild(makeSlider('start speed (x BASE)', _funFloorSpeed, 1.0, 1.85, 0.01, v => { _funFloorSpeed = v; }, '#ff0'));
+    panel.appendChild(makeSlider('spawn intensity (0=off, 1=max)', _funFloorIntensity, 0.0, 1.0, 0.01, v => { _funFloorIntensity = v; }, '#ff0'));
+
     // LATERAL PHYSICS
     panel.appendChild(makeHeader('LATERAL PHYSICS'));
     panel.appendChild(makeSlider('phys level (0=L1 floaty, 4=L5 crisp, -1=live)', _physLevelOverride, -1, 4, 1, v => _physLevelOverride = Math.round(v), '#0ff'));
@@ -19653,7 +19661,7 @@ function _tickAsteroidSpawner(dt) {
   _astStaggerT -= dt;
 
   if (_astTimer <= 0) {
-    _astTimer = T.frequency * (0.8 + Math.random() * 0.4);
+    _astTimer = T.frequency * (0.8 + Math.random() * 0.4) * Math.max(0.15, 1.0 - _funFloorIntensity * 0.85);
 
     if (T.pattern === 'salvo') {
       // Spawn T.salvoCount at once, spread across lanes centered on ship X
@@ -20160,6 +20168,12 @@ const _origUpdateShockwave = _updateShockwave;
     _ltActive.length = 0;
   }
 
+  // Play a random thunder sound (alternates between two clips for variety)
+  function _playThunder() {
+    const id = Math.random() < 0.5 ? 'thunder1-sfx' : 'thunder2-sfx';
+    const el = document.getElementById(id);
+    if (el) { el.currentTime = 0; el.play().catch(()=>{}); }
+  }
   // ── Target X from pattern ─────────────────────────────────────────────────
   function _ltNextTargetX() {
     const range = _LT.laneMax - _LT.laneMin;
@@ -20284,7 +20298,7 @@ const _origUpdateShockwave = _updateShockwave;
     if (_LT.enabled && !_noSpawnMode && !_ltLoopActive) {
       _ltTimer -= dt;
       if (_ltTimer <= 0) {
-        _ltTimer = _LT.frequency * (0.8 + Math.random()*0.4);
+        _ltTimer = _LT.frequency * (0.8 + Math.random()*0.4) * Math.max(0.15, 1.0 - _funFloorIntensity * 0.85);
         _spawnLightning(_ltNextTargetX());
       }
     }
@@ -20332,6 +20346,7 @@ const _origUpdateShockwave = _updateShockwave;
         if (inst.elapsed >= _LT.warningTime) {
           inst.phase = 'strike';
           inst.strikeElapsed = 0;
+          _playThunder(); // thunder crack on bolt slam
           inst.warnMat.opacity = 0;
           inst.coreMat.opacity = 1.0;
           inst.glowMat.opacity = 0.5;
@@ -20360,6 +20375,7 @@ const _origUpdateShockwave = _updateShockwave;
           inst.hitChecked = true;
           const dx = (state.shipX||0) - inst.landX;
           if (Math.abs(dx) < _LT.killRadius) {
+            _playThunder();
             const _ltHitSfx = document.getElementById('shield-hit-sfx');
             if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
             if (state._tutorialActive) addCrashFlash(0x4488ff);
@@ -20395,6 +20411,7 @@ const _origUpdateShockwave = _updateShockwave;
           const near = dx < _LT.killRadius && dz < 4;
           if (near && !inst.hitChecked) {
             inst.hitChecked = true;
+            _playThunder();
             const _ltHitSfx = document.getElementById('shield-hit-sfx');
             if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
             if (state._tutorialActive) addCrashFlash(0x4488ff);
