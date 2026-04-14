@@ -15235,6 +15235,12 @@ function update(dt) {
     if (_lt >= 1) {
       state._introLiftActive = false;
       shipGroup.rotation.x = _shipRotXOffset;
+      // In JL mode, re-lock speed and clear any velocity that built up during prologue
+      if (state._jetLightningMode) {
+        state.shipVelX = 0;
+        state.shipX    = 0;
+        shipGroup.position.x = 0;
+      }
     }
   }
 
@@ -19809,7 +19815,7 @@ function _tickAsteroidSpawner(dt) {
 
     if (T.pattern === 'stagger') {
       // Sequential shots, each reading live shipX at fire time — same as tutorial button
-      const steps = Math.max(2, Math.round(T.salvoCount));
+      const steps = Math.max(1, Math.round(T.salvoCount));
       for (let si = 0; si < steps; si++) {
         setTimeout(() => {
           if (state.phase !== 'playing') return;
@@ -20335,7 +20341,7 @@ function startJetLightning() {
   T.pattern      = 'stagger';
   T.frequency    = 1.4;    // locked from session log (rchouake approved)
   T.staggerGap   = 0.6;    // locked from session log
-  T.salvoCount   = 3;
+  T.salvoCount   = 1;      // stagger = 1 shot at a time, tracking ship live
   T.speed        = 200;
   T.size         = 1.2;    // locked from session log
   T.sizeVariance = 0.55;   // locked from session log
@@ -20396,8 +20402,23 @@ function startJetLightning() {
 }
 
 // ── Per-frame JL difficulty ramp — called from composer chain ────────────────
+let _jlWasInLiftoff = false; // tracks liftoff→playing transition to reset astTimer
 function _tickJetLightningRamp(dt) {
   if (!state._jetLightningMode || state.phase !== 'playing') return;
+
+  const _inLiftoff = state.introActive || state._introLiftActive;
+
+  // Detect liftoff completion — reset astTimer and rampTime to give clean 2s grace
+  if (_jlWasInLiftoff && !_inLiftoff) {
+    _astTimer    = 2.0;  // 2s grace from moment ship is free
+    _jlRampTime  = 0;    // ramp starts from liftoff, not from JL button press
+    state.speed  = BASE_SPEED * LEVELS[3].speedMult; // re-lock L4 speed (prologue may have overridden)
+  }
+  _jlWasInLiftoff = _inLiftoff;
+
+  // Don't tick ramp during prologue/liftoff — time should start when player is free
+  if (_inLiftoff) return;
+
   _jlRampTime += dt;
 
   const T = _asteroidTuner;
