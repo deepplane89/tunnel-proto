@@ -11956,7 +11956,7 @@ function startGame() {
   // engine hum removed
 
   // ── L1 cinematic intro text (only on fresh game start at level 0, NOT on retry) ──
-  if (state.currentLevelIdx === 0 && !_skipL1Intro && !state._tutorialActive && !_retryIsFromDead) {
+  if (state.currentLevelIdx === 0 && !_skipL1Intro && !state._tutorialActive && !state._jetLightningMode && !_retryIsFromDead) {
     state.introActive = true;   // blocks cone spawning
     state.thrusterPower = 0;    // thrusters off during prologue
     showIntroText();
@@ -13008,7 +13008,7 @@ function _drEndlessTick(dt) {
       state.deathRunRestBeat = 4.0;
       state.drPhase = 'RELEASE'; state.drPhaseTimer = 0;
       state.drWaveCount++;
-      if (!state._tutorialActive && _bonusRings.length === 0) _ringSpawnRow(0);
+      if (!state._tutorialActive && !state._jetLightningMode && _bonusRings.length === 0) _ringSpawnRow(0);
       // Cycle vibes through the full palette on each endless wave
       const _totalVibes = DR_VIBES.length;
       const _nextVibeIdx = ((state._endlessVibeIdx || 0) + 1) % _totalVibes;
@@ -13445,7 +13445,7 @@ function _ringBuildOne(colorIdx) {
 }
 
 function _ringSpawnRow(xPos, nearSpawn) {
-  if (state._tutorialActive) return; // never spawn rings during tutorial
+  if (state._tutorialActive || state._jetLightningMode) return; // never spawn rings during tutorial or Jet Lightning
   const baseX = (xPos !== undefined) ? xPos : _ringTuner.x;
   const count = Math.max(1, Math.round(_ringTuner.length));
   const spacing = Math.max(0.5, _ringTuner.freq);
@@ -15793,7 +15793,7 @@ function update(dt) {
   // Always tick the sequencer — REST stages manage deathRunRestBeat internally
   // to suppress the spawner. Gating the sequencer on restBeat caused REST stages
   // to run ~31x longer than intended (seqStageElapsed only advanced 1 frame per 0.5s).
-  if (state.isDeathRun && !state.introActive && !state._tutorialActive) {
+  if (state.isDeathRun && !state.introActive && !state._tutorialActive && !state._jetLightningMode) {
     if (state.deathRunRestBeat > 0) state.deathRunRestBeat -= dt;
     _drSequencerTick(dt);
   }
@@ -15882,7 +15882,7 @@ function update(dt) {
             state.drPhaseDuration = _relDur.min + Math.random() * (_relDur.max - _relDur.min);
             state.drWaveCount++;
             // 40% chance to spawn bonus rings at start of new RELEASE
-            if (!state._tutorialActive && Math.random() < 0.6 && _bonusRings.length === 0) { _ringSpawnRow(0); console.log('[DR] Bonus rings spawned (RELEASE), count=' + _bonusRings.length); }
+            if (!state._tutorialActive && !state._jetLightningMode && Math.random() < 0.6 && _bonusRings.length === 0) { _ringSpawnRow(0); console.log('[DR] Bonus rings spawned (RELEASE), count=' + _bonusRings.length); }
             _dr2DebugLog();
           }
         }
@@ -15935,7 +15935,7 @@ function update(dt) {
           state.drPhaseDuration = _recDur.min + Math.random() * (_recDur.max - _recDur.min);
           state.deathRunRestBeat = 1.0 + Math.random() * 0.5;
           // Always spawn bonus rings after surviving peak — reward
-          if (!state._tutorialActive && _bonusRings.length === 0) { _ringSpawnRow(0); console.log('[DR] Bonus rings spawned (post-PEAK), count=' + _bonusRings.length); }
+          if (!state._tutorialActive && !state._jetLightningMode && _bonusRings.length === 0) { _ringSpawnRow(0); console.log('[DR] Bonus rings spawned (post-PEAK), count=' + _bonusRings.length); }
           _dr2DebugLog();
         }
       }
@@ -15944,7 +15944,7 @@ function update(dt) {
 
   // ── Spawn
   // L3 dense corridor: spawn wall rows every ~7 world units (ship-relative, cyan tinted)
-  if (state.corridorMode) {
+  if (state.corridorMode && !state._jetLightningMode) {
     if (!state.isDeathRun) maybeStartGauntlet();
     if (state.corridorDelay > 0) {
       state.corridorDelay -= dt;
@@ -16150,7 +16150,7 @@ function update(dt) {
   }
 
   // Normal nextSpawnZ-based spawner — suppressed during active zipper, L5 ending, intro, or death run rest beat
-  if (!state._tutorialActive && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
+  if (!state._tutorialActive && !state._jetLightningMode && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
     state.nextSpawnZ += effectiveSpeed * dt;
     if (state.nextSpawnZ >= 0) {
       // Tighter Z spacing for rings (easier to pass through, need more density)
