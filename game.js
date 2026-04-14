@@ -486,15 +486,15 @@ const HANDLING_UPGRADE_KEY = 'jetslide_handling_claimed';
 
 let _handlingDriftOverride = -1; // -1 = use player level, 0-1 = tuner override
 // ── Ship physics tuner overrides (-1 = use formula) ──
-let _accelBase       = 22;   // base ACCEL at L1
-let _accelSnap       = 52;   // extra ACCEL added at max level
+let _accelBase       = 60;   // base ACCEL at L1
+let _accelSnap       = 100;   // extra ACCEL added at max level
 let _physLevelOverride = -1; // -1 = use game level, 0-4 = force physics snap level (0=floaty L1, 4=crisp L5)
 let _accelDriftMult  = 4.0;  // unused — kept for tuner slider
 let _decelBasePct    = 0.02; // DECEL % at stock (long slide)
 let _decelFullPct    = 0.05; // DECEL % at full control (nice slide, stops cleanly)
 let _decelOppScale   = 1.0;  // unused — kept for tuner slider (always start at -1 = live)
-let _maxVelBase      = 9;    // lateral velocity cap at L1
-let _maxVelSnap      = 13;   // extra cap added at max level (total = _maxVelBase + _maxVelSnap at L5)
+let _maxVelBase      = 18;    // lateral velocity cap at L1
+let _maxVelSnap      = 23;   // extra cap added at max level (total = _maxVelBase + _maxVelSnap at L5)
 let _funFloorSpeed     = 1.0;  // speed multiplier applied at game start (1.0 = BASE_SPEED, 1.85 = L5)
 let _funFloorIntensity = 0.0;  // 0→1: scales asteroid + lightning frequency down at spawn (0=tuner defaults, 1=max chaos)
 function getHandlingDrift() {
@@ -6409,7 +6409,7 @@ let _pitchSmooth = 0;
 let _yawMax = 0.06;              // radians — nose turn into steering direction
 let _yawSmoothing = 4;           // higher = snappier yaw response
 let _yawSmooth = 0;
-let _bankMax = 0.03;             // bank multiplier (baked from tuner)
+let _bankMax = 0.04;             // bank multiplier (baked from tuner)
 let _bankSmoothing = 8;          // bank lerp speed (existing: 8)
 let _bankVelX = 0;               // smoothed velocity used for banking (decoupled from drift physics)
 let _wobbleMaxAmp = 0.05;        // max wobble amplitude (baked)
@@ -19099,9 +19099,9 @@ const _asteroidTuner = {
   size:           1.2,     // base radius (world units)
   sizeVariance:   0.4,     // ± random added to size
   frequency:      3.5,     // seconds between spawns (per pattern unit)
-  speed:          73,      // travel speed (units/s along trajectory)
+  speed:          200,     // travel speed (units/s along trajectory)
   leadFactor:     1.0,     // partial lead: 0=no lead (aim at current X), 1=perfect intercept, 0.6=forgiving
-  skyHeight:      40,      // Y spawn height above water at the horizon
+  skyHeight:      42,      // Y spawn height above water at the horizon
   //
   // TRAJECTORY — three independent axes, all slider-controlled:
   //   trajZ  : how far toward the camera the asteroid travels on Z.
@@ -20211,16 +20211,16 @@ const _origUpdateShockwave = _updateShockwave;
 
   const _LT = {
     enabled:      false,
-    frequency:    4.0,
+    frequency:    1.3,
     leadFactor:   0.6,
     skyHeight:    55,
     warningTime:  0.3,    // seconds disc shows before bolt slams — keep short so bolt strikes ahead of ship
     boltDuration: 0.5,    // seconds of initial flash
     lingerDuration: 4.0,  // seconds bolt stays planted in world (ship flies past it)
     coreRadius:   0.12,
-    glowRadius:   0.55,
+    glowRadius:   0.25,
     segments:     10,
-    jaggedness:   1.2,
+    jaggedness:   1.9,
     hitboxScale:  1.0,    // multiplier on glowRadius — hitbox always matches bolt visual
     warnRadius:   3.5,
     shakeAmt:     0.18,
@@ -20237,7 +20237,7 @@ const _origUpdateShockwave = _updateShockwave;
     salvoCount:   3,
     pinchSpread:  1.0,
     count:        1,
-    spawnZ:      -40,   // how far out bolts spawn — closer = less reaction time
+    spawnZ:      -83,   // how far out bolts spawn — closer = less reaction time
   };
 
   let _ltTimer    = 2.0;
