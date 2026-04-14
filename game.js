@@ -16936,6 +16936,10 @@ function updateCameraFOV() {
     _skyQuadMat.uniforms.uOffsetY.value = -0.24;
   }
   // Apply pivot offsets immediately (not just in animate loop)
+  // X must be zeroed here — if a resize fires mid-gameplay the animate loop
+  // will restore it to shipX on the next frame, but lookAt must be computed
+  // from a centered pivot or the camera angle drifts permanently.
+  cameraPivot.position.x = (state && state.phase === 'playing') ? (camTargetX || 0) : 0;
   cameraPivot.position.y = 2.8 + _camPivotYOffset;
   cameraPivot.position.z = 9 + _camPivotZOffset;
   camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
