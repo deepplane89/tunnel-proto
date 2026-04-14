@@ -19063,6 +19063,7 @@ const _asteroidTuner = {
   pinchStep:      0.12,    // how much the pinch closes per tick (independent of sweepSpeed)
   pinchSpread:    1.0,     // arm spread multiplier: 1=full lane width, 0.5=half, 2=extra wide
   chaseFlank:     0.25,    // chase flank offset as fraction of lane range (0=no flanks, 0.5=wide)
+  staggerDual:    false,   // when true: each stagger step fires a 2nd shot at predicted position
   staggerGap:     0.8,     // seconds between stagger drops — tight enough to force movement
   salvoCount:     5,       // how many shots in a stagger/salvo burst
   laneMin:        -8,      // leftmost lane X
@@ -19822,6 +19823,7 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeSlider('sweep speed', T.sweepSpeed, 0.05, 2.0, 0.01, v => T.sweepSpeed = v, '#0df').row);
     panel.appendChild(makeSlider('pinch step', T.pinchStep, 0.01, 0.5, 0.01, v => T.pinchStep = v, '#f0f').row);
     panel.appendChild(makeSlider('pinch spread', T.pinchSpread, 0.1, 3.0, 0.05, v => T.pinchSpread = v, '#f0f').row);
+    panel.appendChild(makeToggle('stagger dual shot', () => T.staggerDual, v => { T.staggerDual = v; }));
     panel.appendChild(makeSlider('stagger gap', T.staggerGap, 0.2, 5.0, 0.1, v => T.staggerGap = v, '#0df').row);
     panel.appendChild(makeSlider('salvo count', T.salvoCount, 1, 8, 1, v => T.salvoCount = Math.round(v), '#0df').row);
     panel.appendChild(makeSlider('lane min X', T.laneMin, -20, 0, 0.5, v => T.laneMin = v, '#8df').row);
@@ -20008,13 +20010,15 @@ const _origUpdateShockwave = _updateShockwave;
           for (let si = 0; si < steps; si++) {
             setTimeout(() => {
               if (state.phase !== 'playing') return;
-              // Shot 1: dead on current position
+              // Shot 1: always dead on current position
               _spawnAsteroid(state.shipX);
-              // Shot 2: leads where ship is heading — offset by velocity * travel time
-              const spawnY = T.skyHeight;
-              const totalTime = Math.sqrt((0 - spawnY) ** 2 + (3.9 - (-160)) ** 2) / T.speed;
-              const leadX = state.shipX + (state.shipVelX || 0) * totalTime * T.leadFactor;
-              if (Math.abs(leadX - state.shipX) > 0.8) _spawnAsteroid(leadX);
+              // Shot 2 (dual mode): leads where ship is heading
+              if (T.staggerDual) {
+                const spawnY = T.skyHeight;
+                const totalTime = Math.sqrt((0 - spawnY) ** 2 + (3.9 - (-160)) ** 2) / T.speed;
+                const leadX = state.shipX + (state.shipVelX || 0) * totalTime * T.leadFactor;
+                if (Math.abs(leadX - state.shipX) > 0.8) _spawnAsteroid(leadX);
+              }
             }, si * T.staggerGap * 1000);
           }
         },
@@ -20082,4 +20086,366 @@ const _origUpdateShockwave = _updateShockwave;
       else panel.style.display = 'none';
     }
   });
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  LIGHTNING STRIKE SYSTEM
+//  – Procedural jagged bolt from sky to water surface
+//  – Warning glow on water, bolt slam, flicker, shockwave ring, camera shake
+//  – Targets ship with physics lead (same algo as asteroids)
+//  – Tuner panel on 'L' key
+// ═══════════════════════════════════════════════════════════════════════════════
+(function setupLightningSystem() {
+
+  // ── Config ────────────────────────────────────────────────────────────────
+  const _LT = {
+    enabled:      false,
+    frequency:    4.0,    // seconds between strikes
+    leadFactor:   0.6,    // how far ahead of ship to lead (0=exact pos, 1=full physics)
+    skyHeight:    60,     // Y where bolt originates
+    warningTime:  1.4,    // seconds glow shows before bolt
+    boltDuration: 0.55,   // how long bolt lingers + flickers
+    boltWidth:    0.18,   // core bolt radius
+    glowWidth:    1.2,    // outer glow radius
+    glowColor:    0x88ccff,
+    coreColor:    0xffffff,
+    flashColor:   0x99ddff,
+    shakeAmt:     0.18,   // camera shake magnitude on strike
+    shakeDuration:0.35,   // seconds of shake
+    warnColor:    0x44aaff,
+    warnRadius:   3.5,    // warning disc radius on water
+    segments:     10,     // bolt jaggedness subdivisions
+    spread:       0.9,    // max horizontal displacement per segment
+    killRadius:   3.2,    // ship death radius
+    count:        1,      // simultaneous strikes (1-3)
+  };
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let _ltTimer   = 2.0;
+  const _ltActive = []; // active strike instances
+
+  // ── Bolt geometry builder ─────────────────────────────────────────────────
+  function _buildBoltGeometry(topY, bottomY, landX, landZ, segs, spread) {
+    // Fractal midpoint displacement on a vertical line
+    const points = [new THREE.Vector3(landX, topY, landZ)];
+    // subdivide
+    let pts = [
+      { x: landX, y: topY },
+      { x: landX, y: bottomY },
+    ];
+    for (let d = 0; d < Math.log2(segs); d++) {
+      const next = [];
+      for (let i = 0; i < pts.length - 1; i++) {
+        next.push(pts[i]);
+        const mx = (pts[i].x + pts[i+1].x) * 0.5 + (Math.random() - 0.5) * spread * (1 - d * 0.25);
+        const my = (pts[i].y + pts[i+1].y) * 0.5;
+        next.push({ x: mx, y: my });
+      }
+      next.push(pts[pts.length - 1]);
+      pts = next;
+    }
+    const verts = [];
+    for (const p of pts) verts.push(p.x, p.y, landZ);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    return geo;
+  }
+
+  // ── Warning disc ──────────────────────────────────────────────────────────
+  function _makeWarnDisc(x, z, radius, color) {
+    const geo = new THREE.CircleGeometry(radius, 32);
+    const mat = new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0.0,
+      depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 0.08, z);
+    scene.add(mesh);
+    return mesh;
+  }
+
+  // ── Shockwave ring ────────────────────────────────────────────────────────
+  function _makeRingMesh(x, z) {
+    const geo = new THREE.RingGeometry(0.1, 0.5, 48);
+    const mat = new THREE.MeshBasicMaterial({
+      color: _LT.glowColor, transparent: true, opacity: 0.9,
+      depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 0.1, z);
+    scene.add(mesh);
+    return mesh;
+  }
+
+  // ── Ground flash sprite ───────────────────────────────────────────────────
+  function _makeFlash(x, z) {
+    const mat = new THREE.SpriteMaterial({
+      color: _LT.flashColor, transparent: true, opacity: 0.0,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const sp = new THREE.Sprite(mat);
+    sp.scale.set(8, 8, 1);
+    sp.position.set(x, 1.0, z);
+    scene.add(sp);
+    return sp;
+  }
+
+  // ── Spawn a single lightning strike ──────────────────────────────────────
+  function _spawnLightning(targetX) {
+    const landZ = -30; // ahead of ship, well in view
+    const landY = 0.0;
+    const topY  = _LT.skyHeight;
+
+    // Physics lead identical to asteroid system
+    const dist     = Math.sqrt((topY - landY) ** 2 + (3.9 - landZ) ** 2);
+    const travelT  = dist / 80; // rough travel estimate for lead calc
+    const shipVelX = (state && state.shipVelX) || 0;
+    const landX    = targetX + shipVelX * travelT * _LT.leadFactor;
+
+    // Build warn disc
+    const warnDisc = _makeWarnDisc(landX, landZ, _LT.warnRadius, _LT.warnColor);
+    const flash    = _makeFlash(landX, landZ);
+    const ring     = _makeRingMesh(landX, landZ);
+
+    // Build bolt lines (core + glow) — hidden until strike
+    const boltGeo   = _buildBoltGeometry(topY, landY, landX, landZ, _LT.segments, _LT.spread);
+    const glowGeo   = _buildBoltGeometry(topY, landY, landX, landZ, _LT.segments, _LT.spread * 1.5);
+
+    const coreMat = new THREE.LineBasicMaterial({
+      color: _LT.coreColor, transparent: true, opacity: 0.0,
+      depthWrite: false, blending: THREE.AdditiveBlending, linewidth: 2,
+    });
+    const glowMat = new THREE.LineBasicMaterial({
+      color: _LT.glowColor, transparent: true, opacity: 0.0,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const coreL = new THREE.Line(boltGeo, coreMat);
+    const glowL = new THREE.Line(glowGeo, glowMat);
+    scene.add(coreL); scene.add(glowL);
+
+    const inst = {
+      landX, landZ, landY,
+      phase: 'warn',       // 'warn' | 'bolt' | 'flicker' | 'dead'
+      elapsed: 0,
+      warnDisc, flash, ring,
+      coreL, glowL, coreMat, glowMat,
+      boltGeo, glowGeo,
+      ringRadius: 0.3,
+      dead: false,
+      hitChecked: false,
+    };
+    _ltActive.push(inst);
+  }
+
+  // ── Rebuild jagged geometry each flicker frame ────────────────────────────
+  function _reJag(inst) {
+    inst.boltGeo.dispose();
+    inst.glowGeo.dispose();
+    const bg = _buildBoltGeometry(inst.landY + _LT.skyHeight, inst.landY, inst.landX, inst.landZ, _LT.segments, _LT.spread);
+    const gg = _buildBoltGeometry(inst.landY + _LT.skyHeight, inst.landY, inst.landX, inst.landZ, _LT.segments, _LT.spread * 1.5);
+    inst.coreL.geometry = bg;
+    inst.glowL.geometry = gg;
+    inst.boltGeo = bg;
+    inst.glowGeo = gg;
+  }
+
+  // ── Kill / cleanup one instance ───────────────────────────────────────────
+  function _killLightning(inst) {
+    scene.remove(inst.warnDisc); inst.warnDisc.geometry.dispose(); inst.warnDisc.material.dispose();
+    scene.remove(inst.flash);    inst.flash.material.dispose();
+    scene.remove(inst.ring);     inst.ring.geometry.dispose(); inst.ring.material.dispose();
+    scene.remove(inst.coreL);    inst.boltGeo.dispose(); inst.coreMat.dispose();
+    scene.remove(inst.glowL);    inst.glowGeo.dispose(); inst.glowMat.dispose();
+    inst.dead = true;
+  }
+
+  // ── Camera shake state ────────────────────────────────────────────────────
+  let _ltShakeTime = 0;
+  let _ltShakeAmt  = 0;
+
+  // ── Update all active strikes ─────────────────────────────────────────────
+  function _updateLightning(dt) {
+    // Spawn tick
+    if (_LT.enabled && !_noSpawnMode) {
+      _ltTimer -= dt;
+      if (_ltTimer <= 0) {
+        _ltTimer = _LT.frequency * (0.85 + Math.random() * 0.3);
+        const count = Math.max(1, Math.round(_LT.count));
+        for (let ci = 0; ci < count; ci++) {
+          const tx = (state && state.shipX) || 0;
+          const spread = ci === 0 ? 0 : (ci % 2 === 0 ? 1 : -1) * 4;
+          _spawnLightning(tx + spread);
+        }
+      }
+    }
+
+    // Camera shake
+    if (_ltShakeTime > 0) {
+      _ltShakeTime -= dt;
+      const s = _ltShakeAmt * (_ltShakeTime / _LT.shakeDuration);
+      camera.position.x += (Math.random() - 0.5) * s;
+      camera.position.y += (Math.random() - 0.5) * s * 0.5;
+    }
+
+    // Update instances
+    for (let i = _ltActive.length - 1; i >= 0; i--) {
+      const inst = _ltActive[i];
+      inst.elapsed += dt;
+
+      if (inst.phase === 'warn') {
+        // Pulse warning disc 0→0.7 opacity
+        const t = Math.min(inst.elapsed / _LT.warningTime, 1.0);
+        const pulse = 0.3 + 0.4 * Math.abs(Math.sin(inst.elapsed * 8));
+        inst.warnDisc.material.opacity = t * pulse;
+        // also scale disc slightly for dramatic effect
+        const s = 0.8 + 0.3 * t;
+        inst.warnDisc.scale.set(s, s, 1);
+
+        if (inst.elapsed >= _LT.warningTime) {
+          // STRIKE
+          inst.phase = 'bolt';
+          inst.elapsed = 0;
+          inst.warnDisc.material.opacity = 0;
+          inst.coreMat.opacity = 1.0;
+          inst.glowMat.opacity = 0.55;
+          inst.flash.material.opacity = 1.0;
+          // Kick shake
+          _ltShakeTime = _LT.shakeDuration;
+          _ltShakeAmt  = _LT.shakeAmt;
+        }
+
+      } else if (inst.phase === 'bolt') {
+        const t = inst.elapsed / _LT.boltDuration;
+        // Flicker every ~4 frames
+        if (Math.floor(inst.elapsed * 24) % 3 === 0) _reJag(inst);
+        // Fade core and glow out together
+        inst.coreMat.opacity = Math.max(0, 1.0 - t * 0.7);
+        inst.glowMat.opacity = Math.max(0, 0.55 - t * 0.5);
+        // Ground flash fades fast
+        inst.flash.material.opacity = Math.max(0, 1.0 - t * 3.0);
+        // Shockwave ring expands
+        inst.ringRadius += dt * 18;
+        inst.ring.scale.set(inst.ringRadius, inst.ringRadius, 1);
+        inst.ring.material.opacity = Math.max(0, 0.8 - t * 1.5);
+
+        // Hit check
+        if (!inst.hitChecked && state && state.phase === 'playing') {
+          inst.hitChecked = true;
+          const dx = (state.shipX || 0) - inst.landX;
+          const dz = (state.shipZ || 3.9) - inst.landZ;
+          if (Math.sqrt(dx*dx + dz*dz) < _LT.killRadius) {
+            // Trigger same death as asteroid hit
+            if (typeof _onAsteroidHit === 'function') _onAsteroidHit();
+            else if (state.phase === 'playing') state.phase = 'dead';
+          }
+        }
+
+        if (inst.elapsed >= _LT.boltDuration) {
+          inst.phase = 'dead';
+          _killLightning(inst);
+          _ltActive.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  // ── Hook into the same composer.render patch as asteroids ────────────────
+  const _origLtRender = composer.render.bind(composer);
+  composer.render = function(...args) {
+    const _ltNow = performance.now();
+    // reuse asteroid dt — just use a simple delta here
+    if (state._tutorialActive && state.phase === 'playing' && !state.introActive) {
+      // dt approximation — 60fps target
+      _updateLightning(1/60);
+    }
+    _origLtRender(...args);
+  };
+
+  // ── Tuner panel (L key) ───────────────────────────────────────────────────
+  const panel = document.createElement('div');
+  panel.id = 'lightning-tuner';
+  panel.style.cssText = 'display:none;position:fixed;top:0;left:270px;width:250px;height:100%;background:rgba(0,0,0,0.93);overflow-y:auto;z-index:99999;font-family:monospace;font-size:11px;color:#ccc;padding:8px;box-sizing:border-box;-webkit-overflow-scrolling:touch;border-right:1px solid #6af;';
+  document.body.appendChild(panel);
+
+  function makeSlider(label, val, min, max, step, onChange) {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:4px;flex-wrap:wrap;';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'width:110px;color:#6af;font-size:10px;flex-shrink:0;';
+    lbl.textContent = label;
+    const inp = document.createElement('input');
+    inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step; inp.value = val;
+    inp.style.cssText = 'flex:1;height:14px;accent-color:#6af;';
+    const valEl = document.createElement('span');
+    valEl.style.cssText = 'width:36px;text-align:right;font-size:10px;color:#fff;';
+    valEl.textContent = (+val).toFixed(2);
+    inp.addEventListener('input', () => { const v = parseFloat(inp.value); valEl.textContent = v.toFixed(2); onChange(v); });
+    row.appendChild(lbl); row.appendChild(inp); row.appendChild(valEl);
+    return row;
+  }
+  function makeToggle(label, getter, setter) {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:8px;';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'color:#6af;font-size:10px;flex:1;';
+    lbl.textContent = label;
+    const btn = document.createElement('button');
+    btn.style.cssText = 'padding:2px 10px;font-size:10px;cursor:pointer;background:#222;border:1px solid #6af;color:#fff;border-radius:3px;';
+    const refresh = () => { btn.textContent = getter() ? 'ON' : 'OFF'; btn.style.background = getter() ? '#224' : '#222'; };
+    refresh();
+    btn.addEventListener('click', () => { setter(!getter()); refresh(); });
+    row.appendChild(lbl); row.appendChild(btn);
+    return row;
+  }
+  function makeHeader(t) {
+    const h = document.createElement('div');
+    h.style.cssText = 'color:#6af;font-weight:bold;font-size:12px;margin:10px 0 4px;border-bottom:1px solid #6af;padding-bottom:2px;';
+    h.textContent = t;
+    return h;
+  }
+
+  function build() {
+    panel.innerHTML = '';
+    panel.appendChild(makeHeader('⚡ LIGHTNING TUNER'));
+    panel.appendChild(makeToggle('ENABLED', () => _LT.enabled, v => { _LT.enabled = v; if (!v) { _ltActive.forEach(_killLightning); _ltActive.length = 0; } }));
+    panel.appendChild(makeHeader('SPAWN'));
+    panel.appendChild(makeSlider('frequency (s)', _LT.frequency, 0.5, 15, 0.1, v => _LT.frequency = v));
+    panel.appendChild(makeSlider('count', _LT.count, 1, 3, 1, v => _LT.count = Math.round(v)));
+    panel.appendChild(makeSlider('lead factor', _LT.leadFactor, 0, 1.5, 0.05, v => _LT.leadFactor = v));
+    panel.appendChild(makeSlider('sky height', _LT.skyHeight, 20, 120, 1, v => _LT.skyHeight = v));
+    panel.appendChild(makeHeader('TIMING'));
+    panel.appendChild(makeSlider('warning time (s)', _LT.warningTime, 0.3, 4.0, 0.05, v => _LT.warningTime = v));
+    panel.appendChild(makeSlider('bolt duration (s)', _LT.boltDuration, 0.1, 2.0, 0.05, v => _LT.boltDuration = v));
+    panel.appendChild(makeHeader('VISUALS'));
+    panel.appendChild(makeSlider('bolt width', _LT.boltWidth, 0.02, 1.0, 0.01, v => _LT.boltWidth = v));
+    panel.appendChild(makeSlider('glow width', _LT.glowWidth, 0.1, 4.0, 0.05, v => _LT.glowWidth = v));
+    panel.appendChild(makeSlider('segments', _LT.segments, 4, 32, 1, v => _LT.segments = Math.round(v)));
+    panel.appendChild(makeSlider('jaggedness', _LT.spread, 0.1, 4.0, 0.05, v => _LT.spread = v));
+    panel.appendChild(makeHeader('IMPACT'));
+    panel.appendChild(makeSlider('kill radius', _LT.killRadius, 0.5, 10, 0.1, v => _LT.killRadius = v));
+    panel.appendChild(makeSlider('warn radius', _LT.warnRadius, 0.5, 10, 0.1, v => _LT.warnRadius = v));
+    panel.appendChild(makeSlider('shake amount', _LT.shakeAmt, 0, 1.0, 0.01, v => _LT.shakeAmt = v));
+    panel.appendChild(makeSlider('shake duration', _LT.shakeDuration, 0, 1.0, 0.02, v => _LT.shakeDuration = v));
+
+    // Manual trigger
+    panel.appendChild(makeHeader('TRIGGER'));
+    const fireBtn = document.createElement('button');
+    fireBtn.textContent = '⚡ STRIKE NOW';
+    fireBtn.style.cssText = 'width:100%;padding:6px;margin:4px 0;background:#224;border:1px solid #6af;color:#6af;font-family:monospace;font-size:12px;cursor:pointer;border-radius:3px;';
+    fireBtn.addEventListener('click', () => _spawnLightning((state && state.shipX) || 0));
+    panel.appendChild(fireBtn);
+  }
+
+  let visible = false;
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'l' || e.key === 'L') {
+      visible = !visible;
+      if (visible) { build(); panel.style.display = 'block'; }
+      else panel.style.display = 'none';
+    }
+  });
+
 })();
