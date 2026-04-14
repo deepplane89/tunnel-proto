@@ -20837,7 +20837,7 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(mkS('count',          _LT.count,        1,  4,   1,   v=>_LT.count=Math.round(v)));
     panel.appendChild(mkS('lead factor',    _LT.leadFactor,   0,  1.5, 0.05,v=>_LT.leadFactor=v));
     panel.appendChild(mkS('sky height',     _LT.skyHeight,    10, 120, 1,   v=>_LT.skyHeight=v));
-    panel.appendChild(mkS('spawn Z (close)', _LT.spawnZ,      -160, -5,  1,   v=>_LT.spawnZ=v));
+    panel.appendChild(mkS('forward dist', Math.abs(_LT.spawnZ), 5, 160, 1, v=>_LT.spawnZ=-v));
     panel.appendChild(mkH('PATTERN'));
     panel.appendChild(mkSel('pattern',['random','sweep','stagger','salvo','pinch'],()=>_LT.pattern,v=>{ _LT.pattern=v; _ltStaggerQ.length=0; _ltSweepX=0.5; }));
     panel.appendChild(mkS('lane min X',    _LT.laneMin,    -20,0,   0.5, v=>_LT.laneMin=v));
