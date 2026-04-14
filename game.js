@@ -7039,16 +7039,16 @@ const _terrainTuner = {
   segsX:     24,    // grid subdivisions across width
   segsZ:     80,    // grid subdivisions along length
   xOffset:   60,    // center of terrain strip from road center
-  peakHeight: 40,   // max mountain peak height
+  peakHeight: 55,   // max mountain peak height — sharper glacier walls
   baseY:     -3,    // Y position (slightly below water)
-  metalness: 1.0,
-  roughness: 0.45,
+  metalness: 0.85,
+  roughness: 0.25,
   scrollSpeed: 1.0, // multiplier of game speed
-  gridColor: '#00ffff',
-  gridOpacity: 1.0,
-  baseColor: '#ffffff',
-  emissiveHex: '#00ffff',
-  emissiveIntensity: 0.7, // grid line glow brightness
+  gridColor: '#00eeff',
+  gridOpacity: 0.9,
+  baseColor: '#060d1a',  // near-black dark blue — glacier rock face
+  emissiveHex: '#00eeff',
+  emissiveIntensity: 1.4, // crack glow brightness
 };
 let _terrainWalls = null; // { left, right, mat, gridTex, shaderRef }
 
@@ -7058,43 +7058,86 @@ function _makeGridTexture(segsX, segsZ, color, opacity) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#000000';
+  // Dark glacier base
+  ctx.fillStyle = '#03080f';
   ctx.fillRect(0, 0, w, h);
+
+  // Primary cyan grid lines (thin, bright)
   ctx.strokeStyle = color;
   ctx.globalAlpha = opacity;
-  ctx.lineWidth = 2.5;
-  // Vertical lines
+  ctx.lineWidth = 1.5;
   for (let i = 0; i <= segsX; i++) {
     const x = (i / segsX) * w;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
   }
-  // Horizontal lines
   for (let j = 0; j <= segsZ; j++) {
     const y = (j / segsZ) * h;
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
   }
+
+  // Magenta crack lines — irregular diagonals that run across grid cells
+  // Seeded so they look the same on rebuild
+  let _rs = 42;
+  const srng = () => { _rs = (_rs * 16807) % 2147483647; return (_rs - 1) / 2147483646; };
+  ctx.lineWidth = 1.2;
+  const crackCount = 18;
+  for (let ci = 0; ci < crackCount; ci++) {
+    const startX = srng() * w;
+    const startY = srng() * h;
+    // Crack wanders in ~3-5 jagged segments
+    const segs = 3 + Math.floor(srng() * 3);
+    const bright = srng() > 0.4; // some cracks are magenta, some pink-white
+    ctx.strokeStyle = bright ? '#ff00cc' : '#cc44ff';
+    ctx.globalAlpha = 0.55 + srng() * 0.35;
+    ctx.lineWidth = 0.8 + srng() * 1.4;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    let cx = startX, cy2 = startY;
+    for (let si = 0; si < segs; si++) {
+      cx  += (srng() - 0.3) * 80;
+      cy2 += (srng() - 0.1) * 60;
+      ctx.lineTo(cx, cy2);
+    }
+    ctx.stroke();
+  }
+
+  // Subtle hotspot glows at crack intersections — small radial gradients
+  for (let gi = 0; gi < 8; gi++) {
+    const gx = srng() * w, gy = srng() * h;
+    const gr = ctx.createRadialGradient(gx, gy, 0, gx, gy, 18 + srng() * 22);
+    gr.addColorStop(0,   'rgba(255,  0, 200, 0.55)');
+    gr.addColorStop(0.4, 'rgba(100,  0, 255, 0.20)');
+    gr.addColorStop(1,   'rgba(0,    0,   0, 0.00)');
+    ctx.fillStyle = gr;
+    ctx.globalAlpha = 1;
+    ctx.fillRect(gx - 40, gy - 40, 80, 80);
+  }
+
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   return tex;
 }
 
-// Displacement: mountains that peak at outer edge, flat near road
+// Displacement: sharp glacier canyon walls — steep near road edge, jagged peaks
 function _displaceTerrain(geo, segsX, segsZ, peakHeight) {
   const pos = geo.attributes.position;
   const uv = geo.attributes.uv;
   for (let i = 0; i < pos.count; i++) {
-    const u = uv.getX(i);  // 0 = road edge, 1 = far edge
-    const vv = uv.getY(i); // 0..1 along Z
-    // Ramp: height increases toward outer edge
-    const edgeRamp = Math.pow(u, 1.8);
-    // Noise for mountain variation
-    const px = u * 8.0, pz = vv * 16.0;
-    const n1 = Math.sin(px * 1.3 + pz * 0.7) * 0.4;
-    const n2 = Math.sin(px * 3.7 + pz * 2.1) * 0.2;
-    const n3 = Math.sin(px * 0.5 + pz * 4.3) * 0.3;
-    const noise = 0.5 + n1 + n2 + n3;
-    const h = edgeRamp * noise * peakHeight;
+    const u  = uv.getX(i);  // 0 = road edge, 1 = far edge
+    const vv = uv.getY(i);  // 0..1 along Z
+    // Sharp cliff ramp: steep wall near road, peaks further out
+    const edgeRamp = Math.pow(u, 1.1);  // steeper than before (was 1.8)
+    // High-frequency angular noise for jagged glacier faces
+    const px = u * 10.0, pz = vv * 22.0;
+    const n1 = Math.sin(px * 2.1 + pz * 1.1) * 0.35;
+    const n2 = Math.sin(px * 5.3 + pz * 3.7) * 0.25;  // sharper ridges
+    const n3 = Math.sin(px * 0.7 + pz * 6.1) * 0.20;
+    const n4 = Math.abs(Math.sin(px * 4.0 + pz * 2.5)) * 0.25; // abs = ridge peaks not valleys
+    const noise = 0.45 + n1 + n2 + n3 + n4;
+    // Sharpen: push toward 0 or 1 for more cliff-like faces
+    const sharp = Math.pow(Math.max(0, noise), 1.35);
+    const h = edgeRamp * sharp * peakHeight;
     pos.setY(i, h);
   }
   pos.needsUpdate = true;
@@ -20608,79 +20651,87 @@ const _origUpdateShockwave = _updateShockwave;
   let   _iceSweepDir   = 1;
   const _iceStaggerQ   = [];
 
-  // ── Materials (shared, rebuilt when tuner values change) ───────────────────
+  // ── Displaced-icosahedron glacier geometry ────────────────────────────────
+  // Vertices randomly displaced outward from an IcosahedronGeometry, bottom
+  // clamped flat at y=0 (waterline). flatShading on MeshPhysicalMaterial
+  // gives the hard faceted frosty-glass glacier look.
   function _makeIceMat() {
     return new THREE.MeshPhysicalMaterial({
-      color:            0xaaddff,
-      emissive:         0x2255aa,
+      color:             0xbbdff5,
+      emissive:          0x1a3a6a,
       emissiveIntensity: _ICE.emissiveIntensity,
-      transmission:     _ICE.transmission,
-      roughness:        _ICE.roughness,
-      metalness:        0.0,
-      ior:              _ICE.ior,
-      thickness:        _ICE.thickness,
-      transparent:      true,
-      opacity:          0.88,
-      side:             THREE.DoubleSide,
-      depthWrite:       false,
+      transmission:      _ICE.transmission,
+      roughness:         _ICE.roughness,
+      metalness:         0.06,
+      ior:               _ICE.ior,
+      thickness:         _ICE.thickness,
+      transparent:       true,
+      opacity:           0.92,
+      side:              THREE.FrontSide,
+      flatShading:       true,
+      depthWrite:        false,
     });
   }
 
-  // ── Build one ice slab instance ────────────────────────────────────────────
-  // Shape: flat angular slab — random convex polygon extruded slightly.
-  // We use a BoxGeometry sheared/scaled differently on each spawn to avoid
-  // cookie-cutter repetition.
-  function _buildIceInstance() {
+  function _makeGlacierGeo(seed, jitter) {
+    let _s = seed;
+    const rng = () => { _s = (_s * 16807) % 2147483647; return (_s - 1) / 2147483646; };
+    const iso = new THREE.IcosahedronGeometry(1, 1);
+    const geo = iso.toNonIndexed();
+    iso.dispose();
+    const pos = geo.attributes.position;
+    const dispMap = {};
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const key = Math.round(x*100)+','+Math.round(y*100)+','+Math.round(z*100);
+      if (!(key in dispMap)) dispMap[key] = 1.0 + (rng() - 0.35) * jitter;
+    }
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const key = Math.round(x*100)+','+Math.round(y*100)+','+Math.round(z*100);
+      const d = dispMap[key];
+      pos.setXYZ(i, x * d, Math.max(0, y * d), z * d);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  function _buildIceInstance(seed) {
     const group = new THREE.Group();
     group.visible = false;
-    const mats = [];
 
-    // Base slab sitting at water level
+    const geo = _makeGlacierGeo(seed || 7919, 0.6);
+    const mat = _makeIceMat();
+    const mesh = new THREE.Mesh(geo, mat);
+    group.add(mesh);
+
+    // Thin base collar so it sits cleanly at the waterline
     const baseMat = _makeIceMat();
-    mats.push(baseMat);
-    const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.22, 0.7), baseMat);
-    baseMesh.position.y = 0.11;
+    const baseMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.65, 0.75, 0.1, 7, 1),
+      baseMat
+    );
+    baseMesh.position.y = 0.05;
     group.add(baseMesh);
 
-    // Spire cluster: 4 tall tapered cones at varying offsets/tilts
-    const spireData = [
-      { x:  0.00, z:  0.00, rx:  0.00, ry: 0.0, h: 1.00, rb: 0.28, rt: 0.04 },
-      { x: -0.28, z:  0.08, rx:  0.06, ry: 0.5, h: 0.72, rb: 0.20, rt: 0.03 },
-      { x:  0.26, z: -0.06, rx: -0.05, ry:-0.4, h: 0.82, rb: 0.22, rt: 0.03 },
-      { x:  0.04, z: -0.22, rx:  0.04, ry: 1.1, h: 0.55, rb: 0.16, rt: 0.02 },
-    ];
-    const spireMeshes = [];
-    for (let _si = 0; _si < spireData.length; _si++) {
-      const s = spireData[_si];
-      const sm = _makeIceMat();
-      mats.push(sm);
-      const spireGeo = new THREE.CylinderGeometry(s.rt, s.rb, s.h, 6, 1);
-      const spireMesh = new THREE.Mesh(spireGeo, sm);
-      spireMesh.position.set(s.x, 0.22 + s.h * 0.5, s.z);
-      spireMesh.rotation.set(s.rx, s.ry, 0);
-      group.add(spireMesh);
-      spireMeshes.push(spireMesh);
-    }
-
-    // Cold blue point light at mid-height
-    const light = new THREE.PointLight(0x66aaff, 0.8, 22);
-    light.position.set(0, 0.8, 0);
+    const light = new THREE.PointLight(0x55aaff, 1.0, 24);
+    light.position.set(0, 0.6, 0);
     group.add(light);
 
     scene.add(group);
 
     return {
-      group, mats, spireMeshes, baseMesh, light,
-      get mat()  { return mats[0]; },
-      get mat2() { return mats[1] || mats[0]; },
-      active:  false,
-      halfW:   1,
-      elapsed: 0,
+      group, mesh, baseMesh, light,
+      mats: [mat, baseMat],
+      get mat()  { return mat; },
+      get mat2() { return baseMat; },
+      active: false, halfW: 1, elapsed: 0,
     };
   }
 
-  // Build pool
-  for (let _ii = 0; _ii < _ICE_POOL_SIZE; _ii++) _icePool.push(_buildIceInstance());
+  // Each pool instance gets a unique seed so no two look identical
+  for (let _ii = 0; _ii < _ICE_POOL_SIZE; _ii++) _icePool.push(_buildIceInstance((_ii + 1) * 7919));
 
   function _getFreeIce() {
     return _icePool.find(c => !c.active) || null;
