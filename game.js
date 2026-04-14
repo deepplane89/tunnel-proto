@@ -19878,10 +19878,17 @@ const _origUpdateShockwave = _updateShockwave;
         // Force both systems into stagger, enable lightning
         T.pattern = 'stagger';
         T.enabled = true;
-        if (window._LT) { window._LT.pattern = 'stagger'; window._LT.enabled = true; }
+        if (window._LT) {
+          window._LT.pattern = 'stagger';
+          window._LT.enabled = true;
+          console.log('[CHAOS ON] window._LT found ✓ | chaos level:', _chaosLevel, '| LT.enabled:', window._LT.enabled, '| LT.pattern:', window._LT.pattern);
+        } else {
+          console.warn('[CHAOS ON] window._LT NOT FOUND — lightning will not fire');
+        }
+        console.log('[CHAOS ON] asteroids enabled, pattern: stagger, freq:', _chaosAstFreq(_chaosLevel).toFixed(2)+'s');
         _astTimer = 0.1; // spawn fast on enable
       } else {
-        // Restore lightning to off when chaos ends
+        console.log('[CHAOS OFF]');
         if (window._LT) window._LT.enabled = false;
       }
     }, '#f0f'));
