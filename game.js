@@ -20356,6 +20356,26 @@ function _tickJetLightningRamp(dt) {
     }
   }
 
+  // ── Fat cones: run across all phases, frequency tightens with time ─────────────
+  // Replaces ice as the chunk obstacle throughout JL mode
+  _jlFatConeTimer -= dt;
+  if (_jlFatConeTimer <= 0 && state.phase === 'playing') {
+    const tClamped   = Math.min(t, 210);
+    const coneFreq   = Math.max(2.5, 12.0 - tClamped * 0.045); // 12s -> 2.5s over 210s
+    _jlFatConeTimer  = coneFreq * (0.7 + Math.random() * 0.6);
+    const coneType   = Math.floor(Math.random() * 3);
+    const fatObs     = getPooledObstacle(coneType);
+    if (fatObs) {
+      const spawnX = state.shipX + (Math.random() - 0.5) * 12;
+      fatObs.position.set(spawnX, 0, SPAWN_Z);
+      fatObs.scale.set(12, 1, 12); // 300% of normal 4x scale
+      fatObs.userData.velX         = 0;
+      fatObs.userData.slalomScaled = true;
+      fatObs.userData.isFatCone    = true;
+      activeObstacles.push(fatObs);
+    }
+  }
+
   // Phase 1 (0-45s): Asteroids only
   // leadFactor=0: every shot aimed at ship current position
   // patterns cycle stagger -> salvo -> random, frequency tightens
@@ -20408,24 +20428,6 @@ function _tickJetLightningRamp(dt) {
       window._LT.frequency = Math.max(0.6, 1.8 - p * 1.2);
     }
 
-    // Fat cones: random single oversized cones (300% normal size) mixed in from Phase 3 start
-    _jlFatConeTimer -= dt;
-    if (_jlFatConeTimer <= 0) {
-      const coneFreq = Math.max(3.0, 8.0 - p * 5.0); // 8s -> 3s interval
-      _jlFatConeTimer = coneFreq * (0.7 + Math.random() * 0.6);
-      const coneType = Math.floor(Math.random() * 3);
-      const fatObs = getPooledObstacle(coneType);
-      if (fatObs && state.phase === 'playing') {
-        const spawnX = state.shipX + (Math.random() - 0.5) * 10;
-        fatObs.position.set(spawnX, 0, SPAWN_Z);
-        fatObs.scale.set(12, 1, 12); // 300% of normal 4x scale
-        fatObs.userData.velX = 0;
-        fatObs.userData.slalomScaled = true;
-        fatObs.userData.isFatCone = true;
-        activeObstacles.push(fatObs);
-      }
-    }
-
     // Terrain + ice at 150s
     if (t >= 150) {
       if (!_terrainWalls) {
@@ -20433,11 +20435,8 @@ function _tickJetLightningRamp(dt) {
       } else {
         _terrainWalls.strips.forEach(m => { m.visible = true; });
       }
-      if (window._ICE && !window._ICE.enabled) {
-        window._ICE.enabled = true;
-      }
-      const p2 = Math.min(1, (t - 150) / 90);
-      if (window._ICE) window._ICE.frequency = Math.max(1.5, 3.0 - p2 * 1.5);
+      // Ice disabled in JL — fat cones are the chunk obstacle here
+      if (window._ICE) window._ICE.enabled = false;
     }
   }
 }
