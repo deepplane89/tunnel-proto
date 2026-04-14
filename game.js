@@ -20327,7 +20327,7 @@ function _tickJetLightningRamp(dt) {
   // Only fires when asteroids are enabled (not during Phase 2 lightning-only).
   if (T.enabled) {
     const driftX          = Math.abs(state.shipX || 0);
-    const DRIFT_THRESHOLD = 5.5;
+    const DRIFT_THRESHOLD = 7.0;
     const RECENTER_DUR    = 5.0; // seconds of sweep before releasing
 
     if (!_jlRecenterActive && driftX > DRIFT_THRESHOLD) {
