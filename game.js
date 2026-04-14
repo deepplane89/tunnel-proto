@@ -20357,7 +20357,8 @@ function startJetLightning() {
   // ── Lightning: OFF at start — ramp turns it on ────────────────────────────
   if (window._LT) {
     window._LT.enabled    = false;
-    window._LT.frequency  = 1.3;
+    window._LT.frequency  = 0.3;   // locked from session log
+    window._LT.count      = 1;
     window._LT.jaggedness = 1.9;
     window._LT.glowRadius = 0.25;
     window._LT.spawnZ     = -83;
@@ -20478,7 +20479,7 @@ function _tickJetLightningRamp(dt) {
       window._LT.enabled    = true;
       window._LT.leadFactor = 0.0;
       const p = Math.min(1, (t - 45) / 75);
-      window._LT.frequency  = 3.5 - p * 2.2;
+      window._LT.frequency  = 1.5 - p * 1.2; // ramps 1.5 -> 0.3 over Phase 2
       window._LT.laneMin    = -8;
       window._LT.laneMax    =  8;
     }
@@ -20499,7 +20500,7 @@ function _tickJetLightningRamp(dt) {
     else if (cycle < 20) { T.pattern = 'salvo';   T.staggerDual = false; }
     else                 { T.pattern = 'random';  T.staggerDual = false; }
     if (window._LT) {
-      window._LT.frequency = Math.max(0.6, 1.8 - p * 1.2);
+      window._LT.frequency = Math.max(0.3, 1.0 - p * 0.7); // ramps 1.0 -> 0.3 over Phase 3
     }
 
     // Terrain + ice at 150s
@@ -20628,7 +20629,7 @@ window._jlDebug = {
 
   const _LT = {
     enabled:      false,
-    frequency:    1.3,
+    frequency:    0.3,   // locked from session log (rchouake approved)
     leadFactor:   0.6,
     skyHeight:    55,
     warningTime:  0.3,    // seconds disc shows before bolt slams — keep short so bolt strikes ahead of ship
@@ -20970,7 +20971,7 @@ window._jlDebug = {
     panel.appendChild(mkH('⚡ LIGHTNING TUNER'));
     panel.appendChild(mkT('ENABLED',()=>_LT.enabled,v=>{ _LT.enabled=v; if(!v){_stopLtLoop();_clearAllLightning();} }));
     panel.appendChild(mkH('SPAWN'));
-    panel.appendChild(mkS('frequency (s)',  _LT.frequency,    0.3,15,  0.1, v=>_LT.frequency=v));
+    panel.appendChild(mkS('frequency (s)',  _LT.frequency,    0.05,15, 0.05, v=>_LT.frequency=v));
     panel.appendChild(mkS('count',          _LT.count,        1,  4,   1,   v=>_LT.count=Math.round(v)));
     panel.appendChild(mkS('lead factor',    _LT.leadFactor,   0,  1.5, 0.05,v=>_LT.leadFactor=v));
     panel.appendChild(mkS('sky height',     _LT.skyHeight,    10, 120, 1,   v=>_LT.skyHeight=v));
