@@ -20332,32 +20332,55 @@ function _tickJetLightningRamp(dt) {
   const T = _asteroidTuner;
   const t = _jlRampTime;
 
-  // ── Recentering funnel: switches to sweep pattern when ship drifts too far ──
-  // Biases laneMin/laneMax so the sweep starts outer and crosses through center.
-  // Only fires when asteroids are enabled (not during Phase 2 lightning-only).
-  if (T.enabled) {
+  // ── Recentering funnel: fires whenever ship drifts past threshold ──────────
+  // Works in ALL phases — uses asteroids when on (P1/P3), fat cones when not (P2).
+  {
     const driftX          = Math.abs(state.shipX || 0);
-    const DRIFT_THRESHOLD = 10.0; // ship can go ~12-15 units before off-screen
-    const RECENTER_DUR    = 5.0; // seconds of sweep before releasing
+    const DRIFT_THRESHOLD = 7.0;  // trigger before ship reaches visual edge (~12-15 units)
+    const RECENTER_DUR    = 5.0;  // seconds before releasing back to normal pattern
 
     if (!_jlRecenterActive && driftX > DRIFT_THRESHOLD) {
-      _jlRecenterActive  = true;
-      _jlRecenterT       = 0;
-      const side         = Math.sign(state.shipX); // which side they drifted to
-      // Bias lanes: start sweep from the outer edge, sweep through center
-      T.pattern          = 'sweep';
-      T.sweepSpeed       = 0.6;
-      T.laneMin          = side > 0 ?  0 : -12; // outer edge on their side
-      T.laneMax          = side > 0 ? 12 :   0;
-      _astSweepX         = side > 0 ? 1.0 : 0.0; // start at outer edge
-      _astSweepDir       = side > 0 ? -1  :  1;  // sweep inward toward center
+      _jlRecenterActive = true;
+      _jlRecenterT      = 0;
+      const side = Math.sign(state.shipX);
+
+      if (T.enabled) {
+        // Asteroids on (Phase 1 / Phase 3): sweep from outer edge inward
+        T.pattern    = 'sweep';
+        T.sweepSpeed = 0.6;
+        T.laneMin    = side > 0 ?  0 : -12;
+        T.laneMax    = side > 0 ? 12 :   0;
+        _astSweepX   = side > 0 ? 1.0 : 0.0;
+        _astSweepDir = side > 0 ? -1  :  1;
+      } else {
+        // Phase 2 (lightning only): fire a burst of fat cones from outer edge → center
+        // Give player 4 fat cones spaced 0.8s apart, walking from their edge inward
+        const outerX = side * 11;
+        const steps  = 4;
+        for (let si = 0; si < steps; si++) {
+          setTimeout(() => {
+            if (!state._jetLightningMode || state.phase !== 'playing') return;
+            const coneX = outerX - side * (si / (steps - 1)) * 8; // walk inward
+            const type  = Math.floor(Math.random() * 3);
+            const obs   = getPooledObstacle(type);
+            if (obs) {
+              obs.position.set(coneX, 0, SPAWN_Z);
+              obs.scale.set(12, 1, 12);
+              obs.userData.velX         = 0;
+              obs.userData.slalomScaled = true;
+              obs.userData.isFatCone    = true;
+              activeObstacles.push(obs);
+            }
+          }, si * 800);
+        }
+      }
     }
 
     if (_jlRecenterActive) {
       _jlRecenterT += dt;
       if (_jlRecenterT >= RECENTER_DUR) {
         _jlRecenterActive = false;
-        // Restore normal lane range
+        // Restore normal lane range for asteroid tuner
         T.laneMin = -8;
         T.laneMax =  8;
       }
