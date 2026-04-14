@@ -15279,7 +15279,11 @@ function update(dt) {
 
     // ── STEP -0.5: Terrain walls — vaporwave mountain ridges for testing ──
     if (state._tutorialStep === -0.5) {
-      _createTerrainWalls();
+      if (!_terrainWalls) {
+        _createTerrainWalls();
+        // Default off — enable via R tuner
+        _terrainWalls.strips.forEach(m => { m.visible = false; });
+      }
       _updateTerrainWalls(dt, effectiveSpeed);
     }
 
