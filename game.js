@@ -20473,6 +20473,56 @@ startGame = function() {
 // Expose for title button
 window.startJetLightning = startJetLightning;
 
+// Debug probe for stress testing (read/write internal JL state)
+window._jlDebug = {
+  get rampTime()          { return _jlRampTime; },
+  set rampTime(v)         { _jlRampTime = v; },
+  get recenterActive()    { return _jlRecenterActive; },
+  set recenterActive(v)   { _jlRecenterActive = v; },
+  get jlMode()            { return state._jetLightningMode; },
+  get phase()             { return state.phase; },
+  get score()             { return state.score; },
+  get levelIdx()          { return state.currentLevelIdx; },
+  get speed()             { return state.speed; },
+  get shipX()             { return state.shipX; },
+  set shipX(v)            { state.shipX = v; },
+  get l4CorridorActive()  { return state.l4CorridorActive; },
+  get l4CorridorDone()    { return state.l4CorridorDone; },
+  get noSpawnMode()       { return _noSpawnMode; },
+  get astEnabled()        { return _asteroidTuner.enabled; },
+  get astPattern()        { return _asteroidTuner.pattern; },
+  get astFreq()           { return _asteroidTuner.frequency; },
+  get astLeadFactor()     { return _asteroidTuner.leadFactor; },
+  get astStaggerDual()    { return _asteroidTuner.staggerDual; },
+  get activeAsteroids()   { return _asteroidActive.length; },
+  get activeObstacles()   { return activeObstacles.length; },
+  tick(dt)                { _tickJetLightningRamp(dt); },
+  snapshot() {
+    return {
+      rampTime:        Math.round(_jlRampTime),
+      jlMode:          state._jetLightningMode,
+      phase:           state.phase,
+      score:           state.score,
+      levelIdx:        state.currentLevelIdx,
+      speed:           Math.round(state.speed),
+      l4CorridorActive: state.l4CorridorActive,
+      l4CorridorDone:  state.l4CorridorDone,
+      noSpawnMode:     _noSpawnMode,
+      astEnabled:      _asteroidTuner.enabled,
+      astPattern:      _asteroidTuner.pattern,
+      astFreq:         +_asteroidTuner.frequency.toFixed(2),
+      astLeadFactor:   _asteroidTuner.leadFactor,
+      astStaggerDual:  _asteroidTuner.staggerDual,
+      ltEnabled:       window._LT.enabled,
+      ltFreq:          +window._LT.frequency.toFixed(2),
+      iceEnabled:      window._ICE.enabled,
+      recenterActive:  _jlRecenterActive,
+      activeAsteroids: _asteroidActive.length,
+      activeObstacles: activeObstacles.length,
+    };
+  }
+};
+
 //  LIGHTNING STRIKE SYSTEM  v3
 //  – Spawns at SPAWN_Z like a cone, scrolls toward ship at game speed
 //  – Warning disc travels with it (always over the target X)
