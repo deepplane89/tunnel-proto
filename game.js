@@ -20685,6 +20685,7 @@ const _origUpdateShockwave = _updateShockwave;
   }
 
   let _ltShakeTime = 0;
+  let _ltShakeOffX = 0, _ltShakeOffY = 0;
   const _shipZ = () => shipGroup ? shipGroup.position.z : 3.9;
 
   function _updateLightning(dt) {
@@ -20697,11 +20698,18 @@ const _origUpdateShockwave = _updateShockwave;
       }
     }
 
+    // Camera shake: undo last frame's offset, apply new one — never drifts
+    camera.position.x -= _ltShakeOffX;
+    camera.position.y -= _ltShakeOffY;
     if (_ltShakeTime > 0) {
       _ltShakeTime -= dt;
       const s = _LT.shakeAmt * (_ltShakeTime / Math.max(0.01, _LT.shakeDuration));
-      camera.position.x += (Math.random()-0.5)*s;
-      camera.position.y += (Math.random()-0.5)*s*0.4;
+      _ltShakeOffX = (Math.random()-0.5)*s;
+      _ltShakeOffY = (Math.random()-0.5)*s*0.4;
+      camera.position.x += _ltShakeOffX;
+      camera.position.y += _ltShakeOffY;
+    } else {
+      _ltShakeOffX = 0; _ltShakeOffY = 0;
     }
 
     const spd = (state && state.speed) || 73;
@@ -20760,18 +20768,13 @@ const _origUpdateShockwave = _updateShockwave;
         inst.ring.scale.set(inst.ringScale, inst.ringScale, 1);
         inst.ringMat.opacity  = Math.max(0, 0.9 - t*2.0);
 
-        // Hit check — only while ship is close
-        if (state && state.phase === 'playing') {
+        // Hit check — bolt is a vertical column, only X matters at strike moment
+        if (!inst.hitChecked && state && state.phase === 'playing') {
+          inst.hitChecked = true;
           const dx = (state.shipX||0) - inst.landX;
-          const dz = _shipZ() - inst.strikePosZ;
-          if (Math.abs(dx) < _LT.killRadius && Math.abs(dz) < _LT.killRadius) {
-            if (!inst.hitChecked) {
-              inst.hitChecked = true;
-              if (state._tutorialActive) addCrashFlash(0x4488ff);
-              else killPlayer();
-            }
-          } else {
-            inst.hitChecked = false; // re-arm if ship moves away and back (shouldn't happen but safe)
+          if (Math.abs(dx) < _LT.killRadius) {
+            if (state._tutorialActive) addCrashFlash(0x4488ff);
+            else killPlayer();
           }
         }
 
@@ -20792,19 +20795,19 @@ const _origUpdateShockwave = _updateShockwave;
         inst.coreMat.opacity = Math.max(0, (1.0 - t) * flicker);
         inst.glowMat.opacity = Math.max(0, (0.45 - t*0.3) * flicker);
 
-        // Hit check stays live while ship is near
+        // During linger: bolt is planted in world, ship is flying past it.
+        // Kill zone = lateral X only — if ship is within killRadius of bolt column
+        // and the bolt's world Z is still near the ship (within a ship-length)
         if (state && state.phase === 'playing') {
-          const dx = (state.shipX||0) - inst.landX;
-          const dz = _shipZ() - inst.strikePosZ;
-          if (Math.abs(dx) < _LT.killRadius && Math.abs(dz) < _LT.killRadius * 2) {
-            if (!inst.hitChecked) {
-              inst.hitChecked = true;
-              if (state._tutorialActive) addCrashFlash(0x4488ff);
-              else killPlayer();
-            }
-          } else {
-            inst.hitChecked = false;
+          const dx = Math.abs((state.shipX||0) - inst.landX);
+          const dz = Math.abs(_shipZ() - inst.strikePosZ);
+          const near = dx < _LT.killRadius && dz < 4;
+          if (near && !inst.hitChecked) {
+            inst.hitChecked = true;
+            if (state._tutorialActive) addCrashFlash(0x4488ff);
+            else killPlayer();
           }
+          if (!near) inst.hitChecked = false;
         }
 
         if (inst.lingerElapsed >= _LT.lingerDuration) {
