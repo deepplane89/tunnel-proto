@@ -7034,19 +7034,19 @@ for (let i = 0; i < OBSTACLE_POOL_SIZE; i++) {
 //  TERRAIN WALLS — vaporwave mountain ridges on both sides
 // ═══════════════════════════════════════════════════
 const _terrainTuner = {
-  width:     120,   // how wide each terrain strip is (X)
+  width:     400,   // how wide each terrain strip is (X)
   length:    400,   // how long (Z) — needs to tile seamlessly
   segsX:     24,    // grid subdivisions across width
   segsZ:     80,    // grid subdivisions along length
-  xOffset:   60,    // center of terrain strip from road center
+  xOffset:   200,   // center of terrain strip from road center
   peakHeight: 55,   // max mountain peak height — sharper glacier walls
-  baseY:     -3,    // Y position (slightly below water)
+  baseY:     -25,   // Y position
   metalness: 0.85,
   roughness: 0.25,
   scrollSpeed: 1.0, // multiplier of game speed
   gridColor: '#00eeff',
-  gridOpacity: 0.9,
-  baseColor: '#060d1a',  // near-black dark blue — glacier rock face
+  gridOpacity: 0.15,
+  baseColor: '#ffffff',
   emissiveHex: '#00eeff',
   emissiveIntensity: 1.4, // crack glow brightness
 };
