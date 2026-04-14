@@ -20836,6 +20836,39 @@ function _tickJetLightningRamp(dt) {
   } else if (window._LT) {
     window._LT.enabled = false;
   }
+
+  // ── Recentering funnel: fires when ship drifts past threshold ────────────────
+  // Only during asteroid-stagger phases so it never fights sweep/salvo/lightning.
+  {
+    const _T            = _asteroidTuner;
+    const _driftX       = Math.abs(state.shipX || 0);
+    const _DRIFT_THRESH = 18;  // units from center before funnel kicks in (was 7 — too narrow)
+    const _RECENTER_DUR = 5.0; // seconds of funnel before releasing
+
+    if (!_jlRecenterActive && _driftX > _DRIFT_THRESH && _T.enabled && _T.pattern === 'stagger') {
+      _jlRecenterActive = true;
+      _jlRecenterT      = 0;
+      const _side = Math.sign(state.shipX);
+      _T.pattern    = 'sweep';
+      _T.sweepSpeed = 0.55;
+      _T.laneMin    = _side > 0 ?  0 : -35;
+      _T.laneMax    = _side > 0 ? 35 :   0;
+      _astSweepX    = _side > 0 ? 1.0 : 0.0;
+      _astSweepDir  = _side > 0 ? -1  :  1;
+    }
+
+    if (_jlRecenterActive) {
+      _jlRecenterT += dt;
+      if (_jlRecenterT >= _RECENTER_DUR) {
+        _jlRecenterActive = false;
+        if (_T.enabled) {
+          _T.pattern = 'stagger';
+          _T.laneMin = -8;
+          _T.laneMax =  8;
+        }
+      }
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
