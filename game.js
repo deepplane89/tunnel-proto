@@ -19456,6 +19456,7 @@ function _spawnAsteroid(targetX) {
   // Warning disc at landing point (hidden until asteroid fades in enough)
   const warnRadius = Math.max(3.0, radius * 2.5);
   inst.warnMesh.position.set(landX, 0.12, landZ);
+  console.log('[SPAWN] targetX='+targetX.toFixed(2)+' shipX_now='+shipX_now.toFixed(2)+' patternOffset='+patternOffset.toFixed(2)+' landX='+landX.toFixed(2)+' warnZ='+landZ.toFixed(2));
   inst.warnMesh.scale.setScalar(warnRadius);
   inst.warnMesh.visible = false; // shown once fadeT > 0.3
   inst.warnMat.uniforms.uProgress.value = 0;
@@ -19536,7 +19537,7 @@ function _astNextTargetX() {
   switch (T.pattern) {
     case 'sweep': {
       // Sweep offset oscillates around ship X
-      const x = THREE.MathUtils.clamp(sx + (_astSweepX - 0.5) * range, T.laneMin, T.laneMax);
+      const x = sx + (_astSweepX - 0.5) * range;
       _astSweepX += _astSweepDir * T.sweepSpeed * T.frequency / range * 0.12;
       if (_astSweepX >= 1.0 || _astSweepX <= 0.0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
       return x;
@@ -19547,17 +19548,17 @@ function _astNextTargetX() {
         const steps = 5 + Math.floor(Math.random() * 4);
         for (let si = 0; si < steps; si++) {
           const fracX = si / (steps - 1);
-          _astStaggerQueue.push(THREE.MathUtils.clamp(sx + (fracX - 0.5) * range * 0.9, T.laneMin, T.laneMax));
+          _astStaggerQueue.push(sx + (fracX - 0.5) * range * 0.9);
         }
       }
       return _astStaggerQueue.shift();
     }
     case 'salvo': {
       // Handled specially in spawn tick — fallback to random near ship
-      return THREE.MathUtils.clamp(sx + (Math.random() - 0.5) * range * 0.5, T.laneMin, T.laneMax);
+      return sx + (Math.random() - 0.5) * range * 0.5;
     }
     default: // 'random' — tight scatter around ship so every shot is a threat
-      return THREE.MathUtils.clamp(sx + (Math.random() - 0.5) * 3.0, T.laneMin, T.laneMax);
+      return sx + (Math.random() - 0.5) * 3.0;
   }
 }
 
@@ -19657,7 +19658,7 @@ function _tickAsteroidSpawner(dt) {
       const half = (T.laneMax - T.laneMin) * 0.45;
       for (let si = 0; si < count; si++) {
         const frac = count === 1 ? 0.5 : si / (count - 1);
-        const targetX = THREE.MathUtils.clamp(sx + (frac - 0.5) * half * 2, T.laneMin, T.laneMax);
+        const targetX = sx + (frac - 0.5) * half * 2;
         _spawnAsteroid(targetX);
       }
     } else {
@@ -19847,8 +19848,9 @@ const _origUpdateShockwave = _updateShockwave;
     spawnBtn.style.cssText = 'background:#060;border:1px solid #0f8;color:#0f8;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:3px 0;width:100%;';
     spawnBtn.onclick = () => {
       if (state.phase !== 'playing') state.phase = 'playing';
-      // ONE always aims directly at the ship (pattern scatter is for loop buttons only)
-      _spawnAsteroid((state && state.shipX) || 0);
+      const _sx = (state && state.shipX) || 0;
+      console.log('[ONE] state.shipX='+_sx+' shipGroup.x='+shipGroup.position.x.toFixed(2));
+      _spawnAsteroid(_sx);
     };
     panel.appendChild(spawnBtn);
 
@@ -19905,11 +19907,11 @@ const _origUpdateShockwave = _updateShockwave;
         const prevX = window._astChaseLastX;
         const shipX = state.shipX;
         const mirrorX = shipX + (shipX - prevX);
-        const targetX = THREE.MathUtils.clamp(mirrorX, T.laneMin, T.laneMax);
+        const targetX = mirrorX;
         const flank = (T.laneMax - T.laneMin) * T.chaseFlank;
         _spawnAsteroid(targetX); // mirror shot
-        setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(THREE.MathUtils.clamp(targetX - flank, T.laneMin, T.laneMax)); }, 280);
-        setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(THREE.MathUtils.clamp(targetX + flank, T.laneMin, T.laneMax)); }, 560);
+        setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(targetX - flank); }, 280);
+        setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(targetX + flank); }, 560);
         window._astChaseLastX = targetX;
       };
       let cancelled = false;
@@ -19945,7 +19947,7 @@ const _origUpdateShockwave = _updateShockwave;
           const sx = state.shipX;
           const half = (T.laneMax - T.laneMin) * 0.5;
           const targets = Array.from({ length: 4 }, () =>
-            THREE.MathUtils.clamp(sx + (Math.random() - 0.5) * half * 2.5, T.laneMin, T.laneMax));
+            sx + (Math.random() - 0.5) * half * 2.5);
           _burstSpawn(targets, 350);
         },
       },
@@ -19962,7 +19964,7 @@ const _origUpdateShockwave = _updateShockwave;
           const waveSize = 5;
           const targets = Array.from({ length: waveSize }, (_, i) => {
             const frac = i / (waveSize - 1);
-            return THREE.MathUtils.clamp(sx + sweepOffset + (frac - 0.5) * range * 0.5, T.laneMin, T.laneMax);
+            return sx + sweepOffset + (frac - 0.5) * range * 0.5;
           });
           _burstSpawn(targets, 200);
         },
@@ -19984,8 +19986,8 @@ const _origUpdateShockwave = _updateShockwave;
             (function(hs, d) {
               const fn = () => {
                 if (state.phase !== 'playing') return;
-                _spawnAsteroid(THREE.MathUtils.clamp(sx - hs, T.laneMin, T.laneMax));
-                _spawnAsteroid(THREE.MathUtils.clamp(sx + hs, T.laneMin, T.laneMax));
+                _spawnAsteroid(sx - hs);
+                _spawnAsteroid(sx + hs);
               };
               if (d === 0) fn(); else setTimeout(fn, d);
             })(halfSpread, delay);
@@ -20006,7 +20008,7 @@ const _origUpdateShockwave = _updateShockwave;
           const half = (T.laneMax - T.laneMin) * 0.45;
           for (let si = 0; si < steps; si++) {
             const frac = si / (steps - 1);
-            const x = THREE.MathUtils.clamp(sx + (frac - 0.5) * half * 2, T.laneMin, T.laneMax);
+            const x = sx + (frac - 0.5) * half * 2;
             setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(x); }, si * T.staggerGap * 1000);
           }
         },
@@ -20021,7 +20023,7 @@ const _origUpdateShockwave = _updateShockwave;
           const half = (T.laneMax - T.laneMin) * 0.45;
           for (let si = 0; si < count; si++) {
             const frac = count === 1 ? 0.5 : si / (count - 1);
-            _spawnAsteroid(THREE.MathUtils.clamp(sx + (frac - 0.5) * half * 2, T.laneMin, T.laneMax));
+            _spawnAsteroid(sx + (frac - 0.5) * half * 2);
           }
         },
       },
