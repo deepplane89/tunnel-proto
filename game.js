@@ -19502,31 +19502,32 @@ function _killAsteroid(inst, impact) {
 function _astNextTargetX() {
   const T = _asteroidTuner;
   const range = T.laneMax - T.laneMin;
+  const sx = (state && state.shipX) || 0; // always center patterns on ship
   switch (T.pattern) {
     case 'sweep': {
-      const x = T.laneMin + _astSweepX * range;
+      // Sweep offset oscillates around ship X
+      const x = THREE.MathUtils.clamp(sx + (_astSweepX - 0.5) * range, T.laneMin, T.laneMax);
       _astSweepX += _astSweepDir * T.sweepSpeed * T.frequency / range * 0.12;
       if (_astSweepX >= 1.0 || _astSweepX <= 0.0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
       return x;
     }
     case 'stagger': {
-      // Pre-fill a stagger queue
+      // Pre-fill a stagger queue centered on ship X
       if (_astStaggerQueue.length === 0) {
         const steps = 5 + Math.floor(Math.random() * 4);
         for (let si = 0; si < steps; si++) {
           const fracX = si / (steps - 1);
-          _astStaggerQueue.push(T.laneMin + fracX * range);
+          _astStaggerQueue.push(THREE.MathUtils.clamp(sx + (fracX - 0.5) * range * 0.9, T.laneMin, T.laneMax));
         }
       }
       return _astStaggerQueue.shift();
     }
     case 'salvo': {
-      // All lanes simultaneously — handled specially in spawn tick
-      const fracX = Math.random();
-      return T.laneMin + fracX * range;
+      // Handled specially in spawn tick — fallback to random near ship
+      return THREE.MathUtils.clamp(sx + (Math.random() - 0.5) * range * 0.5, T.laneMin, T.laneMax);
     }
     default: // 'random'
-      return T.laneMin + Math.random() * range;
+      return THREE.MathUtils.clamp(sx + (Math.random() - 0.5) * range * 0.8, T.laneMin, T.laneMax);
   }
 }
 
@@ -19613,6 +19614,8 @@ function _updateAsteroids(dt) {
 function _tickAsteroidSpawner(dt) {
   const T = _asteroidTuner;
   if (!T.enabled) return;
+  // Pattern loop buttons handle their own spawning — don't double-fire
+  if (window._astPatternLoopActive) return;
 
   _astTimer -= dt;
   _astStaggerT -= dt;
@@ -19621,11 +19624,13 @@ function _tickAsteroidSpawner(dt) {
     _astTimer = T.frequency * (0.8 + Math.random() * 0.4);
 
     if (T.pattern === 'salvo') {
-      // Spawn T.salvoCount at once, spread across lanes
+      // Spawn T.salvoCount at once, spread across lanes centered on ship X
       const count = Math.max(1, Math.round(T.salvoCount));
+      const sx = (state && state.shipX) || 0;
+      const half = (T.laneMax - T.laneMin) * 0.45;
       for (let si = 0; si < count; si++) {
-        const fracX = count === 1 ? 0.5 : si / (count - 1);
-        const targetX = T.laneMin + fracX * (T.laneMax - T.laneMin);
+        const frac = count === 1 ? 0.5 : si / (count - 1);
+        const targetX = THREE.MathUtils.clamp(sx + (frac - 0.5) * half * 2, T.laneMin, T.laneMax);
         _spawnAsteroid(targetX);
       }
     } else {
@@ -19829,12 +19834,14 @@ const _origUpdateShockwave = _updateShockwave;
       if (_activePatternCancelFn) { _activePatternCancelFn(); _activePatternCancelFn = null; }
       if (_activePatternTimeout) { clearTimeout(_activePatternTimeout); _activePatternTimeout = null; }
       if (_activePatternBtn) { _activePatternBtn.style.outline = 'none'; _activePatternBtn.style.opacity = '1'; _activePatternBtn = null; }
+      window._astPatternLoopActive = false;
     }
 
     function _startPatternLoop(btn, color, tickFn) {
       if (_activePatternBtn === btn) { _stopPatternLoop(); return; } // toggle off
       _stopPatternLoop();
       _activePatternBtn = btn;
+      window._astPatternLoopActive = true;
       btn.style.outline = `2px solid ${color}`;
       btn.style.opacity = '0.75';
       if (state.phase !== 'playing') state.phase = 'playing';
@@ -19857,6 +19864,7 @@ const _origUpdateShockwave = _updateShockwave;
       if (_activePatternBtn === btn) { _stopPatternLoop(); return; } // toggle off
       _stopPatternLoop();
       _activePatternBtn = btn;
+      window._astPatternLoopActive = true;
       btn.style.outline = '2px solid #f84';
       btn.style.opacity = '0.75';
       if (state.phase !== 'playing') state.phase = 'playing';
