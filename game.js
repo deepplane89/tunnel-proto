@@ -19994,12 +19994,16 @@ const _origUpdateShockwave = _updateShockwave;
         label: '▼ ▼▼ STAGGER (loop)',
         color: '#ff0',
         tick: () => {
-          const steps = Math.max(2, Math.round(T.salvoCount));
-          const half = (T.laneMax - T.laneMin) * 0.45;
+          const steps = 20; // stress-test: 20 shots
           for (let si = 0; si < steps; si++) {
-            const frac = si / (steps - 1);
             // full lock: fire directly at ship position at the moment each shot fires
-            setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(state.shipX); }, si * T.staggerGap * 1000);
+            setTimeout(() => {
+              if (state.phase === 'playing') {
+                const _sx = state.shipX;
+                console.log('[STAGGER #'+(si+1)+'/20] shipX='+_sx.toFixed(2)+' landX='+_sx.toFixed(2));
+                _spawnAsteroid(_sx);
+              }
+            }, si * T.staggerGap * 1000);
           }
         },
       },
