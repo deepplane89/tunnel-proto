@@ -19013,7 +19013,7 @@ const _asteroidTuner = {
   size:           1.2,     // base radius (world units)
   sizeVariance:   0.4,     // ± random added to size
   frequency:      6.0,     // seconds between spawns (per pattern unit)
-  speed:          22,      // travel speed (units/s along trajectory)
+  speed:          73,      // travel speed (units/s along trajectory)
   skyHeight:      40,      // Y spawn height above water at the horizon
   //
   // TRAJECTORY — three independent axes, all slider-controlled:
@@ -19380,14 +19380,17 @@ function _spawnAsteroid(targetX) {
   const spawnY = T.skyHeight;
   const spawnZ = SPAWN_Z; // -160, same as cones
 
-  const landX  = THREE.MathUtils.clamp(targetX, T.laneMin, T.laneMax);
-  // Always land at the ship's Z so the player is always in danger.
-  // Small random offset (±trajX scatter) keeps it from being pixel-perfect every time.
+  // Land always at ship Z so player is always in danger.
   const landZ  = shipGroup.position.z + (Math.random() - 0.5) * T.trajX;
-  const landY  = 0.15; // always hits the water surface
+  const landY  = 0.15;
 
-  const dist      = Math.sqrt((landX-spawnX)**2 + (landY-spawnY)**2 + (landZ-spawnZ)**2);
+  const dist      = Math.sqrt((targetX-spawnX)**2 + (landY-spawnY)**2 + (landZ-spawnZ)**2);
   const totalTime = dist / T.speed;
+
+  // Lead-targeting: aim at where ship WILL BE when asteroid arrives, not where it is now.
+  // shipVelX is in world-units/s. Clamp so we don't lead off screen.
+  const leadX = targetX + (state.shipVelX || 0) * totalTime * 0.6; // 0.6 = partial lead (not perfect)
+  const landX = THREE.MathUtils.clamp(leadX, T.laneMin, T.laneMax);
 
   // Velocity vector: points from spawn straight to landing point
   const vel = new THREE.Vector3(
@@ -19739,7 +19742,7 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeHeader('PHYSICAL'));
     panel.appendChild(makeSlider('size', T.size, 0.3, 4.0, 0.05, v => T.size = v, '#f80').row);
     panel.appendChild(makeSlider('size variance', T.sizeVariance, 0, 2.0, 0.05, v => T.sizeVariance = v, '#f80').row);
-    panel.appendChild(makeSlider('speed', T.speed, 4, 80, 0.5, v => T.speed = v, '#fa0').row);
+    panel.appendChild(makeSlider('speed', T.speed, 4, 200, 0.5, v => T.speed = v, '#fa0').row);
     panel.appendChild(makeSlider('kill radius', T.killRadius, 0.5, 6.0, 0.1, v => T.killRadius = v, '#f44').row);
 
     panel.appendChild(makeHeader('TRAJECTORY', '#8cf'));
@@ -19829,10 +19832,12 @@ const _origUpdateShockwave = _updateShockwave;
         label: '►◄ SWEEP (loop)',
         color: '#0df',
         tick: () => {
-          const x = T.laneMin + _astSweepX * (T.laneMax - T.laneMin);
-          _astSweepX += _astSweepDir * 0.2;
+          // Sweep steps across lanes relative to ship’s current X so it chases the player.
+          const range = T.laneMax - T.laneMin;
+          const x = state.shipX + ((_astSweepX - 0.5) * range);
+          _astSweepX += _astSweepDir * T.sweepSpeed * 0.18;
           if (_astSweepX >= 1 || _astSweepX <= 0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
-          _spawnAsteroid(x);
+          _spawnAsteroid(THREE.MathUtils.clamp(x, T.laneMin, T.laneMax));
         },
       },
       {
