@@ -20234,18 +20234,18 @@ function startJetLightning() {
   // ── Reset ramp timer ──────────────────────────────────────────────────────
   _jlRampTime = 0;
 
-  // ── Asteroids: on, stagger, tuned defaults ────────────────────────────────
+  // ── Asteroids: on, stagger aimed at ship's current position ────────────────
   const T = _asteroidTuner;
   T.enabled      = true;
   T.pattern      = 'stagger';
-  T.frequency    = 3.5;
-  T.staggerGap   = 0.8;
-  T.salvoCount   = 5;
+  T.frequency    = 4.0;    // slow start — ramp tightens this
+  T.staggerGap   = 1.0;
+  T.salvoCount   = 3;
   T.speed        = 200;
   T.size         = 1.2;
   T.sizeVariance = 0.4;
   T.skyHeight    = 42;
-  T.leadFactor   = 1.0;
+  T.leadFactor   = 0.0;    // aim at ship's CURRENT position, not predicted
   T.killRadius   = 2.2;
   T.laneMin      = -8;
   T.laneMax      =  8;
@@ -20283,6 +20283,7 @@ function startJetLightning() {
   state._jetLightningMode = true;
   _asteroidTuner.enabled  = true;
   _noSpawnMode            = false;
+  state.speed             = BASE_SPEED * 1.5; // L4 speed
 }
 
 // ── Per-frame JL difficulty ramp — called from composer chain ────────────────
@@ -20290,45 +20291,69 @@ function _tickJetLightningRamp(dt) {
   if (!state._jetLightningMode || state.phase !== 'playing') return;
   _jlRampTime += dt;
 
-  const T  = _asteroidTuner;
-  const t  = _jlRampTime;
+  const T = _asteroidTuner;
+  const t = _jlRampTime;
 
-  // ── Phase 1 (0–30s): asteroids only, frequency tightens ──────────────────
-  if (t < 30) {
-    const p = t / 30;
-    T.frequency  = 3.5 - p * 1.5;   // 3.5 → 2.0
-    T.staggerGap = 0.8 - p * 0.2;   // 0.8 → 0.6
+  // Phase 1 (0-45s): Asteroids only
+  // leadFactor=0: every shot aimed at ship current position
+  // patterns cycle stagger -> salvo -> random, frequency tightens
+  if (t < 45) {
+    T.enabled    = true;
+    T.leadFactor = 0.0;
+    if (window._LT) window._LT.enabled = false;
+    const p = t / 45;
+    T.frequency  = 4.0 - p * 2.0;
+    T.staggerGap = 1.0 - p * 0.4;
+    T.salvoCount = Math.round(3 + p * 3);
+    if      (t < 15) T.pattern = 'stagger';
+    else if (t < 30) T.pattern = 'salvo';
+    else             T.pattern = 'random';
   }
 
-  // ── Phase 2 (30–90s): lightning starts mixing in ─────────────────────────
-  if (t >= 30 && window._LT) {
-    if (!window._LT.enabled) {
-      window._LT.enabled = true;
+  // Phase 2 (45-120s): Lightning-only round
+  // Asteroids pause so player can learn lightning clean
+  if (t >= 45 && t < 120) {
+    T.enabled = false;
+    if (window._LT) {
+      window._LT.enabled    = true;
+      window._LT.leadFactor = 0.0;
+      const p = Math.min(1, (t - 45) / 75);
+      window._LT.frequency  = 3.5 - p * 2.2;
+      window._LT.laneMin    = -8;
+      window._LT.laneMax    =  8;
     }
-    const p = Math.min(1, (t - 30) / 60);
-    window._LT.frequency  = 1.3 - p * 0.7;  // 1.3 → 0.6
-    T.frequency            = 2.0 - p * 0.7;  // 2.0 → 1.3
-    T.staggerGap           = 0.6 - p * 0.15; // 0.6 → 0.45
   }
 
-  // ── Phase 3 (90s+): glacier terrain appears + ice chunks ─────────────────
-  if (t >= 90) {
-    // Terrain: create if needed, show if hidden
-    if (!_terrainWalls) {
-      _createTerrainWalls();
-    } else {
-      _terrainWalls.strips.forEach(m => { m.visible = true; });
+  // Phase 3 (120s+): Combined - asteroids back, both ramp together
+  if (t >= 120) {
+    T.enabled    = true;
+    T.leadFactor = 0.0;
+    if (window._LT) window._LT.enabled = true;
+
+    const p = Math.min(1, (t - 120) / 90);
+    T.frequency  = 2.5 - p * 1.2;
+    T.staggerGap = 0.6 - p * 0.15;
+    T.salvoCount = Math.round(4 + p * 4);
+    const cycle = t % 30;
+    if      (cycle < 10) T.pattern = 'stagger';
+    else if (cycle < 20) T.pattern = 'salvo';
+    else                 T.pattern = 'random';
+    if (window._LT) {
+      window._LT.frequency = Math.max(0.6, 1.8 - p * 1.2);
     }
-    // Ice chunks
-    if (window._ICE && !window._ICE.enabled) {
-      window._ICE.enabled = true;
-    }
-    // Continue tightening
-    if (t < 180) {
-      const p = Math.min(1, (t - 90) / 90);
-      T.frequency = 1.3 - p * 0.6;            // 1.3 → 0.7
-      if (window._LT) window._LT.frequency = 0.6 - p * 0.2; // 0.6 → 0.4
-      if (window._ICE) window._ICE.frequency = 3.0 - p * 1.5; // 3.0 → 1.5
+
+    // Terrain + ice at 150s
+    if (t >= 150) {
+      if (!_terrainWalls) {
+        _createTerrainWalls();
+      } else {
+        _terrainWalls.strips.forEach(m => { m.visible = true; });
+      }
+      if (window._ICE && !window._ICE.enabled) {
+        window._ICE.enabled = true;
+      }
+      const p2 = Math.min(1, (t - 150) / 90);
+      if (window._ICE) window._ICE.frequency = Math.max(1.5, 3.0 - p2 * 1.5);
     }
   }
 }
