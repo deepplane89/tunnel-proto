@@ -486,6 +486,23 @@ const HANDLING_TIERS = [
 const HANDLING_UPGRADE_KEY = 'jetslide_handling_claimed';
 
 let _handlingDriftOverride = -1; // -1 = use player level, 0-1 = tuner override
+// ── Named physics presets ───────────────────────────────────────────────────
+// Restore these via the physics tuner "RESTORE PRESET" button
+const _PHYSICS_PRESETS = {
+  'JL_v1': {
+    label:        'Jet Lightning v1 (rchouake approved)',
+    accelBase:    60,
+    accelSnap:    100,
+    maxVelBase:   18,
+    maxVelSnap:   23,
+    bankMax:      0.04,
+    bankSmoothing:8,
+    decelBasePct: 0.02,
+    decelFullPct: 0.05,
+    speed:        'L4',   // BASE_SPEED * LEVELS[3].speedMult = 1.5x
+  },
+};
+
 // ── Ship physics tuner overrides (-1 = use formula) ──
 let _accelBase       = 22;   // base ACCEL at L1
 let _accelSnap       = 52;   // extra ACCEL added at max level
@@ -18112,6 +18129,30 @@ function buildSkinTunerSliders() {
 
     // LATERAL PHYSICS
     panel.appendChild(makeHeader('LATERAL PHYSICS'));
+
+    // ── Preset restore buttons ────────────────────────────────────────────────
+    Object.entries(_PHYSICS_PRESETS).forEach(([key, p]) => {
+      const btn = document.createElement('button');
+      btn.textContent = '↩ RESTORE: ' + key;
+      btn.title = p.label;
+      btn.style.cssText = 'background:none;border:1px solid #0f8;color:#0f8;padding:3px 8px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:4px 0 6px;width:100%;text-align:left;';
+      btn.onclick = () => {
+        _accelBase    = p.accelBase;
+        _accelSnap    = p.accelSnap;
+        _maxVelBase   = p.maxVelBase;
+        _maxVelSnap   = p.maxVelSnap;
+        _bankMax      = p.bankMax;
+        _bankSmoothing = p.bankSmoothing;
+        _decelBasePct = p.decelBasePct;
+        _decelFullPct = p.decelFullPct;
+        if (p.speed === 'L4') state.speed = BASE_SPEED * LEVELS[3].speedMult;
+        // Rebuild panel so sliders reflect restored values
+        build();
+        panel.style.display = 'block';
+      };
+      panel.appendChild(btn);
+    });
+
     panel.appendChild(makeSlider('phys level (0=L1 floaty, 4=L5 crisp, -1=live)', _physLevelOverride, -1, 4, 1, v => _physLevelOverride = Math.round(v), '#0ff'));
     panel.appendChild(makeSlider('accel base', _accelBase, 1, 60, 1, v => _accelBase = v, '#0f8'));
     panel.appendChild(makeSlider('accel snap', _accelSnap, 0, 100, 1, v => _accelSnap = v, '#0f8'));
