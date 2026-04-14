@@ -19254,6 +19254,15 @@ const _asteroidTuner = {
   chaseRampStart: 4.0,     // initial mirror interval (seconds) — forgiving
   chaseRampEnd:   1.2,     // final mirror interval (seconds) — ruthless
   chaseRampDuration: 90,   // seconds over which ramp plays out
+  // Filler (decorative background asteroids)
+  fillerEnabled:  false,   // toggle on/off
+  fillerFreq:     0.4,     // seconds between filler spawns
+  fillerLaneMin: -20,      // X range — wider than normal to sell depth
+  fillerLaneMax:  20,
+  fillerSizeMin:  0.15,    // scale at max distance from center
+  fillerSizeMax:  0.55,    // scale at center
+  fillerSpeedMin: 1.2,     // speed multiplier at max distance (fast = far)
+  fillerSpeedMax: 0.7,     // speed multiplier at center (slower = closer)
 };
 
 // ── Shaders ──────────────────────────────────────────────────────────────────
@@ -19670,6 +19679,7 @@ function _spawnAsteroid(targetX) {
 // ── Kill one asteroid ─────────────────────────────────────────────────────────
 function _killAsteroid(inst, impact) {
   inst.active = false;
+  inst.isFiller = false; // reset so pool reuse is clean
   inst.group.visible = false;
   inst.light.visible = false;
   inst.tailPts.visible = false;
@@ -19687,7 +19697,7 @@ function _killAsteroid(inst, impact) {
       );
     }
     // Kill check: use asteroid's ACTUAL world position at impact, not pre-stored landing coords.
-    if (state.phase === 'playing') {
+    if (state.phase === 'playing' && !inst.isFiller) {
       const ax = inst.group.position.x;
       const az = inst.group.position.z;
       const dx = state.shipX - ax;
@@ -19816,6 +19826,78 @@ function _updateAsteroids(dt) {
 }
 
 // ── Spawn tick: called from tutorial update block ─────────────────────────────
+let _astFillerTimer = 0;
+
+function _spawnFillerAsteroid() {
+  const inst = _getAsteroidFromPool();
+  if (!inst) return;
+  const T = _asteroidTuner;
+
+  // Random X across filler lane range
+  const x = T.fillerLaneMin + Math.random() * (T.fillerLaneMax - T.fillerLaneMin);
+
+  // Distance from center [0..1] — drives size and speed
+  const maxDist = Math.max(Math.abs(T.fillerLaneMin), Math.abs(T.fillerLaneMax));
+  const distFrac = Math.min(Math.abs(x) / maxDist, 1.0);
+
+  // Size: smaller further out (parallax depth)
+  const radius = T.fillerSizeMax + (T.fillerSizeMin - T.fillerSizeMax) * distFrac;
+
+  // Speed scalar: faster further out
+  const speedMult = T.fillerSpeedMax + (T.fillerSpeedMin - T.fillerSpeedMax) * distFrac;
+  const speed = T.speed * speedMult;
+
+  const spawnY = T.skyHeight * 0.6; // slightly lower than real asteroids
+  const spawnZ = SPAWN_Z;
+  const landZ  = shipGroup.position.z - 20; // land well ahead of ship — never reaches it
+  const landY  = 0.15;
+
+  const totalTime = Math.sqrt((landY - spawnY) ** 2 + (landZ - spawnZ) ** 2) / speed;
+
+  inst.vel.set(
+    0,
+    (landY - spawnY) / totalTime,
+    (landZ - spawnZ) / totalTime
+  );
+
+  inst.group.scale.setScalar(radius);
+  inst.rockMesh.material.uniforms.uTime.value = Math.random() * 100;
+  inst.fireMesh.material.uniforms.uTime.value  = Math.random() * 100;
+  inst.fireMesh.material.uniforms.uRadius.value = radius;
+  inst.fireMesh.material.uniforms.uIntensity.value = T.fireIntensity * 0.5; // dimmer
+
+  inst.group.position.set(x, spawnY, spawnZ);
+  inst.group.visible = true;
+
+  inst.light.position.copy(inst.group.position);
+  inst.light.distance  = T.glowRange * radius * 0.5;
+  inst.light.intensity = 0;
+  inst.light.visible   = true;
+
+  inst.warnMesh.visible = false; // no warning disc for fillers
+
+  inst.group.rotation.set(
+    Math.random() * Math.PI * 2,
+    Math.random() * Math.PI * 2,
+    Math.random() * Math.PI * 2
+  );
+
+  inst.radius        = radius;
+  inst.landingX      = x;
+  inst.landingZ      = landZ;
+  inst.totalFallTime = totalTime;
+  inst.elapsed       = 0;
+  inst.warnTimer     = 0;
+  inst.tailWriteIdx  = 0;
+  inst.tailTimer     = 0;
+  inst.isFiller      = true; // skip hit check
+  for (let ti = 0; ti < _AST_TAIL_COUNT; ti++) inst.tailHistory[ti].set(0, 999, 0);
+  inst.tailPts.visible = true;
+  inst.active = true;
+
+  _asteroidActive.push(inst);
+}
+
 function _tickAsteroidSpawner(dt) {
   const T = _asteroidTuner;
   if (!T.enabled) return;
@@ -19869,6 +19951,15 @@ function _tickAsteroidSpawner(dt) {
       }
     } else {
       _spawnAsteroid(_astNextTargetX());
+    }
+  }
+
+  // ── Filler asteroids (decorative, no hit check) ─────────────────────
+  if (T.fillerEnabled && state._jetLightningMode) {
+    _astFillerTimer -= dt;
+    if (_astFillerTimer <= 0) {
+      _astFillerTimer = T.fillerFreq * (0.6 + Math.random() * 0.8);
+      _spawnFillerAsteroid();
     }
   }
 }
@@ -20320,6 +20411,17 @@ const _origUpdateShockwave = _updateShockwave;
     refreshCount();
     setInterval(refreshCount, 500);
     panel.appendChild(countEl);
+
+    // ── FILLER section
+    panel.appendChild(makeHeader('FILLER (decorative)', '#88f'));
+    panel.appendChild(makeToggle('enabled (JL stagger only)', () => T.fillerEnabled, v => { T.fillerEnabled = v; }));
+    panel.appendChild(makeSlider('frequency (s)', T.fillerFreq, 0.05, 3.0, 0.05, v => T.fillerFreq = v, '#88f').row);
+    panel.appendChild(makeSlider('lane min', T.fillerLaneMin, -40, 0, 1, v => T.fillerLaneMin = v, '#8df').row);
+    panel.appendChild(makeSlider('lane max', T.fillerLaneMax, 0, 40, 1, v => T.fillerLaneMax = v, '#8df').row);
+    panel.appendChild(makeSlider('size near', T.fillerSizeMax, 0.05, 1.5, 0.05, v => T.fillerSizeMax = v, '#88f').row);
+    panel.appendChild(makeSlider('size far', T.fillerSizeMin, 0.05, 1.0, 0.05, v => T.fillerSizeMin = v, '#88f').row);
+    panel.appendChild(makeSlider('speed near', T.fillerSpeedMax, 0.1, 3.0, 0.05, v => T.fillerSpeedMax = v, '#f8f').row);
+    panel.appendChild(makeSlider('speed far', T.fillerSpeedMin, 0.1, 3.0, 0.05, v => T.fillerSpeedMin = v, '#f8f').row);
   }
 
   let visible = false;
