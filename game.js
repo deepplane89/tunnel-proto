@@ -20642,9 +20642,10 @@ const _JL_TRACKS = [
 
   // ════════ ALWAYS-ON / CUSTOM ══════════════════════════════════════════════
   {
-    id: 'fatcone', label: 'Fat Cones', type: 'fatcone',
+    id: 'fatcone', label: 'Fat Cones', type: 'custom',
     startT: 360, endT: null,
-    frequency: 8.0,
+    onActivate()   { if (window._startFcLoop) window._startFcLoop(null); },
+    onDeactivate() { if (window._stopFcLoop)  window._stopFcLoop(); },
   },
   {
     id: 'terrain', label: 'Terrain', type: 'custom',
@@ -20868,7 +20869,8 @@ function _tickJetLightningRamp(dt) {
           if (track.type !== 'lightning') {
             if (window._LT) window._LT.enabled = false;
           }
-          if (track.type === 'fatcone') _jlFatConeTimer = 1.0;
+          if (track.id === 'fatcone') { if (window._startFcLoop) window._startFcLoop(null); }
+          else { if (window._stopFcLoop) window._stopFcLoop(); }
           if (_lastJumpBtn) { _lastJumpBtn.style.fontWeight = 'normal'; _lastJumpBtn.style.background = 'none'; }
           btn.style.fontWeight = 'bold'; btn.style.background = color + '22';
           _lastJumpBtn = btn;
@@ -21994,7 +21996,7 @@ window._jlDebug = {
   // ── Tuner state ─────────────────────────────────────────────────────────────
   const FCT = {
     enabled:   false,
-    frequency: 4.0,    // seconds between spawns (auto-loop)
+    frequency: 1.0,    // seconds between spawns — matches campaign T5A_FATCONES cadence
     // shape
     scaleXZ:        4,     // standard campaign fat cone footprint
     scaleY:         1,     // height scalar
@@ -22085,11 +22087,10 @@ window._jlDebug = {
     _stopFcLoop();
     _fcLoopActive = true;
     _fcActiveBtn = btn;
-    btn.style.opacity = '1';
-    btn.style.background = '#1a1a00';
+    if (btn) { btn.style.opacity = '1'; btn.style.background = '#1a1a00'; }
     function loop() {
       if (!_fcLoopActive) return;
-      _spawnFatCone();
+      _spawnFatConeRow(); // use campaign row algo
       _fcLoopTimer = setTimeout(loop, FCT.frequency * 1000 * (0.7 + Math.random() * 0.6));
     }
     loop();
@@ -22238,8 +22239,10 @@ window._jlDebug = {
   }
 
   // Expose to sequencer tick (outside IIFE scope)
-  window._spawnFatCone    = _spawnFatCone;    // single cone (manual spawn button)
-  window._spawnFatConeRow = _spawnFatConeRow; // full row with campaign algo (sequencer)
+  window._spawnFatCone    = _spawnFatCone;
+  window._spawnFatConeRow = _spawnFatConeRow;
+  window._startFcLoop     = _startFcLoop;
+  window._stopFcLoop      = _stopFcLoop;
   window._FCT = FCT;
 
   let _fcVisible = false;
