@@ -19618,15 +19618,10 @@ function _astNextTargetX() {
       return x;
     }
     case 'stagger': {
-      // Pre-fill a stagger queue centered on ship X
-      if (_astStaggerQueue.length === 0) {
-        const steps = 5 + Math.floor(Math.random() * 4);
-        for (let si = 0; si < steps; si++) {
-          const fracX = si / (steps - 1);
-          _astStaggerQueue.push(sx + (fracX - 0.5) * range * 0.9);
-        }
-      }
-      return _astStaggerQueue.shift();
+      // Always read ship X fresh so each shot tracks the live position
+      // Small random nudge keeps it from being perfectly predictable
+      const liveX = (state && state.shipX) || 0;
+      return liveX + (Math.random() - 0.5) * 1.5;
     }
     case 'salvo': {
       // Handled specially in spawn tick — fallback to random near ship
