@@ -10619,7 +10619,7 @@ window.addEventListener('keydown', e => {
     return; // consume key in DR mode
   }
   // toggle no-spawn test mode
-  if ((e.key === "'" || e.key === '`' || e.key === '\\' || e.key === 'n' || e.key === 'N') && state.phase === 'playing') {
+  if ((e.key === "'" || e.key === '`' || e.key === '\\' || e.key === 'n' || e.key === 'N') && state.phase === 'playing' && !state._tutorialActive) {
     _noSpawnMode = !_noSpawnMode;
     // Flash HUD message so player knows it fired
     const _nsEl = document.createElement('div');
@@ -10638,7 +10638,7 @@ window.addEventListener('keydown', e => {
   }
 
   // R = spawn bonus rings + tuner (DR only)
-  if (e.key === 'r' || e.key === 'R') {
+  if ((e.key === 'r' || e.key === 'R') && !state._tutorialActive) {
     if (state.isDeathRun && state.phase === 'playing') {
       if (_bonusRings.length === 0) {
         _ringSpawnRow();
@@ -10716,7 +10716,7 @@ window.addEventListener('keydown', e => {
     debugHitboxes = !debugHitboxes;
   }
   // Key T: toggle L4 aurora tendrils
-  if ((e.key === 't' || e.key === 'T') && state.phase === 'playing') {
+  if ((e.key === 't' || e.key === 'T') && state.phase === 'playing' && !state._tutorialActive) {
     auroraTVisible = !auroraTVisible;
     auroraGroup.visible = auroraTVisible;
     l5fGroup.visible = auroraTVisible;
@@ -11469,9 +11469,9 @@ function closeSettings() {
   document.getElementById('replay-tutorial-btn').addEventListener('click', () => {
     window._LS.removeItem('jh_tutorial_done');
     closeSettings();
-    startGame();
-    state._tutorialActive = true;
+    state._tutorialActive = true;  // must be set BEFORE startGame() so prologue is suppressed
     state._tutorialStep = -0.5;
+    startGame();
     state._tutRocksSpawned = false;
     state._tutRocksPassed = 0;
   });
