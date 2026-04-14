@@ -19037,6 +19037,8 @@ const _asteroidTuner = {
   pattern:        'random', // 'random' | 'sweep' | 'stagger' | 'salvo'
   sweepSpeed:     0.4,     // lanes/sec for sweep pattern
   pinchStep:      0.12,    // how much the pinch closes per tick (independent of sweepSpeed)
+  pinchSpread:    1.0,     // arm spread multiplier: 1=full lane width, 0.5=half, 2=extra wide
+  chaseFlank:     0.25,    // chase flank offset as fraction of lane range (0=no flanks, 0.5=wide)
   staggerGap:     1.8,     // seconds between salvo/stagger drops
   salvoCount:     3,       // how many simultaneous in a salvo
   laneMin:        -8,      // leftmost lane X
@@ -19783,6 +19785,7 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeSlider('frequency (s)', T.frequency, 0.5, 20, 0.1, v => T.frequency = v, '#0df').row);
     panel.appendChild(makeSlider('sweep speed', T.sweepSpeed, 0.05, 2.0, 0.01, v => T.sweepSpeed = v, '#0df').row);
     panel.appendChild(makeSlider('pinch step', T.pinchStep, 0.01, 0.5, 0.01, v => T.pinchStep = v, '#f0f').row);
+    panel.appendChild(makeSlider('pinch spread', T.pinchSpread, 0.1, 3.0, 0.05, v => T.pinchSpread = v, '#f0f').row);
     panel.appendChild(makeSlider('stagger gap', T.staggerGap, 0.2, 5.0, 0.1, v => T.staggerGap = v, '#0df').row);
     panel.appendChild(makeSlider('salvo count', T.salvoCount, 1, 8, 1, v => T.salvoCount = Math.round(v), '#0df').row);
     panel.appendChild(makeSlider('lane min X', T.laneMin, -20, 0, 0.5, v => T.laneMin = v, '#8df').row);
@@ -19793,6 +19796,7 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeSlider('ramp start (s)', T.chaseRampStart, 0.5, 10, 0.1, v => T.chaseRampStart = v, '#f84').row);
     panel.appendChild(makeSlider('ramp end (s)', T.chaseRampEnd, 0.1, 5, 0.05, v => T.chaseRampEnd = v, '#f84').row);
     panel.appendChild(makeSlider('ramp duration (s)', T.chaseRampDuration, 10, 300, 5, v => T.chaseRampDuration = v, '#f84').row);
+    panel.appendChild(makeSlider('chase flank', T.chaseFlank, 0, 0.6, 0.01, v => T.chaseFlank = v, '#f84').row);
 
     // DANGER ZONE
     panel.appendChild(makeHeader('DANGER ZONE', '#f44'));
@@ -19864,7 +19868,7 @@ const _origUpdateShockwave = _updateShockwave;
         const shipX = state.shipX;
         const mirrorX = shipX + (shipX - prevX);
         const targetX = THREE.MathUtils.clamp(mirrorX, T.laneMin, T.laneMax);
-        const flank = (T.laneMax - T.laneMin) * 0.25;
+        const flank = (T.laneMax - T.laneMin) * T.chaseFlank;
         _spawnAsteroid(targetX); // mirror shot
         setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(THREE.MathUtils.clamp(targetX - flank, T.laneMin, T.laneMax)); }, 280);
         setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(THREE.MathUtils.clamp(targetX + flank, T.laneMin, T.laneMax)); }, 560);
@@ -19934,7 +19938,7 @@ const _origUpdateShockwave = _updateShockwave;
           const sx = state.shipX; // snapshot — arms all target where you ARE now
           const pairCount = 5;
           const gapMs = 300;
-          const fullHalf = (T.laneMax - T.laneMin) * 0.5;
+          const fullHalf = (T.laneMax - T.laneMin) * 0.5 * T.pinchSpread;
           for (let pi = 0; pi < pairCount; pi++) {
             const progress = pi / (pairCount - 1); // 0=wide, 1=closed
             const halfSpread = Math.max(0.3, fullHalf * (1.0 - progress));
