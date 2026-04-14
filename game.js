@@ -16551,6 +16551,12 @@ function update(dt) {
         const dx = sx - cx, dy2 = sy - cy;
         const dist = Math.sqrt(dx * dx + dy2 * dy2 + sz * sz);
         if (dist < hitR) {
+          if (_godMode) {
+            // God mode: shield-hit flash + sound, no death
+            _triggerCrashFlash();
+            playSFX(220, 0.18, 'sawtooth', 0.15);
+            return;
+          }
           killPlayer();
           return;
         }
@@ -20469,7 +20475,11 @@ function startJetLightning() {
   // ── Reset ramp timer ──────────────────────────────────────────────────────
   _jlRampTime      = 0;
   _jlFatConeTimer   = 99;
+  _jlLrTimer        = 99;
   _jlRecenterActive = false;
+  // Clear any in-flight lethal rings from a previous session
+  for (const lr of _lethalRingActive) { lr.userData.active = false; lr.visible = false; lr.position.set(0,-9999,0); }
+  _lethalRingActive.length = 0;
   // Reset track activation state so onActivate fires fresh each run
   for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
   _jlRecenterT      = 0;
@@ -20647,6 +20657,22 @@ const _JL_TRACKS = [
   },
 
   // ════════ ALWAYS-ON / CUSTOM ══════════════════════════════════════════════
+  // ════════ LETHAL RINGS ════════════════════════════════════════════════════
+  {
+    id: 'lethal_rings', label: 'Lethal Rings', type: 'lethal_rings',
+    startT: 450, endT: null,
+    settings: { frequency: 1.1 }, // seconds between rows (before intensity scalar)
+    onActivate()   {
+      if (window._asteroidTuner) window._asteroidTuner.enabled = false;
+      if (window._LT) window._LT.enabled = false;
+    },
+    onDeactivate() {
+      for (const lr of _lethalRingActive) { lr.userData.active = false; lr.visible = false; lr.position.set(0,-9999,0); }
+      _lethalRingActive.length = 0;
+    },
+  },
+
+
   {
     id: 'fatcone', label: 'Fat Cones', type: 'custom',
     startT: 360, endT: null,
@@ -20690,9 +20716,33 @@ function _jlApplyLightningTrack(track) {
   if (s.frequency !== undefined) LT.frequency = s.frequency / _jlIntensity;
 }
 
+// ── JL lethal ring row spawner — exact campaign lane-grid algo ──────────────
+function _jlSpawnLethalRingRow() {
+  _initLethalRings();
+  const sx = state.shipX || 0;
+  const spawnCount = 3 + Math.floor(Math.random() * 2); // 3-4 rings per row
+  const lanes  = Array.from({ length: LANE_COUNT }, (_, i) => i);
+  const shuffled = [...lanes].sort(() => Math.random() - 0.5);
+  // Guaranteed 2-wide clear gap
+  const gapStart = Math.floor(Math.random() * (LANE_COUNT - 1));
+  const gapLanes = new Set([gapStart, gapStart + 1]);
+  const blocked = [];
+  for (const lane of shuffled) {
+    if (blocked.length >= spawnCount) break;
+    if (gapLanes.has(lane)) continue;
+    if (blocked.some(b => Math.abs(b - lane) < 4)) continue; // min 4-lane gap between rings
+    blocked.push(lane);
+  }
+  blocked.forEach(lane => {
+    const laneX = sx + (lane - (LANE_COUNT - 1) / 2) * LANE_WIDTH;
+    _spawnLethalRing(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z);
+  });
+}
+
 // ── Main sequencer tick ───────────────────────────────────────────────────────
 let _jlWasInLiftoff = false;
 let _jlFatConeTimer = 99;
+let _jlLrTimer      = 99; // lethal ring row spawn timer
 
 function _tickJetLightningRamp(dt) {
   if (!state._jetLightningMode || state.phase !== 'playing') return;
@@ -20726,7 +20776,9 @@ function _tickJetLightningRamp(dt) {
         if (track.onActivate) track.onActivate();
         if (track.type === 'fatcone') {
           _jlFatConeTimer = 1.0; // fire first cone quickly on track entry
-
+        }
+        if (track.type === 'lethal_rings') {
+          _jlLrTimer = 1.0; // fire first ring row quickly on track entry
         }
       }
 
@@ -20739,6 +20791,15 @@ function _tickJetLightningRamp(dt) {
           const _fct = window._FCT || track;
           _jlFatConeTimer = (_fct.frequency / _jlIntensity) * (0.7 + Math.random() * 0.6);
           if (typeof window._spawnFatConeRow === 'function') window._spawnFatConeRow();
+        }
+      } else if (track.type === 'lethal_rings') {
+        // Lethal ring row spawner — same cadence as campaign T4B_LETHAL
+        _jlLrTimer -= dt;
+        if (_jlLrTimer <= 0) {
+          const baseInterval = track.settings && track.settings.frequency != null
+            ? track.settings.frequency : 1.1;
+          _jlLrTimer = (baseInterval / _jlIntensity) * (0.7 + Math.random() * 0.6);
+          _jlSpawnLethalRingRow();
         }
       }
       // custom tracks: onActivate already fired above, they manage themselves
@@ -20851,9 +20912,10 @@ function _tickJetLightningRamp(dt) {
 
     let _lastJumpBtn = null;
     for (const track of _JL_TRACKS) {
-      const color = track.type === 'asteroid' ? '#f80'
-                  : track.type === 'lightning' ? '#6af'
-                  : track.type === 'fatcone'   ? '#0f8'
+      const color = track.type === 'asteroid'     ? '#f80'
+                  : track.type === 'lightning'    ? '#6af'
+                  : track.type === 'fatcone'      ? '#0f8'
+                  : track.type === 'lethal_rings' ? '#f44'
                   : '#888';
       const endLabel = track.endT !== null ? track.endT + 's' : '∞';
       const btn = mkBtn(
@@ -20877,6 +20939,13 @@ function _tickJetLightningRamp(dt) {
           }
           if (track.id === 'fatcone') { if (window._startFcLoop) window._startFcLoop(null); }
           else { if (window._stopFcLoop) window._stopFcLoop(); }
+          // If jumping away from lethal rings, clear in-flight rings
+          if (track.type !== 'lethal_rings') {
+            for (const lr of _lethalRingActive) { lr.userData.active = false; lr.visible = false; lr.position.set(0,-9999,0); }
+            _lethalRingActive.length = 0;
+          } else {
+            _jlLrTimer = 1.0; // fire first row quickly on jump
+          }
           if (_lastJumpBtn) { _lastJumpBtn.style.fontWeight = 'normal'; _lastJumpBtn.style.background = 'none'; }
           btn.style.fontWeight = 'bold'; btn.style.background = color + '22';
           _lastJumpBtn = btn;
