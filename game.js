@@ -20563,3 +20563,414 @@ const _origUpdateShockwave = _updateShockwave;
   });
 
 })();
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  ICE CHUNK OBSTACLE SYSTEM  v1
+//  – Spawns massive floating ice slabs ahead of the ship (like cones / lightning)
+//  – MeshPhysicalMaterial with transmission for a real ice/glass look
+//  – Pool of 8 chunks; each scrolls with the world
+//  – Tuner on C key
+// ═══════════════════════════════════════════════════════════════════════════════
+(function setupIceSystem() {
+
+  // ── Config object (mirrors _LT / _asteroidTuner structure) ─────────────────
+  const _ICE = {
+    enabled:      false,
+    frequency:    5.0,    // seconds between spawns
+    spawnZ:      -120,    // how far ahead chunks appear
+    laneMin:     -10,
+    laneMax:      10,
+    pattern:      'random',  // random | sweep | stagger | salvo
+    sweepSpeed:   0.25,
+    staggerGap:   0.8,
+    salvoCount:   2,
+    // Size
+    sizeMin:      2.5,    // base scale for ice slab
+    sizeMax:      5.5,    // max scale
+    // Visuals
+    transmission: 0.72,
+    roughness:    0.12,
+    ior:          1.31,
+    thickness:    8.0,
+    emissiveIntensity: 0.18,
+    // Hitbox
+    hitboxScale:  0.72,   // fraction of slab half-width that kills
+  };
+
+  const _ICE_POOL_SIZE = 8;
+  const _icePool       = [];
+  let   _iceActive     = [];
+  let   _iceTimer      = 2.0;
+  let   _iceSweepX     = 0.5;
+  let   _iceSweepDir   = 1;
+  const _iceStaggerQ   = [];
+
+  // ── Materials (shared, rebuilt when tuner values change) ───────────────────
+  function _makeIceMat() {
+    return new THREE.MeshPhysicalMaterial({
+      color:            0xaaddff,
+      emissive:         0x2255aa,
+      emissiveIntensity: _ICE.emissiveIntensity,
+      transmission:     _ICE.transmission,
+      roughness:        _ICE.roughness,
+      metalness:        0.0,
+      ior:              _ICE.ior,
+      thickness:        _ICE.thickness,
+      transparent:      true,
+      opacity:          0.88,
+      side:             THREE.DoubleSide,
+      depthWrite:       false,
+    });
+  }
+
+  // ── Build one ice slab instance ────────────────────────────────────────────
+  // Shape: flat angular slab — random convex polygon extruded slightly.
+  // We use a BoxGeometry sheared/scaled differently on each spawn to avoid
+  // cookie-cutter repetition.
+  function _buildIceInstance() {
+    const group = new THREE.Group();
+    group.visible = false;
+
+    // Main slab — Box with random vertex jitter applied at spawn time
+    const geo  = new THREE.BoxGeometry(1, 0.28, 1, 2, 1, 2);
+    const mat  = _makeIceMat();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow    = false;
+    mesh.receiveShadow = false;
+    group.add(mesh);
+
+    // Sub-slab stacked fragment (slightly offset, smaller) for visual richness
+    const geo2  = new THREE.BoxGeometry(0.7, 0.18, 0.65, 1, 1, 1);
+    const mat2  = _makeIceMat();
+    const mesh2 = new THREE.Mesh(geo2, mat2);
+    mesh2.position.set(0.18, 0.18, -0.12);
+    mesh2.rotation.y = 0.4;
+    group.add(mesh2);
+
+    // Point light — cold blue glow
+    const light = new THREE.PointLight(0x66aaff, 0.6, 18);
+    light.position.set(0, 1.2, 0);
+    group.add(light);
+
+    scene.add(group);
+
+    return {
+      group, mesh, mesh2, mat, mat2, light,
+      active:  false,
+      halfW:   1,   // half-width for hitbox — set at spawn
+      elapsed: 0,
+    };
+  }
+
+  // Build pool
+  for (let _ii = 0; _ii < _ICE_POOL_SIZE; _ii++) _icePool.push(_buildIceInstance());
+
+  function _getFreeIce() {
+    return _icePool.find(c => !c.active) || null;
+  }
+
+  // ── Next target X from pattern (mirrors _ltNextTargetX) ───────────────────
+  function _iceNextX() {
+    const range = _ICE.laneMax - _ICE.laneMin;
+    const sx    = (state && state.shipX) || 0;
+    switch (_ICE.pattern) {
+      case 'sweep': {
+        const x = sx + (_iceSweepX - 0.5) * range;
+        _iceSweepX += _iceSweepDir * _ICE.sweepSpeed * _ICE.frequency / range * 0.12;
+        if (_iceSweepX >= 1 || _iceSweepX <= 0) { _iceSweepDir *= -1; _iceSweepX = Math.max(0, Math.min(1, _iceSweepX)); }
+        return x;
+      }
+      case 'stagger': {
+        if (_iceStaggerQ.length === 0) {
+          const steps = 4 + Math.floor(Math.random() * 4);
+          for (let i = 0; i < steps; i++) _iceStaggerQ.push(sx + (i / (steps - 1) - 0.5) * range * 0.85);
+        }
+        return _iceStaggerQ.shift();
+      }
+      case 'salvo': return sx + (Math.random() - 0.5) * range * 0.5;
+      default:      return sx + (Math.random() - 0.5) * (range * 0.55);
+    }
+  }
+
+  // ── Spawn one chunk ────────────────────────────────────────────────────────
+  function _spawnIce(targetX) {
+    const inst = _getFreeIce();
+    if (!inst) return;
+
+    // Randomise size each spawn
+    const scale  = _ICE.sizeMin + Math.random() * (_ICE.sizeMax - _ICE.sizeMin);
+    const scaleZ = scale * (0.55 + Math.random() * 0.7);  // vary depth independently
+    const tiltY  = (Math.random() - 0.5) * 0.9;          // random yaw
+    const tiltX  = (Math.random() - 0.5) * 0.15;         // slight pitch — not too tall
+
+    inst.group.scale.set(scale, 1, scaleZ);
+    inst.group.rotation.set(tiltX, tiltY, 0);
+    inst.halfW   = scale * _ICE.hitboxScale * 0.5;
+
+    // Live-update material params from tuner
+    for (const m of [inst.mat, inst.mat2]) {
+      m.transmission      = _ICE.transmission;
+      m.roughness         = _ICE.roughness;
+      m.ior               = _ICE.ior;
+      m.thickness         = _ICE.thickness;
+      m.emissiveIntensity = _ICE.emissiveIntensity;
+      m.needsUpdate       = true;
+    }
+
+    // World-space Z: ahead of ship
+    const shipZ  = _shipZ();
+    const spawnZ = shipZ + _ICE.spawnZ;
+    inst.group.position.set(targetX, 0.14, spawnZ);
+    inst.group.visible = true;
+    inst.light.intensity = 0.6;
+    inst.elapsed = 0;
+    inst.active  = true;
+    _iceActive.push(inst);
+  }
+
+  // ── Kill / recycle one chunk ───────────────────────────────────────────────
+  function _killIce(inst) {
+    inst.group.visible = false;
+    inst.active = false;
+    const idx = _iceActive.indexOf(inst);
+    if (idx !== -1) _iceActive.splice(idx, 1);
+  }
+
+  function _clearAllIce() {
+    for (let i = _iceActive.length - 1; i >= 0; i--) _killIce(_iceActive[i]);
+    _iceActive.length = 0;
+    _iceTimer = 0;
+    _iceSweepX = 0.5; _iceSweepDir = 1;
+    _iceStaggerQ.length = 0;
+  }
+
+  // ── Per-frame update: scroll + hitcheck ───────────────────────────────────
+  function _updateIce(dt) {
+    const scrollSpeed = state.speed || 36;
+    for (let i = _iceActive.length - 1; i >= 0; i--) {
+      const inst = _iceActive[i];
+      inst.elapsed += dt;
+
+      // Scroll — same as cones: world moves toward ship, chunk moves +Z each frame
+      inst.group.position.z += scrollSpeed * dt;
+
+      // Gentle bob on water
+      inst.group.position.y = 0.14 + Math.sin(inst.elapsed * 0.9 + i) * 0.06;
+
+      // Despawn behind ship
+      if (inst.group.position.z > 8) {
+        _killIce(inst);
+        continue;
+      }
+
+      // Hit check — only when chunk is near ship Z (z > -4)
+      if (!_noSpawnMode && inst.group.position.z > -4 && inst.group.position.z < 5) {
+        const sx  = (state && state.shipX) || 0;
+        const dx  = Math.abs(inst.group.position.x - sx);
+        if (dx < inst.halfW) {
+          // Trigger death or shield-hit
+          if (typeof triggerDeath === 'function') triggerDeath();
+          else if (typeof window.triggerDeath === 'function') window.triggerDeath();
+          _killIce(inst);
+          continue;
+        }
+      }
+    }
+  }
+
+  // ── Spawn tick ────────────────────────────────────────────────────────────
+  function _tickIceSpawner(dt) {
+    if (!_ICE.enabled) return;
+    if (_noSpawnMode && !_chaosMode) return;
+
+    _iceTimer -= dt;
+    if (_iceTimer <= 0) {
+      _iceTimer = _ICE.frequency * (0.75 + Math.random() * 0.5);
+
+      if (_ICE.pattern === 'salvo') {
+        const count = Math.max(1, Math.round(_ICE.salvoCount));
+        const sx    = (state && state.shipX) || 0;
+        const half  = (_ICE.laneMax - _ICE.laneMin) * 0.45;
+        for (let si = 0; si < count; si++) {
+          const frac = count === 1 ? 0.5 : si / (count - 1);
+          _spawnIce(sx + (frac - 0.5) * half * 2);
+        }
+      } else {
+        _spawnIce(_iceNextX());
+      }
+    }
+  }
+
+  // ── Hook into composer.render (same chaining pattern as asteroids/lightning)
+  const _iceOrigRender = composer.render.bind(composer);
+  let   _iceLastTime   = performance.now();
+  composer.render = function(...args) {
+    const now = performance.now();
+    const dt  = Math.min((now - _iceLastTime) * 0.001, 0.05);
+    _iceLastTime = now;
+    if (state.phase === 'playing' && !state.introActive &&
+        (state._tutorialActive || _chaosMode)) {
+      _tickIceSpawner(dt);
+    }
+    _updateIce(dt);
+    _iceOrigRender(...args);
+  };
+
+  // ── Expose for external systems ────────────────────────────────────────────
+  window._ICE        = _ICE;
+  window._spawnIce   = _spawnIce;
+  window._clearAllIce = _clearAllIce;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  ICE TUNER PANEL  (key = 'C')
+  // ═══════════════════════════════════════════════════════════════════════════
+  const panel = document.createElement('div');
+  panel.id = 'ice-tuner';
+  panel.style.cssText = 'display:none;position:fixed;top:0;right:270px;width:260px;height:100%;background:rgba(0,0,0,0.93);overflow-y:auto;z-index:99999;font-family:monospace;font-size:11px;color:#ccc;padding:8px;box-sizing:border-box;-webkit-overflow-scrolling:touch;border-left:1px solid #6cf;';
+  document.body.appendChild(panel);
+
+  function mkS(label, val, min, max, step, fn, color) {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin:3px 0;display:flex;align-items:center;gap:4px;';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'width:120px;color:' + (color || '#6cf') + ';font-size:10px;flex-shrink:0;';
+    lbl.textContent = label;
+    const inp = document.createElement('input');
+    inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step; inp.value = val;
+    inp.style.cssText = 'flex:1;height:14px;accent-color:' + (color || '#6cf') + ';';
+    const vEl = document.createElement('span');
+    vEl.style.cssText = 'width:38px;text-align:right;font-size:10px;color:#fff;';
+    vEl.textContent = (+val).toFixed(2);
+    inp.addEventListener('input', () => { const v = parseFloat(inp.value); vEl.textContent = v.toFixed(2); fn(v); });
+    row.appendChild(lbl); row.appendChild(inp); row.appendChild(vEl);
+    return row;
+  }
+
+  function mkH(text, color) {
+    const h = document.createElement('div');
+    h.style.cssText = 'margin:10px 0 4px;font-size:11px;font-weight:bold;color:' + (color || '#6cf') + ';border-bottom:1px solid #336;padding-bottom:2px;';
+    h.textContent = text;
+    return h;
+  }
+
+  function mkT(label, getter, setter, color) {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:8px;';
+    const btn = document.createElement('button');
+    btn.style.cssText = 'background:none;border:1px solid ' + (color || '#6cf') + ';color:' + (color || '#6cf') + ';padding:3px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;';
+    const refresh = () => { btn.textContent = label + ': ' + (getter() ? 'ON' : 'OFF'); btn.style.opacity = getter() ? '1' : '0.5'; };
+    btn.onclick = () => { setter(!getter()); refresh(); };
+    refresh();
+    row.appendChild(btn);
+    return row;
+  }
+
+  function mkSel(label, options, getter, setter, color) {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'color:' + (color || '#6cf') + ';font-size:10px;width:120px;flex-shrink:0;';
+    lbl.textContent = label;
+    const sel = document.createElement('select');
+    sel.style.cssText = 'flex:1;background:#111;color:#fff;border:1px solid #6cf;font-family:monospace;font-size:10px;padding:2px;';
+    options.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o; opt.textContent = o;
+      if (o === getter()) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.onchange = () => setter(sel.value);
+    row.appendChild(lbl); row.appendChild(sel);
+    return row;
+  }
+
+  function build() {
+    panel.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#6cf;margin-bottom:6px;">🧊 ICE TUNER (C)</div>';
+
+    // MASTER
+    panel.appendChild(mkH('MASTER', '#6cf'));
+    panel.appendChild(mkT('ENABLED', () => _ICE.enabled, v => {
+      _ICE.enabled = v;
+      if (!v) _clearAllIce();
+      else _iceTimer = 0.5;
+    }, '#6cf'));
+
+    // SPAWN
+    panel.appendChild(mkH('SPAWN', '#8df'));
+    panel.appendChild(mkS('frequency (s)', _ICE.frequency, 0.5, 20, 0.1, v => _ICE.frequency = v));
+    panel.appendChild(mkSel('pattern', ['random', 'sweep', 'stagger', 'salvo'],
+      () => _ICE.pattern, v => { _ICE.pattern = v; _iceSweepX = 0.5; _iceStaggerQ.length = 0; }));
+    panel.appendChild(mkS('sweep speed', _ICE.sweepSpeed, 0.02, 1.5, 0.01, v => _ICE.sweepSpeed = v));
+    panel.appendChild(mkS('stagger gap', _ICE.staggerGap, 0.2, 5.0, 0.1, v => _ICE.staggerGap = v));
+    panel.appendChild(mkS('salvo count', _ICE.salvoCount, 1, 6, 1, v => _ICE.salvoCount = Math.round(v)));
+    panel.appendChild(mkS('spawn Z', _ICE.spawnZ, -200, -30, 1, v => _ICE.spawnZ = v));
+    panel.appendChild(mkS('lane min X', _ICE.laneMin, -20, 0, 0.5, v => _ICE.laneMin = v));
+    panel.appendChild(mkS('lane max X', _ICE.laneMax, 0, 20, 0.5, v => _ICE.laneMax = v));
+
+    // SIZE
+    panel.appendChild(mkH('SIZE', '#aef'));
+    panel.appendChild(mkS('size min', _ICE.sizeMin, 0.5, 8, 0.1, v => _ICE.sizeMin = v));
+    panel.appendChild(mkS('size max', _ICE.sizeMax, 1.0, 14, 0.1, v => _ICE.sizeMax = v));
+    panel.appendChild(mkS('hitbox scale', _ICE.hitboxScale, 0.1, 1.0, 0.01, v => _ICE.hitboxScale = v));
+
+    // MATERIAL
+    panel.appendChild(mkH('MATERIAL', '#9cf'));
+    panel.appendChild(mkS('transmission', _ICE.transmission, 0, 1, 0.01, v => {
+      _ICE.transmission = v;
+      _icePool.forEach(inst => { inst.mat.transmission = v; inst.mat2.transmission = v; inst.mat.needsUpdate = true; inst.mat2.needsUpdate = true; });
+    }));
+    panel.appendChild(mkS('roughness', _ICE.roughness, 0, 1, 0.01, v => {
+      _ICE.roughness = v;
+      _icePool.forEach(inst => { inst.mat.roughness = v; inst.mat2.roughness = v; });
+    }));
+    panel.appendChild(mkS('IOR', _ICE.ior, 1.0, 2.5, 0.01, v => {
+      _ICE.ior = v;
+      _icePool.forEach(inst => { inst.mat.ior = v; inst.mat2.ior = v; inst.mat.needsUpdate = true; inst.mat2.needsUpdate = true; });
+    }));
+    panel.appendChild(mkS('thickness', _ICE.thickness, 0.5, 20, 0.5, v => {
+      _ICE.thickness = v;
+      _icePool.forEach(inst => { inst.mat.thickness = v; inst.mat2.thickness = v; });
+    }));
+    panel.appendChild(mkS('emissive intensity', _ICE.emissiveIntensity, 0, 1, 0.01, v => {
+      _ICE.emissiveIntensity = v;
+      _icePool.forEach(inst => { inst.mat.emissiveIntensity = v; inst.mat2.emissiveIntensity = v; });
+    }));
+
+    // ACTIONS
+    panel.appendChild(mkH('ACTIONS', '#0f8'));
+    const spawnBtn = document.createElement('button');
+    spawnBtn.textContent = '▼ SPAWN ONE';
+    spawnBtn.style.cssText = 'background:#062;border:1px solid #0f8;color:#0f8;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:3px 0;width:100%;';
+    spawnBtn.onclick = () => {
+      if (state.phase !== 'playing') state.phase = 'playing';
+      _spawnIce((state && state.shipX) || 0);
+    };
+    panel.appendChild(spawnBtn);
+
+    const clearBtn = document.createElement('button');
+    clearBtn.textContent = '✕ CLEAR ALL';
+    clearBtn.style.cssText = 'background:#300;border:1px solid #f44;color:#f44;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:3px 0;width:100%;';
+    clearBtn.onclick = () => _clearAllIce();
+    panel.appendChild(clearBtn);
+
+    // Active count
+    const cEl = document.createElement('div');
+    cEl.style.cssText = 'margin-top:6px;color:#888;font-size:10px;';
+    const rc = () => { cEl.textContent = 'active: ' + _iceActive.length; };
+    rc();
+    setInterval(rc, 500);
+    panel.appendChild(cEl);
+  }
+
+  let visible = false;
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'c' || e.key === 'C') {
+      visible = !visible;
+      if (visible) { build(); panel.style.display = 'block'; }
+      else panel.style.display = 'none';
+    }
+  });
+
+})();
