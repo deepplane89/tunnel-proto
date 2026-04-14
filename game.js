@@ -21509,3 +21509,362 @@ window._jlDebug = {
   });
 
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  FAT CONE TUNER PANEL  (key = 'F')
+//  Spawns massive cones (scale 12,1,12) — same pool as campaign cones.
+//  Has loop mode identical to asteroid/lightning tuners.
+// ═══════════════════════════════════════════════════════════════════════════════
+(function setupFatConeTuner() {
+  // ── Tuner state ─────────────────────────────────────────────────────────────
+  const FCT = {
+    enabled:   false,
+    frequency: 4.0,    // seconds between spawns (auto-loop)
+    scaleXZ:   12,     // cone footprint scale (Y always 1)
+    laneMin:  -10,
+    laneMax:   10,
+    spreadAroundShip: 8, // ±X around ship for random placement
+    coneType: -1,       // -1 = random, 0/1/2 = specific mesh
+  };
+
+  let _fcLoopActive = false, _fcLoopTimer = null, _fcActiveBtn = null;
+
+  function _spawnFatCone() {
+    if (state.phase !== 'playing') return;
+    const type = FCT.coneType < 0 ? Math.floor(Math.random() * 3) : FCT.coneType;
+    const obs = getPooledObstacle(type);
+    if (!obs) return;
+    const spawnX = state.shipX + (Math.random() - 0.5) * FCT.spreadAroundShip * 2;
+    const clampedX = Math.max(FCT.laneMin, Math.min(FCT.laneMax, spawnX));
+    obs.position.set(clampedX, 0, SPAWN_Z);
+    obs.scale.set(FCT.scaleXZ, 1, FCT.scaleXZ);
+    obs.userData.velX         = 0;
+    obs.userData.slalomScaled = true;
+    obs.userData.isFatCone    = true;
+    activeObstacles.push(obs);
+    _sessionLogEvent('fatCone_spawn', { x: clampedX, scaleXZ: FCT.scaleXZ });
+  }
+
+  function _startFcLoop(btn) {
+    _stopFcLoop();
+    _fcLoopActive = true;
+    _fcActiveBtn = btn;
+    btn.style.opacity = '1';
+    btn.style.background = '#1a1a00';
+    function loop() {
+      if (!_fcLoopActive) return;
+      _spawnFatCone();
+      _fcLoopTimer = setTimeout(loop, FCT.frequency * 1000 * (0.7 + Math.random() * 0.6));
+    }
+    loop();
+  }
+
+  function _stopFcLoop() {
+    _fcLoopActive = false;
+    if (_fcLoopTimer) { clearTimeout(_fcLoopTimer); _fcLoopTimer = null; }
+    if (_fcActiveBtn) { _fcActiveBtn.style.opacity = '0.7'; _fcActiveBtn.style.background = 'none'; _fcActiveBtn = null; }
+  }
+
+  // ── Panel ──────────────────────────────────────────────────────────────────
+  const panel = document.createElement('div');
+  panel.id = 'fatcone-tuner';
+  panel.style.cssText = 'display:none;position:fixed;top:0;right:0;width:270px;height:100%;background:rgba(0,0,0,0.93);overflow-y:auto;z-index:99999;font-family:monospace;font-size:11px;color:#ccc;padding:8px;box-sizing:border-box;-webkit-overflow-scrolling:touch;border-left:1px solid #f80;';
+  document.body.appendChild(panel);
+
+  function mkSlider(label, val, min, max, step, onChange, color) {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:4px;flex-wrap:wrap;';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'width:110px;color:'+(color||'#f80')+';font-size:10px;flex-shrink:0;';
+    lbl.textContent = label;
+    const inp = document.createElement('input');
+    inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=val;
+    inp.style.cssText = 'flex:1;height:14px;accent-color:'+(color||'#f80')+';';
+    const valEl = document.createElement('span');
+    valEl.style.cssText = 'width:36px;text-align:right;font-size:10px;color:#fff;';
+    valEl.textContent = (+val).toFixed(2);
+    inp.oninput = () => {
+      const v = +inp.value;
+      onChange(v);
+      valEl.textContent = v.toFixed(2);
+      _sessionLogSlider('fatcone_' + label, v);
+    };
+    row.appendChild(lbl); row.appendChild(inp); row.appendChild(valEl);
+    return row;
+  }
+
+  function mkH(text, color) {
+    const h = document.createElement('div');
+    h.style.cssText = 'margin:10px 0 4px;font-size:11px;font-weight:bold;color:'+(color||'#f80')+';border-bottom:1px solid #333;padding-bottom:2px;';
+    h.textContent = text;
+    return h;
+  }
+
+  function mkBtn(label, color, onClick) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.style.cssText = `background:none;border:1px solid ${color};color:${color};padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:2px 0;width:100%;text-align:left;opacity:0.7;transition:opacity 0.1s;`;
+    b.onclick = onClick;
+    return b;
+  }
+
+  function build() {
+    panel.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#f80;margin-bottom:6px;">🔺 FAT CONE TUNER (F)</div>';
+
+    panel.appendChild(mkH('SPAWN', '#f80'));
+
+    panel.appendChild(mkSlider('scale XZ', FCT.scaleXZ, 1, 30, 0.5, v => FCT.scaleXZ = v, '#f80'));
+    panel.appendChild(mkSlider('spread ±X', FCT.spreadAroundShip, 0, 20, 0.5, v => FCT.spreadAroundShip = v, '#fa0'));
+    panel.appendChild(mkSlider('lane min', FCT.laneMin, -25, 0, 0.5, v => FCT.laneMin = v, '#8df'));
+    panel.appendChild(mkSlider('lane max', FCT.laneMax, 0, 25, 0.5, v => FCT.laneMax = v, '#8df'));
+
+    const coneTypeSel = document.createElement('div');
+    coneTypeSel.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+    const ctLbl = document.createElement('span');
+    ctLbl.style.cssText = 'color:#f80;font-size:10px;width:110px;flex-shrink:0;';
+    ctLbl.textContent = 'cone type';
+    const ctSel = document.createElement('select');
+    ctSel.style.cssText = 'flex:1;background:#111;color:#fff;border:1px solid #f80;font-family:monospace;font-size:10px;padding:2px;';
+    [['random', -1],['type 0',0],['type 1',1],['type 2',2]].forEach(([lbl, val]) => {
+      const o = document.createElement('option'); o.value=val; o.textContent=lbl;
+      if (val === FCT.coneType) o.selected = true;
+      ctSel.appendChild(o);
+    });
+    ctSel.onchange = () => { FCT.coneType = +ctSel.value; };
+    coneTypeSel.appendChild(ctLbl); coneTypeSel.appendChild(ctSel);
+    panel.appendChild(coneTypeSel);
+
+    // Manual spawn
+    const spawnBtn = mkBtn('▼ SPAWN ONE', '#f80', _spawnFatCone);
+    spawnBtn.style.opacity = '1';
+    spawnBtn.style.marginTop = '6px';
+    panel.appendChild(spawnBtn);
+
+    panel.appendChild(mkH('LOOP', '#fa0'));
+    panel.appendChild(mkSlider('frequency (s)', FCT.frequency, 0.3, 20, 0.1, v => FCT.frequency = v, '#fa0'));
+
+    const loopBtn = mkBtn('▶ START LOOP', '#fa0', () => _startFcLoop(loopBtn));
+    panel.appendChild(loopBtn);
+
+    const stopBtn = document.createElement('button');
+    stopBtn.textContent = '⏹ STOP LOOP';
+    stopBtn.style.cssText = 'background:#222;border:1px solid #888;color:#aaa;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:4px 0 2px;width:100%;';
+    stopBtn.onclick = _stopFcLoop;
+    panel.appendChild(stopBtn);
+
+    const clearBtn = mkBtn('✕ CLEAR ALL CONES', '#f44', () => {
+      _stopFcLoop();
+      for (let i = activeObstacles.length - 1; i >= 0; i--) {
+        if (activeObstacles[i].userData.isFatCone) {
+          const o = activeObstacles.splice(i, 1)[0];
+          scene.remove(o);
+        }
+      }
+    });
+    panel.appendChild(clearBtn);
+
+    const countEl = document.createElement('div');
+    countEl.style.cssText = 'margin-top:6px;color:#888;font-size:10px;';
+    const refreshCount = () => {
+      const n = activeObstacles.filter(o => o.userData.isFatCone).length;
+      countEl.textContent = 'fat cones active: ' + n;
+    };
+    refreshCount();
+    setInterval(refreshCount, 500);
+    panel.appendChild(countEl);
+  }
+
+  let _fcVisible = false;
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'f' || e.key === 'F') {
+      _fcVisible = !_fcVisible;
+      if (_fcVisible) { build(); panel.style.display = 'block'; }
+      else panel.style.display = 'none';
+    }
+  });
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SESSION LOGGER
+//  Records slider changes, obstacle spawns, ship state snapshots.
+//  Start/Stop with 'L' key. Export with 'E' key while stopped.
+//  Designed to be pasted back to reconstruct a level.
+// ═══════════════════════════════════════════════════════════════════════════════
+(function setupSessionLogger() {
+  let _logActive  = false;
+  let _logEntries = [];
+  let _logStartT  = 0;
+  let _logSnapshotInterval = null;
+  let _logUi = null;
+
+  // Public hook — called by tuner sliders and spawners above
+  window._sessionLogSlider = function(name, value) {
+    if (!_logActive) return;
+    _logEntries.push({
+      t: +((performance.now() - _logStartT) / 1000).toFixed(2),
+      type: 'slider',
+      name, value,
+      shipX: +(state.shipX||0).toFixed(2),
+      speed:  +(state.speed||0).toFixed(1),
+    });
+  };
+
+  window._sessionLogEvent = function(type, data) {
+    if (!_logActive) return;
+    _logEntries.push({
+      t: +((performance.now() - _logStartT) / 1000).toFixed(2),
+      type,
+      ...data,
+      shipX: +(state.shipX||0).toFixed(2),
+      speed:  +(state.speed||0).toFixed(1),
+    });
+  };
+
+  function _snapshotScene() {
+    if (!_logActive || state.phase !== 'playing') return;
+    const astT = window._asteroidTuner || {};
+    const ltT  = window._LT || {};
+    _logEntries.push({
+      t: +((performance.now() - _logStartT) / 1000).toFixed(2),
+      type: 'snapshot',
+      shipX:     +(state.shipX||0).toFixed(2),
+      shipVelX:  +(state.shipVelX||0).toFixed(2),
+      speed:     +(state.speed||0).toFixed(1),
+      score:     state.score,
+      level:     (state.currentLevelIdx||0) + 1,
+      obstacles: activeObstacles.length,
+      ast: {
+        enabled: astT.enabled, pattern: astT.pattern,
+        freq: +(astT.frequency||0).toFixed(2),
+        size: +(astT.size||0).toFixed(2),
+        leadFactor: +(astT.leadFactor||0).toFixed(2),
+        staggerDual: astT.staggerDual,
+        salvoCount: astT.salvoCount,
+        laneMin: astT.laneMin, laneMax: astT.laneMax,
+      },
+      lt: {
+        enabled: ltT.enabled, pattern: ltT.pattern,
+        freq: +(ltT.frequency||0).toFixed(2),
+        staggerGap: +(ltT.staggerGap||0).toFixed(2),
+      },
+      physics: {
+        accelBase: typeof _accelBase !== 'undefined' ? _accelBase : null,
+        maxVelBase: typeof _maxVelBase !== 'undefined' ? _maxVelBase : null,
+      },
+    });
+  }
+
+  function _startLog() {
+    _logEntries = [];
+    _logStartT  = performance.now();
+    _logActive  = true;
+    // Snapshot every 5 seconds
+    _logSnapshotInterval = setInterval(_snapshotScene, 5000);
+    _updateLogUi();
+    // Log initial state
+    _sessionLogEvent('log_start', {
+      mode: state._jetLightningMode ? 'JetLightning' : state._tutorialActive ? 'Tutorial' : 'Campaign',
+    });
+  }
+
+  function _stopLog() {
+    _logActive = false;
+    clearInterval(_logSnapshotInterval);
+    _logSnapshotInterval = null;
+    _updateLogUi();
+  }
+
+  function _exportLog() {
+    if (_logEntries.length === 0) { alert('No log entries — start a session first.'); return; }
+    const json = JSON.stringify({ version: 1, entries: _logEntries }, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'jet-session-' + Date.now() + '.json';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function _updateLogUi() {
+    if (!_logUi) return;
+    const status = _logUi.querySelector('#log-status');
+    const startBtn = _logUi.querySelector('#log-start');
+    const stopBtn  = _logUi.querySelector('#log-stop');
+    if (_logActive) {
+      status.textContent = '● REC';
+      status.style.color = '#f44';
+      startBtn.style.opacity = '0.4';
+      stopBtn.style.opacity  = '1';
+    } else {
+      status.textContent = _logEntries.length > 0 ? '■ ' + _logEntries.length + ' events' : '○ idle';
+      status.style.color = _logEntries.length > 0 ? '#0f8' : '#888';
+      startBtn.style.opacity = '1';
+      stopBtn.style.opacity  = '0.4';
+    }
+  }
+
+  // ── Floating logger HUD (always visible during play) ─────────────────────
+  function _buildLogHud() {
+    _logUi = document.createElement('div');
+    _logUi.style.cssText = 'position:fixed;bottom:10px;left:10px;z-index:99998;font-family:monospace;font-size:10px;background:rgba(0,0,0,0.75);border:1px solid #333;padding:5px 8px;border-radius:3px;display:flex;align-items:center;gap:8px;';
+
+    const title = document.createElement('span');
+    title.style.cssText = 'color:#888;';
+    title.textContent = 'LOG';
+    _logUi.appendChild(title);
+
+    const status = document.createElement('span');
+    status.id = 'log-status';
+    status.style.cssText = 'color:#888;min-width:80px;';
+    status.textContent = '○ idle';
+    _logUi.appendChild(status);
+
+    const startBtn = document.createElement('button');
+    startBtn.id = 'log-start';
+    startBtn.textContent = '● REC';
+    startBtn.style.cssText = 'background:none;border:1px solid #f44;color:#f44;padding:2px 6px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;';
+    startBtn.onclick = () => { if (!_logActive) _startLog(); };
+    _logUi.appendChild(startBtn);
+
+    const stopBtn = document.createElement('button');
+    stopBtn.id = 'log-stop';
+    stopBtn.textContent = '■ STOP';
+    stopBtn.style.cssText = 'background:none;border:1px solid #888;color:#888;padding:2px 6px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;opacity:0.4;';
+    stopBtn.onclick = () => { if (_logActive) _stopLog(); };
+    _logUi.appendChild(stopBtn);
+
+    const expBtn = document.createElement('button');
+    expBtn.textContent = '⬇ EXPORT';
+    expBtn.style.cssText = 'background:none;border:1px solid #0f8;color:#0f8;padding:2px 6px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;';
+    expBtn.onclick = _exportLog;
+    _logUi.appendChild(expBtn);
+
+    document.body.appendChild(_logUi);
+  }
+
+  _buildLogHud();
+
+  // L = toggle log, E = export
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'l' || e.key === 'L') { _logActive ? _stopLog() : _startLog(); }
+    if ((e.key === 'e' || e.key === 'E') && !_logActive) _exportLog();
+  });
+
+  // Hook into existing tuner sliders — patch slider oninput to also log
+  // (asteroid tuner already calls _sessionLogSlider via FCT — wire the existing ones too)
+  // We do this after a short delay so all panels are built
+  setTimeout(() => {
+    document.querySelectorAll('#asteroid-tuner input[type=range], #lightning-tuner input[type=range], #ice-tuner input[type=range]').forEach(inp => {
+      const orig = inp.oninput;
+      if (!orig) return;
+      inp.oninput = function(ev) {
+        orig.call(this, ev);
+        const label = inp.closest('[style*="display:flex"]')?.querySelector('span')?.textContent || 'unknown';
+        _sessionLogSlider(label, +inp.value);
+      };
+    });
+  }, 3000);
+})();
