@@ -486,15 +486,15 @@ const HANDLING_UPGRADE_KEY = 'jetslide_handling_claimed';
 
 let _handlingDriftOverride = -1; // -1 = use player level, 0-1 = tuner override
 // ── Ship physics tuner overrides (-1 = use formula) ──
-let _accelBase       = 60;   // base ACCEL at L1
-let _accelSnap       = 100;   // extra ACCEL added at max level
+let _accelBase       = 22;   // base ACCEL at L1
+let _accelSnap       = 52;   // extra ACCEL added at max level
 let _physLevelOverride = -1; // -1 = use game level, 0-4 = force physics snap level (0=floaty L1, 4=crisp L5)
 let _accelDriftMult  = 4.0;  // unused — kept for tuner slider
 let _decelBasePct    = 0.02; // DECEL % at stock (long slide)
 let _decelFullPct    = 0.05; // DECEL % at full control (nice slide, stops cleanly)
 let _decelOppScale   = 1.0;  // unused — kept for tuner slider (always start at -1 = live)
-let _maxVelBase      = 18;    // lateral velocity cap at L1
-let _maxVelSnap      = 23;   // extra cap added at max level (total = _maxVelBase + _maxVelSnap at L5)
+let _maxVelBase      = 9;    // lateral velocity cap at L1
+let _maxVelSnap      = 13;   // extra cap added at max level (total = _maxVelBase + _maxVelSnap at L5)
 let _funFloorSpeed     = 1.0;  // speed multiplier applied at game start (1.0 = BASE_SPEED, 1.85 = L5)
 let _funFloorIntensity = 0.0;  // 0→1: scales asteroid + lightning frequency down at spawn (0=tuner defaults, 1=max chaos)
 function getHandlingDrift() {
@@ -6409,7 +6409,7 @@ let _pitchSmooth = 0;
 let _yawMax = 0.06;              // radians — nose turn into steering direction
 let _yawSmoothing = 4;           // higher = snappier yaw response
 let _yawSmooth = 0;
-let _bankMax = 0.04;             // bank multiplier (baked from tuner)
+let _bankMax = 0.03;             // bank multiplier (baked from tuner)
 let _bankSmoothing = 8;          // bank lerp speed (existing: 8)
 let _bankVelX = 0;               // smoothed velocity used for banking (decoupled from drift physics)
 let _wobbleMaxAmp = 0.05;        // max wobble amplitude (baked)
@@ -20620,35 +20620,36 @@ const _origUpdateShockwave = _updateShockwave;
   // ── Config object (mirrors _LT / _asteroidTuner structure) ─────────────────
   const _ICE = {
     enabled:      false,
-    frequency:    5.0,    // seconds between spawns
+    frequency:    3.0,    // seconds between spawns
     spawnZ:      -120,    // how far ahead chunks appear
     laneMin:     -10,
     laneMax:      10,
-    pattern:      'random',  // random | sweep | stagger | salvo
+    pattern:      'random',
     sweepSpeed:   0.25,
     staggerGap:   0.8,
     salvoCount:   2,
     // Size
-    sizeMin:      2.5,    // base XZ scale
-    sizeMax:      5.5,    // max XZ scale
-    heightMin:    4.0,    // base Y scale (how tall the glacier is)
-    heightMax:    9.0,    // max Y scale
+    sizeMin:      8.0,    // base XZ scale
+    sizeMax:      14.0,   // max XZ scale
+    heightMin:    6.0,    // base Y scale
+    heightMax:    14.0,   // max Y scale
+    baseY:       -1.2,    // Y offset at spawn — negative sinks into water
     // Material
-    transmission:      0.0,          // 0 = opaque rock, >0 = glassy/icy
-    roughness:         0.35,
-    metalness:         0.8,
+    transmission:      0.25,
+    roughness:         0.4,
+    metalness:         0.85,
     ior:               1.31,
     thickness:         6.0,
-    emissiveIntensity: 1.6,
-    // Style (drives chunk texture rebuild)
-    chunkStyle:        'cracks',      // 'cracks' | 'grid' | 'both' | 'clean'
-    chunkBaseColor:    '#060d1a',
+    emissiveIntensity: 4.0,
+    // Style
+    chunkStyle:        'grid',
+    chunkBaseColor:    '#ffffff',
     chunkCrackColor:   '#ff00cc',
     chunkGridColor:    '#00eeff',
     chunkGridOpacity:  0.55,
-    chunkEmissiveColor:'#003366',
+    chunkEmissiveColor:'#003060',
     // Hitbox
-    hitboxScale:  0.72,   // fraction of slab half-width that kills
+    hitboxScale:  0.72,
   };
 
   const _ICE_POOL_SIZE = 8;
@@ -20891,7 +20892,7 @@ const _origUpdateShockwave = _updateShockwave;
     // World-space Z: ahead of ship (shipGroup.position.z is always 3.9 — world scrolls)
     const shipZ  = (typeof shipGroup !== 'undefined' && shipGroup) ? shipGroup.position.z : 3.9;
     const spawnZ = shipZ + _ICE.spawnZ;
-    inst.group.position.set(targetX, 0.14, spawnZ);
+    inst.group.position.set(targetX, _ICE.baseY, spawnZ);
     inst.group.visible = true;
     inst.light.intensity = 0.6;
     inst.elapsed = 0;
@@ -20926,7 +20927,7 @@ const _origUpdateShockwave = _updateShockwave;
       inst.group.position.z += scrollSpeed * dt;
 
       // Gentle bob on water
-      inst.group.position.y = 0.14 + Math.sin(inst.elapsed * 0.9 + i) * 0.06;
+      inst.group.position.y = _ICE.baseY + Math.sin(inst.elapsed * 0.9 + i) * 0.06;
 
       // Despawn behind ship
       if (inst.group.position.z > 8) {
