@@ -19688,8 +19688,8 @@ function _killAsteroid(inst, impact) {
       const dz = shipGroup.position.z - az;
       const dist = Math.sqrt(dx*dx + dz*dz);
       if (dist < _asteroidTuner.killRadius * inst.radius) {
-        if (state._tutorialActive) {
-          // Tutorial: play shield-hit sound as hit confirmation, no death
+        if (state._tutorialActive || _godMode) {
+          // Tutorial / god mode: play shield-hit sound, no death
           const _shHitSfx = document.getElementById('shield-hit-sfx');
           if (_shHitSfx) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
           addCrashFlash(0xff4400);
@@ -20447,6 +20447,7 @@ function startJetLightning() {
 
 let _jlIntensity  = 1.0; // frequency scalar — 1.0 = approved baseline, locked until you ramp
 let _jlSizeScalar = 1.0; // size scalar — 1.0 = approved baseline
+let _godMode      = false; // no damage — plays shield-hit sound on hit instead of killing
 
 // ── Track definitions — drop new obstacles in here as config objects ──────────
 const _JL_TRACKS = [
@@ -20661,7 +20662,7 @@ function _tickJetLightningRamp(dt) {
 (function setupJLSequencerPanel() {
   const panel = document.createElement('div');
   panel.id = 'jl-seq-panel';
-  panel.style.cssText = 'display:none;position:fixed;top:0;left:50%;transform:translateX(-50%);width:320px;max-height:100%;background:rgba(0,0,0,0.93);overflow-y:auto;z-index:99999;font-family:monospace;font-size:11px;color:#ccc;padding:10px;box-sizing:border-box;border:1px solid #fa0;border-top:none;';
+  panel.style.cssText = 'display:none;position:fixed;top:0;right:0;width:320px;max-height:100%;background:rgba(0,0,0,0.93);overflow-y:auto;z-index:99999;font-family:monospace;font-size:11px;color:#ccc;padding:10px;box-sizing:border-box;border:1px solid #fa0;border-top:none;border-right:none;';
   document.body.appendChild(panel);
 
   function mkH(text, color) {
@@ -20696,6 +20697,17 @@ function _tickJetLightningRamp(dt) {
 
   function build() {
     panel.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#fa0;margin-bottom:6px;">⚡ JL SEQUENCER (Q)</div>';
+
+    // ── God mode toggle
+    const godBtn = mkBtn(_godMode ? '☑ GOD MODE  (no damage)' : '☐ GOD MODE  (no damage)', _godMode ? '#0f0' : '#555', () => {
+      _godMode = !_godMode;
+      godBtn.textContent = _godMode ? '☑ GOD MODE  (no damage)' : '☐ GOD MODE  (no damage)';
+      godBtn.style.color  = _godMode ? '#0f0' : '#555';
+      godBtn.style.borderColor = _godMode ? '#0f0' : '#555';
+    });
+    godBtn.style.width = '100%';
+    godBtn.style.marginBottom = '6px';
+    panel.appendChild(godBtn);
 
     // ── Global scalars
     panel.appendChild(mkH('SCALARS'));
@@ -21145,7 +21157,7 @@ window._jlDebug = {
           if (Math.abs(dx) < (_LT.glowRadius * _LT.hitboxScale) && dz < 6) {
                     const _ltHitSfx = document.getElementById('shield-hit-sfx');
             if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
-            if (state._tutorialActive) addCrashFlash(0x4488ff);
+            if (state._tutorialActive || _godMode) addCrashFlash(0x4488ff);
             else killPlayer();
           }
         }
@@ -21180,7 +21192,7 @@ window._jlDebug = {
             inst.hitChecked = true;
                     const _ltHitSfx = document.getElementById('shield-hit-sfx');
             if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
-            if (state._tutorialActive) addCrashFlash(0x4488ff);
+            if (state._tutorialActive || _godMode) addCrashFlash(0x4488ff);
             else killPlayer();
           }
           if (!near) inst.hitChecked = false;
@@ -21614,9 +21626,15 @@ window._jlDebug = {
         const sx  = (state && state.shipX) || 0;
         const dx  = Math.abs(inst.group.position.x - sx);
         if (dx < inst.halfW) {
-          // Trigger death or shield-hit
-          if (typeof triggerDeath === 'function') triggerDeath();
-          else if (typeof window.triggerDeath === 'function') window.triggerDeath();
+          if (_godMode) {
+            // God mode: shield-hit sound, no death
+            const _shHitSfx = document.getElementById('shield-hit-sfx');
+            if (_shHitSfx) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
+            addCrashFlash(0xff4400);
+          } else {
+            if (typeof triggerDeath === 'function') triggerDeath();
+            else if (typeof window.triggerDeath === 'function') window.triggerDeath();
+          }
           _killIce(inst);
           continue;
         }
