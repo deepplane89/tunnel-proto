@@ -20457,19 +20457,37 @@ function _tickJetLightningRamp(dt) {
     }
   }
 
-  // Phase 1 (0-45s): Asteroids only — locked at approved session values, no ramp
+  // Phase 1a (0-45s): Asteroid stagger — approved: freq=1.4, gap=0.6, salvo=1, size=1.2
   if (t < 45) {
     T.enabled    = true;
     T.leadFactor = 0.0;
     T.frequency  = 1.4;
     T.staggerGap = 0.6;
     T.salvoCount = 1;
+    T.size       = 1.2;
+    T.sizeVariance = 0.55;
+    T.laneMin    = -8;
+    T.laneMax    =  8;
     T.pattern    = 'stagger';
     if (window._LT) window._LT.enabled = false;
   }
 
-  // Phase 2 (45-120s): Lightning only — locked at approved session values, no ramp
-  if (t >= 45 && t < 120) {
+  // Phase 1b (45-90s): Asteroid salvo — approved: freq=0.5, salvo=4, size=1.35, lanes=-6.5/7.5
+  if (t >= 45 && t < 90) {
+    T.enabled    = true;
+    T.leadFactor = 0.0;
+    T.frequency  = 0.5;
+    T.salvoCount = 4;
+    T.size       = 1.35;
+    T.sizeVariance = 0.55;
+    T.laneMin    = -6.5;
+    T.laneMax    =  7.5;
+    T.pattern    = 'salvo';
+    if (window._LT) window._LT.enabled = false;
+  }
+
+  // Phase 2 (90-165s): Lightning only — approved: freq=0.3, stagger
+  if (t >= 90 && t < 165) {
     T.enabled = false;
     if (window._LT) {
       window._LT.enabled    = true;
@@ -20481,13 +20499,17 @@ function _tickJetLightningRamp(dt) {
     }
   }
 
-  // Phase 3 (120s+): Both combined — locked at approved values
-  if (t >= 120) {
+  // Phase 3 (165s+): All combined — asteroid stagger + lightning stagger
+  if (t >= 165) {
     T.enabled    = true;
     T.leadFactor = 0.0;
     T.frequency  = 1.4;
     T.staggerGap = 0.6;
     T.salvoCount = 1;
+    T.size       = 1.2;
+    T.sizeVariance = 0.55;
+    T.laneMin    = -8;
+    T.laneMax    =  8;
     T.pattern    = 'stagger';
     if (window._LT) {
       window._LT.enabled    = true;
