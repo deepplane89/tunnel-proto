@@ -19342,27 +19342,19 @@ for (let _ai = 0; _ai < _AST_POOL_SIZE; _ai++) _asteroidPool.push(_buildAsteroid
 // so the first real asteroid doesn't cause a hitch. We render each mesh once
 // at an off-screen position using renderer.compile().
 (function _preWarmAsteroidShaders() {
-  // Collect all unique materials from the pool
-  const _warmMats = new Set();
-  for (const inst of _asteroidPool) {
-    _warmMats.add(inst.rockMesh.material);
-    _warmMats.add(inst.fireMesh.material);
-    _warmMats.add(inst.tailPts.material);
-    _warmMats.add(inst.warnMat);
-  }
-  // Use renderer.compile() on a temporary scene containing one of each mesh
-  // so the GPU driver compiles all GLSL programs now, not at first draw.
+  // Compile all pool instance materials directly in a temporary scene.
+  // Each ShaderMaterial has its own uniform block so we must compile each one,
+  // not just clones of instance 0.
   const _warmScene = new THREE.Scene();
   const _warmCam   = new THREE.PerspectiveCamera();
-  const _inst0 = _asteroidPool[0];
-  // Temporarily add to warm scene (won't affect main scene)
-  _warmScene.add(_inst0.rockMesh.clone());
-  _warmScene.add(_inst0.fireMesh.clone());
-  _warmScene.add(_inst0.tailPts.clone());
-  _warmScene.add(_inst0.warnMesh.clone());
+  for (const inst of _asteroidPool) {
+    _warmScene.add(inst.group); // add real group to force compile
+  }
   try { renderer.compile(_warmScene, _warmCam); } catch(e) {}
-  // Dispose warm scene children (clones only)
-  _warmScene.children.forEach(c => { if (c.geometry) c.geometry.dispose(); });
+  // Remove from warm scene — they'll be added to main scene on first spawn
+  for (const inst of _asteroidPool) {
+    _warmScene.remove(inst.group);
+  }
 })();
 
 // ── Helper: get free instance from pool ──────────────────────────────────────
@@ -19471,8 +19463,8 @@ function _killAsteroid(inst, impact) {
   if (impact) {
     // Water shockwave at landing point
     _triggerShockwave(new THREE.Vector3(inst.landingX, 0.5, inst.landingZ));
-    // Burst wake rings
-    for (let ri = 0; ri < 8; ri++) {
+    // Burst wake rings (capped at 3 to avoid frame hitch)
+    for (let ri = 0; ri < 3; ri++) {
       spawnWakeRing(
         inst.landingX + (Math.random()-0.5)*inst.radius,
         inst.landingZ + (Math.random()-0.5)*inst.radius,
@@ -19480,7 +19472,6 @@ function _killAsteroid(inst, impact) {
       );
     }
     // Kill check: use asteroid's ACTUAL world position at impact, not pre-stored landing coords.
-    // This is accurate even if the asteroid drifts slightly from the planned trajectory.
     if (state.phase === 'playing') {
       const ax = inst.group.position.x;
       const az = inst.group.position.z;
@@ -19488,7 +19479,14 @@ function _killAsteroid(inst, impact) {
       const dz = shipGroup.position.z - az;
       const dist = Math.sqrt(dx*dx + dz*dz);
       if (dist < _asteroidTuner.killRadius * inst.radius) {
-        killPlayer();
+        if (state._tutorialActive) {
+          // Tutorial: play shield-hit sound as hit confirmation, no death
+          const _shHitSfx = document.getElementById('shield-hit-sfx');
+          if (_shHitSfx) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
+          addCrashFlash(0xff4400);
+        } else {
+          killPlayer();
+        }
       }
     }
     // Flash the warning disc briefly (already hidden but trigger shockwave covers it)
@@ -19845,6 +19843,7 @@ const _origUpdateShockwave = _updateShockwave;
       btn.style.outline = `2px solid ${color}`;
       btn.style.opacity = '0.75';
       if (state.phase !== 'playing') state.phase = 'playing';
+      state._tutorialActive = true; // suppress prologue while pattern loop is running
       let cancelled = false;
       _activePatternCancelFn = () => { cancelled = true; };
       const scheduleNext = () => {
@@ -19868,6 +19867,7 @@ const _origUpdateShockwave = _updateShockwave;
       btn.style.outline = '2px solid #f84';
       btn.style.opacity = '0.75';
       if (state.phase !== 'playing') state.phase = 'playing';
+      state._tutorialActive = true; // suppress prologue while pattern loop is running
       const rampOrigin = (state.elapsed || 0);
       const chaseTick = () => {
         // Fire a burst of 3: mirror shot + one flanking on each side to force real movement
