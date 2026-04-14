@@ -7029,20 +7029,20 @@ for (let i = 0; i < OBSTACLE_POOL_SIZE; i++) {
 //  TERRAIN WALLS — vaporwave mountain ridges on both sides
 // ═══════════════════════════════════════════════════
 const _terrainTuner = {
-  width:     60,    // how wide each terrain strip is (X)
+  width:     120,   // how wide each terrain strip is (X)
   length:    400,   // how long (Z) — needs to tile seamlessly
   segsX:     24,    // grid subdivisions across width
   segsZ:     80,    // grid subdivisions along length
-  xOffset:   30,    // center of terrain strip from road center
-  peakHeight: 12,   // max mountain peak height
-  baseY:     -0.5,  // Y position (slightly below water)
-  metalness: 0.96,
+  xOffset:   60,    // center of terrain strip from road center
+  peakHeight: 40,   // max mountain peak height
+  baseY:     -3,    // Y position (slightly below water)
+  metalness: 1.0,
   roughness: 0.45,
   scrollSpeed: 1.0, // multiplier of game speed
-  gridColor: '#00eeff',
+  gridColor: '#00ffff',
   gridOpacity: 1.0,
-  baseColor: '#0a0a18',
-  emissiveHex: '#00eeff',
+  baseColor: '#ffffff',
+  emissiveHex: '#00ffff',
   emissiveIntensity: 0.7, // grid line glow brightness
 };
 let _terrainWalls = null; // { left, right, mat, gridTex, shaderRef }
@@ -18624,14 +18624,14 @@ function buildSkinTunerSliders() {
   document.body.appendChild(panel);
 
   const sliders = [
-    { key: 'width',      label: 'Width',       min: 20, max: 120, step: 2 },
-    { key: 'xOffset',    label: 'X Offset',    min: 15, max: 60,  step: 1 },
-    { key: 'peakHeight', label: 'Peak Height',  min: 2,  max: 40,  step: 1 },
-    { key: 'baseY',      label: 'Base Y',       min: -3, max: 1,   step: 0.1 },
-    { key: 'metalness',  label: 'Metalness',    min: 0,  max: 1,   step: 0.02 },
-    { key: 'roughness',  label: 'Roughness',    min: 0,  max: 1,   step: 0.02 },
-    { key: 'gridOpacity',label: 'Grid Opacity',  min: 0, max: 1,   step: 0.05 },
-    { key: 'emissiveIntensity', label: 'Emissive', min: 0, max: 1, step: 0.02 },
+    { key: 'width',      label: 'Width',       min: 20,  max: 400,  step: 2 },
+    { key: 'xOffset',    label: 'X Offset',    min: 0,   max: 200,  step: 1 },
+    { key: 'peakHeight', label: 'Peak Height',  min: 2,  max: 200,  step: 1 },
+    { key: 'baseY',      label: 'Base Y',       min: -30, max: 20,  step: 0.5 },
+    { key: 'metalness',  label: 'Metalness',    min: 0,  max: 1,    step: 0.02 },
+    { key: 'roughness',  label: 'Roughness',    min: 0,  max: 1,    step: 0.02 },
+    { key: 'gridOpacity',label: 'Grid Opacity',  min: 0, max: 1,    step: 0.05 },
+    { key: 'emissiveIntensity', label: 'Emissive', min: 0, max: 5,  step: 0.05 },
   ];
 
   function build() {
