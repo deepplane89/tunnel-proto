@@ -19027,7 +19027,7 @@ const _asteroidTuner = {
   enabled:        false,   // master on/off (tutorial only)
   size:           1.2,     // base radius (world units)
   sizeVariance:   0.4,     // ± random added to size
-  frequency:      6.0,     // seconds between spawns (per pattern unit)
+  frequency:      3.5,     // seconds between spawns (per pattern unit)
   speed:          73,      // travel speed (units/s along trajectory)
   leadFactor:     0.6,     // partial lead: 0=no lead (aim at current X), 1=perfect lead, 0.4=easy, 0.8=punishing
   skyHeight:      40,      // Y spawn height above water at the horizon
@@ -19054,8 +19054,8 @@ const _asteroidTuner = {
   pinchStep:      0.12,    // how much the pinch closes per tick (independent of sweepSpeed)
   pinchSpread:    1.0,     // arm spread multiplier: 1=full lane width, 0.5=half, 2=extra wide
   chaseFlank:     0.25,    // chase flank offset as fraction of lane range (0=no flanks, 0.5=wide)
-  staggerGap:     1.8,     // seconds between salvo/stagger drops
-  salvoCount:     3,       // how many simultaneous in a salvo
+  staggerGap:     0.8,     // seconds between stagger drops — tight enough to force movement
+  salvoCount:     5,       // how many shots in a stagger/salvo burst
   laneMin:        -8,      // leftmost lane X
   laneMax:         8,      // rightmost lane X
   warningTime:    1.8,     // seconds warning disc shows before impact
@@ -19447,7 +19447,6 @@ function _spawnAsteroid(targetX) {
   // Warning disc at landing point (hidden until asteroid fades in enough)
   const warnRadius = Math.max(3.0, radius * 2.5);
   inst.warnMesh.position.set(landX, 0.12, landZ);
-  console.log('[SPAWN] targetX='+targetX.toFixed(2)+' landX='+landX.toFixed(2)+' shipX='+((state&&state.shipX)||0).toFixed(2)+' warnZ='+landZ.toFixed(2));
   inst.warnMesh.scale.setScalar(warnRadius);
   inst.warnMesh.visible = false; // shown once fadeT > 0.3
   inst.warnMat.uniforms.uProgress.value = 0;
@@ -19839,9 +19838,7 @@ const _origUpdateShockwave = _updateShockwave;
     spawnBtn.style.cssText = 'background:#060;border:1px solid #0f8;color:#0f8;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:3px 0;width:100%;';
     spawnBtn.onclick = () => {
       if (state.phase !== 'playing') state.phase = 'playing';
-      const _sx = (state && state.shipX) || 0;
-      console.log('[ONE] state.shipX='+_sx+' shipGroup.x='+shipGroup.position.x.toFixed(2));
-      _spawnAsteroid(_sx);
+      _spawnAsteroid((state && state.shipX) || 0);
     };
     panel.appendChild(spawnBtn);
 
@@ -19935,11 +19932,12 @@ const _origUpdateShockwave = _updateShockwave;
         label: '▼▼ RANDOM (loop)',
         color: '#0f8',
         tick: () => {
-          const sx = state.shipX;
+          // re-read shipX at each fire time so delayed shots still track
           const half = (T.laneMax - T.laneMin) * 0.5;
-          const targets = Array.from({ length: 4 }, () =>
-            sx + (Math.random() - 0.5) * half * 2.5);
-          _burstSpawn(targets, 350);
+          const offsets = Array.from({ length: 4 }, () => (Math.random() - 0.5) * half * 2.5);
+          offsets.forEach((off, i) => {
+            setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(state.shipX + off); }, i * 350);
+          });
         },
       },
       {
@@ -19947,17 +19945,16 @@ const _origUpdateShockwave = _updateShockwave;
         label: '►◄ SWEEP (loop)',
         color: '#0df',
         tick: () => {
-          const sx = state.shipX;
           const range = T.laneMax - T.laneMin;
           const sweepOffset = (_astSweepX - 0.5) * range;
           _astSweepX += _astSweepDir * T.sweepSpeed * 0.35;
           if (_astSweepX >= 1 || _astSweepX <= 0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
           const waveSize = 5;
-          const targets = Array.from({ length: waveSize }, (_, i) => {
-            const frac = i / (waveSize - 1);
-            return sx + sweepOffset + (frac - 0.5) * range * 0.5;
+          // compute fracs now, re-read shipX at each fire time
+          const fracs = Array.from({ length: waveSize }, (_, i) => i / (waveSize - 1));
+          fracs.forEach((frac, i) => {
+            setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(state.shipX + sweepOffset + (frac - 0.5) * range * 0.5); }, i * 200);
           });
-          _burstSpawn(targets, 200);
         },
       },
       {
@@ -19994,16 +19991,10 @@ const _origUpdateShockwave = _updateShockwave;
         label: '▼ ▼▼ STAGGER (loop)',
         color: '#ff0',
         tick: () => {
-          const steps = 20; // stress-test: 20 shots
+          const steps = Math.max(2, Math.round(T.salvoCount));
           for (let si = 0; si < steps; si++) {
-            // full lock: fire directly at ship position at the moment each shot fires
-            setTimeout(() => {
-              if (state.phase === 'playing') {
-                const _sx = state.shipX;
-                console.log('[STAGGER #'+(si+1)+'/20] shipX='+_sx.toFixed(2)+' landX='+_sx.toFixed(2));
-                _spawnAsteroid(_sx);
-              }
-            }, si * T.staggerGap * 1000);
+            // full lock: re-read shipX at fire time so each shot tracks current position
+            setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(state.shipX); }, si * T.staggerGap * 1000);
           }
         },
       },
