@@ -11680,12 +11680,22 @@ function _triggerRetryWithSweep() {
   fadeEl.style.opacity = '1'; // fade to black (CSS 0.15s transition)
   const _wasDeathRun = state.isDeathRun;
   const _wasJetLightning = state._jetLightningMode;
+  // Save JL continuation state before the reset wipes it
+  const _jlDeathX    = _wasJetLightning ? (state.shipX || 0) : 0;
+  const _jlDeathRamp = _wasJetLightning ? (_jlRampTime || 0) : 0;
   setTimeout(() => {
     _retryPending = false;
     // ── During black: reset scene ──
     if (_wasJetLightning) startJetLightning();
     else if (_wasDeathRun) startDeathRun();
     else startGame();
+    // JL: restore ramp time + X position so player continues from death spot
+    if (_wasJetLightning) {
+      _jlRampTime   = _jlDeathRamp;
+      state.shipX   = _jlDeathX;
+      state.shipVelX = 0;
+      shipGroup.position.x = _jlDeathX;
+    }
     // Override: skip prologue, ship already at hover, thrusters on
     killThrusterSputter();          // kill any lingering sputter timer
     state.introActive = true;       // blocks obstacle spawning during sweep
