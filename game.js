@@ -19040,6 +19040,7 @@ const _asteroidTuner = {
   laneMin:        -8,      // leftmost lane X
   laneMax:         8,      // rightmost lane X
   warningTime:    1.8,     // seconds warning disc shows before impact
+  showWarning:    true,    // toggle warning disc on/off
 };
 
 // ── Shaders ──────────────────────────────────────────────────────────────────
@@ -19329,6 +19330,33 @@ function _buildAsteroidInstance() {
 // Build pool
 for (let _ai = 0; _ai < _AST_POOL_SIZE; _ai++) _asteroidPool.push(_buildAsteroidInstance());
 
+// ── Pre-warm shaders: force GPU compile on all pool instances before first spawn
+// so the first real asteroid doesn't cause a hitch. We render each mesh once
+// at an off-screen position using renderer.compile().
+(function _preWarmAsteroidShaders() {
+  // Collect all unique materials from the pool
+  const _warmMats = new Set();
+  for (const inst of _asteroidPool) {
+    _warmMats.add(inst.rockMesh.material);
+    _warmMats.add(inst.fireMesh.material);
+    _warmMats.add(inst.tailPts.material);
+    _warmMats.add(inst.warnMat);
+  }
+  // Use renderer.compile() on a temporary scene containing one of each mesh
+  // so the GPU driver compiles all GLSL programs now, not at first draw.
+  const _warmScene = new THREE.Scene();
+  const _warmCam   = new THREE.PerspectiveCamera();
+  const _inst0 = _asteroidPool[0];
+  // Temporarily add to warm scene (won't affect main scene)
+  _warmScene.add(_inst0.rockMesh.clone());
+  _warmScene.add(_inst0.fireMesh.clone());
+  _warmScene.add(_inst0.tailPts.clone());
+  _warmScene.add(_inst0.warnMesh.clone());
+  try { renderer.compile(_warmScene, _warmCam); } catch(e) {}
+  // Dispose warm scene children (clones only)
+  _warmScene.children.forEach(c => { if (c.geometry) c.geometry.dispose(); });
+})();
+
 // ── Helper: get free instance from pool ──────────────────────────────────────
 function _getAsteroidFromPool() {
   return _asteroidPool.find(a => !a.active) || null;
@@ -19527,9 +19555,9 @@ function _updateAsteroids(dt) {
     inst.light.position.copy(inst.group.position);
     inst.light.intensity = fadeT * (0.8 + progress * 2.2) * inst.radius;
 
-    // Show warning disc once asteroid is visible enough
-    if (fadeT > 0.3 && progress < 0.88) inst.warnMesh.visible = true;
-    else if (progress >= 0.88) inst.warnMesh.visible = false;
+    // Show warning disc once asteroid is visible enough (respects toggle)
+    if (T.showWarning && fadeT > 0.3 && progress < 0.88) inst.warnMesh.visible = true;
+    else inst.warnMesh.visible = false;
 
     // Update shader uniforms
     inst.rockMesh.material.uniforms.uTime.value += dt;
@@ -19750,6 +19778,10 @@ const _origUpdateShockwave = _updateShockwave;
 
     // DANGER ZONE
     panel.appendChild(makeHeader('DANGER ZONE', '#f44'));
+    panel.appendChild(makeToggle('show warning disc', () => T.showWarning, v => {
+      T.showWarning = v;
+      if (!v) _asteroidActive.forEach(a => { a.warnMesh.visible = false; });
+    }, '#f44'));
     panel.appendChild(makeSlider('warning time', T.warningTime, 0.2, 4.0, 0.1, v => T.warningTime = v, '#f44').row);
 
     // ACTIONS
