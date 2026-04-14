@@ -20318,13 +20318,13 @@ const _origUpdateShockwave = _updateShockwave;
       inst.strikePosZ          += scrollDt;
 
       if (inst.phase === 'warn') {
-        // Warning disc pulses at the target position ahead of ship
+        // Warning disc pulses at the target position
         inst.warnMat.opacity = 0.4 + 0.35 * Math.abs(Math.sin(inst.elapsed * 8));
         const sc = 0.85 + 0.2 * Math.abs(Math.sin(inst.elapsed * 5));
         inst.warnMesh.scale.set(sc, sc, 1);
 
-        if (inst.elapsed >= _LT.warningTime) {
-          // SLAM — bolt appears, warning disc off
+        // Strike when bolt group reaches ship Z (proximity-based, not timer)
+        if (inst.boltGroup.position.z >= _shipZ() - 1.0) {
           inst.phase = 'strike';
           inst.strikeElapsed = 0;
           inst.warnMat.opacity = 0;
