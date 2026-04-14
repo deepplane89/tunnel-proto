@@ -20168,10 +20168,9 @@ const _origUpdateShockwave = _updateShockwave;
     _ltActive.length = 0;
   }
 
-  // Play a random thunder sound (alternates between two clips for variety)
+  // Play lightning strike zap SFX
   function _playThunder() {
-    const id = Math.random() < 0.5 ? 'thunder1-sfx' : 'thunder2-sfx';
-    const el = document.getElementById(id);
+    const el = document.getElementById('lightning-zap-sfx');
     if (el) { el.currentTime = 0; el.play().catch(()=>{}); }
   }
   // ── Target X from pattern ─────────────────────────────────────────────────
