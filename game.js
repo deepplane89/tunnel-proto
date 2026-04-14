@@ -19488,13 +19488,19 @@ function _spawnAsteroid(targetX) {
   const spawnY = T.skyHeight;
   const spawnZ = SPAWN_Z; // -160
 
-  // Landing point: always at ship Z (ship is static, world scrolls)
-  const landZ = shipGroup.position.z;
+  // Landing point: ship Z compensated for world scroll during flight
+  // World scrolls toward camera at state.speed — asteroid must travel further in Z
+  // to actually arrive at the ship's position when it gets there.
+  // Iterative solve: estimate totalTime, then compute real landZ accounting for scroll.
+  const shipZ = shipGroup.position.z; // 3.9
   const landY = 0.15;
+  // First-pass time estimate (uncompensated)
+  const _t0 = Math.sqrt((landY - spawnY) ** 2 + (shipZ - spawnZ) ** 2) / T.speed;
+  // Scroll compensation: world moves state.speed units/s toward camera (positive Z direction)
+  const scrollSpeed = (state && state.speed) || BASE_SPEED;
+  const landZ = shipZ + scrollSpeed * _t0; // where ship-relative Z will be after flight
 
   // ── Quadratic intercept targeting ──────────────────────────────────────────
-  // totalTime: straight-line fall from (spawnX, spawnY, spawnZ) to (landX, landY, landZ).
-  // Since vel.x will be 0 (spawnX = landX), only Y and Z contribute to distance.
   const totalTime = Math.sqrt((landY - spawnY) ** 2 + (landZ - spawnZ) ** 2) / T.speed;
 
   // Predict where the ship will actually be when the asteroid lands:
