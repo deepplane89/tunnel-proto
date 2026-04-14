@@ -20297,14 +20297,17 @@ function startJetLightning() {
   // ── noSpawnMode: clear ────────────────────────────────────────────────────
   _noSpawnMode = false;
 
-  // ── Start the game (skip prologue by spoofing _retryIsFromDead) ───────────────
-  _retryIsFromDead = true;  // prevents prologue + keeps introActive=false
+  // ── Start the game ────────────────────────────────────────────────────────
   startGame();
-  _retryIsFromDead = false; // restore so retry sweep works normally
 
   // ── Re-apply JL flags AFTER startGame() resets them ─────────────────────
   state._jetLightningMode  = true;
-  state.introActive        = false; // make sure prologue never blocks spawner
+  // Kill prologue overlay + clear introActive so the spawner isn't blocked
+  state.introActive        = false;
+  state.thrusterPower      = 1;
+  const _jlOverlay = document.getElementById('intro-overlay');
+  if (_jlOverlay) { _jlOverlay.style.display = 'none'; _jlOverlay.innerHTML = ''; }
+  clearIntroTimers && clearIntroTimers();
   _asteroidTuner.enabled   = true;
   _noSpawnMode             = false;
   _astTimer                = 2.0;  // 2s grace after liftoff
