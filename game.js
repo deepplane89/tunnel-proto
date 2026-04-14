@@ -20246,6 +20246,7 @@ function startJetLightning() {
   T.sizeVariance = 0.4;
   T.skyHeight    = 42;
   T.leadFactor   = 0.0;    // aim at ship's CURRENT position, not predicted
+  T.staggerDual  = false;  // dual shot unlocks in Phase 3 only
   T.killRadius   = 2.2;
   T.laneMin      = -8;
   T.laneMax      =  8;
@@ -20341,9 +20342,9 @@ function _tickJetLightningRamp(dt) {
     T.staggerGap = 0.6 - p * 0.15;
     T.salvoCount = Math.round(4 + p * 4);
     const cycle = t % 30;
-    if      (cycle < 10) T.pattern = 'stagger';
-    else if (cycle < 20) T.pattern = 'salvo';
-    else                 T.pattern = 'random';
+    if      (cycle < 10) { T.pattern = 'stagger'; T.staggerDual = (p > 0.5); } // dual shot kicks in past 165s
+    else if (cycle < 20) { T.pattern = 'salvo';   T.staggerDual = false; }
+    else                 { T.pattern = 'random';  T.staggerDual = false; }
     if (window._LT) {
       window._LT.frequency = Math.max(0.6, 1.8 - p * 1.2);
     }
