@@ -20560,8 +20560,21 @@ function _tickJetLightningRamp(dt) {
 // Reset JL state when game ends / restarts
 const _origStartGame_JL = startGame;
 startGame = function() {
-  if (!state._jetLightningMode) {
-    // Reset physics to campaign defaults when leaving JL mode
+  if (state._jetLightningMode) {
+    // JL physics applied in startJetLightning re-apply block — don't touch
+  } else if (state._tutorialActive) {
+    // Tutorial uses JL_v1 physics as baseline
+    const _tp = _PHYSICS_PRESETS['JL_v1'];
+    _accelBase     = _tp.accelBase;
+    _accelSnap     = _tp.accelSnap;
+    _maxVelBase    = _tp.maxVelBase;
+    _maxVelSnap    = _tp.maxVelSnap;
+    _bankMax       = _tp.bankMax;
+    _bankSmoothing = _tp.bankSmoothing;
+    _decelBasePct  = _tp.decelBasePct;
+    _decelFullPct  = _tp.decelFullPct;
+  } else {
+    // Campaign defaults
     _accelBase     = 22;
     _accelSnap     = 52;
     _maxVelBase    = 9;
@@ -20569,6 +20582,13 @@ startGame = function() {
     _bankMax       = 0.03;
   }
   _origStartGame_JL.apply(this, arguments);
+  // After startGame resets speed to BASE_SPEED, bump tutorial to L4
+  if (state._tutorialActive) {
+    state.speed = BASE_SPEED * LEVELS[3].speedMult; // L4 = 1.5x
+    state.currentLevelIdx = 3;
+    currentLevelDef = LEVELS[3];
+    targetLevelDef  = LEVELS[3];
+  }
 };
 
 // Expose for title button
