@@ -20457,50 +20457,41 @@ function _tickJetLightningRamp(dt) {
     }
   }
 
-  // Phase 1 (0-45s): Asteroids only
-  // leadFactor=0: every shot aimed at ship current position
-  // patterns cycle stagger -> salvo -> random, frequency tightens
+  // Phase 1 (0-45s): Asteroids only — locked at approved session values, no ramp
   if (t < 45) {
     T.enabled    = true;
     T.leadFactor = 0.0;
+    T.frequency  = 1.4;
+    T.staggerGap = 0.6;
+    T.salvoCount = 1;
+    T.pattern    = 'stagger';
     if (window._LT) window._LT.enabled = false;
-    const p = t / 45;
-    T.frequency  = 1.4 - p * 0.9;  // 1.4 -> 0.5 (starts at your approved value, tightens to max)
-    T.staggerGap = 0.6 - p * 0.1;  // 0.6 -> 0.5
-    T.salvoCount = 1;               // stagger = one shot at a time
-    T.pattern = 'stagger';
   }
 
-  // Phase 2 (45-120s): Lightning-only round
-  // Asteroids pause so player can learn lightning clean
+  // Phase 2 (45-120s): Lightning only — locked at approved session values, no ramp
   if (t >= 45 && t < 120) {
     T.enabled = false;
     if (window._LT) {
       window._LT.enabled    = true;
       window._LT.leadFactor = 0.0;
-      const p = Math.min(1, (t - 45) / 75);
-      window._LT.frequency  = 1.5 - p * 1.2; // ramps 1.5 -> 0.3 over Phase 2
+      window._LT.frequency  = 0.3;
+      window._LT.pattern    = 'stagger';
       window._LT.laneMin    = -8;
       window._LT.laneMax    =  8;
     }
   }
 
-  // Phase 3 (120s+): Combined - asteroids back, both ramp together
+  // Phase 3 (120s+): Both combined — locked at approved values
   if (t >= 120) {
     T.enabled    = true;
     T.leadFactor = 0.0;
-    if (window._LT) window._LT.enabled = true;
-
-    const p = Math.min(1, (t - 120) / 90);
-    T.frequency  = 2.5 - p * 1.2;
-    T.staggerGap = 0.6 - p * 0.15;
-    T.salvoCount = Math.round(4 + p * 4);
-    const cycle = t % 30;
-    if      (cycle < 10) { T.pattern = 'stagger'; T.staggerDual = (p > 0.5); }
-    else if (cycle < 20) { T.pattern = 'salvo';   T.staggerDual = false; }
-    else                 { T.pattern = 'random';  T.staggerDual = false; }
+    T.frequency  = 1.4;
+    T.staggerGap = 0.6;
+    T.salvoCount = 1;
+    T.pattern    = 'stagger';
     if (window._LT) {
-      window._LT.frequency = Math.max(0.3, 1.0 - p * 0.7); // ramps 1.0 -> 0.3 over Phase 3
+      window._LT.enabled    = true;
+      window._LT.frequency  = 0.3;
     }
 
     // Terrain + ice at 150s
