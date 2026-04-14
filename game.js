@@ -20718,8 +20718,8 @@ const _origUpdateShockwave = _updateShockwave;
       m.needsUpdate       = true;
     }
 
-    // World-space Z: ahead of ship
-    const shipZ  = _shipZ();
+    // World-space Z: ahead of ship (shipGroup.position.z is always 3.9 — world scrolls)
+    const shipZ  = (typeof shipGroup !== 'undefined' && shipGroup) ? shipGroup.position.z : 3.9;
     const spawnZ = shipZ + _ICE.spawnZ;
     inst.group.position.set(targetX, 0.14, spawnZ);
     inst.group.visible = true;
@@ -20765,7 +20765,7 @@ const _origUpdateShockwave = _updateShockwave;
       }
 
       // Hit check — only when chunk is near ship Z (z > -4)
-      if (!_noSpawnMode && inst.group.position.z > -4 && inst.group.position.z < 5) {
+      if (inst.group.position.z > -4 && inst.group.position.z < 5) {
         const sx  = (state && state.shipX) || 0;
         const dx  = Math.abs(inst.group.position.x - sx);
         if (dx < inst.halfW) {
@@ -20782,7 +20782,7 @@ const _origUpdateShockwave = _updateShockwave;
   // ── Spawn tick ────────────────────────────────────────────────────────────
   function _tickIceSpawner(dt) {
     if (!_ICE.enabled) return;
-    if (_noSpawnMode && !_chaosMode) return;
+    // _ICE.enabled already checked above — always allow when enabled (bypasses tutorial _noSpawnMode)
 
     _iceTimer -= dt;
     if (_iceTimer <= 0) {
