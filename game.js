@@ -20090,57 +20090,57 @@ const _origUpdateShockwave = _updateShockwave;
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  LIGHTNING STRIKE SYSTEM
-//  – Procedural jagged bolt sky→water, warning glow, shockwave ring, cam shake
+//  LIGHTNING STRIKE SYSTEM  v2
+//  – TubeGeometry bolt (real width, not LineBasicMaterial)
+//  – landZ = shipGroup.position.z - strikeForwardDist (moves with the world)
 //  – Full pattern engine: random / sweep / stagger / salvo / pinch
-//  – Z-spread: each pattern can spawn at multiple Z depths
-//  – Tuner panel on L key
+//  – Z spread across multiple depths
+//  – Tuner on L key
 // ═══════════════════════════════════════════════════════════════════════════════
 (function setupLightningSystem() {
 
-  // ── Config ────────────────────────────────────────────────────────────────
   const _LT = {
-    enabled:       false,
-    frequency:     4.0,
-    leadFactor:    0.6,
-    skyHeight:     60,
-    landZ:        -30,      // base Z where lightning hits (ahead of ship)
-    zSpread:        0,      // extra Z range: strikes land in [landZ - zSpread, landZ + zSpread]
-    warningTime:   1.4,
-    boltDuration:  0.55,
-    segments:      10,
-    spread:        0.9,
-    killRadius:    3.2,
-    warnRadius:    3.5,
-    shakeAmt:      0.18,
-    shakeDuration: 0.35,
-    glowColor:     0x88ccff,
-    coreColor:     0xffffff,
-    flashColor:    0x99ddff,
-    warnColor:     0x44aaff,
+    enabled:          false,
+    frequency:        4.0,
+    leadFactor:       0.6,
+    skyHeight:        55,
+    strikeForwardDist: 8,   // how many units AHEAD of ship the bolt lands (ship is at z=3.9)
+    zSpread:          0,    // randomise Z ± this amount around strikeForwardDist
+    warningTime:      1.4,
+    boltDuration:     0.55,
+    coreRadius:       0.08,  // TubeGeometry core radius
+    glowRadius:       0.45,  // TubeGeometry glow radius
+    segments:         10,
+    jaggedness:       1.2,
+    killRadius:       3.2,
+    warnRadius:       3.5,
+    shakeAmt:         0.18,
+    shakeDuration:    0.35,
+    glowColor:        0x88ccff,
+    coreColor:        0xffffff,
+    flashColor:       0x99ddff,
+    warnColor:        0x44aaff,
     // Pattern
-    pattern:      'random',   // random | sweep | stagger | salvo | pinch
-    laneMin:      -8,
-    laneMax:       8,
-    sweepSpeed:    0.4,
-    staggerGap:    0.6,
-    salvoCount:    3,
-    pinchStep:     0.12,
-    pinchSpread:   1.0,
-    count:         1,         // simultaneous strikes per tick (1-3)
+    pattern:  'random',
+    laneMin:  -8,
+    laneMax:   8,
+    sweepSpeed:  0.4,
+    staggerGap:  0.6,
+    salvoCount:  3,
+    pinchSpread: 1.0,
+    count: 1,
   };
 
-  // ── Pattern state ─────────────────────────────────────────────────────────
-  let _ltTimer     = 2.0;
-  let _ltSweepX    = 0.5;
-  let _ltSweepDir  = 1;
+  let _ltTimer    = 2.0;
+  let _ltSweepX   = 0.5;
+  let _ltSweepDir = 1;
   const _ltStaggerQ = [];
   const _ltActive   = [];
 
-  // ── Pattern loop (mirrors asteroid loop system) ───────────────────────────
-  let _ltLoopActive   = false;
-  let _ltLoopTimeout  = null;
-  let _ltActiveBtn    = null;
+  // ── Pattern loop ──────────────────────────────────────────────────────────
+  let _ltLoopActive  = false;
+  let _ltLoopTimeout = null;
+  let _ltActiveBtn   = null;
 
   function _startLtLoop(btn, color, tick) {
     _stopLtLoop();
@@ -20155,19 +20155,17 @@ const _origUpdateShockwave = _updateShockwave;
     }
     loop();
   }
-
   function _stopLtLoop() {
     _ltLoopActive = false;
     if (_ltLoopTimeout) { clearTimeout(_ltLoopTimeout); _ltLoopTimeout = null; }
     if (_ltActiveBtn) { _ltActiveBtn.style.background = 'none'; _ltActiveBtn.style.fontWeight = 'normal'; _ltActiveBtn = null; }
   }
-
   function _clearAllLightning() {
-    _ltActive.forEach(_killLightning);
+    [..._ltActive].forEach(_killLightning);
     _ltActive.length = 0;
   }
 
-  // ── Target X from pattern (mirrors _astNextTargetX) ──────────────────────
+  // ── Target X ──────────────────────────────────────────────────────────────
   function _ltNextTargetX() {
     const range = _LT.laneMax - _LT.laneMin;
     const sx = (state && state.shipX) || 0;
@@ -20185,47 +20183,47 @@ const _origUpdateShockwave = _updateShockwave;
         }
         return _ltStaggerQ.shift();
       }
-      case 'salvo':
-        return sx + (Math.random() - 0.5) * range * 0.5;
-      default:
-        return sx + (Math.random() - 0.5) * 3.0;
+      case 'salvo': return sx + (Math.random() - 0.5) * range * 0.5;
+      default:      return sx + (Math.random() - 0.5) * 3.0;
     }
   }
 
-  // ── Random Z within configured spread ────────────────────────────────────
-  function _ltPickZ() {
-    return _LT.landZ + (Math.random() - 0.5) * _LT.zSpread * 2;
+  // ── Landing Z: always relative to ship world Z ────────────────────────────
+  function _ltLandZ() {
+    const shipZ = shipGroup ? shipGroup.position.z : 3.9;
+    return shipZ - _LT.strikeForwardDist + (Math.random() - 0.5) * _LT.zSpread * 2;
   }
 
-  // ── Bolt geometry builder ─────────────────────────────────────────────────
-  function _buildBoltGeo(topY, landX, landZ, segs, spread) {
+  // ── Build jagged bolt path as CatmullRomCurve3 → TubeGeometry ────────────
+  function _buildBoltPoints(topY, landX, landZ, segs, jaggedness) {
     let pts = [{ x: landX, y: topY }, { x: landX, y: 0 }];
-    for (let d = 0; d < Math.max(1, Math.round(Math.log2(segs))); d++) {
+    const iters = Math.max(1, Math.round(Math.log2(Math.max(4, segs))));
+    for (let d = 0; d < iters; d++) {
       const next = [];
       for (let i = 0; i < pts.length - 1; i++) {
         next.push(pts[i]);
         next.push({
-          x: (pts[i].x + pts[i+1].x) * 0.5 + (Math.random() - 0.5) * spread * (1 - d * 0.25),
+          x: (pts[i].x + pts[i+1].x) * 0.5 + (Math.random() - 0.5) * jaggedness * (1 - d * 0.2),
           y: (pts[i].y + pts[i+1].y) * 0.5,
         });
       }
       next.push(pts[pts.length - 1]);
       pts = next;
     }
-    const verts = [];
-    for (const p of pts) verts.push(p.x, p.y, landZ);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-    return geo;
+    return pts.map(p => new THREE.Vector3(p.x, p.y, landZ));
+  }
+
+  function _buildBoltTube(topY, landX, landZ, segs, jaggedness, radius) {
+    const pts  = _buildBoltPoints(topY, landX, landZ, segs, jaggedness);
+    const curve = new THREE.CatmullRomCurve3(pts);
+    return new THREE.TubeGeometry(curve, Math.max(4, pts.length), radius, 5, false);
   }
 
   // ── Spawn one strike ──────────────────────────────────────────────────────
   function _spawnLightning(targetX, landZ) {
-    landZ = landZ !== undefined ? landZ : _ltPickZ();
-    const dist   = Math.sqrt((_LT.skyHeight) ** 2 + (3.9 - landZ) ** 2);
-    const travelT = dist / 80;
-    const velX   = (state && state.shipVelX) || 0;
-    const landX  = targetX + velX * travelT * _LT.leadFactor;
+    if (landZ === undefined) landZ = _ltLandZ();
+    const landX   = targetX + ((state && state.shipVelX) || 0) *
+                    (Math.sqrt(_LT.skyHeight ** 2 + 20) / 80) * _LT.leadFactor;
 
     // Warning disc
     const warnGeo = new THREE.CircleGeometry(_LT.warnRadius, 32);
@@ -20235,7 +20233,7 @@ const _origUpdateShockwave = _updateShockwave;
     warnMesh.position.set(landX, 0.08, landZ);
     scene.add(warnMesh);
 
-    // Ground flash
+    // Ground flash sprite
     const flashMat = new THREE.SpriteMaterial({ color: _LT.flashColor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
     const flash = new THREE.Sprite(flashMat);
     flash.scale.set(8, 8, 1);
@@ -20250,32 +20248,51 @@ const _origUpdateShockwave = _updateShockwave;
     ring.position.set(landX, 0.1, landZ);
     scene.add(ring);
 
-    // Bolt lines
-    const bg = _buildBoltGeo(_LT.skyHeight, landX, landZ, _LT.segments, _LT.spread);
-    const gg = _buildBoltGeo(_LT.skyHeight, landX, landZ, _LT.segments, _LT.spread * 1.5);
-    const coreMat = new THREE.LineBasicMaterial({ color: _LT.coreColor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
-    const glowMat = new THREE.LineBasicMaterial({ color: _LT.glowColor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
-    const coreL = new THREE.Line(bg, coreMat);
-    const glowL = new THREE.Line(gg, glowMat);
-    scene.add(coreL); scene.add(glowL);
+    // Core bolt tube
+    const coreMat = new THREE.MeshBasicMaterial({ color: _LT.coreColor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+    const coreGeo = _buildBoltTube(_LT.skyHeight, landX, landZ, _LT.segments, _LT.jaggedness, _LT.coreRadius);
+    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+    scene.add(coreMesh);
 
-    _ltActive.push({ landX, landZ, phase: 'warn', elapsed: 0, warnMesh, warnMat, warnGeo, flash, flashMat, ring, ringGeo, ringMat, coreL, glowL, coreMat, glowMat, boltGeo: bg, glowGeo: gg, ringScale: 0.3, hitChecked: false });
+    // Glow bolt tube (wider, same path jittered a bit more)
+    const glowMat = new THREE.MeshBasicMaterial({ color: _LT.glowColor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    const glowGeo = _buildBoltTube(_LT.skyHeight, landX, landZ, _LT.segments, _LT.jaggedness * 1.4, _LT.glowRadius);
+    const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+    scene.add(glowMesh);
+
+    _ltActive.push({
+      landX, landZ,
+      phase: 'warn', elapsed: 0,
+      warnMesh, warnGeo, warnMat,
+      flash, flashMat,
+      ring, ringGeo, ringMat,
+      coreMesh, coreGeo, coreMat,
+      glowMesh, glowGeo, glowMat,
+      ringScale: 0.3,
+      hitChecked: false,
+    });
   }
 
-  // ── Kill one instance ─────────────────────────────────────────────────────
   function _killLightning(inst) {
     scene.remove(inst.warnMesh); inst.warnGeo.dispose(); inst.warnMat.dispose();
     scene.remove(inst.flash);    inst.flashMat.dispose();
     scene.remove(inst.ring);     inst.ringGeo.dispose(); inst.ringMat.dispose();
-    scene.remove(inst.coreL);    inst.boltGeo.dispose(); inst.coreMat.dispose();
-    scene.remove(inst.glowL);    inst.glowGeo.dispose(); inst.glowMat.dispose();
+    scene.remove(inst.coreMesh); inst.coreGeo.dispose(); inst.coreMat.dispose();
+    scene.remove(inst.glowMesh); inst.glowGeo.dispose(); inst.glowMat.dispose();
   }
 
-  // ── Camera shake ──────────────────────────────────────────────────────────
+  function _rejagBolt(inst) {
+    inst.coreGeo.dispose(); inst.glowGeo.dispose();
+    const ng = _buildBoltTube(_LT.skyHeight, inst.landX, inst.landZ, _LT.segments, _LT.jaggedness, _LT.coreRadius);
+    const gg = _buildBoltTube(_LT.skyHeight, inst.landX, inst.landZ, _LT.segments, _LT.jaggedness * 1.4, _LT.glowRadius);
+    inst.coreMesh.geometry = ng; inst.coreGeo = ng;
+    inst.glowMesh.geometry = gg; inst.glowGeo = gg;
+  }
+
   let _ltShakeTime = 0;
 
-  // ── Update ────────────────────────────────────────────────────────────────
   function _updateLightning(dt) {
+    // Auto-spawn (when not in loop mode)
     if (_LT.enabled && !_noSpawnMode && !_ltLoopActive) {
       _ltTimer -= dt;
       if (_ltTimer <= 0) {
@@ -20301,42 +20318,31 @@ const _origUpdateShockwave = _updateShockwave;
         const sc = 0.8 + 0.3 * t;
         inst.warnMesh.scale.set(sc, sc, 1);
         if (inst.elapsed >= _LT.warningTime) {
-          inst.phase = 'bolt';
-          inst.elapsed = 0;
+          inst.phase = 'bolt'; inst.elapsed = 0;
           inst.warnMat.opacity = 0;
           inst.coreMat.opacity = 1.0;
-          inst.glowMat.opacity = 0.55;
+          inst.glowMat.opacity = 0.5;
           inst.flashMat.opacity = 1.0;
           inst.ringMat.opacity  = 0.9;
           _ltShakeTime = _LT.shakeDuration;
         }
       } else if (inst.phase === 'bolt') {
-        const t = inst.elapsed / _LT.boltDuration;
-        // flicker: rejag every ~4 frames
-        if (Math.floor(inst.elapsed * 22) % 3 === 0) {
-          inst.boltGeo.dispose(); inst.glowGeo.dispose();
-          const nb = _buildBoltGeo(_LT.skyHeight, inst.landX, inst.landZ, _LT.segments, _LT.spread);
-          const ng = _buildBoltGeo(_LT.skyHeight, inst.landX, inst.landZ, _LT.segments, _LT.spread * 1.5);
-          inst.coreL.geometry = nb; inst.glowL.geometry = ng;
-          inst.boltGeo = nb; inst.glowGeo = ng;
-        }
+        const t = inst.elapsed / Math.max(0.01, _LT.boltDuration);
+        if (Math.floor(inst.elapsed * 22) % 3 === 0) _rejagBolt(inst);
         inst.coreMat.opacity  = Math.max(0, 1.0 - t * 0.8);
-        inst.glowMat.opacity  = Math.max(0, 0.55 - t * 0.6);
-        inst.flashMat.opacity = Math.max(0, 1.0 - t * 3.5);
+        inst.glowMat.opacity  = Math.max(0, 0.5  - t * 0.6);
+        inst.flashMat.opacity = Math.max(0, 1.0  - t * 3.5);
         inst.ringScale += dt * 20;
         inst.ring.scale.set(inst.ringScale, inst.ringScale, 1);
-        inst.ringMat.opacity = Math.max(0, 0.9 - t * 1.8);
+        inst.ringMat.opacity  = Math.max(0, 0.9  - t * 1.8);
 
         if (!inst.hitChecked && state && state.phase === 'playing') {
           inst.hitChecked = true;
           const dx = (state.shipX || 0) - inst.landX;
           const dz = (shipGroup ? shipGroup.position.z : 3.9) - inst.landZ;
-          if (Math.sqrt(dx*dx + dz*dz) < _LT.killRadius) {
-            if (state._tutorialActive) {
-              addCrashFlash(0x4488ff);
-            } else {
-              killPlayer();
-            }
+          if (Math.sqrt(dx * dx + dz * dz) < _LT.killRadius) {
+            if (state._tutorialActive) addCrashFlash(0x4488ff);
+            else killPlayer();
           }
         }
 
@@ -20348,8 +20354,8 @@ const _origUpdateShockwave = _updateShockwave;
     }
   }
 
-  // ── Hook into composer render (same as asteroid system) ───────────────────
-  const _origLtComposer = composer.render.bind(composer);
+  // ── Hook into composer render ─────────────────────────────────────────────
+  const _ltOrigRender = composer.render.bind(composer);
   let _ltLastTime = performance.now();
   composer.render = function(...args) {
     const now = performance.now();
@@ -20358,7 +20364,7 @@ const _origUpdateShockwave = _updateShockwave;
     if (state._tutorialActive && state.phase === 'playing' && !state.introActive) {
       _updateLightning(dt);
     }
-    _origLtComposer(...args);
+    _ltOrigRender(...args);
   };
 
   // ── Tuner panel (L key) ───────────────────────────────────────────────────
@@ -20367,182 +20373,484 @@ const _origUpdateShockwave = _updateShockwave;
   panel.style.cssText = 'display:none;position:fixed;top:0;left:270px;width:260px;height:100%;background:rgba(0,0,0,0.93);overflow-y:auto;z-index:99999;font-family:monospace;font-size:11px;color:#ccc;padding:8px;box-sizing:border-box;-webkit-overflow-scrolling:touch;border-right:1px solid #6af;';
   document.body.appendChild(panel);
 
-  function mkSlider(label, val, min, max, step, fn) {
+  function mkS(label, val, min, max, step, fn) {
     const row = document.createElement('div');
-    row.style.cssText = 'margin:3px 0;display:flex;align-items:center;gap:4px;';
-    const lbl = document.createElement('span');
-    lbl.style.cssText = 'width:112px;color:#6af;font-size:10px;flex-shrink:0;';
-    lbl.textContent = label;
-    const inp = document.createElement('input');
-    inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=val;
+    row.style.cssText='margin:3px 0;display:flex;align-items:center;gap:4px;';
+    const lbl=document.createElement('span'); lbl.style.cssText='width:120px;color:#6af;font-size:10px;flex-shrink:0;'; lbl.textContent=label;
+    const inp=document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=val;
     inp.style.cssText='flex:1;height:14px;accent-color:#6af;';
-    const vEl = document.createElement('span');
-    vEl.style.cssText='width:36px;text-align:right;font-size:10px;color:#fff;';
-    vEl.textContent=(+val).toFixed(2);
+    const vEl=document.createElement('span'); vEl.style.cssText='width:38px;text-align:right;font-size:10px;color:#fff;'; vEl.textContent=(+val).toFixed(2);
     inp.addEventListener('input',()=>{ const v=parseFloat(inp.value); vEl.textContent=v.toFixed(2); fn(v); });
-    row.appendChild(lbl); row.appendChild(inp); row.appendChild(vEl);
-    return row;
+    row.appendChild(lbl); row.appendChild(inp); row.appendChild(vEl); return row;
   }
-  function mkToggle(label, getter, setter) {
-    const row = document.createElement('div');
-    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:8px;';
-    const lbl = document.createElement('span'); lbl.style.cssText='color:#6af;font-size:10px;flex:1;'; lbl.textContent=label;
-    const btn = document.createElement('button');
-    btn.style.cssText='padding:2px 10px;font-size:10px;cursor:pointer;background:#222;border:1px solid #6af;color:#fff;border-radius:3px;';
-    const ref=()=>{ btn.textContent=getter()?'ON':'OFF'; btn.style.background=getter()?'#224':'#222'; };
-    ref();
-    btn.addEventListener('click',()=>{ setter(!getter()); ref(); });
-    row.appendChild(lbl); row.appendChild(btn);
-    return row;
+  function mkT(label, getter, setter) {
+    const row=document.createElement('div'); row.style.cssText='margin:4px 0;display:flex;align-items:center;gap:8px;';
+    const lbl=document.createElement('span'); lbl.style.cssText='color:#6af;font-size:10px;flex:1;'; lbl.textContent=label;
+    const btn=document.createElement('button'); btn.style.cssText='padding:2px 10px;font-size:10px;cursor:pointer;background:#222;border:1px solid #6af;color:#fff;border-radius:3px;';
+    const ref=()=>{ btn.textContent=getter()?'ON':'OFF'; btn.style.background=getter()?'#224':'#222'; }; ref();
+    btn.addEventListener('click',()=>{ setter(!getter()); ref(); }); row.appendChild(lbl); row.appendChild(btn); return row;
   }
-  function mkSelect(label, options, getter, setter) {
-    const row = document.createElement('div');
-    row.style.cssText='margin:4px 0;display:flex;align-items:center;gap:6px;';
-    const lbl = document.createElement('span'); lbl.style.cssText='width:80px;color:#6af;font-size:10px;flex-shrink:0;'; lbl.textContent=label;
-    const sel = document.createElement('select');
-    sel.style.cssText='flex:1;background:#111;color:#fff;border:1px solid #6af;font-size:10px;padding:1px;';
-    options.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===getter()) op.selected=true; sel.appendChild(op); });
-    sel.addEventListener('change',()=>setter(sel.value));
-    row.appendChild(lbl); row.appendChild(sel);
-    return row;
+  function mkSel(label, opts, getter, setter) {
+    const row=document.createElement('div'); row.style.cssText='margin:4px 0;display:flex;align-items:center;gap:6px;';
+    const lbl=document.createElement('span'); lbl.style.cssText='width:80px;color:#6af;font-size:10px;flex-shrink:0;'; lbl.textContent=label;
+    const sel=document.createElement('select'); sel.style.cssText='flex:1;background:#111;color:#fff;border:1px solid #6af;font-size:10px;padding:1px;';
+    opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===getter()) op.selected=true; sel.appendChild(op); });
+    sel.addEventListener('change',()=>setter(sel.value)); row.appendChild(lbl); row.appendChild(sel); return row;
   }
-  function mkHeader(t) {
-    const h = document.createElement('div');
-    h.style.cssText='color:#6af;font-weight:bold;font-size:12px;margin:10px 0 3px;border-bottom:1px solid #6af;padding-bottom:2px;';
-    h.textContent=t; return h;
+  function mkH(t) {
+    const h=document.createElement('div'); h.style.cssText='color:#6af;font-weight:bold;font-size:12px;margin:10px 0 3px;border-bottom:1px solid #6af;padding-bottom:2px;'; h.textContent=t; return h;
   }
-  function mkBtn(label, color, onClick) {
-    const b = document.createElement('button');
-    b.textContent=label;
+  function mkB(label, color, onClick) {
+    const b=document.createElement('button'); b.textContent=label;
     b.style.cssText=`background:none;border:1px solid ${color};color:${color};padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:2px 0;width:100%;text-align:left;`;
-    b.addEventListener('click', onClick);
-    return b;
+    b.addEventListener('click',onClick); return b;
   }
 
   function build() {
-    panel.innerHTML = '';
-    panel.appendChild(mkHeader('⚡ LIGHTNING TUNER'));
-    panel.appendChild(mkToggle('ENABLED (auto-spawn)', ()=>_LT.enabled, v=>{ _LT.enabled=v; if(!v){ _stopLtLoop(); _clearAllLightning(); } }));
+    panel.innerHTML='';
+    panel.appendChild(mkH('⚡ LIGHTNING TUNER'));
+    panel.appendChild(mkT('ENABLED (auto-spawn)', ()=>_LT.enabled, v=>{ _LT.enabled=v; if(!v){ _stopLtLoop(); _clearAllLightning(); } }));
 
-    panel.appendChild(mkHeader('SPAWN'));
-    panel.appendChild(mkSlider('frequency (s)', _LT.frequency, 0.3, 15, 0.1, v=>_LT.frequency=v));
-    panel.appendChild(mkSlider('count', _LT.count, 1, 4, 1, v=>_LT.count=Math.round(v)));
-    panel.appendChild(mkSlider('lead factor', _LT.leadFactor, 0, 1.5, 0.05, v=>_LT.leadFactor=v));
-    panel.appendChild(mkSlider('sky height', _LT.skyHeight, 20, 120, 1, v=>_LT.skyHeight=v));
-    panel.appendChild(mkSlider('land Z (depth)', _LT.landZ, -120, -5, 1, v=>_LT.landZ=v));
-    panel.appendChild(mkSlider('Z spread', _LT.zSpread, 0, 60, 1, v=>_LT.zSpread=v));
+    panel.appendChild(mkH('SPAWN'));
+    panel.appendChild(mkS('frequency (s)',   _LT.frequency,          0.3,  15,   0.1,  v=>_LT.frequency=v));
+    panel.appendChild(mkS('count',           _LT.count,              1,    4,    1,    v=>_LT.count=Math.round(v)));
+    panel.appendChild(mkS('lead factor',     _LT.leadFactor,         0,    1.5,  0.05, v=>_LT.leadFactor=v));
+    panel.appendChild(mkS('sky height',      _LT.skyHeight,          10,   120,  1,    v=>_LT.skyHeight=v));
+    panel.appendChild(mkS('forward dist',    _LT.strikeForwardDist,  1,    80,   0.5,  v=>_LT.strikeForwardDist=v));
+    panel.appendChild(mkS('Z spread',        _LT.zSpread,            0,    60,   0.5,  v=>_LT.zSpread=v));
 
-    panel.appendChild(mkHeader('PATTERN'));
-    panel.appendChild(mkSelect('pattern', ['random','sweep','stagger','salvo','pinch'], ()=>_LT.pattern, v=>{ _LT.pattern=v; _ltStaggerQ.length=0; _ltSweepX=0.5; }));
-    panel.appendChild(mkSlider('lane min X', _LT.laneMin, -20, 0, 0.5, v=>_LT.laneMin=v));
-    panel.appendChild(mkSlider('lane max X', _LT.laneMax, 0, 20, 0.5, v=>_LT.laneMax=v));
-    panel.appendChild(mkSlider('sweep speed', _LT.sweepSpeed, 0.05, 2.0, 0.01, v=>_LT.sweepSpeed=v));
-    panel.appendChild(mkSlider('stagger gap (s)', _LT.staggerGap, 0.1, 3.0, 0.05, v=>_LT.staggerGap=v));
-    panel.appendChild(mkSlider('salvo / count', _LT.salvoCount, 1, 8, 1, v=>_LT.salvoCount=Math.round(v)));
-    panel.appendChild(mkSlider('pinch spread', _LT.pinchSpread, 0.1, 3.0, 0.05, v=>_LT.pinchSpread=v));
+    panel.appendChild(mkH('PATTERN'));
+    panel.appendChild(mkSel('pattern', ['random','sweep','stagger','salvo','pinch'], ()=>_LT.pattern, v=>{ _LT.pattern=v; _ltStaggerQ.length=0; _ltSweepX=0.5; }));
+    panel.appendChild(mkS('lane min X',    _LT.laneMin,     -20,  0,    0.5,  v=>_LT.laneMin=v));
+    panel.appendChild(mkS('lane max X',    _LT.laneMax,     0,    20,   0.5,  v=>_LT.laneMax=v));
+    panel.appendChild(mkS('sweep speed',   _LT.sweepSpeed,  0.05, 2.0,  0.01, v=>_LT.sweepSpeed=v));
+    panel.appendChild(mkS('stagger gap(s)',_LT.staggerGap,  0.1,  3.0,  0.05, v=>_LT.staggerGap=v));
+    panel.appendChild(mkS('salvo count',   _LT.salvoCount,  1,    8,    1,    v=>_LT.salvoCount=Math.round(v)));
+    panel.appendChild(mkS('pinch spread',  _LT.pinchSpread, 0.1,  3.0,  0.05, v=>_LT.pinchSpread=v));
 
-    panel.appendChild(mkHeader('TIMING'));
-    panel.appendChild(mkSlider('warning time (s)', _LT.warningTime, 0.2, 4.0, 0.05, v=>_LT.warningTime=v));
-    panel.appendChild(mkSlider('bolt duration (s)', _LT.boltDuration, 0.1, 2.0, 0.05, v=>_LT.boltDuration=v));
+    panel.appendChild(mkH('TIMING'));
+    panel.appendChild(mkS('warning time(s)',  _LT.warningTime,  0.2, 4.0, 0.05, v=>_LT.warningTime=v));
+    panel.appendChild(mkS('bolt duration(s)', _LT.boltDuration, 0.1, 2.0, 0.05, v=>_LT.boltDuration=v));
 
-    panel.appendChild(mkHeader('VISUALS'));
-    panel.appendChild(mkSlider('segments', _LT.segments, 4, 64, 1, v=>_LT.segments=Math.round(v)));
-    panel.appendChild(mkSlider('jaggedness', _LT.spread, 0.1, 5.0, 0.05, v=>_LT.spread=v));
-    panel.appendChild(mkSlider('warn radius', _LT.warnRadius, 0.5, 12, 0.1, v=>_LT.warnRadius=v));
+    panel.appendChild(mkH('VISUALS'));
+    panel.appendChild(mkS('core radius',  _LT.coreRadius,  0.01, 2.0, 0.01, v=>_LT.coreRadius=v));
+    panel.appendChild(mkS('glow radius',  _LT.glowRadius,  0.05, 6.0, 0.05, v=>_LT.glowRadius=v));
+    panel.appendChild(mkS('segments',     _LT.segments,    4,    64,  1,    v=>_LT.segments=Math.round(v)));
+    panel.appendChild(mkS('jaggedness',   _LT.jaggedness,  0.1,  6.0, 0.05, v=>_LT.jaggedness=v));
+    panel.appendChild(mkS('warn radius',  _LT.warnRadius,  0.5,  12,  0.1,  v=>_LT.warnRadius=v));
 
-    panel.appendChild(mkHeader('IMPACT'));
-    panel.appendChild(mkSlider('kill radius', _LT.killRadius, 0.5, 10, 0.1, v=>_LT.killRadius=v));
-    panel.appendChild(mkSlider('shake amount', _LT.shakeAmt, 0, 1.0, 0.01, v=>_LT.shakeAmt=v));
-    panel.appendChild(mkSlider('shake duration', _LT.shakeDuration, 0, 1.0, 0.02, v=>_LT.shakeDuration=v));
+    panel.appendChild(mkH('IMPACT'));
+    panel.appendChild(mkS('kill radius',     _LT.killRadius,    0.5, 10,  0.1,  v=>_LT.killRadius=v));
+    panel.appendChild(mkS('shake amount',    _LT.shakeAmt,      0,   1.0, 0.01, v=>_LT.shakeAmt=v));
+    panel.appendChild(mkS('shake duration',  _LT.shakeDuration, 0,   1.0, 0.02, v=>_LT.shakeDuration=v));
 
-    panel.appendChild(mkHeader('PATTERN LOOPS'));
-    const patterns = [
-      { label: '↯ RANDOM (loop)',  color: '#6af', tick: () => {
-        for (let c = 0; c < Math.max(1, _LT.count); c++)
-          setTimeout(() => { if (state.phase==='playing') _spawnLightning(_ltNextTargetX()); }, c * 120);
+    panel.appendChild(mkH('PATTERN LOOPS'));
+    const patDefs = [
+      { label:'↯ RANDOM (loop)',      color:'#6af', tick:()=>{
+        for(let c=0;c<Math.max(1,_LT.count);c++)
+          setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(_ltNextTargetX()); }, c*120);
       }},
-      { label: '►◄ SWEEP (loop)',  color: '#0df', tick: () => {
-        const range = _LT.laneMax - _LT.laneMin;
-        const swOff = (_ltSweepX - 0.5) * range;
-        _ltSweepX += _ltSweepDir * _LT.sweepSpeed * 0.35;
-        if (_ltSweepX >= 1 || _ltSweepX <= 0) { _ltSweepDir *= -1; _ltSweepX = Math.max(0, Math.min(1, _ltSweepX)); }
-        const waveSize = Math.max(2, _LT.salvoCount);
-        for (let i = 0; i < waveSize; i++) {
-          setTimeout(() => {
-            if (state.phase !== 'playing') return;
-            _spawnLightning(state.shipX + swOff + (i/(waveSize-1) - 0.5) * range * 0.5, _ltPickZ());
-          }, i * 250);
-        }
+      { label:'►◄ SWEEP (loop)',      color:'#0df', tick:()=>{
+        const range=_LT.laneMax-_LT.laneMin, swOff=(_ltSweepX-0.5)*range;
+        _ltSweepX+=_ltSweepDir*_LT.sweepSpeed*0.35;
+        if(_ltSweepX>=1||_ltSweepX<=0){_ltSweepDir*=-1;_ltSweepX=Math.max(0,Math.min(1,_ltSweepX));}
+        const n=Math.max(2,_LT.salvoCount);
+        for(let i=0;i<n;i++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(state.shipX+swOff+(i/(n-1)-0.5)*range*0.5); },i*250);
       }},
-      { label: '▼ ▼▼ STAGGER (loop)', color: '#ff0', tick: () => {
-        const steps = Math.max(2, _LT.salvoCount);
-        for (let si = 0; si < steps; si++) {
-          setTimeout(() => {
-            if (state.phase !== 'playing') return;
-            _spawnLightning(state.shipX, _ltPickZ());
-          }, si * _LT.staggerGap * 1000);
-        }
+      { label:'▼ ▼▼ STAGGER (loop)', color:'#ff0', tick:()=>{
+        const steps=Math.max(2,_LT.salvoCount);
+        for(let si=0;si<steps;si++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(state.shipX); },si*_LT.staggerGap*1000);
       }},
-      { label: '▼▼▼ SALVO (loop)', color: '#f80', tick: () => {
-        const sx = state.shipX;
-        const count = Math.max(1, _LT.salvoCount);
-        const half  = (_LT.laneMax - _LT.laneMin) * 0.45;
-        for (let si = 0; si < count; si++) {
-          const frac = count === 1 ? 0.5 : si / (count - 1);
-          _spawnLightning(sx + (frac - 0.5) * half * 2, _ltPickZ());
-        }
+      { label:'▼▼▼ SALVO (loop)',    color:'#f80', tick:()=>{
+        const sx=state.shipX, n=Math.max(1,_LT.salvoCount), half=(_LT.laneMax-_LT.laneMin)*0.45;
+        for(let si=0;si<n;si++) _spawnLightning(sx+(n===1?0:(si/(n-1)-0.5))*half*2);
       }},
-      { label: '▷◁ PINCH (loop)', color: '#f0f', tick: () => {
-        const sx = state.shipX;
-        const pairs = 5;
-        const fullHalf = (_LT.laneMax - _LT.laneMin) * 0.5 * _LT.pinchSpread;
-        for (let pi = 0; pi < pairs; pi++) {
-          const hs = Math.max(0.3, fullHalf * (1 - pi / (pairs - 1)));
-          const d  = pi * 300;
-          (function(spread, delay) {
-            const fn = () => {
-              if (state.phase !== 'playing') return;
-              _spawnLightning(sx - spread, _ltPickZ());
-              _spawnLightning(sx + spread, _ltPickZ());
-            };
-            delay === 0 ? fn() : setTimeout(fn, delay);
-          })(hs, d);
+      { label:'▷◁ PINCH (loop)',     color:'#f0f', tick:()=>{
+        const sx=state.shipX, pairs=5, fullHalf=(_LT.laneMax-_LT.laneMin)*0.5*_LT.pinchSpread;
+        for(let pi=0;pi<pairs;pi++){
+          const hs=Math.max(0.3,fullHalf*(1-pi/(pairs-1))), d=pi*300;
+          (function(s,dl){ const fn=()=>{ if(state.phase!=='playing')return; _spawnLightning(sx-s); _spawnLightning(sx+s); }; dl===0?fn():setTimeout(fn,dl); })(hs,d);
         }
-        setTimeout(() => { if (state.phase === 'playing') _spawnLightning(sx, _ltPickZ()); }, pairs * 300);
+        setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(sx); },pairs*300);
       }},
     ];
+    patDefs.forEach(({label,color,tick})=>{ const b=mkB(label,color,()=>_startLtLoop(b,color,tick)); panel.appendChild(b); });
+    panel.appendChild(mkB('⏹ STOP LOOP','#888',_stopLtLoop));
+    panel.appendChild(mkB('✕ CLEAR ALL','#f44',()=>{ _stopLtLoop(); _clearAllLightning(); }));
 
-    patterns.forEach(({ label, color, tick }) => {
-      const btn = mkBtn(label, color, () => _startLtLoop(btn, color, tick));
-      panel.appendChild(btn);
-    });
-
-    panel.appendChild(mkBtn('⏹ STOP LOOP', '#888', _stopLtLoop));
-    panel.appendChild(mkBtn('✕ CLEAR ALL', '#f44', () => { _stopLtLoop(); _clearAllLightning(); }));
-
-    // ONE button
-    const oneBtn = document.createElement('button');
-    oneBtn.textContent = '⚡ STRIKE NOW';
+    const oneBtn=document.createElement('button');
+    oneBtn.textContent='⚡ STRIKE NOW';
     oneBtn.style.cssText='width:100%;padding:6px;margin:6px 0 2px;background:#224;border:1px solid #6af;color:#6af;font-family:monospace;font-size:12px;cursor:pointer;border-radius:3px;';
-    oneBtn.addEventListener('click', () => _spawnLightning((state&&state.shipX)||0, _LT.landZ));
+    oneBtn.addEventListener('click',()=>_spawnLightning((state&&state.shipX)||0));
     panel.appendChild(oneBtn);
 
-    const countEl = document.createElement('div');
-    countEl.style.cssText='margin-top:6px;color:#888;font-size:10px;';
-    const refreshCount = () => { countEl.textContent = 'active strikes: ' + _ltActive.length; };
-    refreshCount();
-    setInterval(refreshCount, 500);
-    panel.appendChild(countEl);
+    const countEl=document.createElement('div'); countEl.style.cssText='margin-top:6px;color:#888;font-size:10px;';
+    const rc=()=>{ countEl.textContent='active strikes: '+_ltActive.length; }; rc();
+    setInterval(rc,500); panel.appendChild(countEl);
   }
 
-  let visible = false;
-  document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'l' || e.key === 'L') {
-      visible = !visible;
-      if (visible) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
+  let visible=false;
+  document.addEventListener('keydown',e=>{
+    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+    if(e.key==='l'||e.key==='L'){
+      visible=!visible;
+      if(visible){build();panel.style.display='block';}
+      else panel.style.display='none';
     }
+  });
+
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  LIGHTNING STRIKE SYSTEM  v3
+//  – Spawns at SPAWN_Z like a cone, scrolls toward ship at game speed
+//  – Warning disc travels with it (always over the target X)
+//  – When it reaches ship Z it slams: bolt flash, shockwave, kill check
+//  – TubeGeometry bolt (real width, not LineBasicMaterial)
+//  – Full pattern engine: random / sweep / stagger / salvo / pinch
+//  – Tuner on L key
+// ═══════════════════════════════════════════════════════════════════════════════
+(function setupLightningSystem() {
+
+  const _LT = {
+    enabled:      false,
+    frequency:    4.0,
+    leadFactor:   0.6,
+    skyHeight:    55,
+    warningTime:  1.8,    // seconds disc is visible before bolt (cosmetic — actual strike = when Z reached)
+    boltDuration: 0.5,    // seconds bolt lingers after strike
+    coreRadius:   0.12,
+    glowRadius:   0.55,
+    segments:     10,
+    jaggedness:   1.2,
+    killRadius:   3.2,
+    warnRadius:   3.5,
+    shakeAmt:     0.18,
+    shakeDuration:0.35,
+    glowColor:    0x88ccff,
+    coreColor:    0xffffff,
+    flashColor:   0x99ddff,
+    warnColor:    0x44aaff,
+    pattern:      'random',
+    laneMin:      -8,
+    laneMax:       8,
+    sweepSpeed:   0.4,
+    staggerGap:   0.6,
+    salvoCount:   3,
+    pinchSpread:  1.0,
+    count:        1,
+    spawnZ:      -40,   // how far out bolts spawn — closer = less reaction time
+  };
+
+  let _ltTimer    = 2.0;
+  let _ltSweepX   = 0.5;
+  let _ltSweepDir = 1;
+  const _ltStaggerQ = [];
+  const _ltActive   = [];   // active bolt instances
+
+  // ── Pattern loop ──────────────────────────────────────────────────────────
+  let _ltLoopActive = false, _ltLoopTimeout = null, _ltActiveBtn = null;
+  function _startLtLoop(btn, color, tick) {
+    _stopLtLoop();
+    _ltLoopActive = true; _ltActiveBtn = btn;
+    if (btn) { btn.style.background = color+'33'; btn.style.fontWeight='bold'; }
+    function loop() {
+      if (!_ltLoopActive) return;
+      tick();
+      _ltLoopTimeout = setTimeout(loop, _LT.staggerGap * 1000 * _LT.salvoCount + 800);
+    }
+    loop();
+  }
+  function _stopLtLoop() {
+    _ltLoopActive = false;
+    if (_ltLoopTimeout) { clearTimeout(_ltLoopTimeout); _ltLoopTimeout = null; }
+    if (_ltActiveBtn) { _ltActiveBtn.style.background='none'; _ltActiveBtn.style.fontWeight='normal'; _ltActiveBtn=null; }
+  }
+  function _clearAllLightning() {
+    [..._ltActive].forEach(_ltKill);
+    _ltActive.length = 0;
+  }
+
+  // ── Target X from pattern ─────────────────────────────────────────────────
+  function _ltNextTargetX() {
+    const range = _LT.laneMax - _LT.laneMin;
+    const sx = (state && state.shipX) || 0;
+    switch (_LT.pattern) {
+      case 'sweep': {
+        const x = sx + (_ltSweepX - 0.5) * range;
+        _ltSweepX += _ltSweepDir * _LT.sweepSpeed * _LT.frequency / range * 0.12;
+        if (_ltSweepX >= 1 || _ltSweepX <= 0) { _ltSweepDir *= -1; _ltSweepX = Math.max(0,Math.min(1,_ltSweepX)); }
+        return x;
+      }
+      case 'stagger': {
+        if (_ltStaggerQ.length === 0) {
+          const steps = 5 + Math.floor(Math.random() * 4);
+          for (let i = 0; i < steps; i++) _ltStaggerQ.push(sx + (i/(steps-1)-0.5)*range*0.9);
+        }
+        return _ltStaggerQ.shift();
+      }
+      case 'salvo': return sx + (Math.random()-0.5)*range*0.5;
+      default:      return sx + (Math.random()-0.5)*3.0;
+    }
+  }
+
+  // ── Build jagged TubeGeometry bolt ────────────────────────────────────────
+  function _ltBoltGeo(topY, landX, currentZ, segs, jagg, radius) {
+    let pts = [{ x: landX, y: topY }, { x: landX, y: 0.5 }];
+    const iters = Math.max(1, Math.round(Math.log2(Math.max(4, segs))));
+    for (let d = 0; d < iters; d++) {
+      const next = [];
+      for (let i = 0; i < pts.length-1; i++) {
+        next.push(pts[i]);
+        next.push({ x:(pts[i].x+pts[i+1].x)*0.5+(Math.random()-0.5)*jagg*(1-d*0.2), y:(pts[i].y+pts[i+1].y)*0.5 });
+      }
+      next.push(pts[pts.length-1]);
+      pts = next;
+    }
+    const v3pts = pts.map(p => new THREE.Vector3(p.x, p.y, currentZ));
+    const curve = new THREE.CatmullRomCurve3(v3pts);
+    return new THREE.TubeGeometry(curve, Math.max(4, pts.length), radius, 5, false);
+  }
+
+  // ── Spawn one lightning bolt ──────────────────────────────────────────────
+  function _spawnLightning(targetX) {
+    // Spawn close — just enough reaction time for a quick strafe, not a long read
+    const ltSpawnZ = _LT.spawnZ;
+    const travelDist = Math.abs(ltSpawnZ - (shipGroup ? shipGroup.position.z : 3.9));
+    const travelTime = travelDist / Math.max(1, state.speed || 73);
+    const velX = (state && state.shipVelX) || 0;
+    const landX = targetX + velX * travelTime * _LT.leadFactor;
+
+    const spawnZ = ltSpawnZ;
+
+    // Warning disc — placed at spawnZ, will scroll with the bolt
+    const warnGeo = new THREE.CircleGeometry(_LT.warnRadius, 32);
+    const warnMat = new THREE.MeshBasicMaterial({ color:_LT.warnColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+    const warnMesh = new THREE.Mesh(warnGeo, warnMat);
+    warnMesh.rotation.x = -Math.PI/2;
+    warnMesh.position.set(landX, 0.08, spawnZ);
+    scene.add(warnMesh);
+
+    // Ground flash sprite (shown at strike moment)
+    const flashMat = new THREE.SpriteMaterial({ color:_LT.flashColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
+    const flash = new THREE.Sprite(flashMat);
+    flash.scale.set(10, 10, 1);
+    flash.position.set(landX, 1.5, spawnZ);
+    scene.add(flash);
+
+    // Shockwave ring
+    const ringGeo = new THREE.RingGeometry(0.1, 0.5, 48);
+    const ringMat = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI/2;
+    ring.position.set(landX, 0.1, spawnZ);
+    scene.add(ring);
+
+    // Bolt meshes (hidden until strike)
+    const coreMat = new THREE.MeshBasicMaterial({ color:_LT.coreColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
+    const glowMat = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+    const coreGeo = _ltBoltGeo(_LT.skyHeight, landX, spawnZ, _LT.segments, _LT.jaggedness, _LT.coreRadius);
+    const glowGeo = _ltBoltGeo(_LT.skyHeight, landX, spawnZ, _LT.segments, _LT.jaggedness*1.4, _LT.glowRadius);
+    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+    const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+    scene.add(coreMesh); scene.add(glowMesh);
+
+    _ltActive.push({
+      landX, phase:'scroll', elapsed:0, strikeElapsed:0,
+      warnMesh, warnGeo, warnMat,
+      flash, flashMat,
+      ring, ringGeo, ringMat,
+      coreMesh, coreGeo, coreMat,
+      glowMesh, glowGeo, glowMat,
+      ringScale:0.3, hitChecked:false,
+    });
+  }
+
+  function _ltKill(inst) {
+    scene.remove(inst.warnMesh); inst.warnGeo.dispose(); inst.warnMat.dispose();
+    scene.remove(inst.flash);    inst.flashMat.dispose();
+    scene.remove(inst.ring);     inst.ringGeo.dispose(); inst.ringMat.dispose();
+    scene.remove(inst.coreMesh); inst.coreGeo.dispose(); inst.coreMat.dispose();
+    scene.remove(inst.glowMesh); inst.glowGeo.dispose(); inst.glowMat.dispose();
+  }
+
+  function _ltRejag(inst) {
+    const z = inst.warnMesh.position.z;
+    inst.coreGeo.dispose(); inst.glowGeo.dispose();
+    const ng = _ltBoltGeo(_LT.skyHeight, inst.landX, z, _LT.segments, _LT.jaggedness,   _LT.coreRadius);
+    const gg = _ltBoltGeo(_LT.skyHeight, inst.landX, z, _LT.segments, _LT.jaggedness*1.4, _LT.glowRadius);
+    inst.coreMesh.geometry = ng; inst.coreGeo = ng;
+    inst.glowMesh.geometry = gg; inst.glowGeo = gg;
+  }
+
+  let _ltShakeTime = 0;
+  const _shipZ = () => shipGroup ? shipGroup.position.z : 3.9;
+
+  function _updateLightning(dt) {
+    // Auto-spawn
+    if (_LT.enabled && !_noSpawnMode && !_ltLoopActive) {
+      _ltTimer -= dt;
+      if (_ltTimer <= 0) {
+        _ltTimer = _LT.frequency * (0.8 + Math.random()*0.4);
+        _spawnLightning(_ltNextTargetX());
+      }
+    }
+
+    if (_ltShakeTime > 0) {
+      _ltShakeTime -= dt;
+      const s = _LT.shakeAmt * (_ltShakeTime / Math.max(0.01, _LT.shakeDuration));
+      camera.position.x += (Math.random()-0.5)*s;
+      camera.position.y += (Math.random()-0.5)*s*0.4;
+    }
+
+    const spd = (state && state.speed) || 73;
+
+    for (let i = _ltActive.length-1; i >= 0; i--) {
+      const inst = _ltActive[i];
+      inst.elapsed += dt;
+
+      if (inst.phase === 'scroll') {
+        // Scroll toward ship just like a cone
+        const scrollDt = spd * dt;
+        inst.warnMesh.position.z += scrollDt;
+        inst.flash.position.z    += scrollDt;
+        inst.ring.position.z     += scrollDt;
+        inst.coreMesh.position.z += scrollDt;
+        inst.glowMesh.position.z += scrollDt;
+
+        // Pulse warning disc as it approaches
+        const distToShip = _shipZ() - inst.warnMesh.position.z;
+        const approachT = Math.max(0, 1 - distToShip / Math.abs(SPAWN_Z));
+        inst.warnMat.opacity = (0.2 + 0.5*approachT) * (0.6 + 0.4*Math.abs(Math.sin(inst.elapsed*8)));
+
+        // Strike when warning disc reaches ship Z
+        if (inst.warnMesh.position.z >= _shipZ() - 0.5) {
+          inst.phase = 'strike';
+          inst.strikeElapsed = 0;
+          inst.warnMat.opacity = 0;
+          inst.coreMat.opacity = 1.0;
+          inst.glowMat.opacity = 0.5;
+          inst.flashMat.opacity = 1.0;
+          inst.ringMat.opacity  = 0.9;
+          _ltShakeTime = _LT.shakeDuration;
+          // Freeze bolt at ship Z position for the strike
+          const sz = _shipZ();
+          [inst.warnMesh, inst.flash, inst.ring, inst.coreMesh, inst.glowMesh].forEach(m => m.position.z = sz);
+          _ltRejag(inst); // final jag at strike position
+        }
+
+        // Despawn if scrolled past ship without striking (shouldn't happen)
+        if (inst.warnMesh.position.z > _shipZ() + 10) {
+          _ltKill(inst); _ltActive.splice(i,1);
+        }
+
+      } else if (inst.phase === 'strike') {
+        inst.strikeElapsed += dt;
+        const t = inst.strikeElapsed / Math.max(0.01, _LT.boltDuration);
+
+        if (Math.floor(inst.strikeElapsed * 22) % 3 === 0) _ltRejag(inst);
+
+        inst.coreMat.opacity  = Math.max(0, 1.0 - t*0.9);
+        inst.glowMat.opacity  = Math.max(0, 0.5  - t*0.7);
+        inst.flashMat.opacity = Math.max(0, 1.0  - t*4.0);
+        inst.ringScale += dt * 22;
+        inst.ring.scale.set(inst.ringScale, inst.ringScale, 1);
+        inst.ringMat.opacity  = Math.max(0, 0.9  - t*2.0);
+
+        if (!inst.hitChecked && state && state.phase === 'playing') {
+          inst.hitChecked = true;
+          const dx = (state.shipX||0) - inst.landX;
+          if (Math.abs(dx) < _LT.killRadius) {
+            if (state._tutorialActive) addCrashFlash(0x4488ff);
+            else killPlayer();
+          }
+        }
+
+        if (inst.strikeElapsed >= _LT.boltDuration) {
+          _ltKill(inst); _ltActive.splice(i,1);
+        }
+      }
+    }
+  }
+
+  // ── Hook into composer render ─────────────────────────────────────────────
+  const _ltOrigRender = composer.render.bind(composer);
+  let _ltLastTime = performance.now();
+  composer.render = function(...args) {
+    const now = performance.now();
+    const dt  = Math.min((now - _ltLastTime)*0.001, 0.05);
+    _ltLastTime = now;
+    if (state._tutorialActive && state.phase === 'playing' && !state.introActive) {
+      _updateLightning(dt);
+    }
+    _ltOrigRender(...args);
+  };
+
+  // ── Tuner panel (L key) ───────────────────────────────────────────────────
+  const panel = document.createElement('div');
+  panel.id = 'lightning-tuner';
+  panel.style.cssText = 'display:none;position:fixed;top:0;left:270px;width:260px;height:100%;background:rgba(0,0,0,0.93);overflow-y:auto;z-index:99999;font-family:monospace;font-size:11px;color:#ccc;padding:8px;box-sizing:border-box;-webkit-overflow-scrolling:touch;border-right:1px solid #6af;';
+  document.body.appendChild(panel);
+
+  function mkS(label,val,min,max,step,fn){ const row=document.createElement('div'); row.style.cssText='margin:3px 0;display:flex;align-items:center;gap:4px;'; const lbl=document.createElement('span'); lbl.style.cssText='width:120px;color:#6af;font-size:10px;flex-shrink:0;'; lbl.textContent=label; const inp=document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=val; inp.style.cssText='flex:1;height:14px;accent-color:#6af;'; const vEl=document.createElement('span'); vEl.style.cssText='width:38px;text-align:right;font-size:10px;color:#fff;'; vEl.textContent=(+val).toFixed(2); inp.addEventListener('input',()=>{ const v=parseFloat(inp.value); vEl.textContent=v.toFixed(2); fn(v); }); row.appendChild(lbl); row.appendChild(inp); row.appendChild(vEl); return row; }
+  function mkT(label,getter,setter){ const row=document.createElement('div'); row.style.cssText='margin:4px 0;display:flex;align-items:center;gap:8px;'; const lbl=document.createElement('span'); lbl.style.cssText='color:#6af;font-size:10px;flex:1;'; lbl.textContent=label; const btn=document.createElement('button'); btn.style.cssText='padding:2px 10px;font-size:10px;cursor:pointer;background:#222;border:1px solid #6af;color:#fff;border-radius:3px;'; const ref=()=>{ btn.textContent=getter()?'ON':'OFF'; btn.style.background=getter()?'#224':'#222'; }; ref(); btn.addEventListener('click',()=>{ setter(!getter()); ref(); }); row.appendChild(lbl); row.appendChild(btn); return row; }
+  function mkSel(label,opts,getter,setter){ const row=document.createElement('div'); row.style.cssText='margin:4px 0;display:flex;align-items:center;gap:6px;'; const lbl=document.createElement('span'); lbl.style.cssText='width:80px;color:#6af;font-size:10px;flex-shrink:0;'; lbl.textContent=label; const sel=document.createElement('select'); sel.style.cssText='flex:1;background:#111;color:#fff;border:1px solid #6af;font-size:10px;padding:1px;'; opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===getter()) op.selected=true; sel.appendChild(op); }); sel.addEventListener('change',()=>setter(sel.value)); row.appendChild(lbl); row.appendChild(sel); return row; }
+  function mkH(t){ const h=document.createElement('div'); h.style.cssText='color:#6af;font-weight:bold;font-size:12px;margin:10px 0 3px;border-bottom:1px solid #6af;padding-bottom:2px;'; h.textContent=t; return h; }
+  function mkB(label,color,onClick){ const b=document.createElement('button'); b.textContent=label; b.style.cssText=`background:none;border:1px solid ${color};color:${color};padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:2px 0;width:100%;text-align:left;`; b.addEventListener('click',onClick); return b; }
+
+  function build(){
+    panel.innerHTML='';
+    panel.appendChild(mkH('⚡ LIGHTNING TUNER'));
+    panel.appendChild(mkT('ENABLED',()=>_LT.enabled,v=>{ _LT.enabled=v; if(!v){_stopLtLoop();_clearAllLightning();} }));
+    panel.appendChild(mkH('SPAWN'));
+    panel.appendChild(mkS('frequency (s)',  _LT.frequency,    0.3,15,  0.1, v=>_LT.frequency=v));
+    panel.appendChild(mkS('count',          _LT.count,        1,  4,   1,   v=>_LT.count=Math.round(v)));
+    panel.appendChild(mkS('lead factor',    _LT.leadFactor,   0,  1.5, 0.05,v=>_LT.leadFactor=v));
+    panel.appendChild(mkS('sky height',     _LT.skyHeight,    10, 120, 1,   v=>_LT.skyHeight=v));
+    panel.appendChild(mkS('spawn Z (close)', _LT.spawnZ,      -160, -5,  1,   v=>_LT.spawnZ=v));
+    panel.appendChild(mkH('PATTERN'));
+    panel.appendChild(mkSel('pattern',['random','sweep','stagger','salvo','pinch'],()=>_LT.pattern,v=>{ _LT.pattern=v; _ltStaggerQ.length=0; _ltSweepX=0.5; }));
+    panel.appendChild(mkS('lane min X',    _LT.laneMin,    -20,0,   0.5, v=>_LT.laneMin=v));
+    panel.appendChild(mkS('lane max X',    _LT.laneMax,    0,  20,  0.5, v=>_LT.laneMax=v));
+    panel.appendChild(mkS('sweep speed',   _LT.sweepSpeed, 0.05,2,  0.01,v=>_LT.sweepSpeed=v));
+    panel.appendChild(mkS('stagger gap(s)',_LT.staggerGap, 0.1,3,   0.05,v=>_LT.staggerGap=v));
+    panel.appendChild(mkS('salvo count',   _LT.salvoCount, 1,  8,   1,   v=>_LT.salvoCount=Math.round(v)));
+    panel.appendChild(mkS('pinch spread',  _LT.pinchSpread,0.1,3,   0.05,v=>_LT.pinchSpread=v));
+    panel.appendChild(mkH('TIMING'));
+    panel.appendChild(mkS('bolt duration(s)',_LT.boltDuration,0.1,2,0.05,v=>_LT.boltDuration=v));
+    panel.appendChild(mkH('VISUALS'));
+    panel.appendChild(mkS('core radius',  _LT.coreRadius,  0.01,3,  0.01,v=>_LT.coreRadius=v));
+    panel.appendChild(mkS('glow radius',  _LT.glowRadius,  0.05,8,  0.05,v=>_LT.glowRadius=v));
+    panel.appendChild(mkS('segments',     _LT.segments,    4,  64,  1,   v=>_LT.segments=Math.round(v)));
+    panel.appendChild(mkS('jaggedness',   _LT.jaggedness,  0.1,6,   0.05,v=>_LT.jaggedness=v));
+    panel.appendChild(mkS('warn radius',  _LT.warnRadius,  0.5,12,  0.1, v=>_LT.warnRadius=v));
+    panel.appendChild(mkH('IMPACT'));
+    panel.appendChild(mkS('kill radius',    _LT.killRadius,    0.5,10, 0.1, v=>_LT.killRadius=v));
+    panel.appendChild(mkS('shake amount',   _LT.shakeAmt,      0,  1,  0.01,v=>_LT.shakeAmt=v));
+    panel.appendChild(mkS('shake duration', _LT.shakeDuration, 0,  1,  0.02,v=>_LT.shakeDuration=v));
+    panel.appendChild(mkH('PATTERN LOOPS'));
+    const pats=[
+      {label:'↯ RANDOM (loop)', color:'#6af', tick:()=>{ for(let c=0;c<Math.max(1,_LT.count);c++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(_ltNextTargetX()); },c*120); }},
+      {label:'►◄ SWEEP (loop)', color:'#0df', tick:()=>{ const range=_LT.laneMax-_LT.laneMin,swOff=(_ltSweepX-0.5)*range; _ltSweepX+=_ltSweepDir*_LT.sweepSpeed*0.35; if(_ltSweepX>=1||_ltSweepX<=0){_ltSweepDir*=-1;_ltSweepX=Math.max(0,Math.min(1,_ltSweepX));} const n=Math.max(2,_LT.salvoCount); for(let i=0;i<n;i++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(state.shipX+swOff+(i/(n-1)-0.5)*range*0.5); },i*250); }},
+      {label:'▼ ▼▼ STAGGER (loop)', color:'#ff0', tick:()=>{ const s=Math.max(2,_LT.salvoCount); for(let si=0;si<s;si++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(state.shipX); },si*_LT.staggerGap*1000); }},
+      {label:'▼▼▼ SALVO (loop)', color:'#f80', tick:()=>{ const sx=state.shipX,n=Math.max(1,_LT.salvoCount),half=(_LT.laneMax-_LT.laneMin)*0.45; for(let si=0;si<n;si++) _spawnLightning(sx+(n===1?0:(si/(n-1)-0.5))*half*2); }},
+      {label:'▷◁ PINCH (loop)', color:'#f0f', tick:()=>{ const sx=state.shipX,pairs=5,fh=(_LT.laneMax-_LT.laneMin)*0.5*_LT.pinchSpread; for(let pi=0;pi<pairs;pi++){ const hs=Math.max(0.3,fh*(1-pi/(pairs-1))),d=pi*300; (function(s,dl){const fn=()=>{ if(state.phase!=='playing')return; _spawnLightning(sx-s); _spawnLightning(sx+s); }; dl===0?fn():setTimeout(fn,dl);})(hs,d); } setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(sx); },pairs*300); }},
+    ];
+    pats.forEach(({label,color,tick})=>{ const b=mkB(label,color,()=>_startLtLoop(b,color,tick)); panel.appendChild(b); });
+    panel.appendChild(mkB('⏹ STOP LOOP','#888',_stopLtLoop));
+    panel.appendChild(mkB('✕ CLEAR ALL','#f44',()=>{ _stopLtLoop(); _clearAllLightning(); }));
+    const oneBtn=document.createElement('button'); oneBtn.textContent='⚡ STRIKE NOW';
+    oneBtn.style.cssText='width:100%;padding:6px;margin:6px 0 2px;background:#224;border:1px solid #6af;color:#6af;font-family:monospace;font-size:12px;cursor:pointer;border-radius:3px;';
+    oneBtn.addEventListener('click',()=>_spawnLightning((state&&state.shipX)||0));
+    panel.appendChild(oneBtn);
+    const cEl=document.createElement('div'); cEl.style.cssText='margin-top:6px;color:#888;font-size:10px;';
+    const rc=()=>{ cEl.textContent='active: '+_ltActive.length; }; rc(); setInterval(rc,500); panel.appendChild(cEl);
+  }
+
+  let visible=false;
+  document.addEventListener('keydown',e=>{
+    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+    if(e.key==='l'||e.key==='L'){ visible=!visible; if(visible){build();panel.style.display='block';}else panel.style.display='none'; }
   });
 
 })();
