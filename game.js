@@ -20851,8 +20851,8 @@ function _tickJetLightningRamp(dt) {
       const _side = Math.sign(state.shipX);
       _T.pattern    = 'sweep';
       _T.sweepSpeed = 0.55;
-      _T.laneMin    = _side > 0 ?  0 : -35;
-      _T.laneMax    = _side > 0 ? 35 :   0;
+      _T.laneMin    = _side > 0 ?  0 : -60;
+      _T.laneMax    = _side > 0 ? 60 :   0;
       _astSweepX    = _side > 0 ? 1.0 : 0.0;
       _astSweepDir  = _side > 0 ? -1  :  1;
     }
