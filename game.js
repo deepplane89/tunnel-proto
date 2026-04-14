@@ -20322,38 +20322,34 @@ function _tickJetLightningRamp(dt) {
   const T = _asteroidTuner;
   const t = _jlRampTime;
 
-  // ── Recentering funnel: fires when ship drifts past X threshold ──────────────
-  // When active, temporarily overrides pattern to a wall of shots from the
-  // far side, sweeping inward — nudges the player back toward midline.
+  // ── Recentering funnel: switches to sweep pattern when ship drifts too far ──
+  // Biases laneMin/laneMax so the sweep starts outer and crosses through center.
   // Only fires when asteroids are enabled (not during Phase 2 lightning-only).
   if (T.enabled) {
-    const driftX   = Math.abs(state.shipX || 0);
-    const DRIFT_THRESHOLD = 5.5; // units from center before recenter kicks in
-    const RECENTER_DUR    = 4.0; // seconds of corrective pattern
+    const driftX          = Math.abs(state.shipX || 0);
+    const DRIFT_THRESHOLD = 5.5;
+    const RECENTER_DUR    = 5.0; // seconds of sweep before releasing
 
     if (!_jlRecenterActive && driftX > DRIFT_THRESHOLD) {
-      // Trigger: fire a sweep of shots from the outer edge pushing inward
-      _jlRecenterActive = true;
-      _jlRecenterT      = 0;
-      const side      = Math.sign(state.shipX); // +1 right, -1 left
-      const outerX    = side * 10;              // start shots from far edge
-      const innerX    = side * 1.5;             // end shots near center
-      const steps     = 6;
-      for (let i = 0; i < steps; i++) {
-        const frac   = i / (steps - 1);
-        const shotX  = outerX + (innerX - outerX) * frac; // outer → inner
-        setTimeout(() => {
-          if (state.phase === 'playing' && state._jetLightningMode) {
-            _spawnAsteroid(shotX);
-          }
-        }, i * 400); // 400ms between shots — tight enough to feel urgent
-      }
+      _jlRecenterActive  = true;
+      _jlRecenterT       = 0;
+      const side         = Math.sign(state.shipX); // which side they drifted to
+      // Bias lanes: start sweep from the outer edge, sweep through center
+      T.pattern          = 'sweep';
+      T.sweepSpeed       = 0.6;
+      T.laneMin          = side > 0 ?  0 : -12; // outer edge on their side
+      T.laneMax          = side > 0 ? 12 :   0;
+      _astSweepX         = side > 0 ? 1.0 : 0.0; // start at outer edge
+      _astSweepDir       = side > 0 ? -1  :  1;  // sweep inward toward center
     }
 
     if (_jlRecenterActive) {
       _jlRecenterT += dt;
       if (_jlRecenterT >= RECENTER_DUR) {
-        _jlRecenterActive = false; // release — normal patterns resume
+        _jlRecenterActive = false;
+        // Restore normal lane range
+        T.laneMin = -8;
+        T.laneMax =  8;
       }
     }
   }
@@ -20369,9 +20365,11 @@ function _tickJetLightningRamp(dt) {
     T.frequency  = 4.0 - p * 3.5;  // 4.0 -> 0.5 (hits slider max by end of phase)
     T.staggerGap = 1.0 - p * 0.5;  // 1.0 -> 0.5
     T.salvoCount = Math.round(3 + p * 4); // 3 -> 7
-    if      (t < 15) T.pattern = 'stagger';
-    else if (t < 30) T.pattern = 'salvo';
-    else             T.pattern = 'random';
+    if (!_jlRecenterActive) {
+      if      (t < 15) T.pattern = 'stagger';
+      else if (t < 30) T.pattern = 'salvo';
+      else             T.pattern = 'random';
+    }
   }
 
   // Phase 2 (45-120s): Lightning-only round
@@ -20399,9 +20397,11 @@ function _tickJetLightningRamp(dt) {
     T.staggerGap = 0.6 - p * 0.15;
     T.salvoCount = Math.round(4 + p * 4);
     const cycle = t % 30;
-    if      (cycle < 10) { T.pattern = 'stagger'; T.staggerDual = (p > 0.5); } // dual shot kicks in past 165s
-    else if (cycle < 20) { T.pattern = 'salvo';   T.staggerDual = false; }
-    else                 { T.pattern = 'random';  T.staggerDual = false; }
+    if (!_jlRecenterActive) {
+      if      (cycle < 10) { T.pattern = 'stagger'; T.staggerDual = (p > 0.5); }
+      else if (cycle < 20) { T.pattern = 'salvo';   T.staggerDual = false; }
+      else                 { T.pattern = 'random';  T.staggerDual = false; }
+    }
     if (window._LT) {
       window._LT.frequency = Math.max(0.6, 1.8 - p * 1.2);
     }
