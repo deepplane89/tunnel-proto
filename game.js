@@ -20006,8 +20006,16 @@ const _origUpdateShockwave = _updateShockwave;
         tick: () => {
           const steps = Math.max(2, Math.round(T.salvoCount));
           for (let si = 0; si < steps; si++) {
-            // full lock: re-read shipX at fire time so each shot tracks current position
-            setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(state.shipX); }, si * T.staggerGap * 1000);
+            setTimeout(() => {
+              if (state.phase !== 'playing') return;
+              // Shot 1: dead on current position
+              _spawnAsteroid(state.shipX);
+              // Shot 2: leads where ship is heading — offset by velocity * travel time
+              const spawnY = T.skyHeight;
+              const totalTime = Math.sqrt((0 - spawnY) ** 2 + (3.9 - (-160)) ** 2) / T.speed;
+              const leadX = state.shipX + (state.shipVelX || 0) * totalTime * T.leadFactor;
+              if (Math.abs(leadX - state.shipX) > 0.8) _spawnAsteroid(leadX);
+            }, si * T.staggerGap * 1000);
           }
         },
       },
