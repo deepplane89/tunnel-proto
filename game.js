@@ -19013,9 +19013,9 @@ const _asteroidTuner = {
   size:           1.2,     // base radius (world units)
   sizeVariance:   0.4,     // ± random added to size
   frequency:      6.0,     // seconds between spawns (per pattern unit)
-  speed:          18,      // fall speed (units/s along trajectory)
-  angleX:         55,      // degrees from vertical (trajectory tilt toward camera)
-  angleZ:         20,      // degrees of lateral drift per asteroid
+  speed:          22,      // travel speed (units/s along trajectory)
+  skyHeight:      28,      // Y above water at spawn (horizon height)
+  diveAngle:      18,      // degrees below horizontal — steeper = more vertical dive
   fireIntensity:  1.0,     // fire shell opacity multiplier
   trailLength:    1.0,     // particle trail length multiplier
   glowRange:      14,      // PointLight range
@@ -19330,42 +19330,54 @@ function _spawnAsteroid(targetX) {
   const T = _asteroidTuner;
   const radius = T.size + (Math.random() - 0.5) * T.sizeVariance * 2;
 
-  // Sky spawn position — high above and forward on z
-  const spawnY  = 55 + Math.random() * 15;
-  const spawnZ  = SPAWN_Z * 0.35; // somewhere in mid-distance, not horizon
+  // ── Trajectory: spawn at horizon (same SPAWN_Z as cones), elevated by skyHeight.
+  // Asteroid travels diagonally — diveAngle controls how steep the descent is.
+  // It lands at targetX near the ship (~z=-8 to -2) so the player sees the full arc.
+  const spawnX  = targetX + (Math.random() - 0.5) * 4; // slight lateral jitter at horizon
+  const spawnY  = T.skyHeight;
+  const spawnZ  = SPAWN_Z; // same horizon spawn as cones
 
-  // Trajectory: land at targetX, water level (y≈0), at a z near ship
-  const landZ = -6 + (Math.random() - 0.5) * 8; // lands just ahead of ship
-  const landX = THREE.MathUtils.clamp(targetX, T.laneMin, T.laneMax);
+  const landX   = THREE.MathUtils.clamp(targetX, T.laneMin, T.laneMax);
+  const landZ   = -5 + (Math.random() - 0.5) * 6;  // lands just ahead of ship
+  const landY   = 0.2;                               // water surface
 
-  const dX = landX - (targetX + (Math.random() - 0.5) * 2); // slight drift
-  const dY = 0 - spawnY;
-  const dZ = landZ - spawnZ;
-  const totalTime = Math.sqrt(dX*dX + dY*dY + dZ*dZ) / T.speed;
+  // Build velocity from dive angle: horizontal component drives Z, vertical drives Y
+  // diveAngle=0 → horizontal glide, diveAngle=90 → straight down
+  const diveRad = THREE.MathUtils.degToRad(Math.max(5, Math.min(85, T.diveAngle)));
+  const dist    = Math.sqrt((landX-spawnX)**2 + (landY-spawnY)**2 + (landZ-spawnZ)**2);
+  const totalTime = dist / T.speed;
 
-  const vel = new THREE.Vector3(dX / totalTime, dY / totalTime, dZ / totalTime);
+  const vel = new THREE.Vector3(
+    (landX - spawnX) / totalTime,
+    (landY - spawnY) / totalTime,
+    (landZ - spawnZ) / totalTime
+  );
 
   // Scale meshes to radius
   inst.group.scale.setScalar(radius);
-  inst.fireMesh.scale.setScalar(1.28); // relative to group
   inst.rockMesh.material.uniforms.uTime.value = Math.random() * 100;
   inst.fireMesh.material.uniforms.uTime.value  = Math.random() * 100;
   inst.fireMesh.material.uniforms.uRadius.value = radius;
   inst.fireMesh.material.uniforms.uIntensity.value = T.fireIntensity;
 
-  inst.group.position.set(targetX + (Math.random() - 0.5) * 3, spawnY, spawnZ);
+  inst.group.position.set(spawnX, spawnY, spawnZ);
   inst.group.visible = true;
 
-  inst.light.position.copy(inst.group.position);
-  inst.light.distance = T.glowRange * radius;
-  inst.light.intensity = 1.8 * radius;
-  inst.light.visible = true;
+  // Start fully transparent — fade in as it crosses from SPAWN_Z toward camera (matching cone behaviour)
+  inst.rockMesh.material.transparent = true;
+  inst.rockMesh.material.depthWrite  = false;
+  inst.fireMesh.material.depthWrite  = false;
 
-  // Warning disc at landing point
+  inst.light.position.copy(inst.group.position);
+  inst.light.distance  = T.glowRange * radius;
+  inst.light.intensity = 0; // fades in with opacity
+  inst.light.visible   = true;
+
+  // Warning disc at landing point (hidden until asteroid fades in enough)
   const warnRadius = Math.max(3.0, radius * 2.5);
   inst.warnMesh.position.set(landX, 0.12, landZ);
   inst.warnMesh.scale.setScalar(warnRadius);
-  inst.warnMesh.visible = true;
+  inst.warnMesh.visible = false; // shown once fadeT > 0.3
   inst.warnMat.uniforms.uProgress.value = 0;
   inst.warnMat.uniforms.uTime.value = 0;
 
@@ -19479,22 +19491,38 @@ function _updateAsteroids(dt) {
     inst.group.rotation.x += 0.4 * dt;
     inst.group.rotation.z += 0.25 * dt;
 
-    // Sync light to group
+    // ── Horizon fade-in: same Z bands as cone system ──
+    // SPAWN_Z (-160) = invisible, -110 = fully opaque
+    const _AST_FADE_START = SPAWN_Z;   // -160
+    const _AST_FADE_END   = -100;      // fully visible from here
+    const fadeT = Math.max(0, Math.min(1, (inst.group.position.z - _AST_FADE_START) / (_AST_FADE_END - _AST_FADE_START)));
+
+    // Apply opacity to rock (custom shader — use material.opacity uniform substitute via side-channel)
+    // Rock uses opaque ShaderMaterial — fade via blending trick: mix toward transparent
+    inst.rockMesh.material.transparent = fadeT < 1.0;
+    inst.rockMesh.material.depthWrite  = fadeT >= 1.0;
+    // GLSL doesn't have a uOpacity — we drive opacity on fire shell and hide rock at extreme dist
+    inst.rockMesh.visible = fadeT > 0.02;
+    // Fire shell: has uIntensity, use it as combined fire + fade
+    inst.fireMesh.material.uniforms.uIntensity.value = T.fireIntensity * fadeT;
+    // Tail: fade alpha with fadeT
+    inst.tailPts.material.opacity !== undefined && (inst.tailPts.material.opacity = fadeT);
+
+    // Light: fades in with opacity
     inst.light.position.copy(inst.group.position);
-    // Intensify glow as it falls (closer = brighter)
-    inst.light.intensity = (0.8 + progress * 2.2) * inst.radius;
+    inst.light.intensity = fadeT * (0.8 + progress * 2.2) * inst.radius;
+
+    // Show warning disc once asteroid is visible enough
+    if (fadeT > 0.3 && progress < 0.88) inst.warnMesh.visible = true;
+    else if (progress >= 0.88) inst.warnMesh.visible = false;
 
     // Update shader uniforms
-    const shaderDt = dt;
-    inst.rockMesh.material.uniforms.uTime.value += shaderDt;
-    inst.fireMesh.material.uniforms.uTime.value  += shaderDt;
+    inst.rockMesh.material.uniforms.uTime.value += dt;
+    inst.fireMesh.material.uniforms.uTime.value  += dt;
 
     // Update warning disc
     inst.warnMat.uniforms.uProgress.value = Math.min(progress * 1.2, 1.0);
     inst.warnMat.uniforms.uTime.value += dt;
-
-    // Hide warning when asteroid is close (it's arrived)
-    if (progress > 0.88) inst.warnMesh.visible = false;
 
     // Tail particles: write current position into ring buffer
     inst.tailTimer += dt;
@@ -19671,7 +19699,9 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeHeader('PHYSICAL'));
     panel.appendChild(makeSlider('size', T.size, 0.3, 4.0, 0.05, v => T.size = v, '#f80').row);
     panel.appendChild(makeSlider('size variance', T.sizeVariance, 0, 2.0, 0.05, v => T.sizeVariance = v, '#f80').row);
-    panel.appendChild(makeSlider('fall speed', T.speed, 4, 60, 0.5, v => T.speed = v, '#fa0').row);
+    panel.appendChild(makeSlider('speed', T.speed, 4, 80, 0.5, v => T.speed = v, '#fa0').row);
+    panel.appendChild(makeSlider('sky height', T.skyHeight, 5, 80, 1, v => T.skyHeight = v, '#8cf').row);
+    panel.appendChild(makeSlider('dive angle °', T.diveAngle, 5, 85, 1, v => T.diveAngle = v, '#8cf').row);
     panel.appendChild(makeSlider('kill radius', T.killRadius, 0.5, 6.0, 0.1, v => T.killRadius = v, '#f44').row);
 
     // VISUALS
