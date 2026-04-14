@@ -14897,7 +14897,8 @@ function update(dt) {
   // ── Camera roll: tilt screen when steering (like original Jet Slalom)
   // camera.rotation is in LOCAL space of pivot; lookAt was already set at init.
   // We only change rotation.z (roll) — x/y stay from the initial lookAt.
-  const targetCamRoll = -state.shipVelX * 0.018;  // ~10° max at full speed
+  const _maxVelNow = _maxVelBase + _snap * _maxVelSnap;
+  const targetCamRoll = -(state.shipVelX / Math.max(1, _maxVelNow)) * 0.4;  // normalized: ~10° max regardless of vel cap
   cameraRoll = THREE.MathUtils.lerp(cameraRoll, targetCamRoll, 5 * dt);
   camera.rotation.z = cameraRoll;
 
