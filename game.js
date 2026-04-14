@@ -21892,10 +21892,17 @@ window._jlDebug = {
   const FCT = {
     enabled:   false,
     frequency: 4.0,    // seconds between spawns (auto-loop)
-    scaleXZ:   12,     // cone footprint scale (Y always 1)
+    // shape
+    scaleXZ:        4,     // standard campaign fat cone footprint
+    scaleY:         1,     // height scalar
+    glowBot:        0.255, // neon band bottom (UV space)
+    glowTop:        0.345, // neon band top (UV space)
+    neonColor:      0xff1a8c, // default: pink (matches type-0)
+    obsidianColor:  0x12121a, // dark body color
+    // placement
     laneMin:  -10,
     laneMax:   10,
-    spreadAroundShip: 8, // ±X around ship for random placement
+    spreadAroundShip: 8,
     coneType: -1,       // -1 = random, 0/1/2 = specific mesh
   };
 
@@ -21905,31 +21912,23 @@ window._jlDebug = {
     if (state.phase !== 'playing') return;
     const type = FCT.coneType < 0 ? Math.floor(Math.random() * 3) : FCT.coneType;
     const obs = getPooledObstacle(type);
-    if (!obs) { console.warn('[FATCONE] pool exhausted'); return; }
+    if (!obs) return;
     const spawnX = state.shipX + (Math.random() - 0.5) * FCT.spreadAroundShip * 2;
     const clampedX = Math.max(FCT.laneMin, Math.min(FCT.laneMax, spawnX));
-    // In JL mode spawn closer so cones arrive quickly; campaign uses deep horizon
-    const spawnZ = state._jetLightningMode ? -30 : SPAWN_Z;
-    obs.position.set(clampedX, 0, spawnZ);
-    obs.scale.set(FCT.scaleXZ, 1, FCT.scaleXZ);
+    obs.position.set(clampedX, 0, SPAWN_Z);
+    obs.scale.set(FCT.scaleXZ, FCT.scaleY, FCT.scaleXZ);
     obs.userData.velX         = 0;
     obs.userData.slalomScaled = true;
     obs.userData.isFatCone    = true;
-    // In JL mode spawning close — force full opacity immediately (no fade-in)
-    if (state._jetLightningMode) {
-      const _mc = obs.userData._meshes;
-      for (let mi = 0; mi < _mc.length; mi++) {
-        const child = _mc[mi];
-        if (child.material.uniforms && child.material.uniforms.uOpacity) {
-          child.material.uniforms.uOpacity.value = 1.0;
-          child.material.transparent = false;
-          child.material.depthWrite  = true;
-          child.material.needsUpdate = true;
-        } else if (child.material.opacity !== undefined) {
-          child.material.opacity     = 1.0;
-          child.material.transparent = false;
-          child.material.needsUpdate = true;
-        }
+    // Apply per-cone shader overrides from tuner
+    const _mc = obs.userData._meshes;
+    for (let mi = 0; mi < _mc.length; mi++) {
+      const mat = _mc[mi].material;
+      if (mat.uniforms) {
+        if (mat.uniforms.uGlowBot)  mat.uniforms.uGlowBot.value  = FCT.glowBot;
+        if (mat.uniforms.uGlowTop)  mat.uniforms.uGlowTop.value  = FCT.glowTop;
+        if (mat.uniforms.uNeon)     mat.uniforms.uNeon.value.setHex(FCT.neonColor);
+        if (mat.uniforms.uObsidian) mat.uniforms.uObsidian.value.setHex(FCT.obsidianColor);
       }
     }
     activeObstacles.push(obs);
@@ -22002,9 +22001,36 @@ window._jlDebug = {
   function build() {
     panel.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#f80;margin-bottom:6px;">🔺 FAT CONE TUNER (F)</div>';
 
+    panel.appendChild(mkH('SHAPE', '#f80'));
+    panel.appendChild(mkSlider('scale XZ', FCT.scaleXZ, 0.5, 20, 0.25, v => FCT.scaleXZ = v, '#f80'));
+    panel.appendChild(mkSlider('scale Y', FCT.scaleY, 0.1, 5, 0.1, v => FCT.scaleY = v, '#f80'));
+    panel.appendChild(mkSlider('glow bot', FCT.glowBot, 0, 1, 0.005, v => FCT.glowBot = v, '#f0a'));
+    panel.appendChild(mkSlider('glow top', FCT.glowTop, 0, 1, 0.005, v => FCT.glowTop = v, '#f0a'));
+
+    // Neon color picker
+    (() => {
+      const row = document.createElement('div');
+      row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:6px;';
+      const lbl = document.createElement('span'); lbl.style.cssText = 'width:110px;color:#f0a;font-size:10px;flex-shrink:0;'; lbl.textContent = 'neon color';
+      const inp = document.createElement('input'); inp.type='color'; inp.value='#'+FCT.neonColor.toString(16).padStart(6,'0');
+      inp.style.cssText = 'flex:1;height:22px;border:none;background:none;cursor:pointer;';
+      inp.oninput = () => { FCT.neonColor = parseInt(inp.value.slice(1),16); };
+      row.appendChild(lbl); row.appendChild(inp); panel.appendChild(row);
+    })();
+
+    // Obsidian color picker
+    (() => {
+      const row = document.createElement('div');
+      row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:6px;';
+      const lbl = document.createElement('span'); lbl.style.cssText = 'width:110px;color:#aaa;font-size:10px;flex-shrink:0;'; lbl.textContent = 'body color';
+      const inp = document.createElement('input'); inp.type='color'; inp.value='#'+FCT.obsidianColor.toString(16).padStart(6,'0');
+      inp.style.cssText = 'flex:1;height:22px;border:none;background:none;cursor:pointer;';
+      inp.oninput = () => { FCT.obsidianColor = parseInt(inp.value.slice(1),16); };
+      row.appendChild(lbl); row.appendChild(inp); panel.appendChild(row);
+    })();
+
     panel.appendChild(mkH('SPAWN', '#f80'));
 
-    panel.appendChild(mkSlider('scale XZ', FCT.scaleXZ, 1, 30, 0.5, v => FCT.scaleXZ = v, '#f80'));
     panel.appendChild(mkSlider('spread ±X', FCT.spreadAroundShip, 0, 20, 0.5, v => FCT.spreadAroundShip = v, '#fa0'));
     panel.appendChild(mkSlider('lane min', FCT.laneMin, -25, 0, 0.5, v => FCT.laneMin = v, '#8df'));
     panel.appendChild(mkSlider('lane max', FCT.laneMax, 0, 25, 0.5, v => FCT.laneMax = v, '#8df'));
