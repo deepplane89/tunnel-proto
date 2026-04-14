@@ -20541,7 +20541,7 @@ const _JL_TRACKS = [
   // ════════ ALWAYS-ON / CUSTOM ══════════════════════════════════════════════
   {
     id: 'fatcone', label: 'Fat Cones', type: 'fatcone',
-    startT: 0, endT: null,
+    startT: 360, endT: null,
     frequency: 8.0,
   },
   {
