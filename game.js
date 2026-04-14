@@ -19387,22 +19387,27 @@ function _spawnAsteroid(targetX) {
   //   trajZ  → how far toward the camera it travels (landZ = spawnZ + trajZ)
   //   trajY  → multiplier on height drop (1.0 = full drop to water)
   //   trajX  → lateral jitter at spawn point
-  const spawnX = targetX + (Math.random() - 0.5) * T.trajX;
+  // Spawn at horizon, elevated
   const spawnY = T.skyHeight;
-  const spawnZ = SPAWN_Z; // -160, same as cones
+  const spawnZ = SPAWN_Z; // -160
 
-  // Land exactly at ship Z — no jitter on Z so it always passes through the ship's lane.
-  // trajX scatter only applies to X (spawn jitter) not the landing point.
-  const landZ  = shipGroup.position.z;
-  const landY  = 0.15;
+  // Landing point: always at ship Z (ship is static, world scrolls)
+  const landZ = shipGroup.position.z;
+  const landY = 0.15;
 
-  const dist      = Math.sqrt((targetX-spawnX)**2 + (landY-spawnY)**2 + (landZ-spawnZ)**2);
-  const totalTime = dist / T.speed;
+  // Estimate fall time from straight-line distance using targetX as proxy
+  const estDist = Math.sqrt((targetX - targetX)**2 + (landY - spawnY)**2 + (landZ - spawnZ)**2);
+  const totalTime = Math.sqrt((landY-spawnY)**2 + (landZ-spawnZ)**2) / T.speed;
 
-  // Lead-targeting: aim at where ship WILL BE when asteroid arrives, not where it is now.
-  // shipVelX is in world-units/s. Clamp so we don't lead off screen.
-  const leadX = targetX + (state.shipVelX || 0) * totalTime * T.leadFactor;
-  const landX = THREE.MathUtils.clamp(leadX, T.laneMin, T.laneMax);
+  // Land X = ship's current position + lead + the pattern offset (targetX is already ship-relative from patterns)
+  // targetX IS the desired landing X (patterns pass state.shipX ± offset), so just lead from there.
+  const landX = THREE.MathUtils.clamp(
+    targetX + (state.shipVelX || 0) * totalTime * T.leadFactor,
+    T.laneMin, T.laneMax
+  );
+
+  // Spawn X = same as landX so trajectory is straight down-forward, no sideways drift
+  const spawnX = landX;
 
   // Velocity vector: reuse pooled vector on inst to avoid GC allocation
   inst.vel.set(
@@ -19549,15 +19554,6 @@ function _updateAsteroids(dt) {
 
     // Move
     inst.group.position.addScaledVector(inst.vel, dt);
-
-    // Mid-flight steering: continuously correct vel.x toward current ship X
-    // so the asteroid tracks lateral movement instead of flying past on a fixed rail.
-    // Strength = leadFactor * 1.5 — same tuner param, no new slider needed.
-    const _steerTargetX = state.shipX + (state.shipVelX || 0) * (inst.totalFallTime - inst.elapsed) * T.leadFactor;
-    const _steerDx = THREE.MathUtils.clamp(_steerTargetX, T.laneMin, T.laneMax) - inst.group.position.x;
-    inst.vel.x += _steerDx * T.leadFactor * 1.5 * dt;
-    // Also update the warn disc X to follow corrected trajectory
-    inst.warnMesh.position.x = inst.group.position.x + inst.vel.x * (inst.totalFallTime - inst.elapsed);
 
     // Slow tumble
     inst.group.rotation.x += 0.4 * dt;
