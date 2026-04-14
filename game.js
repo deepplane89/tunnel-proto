@@ -20613,21 +20613,12 @@ function _tickJetLightningRamp(dt) {
       if      (track.type === 'asteroid')  _activeAst = track;
       else if (track.type === 'lightning') _activeLt  = track;
       else if (track.type === 'fatcone') {
-        // Fat cone spawner — self-contained timer
+        // Fat cone spawner — delegates to _spawnFatCone() which uses FCT settings
         _jlFatConeTimer -= dt;
         if (_jlFatConeTimer <= 0) {
-          _jlFatConeTimer = (track.frequency / _jlIntensity) * (0.7 + Math.random() * 0.6);
-          const coneType = Math.floor(Math.random() * 3);
-          const fatObs   = getPooledObstacle(coneType);
-          if (fatObs) {
-            const spawnX = state.shipX + (Math.random() - 0.5) * 12;
-            fatObs.position.set(spawnX, 0, SPAWN_Z);
-            fatObs.scale.set(12, 1, 12);
-            fatObs.userData.velX         = 0;
-            fatObs.userData.slalomScaled = true;
-            fatObs.userData.isFatCone    = true;
-            activeObstacles.push(fatObs);
-          }
+          const _fct = window._FCT || track;
+          _jlFatConeTimer = (_fct.frequency / _jlIntensity) * (0.7 + Math.random() * 0.6);
+          if (typeof window._spawnFatCone === 'function') window._spawnFatCone();
         }
       }
       // custom tracks: onActivate already fired above, they manage themselves
@@ -22033,6 +22024,10 @@ window._jlDebug = {
     setInterval(refreshCount, 500);
     panel.appendChild(countEl);
   }
+
+  // Expose to sequencer tick (outside IIFE scope)
+  window._spawnFatCone = _spawnFatCone;
+  window._FCT = FCT;
 
   let _fcVisible = false;
   document.addEventListener('keydown', e => {
