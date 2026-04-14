@@ -20105,7 +20105,7 @@ const _origUpdateShockwave = _updateShockwave;
     frequency:    4.0,
     leadFactor:   0.6,
     skyHeight:    55,
-    warningTime:  1.8,    // seconds disc is visible before bolt (cosmetic — actual strike = when Z reached)
+    warningTime:  0.3,    // seconds disc shows before bolt slams — keep short so bolt strikes ahead of ship
     boltDuration: 0.5,    // seconds of initial flash
     lingerDuration: 4.0,  // seconds bolt stays planted in world (ship flies past it)
     coreRadius:   0.12,
@@ -20325,8 +20325,8 @@ const _origUpdateShockwave = _updateShockwave;
         const sc = 0.85 + 0.2 * Math.abs(Math.sin(inst.elapsed * 5));
         inst.warnMesh.scale.set(sc, sc, 1);
 
-        // Strike when bolt group reaches ship Z (proximity-based, not timer)
-        if (inst.boltGroup.position.z >= _shipZ() - 1.0) {
+        // Strike after warningTime — bolt is still ahead of ship, plants there
+        if (inst.elapsed >= _LT.warningTime) {
           inst.phase = 'strike';
           inst.strikeElapsed = 0;
           inst.warnMat.opacity = 0;
