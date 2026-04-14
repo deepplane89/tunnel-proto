@@ -20518,7 +20518,8 @@ const _origUpdateShockwave = _updateShockwave;
     leadFactor:   0.6,
     skyHeight:    55,
     warningTime:  1.8,    // seconds disc is visible before bolt (cosmetic — actual strike = when Z reached)
-    boltDuration: 0.5,    // seconds bolt lingers after strike
+    boltDuration: 0.5,    // seconds of initial flash
+    lingerDuration: 2.0,  // seconds bolt stays planted in world (ship flies past it)
     coreRadius:   0.12,
     glowRadius:   0.55,
     segments:     10,
@@ -20733,10 +20734,11 @@ const _origUpdateShockwave = _updateShockwave;
           inst.flashMat.opacity = 1.0;
           inst.ringMat.opacity  = 0.9;
           _ltShakeTime = _LT.shakeDuration;
-          // Freeze bolt at ship Z position for the strike
+          // Plant bolt at strike position — stays here forever (ship flies past)
           const sz = _shipZ();
+          inst.strikePosZ = sz;
           [inst.warnMesh, inst.flash, inst.ring, inst.coreMesh, inst.glowMesh].forEach(m => m.position.z = sz);
-          _ltRejag(inst); // final jag at strike position
+          _ltRejag(inst);
         }
 
         // Despawn if scrolled past ship without striking (shouldn't happen)
@@ -20750,23 +20752,62 @@ const _origUpdateShockwave = _updateShockwave;
 
         if (Math.floor(inst.strikeElapsed * 22) % 3 === 0) _ltRejag(inst);
 
-        inst.coreMat.opacity  = Math.max(0, 1.0 - t*0.9);
-        inst.glowMat.opacity  = Math.max(0, 0.5  - t*0.7);
-        inst.flashMat.opacity = Math.max(0, 1.0  - t*4.0);
+        // Flash fades fast, bolt stays bright
+        inst.coreMat.opacity  = Math.max(0.8, 1.0 - t*0.1);
+        inst.glowMat.opacity  = Math.max(0.4, 0.5 - t*0.05);
+        inst.flashMat.opacity = Math.max(0, 1.0 - t*4.0);
         inst.ringScale += dt * 22;
         inst.ring.scale.set(inst.ringScale, inst.ringScale, 1);
-        inst.ringMat.opacity  = Math.max(0, 0.9  - t*2.0);
+        inst.ringMat.opacity  = Math.max(0, 0.9 - t*2.0);
 
-        if (!inst.hitChecked && state && state.phase === 'playing') {
-          inst.hitChecked = true;
+        // Hit check — only while ship is close
+        if (state && state.phase === 'playing') {
           const dx = (state.shipX||0) - inst.landX;
-          if (Math.abs(dx) < _LT.killRadius) {
-            if (state._tutorialActive) addCrashFlash(0x4488ff);
-            else killPlayer();
+          const dz = _shipZ() - inst.strikePosZ;
+          if (Math.abs(dx) < _LT.killRadius && Math.abs(dz) < _LT.killRadius) {
+            if (!inst.hitChecked) {
+              inst.hitChecked = true;
+              if (state._tutorialActive) addCrashFlash(0x4488ff);
+              else killPlayer();
+            }
+          } else {
+            inst.hitChecked = false; // re-arm if ship moves away and back (shouldn't happen but safe)
           }
         }
 
         if (inst.strikeElapsed >= _LT.boltDuration) {
+          // Transition to linger — bolt stays planted, crackles as ship flies past
+          inst.phase = 'linger';
+          inst.lingerElapsed = 0;
+          inst.flashMat.opacity = 0;
+        }
+
+      } else if (inst.phase === 'linger') {
+        inst.lingerElapsed += dt;
+        const t = inst.lingerElapsed / Math.max(0.01, _LT.lingerDuration);
+
+        // Crackle: random flicker
+        if (Math.floor(inst.lingerElapsed * 18) % 2 === 0) _ltRejag(inst);
+        const flicker = 0.6 + 0.4 * Math.abs(Math.sin(inst.lingerElapsed * 14 + Math.random()));
+        inst.coreMat.opacity = Math.max(0, (1.0 - t) * flicker);
+        inst.glowMat.opacity = Math.max(0, (0.45 - t*0.3) * flicker);
+
+        // Hit check stays live while ship is near
+        if (state && state.phase === 'playing') {
+          const dx = (state.shipX||0) - inst.landX;
+          const dz = _shipZ() - inst.strikePosZ;
+          if (Math.abs(dx) < _LT.killRadius && Math.abs(dz) < _LT.killRadius * 2) {
+            if (!inst.hitChecked) {
+              inst.hitChecked = true;
+              if (state._tutorialActive) addCrashFlash(0x4488ff);
+              else killPlayer();
+            }
+          } else {
+            inst.hitChecked = false;
+          }
+        }
+
+        if (inst.lingerElapsed >= _LT.lingerDuration) {
           _ltKill(inst); _ltActive.splice(i,1);
         }
       }
@@ -20817,7 +20858,8 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(mkS('salvo count',   _LT.salvoCount, 1,  8,   1,   v=>_LT.salvoCount=Math.round(v)));
     panel.appendChild(mkS('pinch spread',  _LT.pinchSpread,0.1,3,   0.05,v=>_LT.pinchSpread=v));
     panel.appendChild(mkH('TIMING'));
-    panel.appendChild(mkS('bolt duration(s)',_LT.boltDuration,0.1,2,0.05,v=>_LT.boltDuration=v));
+    panel.appendChild(mkS('bolt duration(s)', _LT.boltDuration,  0.1, 2,   0.05, v=>_LT.boltDuration=v));
+    panel.appendChild(mkS('linger duration(s)',_LT.lingerDuration, 0.2, 6.0, 0.1,  v=>_LT.lingerDuration=v));
     panel.appendChild(mkH('VISUALS'));
     panel.appendChild(mkS('core radius',  _LT.coreRadius,  0.01,3,  0.01,v=>_LT.coreRadius=v));
     panel.appendChild(mkS('glow radius',  _LT.glowRadius,  0.05,8,  0.05,v=>_LT.glowRadius=v));
