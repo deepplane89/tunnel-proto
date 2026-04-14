@@ -493,6 +493,8 @@ let _accelDriftMult  = 4.0;  // unused — kept for tuner slider
 let _decelBasePct    = 0.02; // DECEL % at stock (long slide)
 let _decelFullPct    = 0.05; // DECEL % at full control (nice slide, stops cleanly)
 let _decelOppScale   = 1.0;  // unused — kept for tuner slider (always start at -1 = live)
+let _maxVelBase      = 9;    // lateral velocity cap at L1
+let _maxVelSnap      = 13;   // extra cap added at max level (total = _maxVelBase + _maxVelSnap at L5)
 function getHandlingDrift() {
   if (_handlingDriftOverride >= 0) return _handlingDriftOverride;
   const level = loadPlayerLevel();
@@ -14813,7 +14815,7 @@ function update(dt) {
   // DECEL: low tier = long slide, high tier = brief slide
   const DECEL_BASE = 10 + _snap * 26;
   const DECEL = DECEL_BASE * (_decelBasePct + (1 - _handlingDrift) * (_decelFullPct - _decelBasePct));
-  const MAX_VEL = 9 + _snap * 13;
+  const MAX_VEL = _maxVelBase + _snap * _maxVelSnap;
 
   // Tilt penalty: only kicks in after a 2s grace period of being tilted
   const TILT_GRACE = 2.0;  // seconds before penalty starts
@@ -18048,6 +18050,8 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('decel stock %', _decelBasePct, 0, 0.5, 0.01, v => _decelBasePct = v, '#0f8'));
     panel.appendChild(makeSlider('decel full %', _decelFullPct, 0, 1.0, 0.01, v => _decelFullPct = v, '#0f8'));
     panel.appendChild(makeSlider('opp decel scale', _decelOppScale, 0, 2, 0.05, v => _decelOppScale = v, '#0f8'));
+    panel.appendChild(makeSlider('max vel base', _maxVelBase, 1, 120, 1, v => _maxVelBase = v, '#0f8'));
+    panel.appendChild(makeSlider('max vel snap', _maxVelSnap, 0, 120, 1, v => _maxVelSnap = v, '#0f8'));
 
     panel.appendChild(makeHeader('BANK'));
     panel.appendChild(makeSlider('bank max', _bankMax, 0, 0.06, 0.001, v => _bankMax = v, '#0af'));
