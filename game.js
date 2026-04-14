@@ -20283,7 +20283,13 @@ function startJetLightning() {
   state._jetLightningMode = true;
   _asteroidTuner.enabled  = true;
   _noSpawnMode            = false;
-  state.speed             = BASE_SPEED * 1.5; // L4 speed
+  // Start at L4 score threshold so level/speed is L4 from the jump
+  // Score will climb naturally to L5 (threshold 675) during play
+  state.score         = 490; // LEVELS[3].scoreThreshold
+  state.currentLevelIdx = 3;
+  currentLevelDef     = LEVELS[3];
+  targetLevelDef      = LEVELS[3];
+  state.speed         = BASE_SPEED * LEVELS[3].speedMult; // 1.5x = L4
 }
 
 // ── Per-frame JL difficulty ramp — called from composer chain ────────────────
