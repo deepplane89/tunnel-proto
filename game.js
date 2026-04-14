@@ -18991,3 +18991,749 @@ function buildSkinTunerSliders() {
     }
   });
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  FLAMING ASTEROID SYSTEM
+//  Rocky enflamed asteroids fall from sky on diagonal trajectories.
+//  Tutorial mode only (gated by _asteroidTuner.enabled).
+//  Architecture:
+//    - _asteroidGroup: THREE.Group pooled per asteroid
+//    - Rock shell: IcosahedronGeometry + custom ShaderMaterial (lava cracks via FBM)
+//    - Fire shell: slightly larger icosahedron, additive blending, vertex displacement
+//    - PointLight child: orange glow casts on water as it falls
+//    - Tail particles: BufferGeometry points trailing behind
+//    - Impact warning: glow disc on water at projected landing X
+//    - Impact: water shockwave + kill check + ripple burst
+//    - Pattern: sweep / stagger / random / salvo
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Tuner config (all live-editable via panel, key='Y') ──────────────────────
+const _asteroidTuner = {
+  enabled:        false,   // master on/off (tutorial only)
+  size:           1.2,     // base radius (world units)
+  sizeVariance:   0.4,     // ± random added to size
+  frequency:      6.0,     // seconds between spawns (per pattern unit)
+  speed:          18,      // fall speed (units/s along trajectory)
+  angleX:         55,      // degrees from vertical (trajectory tilt toward camera)
+  angleZ:         20,      // degrees of lateral drift per asteroid
+  fireIntensity:  1.0,     // fire shell opacity multiplier
+  trailLength:    1.0,     // particle trail length multiplier
+  glowRange:      14,      // PointLight range
+  killRadius:     2.2,     // collision kill radius at water level
+  // Pattern
+  pattern:        'random', // 'random' | 'sweep' | 'stagger' | 'salvo'
+  sweepSpeed:     0.4,     // lanes/sec for sweep pattern
+  staggerGap:     1.8,     // seconds between salvo/stagger drops
+  salvoCount:     3,       // how many simultaneous in a salvo
+  laneMin:        -8,      // leftmost lane X
+  laneMax:         8,      // rightmost lane X
+  warningTime:    1.8,     // seconds warning disc shows before impact
+};
+
+// ── Shaders ──────────────────────────────────────────────────────────────────
+const _asteroidRockVS = `
+varying vec3 vNormal;
+varying vec3 vPos;
+uniform float uTime;
+
+// Simple hash + FBM for vertex displacement
+float hash(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
+float noise3(vec3 p){
+  vec3 i=floor(p); vec3 f=fract(p);
+  f=f*f*(3.0-2.0*f);
+  float n=mix(mix(mix(hash(i+vec3(0,0,0)),hash(i+vec3(1,0,0)),f.x),
+                  mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+              mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),
+                  mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);
+  return n*2.0-1.0;
+}
+float fbm(vec3 p){
+  float v=0.0, a=0.5;
+  for(int i=0;i<4;i++){v+=a*noise3(p); p*=2.1; a*=0.5;}
+  return v;
+}
+
+void main(){
+  vNormal = normalize(normalMatrix * normal);
+  // Distort vertex position to make chunky irregular rock
+  vec3 displaced = position + normal * (fbm(position * 1.8 + uTime * 0.05) * 0.28);
+  vPos = displaced;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+}`;
+
+const _asteroidRockFS = `
+varying vec3 vNormal;
+varying vec3 vPos;
+uniform float uTime;
+
+float hash(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
+float noise3(vec3 p){
+  vec3 i=floor(p); vec3 f=fract(p);
+  f=f*f*(3.0-2.0*f);
+  return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z)*2.0-1.0;
+}
+float fbm(vec3 p){
+  float v=0.0, a=0.5;
+  for(int i=0;i<5;i++){v+=a*noise3(p); p*=2.1; a*=0.5;}
+  return v;
+}
+
+void main(){
+  float nml = dot(normalize(vNormal), vec3(0.0, 1.0, -0.5)) * 0.5 + 0.5;
+  // Lava crack pattern: narrow high-contrast ridges
+  float crack = fbm(vPos * 3.2 + uTime * 0.12);
+  float crack2 = fbm(vPos * 5.8 - uTime * 0.08);
+  float lava = smoothstep(0.22, 0.55, crack) * smoothstep(0.18, 0.48, crack2);
+  lava = clamp(lava, 0.0, 1.0);
+
+  // Base rock: very dark basalt with slight roughness shading
+  vec3 rockColor = mix(vec3(0.06, 0.04, 0.04), vec3(0.18, 0.10, 0.06), nml * 0.5 + fbm(vPos*1.1)*0.3);
+  // Lava: glowing orange/red/yellow
+  float pulse = 0.85 + 0.15 * sin(uTime * 3.0 + vPos.y * 4.0);
+  vec3 lavaColor = mix(vec3(1.0, 0.18, 0.0), vec3(1.0, 0.72, 0.0), crack * pulse);
+
+  vec3 col = mix(rockColor, lavaColor, lava);
+  // Emissive hotspots where lava is strongest
+  float emission = lava * lava * 2.5 * pulse;
+  col = col + lavaColor * emission * 0.6;
+
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+const _asteroidFireVS = `
+varying float vAlpha;
+varying vec3 vPos;
+uniform float uTime;
+uniform float uRadius;
+
+float hash(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
+float noise3(vec3 p){
+  vec3 i=floor(p); vec3 f=fract(p);
+  f=f*f*(3.0-2.0*f);
+  return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z)*2.0-1.0;
+}
+float fbm(vec3 p){
+  float v=0.0,a=0.5;
+  for(int i=0;i<3;i++){v+=a*noise3(p); p*=2.1; a*=0.5;}
+  return v;
+}
+
+void main(){
+  // Vertex displacement: fire billows outward from surface
+  float n = fbm(position * 1.6 + uTime * 0.35);
+  vec3 disp = position + normalize(position) * (n * 0.45 + 0.12) * uRadius;
+  vPos = disp;
+
+  // Alpha: opaque at equator, fade at poles — fire wraps belly
+  float polarFade = 1.0 - abs(normalize(position).y);
+  vAlpha = clamp(polarFade * 1.2, 0.0, 1.0);
+
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(disp, 1.0);
+}`;
+
+const _asteroidFireFS = `
+varying float vAlpha;
+varying vec3 vPos;
+uniform float uTime;
+uniform float uIntensity;
+
+float hash(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
+float noise3(vec3 p){
+  vec3 i=floor(p); vec3 f=fract(p);
+  f=f*f*(3.0-2.0*f);
+  return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z)*2.0-1.0;
+}
+float fbm(vec3 p){
+  float v=0.0,a=0.5;
+  for(int i=0;i<4;i++){v+=a*noise3(p); p*=2.1; a*=0.5;}
+  return v;
+}
+
+void main(){
+  float f = fbm(vPos * 2.5 + vec3(0.0, uTime * 0.8, uTime * 0.3));
+  f = f * 0.5 + 0.5;
+  // Fire color ramp: core=white-yellow, mid=orange, outer=deep red
+  vec3 fireInner = vec3(1.0, 0.95, 0.5);
+  vec3 fireMid   = vec3(1.0, 0.38, 0.0);
+  vec3 fireOuter = vec3(0.6, 0.05, 0.0);
+  vec3 col = mix(fireOuter, fireMid, f);
+  col = mix(col, fireInner, smoothstep(0.55, 0.85, f));
+
+  float alpha = vAlpha * (0.55 + 0.45 * f) * uIntensity;
+  gl_FragColor = vec4(col, alpha);
+}`;
+
+// Impact warning disc shader (glows on water at landing point)
+const _asteroidWarnVS = `
+varying vec2 vUv;
+void main(){
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+const _asteroidWarnFS = `
+varying vec2 vUv;
+uniform float uProgress; // 0=just appeared, 1=impact
+uniform float uTime;
+void main(){
+  vec2 c = vUv * 2.0 - 1.0;
+  float r = length(c);
+  // Pulsing outer ring + inner glow
+  float ring = smoothstep(0.75, 0.85, r) * smoothstep(1.0, 0.85, r);
+  float inner = smoothstep(0.6, 0.0, r) * 0.25;
+  // Pulse gets more frantic as progress → 1
+  float pulse = 0.6 + 0.4 * sin(uTime * (4.0 + uProgress * 12.0));
+  float alpha = (ring + inner) * pulse * (0.4 + uProgress * 0.6);
+  // Color: orange→red as impact nears
+  vec3 col = mix(vec3(1.0, 0.55, 0.0), vec3(1.0, 0.1, 0.0), uProgress);
+  gl_FragColor = vec4(col, alpha);
+}`;
+
+// ── Pool + state ─────────────────────────────────────────────────────────────
+const _AST_POOL_SIZE = 12;
+const _asteroidPool  = [];      // { group, rockMesh, fireMesh, light, tailGeo, tailPts, warnMesh, warnMat, active, ... }
+let   _asteroidActive = [];     // refs into pool currently in flight
+let   _astTimer = 0;            // time until next spawn
+let   _astSweepX = 0;           // current sweep lane X
+let   _astSweepDir = 1;
+let   _astStaggerQueue = [];    // pending stagger/salvo lane Xs
+let   _astStaggerT = 0;
+
+// Tail particle constants
+const _AST_TAIL_COUNT = 60;
+
+function _buildAsteroidInstance() {
+  const group = new THREE.Group();
+  group.visible = false;
+  scene.add(group);
+
+  // Rock shell
+  const rockGeo = new THREE.IcosahedronGeometry(1, 1);
+  const rockMat = new THREE.ShaderMaterial({
+    vertexShader: _asteroidRockVS,
+    fragmentShader: _asteroidRockFS,
+    uniforms: { uTime: { value: 0 } },
+  });
+  const rockMesh = new THREE.Mesh(rockGeo, rockMat);
+  group.add(rockMesh);
+
+  // Fire shell (slightly larger, additive)
+  const fireGeo = new THREE.IcosahedronGeometry(1, 2);
+  const fireMat = new THREE.ShaderMaterial({
+    vertexShader: _asteroidFireVS,
+    fragmentShader: _asteroidFireFS,
+    uniforms: {
+      uTime:      { value: 0 },
+      uRadius:    { value: 1.0 },
+      uIntensity: { value: 1.0 },
+    },
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const fireMesh = new THREE.Mesh(fireGeo, fireMat);
+  fireMesh.scale.setScalar(1.28);
+  group.add(fireMesh);
+
+  // PointLight (orange glow, added to scene not group so it doesn't inherit scale issues)
+  const light = new THREE.PointLight(0xff5500, 0, 14);
+  light.visible = false;
+  scene.add(light);
+
+  // Tail particles
+  const tailPositions = new Float32Array(_AST_TAIL_COUNT * 3);
+  const tailAlphas    = new Float32Array(_AST_TAIL_COUNT);
+  const tailGeo = new THREE.BufferGeometry();
+  tailGeo.setAttribute('position', new THREE.BufferAttribute(tailPositions, 3));
+  tailGeo.setAttribute('alpha',    new THREE.BufferAttribute(tailAlphas, 1));
+  const tailMat = new THREE.ShaderMaterial({
+    uniforms: {},
+    vertexShader: `
+      attribute float alpha;
+      varying float vAlpha;
+      void main(){
+        vAlpha = alpha;
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = (80.0 / -mvPos.z) * alpha;
+        gl_Position = projectionMatrix * mvPos;
+      }`,
+    fragmentShader: `
+      varying float vAlpha;
+      void main(){
+        float d = length(gl_PointCoord - vec2(0.5));
+        if(d > 0.5) discard;
+        float a = (1.0 - d*2.0) * vAlpha;
+        gl_FragColor = vec4(1.0, 0.45 + vAlpha*0.3, 0.0, a);
+      }`,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const tailPts = new THREE.Points(tailGeo, tailMat);
+  tailPts.frustumCulled = false;
+  scene.add(tailPts);
+
+  // Warning disc on water
+  const warnGeo = new THREE.CircleGeometry(1, 32);
+  const warnMat = new THREE.ShaderMaterial({
+    vertexShader: _asteroidWarnVS,
+    fragmentShader: _asteroidWarnFS,
+    uniforms: { uProgress: { value: 0 }, uTime: { value: 0 } },
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const warnMesh = new THREE.Mesh(warnGeo, warnMat);
+  warnMesh.rotation.x = -Math.PI / 2;
+  warnMesh.position.y = 0.12;
+  warnMesh.visible = false;
+  scene.add(warnMesh);
+
+  // Tail history ring buffer
+  const tailHistory = [];
+  for (let i = 0; i < _AST_TAIL_COUNT; i++) tailHistory.push(new THREE.Vector3(0, 999, 0));
+
+  return {
+    group, rockMesh, fireMesh, light, tailGeo, tailPts, tailHistory,
+    warnMesh, warnMat,
+    active: false,
+    // per-instance state
+    vel: new THREE.Vector3(),
+    radius: 1,
+    landingX: 0,
+    landingZ: 0,
+    warnTimer: 0,
+    totalFallTime: 0,
+    elapsed: 0,
+    tailWriteIdx: 0,
+    tailTimer: 0,
+  };
+}
+
+// Build pool
+for (let _ai = 0; _ai < _AST_POOL_SIZE; _ai++) _asteroidPool.push(_buildAsteroidInstance());
+
+// ── Helper: get free instance from pool ──────────────────────────────────────
+function _getAsteroidFromPool() {
+  return _asteroidPool.find(a => !a.active) || null;
+}
+
+// ── Spawn one asteroid ───────────────────────────────────────────────────────
+function _spawnAsteroid(targetX) {
+  const inst = _getAsteroidFromPool();
+  if (!inst) return;
+
+  const T = _asteroidTuner;
+  const radius = T.size + (Math.random() - 0.5) * T.sizeVariance * 2;
+
+  // Sky spawn position — high above and forward on z
+  const spawnY  = 55 + Math.random() * 15;
+  const spawnZ  = SPAWN_Z * 0.35; // somewhere in mid-distance, not horizon
+
+  // Trajectory: land at targetX, water level (y≈0), at a z near ship
+  const landZ = -6 + (Math.random() - 0.5) * 8; // lands just ahead of ship
+  const landX = THREE.MathUtils.clamp(targetX, T.laneMin, T.laneMax);
+
+  const dX = landX - (targetX + (Math.random() - 0.5) * 2); // slight drift
+  const dY = 0 - spawnY;
+  const dZ = landZ - spawnZ;
+  const totalTime = Math.sqrt(dX*dX + dY*dY + dZ*dZ) / T.speed;
+
+  const vel = new THREE.Vector3(dX / totalTime, dY / totalTime, dZ / totalTime);
+
+  // Scale meshes to radius
+  inst.group.scale.setScalar(radius);
+  inst.fireMesh.scale.setScalar(1.28); // relative to group
+  inst.rockMesh.material.uniforms.uTime.value = Math.random() * 100;
+  inst.fireMesh.material.uniforms.uTime.value  = Math.random() * 100;
+  inst.fireMesh.material.uniforms.uRadius.value = radius;
+  inst.fireMesh.material.uniforms.uIntensity.value = T.fireIntensity;
+
+  inst.group.position.set(targetX + (Math.random() - 0.5) * 3, spawnY, spawnZ);
+  inst.group.visible = true;
+
+  inst.light.position.copy(inst.group.position);
+  inst.light.distance = T.glowRange * radius;
+  inst.light.intensity = 1.8 * radius;
+  inst.light.visible = true;
+
+  // Warning disc at landing point
+  const warnRadius = Math.max(3.0, radius * 2.5);
+  inst.warnMesh.position.set(landX, 0.12, landZ);
+  inst.warnMesh.scale.setScalar(warnRadius);
+  inst.warnMesh.visible = true;
+  inst.warnMat.uniforms.uProgress.value = 0;
+  inst.warnMat.uniforms.uTime.value = 0;
+
+  // Randomize rotation
+  inst.group.rotation.set(
+    Math.random() * Math.PI * 2,
+    Math.random() * Math.PI * 2,
+    Math.random() * Math.PI * 2
+  );
+
+  inst.vel.copy(vel);
+  inst.radius   = radius;
+  inst.landingX = landX;
+  inst.landingZ = landZ;
+  inst.totalFallTime = totalTime;
+  inst.elapsed  = 0;
+  inst.warnTimer = 0;
+  inst.tailWriteIdx = 0;
+  inst.tailTimer = 0;
+  // Reset tail history
+  for (let ti = 0; ti < _AST_TAIL_COUNT; ti++) inst.tailHistory[ti].set(0, 999, 0);
+  inst.tailPts.visible = true;
+  inst.active = true;
+
+  _asteroidActive.push(inst);
+}
+
+// ── Kill one asteroid ─────────────────────────────────────────────────────────
+function _killAsteroid(inst, impact) {
+  inst.active = false;
+  inst.group.visible = false;
+  inst.light.visible = false;
+  inst.tailPts.visible = false;
+  inst.warnMesh.visible = false;
+
+  if (impact) {
+    // Water shockwave at landing point
+    _triggerShockwave(new THREE.Vector3(inst.landingX, 0.5, inst.landingZ));
+    // Burst wake rings
+    for (let ri = 0; ri < 8; ri++) {
+      spawnWakeRing(
+        inst.landingX + (Math.random()-0.5)*inst.radius,
+        inst.landingZ + (Math.random()-0.5)*inst.radius,
+        (Math.random()-0.5)*2
+      );
+    }
+    // Kill player if in radius
+    if (state.phase === 'playing' && !state.invincible) {
+      const dx = state.shipX - inst.landingX;
+      const dz = shipGroup.position.z - inst.landingZ;
+      const dist = Math.sqrt(dx*dx + dz*dz);
+      if (dist < _asteroidTuner.killRadius * inst.radius) {
+        // Trigger explosion (same path as cone collision)
+        spawnConeShards(state.shipX, _hoverBaseY, shipGroup.position.z, 0xff4400);
+        state._thrusterFlare = 0;
+        state.phase = 'dead';
+      }
+    }
+    // Flash the warning disc briefly (already hidden but trigger shockwave covers it)
+  }
+
+  const idx = _asteroidActive.indexOf(inst);
+  if (idx >= 0) _asteroidActive.splice(idx, 1);
+}
+
+// ── Pattern: generate next target X ──────────────────────────────────────────
+function _astNextTargetX() {
+  const T = _asteroidTuner;
+  const range = T.laneMax - T.laneMin;
+  switch (T.pattern) {
+    case 'sweep': {
+      const x = T.laneMin + _astSweepX * range;
+      _astSweepX += _astSweepDir * T.sweepSpeed * T.frequency / range * 0.12;
+      if (_astSweepX >= 1.0 || _astSweepX <= 0.0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
+      return x;
+    }
+    case 'stagger': {
+      // Pre-fill a stagger queue
+      if (_astStaggerQueue.length === 0) {
+        const steps = 5 + Math.floor(Math.random() * 4);
+        for (let si = 0; si < steps; si++) {
+          const fracX = si / (steps - 1);
+          _astStaggerQueue.push(T.laneMin + fracX * range);
+        }
+      }
+      return _astStaggerQueue.shift();
+    }
+    case 'salvo': {
+      // All lanes simultaneously — handled specially in spawn tick
+      const fracX = Math.random();
+      return T.laneMin + fracX * range;
+    }
+    default: // 'random'
+      return T.laneMin + Math.random() * range;
+  }
+}
+
+// ── Update all active asteroids each frame ────────────────────────────────────
+function _updateAsteroids(dt) {
+  const T = _asteroidTuner;
+  const uTime = performance.now() * 0.001;
+
+  for (let ai = _asteroidActive.length - 1; ai >= 0; ai--) {
+    const inst = _asteroidActive[ai];
+    inst.elapsed += dt;
+    const progress = Math.min(inst.elapsed / inst.totalFallTime, 1.0);
+
+    // Move
+    inst.group.position.addScaledVector(inst.vel, dt);
+    // Slow tumble
+    inst.group.rotation.x += 0.4 * dt;
+    inst.group.rotation.z += 0.25 * dt;
+
+    // Sync light to group
+    inst.light.position.copy(inst.group.position);
+    // Intensify glow as it falls (closer = brighter)
+    inst.light.intensity = (0.8 + progress * 2.2) * inst.radius;
+
+    // Update shader uniforms
+    const shaderDt = dt;
+    inst.rockMesh.material.uniforms.uTime.value += shaderDt;
+    inst.fireMesh.material.uniforms.uTime.value  += shaderDt;
+
+    // Update warning disc
+    inst.warnMat.uniforms.uProgress.value = Math.min(progress * 1.2, 1.0);
+    inst.warnMat.uniforms.uTime.value += dt;
+
+    // Hide warning when asteroid is close (it's arrived)
+    if (progress > 0.88) inst.warnMesh.visible = false;
+
+    // Tail particles: write current position into ring buffer
+    inst.tailTimer += dt;
+    const tailInterval = 0.022 / Math.max(0.5, T.trailLength);
+    if (inst.tailTimer >= tailInterval) {
+      inst.tailTimer = 0;
+      inst.tailHistory[inst.tailWriteIdx % _AST_TAIL_COUNT].copy(inst.group.position);
+      inst.tailWriteIdx++;
+    }
+    // Update tail buffer
+    const tailPos  = inst.tailGeo.attributes.position.array;
+    const tailAlph = inst.tailGeo.attributes.alpha.array;
+    for (let ti = 0; ti < _AST_TAIL_COUNT; ti++) {
+      const histIdx = ((inst.tailWriteIdx - 1 - ti) % _AST_TAIL_COUNT + _AST_TAIL_COUNT) % _AST_TAIL_COUNT;
+      const hp = inst.tailHistory[histIdx];
+      tailPos[ti*3]   = hp.x;
+      tailPos[ti*3+1] = hp.y;
+      tailPos[ti*3+2] = hp.z;
+      tailAlph[ti] = Math.max(0, (1.0 - ti / _AST_TAIL_COUNT) * T.trailLength * 0.85);
+    }
+    inst.tailGeo.attributes.position.needsUpdate = true;
+    inst.tailGeo.attributes.alpha.needsUpdate    = true;
+
+    // Impact: reached water level or timeout
+    const landed = inst.group.position.y <= 0.3 || progress >= 1.0;
+    if (landed) {
+      _killAsteroid(inst, true);
+    }
+  }
+}
+
+// ── Spawn tick: called from tutorial update block ─────────────────────────────
+function _tickAsteroidSpawner(dt) {
+  const T = _asteroidTuner;
+  if (!T.enabled) return;
+
+  _astTimer -= dt;
+  _astStaggerT -= dt;
+
+  if (_astTimer <= 0) {
+    _astTimer = T.frequency * (0.8 + Math.random() * 0.4);
+
+    if (T.pattern === 'salvo') {
+      // Spawn T.salvoCount at once, spread across lanes
+      const count = Math.max(1, Math.round(T.salvoCount));
+      for (let si = 0; si < count; si++) {
+        const fracX = count === 1 ? 0.5 : si / (count - 1);
+        const targetX = T.laneMin + fracX * (T.laneMax - T.laneMin);
+        _spawnAsteroid(targetX);
+      }
+    } else {
+      _spawnAsteroid(_astNextTargetX());
+    }
+  }
+}
+
+// ── Cleanup: remove all active asteroids ─────────────────────────────────────
+function _clearAllAsteroids() {
+  for (let ai = _asteroidActive.length - 1; ai >= 0; ai--) {
+    _killAsteroid(_asteroidActive[ai], false);
+  }
+  _asteroidActive.length = 0;
+  _astTimer = 0;
+  _astSweepX = 0; _astSweepDir = 1;
+  _astStaggerQueue.length = 0;
+}
+
+// ── Hook into main animate loop — append _updateAsteroids after _updateShockwave
+// (done via monkey-patch pattern to avoid re-editing large blocks)
+const _origUpdateShockwave = _updateShockwave;
+// _updateShockwave already declared; we extend the animate-level call by wrapping
+// Instead we hook into the existing update() call by extending that function's end.
+// Since update() runs the tutorial tick, we extend the tutorial section.
+// The cleanest safe hook: override _noSpawnMode setter end; we'll patch the update tail.
+// Safest: add to the tail particle update already called in animate via a small wrapper.
+(function _hookAsteroidIntoLoop() {
+  const _origComposerRender = composer.render.bind(composer);
+  let _lastAstDt = 0;
+  let _lastAstTime = performance.now();
+  composer.render = function(...args) {
+    const now = performance.now();
+    const dt = Math.min((now - _lastAstTime) * 0.001, 0.05);
+    _lastAstTime = now;
+    // Only run during tutorial gameplay
+    if (state._tutorialActive && state.phase === 'playing' && !state.introActive) {
+      _tickAsteroidSpawner(dt);
+    }
+    _updateAsteroids(dt);
+    _origComposerRender(...args);
+  };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  ASTEROID TUNER PANEL  (key = 'Y')
+// ═══════════════════════════════════════════════════════════════════════════════
+(function setupAsteroidTuner() {
+  const panel = document.createElement('div');
+  panel.id = 'asteroid-tuner';
+  panel.style.cssText = 'display:none;position:fixed;top:0;right:0;width:270px;height:100%;background:rgba(0,0,0,0.93);overflow-y:auto;z-index:99999;font-family:monospace;font-size:11px;color:#ccc;padding:8px;box-sizing:border-box;-webkit-overflow-scrolling:touch;border-left:1px solid #f60;';
+  document.body.appendChild(panel);
+
+  function makeSlider(label, val, min, max, step, onChange, color) {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:4px;flex-wrap:wrap;';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'width:108px;color:'+(color||'#f80')+';font-size:10px;flex-shrink:0;';
+    lbl.textContent = label;
+    const inp = document.createElement('input');
+    inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step; inp.value = val;
+    inp.style.cssText = 'flex:1;height:14px;accent-color:'+(color||'#f80')+';';
+    const valEl = document.createElement('span');
+    valEl.style.cssText = 'width:36px;text-align:right;font-size:10px;color:#fff;';
+    valEl.textContent = (+val).toFixed(2);
+    inp.oninput = () => { onChange(+inp.value); valEl.textContent = (+inp.value).toFixed(2); };
+    row.appendChild(lbl); row.appendChild(inp); row.appendChild(valEl);
+    return { row, inp, valEl };
+  }
+
+  function makeHeader(text, color) {
+    const h = document.createElement('div');
+    h.style.cssText = 'margin:10px 0 4px;font-size:11px;font-weight:bold;color:'+(color||'#f80')+';border-bottom:1px solid #333;padding-bottom:2px;';
+    h.textContent = text;
+    return h;
+  }
+
+  function makeToggle(label, getter, setter, color) {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:8px;';
+    const btn = document.createElement('button');
+    btn.style.cssText = 'background:none;border:1px solid '+(color||'#f80')+';color:'+(color||'#f80')+';padding:3px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;';
+    const refresh = () => { btn.textContent = label + ': ' + (getter() ? 'ON' : 'OFF'); btn.style.opacity = getter() ? '1' : '0.5'; };
+    btn.onclick = () => { setter(!getter()); refresh(); };
+    refresh();
+    row.appendChild(btn);
+    return row;
+  }
+
+  function makeSelect(label, options, getter, setter, color) {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'color:'+(color||'#f80')+';font-size:10px;width:108px;flex-shrink:0;';
+    lbl.textContent = label;
+    const sel = document.createElement('select');
+    sel.style.cssText = 'flex:1;background:#111;color:#fff;border:1px solid #f80;font-family:monospace;font-size:10px;padding:2px;';
+    options.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o; opt.textContent = o;
+      if (o === getter()) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.onchange = () => setter(sel.value);
+    row.appendChild(lbl); row.appendChild(sel);
+    return row;
+  }
+
+  function build() {
+    panel.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#f60;margin-bottom:6px;">☄ ASTEROID TUNER (Y)</div>';
+    const T = _asteroidTuner;
+
+    // MASTER
+    panel.appendChild(makeHeader('MASTER', '#f60'));
+    panel.appendChild(makeToggle('ENABLED', () => T.enabled, v => {
+      T.enabled = v;
+      if (!v) _clearAllAsteroids();
+      else { _astTimer = 0.5; } // spawn quickly on enable
+    }, '#f60'));
+    panel.appendChild(makeToggle('TUTORIAL MODE', () => state._tutorialActive, v => {
+      state._tutorialActive = v;
+      if (v) { state.phase = 'playing'; state._tutorialStep = 2; } // park at end card, no obstacles
+    }, '#ff0'));
+
+    // PHYSICAL
+    panel.appendChild(makeHeader('PHYSICAL'));
+    panel.appendChild(makeSlider('size', T.size, 0.3, 4.0, 0.05, v => T.size = v, '#f80').row);
+    panel.appendChild(makeSlider('size variance', T.sizeVariance, 0, 2.0, 0.05, v => T.sizeVariance = v, '#f80').row);
+    panel.appendChild(makeSlider('fall speed', T.speed, 4, 60, 0.5, v => T.speed = v, '#fa0').row);
+    panel.appendChild(makeSlider('kill radius', T.killRadius, 0.5, 6.0, 0.1, v => T.killRadius = v, '#f44').row);
+
+    // VISUALS
+    panel.appendChild(makeHeader('VISUALS'));
+    panel.appendChild(makeSlider('fire intensity', T.fireIntensity, 0, 3.0, 0.05, v => {
+      T.fireIntensity = v;
+      _asteroidActive.forEach(a => { a.fireMesh.material.uniforms.uIntensity.value = v; });
+    }, '#f84').row);
+    panel.appendChild(makeSlider('trail length', T.trailLength, 0, 3.0, 0.05, v => T.trailLength = v, '#fa0').row);
+    panel.appendChild(makeSlider('glow range', T.glowRange, 0, 40, 0.5, v => {
+      T.glowRange = v;
+      _asteroidActive.forEach(a => { a.light.distance = v * a.radius; });
+    }, '#f60').row);
+
+    // PATTERN
+    panel.appendChild(makeHeader('PATTERN', '#0df'));
+    panel.appendChild(makeSelect('pattern', ['random','sweep','stagger','salvo'],
+      () => T.pattern, v => { T.pattern = v; _astSweepX = 0; _astStaggerQueue.length = 0; }, '#0df'));
+    panel.appendChild(makeSlider('frequency (s)', T.frequency, 0.5, 20, 0.1, v => T.frequency = v, '#0df').row);
+    panel.appendChild(makeSlider('sweep speed', T.sweepSpeed, 0.05, 2.0, 0.01, v => T.sweepSpeed = v, '#0df').row);
+    panel.appendChild(makeSlider('stagger gap', T.staggerGap, 0.2, 5.0, 0.1, v => T.staggerGap = v, '#0df').row);
+    panel.appendChild(makeSlider('salvo count', T.salvoCount, 1, 8, 1, v => T.salvoCount = Math.round(v), '#0df').row);
+    panel.appendChild(makeSlider('lane min X', T.laneMin, -20, 0, 0.5, v => T.laneMin = v, '#8df').row);
+    panel.appendChild(makeSlider('lane max X', T.laneMax, 0, 20, 0.5, v => T.laneMax = v, '#8df').row);
+
+    // DANGER ZONE
+    panel.appendChild(makeHeader('DANGER ZONE', '#f44'));
+    panel.appendChild(makeSlider('warning time', T.warningTime, 0.2, 4.0, 0.1, v => T.warningTime = v, '#f44').row);
+
+    // ACTIONS
+    panel.appendChild(makeHeader('ACTIONS', '#0f8'));
+    const spawnBtn = document.createElement('button');
+    spawnBtn.textContent = '▼ SPAWN ONE NOW';
+    spawnBtn.style.cssText = 'background:#060;border:1px solid #0f8;color:#0f8;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:3px 0;width:100%;';
+    spawnBtn.onclick = () => {
+      if (state.phase !== 'playing') { state.phase = 'playing'; }
+      _spawnAsteroid(_astNextTargetX());
+    };
+    panel.appendChild(spawnBtn);
+
+    const clearBtn = document.createElement('button');
+    clearBtn.textContent = '✕ CLEAR ALL';
+    clearBtn.style.cssText = 'background:#300;border:1px solid #f44;color:#f44;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:3px 0;width:100%;';
+    clearBtn.onclick = () => _clearAllAsteroids();
+    panel.appendChild(clearBtn);
+
+    // Active count
+    const countEl = document.createElement('div');
+    countEl.style.cssText = 'margin-top:8px;color:#888;font-size:10px;';
+    const refreshCount = () => { countEl.textContent = 'active: ' + _asteroidActive.length + ' / ' + _AST_POOL_SIZE; };
+    refreshCount();
+    setInterval(refreshCount, 500);
+    panel.appendChild(countEl);
+  }
+
+  let visible = false;
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'y' || e.key === 'Y') {
+      visible = !visible;
+      if (visible) { build(); panel.style.display = 'block'; }
+      else panel.style.display = 'none';
+    }
+  });
+})();
