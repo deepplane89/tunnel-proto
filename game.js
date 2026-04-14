@@ -19043,6 +19043,10 @@ const _asteroidTuner = {
   laneMax:         8,      // rightmost lane X
   warningTime:    1.8,     // seconds warning disc shows before impact
   showWarning:    true,    // toggle warning disc on/off
+  // Chase difficulty ramp
+  chaseRampStart: 4.0,     // initial mirror interval (seconds) — forgiving
+  chaseRampEnd:   1.2,     // final mirror interval (seconds) — ruthless
+  chaseRampDuration: 90,   // seconds over which ramp plays out
 };
 
 // ── Shaders ──────────────────────────────────────────────────────────────────
@@ -19784,6 +19788,12 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeSlider('lane min X', T.laneMin, -20, 0, 0.5, v => T.laneMin = v, '#8df').row);
     panel.appendChild(makeSlider('lane max X', T.laneMax, 0, 20, 0.5, v => T.laneMax = v, '#8df').row);
 
+    // CHASE RAMP
+    panel.appendChild(makeHeader('CHASE RAMP', '#f84'));
+    panel.appendChild(makeSlider('ramp start (s)', T.chaseRampStart, 0.5, 10, 0.1, v => T.chaseRampStart = v, '#f84').row);
+    panel.appendChild(makeSlider('ramp end (s)', T.chaseRampEnd, 0.1, 5, 0.05, v => T.chaseRampEnd = v, '#f84').row);
+    panel.appendChild(makeSlider('ramp duration (s)', T.chaseRampDuration, 10, 300, 5, v => T.chaseRampDuration = v, '#f84').row);
+
     // DANGER ZONE
     panel.appendChild(makeHeader('DANGER ZONE', '#f44'));
     panel.appendChild(makeToggle('show warning disc', () => T.showWarning, v => {
@@ -19805,13 +19815,15 @@ const _origUpdateShockwave = _updateShockwave;
     };
     panel.appendChild(spawnBtn);
 
-    // Continuous pattern toggles — each runs on its own interval, click to start/stop.
-    // Only one can be active at a time; starting one stops the others.
-    let _activePatternInterval = null;
+    // Continuous pattern toggles — self-scheduling setTimeout so T.frequency is live.
+    // Only one loop runs at a time; starting one stops any previous.
+    let _activePatternTimeout = null;  // current pending setTimeout handle
+    let _activePatternCancelFn = null; // cancel function for the running loop
     let _activePatternBtn = null;
 
     function _stopPatternLoop() {
-      if (_activePatternInterval) { clearInterval(_activePatternInterval); _activePatternInterval = null; }
+      if (_activePatternCancelFn) { _activePatternCancelFn(); _activePatternCancelFn = null; }
+      if (_activePatternTimeout) { clearTimeout(_activePatternTimeout); _activePatternTimeout = null; }
       if (_activePatternBtn) { _activePatternBtn.style.outline = 'none'; _activePatternBtn.style.opacity = '1'; _activePatternBtn = null; }
     }
 
@@ -19821,13 +19833,53 @@ const _origUpdateShockwave = _updateShockwave;
       _activePatternBtn = btn;
       btn.style.outline = `2px solid ${color}`;
       btn.style.opacity = '0.75';
-      // Fire once immediately, then on interval driven by T.frequency
       if (state.phase !== 'playing') state.phase = 'playing';
-      tickFn();
-      _activePatternInterval = setInterval(() => {
-        if (state.phase !== 'playing') return;
-        tickFn();
-      }, T.frequency * 1000);
+      let cancelled = false;
+      _activePatternCancelFn = () => { cancelled = true; };
+      const scheduleNext = () => {
+        const delay = Math.max(100, T.frequency * 1000);
+        _activePatternTimeout = setTimeout(() => {
+          if (cancelled) return;
+          if (state.phase === 'playing') tickFn();
+          scheduleNext();
+        }, delay);
+      };
+      tickFn(); // fire immediately
+      scheduleNext();
+    }
+
+    function _startChaseLoop(btn) {
+      // Chase-specific loop with difficulty ramp: interval lerps chaseRampStart→chaseRampEnd over chaseRampDuration seconds.
+      if (_activePatternBtn === btn) { _stopPatternLoop(); return; } // toggle off
+      _stopPatternLoop();
+      _activePatternBtn = btn;
+      btn.style.outline = '2px solid #f84';
+      btn.style.opacity = '0.75';
+      if (state.phase !== 'playing') state.phase = 'playing';
+      const rampOrigin = (state.elapsed || 0);
+      const chaseTick = () => {
+        if (typeof window._astChaseLastX === 'undefined') window._astChaseLastX = state.shipX;
+        const prevX = window._astChaseLastX;
+        const shipX = state.shipX;
+        const mirrorX = shipX + (shipX - prevX);
+        const targetX = THREE.MathUtils.clamp(mirrorX, T.laneMin, T.laneMax);
+        _spawnAsteroid(targetX);
+        window._astChaseLastX = targetX;
+      };
+      let cancelled = false;
+      _activePatternCancelFn = () => { cancelled = true; };
+      const scheduleNext = () => {
+        const elapsed = Math.max(0, (state.elapsed || 0) - rampOrigin);
+        const tRamp = Math.min(elapsed / Math.max(1, T.chaseRampDuration), 1);
+        const interval = T.chaseRampStart + (T.chaseRampEnd - T.chaseRampStart) * tRamp;
+        _activePatternTimeout = setTimeout(() => {
+          if (cancelled) return;
+          if (state.phase === 'playing') chaseTick();
+          scheduleNext();
+        }, Math.max(100, interval * 1000));
+      };
+      chaseTick(); // fire immediately
+      scheduleNext();
     }
 
     const _patternDefs = [
@@ -19861,22 +19913,8 @@ const _origUpdateShockwave = _updateShockwave;
           _astSweepX -= T.pinchStep;                 // converge per tick — tuned independently
         },
       },
-      {
-        label: '⇔ CHASE (loop)',
-        color: '#f84',
-        tick: () => {
-          // Alternating chase: fire at ship X, then mirror it on the opposite side.
-          // Forces constant lane switching — staying put means the next one mirrors onto you.
-          if (typeof _astChaseLastX === 'undefined') window._astChaseLastX = state.shipX;
-          const prevX = window._astChaseLastX;
-          const shipX = state.shipX;
-          // Mirror: reflect previous shot across ship X
-          const mirrorX = shipX + (shipX - prevX);
-          const targetX = THREE.MathUtils.clamp(mirrorX, T.laneMin, T.laneMax);
-          _spawnAsteroid(targetX);
-          window._astChaseLastX = targetX;
-        },
-      },
+      // CHASE is handled separately via _startChaseLoop (difficulty ramp)
+      // placeholder entry omitted — button wired below
       {
         label: '▼ ▼▼ STAGGER (loop)',
         color: '#ff0',
@@ -19910,6 +19948,15 @@ const _origUpdateShockwave = _updateShockwave;
       btn.onclick = () => _startPatternLoop(btn, color, tick);
       panel.appendChild(btn);
     });
+
+    // CHASE button — wired to ramp loop
+    {
+      const chaseBtn = document.createElement('button');
+      chaseBtn.textContent = '⇔ CHASE (loop, ramp)';
+      chaseBtn.style.cssText = 'background:none;border:1px solid #f84;color:#f84;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:2px 0;width:100%;text-align:left;transition:opacity 0.1s;';
+      chaseBtn.onclick = () => _startChaseLoop(chaseBtn);
+      panel.appendChild(chaseBtn);
+    }
 
     const stopBtn = document.createElement('button');
     stopBtn.textContent = '⏹ STOP LOOP';
