@@ -9429,6 +9429,9 @@ function checkLevelUp() {
     }
     return;
   }
+  // JL mode: frozen at L4 — score must never flip currentLevelIdx to L5
+  // (L5 activates the zipper/corridor campaign system which bleeds into JL)
+  if (state._jetLightningMode) return;
 
   let newIdx = 0;
   for (let i = LEVELS.length - 1; i >= 0; i--) {
@@ -20556,7 +20559,7 @@ function startJetLightning() {
 //    'custom'   — calls onActivate() once on entry, onDeactivate() once on exit
 // ═══════════════════════════════════════════════════════════════════════════════
 
-let _jlIntensity  = 1.0; // frequency scalar — 1.0 = approved baseline, locked until you ramp
+let _jlIntensity  = 1.5; // frequency scalar — 1.5 default (user: "start intensity needs to be higher")
 let _jlSizeScalar = 1.0; // size scalar — 1.0 = approved baseline
 let _godMode      = false; // no damage — plays shield-hit sound on hit instead of killing
 
