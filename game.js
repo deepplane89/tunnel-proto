@@ -19834,7 +19834,7 @@ const _origUpdateShockwave = _updateShockwave;
     const valEl = document.createElement('span');
     valEl.style.cssText = 'width:36px;text-align:right;font-size:10px;color:#fff;';
     valEl.textContent = (+val).toFixed(2);
-    inp.oninput = () => { onChange(+inp.value); valEl.textContent = (+inp.value).toFixed(2); };
+    inp.oninput = () => { const v = +inp.value; onChange(v); valEl.textContent = v.toFixed(2); if (window._sessionLogSlider) _sessionLogSlider('ast_' + label, v); };
     row.appendChild(lbl); row.appendChild(inp); row.appendChild(valEl);
     return { row, inp, valEl };
   }
@@ -20894,7 +20894,7 @@ window._jlDebug = {
   panel.style.cssText = 'display:none;position:fixed;top:0;left:270px;width:260px;height:100%;background:rgba(0,0,0,0.93);overflow-y:auto;z-index:99999;font-family:monospace;font-size:11px;color:#ccc;padding:8px;box-sizing:border-box;-webkit-overflow-scrolling:touch;border-right:1px solid #6af;';
   document.body.appendChild(panel);
 
-  function mkS(label,val,min,max,step,fn){ const row=document.createElement('div'); row.style.cssText='margin:3px 0;display:flex;align-items:center;gap:4px;'; const lbl=document.createElement('span'); lbl.style.cssText='width:120px;color:#6af;font-size:10px;flex-shrink:0;'; lbl.textContent=label; const inp=document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=val; inp.style.cssText='flex:1;height:14px;accent-color:#6af;'; const vEl=document.createElement('span'); vEl.style.cssText='width:38px;text-align:right;font-size:10px;color:#fff;'; vEl.textContent=(+val).toFixed(2); inp.addEventListener('input',()=>{ const v=parseFloat(inp.value); vEl.textContent=v.toFixed(2); fn(v); }); row.appendChild(lbl); row.appendChild(inp); row.appendChild(vEl); return row; }
+  function mkS(label,val,min,max,step,fn){ const row=document.createElement('div'); row.style.cssText='margin:3px 0;display:flex;align-items:center;gap:4px;'; const lbl=document.createElement('span'); lbl.style.cssText='width:120px;color:#6af;font-size:10px;flex-shrink:0;'; lbl.textContent=label; const inp=document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=val; inp.style.cssText='flex:1;height:14px;accent-color:#6af;'; const vEl=document.createElement('span'); vEl.style.cssText='width:38px;text-align:right;font-size:10px;color:#fff;'; vEl.textContent=(+val).toFixed(2); inp.addEventListener('input',()=>{ const v=parseFloat(inp.value); vEl.textContent=v.toFixed(2); fn(v); if(window._sessionLogSlider) _sessionLogSlider('lt_'+label,v); }); row.appendChild(lbl); row.appendChild(inp); row.appendChild(vEl); return row; }
   function mkT(label,getter,setter){ const row=document.createElement('div'); row.style.cssText='margin:4px 0;display:flex;align-items:center;gap:8px;'; const lbl=document.createElement('span'); lbl.style.cssText='color:#6af;font-size:10px;flex:1;'; lbl.textContent=label; const btn=document.createElement('button'); btn.style.cssText='padding:2px 10px;font-size:10px;cursor:pointer;background:#222;border:1px solid #6af;color:#fff;border-radius:3px;'; const ref=()=>{ btn.textContent=getter()?'ON':'OFF'; btn.style.background=getter()?'#224':'#222'; }; ref(); btn.addEventListener('click',()=>{ setter(!getter()); ref(); }); row.appendChild(lbl); row.appendChild(btn); return row; }
   function mkSel(label,opts,getter,setter){ const row=document.createElement('div'); row.style.cssText='margin:4px 0;display:flex;align-items:center;gap:6px;'; const lbl=document.createElement('span'); lbl.style.cssText='width:80px;color:#6af;font-size:10px;flex-shrink:0;'; lbl.textContent=label; const sel=document.createElement('select'); sel.style.cssText='flex:1;background:#111;color:#fff;border:1px solid #6af;font-size:10px;padding:1px;'; opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===getter()) op.selected=true; sel.appendChild(op); }); sel.addEventListener('change',()=>setter(sel.value)); row.appendChild(lbl); row.appendChild(sel); return row; }
   function mkH(t){ const h=document.createElement('div'); h.style.cssText='color:#6af;font-weight:bold;font-size:12px;margin:10px 0 3px;border-bottom:1px solid #6af;padding-bottom:2px;'; h.textContent=t; return h; }
@@ -21831,7 +21831,7 @@ window._jlDebug = {
   // ── Floating logger HUD (always visible during play) ─────────────────────
   function _buildLogHud() {
     _logUi = document.createElement('div');
-    _logUi.style.cssText = 'position:fixed;bottom:10px;left:10px;z-index:99998;font-family:monospace;font-size:10px;background:rgba(0,0,0,0.75);border:1px solid #333;padding:5px 8px;border-radius:3px;display:flex;align-items:center;gap:8px;';
+    _logUi.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:99999;font-family:monospace;font-size:10px;background:rgba(0,0,0,0.85);border:1px solid #444;padding:5px 10px;border-radius:3px;display:flex;align-items:center;gap:8px;pointer-events:all;';
 
     const title = document.createElement('span');
     title.style.cssText = 'color:#888;';
@@ -21876,18 +21876,5 @@ window._jlDebug = {
     if ((e.key === 'e' || e.key === 'E') && !_logActive) _exportLog();
   });
 
-  // Hook into existing tuner sliders — patch slider oninput to also log
-  // (asteroid tuner already calls _sessionLogSlider via FCT — wire the existing ones too)
-  // We do this after a short delay so all panels are built
-  setTimeout(() => {
-    document.querySelectorAll('#asteroid-tuner input[type=range], #lightning-tuner input[type=range], #ice-tuner input[type=range]').forEach(inp => {
-      const orig = inp.oninput;
-      if (!orig) return;
-      inp.oninput = function(ev) {
-        orig.call(this, ev);
-        const label = inp.closest('[style*="display:flex"]')?.querySelector('span')?.textContent || 'unknown';
-        _sessionLogSlider(label, +inp.value);
-      };
-    });
-  }, 3000);
+  // Slider logging is now injected directly inside each tuner's makeSlider/mkS functions.
 })();
