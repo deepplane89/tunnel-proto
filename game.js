@@ -19732,8 +19732,9 @@ const _origUpdateShockwave = _updateShockwave;
     const now = performance.now();
     const dt = Math.min((now - _lastAstTime) * 0.001, 0.05);
     _lastAstTime = now;
-    // Only run during tutorial gameplay
-    if (state._tutorialActive && state.phase === 'playing' && !state.introActive) {
+    // Run during tutorial gameplay OR when chaos mode is active
+    if (state.phase === 'playing' && !state.introActive &&
+        (state._tutorialActive || _chaosMode)) {
       _tickAsteroidSpawner(dt);
     }
     _updateAsteroids(dt);
@@ -20482,7 +20483,8 @@ const _origUpdateShockwave = _updateShockwave;
     const now = performance.now();
     const dt  = Math.min((now - _ltLastTime)*0.001, 0.05);
     _ltLastTime = now;
-    if (state._tutorialActive && state.phase === 'playing' && !state.introActive) {
+    if (state.phase === 'playing' && !state.introActive &&
+        (state._tutorialActive || _chaosMode)) {
       _updateLightning(dt);
     }
     _ltOrigRender(...args);
