@@ -19395,18 +19395,27 @@ function _spawnAsteroid(targetX) {
   const landZ = shipGroup.position.z;
   const landY = 0.15;
 
-  // Estimate fall time from straight-line distance using targetX as proxy
-  const estDist = Math.sqrt((targetX - targetX)**2 + (landY - spawnY)**2 + (landZ - spawnZ)**2);
-  const totalTime = Math.sqrt((landY-spawnY)**2 + (landZ-spawnZ)**2) / T.speed;
+  // ── Quadratic intercept targeting ──────────────────────────────────────────
+  // totalTime: straight-line fall from (spawnX, spawnY, spawnZ) to (landX, landY, landZ).
+  // Since vel.x will be 0 (spawnX = landX), only Y and Z contribute to distance.
+  const totalTime = Math.sqrt((landY - spawnY) ** 2 + (landZ - spawnZ) ** 2) / T.speed;
 
-  // Land X = ship's current position + lead + the pattern offset (targetX is already ship-relative from patterns)
-  // targetX IS the desired landing X (patterns pass state.shipX ± offset), so just lead from there.
-  const landX = THREE.MathUtils.clamp(
-    targetX + (state.shipVelX || 0) * totalTime * T.leadFactor,
-    T.laneMin, T.laneMax
-  );
+  // Pattern offset: how far left/right of the ship this shot should land.
+  // Patterns pass targetX = state.shipX ± offset; recover offset here so we can
+  // apply it on top of the intercept even if the ship has moved since the call was queued.
+  const patternOffset = targetX - ((state && state.shipX) || 0);
 
-  // Spawn X = same as landX so trajectory is straight down-forward, no sideways drift
+  // Intercept: where will the ship be when the asteroid arrives?
+  //   intercept = shipX_now + shipVelX * totalTime * leadFactor
+  // Add pattern offset so flanks/arms/spread still work correctly.
+  const shipX_now = (state && state.shipX) || 0;
+  const shipVelX_now = (state && state.shipVelX) || 0;
+  const interceptX = shipX_now + shipVelX_now * totalTime * T.leadFactor + patternOffset;
+  const landX = THREE.MathUtils.clamp(interceptX, T.laneMin, T.laneMax);
+  // DEBUG — remove after confirming targeting
+  console.log('[AST TARGET] shipX='+shipX_now.toFixed(2)+' shipVelX='+shipVelX_now.toFixed(2)+' totalTime='+totalTime.toFixed(2)+' patternOffset='+patternOffset.toFixed(2)+' interceptX='+interceptX.toFixed(2)+' landX='+landX.toFixed(2)+' shipGroup.x='+shipGroup.position.x.toFixed(2));
+
+  // Spawn X = same as landX so trajectory is straight down-forward (vel.x = 0)
   const spawnX = landX;
 
   // Velocity vector: reuse pooled vector on inst to avoid GC allocation
@@ -19537,8 +19546,8 @@ function _astNextTargetX() {
       // Handled specially in spawn tick — fallback to random near ship
       return THREE.MathUtils.clamp(sx + (Math.random() - 0.5) * range * 0.5, T.laneMin, T.laneMax);
     }
-    default: // 'random'
-      return THREE.MathUtils.clamp(sx + (Math.random() - 0.5) * range * 0.8, T.laneMin, T.laneMax);
+    default: // 'random' — tight scatter around ship so every shot is a threat
+      return THREE.MathUtils.clamp(sx + (Math.random() - 0.5) * 3.0, T.laneMin, T.laneMax);
   }
 }
 
@@ -19828,7 +19837,8 @@ const _origUpdateShockwave = _updateShockwave;
     spawnBtn.style.cssText = 'background:#060;border:1px solid #0f8;color:#0f8;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:3px 0;width:100%;';
     spawnBtn.onclick = () => {
       if (state.phase !== 'playing') state.phase = 'playing';
-      _spawnAsteroid(_astNextTargetX());
+      // ONE always aims directly at the ship (pattern scatter is for loop buttons only)
+      _spawnAsteroid((state && state.shipX) || 0);
     };
     panel.appendChild(spawnBtn);
 
