@@ -19755,9 +19755,9 @@ const _origUpdateShockwave = _updateShockwave;
     // ACTIONS
     panel.appendChild(makeHeader('ACTIONS', '#0f8'));
 
-    // Single spawn
+    // Single one-shot
     const spawnBtn = document.createElement('button');
-    spawnBtn.textContent = '▼ ONE (current pattern)';
+    spawnBtn.textContent = '▼ ONE';
     spawnBtn.style.cssText = 'background:#060;border:1px solid #0f8;color:#0f8;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:3px 0;width:100%;';
     spawnBtn.onclick = () => {
       if (state.phase !== 'playing') state.phase = 'playing';
@@ -19765,45 +19765,91 @@ const _origUpdateShockwave = _updateShockwave;
     };
     panel.appendChild(spawnBtn);
 
-    // Pattern fire buttons — one row per pattern, fires immediately regardless of dropdown
+    // Continuous pattern toggles — each runs on its own interval, click to start/stop.
+    // Only one can be active at a time; starting one stops the others.
+    let _activePatternInterval = null;
+    let _activePatternBtn = null;
+
+    function _stopPatternLoop() {
+      if (_activePatternInterval) { clearInterval(_activePatternInterval); _activePatternInterval = null; }
+      if (_activePatternBtn) { _activePatternBtn.style.outline = 'none'; _activePatternBtn.style.opacity = '1'; _activePatternBtn = null; }
+    }
+
+    function _startPatternLoop(btn, color, tickFn) {
+      if (_activePatternBtn === btn) { _stopPatternLoop(); return; } // toggle off
+      _stopPatternLoop();
+      _activePatternBtn = btn;
+      btn.style.outline = `2px solid ${color}`;
+      btn.style.opacity = '0.75';
+      // Fire once immediately, then on interval driven by T.frequency
+      if (state.phase !== 'playing') state.phase = 'playing';
+      tickFn();
+      _activePatternInterval = setInterval(() => {
+        if (state.phase !== 'playing') return;
+        tickFn();
+      }, T.frequency * 1000);
+    }
+
     const _patternDefs = [
-      { label: '▼▼ RANDOM',   color: '#0f8', fn: () => { _spawnAsteroid(T.laneMin + Math.random() * (T.laneMax - T.laneMin)); } },
-      { label: '►◄ SWEEP',    color: '#0df', fn: () => {
+      {
+        label: '▼▼ RANDOM (loop)',
+        color: '#0f8',
+        tick: () => { _spawnAsteroid(T.laneMin + Math.random() * (T.laneMax - T.laneMin)); },
+      },
+      {
+        label: '►◄ SWEEP (loop)',
+        color: '#0df',
+        tick: () => {
           const x = T.laneMin + _astSweepX * (T.laneMax - T.laneMin);
-          _astSweepX += _astSweepDir * 0.18;
+          _astSweepX += _astSweepDir * 0.2;
           if (_astSweepX >= 1 || _astSweepX <= 0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
           _spawnAsteroid(x);
-      }},
-      { label: '▼ ▼▼ STAGGER', color: '#ff0', fn: () => {
+        },
+      },
+      {
+        label: '▼ ▼▼ STAGGER (loop)',
+        color: '#ff0',
+        tick: () => {
           const steps = Math.max(2, Math.round(T.salvoCount));
           for (let si = 0; si < steps; si++) {
-            const delay = si * T.staggerGap * 1000;
             setTimeout(() => {
-              if (state.phase !== 'playing') state.phase = 'playing';
-              _spawnAsteroid(T.laneMin + (si / (steps-1)) * (T.laneMax - T.laneMin));
-            }, delay);
+              if (state.phase !== 'playing') return;
+              _spawnAsteroid(T.laneMin + (si / (steps - 1)) * (T.laneMax - T.laneMin));
+            }, si * T.staggerGap * 1000);
           }
-      }},
-      { label: '▼▼▼ SALVO',   color: '#f80', fn: () => {
+        },
+      },
+      {
+        label: '▼▼▼ SALVO (loop)',
+        color: '#f80',
+        tick: () => {
           const count = Math.max(1, Math.round(T.salvoCount));
           for (let si = 0; si < count; si++) {
             const fracX = count === 1 ? 0.5 : si / (count - 1);
             _spawnAsteroid(T.laneMin + fracX * (T.laneMax - T.laneMin));
           }
-      }},
+        },
+      },
     ];
-    _patternDefs.forEach(({ label, color, fn }) => {
+
+    _patternDefs.forEach(({ label, color, tick }) => {
       const btn = document.createElement('button');
       btn.textContent = label;
-      btn.style.cssText = `background:none;border:1px solid ${color};color:${color};padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:2px 0;width:100%;text-align:left;`;
-      btn.onclick = () => { if (state.phase !== 'playing') state.phase = 'playing'; fn(); };
+      btn.style.cssText = `background:none;border:1px solid ${color};color:${color};padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:2px 0;width:100%;text-align:left;transition:opacity 0.1s;`;
+      btn.onclick = () => _startPatternLoop(btn, color, tick);
       panel.appendChild(btn);
     });
 
+    const stopBtn = document.createElement('button');
+    stopBtn.textContent = '⏹ STOP LOOP';
+    stopBtn.style.cssText = 'background:#222;border:1px solid #888;color:#aaa;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:4px 0 2px;width:100%;';
+    stopBtn.onclick = () => _stopPatternLoop();
+    panel.appendChild(stopBtn);
+
     const clearBtn = document.createElement('button');
     clearBtn.textContent = '✕ CLEAR ALL';
-    clearBtn.style.cssText = 'background:#300;border:1px solid #f44;color:#f44;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:6px 0 2px;width:100%;';
-    clearBtn.onclick = () => _clearAllAsteroids();
+    clearBtn.style.cssText = 'background:#300;border:1px solid #f44;color:#f44;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:2px 0;width:100%;';
+    clearBtn.onclick = () => { _stopPatternLoop(); _clearAllAsteroids(); };
     panel.appendChild(clearBtn);
 
     // Active count
