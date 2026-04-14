@@ -20608,7 +20608,7 @@ function startJetLightning() {
 //    'custom'   — calls onActivate() once on entry, onDeactivate() once on exit
 // ═══════════════════════════════════════════════════════════════════════════════
 
-let _jlIntensity  = 1.5; // frequency scalar — 1.5 default (user: "start intensity needs to be higher")
+let _jlIntensity  = 3.0; // frequency scalar — 3.0 default (doubled from 1.5)
 let _jlSizeScalar = 1.0; // size scalar — 1.0 = approved baseline
 let _godMode      = false; // no damage — plays shield-hit sound on hit instead of killing
 
