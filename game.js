@@ -20313,7 +20313,6 @@ const _origUpdateShockwave = _updateShockwave;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 let _jlRampTime      = 0;   // seconds elapsed in Jet Lightning mode
-let _jlFatConeTimer  = 0;  // independent timer for JL fat cone spawner
 let _jlRecenterActive = false; // true while funnel pattern is correcting drift
 let _jlRecenterT      = 0;    // how long recenter has been active
 
@@ -20332,8 +20331,10 @@ function startJetLightning() {
 
   // ── Reset ramp timer ──────────────────────────────────────────────────────
   _jlRampTime      = 0;
-  _jlFatConeTimer   = 99; // start high so first cone doesn't fire instantly
+  _jlFatConeTimer   = 99;
   _jlRecenterActive = false;
+  // Reset track activation state so onActivate fires fresh each run
+  for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
   _jlRecenterT      = 0;
 
   // ── Asteroids: on, stagger aimed at ship's current position ────────────────
@@ -20409,123 +20410,189 @@ function startJetLightning() {
   state.speed         = BASE_SPEED * LEVELS[3].speedMult; // 1.5x = L4
 }
 
-// ── Per-frame JL difficulty ramp — called from composer chain ────────────────
-let _jlWasInLiftoff = false; // tracks liftoff→playing transition to reset astTimer
+// ═══════════════════════════════════════════════════════════════════════════════
+//  JET LIGHTNING SEQUENCER
+//  Each track activates at startT and deactivates at endT (null = forever).
+//  _jlIntensity is a scalar locked at 1.0 — wire it to a ramp later.
+//  Track types:
+//    'asteroid' — sets _asteroidTuner fields each frame while active
+//    'lightning' — sets _LT fields each frame while active
+//    'fatcone'  — drives its own spawn timer while active
+//    'custom'   — calls onActivate() once on entry, onDeactivate() once on exit
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let _jlIntensity = 1.0; // difficulty scalar — locked at 1.0, modulate later
+
+const _JL_TRACKS = [
+  // ── Asteroid: stagger (0-45s) ─────────────────────────────────────────────
+  {
+    id: 'ast_stagger', type: 'asteroid',
+    startT: 0, endT: 45,
+    settings: {
+      enabled: true, pattern: 'stagger', leadFactor: 0.0,
+      frequency: 1.4, staggerGap: 0.6, salvoCount: 1,
+      size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
+    },
+  },
+  // ── Asteroid: salvo (45-90s) ──────────────────────────────────────────────
+  {
+    id: 'ast_salvo', type: 'asteroid',
+    startT: 45, endT: 90,
+    settings: {
+      enabled: true, pattern: 'salvo', leadFactor: 0.0,
+      frequency: 0.5, salvoCount: 4,
+      size: 1.35, sizeVariance: 0.55, laneMin: -6.5, laneMax: 7.5,
+    },
+  },
+  // ── Lightning: stagger (90-165s) ──────────────────────────────────────────
+  {
+    id: 'lt_stagger', type: 'lightning',
+    startT: 90, endT: 165,
+    settings: {
+      enabled: true, pattern: 'stagger', leadFactor: 0.0,
+      frequency: 0.3, laneMin: -8, laneMax: 8,
+    },
+    // turn asteroid off when this track is the only active one
+    onActivate()   { if (window._asteroidTuner) window._asteroidTuner.enabled = false; },
+    onDeactivate() { /* asteroid re-enabled by next asteroid track */ },
+  },
+  // ── Combined: asteroid stagger + lightning (165s+) ────────────────────────
+  {
+    id: 'ast_stagger_2', type: 'asteroid',
+    startT: 165, endT: null,
+    settings: {
+      enabled: true, pattern: 'stagger', leadFactor: 0.0,
+      frequency: 1.4, staggerGap: 0.6, salvoCount: 1,
+      size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
+    },
+  },
+  {
+    id: 'lt_stagger_2', type: 'lightning',
+    startT: 165, endT: null,
+    settings: {
+      enabled: true, pattern: 'stagger', leadFactor: 0.0,
+      frequency: 0.3, laneMin: -8, laneMax: 8,
+    },
+  },
+  // ── Terrain walls (150s+) — custom type ───────────────────────────────────
+  {
+    id: 'terrain', type: 'custom',
+    startT: 150, endT: null,
+    onActivate() {
+      if (!_terrainWalls) _createTerrainWalls();
+      else _terrainWalls.strips.forEach(m => { m.visible = true; });
+      if (window._ICE) window._ICE.enabled = false;
+    },
+    onDeactivate() {
+      if (_terrainWalls) _terrainWalls.strips.forEach(m => { m.visible = false; });
+    },
+  },
+  // ── Fat cones: active entire run ─────────────────────────────────────────
+  // frequency=8s start, tightens via its own timer in the tick
+  {
+    id: 'fatcone', type: 'fatcone',
+    startT: 0, endT: null,
+    frequency: 8.0,   // seconds between spawns (base)
+  },
+];
+
+// Track which custom tracks have been activated (so onActivate fires once)
+const _jlTrackActive = {};
+
+// ── Apply one asteroid track's settings to _asteroidTuner ────────────────────
+function _jlApplyAsteroidTrack(track) {
+  const T = _asteroidTuner;
+  const s = track.settings;
+  for (const k of Object.keys(s)) T[k] = s[k];
+}
+
+// ── Apply one lightning track's settings to _LT ───────────────────────────────
+function _jlApplyLightningTrack(track) {
+  const LT = window._LT;
+  if (!LT) return;
+  const s = track.settings;
+  for (const k of Object.keys(s)) LT[k] = s[k];
+}
+
+// ── Main sequencer tick ───────────────────────────────────────────────────────
+let _jlWasInLiftoff = false;
+let _jlFatConeTimer = 99;
+
 function _tickJetLightningRamp(dt) {
   if (!state._jetLightningMode || state.phase !== 'playing') return;
 
   const _inLiftoff = state.introActive || state._introLiftActive;
 
-  // Detect liftoff completion — reset astTimer and rampTime to give clean 2s grace
   if (_jlWasInLiftoff && !_inLiftoff) {
-    _astTimer    = 2.0;  // 2s grace from moment ship is free
-    _jlRampTime  = 0;    // ramp starts from liftoff, not from JL button press
-    state.speed  = BASE_SPEED * LEVELS[3].speedMult; // re-lock L4 speed (prologue may have overridden)
+    _astTimer   = 2.0;
+    _jlRampTime = 0;
+    state.speed = BASE_SPEED * LEVELS[3].speedMult;
   }
   _jlWasInLiftoff = _inLiftoff;
-
-  // Don't tick ramp during prologue/liftoff — time should start when player is free
   if (_inLiftoff) return;
 
   _jlRampTime += dt;
-
-  const T = _asteroidTuner;
   const t = _jlRampTime;
 
-  // Recentering funnel removed — was hijacking T.pattern to 'sweep' whenever
-  // ship drifted past 7 units, causing all asteroids to miss the ship.
-  // Stagger already tracks live shipX every shot, so no funnel needed.
-  _jlRecenterActive = false;
+  // ── Iterate tracks ────────────────────────────────────────────────────────
+  // First pass: find which asteroid/lightning tracks are active this frame
+  // (last one wins if ranges overlap — intentional for combined phases)
+  let _activeAst = null;
+  let _activeLt  = null;
 
-  // ── Fat cones: run across all phases, frequency tightens with time ─────────────
-  // Replaces ice as the chunk obstacle throughout JL mode
-  _jlFatConeTimer -= dt;
-  if (_jlFatConeTimer <= 0 && state.phase === 'playing') {
-    const tClamped   = Math.min(t, 210);
-    const coneFreq   = Math.max(2.5, 12.0 - tClamped * 0.045); // 12s -> 2.5s over 210s
-    _jlFatConeTimer  = coneFreq * (0.7 + Math.random() * 0.6);
-    const coneType   = Math.floor(Math.random() * 3);
-    const fatObs     = getPooledObstacle(coneType);
-    if (fatObs) {
-      const spawnX = state.shipX + (Math.random() - 0.5) * 12;
-      fatObs.position.set(spawnX, 0, SPAWN_Z);
-      fatObs.scale.set(12, 1, 12); // 300% of normal 4x scale
-      fatObs.userData.velX         = 0;
-      fatObs.userData.slalomScaled = true;
-      fatObs.userData.isFatCone    = true;
-      activeObstacles.push(fatObs);
-    }
-  }
+  for (const track of _JL_TRACKS) {
+    const active = t >= track.startT && (track.endT === null || t < track.endT);
 
-  // Phase 1a (0-45s): Asteroid stagger — approved: freq=1.4, gap=0.6, salvo=1, size=1.2
-  if (t < 45) {
-    T.enabled    = true;
-    T.leadFactor = 0.0;
-    T.frequency  = 1.4;
-    T.staggerGap = 0.6;
-    T.salvoCount = 1;
-    T.size       = 1.2;
-    T.sizeVariance = 0.55;
-    T.laneMin    = -8;
-    T.laneMax    =  8;
-    T.pattern    = 'stagger';
-    if (window._LT) window._LT.enabled = false;
-  }
-
-  // Phase 1b (45-90s): Asteroid salvo — approved: freq=0.5, salvo=4, size=1.35, lanes=-6.5/7.5
-  if (t >= 45 && t < 90) {
-    T.enabled    = true;
-    T.leadFactor = 0.0;
-    T.frequency  = 0.5;
-    T.salvoCount = 4;
-    T.size       = 1.35;
-    T.sizeVariance = 0.55;
-    T.laneMin    = -6.5;
-    T.laneMax    =  7.5;
-    T.pattern    = 'salvo';
-    if (window._LT) window._LT.enabled = false;
-  }
-
-  // Phase 2 (90-165s): Lightning only — approved: freq=0.3, stagger
-  if (t >= 90 && t < 165) {
-    T.enabled = false;
-    if (window._LT) {
-      window._LT.enabled    = true;
-      window._LT.leadFactor = 0.0;
-      window._LT.frequency  = 0.3;
-      window._LT.pattern    = 'stagger';
-      window._LT.laneMin    = -8;
-      window._LT.laneMax    =  8;
-    }
-  }
-
-  // Phase 3 (165s+): All combined — asteroid stagger + lightning stagger
-  if (t >= 165) {
-    T.enabled    = true;
-    T.leadFactor = 0.0;
-    T.frequency  = 1.4;
-    T.staggerGap = 0.6;
-    T.salvoCount = 1;
-    T.size       = 1.2;
-    T.sizeVariance = 0.55;
-    T.laneMin    = -8;
-    T.laneMax    =  8;
-    T.pattern    = 'stagger';
-    if (window._LT) {
-      window._LT.enabled    = true;
-      window._LT.frequency  = 0.3;
-    }
-
-    // Terrain + ice at 150s
-    if (t >= 150) {
-      if (!_terrainWalls) {
-        _createTerrainWalls();
-      } else {
-        _terrainWalls.strips.forEach(m => { m.visible = true; });
+    if (active) {
+      // Fire onActivate once on entry
+      if (!_jlTrackActive[track.id]) {
+        _jlTrackActive[track.id] = true;
+        if (track.onActivate) track.onActivate();
       }
-      // Ice disabled in JL — fat cones are the chunk obstacle here
-      if (window._ICE) window._ICE.enabled = false;
+
+      if      (track.type === 'asteroid')  _activeAst = track;
+      else if (track.type === 'lightning') _activeLt  = track;
+      else if (track.type === 'fatcone') {
+        // Fat cone spawner — self-contained timer
+        _jlFatConeTimer -= dt;
+        if (_jlFatConeTimer <= 0) {
+          _jlFatConeTimer = track.frequency * (0.7 + Math.random() * 0.6);
+          const coneType = Math.floor(Math.random() * 3);
+          const fatObs   = getPooledObstacle(coneType);
+          if (fatObs) {
+            const spawnX = state.shipX + (Math.random() - 0.5) * 12;
+            fatObs.position.set(spawnX, 0, SPAWN_Z);
+            fatObs.scale.set(12, 1, 12);
+            fatObs.userData.velX         = 0;
+            fatObs.userData.slalomScaled = true;
+            fatObs.userData.isFatCone    = true;
+            activeObstacles.push(fatObs);
+          }
+        }
+      }
+      // custom tracks: onActivate already fired above, they manage themselves
+    } else {
+      // Fire onDeactivate once on exit
+      if (_jlTrackActive[track.id]) {
+        _jlTrackActive[track.id] = false;
+        if (track.onDeactivate) track.onDeactivate();
+      }
     }
+  }
+
+  // ── Apply active asteroid settings each frame ─────────────────────────────
+  if (_activeAst) {
+    _jlApplyAsteroidTrack(_activeAst);
+  } else {
+    // No asteroid track active — disable
+    _asteroidTuner.enabled = false;
+  }
+
+  // ── Apply active lightning settings each frame ────────────────────────────
+  if (_activeLt) {
+    _jlApplyLightningTrack(_activeLt);
+  } else if (window._LT) {
+    window._LT.enabled = false;
   }
 }
 
