@@ -20596,7 +20596,8 @@ const _origUpdateShockwave = _updateShockwave;
   }
 
   // ── Build jagged TubeGeometry bolt ────────────────────────────────────────
-  function _ltBoltGeo(topY, landX, currentZ, segs, jagg, radius) {
+  // Bolt geometry built at Z=0 local space — Group handles world Z position
+  function _ltBoltGeo(topY, landX, segs, jagg, radius) {
     let pts = [{ x: landX, y: topY }, { x: landX, y: 0.5 }];
     const iters = Math.max(1, Math.round(Math.log2(Math.max(4, segs))));
     for (let d = 0; d < iters; d++) {
@@ -20608,7 +20609,7 @@ const _origUpdateShockwave = _updateShockwave;
       next.push(pts[pts.length-1]);
       pts = next;
     }
-    const v3pts = pts.map(p => new THREE.Vector3(p.x, p.y, currentZ));
+    const v3pts = pts.map(p => new THREE.Vector3(p.x, p.y, 0)); // Z=0 local
     const curve = new THREE.CatmullRomCurve3(v3pts);
     return new THREE.TubeGeometry(curve, Math.max(4, pts.length), radius, 5, false);
   }
@@ -20647,14 +20648,17 @@ const _origUpdateShockwave = _updateShockwave;
     ring.position.set(landX, 0.1, landZ);
     scene.add(ring);
 
-    // Bolt tubes — built at landZ, hidden until strike
+    // Bolt group — Z=0 local geometry, group positioned at landZ and scrolled like a cone
+    const boltGroup = new THREE.Group();
+    boltGroup.position.set(0, 0, landZ);
     const coreMat  = new THREE.MeshBasicMaterial({ color:_LT.coreColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
     const glowMat  = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
-    const coreGeo  = _ltBoltGeo(_LT.skyHeight, landX, landZ, _LT.segments, _LT.jaggedness,       _LT.coreRadius);
-    const glowGeo  = _ltBoltGeo(_LT.skyHeight, landX, landZ, _LT.segments, _LT.jaggedness * 1.4, _LT.glowRadius);
+    const coreGeo  = _ltBoltGeo(_LT.skyHeight, landX, _LT.segments, _LT.jaggedness,       _LT.coreRadius);
+    const glowGeo  = _ltBoltGeo(_LT.skyHeight, landX, _LT.segments, _LT.jaggedness * 1.4, _LT.glowRadius);
     const coreMesh = new THREE.Mesh(coreGeo, coreMat);
     const glowMesh = new THREE.Mesh(glowGeo, glowMat);
-    scene.add(coreMesh); scene.add(glowMesh);
+    boltGroup.add(coreMesh); boltGroup.add(glowMesh);
+    scene.add(boltGroup);
 
     _ltActive.push({
       landX, landZ, strikePosZ: landZ,
@@ -20662,7 +20666,7 @@ const _origUpdateShockwave = _updateShockwave;
       warnMesh, warnGeo, warnMat,
       flash, flashMat,
       ring, ringGeo, ringMat,
-      coreMesh, coreGeo, coreMat,
+      boltGroup, coreMesh, coreGeo, coreMat,
       glowMesh, glowGeo, glowMat,
       ringScale: 0.3, hitChecked: false,
     });
@@ -20672,15 +20676,13 @@ const _origUpdateShockwave = _updateShockwave;
     scene.remove(inst.warnMesh); inst.warnGeo.dispose(); inst.warnMat.dispose();
     scene.remove(inst.flash);    inst.flashMat.dispose();
     scene.remove(inst.ring);     inst.ringGeo.dispose(); inst.ringMat.dispose();
-    scene.remove(inst.coreMesh); inst.coreGeo.dispose(); inst.coreMat.dispose();
-    scene.remove(inst.glowMesh); inst.glowGeo.dispose(); inst.glowMat.dispose();
+    scene.remove(inst.boltGroup); inst.coreGeo.dispose(); inst.coreMat.dispose(); inst.glowGeo.dispose(); inst.glowMat.dispose();
   }
 
   function _ltRejag(inst) {
-    const z = inst.warnMesh.position.z;
     inst.coreGeo.dispose(); inst.glowGeo.dispose();
-    const ng = _ltBoltGeo(_LT.skyHeight, inst.landX, z, _LT.segments, _LT.jaggedness,   _LT.coreRadius);
-    const gg = _ltBoltGeo(_LT.skyHeight, inst.landX, z, _LT.segments, _LT.jaggedness*1.4, _LT.glowRadius);
+    const ng = _ltBoltGeo(_LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness,     _LT.coreRadius);
+    const gg = _ltBoltGeo(_LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness*1.4, _LT.glowRadius);
     inst.coreMesh.geometry = ng; inst.coreGeo = ng;
     inst.glowMesh.geometry = gg; inst.glowGeo = gg;
   }
@@ -20718,6 +20720,14 @@ const _origUpdateShockwave = _updateShockwave;
     for (let i = _ltActive.length-1; i >= 0; i--) {
       const inst = _ltActive[i];
       inst.elapsed += dt;
+
+      // All phases: scroll everything toward ship like a cone
+      const scrollDt = spd * dt;
+      inst.warnMesh.position.z += scrollDt;
+      inst.flash.position.z    += scrollDt;
+      inst.ring.position.z     += scrollDt;
+      inst.boltGroup.position.z += scrollDt;
+      inst.strikePosZ          += scrollDt;
 
       if (inst.phase === 'warn') {
         // Warning disc pulses at the target position ahead of ship
