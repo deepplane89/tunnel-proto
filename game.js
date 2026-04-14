@@ -14900,8 +14900,8 @@ function update(dt) {
   state.shipX   += state.shipVelX * dt;
 
 
-  // Camera pivot follows ship X (lerped to avoid jitter at high speeds)
-  camTargetX = THREE.MathUtils.lerp(camTargetX, state.shipX, Math.min(1, 12 * dt));
+  // Camera pivot follows ship X
+  camTargetX = state.shipX;
   // ── Retry sweep: establishing shot → chase cam ──
   if (_retrySweepActive) {
     _retrySweepT = Math.min(1, _retrySweepT + dt / _RETRY_SWEEP_DUR);
