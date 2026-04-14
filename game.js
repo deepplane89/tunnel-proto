@@ -17879,9 +17879,9 @@ function buildSkinTunerSliders() {
     return row;
   }
 
-  function makeHeader(text) {
+  function makeHeader(text, color) {
     const h = document.createElement('div');
-    h.style.cssText = 'margin:8px 0 4px;font-size:11px;font-weight:bold;color:#ff0;border-bottom:1px solid #333;padding-bottom:2px;';
+    h.style.cssText = 'margin:8px 0 4px;font-size:11px;font-weight:bold;color:'+(color||'#ff0')+';border-bottom:1px solid #333;padding-bottom:2px;';
     h.textContent = text;
     return h;
   }
@@ -17914,6 +17914,32 @@ function buildSkinTunerSliders() {
         _spdLabel.textContent = v.toFixed(2) + 'x  (' + tier + ')  = ' + (BASE_SPEED * v).toFixed(0);
       }
     }, '#0ff'));
+
+    // JL SEQUENCER
+    panel.appendChild(makeHeader('JL SEQUENCER', '#fa0'));
+    {
+      // Intensity scalar — multiplies into frequency of all active tracks
+      const intRow = makeSlider('intensity', _jlIntensity, 0.1, 3.0, 0.05, v => {
+        _jlIntensity = v;
+      }, '#fa0');
+      panel.appendChild(intRow.row);
+
+      // Live readout: ramp time + active tracks
+      const seqInfo = document.createElement('div');
+      seqInfo.style.cssText = 'font-family:monospace;font-size:9px;color:#888;margin:3px 0 6px;line-height:1.5;';
+      const _refreshSeqInfo = () => {
+        if (!state._jetLightningMode) { seqInfo.textContent = 'JL not active'; return; }
+        const t = _jlRampTime || 0;
+        const active = _JL_TRACKS
+          .filter(tr => t >= tr.startT && (tr.endT === null || t < tr.endT))
+          .map(tr => tr.id)
+          .join(', ');
+        seqInfo.textContent = 't=' + t.toFixed(1) + 's  intensity=' + _jlIntensity.toFixed(2) + '\nactive: ' + (active || 'none');
+      };
+      setInterval(_refreshSeqInfo, 500);
+      _refreshSeqInfo();
+      panel.appendChild(seqInfo);
+    }
 
     // LIGHTS
     panel.appendChild(makeHeader('LIGHTS'));
@@ -20500,10 +20526,13 @@ const _JL_TRACKS = [
 const _jlTrackActive = {};
 
 // ── Apply one asteroid track's settings to _asteroidTuner ────────────────────
+// _jlIntensity > 1 = shorter interval = more frequent spawns
 function _jlApplyAsteroidTrack(track) {
   const T = _asteroidTuner;
   const s = track.settings;
   for (const k of Object.keys(s)) T[k] = s[k];
+  // Intensity scales frequency DOWN (more intense = shorter gap)
+  if (s.frequency !== undefined) T.frequency = s.frequency / _jlIntensity;
 }
 
 // ── Apply one lightning track's settings to _LT ───────────────────────────────
@@ -20512,6 +20541,7 @@ function _jlApplyLightningTrack(track) {
   if (!LT) return;
   const s = track.settings;
   for (const k of Object.keys(s)) LT[k] = s[k];
+  if (s.frequency !== undefined) LT.frequency = s.frequency / _jlIntensity;
 }
 
 // ── Main sequencer tick ───────────────────────────────────────────────────────
@@ -20556,7 +20586,7 @@ function _tickJetLightningRamp(dt) {
         // Fat cone spawner — self-contained timer
         _jlFatConeTimer -= dt;
         if (_jlFatConeTimer <= 0) {
-          _jlFatConeTimer = track.frequency * (0.7 + Math.random() * 0.6);
+          _jlFatConeTimer = (track.frequency / _jlIntensity) * (0.7 + Math.random() * 0.6);
           const coneType = Math.floor(Math.random() * 3);
           const fatObs   = getPooledObstacle(coneType);
           if (fatObs) {
