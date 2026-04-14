@@ -19737,8 +19737,24 @@ function _tickAsteroidSpawner(dt) {
   if (_astTimer <= 0) {
     _astTimer = T.frequency * (0.8 + Math.random() * 0.4) * Math.max(0.15, 1.0 - _funFloorIntensity * 0.85);
 
-    if (T.pattern === 'salvo') {
-      // Spawn T.salvoCount at once, spread across lanes centered on ship X
+    if (T.pattern === 'stagger') {
+      // Sequential shots, each reading live shipX at fire time — same as tutorial button
+      const steps = Math.max(2, Math.round(T.salvoCount));
+      for (let si = 0; si < steps; si++) {
+        setTimeout(() => {
+          if (state.phase !== 'playing') return;
+          _spawnAsteroid(state.shipX);
+          // staggerDual: second shot leading where ship is heading
+          if (T.staggerDual) {
+            const spawnY = T.skyHeight;
+            const totalTime = Math.sqrt((0.15 - spawnY) ** 2 + (3.9 - T.spawnZ) ** 2) / T.speed;
+            const leadX = state.shipX + (state.shipVelX || 0) * totalTime;
+            if (Math.abs(leadX - state.shipX) > 0.8) _spawnAsteroid(leadX);
+          }
+        }, si * T.staggerGap * 1000);
+      }
+    } else if (T.pattern === 'salvo') {
+      // Simultaneous wall spread across lanes centered on ship X
       const count = Math.max(1, Math.round(T.salvoCount));
       const sx = (state && state.shipX) || 0;
       const half = (T.laneMax - T.laneMin) * 0.45;
