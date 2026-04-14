@@ -19754,24 +19754,61 @@ const _origUpdateShockwave = _updateShockwave;
 
     // ACTIONS
     panel.appendChild(makeHeader('ACTIONS', '#0f8'));
+
+    // Single spawn
     const spawnBtn = document.createElement('button');
-    spawnBtn.textContent = '▼ SPAWN ONE NOW';
+    spawnBtn.textContent = '▼ ONE (current pattern)';
     spawnBtn.style.cssText = 'background:#060;border:1px solid #0f8;color:#0f8;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:3px 0;width:100%;';
     spawnBtn.onclick = () => {
-      if (state.phase !== 'playing') { state.phase = 'playing'; }
+      if (state.phase !== 'playing') state.phase = 'playing';
       _spawnAsteroid(_astNextTargetX());
     };
     panel.appendChild(spawnBtn);
 
+    // Pattern fire buttons — one row per pattern, fires immediately regardless of dropdown
+    const _patternDefs = [
+      { label: '▼▼ RANDOM',   color: '#0f8', fn: () => { _spawnAsteroid(T.laneMin + Math.random() * (T.laneMax - T.laneMin)); } },
+      { label: '►◄ SWEEP',    color: '#0df', fn: () => {
+          const x = T.laneMin + _astSweepX * (T.laneMax - T.laneMin);
+          _astSweepX += _astSweepDir * 0.18;
+          if (_astSweepX >= 1 || _astSweepX <= 0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
+          _spawnAsteroid(x);
+      }},
+      { label: '▼ ▼▼ STAGGER', color: '#ff0', fn: () => {
+          const steps = Math.max(2, Math.round(T.salvoCount));
+          for (let si = 0; si < steps; si++) {
+            const delay = si * T.staggerGap * 1000;
+            setTimeout(() => {
+              if (state.phase !== 'playing') state.phase = 'playing';
+              _spawnAsteroid(T.laneMin + (si / (steps-1)) * (T.laneMax - T.laneMin));
+            }, delay);
+          }
+      }},
+      { label: '▼▼▼ SALVO',   color: '#f80', fn: () => {
+          const count = Math.max(1, Math.round(T.salvoCount));
+          for (let si = 0; si < count; si++) {
+            const fracX = count === 1 ? 0.5 : si / (count - 1);
+            _spawnAsteroid(T.laneMin + fracX * (T.laneMax - T.laneMin));
+          }
+      }},
+    ];
+    _patternDefs.forEach(({ label, color, fn }) => {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.style.cssText = `background:none;border:1px solid ${color};color:${color};padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:2px 0;width:100%;text-align:left;`;
+      btn.onclick = () => { if (state.phase !== 'playing') state.phase = 'playing'; fn(); };
+      panel.appendChild(btn);
+    });
+
     const clearBtn = document.createElement('button');
     clearBtn.textContent = '✕ CLEAR ALL';
-    clearBtn.style.cssText = 'background:#300;border:1px solid #f44;color:#f44;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:3px 0;width:100%;';
+    clearBtn.style.cssText = 'background:#300;border:1px solid #f44;color:#f44;padding:4px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:6px 0 2px;width:100%;';
     clearBtn.onclick = () => _clearAllAsteroids();
     panel.appendChild(clearBtn);
 
     // Active count
     const countEl = document.createElement('div');
-    countEl.style.cssText = 'margin-top:8px;color:#888;font-size:10px;';
+    countEl.style.cssText = 'margin-top:6px;color:#888;font-size:10px;';
     const refreshCount = () => { countEl.textContent = 'active: ' + _asteroidActive.length + ' / ' + _AST_POOL_SIZE; };
     refreshCount();
     setInterval(refreshCount, 500);
