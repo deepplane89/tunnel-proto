@@ -19040,6 +19040,17 @@ function buildSkinTunerSliders() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Tuner config (all live-editable via panel, key='Y') ──────────────────────
+let _chaosMode  = false;  // combined asteroid + lightning stagger mode
+let _chaosLevel = 0.0;    // 0=chill stagger, 1=physically impossible
+
+// Chaos curve helpers — called every tick when _chaosMode is on
+// Returns the effective frequency (seconds) for a given chaos level
+function _chaosAstFreq(c)  { return 3.0 - c * 2.6; }          // 3.0s → 0.4s
+function _chaosLtFreq(c)   { return 3.5 - c * 3.2; }          // 3.5s → 0.3s
+function _chaosStaggerGap(c){ return 0.8 - c * 0.65; }        // 0.8s → 0.15s
+function _chaosLtStaggerGap(c){ return 0.7 - c * 0.58; }      // 0.7s → 0.12s
+function _chaosSalvo(c)    { return Math.round(1 + c * 6); }   // 1 → 7 shots
+
 const _asteroidTuner = {
   enabled:        false,   // master on/off (tutorial only)
   size:           1.2,     // base radius (world units)
@@ -19654,6 +19665,21 @@ function _tickAsteroidSpawner(dt) {
   const T = _asteroidTuner;
   if (!T.enabled) return;
   if (_noSpawnMode) return;
+  // Keep chaos params live every tick so slider changes take effect instantly
+  if (_chaosMode) {
+    const c = _chaosLevel;
+    T.pattern    = 'stagger';
+    T.frequency  = _chaosAstFreq(c);
+    T.staggerGap = _chaosStaggerGap(c);
+    T.salvoCount = _chaosSalvo(c);
+    T.staggerDual = c > 0.5;
+    if (typeof _LT !== 'undefined' && _LT.enabled) {
+      _LT.pattern    = 'stagger';
+      _LT.frequency  = _chaosLtFreq(c);
+      _LT.staggerGap = _chaosLtStaggerGap(c);
+      _LT.salvoCount = _chaosSalvo(c);
+    }
+  }
   // Pattern loop buttons handle their own spawning — don't double-fire
   if (window._astPatternLoopActive) return;
 
@@ -19843,6 +19869,36 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeSlider('ramp end (s)', T.chaseRampEnd, 0.1, 5, 0.05, v => T.chaseRampEnd = v, '#f84').row);
     panel.appendChild(makeSlider('ramp duration (s)', T.chaseRampDuration, 10, 300, 5, v => T.chaseRampDuration = v, '#f84').row);
     panel.appendChild(makeSlider('chase flank', T.chaseFlank, 0, 0.6, 0.01, v => T.chaseFlank = v, '#f84').row);
+
+    // CHAOS MODE
+    panel.appendChild(makeHeader('CHAOS MODE', '#f0f'));
+    panel.appendChild(makeToggle('⚡ CHAOS — asteroids + lightning stagger', () => _chaosMode, v => {
+      _chaosMode = v;
+      if (v) {
+        // Force both systems into stagger, enable lightning
+        T.pattern = 'stagger';
+        T.enabled = true;
+        if (typeof _LT !== 'undefined') { _LT.pattern = 'stagger'; _LT.enabled = true; }
+        _astTimer = 0.1; // spawn fast on enable
+      } else {
+        // Restore lightning to off when chaos ends
+        if (typeof _LT !== 'undefined') _LT.enabled = false;
+      }
+      build(); // rebuild panel to reflect pattern changes
+    }, '#f0f'));
+    panel.appendChild(makeSlider('chaos level', _chaosLevel, 0.0, 1.0, 0.01, v => {
+      _chaosLevel = v;
+      // Live-update both systems immediately
+      T.frequency   = _chaosAstFreq(v);
+      T.staggerGap  = _chaosStaggerGap(v);
+      T.salvoCount  = _chaosSalvo(v);
+      T.staggerDual = v > 0.5;
+      if (typeof _LT !== 'undefined') {
+        _LT.frequency  = _chaosLtFreq(v);
+        _LT.staggerGap = _chaosLtStaggerGap(v);
+        _LT.salvoCount = _chaosSalvo(v);
+      }
+    }, '#f0f').row);
 
     // DANGER ZONE
     panel.appendChild(makeHeader('DANGER ZONE', '#f44'));
@@ -20168,11 +20224,6 @@ const _origUpdateShockwave = _updateShockwave;
     _ltActive.length = 0;
   }
 
-  // Play lightning strike zap SFX
-  function _playThunder() {
-    const el = document.getElementById('lightning-zap-sfx');
-    if (el) { el.currentTime = 0; el.play().catch(()=>{}); }
-  }
   // ── Target X from pattern ─────────────────────────────────────────────────
   function _ltNextTargetX() {
     const range = _LT.laneMax - _LT.laneMin;
@@ -20345,7 +20396,6 @@ const _origUpdateShockwave = _updateShockwave;
         if (inst.elapsed >= _LT.warningTime) {
           inst.phase = 'strike';
           inst.strikeElapsed = 0;
-          _playThunder(); // thunder crack on bolt slam
           inst.warnMat.opacity = 0;
           inst.coreMat.opacity = 1.0;
           inst.glowMat.opacity = 0.5;
@@ -20374,8 +20424,7 @@ const _origUpdateShockwave = _updateShockwave;
           inst.hitChecked = true;
           const dx = (state.shipX||0) - inst.landX;
           if (Math.abs(dx) < (_LT.glowRadius * _LT.hitboxScale)) {
-            _playThunder();
-            const _ltHitSfx = document.getElementById('shield-hit-sfx');
+                    const _ltHitSfx = document.getElementById('shield-hit-sfx');
             if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
             if (state._tutorialActive) addCrashFlash(0x4488ff);
             else killPlayer();
@@ -20410,8 +20459,7 @@ const _origUpdateShockwave = _updateShockwave;
           const near = dx < (_LT.glowRadius * _LT.hitboxScale) && dz < 4;
           if (near && !inst.hitChecked) {
             inst.hitChecked = true;
-            _playThunder();
-            const _ltHitSfx = document.getElementById('shield-hit-sfx');
+                    const _ltHitSfx = document.getElementById('shield-hit-sfx');
             if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
             if (state._tutorialActive) addCrashFlash(0x4488ff);
             else killPlayer();
