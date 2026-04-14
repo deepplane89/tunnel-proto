@@ -16370,7 +16370,13 @@ function update(dt) {
     if (dxC < (colDistX + (cScale - 1) * cMult) && dzC < (colDistZ + (cScale - 1) * 0.4)) {
       returnObstacleToPool(obs);
       activeObstacles.splice(i, 1);
-      killPlayer();
+      if (_godMode) {
+        const _shHitSfx = document.getElementById('shield-hit-sfx');
+        if (_shHitSfx) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
+        addCrashFlash(0xff4400);
+      } else {
+        killPlayer();
+      }
       return;
     }
 
@@ -20608,6 +20614,10 @@ function _tickJetLightningRamp(dt) {
       if (!_jlTrackActive[track.id]) {
         _jlTrackActive[track.id] = true;
         if (track.onActivate) track.onActivate();
+        if (track.type === 'fatcone') {
+          _jlFatConeTimer = 1.0; // fire first cone quickly on track entry
+          console.log('[FATCONE] track activated — timer reset to 1s');
+        }
       }
 
       if      (track.type === 'asteroid')  _activeAst = track;
@@ -20618,7 +20628,9 @@ function _tickJetLightningRamp(dt) {
         if (_jlFatConeTimer <= 0) {
           const _fct = window._FCT || track;
           _jlFatConeTimer = (_fct.frequency / _jlIntensity) * (0.7 + Math.random() * 0.6);
+          console.log('[FATCONE] timer fired — window._spawnFatCone='+typeof window._spawnFatCone+' window._FCT='+JSON.stringify(window._FCT));
           if (typeof window._spawnFatCone === 'function') window._spawnFatCone();
+          else console.warn('[FATCONE] _spawnFatCone not defined on window!');
         }
       }
       // custom tracks: onActivate already fired above, they manage themselves
@@ -20741,10 +20753,12 @@ function _tickJetLightningRamp(dt) {
         color,
         () => {
           if (!state._jetLightningMode) return;
+          console.log('[JUMP] clicked track='+track.id+' type='+track.type+' startT='+track.startT);
           // Reset all track activation flags so onActivate fires correctly
           for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
           _jlRampTime = track.startT;
           _astTimer   = 0.1; // fire first asteroid quickly
+          if (track.type === 'fatcone') _jlFatConeTimer = 1.0;
           if (_lastJumpBtn) { _lastJumpBtn.style.fontWeight = 'normal'; _lastJumpBtn.style.background = 'none'; }
           btn.style.fontWeight = 'bold'; btn.style.background = color + '22';
           _lastJumpBtn = btn;
