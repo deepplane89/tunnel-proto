@@ -20614,56 +20614,57 @@ const _origUpdateShockwave = _updateShockwave;
   }
 
   // ── Spawn one lightning bolt ──────────────────────────────────────────────
+  // Everything spawns at a Z offset ahead of the ship.
+  // Warning disc pulses for warningTime seconds, then bolt slams and lingers.
+  // After the strike the bolt is a planted world-space column — ship flies past it.
   function _spawnLightning(targetX) {
-    // Spawn close — just enough reaction time for a quick strafe, not a long read
-    const ltSpawnZ = _LT.spawnZ;
-    const travelDist = Math.abs(ltSpawnZ - (shipGroup ? shipGroup.position.z : 3.9));
-    const travelTime = travelDist / Math.max(1, state.speed || 73);
-    const velX = (state && state.shipVelX) || 0;
-    const landX = targetX + velX * travelTime * _LT.leadFactor;
+    const shipZ  = _shipZ();
+    const landZ  = shipZ + _LT.spawnZ;  // spawnZ is negative = ahead of ship
+    const velX   = (state && state.shipVelX) || 0;
+    const travelTime = Math.abs(_LT.spawnZ) / Math.max(1, state.speed || 73);
+    const landX  = targetX + velX * travelTime * _LT.leadFactor;
 
-    const spawnZ = ltSpawnZ;
-
-    // Warning disc — placed at spawnZ, will scroll with the bolt
-    const warnGeo = new THREE.CircleGeometry(_LT.warnRadius, 32);
-    const warnMat = new THREE.MeshBasicMaterial({ color:_LT.warnColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+    // Warning disc — visible immediately at landZ ahead of ship
+    const warnGeo  = new THREE.CircleGeometry(_LT.warnRadius, 32);
+    const warnMat  = new THREE.MeshBasicMaterial({ color:_LT.warnColor, transparent:true, opacity:0.6, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
     const warnMesh = new THREE.Mesh(warnGeo, warnMat);
     warnMesh.rotation.x = -Math.PI/2;
-    warnMesh.position.set(landX, 0.08, spawnZ);
+    warnMesh.position.set(landX, 0.08, landZ);
     scene.add(warnMesh);
 
-    // Ground flash sprite (shown at strike moment)
+    // Ground flash
     const flashMat = new THREE.SpriteMaterial({ color:_LT.flashColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
-    const flash = new THREE.Sprite(flashMat);
+    const flash    = new THREE.Sprite(flashMat);
     flash.scale.set(10, 10, 1);
-    flash.position.set(landX, 1.5, spawnZ);
+    flash.position.set(landX, 1.5, landZ);
     scene.add(flash);
 
     // Shockwave ring
-    const ringGeo = new THREE.RingGeometry(0.1, 0.5, 48);
-    const ringMat = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
+    const ringGeo  = new THREE.RingGeometry(0.1, 0.5, 48);
+    const ringMat  = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+    const ring     = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI/2;
-    ring.position.set(landX, 0.1, spawnZ);
+    ring.position.set(landX, 0.1, landZ);
     scene.add(ring);
 
-    // Bolt meshes (hidden until strike)
-    const coreMat = new THREE.MeshBasicMaterial({ color:_LT.coreColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
-    const glowMat = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
-    const coreGeo = _ltBoltGeo(_LT.skyHeight, landX, spawnZ, _LT.segments, _LT.jaggedness, _LT.coreRadius);
-    const glowGeo = _ltBoltGeo(_LT.skyHeight, landX, spawnZ, _LT.segments, _LT.jaggedness*1.4, _LT.glowRadius);
+    // Bolt tubes — built at landZ, hidden until strike
+    const coreMat  = new THREE.MeshBasicMaterial({ color:_LT.coreColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
+    const glowMat  = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+    const coreGeo  = _ltBoltGeo(_LT.skyHeight, landX, landZ, _LT.segments, _LT.jaggedness,       _LT.coreRadius);
+    const glowGeo  = _ltBoltGeo(_LT.skyHeight, landX, landZ, _LT.segments, _LT.jaggedness * 1.4, _LT.glowRadius);
     const coreMesh = new THREE.Mesh(coreGeo, coreMat);
     const glowMesh = new THREE.Mesh(glowGeo, glowMat);
     scene.add(coreMesh); scene.add(glowMesh);
 
     _ltActive.push({
-      landX, phase:'scroll', elapsed:0, strikeElapsed:0,
+      landX, landZ, strikePosZ: landZ,
+      phase: 'warn', elapsed: 0, strikeElapsed: 0, lingerElapsed: 0,
       warnMesh, warnGeo, warnMat,
       flash, flashMat,
       ring, ringGeo, ringMat,
       coreMesh, coreGeo, coreMat,
       glowMesh, glowGeo, glowMat,
-      ringScale:0.3, hitChecked:false,
+      ringScale: 0.3, hitChecked: false,
     });
   }
 
@@ -20718,22 +20719,14 @@ const _origUpdateShockwave = _updateShockwave;
       const inst = _ltActive[i];
       inst.elapsed += dt;
 
-      if (inst.phase === 'scroll') {
-        // Scroll toward ship just like a cone
-        const scrollDt = spd * dt;
-        inst.warnMesh.position.z += scrollDt;
-        inst.flash.position.z    += scrollDt;
-        inst.ring.position.z     += scrollDt;
-        inst.coreMesh.position.z += scrollDt;
-        inst.glowMesh.position.z += scrollDt;
+      if (inst.phase === 'warn') {
+        // Warning disc pulses at the target position ahead of ship
+        inst.warnMat.opacity = 0.4 + 0.35 * Math.abs(Math.sin(inst.elapsed * 8));
+        const sc = 0.85 + 0.2 * Math.abs(Math.sin(inst.elapsed * 5));
+        inst.warnMesh.scale.set(sc, sc, 1);
 
-        // Pulse warning disc as it approaches
-        const distToShip = _shipZ() - inst.warnMesh.position.z;
-        const approachT = Math.max(0, 1 - distToShip / Math.abs(SPAWN_Z));
-        inst.warnMat.opacity = (0.2 + 0.5*approachT) * (0.6 + 0.4*Math.abs(Math.sin(inst.elapsed*8)));
-
-        // Strike when warning disc reaches ship Z
-        if (inst.warnMesh.position.z >= _shipZ() - 0.5) {
+        if (inst.elapsed >= _LT.warningTime) {
+          // SLAM — bolt appears, warning disc off
           inst.phase = 'strike';
           inst.strikeElapsed = 0;
           inst.warnMat.opacity = 0;
@@ -20742,16 +20735,7 @@ const _origUpdateShockwave = _updateShockwave;
           inst.flashMat.opacity = 1.0;
           inst.ringMat.opacity  = 0.9;
           _ltShakeTime = _LT.shakeDuration;
-          // Plant bolt at strike position — stays here forever (ship flies past)
-          const sz = _shipZ();
-          inst.strikePosZ = sz;
-          [inst.warnMesh, inst.flash, inst.ring, inst.coreMesh, inst.glowMesh].forEach(m => m.position.z = sz);
           _ltRejag(inst);
-        }
-
-        // Despawn if scrolled past ship without striking (shouldn't happen)
-        if (inst.warnMesh.position.z > _shipZ() + 10) {
-          _ltKill(inst); _ltActive.splice(i,1);
         }
 
       } else if (inst.phase === 'strike') {
