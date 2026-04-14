@@ -19036,6 +19036,7 @@ const _asteroidTuner = {
   // Pattern
   pattern:        'random', // 'random' | 'sweep' | 'stagger' | 'salvo'
   sweepSpeed:     0.4,     // lanes/sec for sweep pattern
+  pinchStep:      0.12,    // how much the pinch closes per tick (independent of sweepSpeed)
   staggerGap:     1.8,     // seconds between salvo/stagger drops
   salvoCount:     3,       // how many simultaneous in a salvo
   laneMin:        -8,      // leftmost lane X
@@ -19381,8 +19382,9 @@ function _spawnAsteroid(targetX) {
   const spawnY = T.skyHeight;
   const spawnZ = SPAWN_Z; // -160, same as cones
 
-  // Land always at ship Z so player is always in danger.
-  const landZ  = shipGroup.position.z + (Math.random() - 0.5) * T.trajX;
+  // Land exactly at ship Z — no jitter on Z so it always passes through the ship's lane.
+  // trajX scatter only applies to X (spawn jitter) not the landing point.
+  const landZ  = shipGroup.position.z;
   const landY  = 0.15;
 
   const dist      = Math.sqrt((targetX-spawnX)**2 + (landY-spawnY)**2 + (landZ-spawnZ)**2);
@@ -19471,10 +19473,13 @@ function _killAsteroid(inst, impact) {
         (Math.random()-0.5)*2
       );
     }
-    // Kill player if in radius — use killPlayer() so tutorial flash/respawn works correctly
+    // Kill check: use asteroid's ACTUAL world position at impact, not pre-stored landing coords.
+    // This is accurate even if the asteroid drifts slightly from the planned trajectory.
     if (state.phase === 'playing') {
-      const dx = state.shipX - inst.landingX;
-      const dz = shipGroup.position.z - inst.landingZ;
+      const ax = inst.group.position.x;
+      const az = inst.group.position.z;
+      const dx = state.shipX - ax;
+      const dz = shipGroup.position.z - az;
       const dist = Math.sqrt(dx*dx + dz*dz);
       if (dist < _asteroidTuner.killRadius * inst.radius) {
         killPlayer();
@@ -19773,6 +19778,7 @@ const _origUpdateShockwave = _updateShockwave;
       () => T.pattern, v => { T.pattern = v; _astSweepX = 0; _astStaggerQueue.length = 0; }, '#0df'));
     panel.appendChild(makeSlider('frequency (s)', T.frequency, 0.5, 20, 0.1, v => T.frequency = v, '#0df').row);
     panel.appendChild(makeSlider('sweep speed', T.sweepSpeed, 0.05, 2.0, 0.01, v => T.sweepSpeed = v, '#0df').row);
+    panel.appendChild(makeSlider('pinch step', T.pinchStep, 0.01, 0.5, 0.01, v => T.pinchStep = v, '#f0f').row);
     panel.appendChild(makeSlider('stagger gap', T.staggerGap, 0.2, 5.0, 0.1, v => T.staggerGap = v, '#0df').row);
     panel.appendChild(makeSlider('salvo count', T.salvoCount, 1, 8, 1, v => T.salvoCount = Math.round(v), '#0df').row);
     panel.appendChild(makeSlider('lane min X', T.laneMin, -20, 0, 0.5, v => T.laneMin = v, '#8df').row);
@@ -19852,7 +19858,23 @@ const _origUpdateShockwave = _updateShockwave;
           const halfSpread = _astSweepX * (T.laneMax - T.laneMin) * 0.5;
           _spawnAsteroid(state.shipX - halfSpread); // left arm
           _spawnAsteroid(state.shipX + halfSpread); // right arm
-          _astSweepX -= T.sweepSpeed * 0.12;         // converge each tick
+          _astSweepX -= T.pinchStep;                 // converge per tick — tuned independently
+        },
+      },
+      {
+        label: '⇔ CHASE (loop)',
+        color: '#f84',
+        tick: () => {
+          // Alternating chase: fire at ship X, then mirror it on the opposite side.
+          // Forces constant lane switching — staying put means the next one mirrors onto you.
+          if (typeof _astChaseLastX === 'undefined') window._astChaseLastX = state.shipX;
+          const prevX = window._astChaseLastX;
+          const shipX = state.shipX;
+          // Mirror: reflect previous shot across ship X
+          const mirrorX = shipX + (shipX - prevX);
+          const targetX = THREE.MathUtils.clamp(mirrorX, T.laneMin, T.laneMax);
+          _spawnAsteroid(targetX);
+          window._astChaseLastX = targetX;
         },
       },
       {
