@@ -19353,8 +19353,10 @@ function _spawnAsteroid(targetX) {
   const spawnZ = SPAWN_Z; // -160, same as cones
 
   const landX  = THREE.MathUtils.clamp(targetX, T.laneMin, T.laneMax);
-  const landZ  = spawnZ + THREE.MathUtils.clamp(T.trajZ, 0, 160); // how far toward camera
-  const landY  = spawnY * (1.0 - THREE.MathUtils.clamp(T.trajY, 0, 1)); // 1.0 = drop to water
+  // Always land at the ship's Z so the player is always in danger.
+  // Small random offset (±trajX scatter) keeps it from being pixel-perfect every time.
+  const landZ  = shipGroup.position.z + (Math.random() - 0.5) * T.trajX;
+  const landY  = 0.15; // always hits the water surface
 
   const dist      = Math.sqrt((landX-spawnX)**2 + (landY-spawnY)**2 + (landZ-spawnZ)**2);
   const totalTime = dist / T.speed;
@@ -19718,12 +19720,10 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeHeader('TRAJECTORY', '#8cf'));
     const trajNote = document.createElement('div');
     trajNote.style.cssText = 'font-size:9px;color:#666;margin:2px 0 6px;line-height:1.4;';
-    trajNote.textContent = 'trajZ=160→lands at ship | trajZ=0→lands at horizon | trajY=1→hits water | trajY=0→stays high';
+    trajNote.textContent = 'Always lands at ship Z. skyHeight = arc steepness. scatter = lane spread.';
     panel.appendChild(trajNote);
-    panel.appendChild(makeSlider('sky height Y', T.skyHeight, 5, 120, 1, v => T.skyHeight = v, '#8cf').row);
-    panel.appendChild(makeSlider('traj Z (depth)', T.trajZ, 0, 160, 1, v => T.trajZ = v, '#8cf').row);
-    panel.appendChild(makeSlider('traj Y (drop)', T.trajY, 0, 1, 0.01, v => T.trajY = v, '#8cf').row);
-    panel.appendChild(makeSlider('traj X (scatter)', T.trajX, 0, 20, 0.5, v => T.trajX = v, '#8cf').row);
+    panel.appendChild(makeSlider('sky height', T.skyHeight, 5, 120, 1, v => T.skyHeight = v, '#8cf').row);
+    panel.appendChild(makeSlider('lane scatter', T.trajX, 0, 20, 0.5, v => T.trajX = v, '#8cf').row);
 
     // VISUALS
     panel.appendChild(makeHeader('VISUALS'));
