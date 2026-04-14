@@ -19014,8 +19014,20 @@ const _asteroidTuner = {
   sizeVariance:   0.4,     // ± random added to size
   frequency:      6.0,     // seconds between spawns (per pattern unit)
   speed:          22,      // travel speed (units/s along trajectory)
-  skyHeight:      28,      // Y above water at spawn (horizon height)
-  diveAngle:      18,      // degrees below horizontal — steeper = more vertical dive
+  skyHeight:      40,      // Y spawn height above water at the horizon
+  //
+  // TRAJECTORY — three independent axes, all slider-controlled:
+  //   trajZ  : how far toward the camera the asteroid travels on Z.
+  //            0 = lands at the horizon, 160 = lands right at the ship.
+  //            Default ~140 so it visibly crosses the whole play field.
+  //   trajY  : how far it drops on Y (sky → water). Driven by skyHeight
+  //            automatically, but offset here lets you keep height and
+  //            shorten/lengthen the Y drop independently.
+  //   trajX  : lateral drift added on top of the targeted lane X.
+  //            0 = dead-on the lane, higher = random side-scatter.
+  trajZ:          140,     // Z distance traveled toward camera (0–160)
+  trajY:          1.0,     // multiplier on the Y drop (skyHeight → 0). 1=full drop
+  trajX:          3.0,     // ± random lateral scatter at spawn (jitter)
   fireIntensity:  1.0,     // fire shell opacity multiplier
   trailLength:    1.0,     // particle trail length multiplier
   glowRange:      14,      // PointLight range
@@ -19330,23 +19342,24 @@ function _spawnAsteroid(targetX) {
   const T = _asteroidTuner;
   const radius = T.size + (Math.random() - 0.5) * T.sizeVariance * 2;
 
-  // ── Trajectory: spawn at horizon (same SPAWN_Z as cones), elevated by skyHeight.
-  // Asteroid travels diagonally — diveAngle controls how steep the descent is.
-  // It lands at targetX near the ship (~z=-8 to -2) so the player sees the full arc.
-  const spawnX  = targetX + (Math.random() - 0.5) * 4; // slight lateral jitter at horizon
-  const spawnY  = T.skyHeight;
-  const spawnZ  = SPAWN_Z; // same horizon spawn as cones
+  // ── Trajectory ──
+  // Spawn at the horizon (SPAWN_Z, same as cones), elevated by skyHeight.
+  // Land position is driven by three independent tuner sliders:
+  //   trajZ  → how far toward the camera it travels (landZ = spawnZ + trajZ)
+  //   trajY  → multiplier on height drop (1.0 = full drop to water)
+  //   trajX  → lateral jitter at spawn point
+  const spawnX = targetX + (Math.random() - 0.5) * T.trajX;
+  const spawnY = T.skyHeight;
+  const spawnZ = SPAWN_Z; // -160, same as cones
 
-  const landX   = THREE.MathUtils.clamp(targetX, T.laneMin, T.laneMax);
-  const landZ   = -5 + (Math.random() - 0.5) * 6;  // lands just ahead of ship
-  const landY   = 0.2;                               // water surface
+  const landX  = THREE.MathUtils.clamp(targetX, T.laneMin, T.laneMax);
+  const landZ  = spawnZ + THREE.MathUtils.clamp(T.trajZ, 0, 160); // how far toward camera
+  const landY  = spawnY * (1.0 - THREE.MathUtils.clamp(T.trajY, 0, 1)); // 1.0 = drop to water
 
-  // Build velocity from dive angle: horizontal component drives Z, vertical drives Y
-  // diveAngle=0 → horizontal glide, diveAngle=90 → straight down
-  const diveRad = THREE.MathUtils.degToRad(Math.max(5, Math.min(85, T.diveAngle)));
-  const dist    = Math.sqrt((landX-spawnX)**2 + (landY-spawnY)**2 + (landZ-spawnZ)**2);
+  const dist      = Math.sqrt((landX-spawnX)**2 + (landY-spawnY)**2 + (landZ-spawnZ)**2);
   const totalTime = dist / T.speed;
 
+  // Velocity vector: points from spawn straight to landing point
   const vel = new THREE.Vector3(
     (landX - spawnX) / totalTime,
     (landY - spawnY) / totalTime,
@@ -19700,9 +19713,17 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeSlider('size', T.size, 0.3, 4.0, 0.05, v => T.size = v, '#f80').row);
     panel.appendChild(makeSlider('size variance', T.sizeVariance, 0, 2.0, 0.05, v => T.sizeVariance = v, '#f80').row);
     panel.appendChild(makeSlider('speed', T.speed, 4, 80, 0.5, v => T.speed = v, '#fa0').row);
-    panel.appendChild(makeSlider('sky height', T.skyHeight, 5, 80, 1, v => T.skyHeight = v, '#8cf').row);
-    panel.appendChild(makeSlider('dive angle °', T.diveAngle, 5, 85, 1, v => T.diveAngle = v, '#8cf').row);
     panel.appendChild(makeSlider('kill radius', T.killRadius, 0.5, 6.0, 0.1, v => T.killRadius = v, '#f44').row);
+
+    panel.appendChild(makeHeader('TRAJECTORY', '#8cf'));
+    const trajNote = document.createElement('div');
+    trajNote.style.cssText = 'font-size:9px;color:#666;margin:2px 0 6px;line-height:1.4;';
+    trajNote.textContent = 'trajZ=160→lands at ship | trajZ=0→lands at horizon | trajY=1→hits water | trajY=0→stays high';
+    panel.appendChild(trajNote);
+    panel.appendChild(makeSlider('sky height Y', T.skyHeight, 5, 120, 1, v => T.skyHeight = v, '#8cf').row);
+    panel.appendChild(makeSlider('traj Z (depth)', T.trajZ, 0, 160, 1, v => T.trajZ = v, '#8cf').row);
+    panel.appendChild(makeSlider('traj Y (drop)', T.trajY, 0, 1, 0.01, v => T.trajY = v, '#8cf').row);
+    panel.appendChild(makeSlider('traj X (scatter)', T.trajX, 0, 20, 0.5, v => T.trajX = v, '#8cf').row);
 
     // VISUALS
     panel.appendChild(makeHeader('VISUALS'));
