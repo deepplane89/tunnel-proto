@@ -15980,7 +15980,7 @@ function update(dt) {
         }
       }
     }
-  } else if (state.currentLevelIdx === 3 && !state.l4CorridorDone && !state.isDeathRun) {
+  } else if (state.currentLevelIdx === 3 && !state.l4CorridorDone && !state.isDeathRun && !state._jetLightningMode) {
     if (!state.l4CorridorActive) {
       if (state.levelElapsed >= L4_CORRIDOR_TRIGGER_S) {
         state.l4CorridorActive = true;
@@ -20301,10 +20301,12 @@ function startJetLightning() {
   startGame();
 
   // ── Re-apply JL flags AFTER startGame() resets them ─────────────────────
-  state._jetLightningMode = true;
-  _asteroidTuner.enabled  = true;
-  _noSpawnMode            = false;
-  _astTimer               = 2.0;  // 2s grace after liftoff
+  state._jetLightningMode  = true;
+  _asteroidTuner.enabled   = true;
+  _noSpawnMode             = false;
+  _astTimer                = 2.0;  // 2s grace after liftoff
+  state.l4CorridorActive   = false; // hard kill — can't linger from prev run
+  state.l4CorridorDone     = true;  // prevent re-trigger for this session
   // Start at L4 score threshold so level/speed is L4 from the jump
   // Score will climb naturally to L5 (threshold 675) during play
   state.score         = 490; // LEVELS[3].scoreThreshold
