@@ -20425,60 +20425,10 @@ function _tickJetLightningRamp(dt) {
   const T = _asteroidTuner;
   const t = _jlRampTime;
 
-  // ── Recentering funnel: fires whenever ship drifts past threshold ──────────
-  // Works in ALL phases — uses asteroids when on (P1/P3), fat cones when not (P2).
-  {
-    const driftX          = Math.abs(state.shipX || 0);
-    const DRIFT_THRESHOLD = 7.0;  // trigger before ship reaches visual edge (~12-15 units)
-    const RECENTER_DUR    = 5.0;  // seconds before releasing back to normal pattern
-
-    if (!_jlRecenterActive && driftX > DRIFT_THRESHOLD) {
-      _jlRecenterActive = true;
-      _jlRecenterT      = 0;
-      const side = Math.sign(state.shipX);
-
-      if (T.enabled) {
-        // Asteroids on (Phase 1 / Phase 3): sweep from outer edge inward
-        T.pattern    = 'sweep';
-        T.sweepSpeed = 0.6;
-        T.laneMin    = side > 0 ?  0 : -12;
-        T.laneMax    = side > 0 ? 12 :   0;
-        _astSweepX   = side > 0 ? 1.0 : 0.0;
-        _astSweepDir = side > 0 ? -1  :  1;
-      } else {
-        // Phase 2 (lightning only): fire a burst of fat cones from outer edge → center
-        // Give player 4 fat cones spaced 0.8s apart, walking from their edge inward
-        const outerX = side * 11;
-        const steps  = 4;
-        for (let si = 0; si < steps; si++) {
-          setTimeout(() => {
-            if (!state._jetLightningMode || state.phase !== 'playing') return;
-            const coneX = outerX - side * (si / (steps - 1)) * 8; // walk inward
-            const type  = Math.floor(Math.random() * 3);
-            const obs   = getPooledObstacle(type);
-            if (obs) {
-              obs.position.set(coneX, 0, SPAWN_Z);
-              obs.scale.set(12, 1, 12);
-              obs.userData.velX         = 0;
-              obs.userData.slalomScaled = true;
-              obs.userData.isFatCone    = true;
-              activeObstacles.push(obs);
-            }
-          }, si * 800);
-        }
-      }
-    }
-
-    if (_jlRecenterActive) {
-      _jlRecenterT += dt;
-      if (_jlRecenterT >= RECENTER_DUR) {
-        _jlRecenterActive = false;
-        // Restore normal lane range for asteroid tuner
-        T.laneMin = -8;
-        T.laneMax =  8;
-      }
-    }
-  }
+  // Recentering funnel removed — was hijacking T.pattern to 'sweep' whenever
+  // ship drifted past 7 units, causing all asteroids to miss the ship.
+  // Stagger already tracks live shipX every shot, so no funnel needed.
+  _jlRecenterActive = false;
 
   // ── Fat cones: run across all phases, frequency tightens with time ─────────────
   // Replaces ice as the chunk obstacle throughout JL mode
@@ -20511,9 +20461,7 @@ function _tickJetLightningRamp(dt) {
     T.frequency  = 1.4 - p * 0.9;  // 1.4 -> 0.5 (starts at your approved value, tightens to max)
     T.staggerGap = 0.6 - p * 0.1;  // 0.6 -> 0.5
     T.salvoCount = 1;               // stagger = one shot at a time
-    if (!_jlRecenterActive) {
-      T.pattern = 'stagger'; // stagger throughout Phase 1 — tracks ship every shot
-    }
+    T.pattern = 'stagger';
   }
 
   // Phase 2 (45-120s): Lightning-only round
@@ -20541,11 +20489,9 @@ function _tickJetLightningRamp(dt) {
     T.staggerGap = 0.6 - p * 0.15;
     T.salvoCount = Math.round(4 + p * 4);
     const cycle = t % 30;
-    if (!_jlRecenterActive) {
-      if      (cycle < 10) { T.pattern = 'stagger'; T.staggerDual = (p > 0.5); }
-      else if (cycle < 20) { T.pattern = 'salvo';   T.staggerDual = false; }
-      else                 { T.pattern = 'random';  T.staggerDual = false; }
-    }
+    if      (cycle < 10) { T.pattern = 'stagger'; T.staggerDual = (p > 0.5); }
+    else if (cycle < 20) { T.pattern = 'salvo';   T.staggerDual = false; }
+    else                 { T.pattern = 'random';  T.staggerDual = false; }
     if (window._LT) {
       window._LT.frequency = Math.max(0.6, 1.8 - p * 1.2);
     }
