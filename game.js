@@ -20569,6 +20569,7 @@ function _jlApplyAsteroidTrack(track) {
   for (const k of Object.keys(s)) T[k] = s[k];
   if (s.frequency !== undefined) T.frequency = s.frequency / _jlIntensity;
   if (s.size      !== undefined) T.size      = s.size      * _jlSizeScalar;
+  T.enabled = true; // always re-enable when a track is active
 }
 
 // ── Apply one lightning track's settings to _LT ───────────────────────────────
@@ -21913,8 +21914,8 @@ window._jlDebug = {
     const type = FCT.coneType < 0 ? Math.floor(Math.random() * 3) : FCT.coneType;
     const obs = getPooledObstacle(type);
     if (!obs) return;
-    const spawnX = state.shipX + (Math.random() - 0.5) * FCT.spreadAroundShip * 2;
-    const clampedX = Math.max(FCT.laneMin, Math.min(FCT.laneMax, spawnX));
+    // Spawn at a random position in the lane range (not ship-relative — campaign style)
+    const clampedX = FCT.laneMin + Math.random() * (FCT.laneMax - FCT.laneMin);
     obs.position.set(clampedX, 0, SPAWN_Z);
     obs.scale.set(FCT.scaleXZ, FCT.scaleY, FCT.scaleXZ);
     obs.userData.velX         = 0;
@@ -22031,7 +22032,7 @@ window._jlDebug = {
 
     panel.appendChild(mkH('SPAWN', '#f80'));
 
-    panel.appendChild(mkSlider('spread ±X', FCT.spreadAroundShip, 0, 20, 0.5, v => FCT.spreadAroundShip = v, '#fa0'));
+
     panel.appendChild(mkSlider('lane min', FCT.laneMin, -25, 0, 0.5, v => FCT.laneMin = v, '#8df'));
     panel.appendChild(mkSlider('lane max', FCT.laneMax, 0, 25, 0.5, v => FCT.laneMax = v, '#8df'));
 
