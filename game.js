@@ -10620,20 +10620,10 @@ window.addEventListener('keydown', e => {
   }
   // toggle no-spawn test mode
   if ((e.key === "'" || e.key === '`' || e.key === '\\' || e.key === 'n' || e.key === 'N') && state.phase === 'playing') {
-    let _spawnLabel;
-    if (state._tutorialActive) {
-      // In tutorial: toggle asteroid spawner enabled
-      _asteroidTuner.enabled = !_asteroidTuner.enabled;
-      if (!_asteroidTuner.enabled) _clearAllAsteroids();
-      else _astTimer = 0.5;
-      _spawnLabel = _asteroidTuner.enabled ? 'ASTEROIDS ON' : 'ASTEROIDS OFF';
-    } else {
-      _noSpawnMode = !_noSpawnMode;
-      _spawnLabel = _noSpawnMode ? 'SPAWN OFF' : 'SPAWN ON';
-    }
+    _noSpawnMode = !_noSpawnMode;
     // Flash HUD message so player knows it fired
     const _nsEl = document.createElement('div');
-    _nsEl.textContent = _spawnLabel;
+    _nsEl.textContent = _noSpawnMode ? 'SPAWN OFF' : 'SPAWN ON';
     _nsEl.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-family:monospace;font-size:24px;font-weight:bold;pointer-events:none;z-index:9999;opacity:1;transition:opacity 1s';
     document.body.appendChild(_nsEl);
     setTimeout(() => { _nsEl.style.opacity = '0'; setTimeout(() => _nsEl.remove(), 1000); }, 500);
@@ -19649,6 +19639,7 @@ function _updateAsteroids(dt) {
 function _tickAsteroidSpawner(dt) {
   const T = _asteroidTuner;
   if (!T.enabled) return;
+  if (_noSpawnMode) return;
   // Pattern loop buttons handle their own spawning — don't double-fire
   if (window._astPatternLoopActive) return;
 
