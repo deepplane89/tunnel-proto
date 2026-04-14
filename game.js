@@ -488,6 +488,7 @@ let _handlingDriftOverride = -1; // -1 = use player level, 0-1 = tuner override
 // ── Ship physics tuner overrides (-1 = use formula) ──
 let _accelBase       = 22;   // base ACCEL at L1
 let _accelSnap       = 52;   // extra ACCEL added at max level
+let _physLevelOverride = -1; // -1 = use game level, 0-4 = force physics snap level (0=floaty L1, 4=crisp L5)
 let _accelDriftMult  = 4.0;  // unused — kept for tuner slider
 let _decelBasePct    = 0.02; // DECEL % at stock (long slide)
 let _decelFullPct    = 0.05; // DECEL % at full control (nice slide, stops cleanly)
@@ -14799,7 +14800,8 @@ function update(dt) {
   // Physics ramp: starts floaty at L1, gradually snappier by L5
   // Death Run: lateral physics matches independent speed ramp (not vibe)
   // DR: snappiness ramps L2→L5 but caps at L5 even as speed keeps climbing
-  const _physIdx = state.isDeathRun ? Math.min(state.deathRunSpeedTier + 1, 4) : state.currentLevelIdx;
+  const _physIdx = _physLevelOverride >= 0 ? _physLevelOverride
+    : state.isDeathRun ? Math.min(state.deathRunSpeedTier + 1, 4) : state.currentLevelIdx;
   const _lvlT   = _physIdx / (LEVELS.length - 1); // 0 at L1, 1 at L5
   const _snap   = _lvlT * _lvlT;  // ease-in so early levels stay floaty longer
   // Handling tier: 0.0 at max upgrade (crisp), 1.0 at stock (loose)
@@ -18035,6 +18037,7 @@ function buildSkinTunerSliders() {
 
     // LATERAL PHYSICS
     panel.appendChild(makeHeader('LATERAL PHYSICS'));
+    panel.appendChild(makeSlider('phys level (0=L1 floaty, 4=L5 crisp, -1=live)', _physLevelOverride, -1, 4, 1, v => _physLevelOverride = Math.round(v), '#0ff'));
     panel.appendChild(makeSlider('accel base', _accelBase, 1, 60, 1, v => _accelBase = v, '#0f8'));
     panel.appendChild(makeSlider('accel snap', _accelSnap, 0, 100, 1, v => _accelSnap = v, '#0f8'));
     panel.appendChild(makeSlider('accel drift x', _accelDriftMult, 0, 8, 0.1, v => _accelDriftMult = v, '#0f8'));
@@ -19342,19 +19345,25 @@ for (let _ai = 0; _ai < _AST_POOL_SIZE; _ai++) _asteroidPool.push(_buildAsteroid
 // so the first real asteroid doesn't cause a hitch. We render each mesh once
 // at an off-screen position using renderer.compile().
 (function _preWarmAsteroidShaders() {
-  // Compile all pool instance materials directly in a temporary scene.
-  // Each ShaderMaterial has its own uniform block so we must compile each one,
-  // not just clones of instance 0.
+  // Compile all unique ShaderMaterials by building throwaway meshes with the same
+  // material — never touching the actual pool groups so scene membership is untouched.
   const _warmScene = new THREE.Scene();
   const _warmCam   = new THREE.PerspectiveCamera();
+  const _warmGeo   = new THREE.IcosahedronGeometry(1, 2); // tiny proxy geometry
+  const _seenMats  = new Set();
   for (const inst of _asteroidPool) {
-    _warmScene.add(inst.group); // add real group to force compile
+    for (const mat of [inst.rockMesh.material, inst.fireMesh.material,
+                       inst.tailPts.material, inst.warnMat]) {
+      if (mat && !_seenMats.has(mat)) {
+        _seenMats.add(mat);
+        const proxy = new THREE.Mesh(_warmGeo, mat);
+        _warmScene.add(proxy);
+      }
+    }
   }
   try { renderer.compile(_warmScene, _warmCam); } catch(e) {}
-  // Remove from warm scene — they'll be added to main scene on first spawn
-  for (const inst of _asteroidPool) {
-    _warmScene.remove(inst.group);
-  }
+  _warmGeo.dispose();
+  // _warmScene and proxy meshes go out of scope and are GC'd
 })();
 
 // ── Helper: get free instance from pool ──────────────────────────────────────
