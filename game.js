@@ -20507,13 +20507,11 @@ function _tickJetLightningRamp(dt) {
     T.leadFactor = 0.0;
     if (window._LT) window._LT.enabled = false;
     const p = t / 45;
-    T.frequency  = 4.0 - p * 3.5;  // 4.0 -> 0.5 (hits slider max by end of phase)
-    T.staggerGap = 1.0 - p * 0.5;  // 1.0 -> 0.5
-    T.salvoCount = Math.round(3 + p * 4); // 3 -> 7
+    T.frequency  = 1.4 - p * 0.9;  // 1.4 -> 0.5 (starts at your approved value, tightens to max)
+    T.staggerGap = 0.6 - p * 0.1;  // 0.6 -> 0.5
+    T.salvoCount = 1;               // stagger = one shot at a time
     if (!_jlRecenterActive) {
-      if      (t < 15) T.pattern = 'stagger';
-      else if (t < 30) T.pattern = 'salvo';
-      else             T.pattern = 'random';
+      T.pattern = 'stagger'; // stagger throughout Phase 1 — tracks ship every shot
     }
   }
 
