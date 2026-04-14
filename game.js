@@ -20532,8 +20532,9 @@ function startJetLightning() {
   _bankMax        = 0.04;
   _bankSmoothing  = 8;
 
-  _asteroidTuner.enabled   = true;
-  _noSpawnMode             = false;
+  _asteroidTuner.enabled     = true;
+  _asteroidTuner.showWarning  = false;
+  _noSpawnMode               = false;
   _astTimer                = 2.0;  // 2s grace after liftoff
   state.l4CorridorActive   = false;
   state.l4CorridorDone     = true;
