@@ -20302,12 +20302,13 @@ function startJetLightning() {
 
   // ── Re-apply JL flags AFTER startGame() resets them ─────────────────────
   state._jetLightningMode  = true;
-  // Kill prologue overlay + clear introActive so the spawner isn't blocked
-  state.introActive        = false;
-  state.thrusterPower      = 1;
+  // Kill ALL intro state so shipX is never clamped to 0
+  state.introActive         = false;
+  state._introLiftActive    = false;
+  state.thrusterPower       = 1;
+  clearIntroTimers();  // kill the queued 18.5s prologue launch timer
   const _jlOverlay = document.getElementById('intro-overlay');
   if (_jlOverlay) { _jlOverlay.style.display = 'none'; _jlOverlay.innerHTML = ''; }
-  clearIntroTimers && clearIntroTimers();
   _asteroidTuner.enabled   = true;
   _noSpawnMode             = false;
   _astTimer                = 2.0;  // 2s grace after liftoff
