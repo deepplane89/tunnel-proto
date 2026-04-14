@@ -20261,7 +20261,7 @@ function startJetLightning() {
   T.killRadius   = 2.2;
   T.laneMin      = -8;
   T.laneMax      =  8;
-  _astTimer      = 1.0;
+  _astTimer      = 2.0;  // 2s grace period after liftoff before first asteroid
 
   // ── Lightning: OFF at start — ramp turns it on ────────────────────────────
   if (window._LT) {
@@ -20295,6 +20295,7 @@ function startJetLightning() {
   state._jetLightningMode = true;
   _asteroidTuner.enabled  = true;
   _noSpawnMode            = false;
+  _astTimer               = 2.0;  // 2s grace after liftoff
   // Start at L4 score threshold so level/speed is L4 from the jump
   // Score will climb naturally to L5 (threshold 675) during play
   state.score         = 490; // LEVELS[3].scoreThreshold
