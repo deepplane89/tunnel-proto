@@ -20230,8 +20230,10 @@ const _origUpdateShockwave = _updateShockwave;
 //  difficulty over time. Physics tuned for high-speed lateral feel.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-let _jlRampTime    = 0;   // seconds elapsed in Jet Lightning mode
-let _jlFatConeTimer = 0;  // independent timer for JL fat cone spawner
+let _jlRampTime      = 0;   // seconds elapsed in Jet Lightning mode
+let _jlFatConeTimer  = 0;  // independent timer for JL fat cone spawner
+let _jlRecenterActive = false; // true while funnel pattern is correcting drift
+let _jlRecenterT      = 0;    // how long recenter has been active
 
 function startJetLightning() {
   // ── Flag ──────────────────────────────────────────────────────────────────
@@ -20247,8 +20249,10 @@ function startJetLightning() {
   _bankSmoothing  = 8;
 
   // ── Reset ramp timer ──────────────────────────────────────────────────────
-  _jlRampTime     = 0;
-  _jlFatConeTimer  = 99; // start high so first cone doesn't fire instantly
+  _jlRampTime      = 0;
+  _jlFatConeTimer   = 99; // start high so first cone doesn't fire instantly
+  _jlRecenterActive = false;
+  _jlRecenterT      = 0;
 
   // ── Asteroids: on, stagger aimed at ship's current position ────────────────
   const T = _asteroidTuner;
@@ -20317,6 +20321,42 @@ function _tickJetLightningRamp(dt) {
 
   const T = _asteroidTuner;
   const t = _jlRampTime;
+
+  // ── Recentering funnel: fires when ship drifts past X threshold ──────────────
+  // When active, temporarily overrides pattern to a wall of shots from the
+  // far side, sweeping inward — nudges the player back toward midline.
+  // Only fires when asteroids are enabled (not during Phase 2 lightning-only).
+  if (T.enabled) {
+    const driftX   = Math.abs(state.shipX || 0);
+    const DRIFT_THRESHOLD = 5.5; // units from center before recenter kicks in
+    const RECENTER_DUR    = 4.0; // seconds of corrective pattern
+
+    if (!_jlRecenterActive && driftX > DRIFT_THRESHOLD) {
+      // Trigger: fire a sweep of shots from the outer edge pushing inward
+      _jlRecenterActive = true;
+      _jlRecenterT      = 0;
+      const side      = Math.sign(state.shipX); // +1 right, -1 left
+      const outerX    = side * 10;              // start shots from far edge
+      const innerX    = side * 1.5;             // end shots near center
+      const steps     = 6;
+      for (let i = 0; i < steps; i++) {
+        const frac   = i / (steps - 1);
+        const shotX  = outerX + (innerX - outerX) * frac; // outer → inner
+        setTimeout(() => {
+          if (state.phase === 'playing' && state._jetLightningMode) {
+            _spawnAsteroid(shotX);
+          }
+        }, i * 400); // 400ms between shots — tight enough to feel urgent
+      }
+    }
+
+    if (_jlRecenterActive) {
+      _jlRecenterT += dt;
+      if (_jlRecenterT >= RECENTER_DUR) {
+        _jlRecenterActive = false; // release — normal patterns resume
+      }
+    }
+  }
 
   // Phase 1 (0-45s): Asteroids only
   // leadFactor=0: every shot aimed at ship current position
