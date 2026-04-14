@@ -20633,12 +20633,20 @@ const _origUpdateShockwave = _updateShockwave;
     sizeMax:      5.5,    // max XZ scale
     heightMin:    4.0,    // base Y scale (how tall the glacier is)
     heightMax:    9.0,    // max Y scale
-    // Visuals
-    transmission: 0.72,
-    roughness:    0.12,
-    ior:          1.31,
-    thickness:    8.0,
-    emissiveIntensity: 0.18,
+    // Material
+    transmission:      0.0,          // 0 = opaque rock, >0 = glassy/icy
+    roughness:         0.35,
+    metalness:         0.8,
+    ior:               1.31,
+    thickness:         6.0,
+    emissiveIntensity: 1.6,
+    // Style (drives chunk texture rebuild)
+    chunkStyle:        'cracks',      // 'cracks' | 'grid' | 'both' | 'clean'
+    chunkBaseColor:    '#060d1a',
+    chunkCrackColor:   '#ff00cc',
+    chunkGridColor:    '#00eeff',
+    chunkGridOpacity:  0.55,
+    chunkEmissiveColor:'#003366',
     // Hitbox
     hitboxScale:  0.72,   // fraction of slab half-width that kills
   };
@@ -20652,85 +20660,179 @@ const _origUpdateShockwave = _updateShockwave;
   const _iceStaggerQ   = [];
 
   // ── Displaced-icosahedron glacier geometry ────────────────────────────────
-  // Vertices randomly displaced outward from an IcosahedronGeometry, bottom
-  // clamped flat at y=0 (waterline). flatShading on MeshPhysicalMaterial
-  // gives the hard faceted frosty-glass glacier look.
-  function _makeIceMat() {
-    return new THREE.MeshPhysicalMaterial({
-      color:             0xbbdff5,
-      emissive:          0x1a3a6a,
-      emissiveIntensity: _ICE.emissiveIntensity,
-      transmission:      _ICE.transmission,
-      roughness:         _ICE.roughness,
-      metalness:         0.06,
-      ior:               _ICE.ior,
-      thickness:         _ICE.thickness,
-      transparent:       true,
-      opacity:           0.92,
-      side:              THREE.FrontSide,
-      flatShading:       true,
-      depthWrite:        false,
-    });
+  // ── Ice chunk geometry: small terrain-slab fragments ───────────────────────
+  // Each chunk is a displaced PlaneGeometry patch — same noise as the canyon
+  // walls, so it looks like a piece that broke off. Style is independent from
+  // the terrain: own color, own crack texture, own material mode.
+
+  // Build a canvas texture for the chunk surface (called on rebuild)
+  function _makeIceChunkTex() {
+    const w = 256, h = 256;
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+
+    // Base fill
+    const bc = _ICE.chunkBaseColor || '#060d1a';
+    ctx.fillStyle = bc;
+    ctx.fillRect(0, 0, w, h);
+
+    const style = _ICE.chunkStyle || 'cracks';
+
+    if (style === 'cracks' || style === 'both') {
+      // Magenta/cyan crack lines
+      let _rs = 77;
+      const srng = () => { _rs = (_rs * 16807) % 2147483647; return (_rs - 1) / 2147483646; };
+      const cc = _ICE.chunkCrackColor || '#ff00cc';
+      for (let ci = 0; ci < 14; ci++) {
+        const sx = srng() * w, sy = srng() * h;
+        ctx.strokeStyle = srng() > 0.5 ? cc : '#00eeff';
+        ctx.globalAlpha  = 0.4 + srng() * 0.5;
+        ctx.lineWidth    = 0.7 + srng() * 1.6;
+        ctx.beginPath(); ctx.moveTo(sx, sy);
+        let cx = sx, cy2 = sy;
+        for (let si = 0; si < 3 + Math.floor(srng()*3); si++) {
+          cx  += (srng() - 0.3) * 70;
+          cy2 += (srng() - 0.2) * 55;
+          ctx.lineTo(cx, cy2);
+        }
+        ctx.stroke();
+      }
+      // Glow hotspots
+      for (let gi = 0; gi < 5; gi++) {
+        const gx = srng()*w, gy = srng()*h;
+        const gr = ctx.createRadialGradient(gx,gy,0,gx,gy,14+srng()*20);
+        gr.addColorStop(0,   'rgba(255,0,200,0.6)');
+        gr.addColorStop(0.5, 'rgba(80,0,200,0.2)');
+        gr.addColorStop(1,   'rgba(0,0,0,0)');
+        ctx.fillStyle = gr; ctx.globalAlpha = 1;
+        ctx.fillRect(gx-35, gy-35, 70, 70);
+      }
+    }
+
+    if (style === 'grid' || style === 'both') {
+      const gc = _ICE.chunkGridColor || '#00eeff';
+      ctx.strokeStyle = gc;
+      ctx.globalAlpha  = _ICE.chunkGridOpacity || 0.55;
+      ctx.lineWidth    = 1.2;
+      const gx = 8, gz = 8;
+      for (let i = 0; i <= gx; i++) { const x=(i/gx)*w; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+      for (let j = 0; j <= gz; j++) { const y=(j/gz)*h; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+    }
+
+    if (style === 'clean') {
+      // Just a subtle edge vignette — no lines, pure ice slab
+      const gr = ctx.createRadialGradient(w/2,h/2,h*0.2,w/2,h/2,h*0.75);
+      gr.addColorStop(0, 'rgba(150,220,255,0.08)');
+      gr.addColorStop(1, 'rgba(0,20,60,0.55)');
+      ctx.fillStyle = gr; ctx.globalAlpha = 1;
+      ctx.fillRect(0,0,w,h);
+    }
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    return tex;
   }
 
-  function _makeGlacierGeo(seed, jitter) {
-    let _s = seed;
-    const rng = () => { _s = (_s * 16807) % 2147483647; return (_s - 1) / 2147483646; };
-    const iso = new THREE.IcosahedronGeometry(1, 1);
-    const geo = iso.toNonIndexed();
-    iso.dispose();
-    const pos = geo.attributes.position;
-    const dispMap = {};
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-      const key = Math.round(x*100)+','+Math.round(y*100)+','+Math.round(z*100);
-      if (!(key in dispMap)) dispMap[key] = 1.0 + (rng() - 0.35) * jitter;
+  // Shared chunk material — rebuilt via REBUILD button
+  let _iceChunkTex = _makeIceChunkTex();
+  function _makeIceMat() {
+    const useTransmission = _ICE.transmission > 0.05;
+    if (useTransmission) {
+      return new THREE.MeshPhysicalMaterial({
+        color:             new THREE.Color(_ICE.chunkBaseColor || '#aaccee'),
+        map:               _iceChunkTex,
+        emissive:          new THREE.Color(_ICE.chunkEmissiveColor || '#0044aa'),
+        emissiveMap:       _iceChunkTex,
+        emissiveIntensity: _ICE.emissiveIntensity,
+        transmission:      _ICE.transmission,
+        roughness:         _ICE.roughness,
+        metalness:         _ICE.metalness,
+        ior:               _ICE.ior,
+        thickness:         _ICE.thickness,
+        transparent:       true,
+        opacity:           0.94,
+        side:              THREE.DoubleSide,
+        flatShading:       true,
+        depthWrite:        false,
+      });
+    } else {
+      return new THREE.MeshStandardMaterial({
+        color:             new THREE.Color(_ICE.chunkBaseColor || '#0a1a2a'),
+        map:               _iceChunkTex,
+        emissive:          new THREE.Color(_ICE.chunkEmissiveColor || '#0044aa'),
+        emissiveMap:       _iceChunkTex,
+        emissiveIntensity: _ICE.emissiveIntensity,
+        roughness:         _ICE.roughness,
+        metalness:         _ICE.metalness,
+        side:              THREE.DoubleSide,
+        flatShading:       true,
+      });
     }
+  }
+
+  // Terrain-patch displacement — same noise as canyon walls, small scale
+  function _displaceChunk(geo, seed, peakH) {
+    let _s = seed;
+    const srng = () => { _s = (_s*16807)%2147483647; return (_s-1)/2147483646; };
+    const pos = geo.attributes.position;
+    const uv  = geo.attributes.uv;
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-      const key = Math.round(x*100)+','+Math.round(y*100)+','+Math.round(z*100);
-      const d = dispMap[key];
-      pos.setXYZ(i, x * d, Math.max(0, y * d), z * d);
+      const u  = uv.getX(i);
+      const vv = uv.getY(i);
+      const px = u * 10.0 + srng()*2, pz = vv * 14.0 + srng()*2;
+      const n1 = Math.sin(px*2.1+pz*1.1)*0.35;
+      const n2 = Math.sin(px*5.3+pz*3.7)*0.25;
+      const n3 = Math.abs(Math.sin(px*3.8+pz*2.2))*0.28;
+      const noise = Math.pow(Math.max(0, 0.4+n1+n2+n3), 1.3);
+      pos.setY(i, noise * peakH);
     }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
-    return geo;
   }
 
   function _buildIceInstance(seed) {
     const group = new THREE.Group();
     group.visible = false;
-
-    const geo = _makeGlacierGeo(seed || 7919, 0.6);
     const mat = _makeIceMat();
+
+    // Chunk: a PlaneGeometry patch, displaced upward like a terrain fragment
+    const segs = 10;
+    const geo = new THREE.PlaneGeometry(1, 1, segs, segs);
+    geo.rotateX(-Math.PI / 2);  // lay flat, displacement goes up
+    _displaceChunk(geo, seed || 7919, 0.9);
     const mesh = new THREE.Mesh(geo, mat);
     group.add(mesh);
 
-    // Thin base collar so it sits cleanly at the waterline
-    const baseMat = _makeIceMat();
-    const baseMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.65, 0.75, 0.1, 7, 1),
-      baseMat
-    );
-    baseMesh.position.y = 0.05;
-    group.add(baseMesh);
-
-    const light = new THREE.PointLight(0x55aaff, 1.0, 24);
-    light.position.set(0, 0.6, 0);
+    const light = new THREE.PointLight(0x44aaff, 0.9, 20);
+    light.position.set(0, 0.5, 0);
     group.add(light);
 
     scene.add(group);
-
     return {
-      group, mesh, baseMesh, light,
-      mats: [mat, baseMat],
+      group, mesh, light,
+      mats: [mat],
       get mat()  { return mat; },
-      get mat2() { return baseMat; },
+      get mat2() { return mat; },
       active: false, halfW: 1, elapsed: 0,
     };
   }
 
-  // Each pool instance gets a unique seed so no two look identical
+  function _rebuildIcePool() {
+    // Dispose old pool
+    for (const inst of _icePool) {
+      scene.remove(inst.group);
+      inst.mesh.geometry.dispose();
+      inst.mats.forEach(m => m.dispose());
+    }
+    _icePool.length = 0;
+    _iceActive.length = 0;
+    _iceChunkTex.dispose();
+    _iceChunkTex = _makeIceChunkTex();
+    for (let _ii = 0; _ii < _ICE_POOL_SIZE; _ii++) _icePool.push(_buildIceInstance((_ii+1)*7919));
+  }
+
+  // Initial pool build
   for (let _ii = 0; _ii < _ICE_POOL_SIZE; _ii++) _icePool.push(_buildIceInstance((_ii + 1) * 7919));
 
   function _getFreeIce() {
@@ -20988,24 +21090,54 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(mkH('MATERIAL', '#9cf'));
     panel.appendChild(mkS('transmission', _ICE.transmission, 0, 1, 0.01, v => {
       _ICE.transmission = v;
-      _icePool.forEach(inst => { inst.mats.forEach(m => { m.transmission = v; m.needsUpdate = true; }); });
+      _icePool.forEach(inst => { inst.mats.forEach(m => { if (m.transmission !== undefined) { m.transmission = v; m.needsUpdate = true; } }); });
     }));
     panel.appendChild(mkS('roughness', _ICE.roughness, 0, 1, 0.01, v => {
       _ICE.roughness = v;
       _icePool.forEach(inst => { inst.mats.forEach(m => { m.roughness = v; }); });
     }));
-    panel.appendChild(mkS('IOR', _ICE.ior, 1.0, 2.5, 0.01, v => {
-      _ICE.ior = v;
-      _icePool.forEach(inst => { inst.mats.forEach(m => { m.ior = v; m.needsUpdate = true; }); });
+    panel.appendChild(mkS('metalness', _ICE.metalness, 0, 1, 0.01, v => {
+      _ICE.metalness = v;
+      _icePool.forEach(inst => { inst.mats.forEach(m => { m.metalness = v; }); });
     }));
-    panel.appendChild(mkS('thickness', _ICE.thickness, 0.5, 20, 0.5, v => {
-      _ICE.thickness = v;
-      _icePool.forEach(inst => { inst.mats.forEach(m => { m.thickness = v; }); });
-    }));
-    panel.appendChild(mkS('emissive intensity', _ICE.emissiveIntensity, 0, 1, 0.01, v => {
+    panel.appendChild(mkS('emissive intensity', _ICE.emissiveIntensity, 0, 5, 0.05, v => {
       _ICE.emissiveIntensity = v;
       _icePool.forEach(inst => { inst.mats.forEach(m => { m.emissiveIntensity = v; }); });
     }));
+
+    // STYLE
+    panel.appendChild(mkH('STYLE', '#c8f'));
+    panel.appendChild(mkSel('surface style', ['cracks','grid','both','clean'],
+      () => _ICE.chunkStyle, v => { _ICE.chunkStyle = v; }));
+
+    // Color pickers
+    function mkColor(label, getter, setter) {
+      const row = document.createElement('div');
+      row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:8px;font-size:10px;color:#c8f;';
+      const lbl = document.createElement('span'); lbl.style.width='120px'; lbl.textContent = label;
+      const inp = document.createElement('input'); inp.type='color'; inp.value=getter();
+      inp.style.cssText='width:36px;height:22px;border:none;background:none;cursor:pointer;';
+      inp.oninput = () => setter(inp.value);
+      row.appendChild(lbl); row.appendChild(inp);
+      return row;
+    }
+    panel.appendChild(mkColor('base color',    () => _ICE.chunkBaseColor,    v => _ICE.chunkBaseColor = v));
+    panel.appendChild(mkColor('crack color',   () => _ICE.chunkCrackColor,   v => _ICE.chunkCrackColor = v));
+    panel.appendChild(mkColor('grid color',    () => _ICE.chunkGridColor,    v => _ICE.chunkGridColor = v));
+    panel.appendChild(mkColor('emissive color',() => _ICE.chunkEmissiveColor,v => _ICE.chunkEmissiveColor = v));
+    panel.appendChild(mkS('grid opacity', _ICE.chunkGridOpacity, 0, 1, 0.01, v => _ICE.chunkGridOpacity = v, '#c8f'));
+
+    // REBUILD button — regenerates texture + pool
+    const rebuildBtn = document.createElement('button');
+    rebuildBtn.textContent = '⟳ REBUILD CHUNKS';
+    rebuildBtn.style.cssText = 'background:#110022;border:1px solid #c8f;color:#c8f;padding:5px 10px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:6px 0;width:100%;';
+    rebuildBtn.onclick = () => {
+      _clearAllIce();
+      _rebuildIcePool();
+      rebuildBtn.textContent = '✓ REBUILT';
+      setTimeout(() => { rebuildBtn.textContent = '⟳ REBUILD CHUNKS'; }, 1200);
+    };
+    panel.appendChild(rebuildBtn);
 
     // ACTIONS
     panel.appendChild(mkH('ACTIONS', '#0f8'));
