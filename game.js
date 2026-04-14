@@ -19467,16 +19467,13 @@ function _killAsteroid(inst, impact) {
         (Math.random()-0.5)*2
       );
     }
-    // Kill player if in radius
-    if (state.phase === 'playing' && !state.invincible) {
+    // Kill player if in radius — use killPlayer() so tutorial flash/respawn works correctly
+    if (state.phase === 'playing') {
       const dx = state.shipX - inst.landingX;
       const dz = shipGroup.position.z - inst.landingZ;
       const dist = Math.sqrt(dx*dx + dz*dz);
       if (dist < _asteroidTuner.killRadius * inst.radius) {
-        // Trigger explosion (same path as cone collision)
-        spawnConeShards(state.shipX, _hoverBaseY, shipGroup.position.z, 0xff4400);
-        state._thrusterFlare = 0;
-        state.phase = 'dead';
+        killPlayer();
       }
     }
     // Flash the warning disc briefly (already hidden but trigger shockwave covers it)
