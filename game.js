@@ -21898,14 +21898,33 @@ window._jlDebug = {
     if (state.phase !== 'playing') return;
     const type = FCT.coneType < 0 ? Math.floor(Math.random() * 3) : FCT.coneType;
     const obs = getPooledObstacle(type);
-    if (!obs) return;
+    if (!obs) { console.warn('[FATCONE] pool exhausted'); return; }
     const spawnX = state.shipX + (Math.random() - 0.5) * FCT.spreadAroundShip * 2;
     const clampedX = Math.max(FCT.laneMin, Math.min(FCT.laneMax, spawnX));
-    obs.position.set(clampedX, 0, SPAWN_Z);
+    // In JL mode spawn closer so cones arrive quickly; campaign uses deep horizon
+    const spawnZ = state._jetLightningMode ? -30 : SPAWN_Z;
+    obs.position.set(clampedX, 0, spawnZ);
     obs.scale.set(FCT.scaleXZ, 1, FCT.scaleXZ);
     obs.userData.velX         = 0;
     obs.userData.slalomScaled = true;
     obs.userData.isFatCone    = true;
+    // In JL mode spawning close — force full opacity immediately (no fade-in)
+    if (state._jetLightningMode) {
+      const _mc = obs.userData._meshes;
+      for (let mi = 0; mi < _mc.length; mi++) {
+        const child = _mc[mi];
+        if (child.material.uniforms && child.material.uniforms.uOpacity) {
+          child.material.uniforms.uOpacity.value = 1.0;
+          child.material.transparent = false;
+          child.material.depthWrite  = true;
+          child.material.needsUpdate = true;
+        } else if (child.material.opacity !== undefined) {
+          child.material.opacity     = 1.0;
+          child.material.transparent = false;
+          child.material.needsUpdate = true;
+        }
+      }
+    }
     activeObstacles.push(obs);
     _sessionLogEvent('fatCone_spawn', { x: clampedX, scaleXZ: FCT.scaleXZ });
   }
