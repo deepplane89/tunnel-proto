@@ -20360,6 +20360,8 @@ const _origUpdateShockwave = _updateShockwave;
           inst.hitChecked = true;
           const dx = (state.shipX||0) - inst.landX;
           if (Math.abs(dx) < _LT.killRadius) {
+            const _ltHitSfx = document.getElementById('shield-hit-sfx');
+            if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
             if (state._tutorialActive) addCrashFlash(0x4488ff);
             else killPlayer();
           }
@@ -20393,6 +20395,8 @@ const _origUpdateShockwave = _updateShockwave;
           const near = dx < _LT.killRadius && dz < 4;
           if (near && !inst.hitChecked) {
             inst.hitChecked = true;
+            const _ltHitSfx = document.getElementById('shield-hit-sfx');
+            if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
             if (state._tutorialActive) addCrashFlash(0x4488ff);
             else killPlayer();
           }
