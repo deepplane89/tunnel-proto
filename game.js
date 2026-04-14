@@ -11637,10 +11637,13 @@ function _triggerRetryWithSweep() {
   const fadeEl = document.getElementById('retry-fade');
   fadeEl.style.opacity = '1'; // fade to black (CSS 0.15s transition)
   const _wasDeathRun = state.isDeathRun;
+  const _wasJetLightning = state._jetLightningMode;
   setTimeout(() => {
     _retryPending = false;
     // ── During black: reset scene ──
-    if (_wasDeathRun) startDeathRun(); else startGame();
+    if (_wasJetLightning) startJetLightning();
+    else if (_wasDeathRun) startDeathRun();
+    else startGame();
     // Override: skip prologue, ship already at hover, thrusters on
     killThrusterSputter();          // kill any lingering sputter timer
     state.introActive = true;       // blocks obstacle spawning during sweep
