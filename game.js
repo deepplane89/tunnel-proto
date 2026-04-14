@@ -19664,7 +19664,7 @@ function _updateAsteroids(dt) {
 function _tickAsteroidSpawner(dt) {
   const T = _asteroidTuner;
   if (!T.enabled) return;
-  if (_noSpawnMode) return;
+  if (_noSpawnMode && !_chaosMode) return;
   // Keep chaos params live every tick so slider changes take effect instantly
   if (_chaosMode) {
     const c = _chaosLevel;
@@ -19688,7 +19688,6 @@ function _tickAsteroidSpawner(dt) {
 
   if (_astTimer <= 0) {
     _astTimer = T.frequency * (0.8 + Math.random() * 0.4) * Math.max(0.15, 1.0 - _funFloorIntensity * 0.85);
-    console.log('[AST-SPAWN] firing pattern:', T.pattern, 'next timer:', _astTimer.toFixed(2)+'s', 'chaosMode:', _chaosMode);
 
     if (T.pattern === 'salvo') {
       // Spawn T.salvoCount at once, spread across lanes centered on ship X
@@ -19734,8 +19733,6 @@ const _origUpdateShockwave = _updateShockwave;
     const dt = Math.min((now - _lastAstTime) * 0.001, 0.05);
     _lastAstTime = now;
     // Run during tutorial gameplay OR when chaos mode is active
-    if (!window._dbgAstHookLog) { window._dbgAstHookLog = 0; }
-    window._dbgAstHookLog += dt;
     if (window._dbgAstHookLog > 2) { window._dbgAstHookLog = 0; console.log('[AST-HOOK] phase:', state.phase, 'tutActive:', state._tutorialActive, '_chaosMode:', _chaosMode, 'T.enabled:', _asteroidTuner.enabled, '_noSpawnMode:', _noSpawnMode, '_astPatternLoopActive:', window._astPatternLoopActive, '_astTimer:', _astTimer.toFixed(2)); }
     if (state.phase === 'playing' && !state.introActive &&
         (state._tutorialActive || _chaosMode)) {
@@ -20487,8 +20484,6 @@ const _origUpdateShockwave = _updateShockwave;
     const now = performance.now();
     const dt  = Math.min((now - _ltLastTime)*0.001, 0.05);
     _ltLastTime = now;
-    if (!window._dbgLtHookLog) { window._dbgLtHookLog = 0; }
-    window._dbgLtHookLog += dt;
     if (window._dbgLtHookLog > 2) { window._dbgLtHookLog = 0; console.log('[LT-HOOK] phase:', state.phase, 'tutActive:', state._tutorialActive, '_chaosMode:', _chaosMode, 'LT.enabled:', _LT.enabled); }
     if (state.phase === 'playing' && !state.introActive &&
         (state._tutorialActive || _chaosMode)) {
