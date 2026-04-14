@@ -19573,8 +19573,6 @@ function _getAsteroidFromPool() {
 function _spawnAsteroid(targetX) {
   const inst = _getAsteroidFromPool();
   if (!inst) return;
-  console.log('[AST] targetX='+targetX.toFixed(2)+' shipX='+state.shipX.toFixed(2)+' diff='+(targetX-state.shipX).toFixed(2)+' pattern='+_asteroidTuner.pattern+' recenter='+_jlRecenterActive);
-
   const T = _asteroidTuner;
   const radius = T.size + (Math.random() - 0.5) * T.sizeVariance * 2;
 
@@ -20447,12 +20445,15 @@ function startJetLightning() {
 //    'custom'   — calls onActivate() once on entry, onDeactivate() once on exit
 // ═══════════════════════════════════════════════════════════════════════════════
 
-let _jlIntensity = 1.0; // difficulty scalar — locked at 1.0, modulate later
+let _jlIntensity  = 1.0; // frequency scalar — 1.0 = approved baseline, locked until you ramp
+let _jlSizeScalar = 1.0; // size scalar — 1.0 = approved baseline
 
+// ── Track definitions — drop new obstacles in here as config objects ──────────
 const _JL_TRACKS = [
-  // ── Asteroid: stagger (0-45s) ─────────────────────────────────────────────
+
+  // ════════ ASTEROID TRACKS ════════════════════════════════════════════════
   {
-    id: 'ast_stagger', type: 'asteroid',
+    id: 'ast_stagger', label: 'AST Stagger', type: 'asteroid',
     startT: 0, endT: 45,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
@@ -20460,32 +20461,61 @@ const _JL_TRACKS = [
       size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
     },
   },
-  // ── Asteroid: salvo (45-90s) ──────────────────────────────────────────────
   {
-    id: 'ast_salvo', type: 'asteroid',
+    id: 'ast_sweep', label: 'AST Sweep', type: 'asteroid',
     startT: 45, endT: 90,
+    settings: {
+      enabled: true, pattern: 'sweep', leadFactor: 0.0,
+      frequency: 0.6, sweepSpeed: 0.5,
+      size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
+    },
+  },
+  {
+    id: 'ast_salvo', label: 'AST Salvo', type: 'asteroid',
+    startT: 90, endT: 135,
     settings: {
       enabled: true, pattern: 'salvo', leadFactor: 0.0,
       frequency: 0.5, salvoCount: 4,
       size: 1.35, sizeVariance: 0.55, laneMin: -6.5, laneMax: 7.5,
     },
   },
-  // ── Lightning: stagger (90-165s) ──────────────────────────────────────────
+
+  // ════════ LIGHTNING TRACKS ════════════════════════════════════════════════
   {
-    id: 'lt_stagger', type: 'lightning',
-    startT: 90, endT: 165,
+    id: 'lt_stagger', label: 'LT Stagger', type: 'lightning',
+    startT: 135, endT: 210,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.3, laneMin: -8, laneMax: 8,
     },
-    // turn asteroid off when this track is the only active one
     onActivate()   { if (window._asteroidTuner) window._asteroidTuner.enabled = false; },
-    onDeactivate() { /* asteroid re-enabled by next asteroid track */ },
+    onDeactivate() {},
   },
-  // ── Combined: asteroid stagger + lightning (165s+) ────────────────────────
   {
-    id: 'ast_stagger_2', type: 'asteroid',
-    startT: 165, endT: null,
+    id: 'lt_sweep', label: 'LT Sweep', type: 'lightning',
+    startT: 210, endT: 270,
+    settings: {
+      enabled: true, pattern: 'sweep', leadFactor: 0.0,
+      frequency: 0.4, sweepSpeed: 0.4, laneMin: -8, laneMax: 8,
+    },
+    onActivate()   { if (window._asteroidTuner) window._asteroidTuner.enabled = false; },
+    onDeactivate() {},
+  },
+  {
+    id: 'lt_salvo', label: 'LT Salvo', type: 'lightning',
+    startT: 270, endT: 330,
+    settings: {
+      enabled: true, pattern: 'salvo', leadFactor: 0.0,
+      frequency: 0.5, laneMin: -8, laneMax: 8,
+    },
+    onActivate()   { if (window._asteroidTuner) window._asteroidTuner.enabled = false; },
+    onDeactivate() {},
+  },
+
+  // ════════ COMBINED (330s+) ════════════════════════════════════════════════
+  {
+    id: 'ast_stagger_2', label: 'AST Stagger+LT', type: 'asteroid',
+    startT: 330, endT: null,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 1.4, staggerGap: 0.6, salvoCount: 1,
@@ -20493,17 +20523,23 @@ const _JL_TRACKS = [
     },
   },
   {
-    id: 'lt_stagger_2', type: 'lightning',
-    startT: 165, endT: null,
+    id: 'lt_stagger_2', label: 'LT Stagger (combined)', type: 'lightning',
+    startT: 330, endT: null,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.3, laneMin: -8, laneMax: 8,
     },
   },
-  // ── Terrain walls (150s+) — custom type ───────────────────────────────────
+
+  // ════════ ALWAYS-ON / CUSTOM ══════════════════════════════════════════════
   {
-    id: 'terrain', type: 'custom',
-    startT: 150, endT: null,
+    id: 'fatcone', label: 'Fat Cones', type: 'fatcone',
+    startT: 0, endT: null,
+    frequency: 8.0,
+  },
+  {
+    id: 'terrain', label: 'Terrain', type: 'custom',
+    startT: 300, endT: null,
     onActivate() {
       if (!_terrainWalls) _createTerrainWalls();
       else _terrainWalls.strips.forEach(m => { m.visible = true; });
@@ -20512,13 +20548,6 @@ const _JL_TRACKS = [
     onDeactivate() {
       if (_terrainWalls) _terrainWalls.strips.forEach(m => { m.visible = false; });
     },
-  },
-  // ── Fat cones: active entire run ─────────────────────────────────────────
-  // frequency=8s start, tightens via its own timer in the tick
-  {
-    id: 'fatcone', type: 'fatcone',
-    startT: 0, endT: null,
-    frequency: 8.0,   // seconds between spawns (base)
   },
 ];
 
@@ -20531,8 +20560,8 @@ function _jlApplyAsteroidTrack(track) {
   const T = _asteroidTuner;
   const s = track.settings;
   for (const k of Object.keys(s)) T[k] = s[k];
-  // Intensity scales frequency DOWN (more intense = shorter gap)
   if (s.frequency !== undefined) T.frequency = s.frequency / _jlIntensity;
+  if (s.size      !== undefined) T.size      = s.size      * _jlSizeScalar;
 }
 
 // ── Apply one lightning track's settings to _LT ───────────────────────────────
@@ -20625,6 +20654,120 @@ function _tickJetLightningRamp(dt) {
     window._LT.enabled = false;
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  JL SEQUENCER PANEL  (Q key)
+// ═══════════════════════════════════════════════════════════════════════════════
+(function setupJLSequencerPanel() {
+  const panel = document.createElement('div');
+  panel.id = 'jl-seq-panel';
+  panel.style.cssText = 'display:none;position:fixed;top:0;left:50%;transform:translateX(-50%);width:320px;max-height:100%;background:rgba(0,0,0,0.93);overflow-y:auto;z-index:99999;font-family:monospace;font-size:11px;color:#ccc;padding:10px;box-sizing:border-box;border:1px solid #fa0;border-top:none;';
+  document.body.appendChild(panel);
+
+  function mkH(text, color) {
+    const h = document.createElement('div');
+    h.style.cssText = 'margin:8px 0 4px;font-size:11px;font-weight:bold;color:'+(color||'#fa0')+';border-bottom:1px solid #333;padding-bottom:2px;';
+    h.textContent = text;
+    return h;
+  }
+  function mkS(label, val, min, max, step, fn, color) {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:4px;';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'width:100px;color:'+(color||'#fa0')+';font-size:10px;flex-shrink:0;';
+    lbl.textContent = label;
+    const inp = document.createElement('input');
+    inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=val;
+    inp.style.cssText = 'flex:1;height:14px;accent-color:'+(color||'#fa0')+';';
+    const vEl = document.createElement('span');
+    vEl.style.cssText = 'width:36px;text-align:right;font-size:10px;color:#fff;';
+    vEl.textContent = (+val).toFixed(2);
+    inp.oninput = () => { const v=+inp.value; vEl.textContent=v.toFixed(2); fn(v); };
+    row.appendChild(lbl); row.appendChild(inp); row.appendChild(vEl);
+    return { row, inp, vEl };
+  }
+  function mkBtn(text, color, fn) {
+    const b = document.createElement('button');
+    b.textContent = text;
+    b.style.cssText = 'background:none;border:1px solid '+color+';color:'+color+';padding:3px 8px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:2px;';
+    b.onclick = fn;
+    return b;
+  }
+
+  function build() {
+    panel.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#fa0;margin-bottom:6px;">⚡ JL SEQUENCER (Q)</div>';
+
+    // ── Global scalars
+    panel.appendChild(mkH('SCALARS'));
+    const intSlider = mkS('intensity', _jlIntensity, 0.1, 3.0, 0.05, v => { _jlIntensity = v; }, '#fa0');
+    panel.appendChild(intSlider.row);
+    const sizeSlider = mkS('size', _jlSizeScalar, 0.2, 3.0, 0.05, v => { _jlSizeScalar = v; }, '#f80');
+    panel.appendChild(sizeSlider.row);
+
+    // ── Live readout
+    const info = document.createElement('div');
+    info.style.cssText = 'font-size:9px;color:#666;margin:4px 0 8px;line-height:1.6;white-space:pre;';
+    const refreshInfo = () => {
+      if (!state._jetLightningMode) { info.textContent = 'JL not active'; return; }
+      const t = _jlRampTime || 0;
+      const active = _JL_TRACKS
+        .filter(tr => t >= tr.startT && (tr.endT === null || t < tr.endT))
+        .map(tr => tr.label || tr.id).join(', ');
+      info.textContent = 't=' + t.toFixed(1) + 's   intensity=' + _jlIntensity.toFixed(2) + '   size=' + _jlSizeScalar.toFixed(2) + '\nactive: ' + (active || 'none');
+    };
+    const _infoInterval = setInterval(refreshInfo, 250);
+    refreshInfo();
+    panel.appendChild(info);
+
+    // ── Jump buttons: one per track
+    panel.appendChild(mkH('JUMP TO TRACK'));
+    const jumpNote = document.createElement('div');
+    jumpNote.style.cssText = 'font-size:9px;color:#666;margin-bottom:4px;';
+    jumpNote.textContent = 'Sets game clock to track startT. JL mode only.';
+    panel.appendChild(jumpNote);
+
+    let _lastJumpBtn = null;
+    for (const track of _JL_TRACKS) {
+      const color = track.type === 'asteroid' ? '#f80'
+                  : track.type === 'lightning' ? '#6af'
+                  : track.type === 'fatcone'   ? '#0f8'
+                  : '#888';
+      const endLabel = track.endT !== null ? track.endT + 's' : '∞';
+      const btn = mkBtn(
+        (track.label || track.id) + '  [' + track.startT + 's–' + endLabel + ']',
+        color,
+        () => {
+          if (!state._jetLightningMode) return;
+          // Reset all track activation flags so onActivate fires correctly
+          for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
+          _jlRampTime = track.startT;
+          _astTimer   = 0.1; // fire first asteroid quickly
+          if (_lastJumpBtn) { _lastJumpBtn.style.fontWeight = 'normal'; _lastJumpBtn.style.background = 'none'; }
+          btn.style.fontWeight = 'bold'; btn.style.background = color + '22';
+          _lastJumpBtn = btn;
+        }
+      );
+      btn.style.width = '100%'; btn.style.textAlign = 'left';
+      // Highlight currently active track
+      const t = _jlRampTime || 0;
+      if (t >= track.startT && (track.endT === null || t < track.endT)) {
+        btn.style.fontWeight = 'bold'; btn.style.background = color + '22';
+        _lastJumpBtn = btn;
+      }
+      panel.appendChild(btn);
+    }
+  }
+
+  let visible = false;
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'q' || e.key === 'Q') {
+      visible = !visible;
+      if (visible) { build(); panel.style.display = 'block'; }
+      else panel.style.display = 'none';
+    }
+  });
+})();
 
 // Hook ramp into composer chain (safe to call before lightning IIFE since it
 // just calls free-standing functions that exist by then)
