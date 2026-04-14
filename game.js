@@ -20519,7 +20519,7 @@ const _origUpdateShockwave = _updateShockwave;
     skyHeight:    55,
     warningTime:  1.8,    // seconds disc is visible before bolt (cosmetic — actual strike = when Z reached)
     boltDuration: 0.5,    // seconds of initial flash
-    lingerDuration: 2.0,  // seconds bolt stays planted in world (ship flies past it)
+    lingerDuration: 4.0,  // seconds bolt stays planted in world (ship flies past it)
     coreRadius:   0.12,
     glowRadius:   0.55,
     segments:     10,
@@ -20791,9 +20791,11 @@ const _origUpdateShockwave = _updateShockwave;
 
         // Crackle: random flicker
         if (Math.floor(inst.lingerElapsed * 18) % 2 === 0) _ltRejag(inst);
-        const flicker = 0.6 + 0.4 * Math.abs(Math.sin(inst.lingerElapsed * 14 + Math.random()));
-        inst.coreMat.opacity = Math.max(0, (1.0 - t) * flicker);
-        inst.glowMat.opacity = Math.max(0, (0.45 - t*0.3) * flicker);
+        // Stay bright for most of linger, only fade in last 25%
+        const fadeT = Math.max(0, (t - 0.75) / 0.25);
+        const flicker = 0.7 + 0.3 * Math.abs(Math.sin(inst.lingerElapsed * 14 + Math.random()));
+        inst.coreMat.opacity = Math.max(0, (1.0 - fadeT) * flicker);
+        inst.glowMat.opacity = Math.max(0, (0.5  - fadeT * 0.5) * flicker);
 
         // During linger: bolt is planted in world, ship is flying past it.
         // Kill zone = lateral X only — if ship is within killRadius of bolt column
