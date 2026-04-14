@@ -2034,6 +2034,9 @@ html, body {
 }
 .btn-campaign { border-color: #00eeff; color: #00eeff; }
 .btn-campaign:active { background: rgba(0,238,255,0.12); }
+.btn-jetlightning { border-color: #00eeff; color: #00eeff; }
+.btn-jetlightning:hover { background: rgba(0, 238, 255, 0.08); }
+.btn-jetlightning:active { background: rgba(0, 238, 255, 0.12); }
 .btn-deathrun { border-color: #ff1a8c; color: #ff1a8c; }
 .btn-deathrun:active { background: rgba(255,26,140,0.12); }
 .btn-wormhole { border-color: #00ffcc; color: #00ffcc; }

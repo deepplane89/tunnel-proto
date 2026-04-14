@@ -239,6 +239,7 @@ const state = {
   nextSpawnZ: -50,
   // Tutorial
   _tutorialActive: false,
+  _jetLightningMode: false,  // Jet Lightning arcade mode
   _tutorialStep: 0,       // 0=cones, 1=zipline, 2=endcard, 3=done
   _tutorialTimer: 0,
   _tutorialConesFired: 0, // how many cone rows spawned
@@ -11522,6 +11523,14 @@ function closeSettings() {
     state._tutRocksSpawned = false;
     state._tutRocksPassed = 0;
   });
+
+  // Jet Lightning mode button
+  document.getElementById('jet-lightning-btn').addEventListener('click', () => {
+    playStartSound();
+    state._jetLightningMode = true;
+    startJetLightning();
+  });
+
   document.getElementById('settings-overlay').addEventListener('click', (e) => {
     if (e.target.id === 'settings-overlay') closeSettings();
   });
@@ -11692,6 +11701,7 @@ function startGame() {
   state.currentLevelIdx = 0;
   state.startedFromL1  = true;
   state.isDeathRun     = false;
+  state._jetLightningMode = false;
   state.deathRunVibeIdx = 0;
   state.deathRunRestBeat       = 0;
   state.deathRunMechCooldown   = 0;
@@ -15525,7 +15535,7 @@ function update(dt) {
         }
       );
     }
-    if (!_chaosMode) _noSpawnMode = true; // suppress normal spawner during tutorial (chaos overrides this)
+    if (!_chaosMode && !state._jetLightningMode) _noSpawnMode = true; // suppress normal spawner during tutorial (chaos/JL override this)
   }
 
   // ── T5 scanning beam: fan-ray destruction (runs before obstacle loop)
@@ -19707,7 +19717,7 @@ function _updateAsteroids(dt) {
 function _tickAsteroidSpawner(dt) {
   const T = _asteroidTuner;
   if (!T.enabled) return;
-  if (_noSpawnMode && !_chaosMode) return;
+  if (_noSpawnMode && !_chaosMode && !state._jetLightningMode) return;
   // Keep chaos params live every tick so slider changes take effect instantly
   if (_chaosMode) {
     const c = _chaosLevel;
@@ -19777,7 +19787,7 @@ const _origUpdateShockwave = _updateShockwave;
     _lastAstTime = now;
     // Run during tutorial gameplay OR when chaos mode is active
     if (state.phase === 'playing' && !state.introActive &&
-        (state._tutorialActive || _chaosMode)) {
+        (state._tutorialActive || _chaosMode || state._jetLightningMode)) {
       _tickAsteroidSpawner(dt);
     }
     _updateAsteroids(dt);
@@ -20199,6 +20209,156 @@ const _origUpdateShockwave = _updateShockwave;
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  JET LIGHTNING MODE
+//  A standalone arcade mode: asteroids → lightning → glacier terrain, ramping
+//  difficulty over time. Physics tuned for high-speed lateral feel.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let _jlRampTime = 0;   // seconds elapsed in Jet Lightning mode
+
+function startJetLightning() {
+  // ── Flag ──────────────────────────────────────────────────────────────────
+  state._jetLightningMode = true;
+  state._tutorialActive   = false;
+
+  // ── Physics override ──────────────────────────────────────────────────────
+  _accelBase      = 60;
+  _accelSnap      = 100;
+  _maxVelBase     = 18;
+  _maxVelSnap     = 23;
+  _bankMax        = 0.04;
+  _bankSmoothing  = 8;
+
+  // ── Reset ramp timer ──────────────────────────────────────────────────────
+  _jlRampTime = 0;
+
+  // ── Asteroids: on, stagger, tuned defaults ────────────────────────────────
+  const T = _asteroidTuner;
+  T.enabled      = true;
+  T.pattern      = 'stagger';
+  T.frequency    = 3.5;
+  T.staggerGap   = 0.8;
+  T.salvoCount   = 5;
+  T.speed        = 200;
+  T.size         = 1.2;
+  T.sizeVariance = 0.4;
+  T.skyHeight    = 42;
+  T.leadFactor   = 1.0;
+  T.killRadius   = 2.2;
+  T.laneMin      = -8;
+  T.laneMax      =  8;
+  _astTimer      = 1.0;
+
+  // ── Lightning: OFF at start — ramp turns it on ────────────────────────────
+  if (window._LT) {
+    window._LT.enabled    = false;
+    window._LT.frequency  = 1.3;
+    window._LT.jaggedness = 1.9;
+    window._LT.glowRadius = 0.25;
+    window._LT.spawnZ     = -83;
+    window._LT.pattern    = 'random';
+    window._LT.laneMin    = -8;
+    window._LT.laneMax    =  8;
+  }
+
+  // ── Ice: OFF at start — ramp turns it on ─────────────────────────────────
+  if (window._ICE) {
+    window._ICE.enabled = false;
+  }
+
+  // ── Terrain: OFF at start — ramp turns it on ─────────────────────────────
+  if (_terrainWalls) {
+    _terrainWalls.strips.forEach(m => { m.visible = false; });
+  }
+
+  // ── noSpawnMode: clear ────────────────────────────────────────────────────
+  _noSpawnMode = false;
+
+  // ── Start the game ────────────────────────────────────────────────────────
+  startGame();
+}
+
+// ── Per-frame JL difficulty ramp — called from composer chain ────────────────
+function _tickJetLightningRamp(dt) {
+  if (!state._jetLightningMode || state.phase !== 'playing') return;
+  _jlRampTime += dt;
+
+  const T  = _asteroidTuner;
+  const t  = _jlRampTime;
+
+  // ── Phase 1 (0–30s): asteroids only, frequency tightens ──────────────────
+  if (t < 30) {
+    const p = t / 30;
+    T.frequency  = 3.5 - p * 1.5;   // 3.5 → 2.0
+    T.staggerGap = 0.8 - p * 0.2;   // 0.8 → 0.6
+  }
+
+  // ── Phase 2 (30–90s): lightning starts mixing in ─────────────────────────
+  if (t >= 30 && window._LT) {
+    if (!window._LT.enabled) {
+      window._LT.enabled = true;
+    }
+    const p = Math.min(1, (t - 30) / 60);
+    window._LT.frequency  = 1.3 - p * 0.7;  // 1.3 → 0.6
+    T.frequency            = 2.0 - p * 0.7;  // 2.0 → 1.3
+    T.staggerGap           = 0.6 - p * 0.15; // 0.6 → 0.45
+  }
+
+  // ── Phase 3 (90s+): glacier terrain appears + ice chunks ─────────────────
+  if (t >= 90) {
+    // Terrain: create if needed, show if hidden
+    if (!_terrainWalls) {
+      _createTerrainWalls();
+    } else {
+      _terrainWalls.strips.forEach(m => { m.visible = true; });
+    }
+    // Ice chunks
+    if (window._ICE && !window._ICE.enabled) {
+      window._ICE.enabled = true;
+    }
+    // Continue tightening
+    if (t < 180) {
+      const p = Math.min(1, (t - 90) / 90);
+      T.frequency = 1.3 - p * 0.6;            // 1.3 → 0.7
+      if (window._LT) window._LT.frequency = 0.6 - p * 0.2; // 0.6 → 0.4
+      if (window._ICE) window._ICE.frequency = 3.0 - p * 1.5; // 3.0 → 1.5
+    }
+  }
+}
+
+// Hook ramp into composer chain (safe to call before lightning IIFE since it
+// just calls free-standing functions that exist by then)
+(function _hookJLRamp() {
+  const _jlOrigRender = composer.render.bind(composer);
+  let   _jlLastTime   = performance.now();
+  composer.render = function(...args) {
+    const now = performance.now();
+    const dt  = Math.min((now - _jlLastTime) * 0.001, 0.05);
+    _jlLastTime = now;
+    _tickJetLightningRamp(dt);
+    _jlOrigRender(...args);
+  };
+})();
+
+// Reset JL state when game ends / restarts
+const _origStartGame_JL = startGame;
+startGame = function() {
+  if (!state._jetLightningMode) {
+    // Reset physics to campaign defaults when leaving JL mode
+    _accelBase     = 22;
+    _accelSnap     = 52;
+    _maxVelBase    = 9;
+    _maxVelSnap    = 13;
+    _bankMax       = 0.03;
+  }
+  _origStartGame_JL.apply(this, arguments);
+};
+
+// Expose for title button
+window.startJetLightning = startJetLightning;
+
 //  LIGHTNING STRIKE SYSTEM  v3
 //  – Spawns at SPAWN_Z like a cone, scrolls toward ship at game speed
 //  – Warning disc travels with it (always over the target X)
@@ -20527,7 +20687,7 @@ const _origUpdateShockwave = _updateShockwave;
     const dt  = Math.min((now - _ltLastTime)*0.001, 0.05);
     _ltLastTime = now;
     if (state.phase === 'playing' && !state.introActive &&
-        (state._tutorialActive || _chaosMode)) {
+        (state._tutorialActive || _chaosMode || state._jetLightningMode)) {
       _updateLightning(dt);
     }
     _ltOrigRender(...args);
@@ -20981,7 +21141,7 @@ const _origUpdateShockwave = _updateShockwave;
     const dt  = Math.min((now - _iceLastTime) * 0.001, 0.05);
     _iceLastTime = now;
     if (state.phase === 'playing' && !state.introActive &&
-        (state._tutorialActive || _chaosMode)) {
+        (state._tutorialActive || _chaosMode || state._jetLightningMode)) {
       _tickIceSpawner(dt);
     }
     _updateIce(dt);
