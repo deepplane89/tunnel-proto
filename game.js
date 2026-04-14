@@ -14900,8 +14900,8 @@ function update(dt) {
   state.shipX   += state.shipVelX * dt;
 
 
-  // Camera pivot follows ship X
-  camTargetX = state.shipX;
+  // Camera pivot follows ship X (lerped to avoid jitter at high speeds)
+  camTargetX = THREE.MathUtils.lerp(camTargetX, state.shipX, Math.min(1, 12 * dt));
   // ── Retry sweep: establishing shot → chase cam ──
   if (_retrySweepActive) {
     _retrySweepT = Math.min(1, _retrySweepT + dt / _RETRY_SWEEP_DUR);
@@ -20795,7 +20795,8 @@ window._jlDebug = {
         if (!inst.hitChecked && state && state.phase === 'playing') {
           inst.hitChecked = true;
           const dx = (state.shipX||0) - inst.landX;
-          if (Math.abs(dx) < (_LT.glowRadius * _LT.hitboxScale)) {
+          const dz = Math.abs(_shipZ() - inst.strikePosZ);
+          if (Math.abs(dx) < (_LT.glowRadius * _LT.hitboxScale) && dz < 6) {
                     const _ltHitSfx = document.getElementById('shield-hit-sfx');
             if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
             if (state._tutorialActive) addCrashFlash(0x4488ff);
