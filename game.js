@@ -19412,13 +19412,12 @@ function _spawnAsteroid(targetX) {
   // Since vel.x will be 0 (spawnX = landX), only Y and Z contribute to distance.
   const totalTime = Math.sqrt((landY - spawnY) ** 2 + (landZ - spawnZ) ** 2) / T.speed;
 
-  // Predictive lead: aim ahead of the ship based on its current lateral velocity.
-  // leadFactor scales up with frequency so faster patterns aim further ahead —
-  // strafing at high frequency becomes increasingly hard to escape.
-  const freqScale = Math.min(T.frequency / 3.5, 1.0); // 1.0 at default freq, <1 at higher freq
-  const effectiveLead = T.leadFactor * (1.0 + (1.0 - freqScale) * 1.5); // ramps up as freq increases
+  // Predict where the ship will actually be when the asteroid lands:
+  //   landX = targetX + shipVelX * totalTime
+  // This is pure physics — if the ship keeps its current velocity it will be here at impact.
+  // leadFactor lets you dial it back (1.0 = perfect prediction, 0.6 = gives player a chance to escape).
   const shipVelX_now = (state && state.shipVelX) || 0;
-  const landX = targetX + shipVelX_now * totalTime * effectiveLead;
+  const landX = targetX + shipVelX_now * totalTime * T.leadFactor;
 
   // Spawn X = same as landX so trajectory is straight down-forward (vel.x = 0)
   const spawnX = landX;
