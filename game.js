@@ -499,7 +499,19 @@ const _PHYSICS_PRESETS = {
     bankSmoothing:8,
     decelBasePct: 0.02,
     decelFullPct: 0.05,
-    speed:        'L4',   // BASE_SPEED * LEVELS[3].speedMult = 1.5x
+    speed:        'L4',
+  },
+  'JL_v2': {
+    label:        'Jet Lightning v2 — tighter lateral cap (maxVelBase 13)',
+    accelBase:    60,
+    accelSnap:    100,
+    maxVelBase:   13,
+    maxVelSnap:   23,
+    bankMax:      0.04,
+    bankSmoothing:8,
+    decelBasePct: 0.02,
+    decelFullPct: 0.05,
+    speed:        'L4',
   },
 };
 
@@ -20288,7 +20300,7 @@ function startJetLightning() {
   // ── Physics override ──────────────────────────────────────────────────────
   _accelBase      = 60;
   _accelSnap      = 100;
-  _maxVelBase     = 18;
+  _maxVelBase     = 13;    // JL_v2 — tighter lateral cap, more intentional feel
   _maxVelSnap     = 23;
   _bankMax        = 0.04;
   _bankSmoothing  = 8;
@@ -20303,12 +20315,12 @@ function startJetLightning() {
   const T = _asteroidTuner;
   T.enabled      = true;
   T.pattern      = 'stagger';
-  T.frequency    = 4.0;    // slow start — ramp tightens this
-  T.staggerGap   = 1.0;
+  T.frequency    = 1.4;    // locked from session log (rchouake approved)
+  T.staggerGap   = 0.6;    // locked from session log
   T.salvoCount   = 3;
   T.speed        = 200;
-  T.size         = 1.2;
-  T.sizeVariance = 0.4;
+  T.size         = 1.2;    // locked from session log
+  T.sizeVariance = 0.55;   // locked from session log
   T.skyHeight    = 42;
   T.leadFactor   = 0.0;    // aim at ship's CURRENT position, not predicted
   T.staggerDual  = false;  // dual shot unlocks in Phase 3 only
