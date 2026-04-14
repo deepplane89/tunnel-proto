@@ -19858,12 +19858,16 @@ const _origUpdateShockwave = _updateShockwave;
       if (state.phase !== 'playing') state.phase = 'playing';
       const rampOrigin = (state.elapsed || 0);
       const chaseTick = () => {
+        // Fire a burst of 3: mirror shot + one flanking on each side to force real movement
         if (typeof window._astChaseLastX === 'undefined') window._astChaseLastX = state.shipX;
         const prevX = window._astChaseLastX;
         const shipX = state.shipX;
         const mirrorX = shipX + (shipX - prevX);
         const targetX = THREE.MathUtils.clamp(mirrorX, T.laneMin, T.laneMax);
-        _spawnAsteroid(targetX);
+        const flank = (T.laneMax - T.laneMin) * 0.25;
+        _spawnAsteroid(targetX); // mirror shot
+        setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(THREE.MathUtils.clamp(targetX - flank, T.laneMin, T.laneMax)); }, 280);
+        setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(THREE.MathUtils.clamp(targetX + flank, T.laneMin, T.laneMax)); }, 560);
         window._astChaseLastX = targetX;
       };
       let cancelled = false;
@@ -19882,64 +19886,104 @@ const _origUpdateShockwave = _updateShockwave;
       scheduleNext();
     }
 
+    // Burst helper: spawn targets[i] after i*gapMs, snapshotting ship X at call time
+    function _burstSpawn(targets, gapMs) {
+      targets.forEach((x, i) => {
+        if (i === 0) { _spawnAsteroid(x); return; }
+        setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(x); }, i * gapMs);
+      });
+    }
+
     const _patternDefs = [
       {
+        // RANDOM: 4 shots scattered around ship X — always threatening, never safe to stay put
         label: '▼▼ RANDOM (loop)',
         color: '#0f8',
-        tick: () => { _spawnAsteroid(T.laneMin + Math.random() * (T.laneMax - T.laneMin)); },
-      },
-      {
-        label: '►◄ SWEEP (loop)',
-        color: '#0df',
         tick: () => {
-          // Sweep steps across lanes relative to ship’s current X so it chases the player.
-          const range = T.laneMax - T.laneMin;
-          const x = state.shipX + ((_astSweepX - 0.5) * range);
-          _astSweepX += _astSweepDir * T.sweepSpeed * 0.18;
-          if (_astSweepX >= 1 || _astSweepX <= 0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
-          _spawnAsteroid(THREE.MathUtils.clamp(x, T.laneMin, T.laneMax));
+          const sx = state.shipX;
+          const half = (T.laneMax - T.laneMin) * 0.5;
+          const targets = Array.from({ length: 4 }, () =>
+            THREE.MathUtils.clamp(sx + (Math.random() - 0.5) * half * 2.5, T.laneMin, T.laneMax));
+          _burstSpawn(targets, 350);
         },
       },
       {
+        // SWEEP: burst of 5 shots, origin tracks ship X, sweeps laterally across the lane range
+        label: '►◄ SWEEP (loop)',
+        color: '#0df',
+        tick: () => {
+          const sx = state.shipX;
+          const range = T.laneMax - T.laneMin;
+          const sweepOffset = (_astSweepX - 0.5) * range;
+          _astSweepX += _astSweepDir * T.sweepSpeed * 0.35;
+          if (_astSweepX >= 1 || _astSweepX <= 0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
+          const waveSize = 5;
+          const targets = Array.from({ length: waveSize }, (_, i) => {
+            const frac = i / (waveSize - 1);
+            return THREE.MathUtils.clamp(sx + sweepOffset + (frac - 0.5) * range * 0.5, T.laneMin, T.laneMax);
+          });
+          _burstSpawn(targets, 200);
+        },
+      },
+      {
+        // PINCH: 5 pairs fired 300ms apart, arms close on ship X — you see them converging
+        // and must commit to a lane before the kill shot lands center
         label: '▷◁ PINCH (loop)',
         color: '#f0f',
         tick: () => {
-          // Pinch: two asteroids start wide and converge toward ship X each tick.
-          // _astSweepX tracks pinch progress 1→0. At 1=fully open, 0=both land on ship.
-          if (_astSweepX <= 0) { _astSweepX = 1.0; } // reset when converged
-          const halfSpread = _astSweepX * (T.laneMax - T.laneMin) * 0.5;
-          _spawnAsteroid(state.shipX - halfSpread); // left arm
-          _spawnAsteroid(state.shipX + halfSpread); // right arm
-          _astSweepX -= T.pinchStep;                 // converge per tick — tuned independently
+          const sx = state.shipX; // snapshot — arms all target where you ARE now
+          const pairCount = 5;
+          const gapMs = 300;
+          const fullHalf = (T.laneMax - T.laneMin) * 0.5;
+          for (let pi = 0; pi < pairCount; pi++) {
+            const progress = pi / (pairCount - 1); // 0=wide, 1=closed
+            const halfSpread = Math.max(0.3, fullHalf * (1.0 - progress));
+            const delay = pi * gapMs;
+            (function(hs, d) {
+              const fn = () => {
+                if (state.phase !== 'playing') return;
+                _spawnAsteroid(THREE.MathUtils.clamp(sx - hs, T.laneMin, T.laneMax));
+                _spawnAsteroid(THREE.MathUtils.clamp(sx + hs, T.laneMin, T.laneMax));
+              };
+              if (d === 0) fn(); else setTimeout(fn, d);
+            })(halfSpread, delay);
+          }
+          // Kill shot dead-center after arms close
+          setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(sx); }, pairCount * gapMs);
         },
       },
       // CHASE is handled separately via _startChaseLoop (difficulty ramp)
       // placeholder entry omitted — button wired below
       {
+        // STAGGER: rolling wall left→right, centered on ship X so no lane is permanently safe
         label: '▼ ▼▼ STAGGER (loop)',
         color: '#ff0',
         tick: () => {
+          const sx = state.shipX;
           const steps = Math.max(2, Math.round(T.salvoCount));
+          const half = (T.laneMax - T.laneMin) * 0.45;
           for (let si = 0; si < steps; si++) {
-            setTimeout(() => {
-              if (state.phase !== 'playing') return;
-              _spawnAsteroid(T.laneMin + (si / (steps - 1)) * (T.laneMax - T.laneMin));
-            }, si * T.staggerGap * 1000);
+            const frac = si / (steps - 1);
+            const x = THREE.MathUtils.clamp(sx + (frac - 0.5) * half * 2, T.laneMin, T.laneMax);
+            setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(x); }, si * T.staggerGap * 1000);
           }
         },
       },
       {
+        // SALVO: simultaneous wall centered on ship X — survive by reading the gaps
         label: '▼▼▼ SALVO (loop)',
         color: '#f80',
         tick: () => {
+          const sx = state.shipX;
           const count = Math.max(1, Math.round(T.salvoCount));
+          const half = (T.laneMax - T.laneMin) * 0.45;
           for (let si = 0; si < count; si++) {
-            const fracX = count === 1 ? 0.5 : si / (count - 1);
-            _spawnAsteroid(T.laneMin + fracX * (T.laneMax - T.laneMin));
+            const frac = count === 1 ? 0.5 : si / (count - 1);
+            _spawnAsteroid(THREE.MathUtils.clamp(sx + (frac - 0.5) * half * 2, T.laneMin, T.laneMax));
           }
         },
       },
-    ];
+        ];
 
     _patternDefs.forEach(({ label, color, tick }) => {
       const btn = document.createElement('button');
