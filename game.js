@@ -19549,6 +19549,16 @@ function _updateAsteroids(dt) {
 
     // Move
     inst.group.position.addScaledVector(inst.vel, dt);
+
+    // Mid-flight steering: continuously correct vel.x toward current ship X
+    // so the asteroid tracks lateral movement instead of flying past on a fixed rail.
+    // Strength = leadFactor * 1.5 — same tuner param, no new slider needed.
+    const _steerTargetX = state.shipX + (state.shipVelX || 0) * (inst.totalFallTime - inst.elapsed) * T.leadFactor;
+    const _steerDx = THREE.MathUtils.clamp(_steerTargetX, T.laneMin, T.laneMax) - inst.group.position.x;
+    inst.vel.x += _steerDx * T.leadFactor * 1.5 * dt;
+    // Also update the warn disc X to follow corrected trajectory
+    inst.warnMesh.position.x = inst.group.position.x + inst.vel.x * (inst.totalFallTime - inst.elapsed);
+
     // Slow tumble
     inst.group.rotation.x += 0.4 * dt;
     inst.group.rotation.z += 0.25 * dt;
@@ -19559,11 +19569,7 @@ function _updateAsteroids(dt) {
     const _AST_FADE_END   = -100;      // fully visible from here
     const fadeT = Math.max(0, Math.min(1, (inst.group.position.z - _AST_FADE_START) / (_AST_FADE_END - _AST_FADE_START)));
 
-    // Apply opacity to rock (custom shader — use material.opacity uniform substitute via side-channel)
-    // Rock uses opaque ShaderMaterial — fade via blending trick: mix toward transparent
-    inst.rockMesh.material.transparent = fadeT < 1.0;
-    inst.rockMesh.material.depthWrite  = fadeT >= 1.0;
-    // GLSL doesn't have a uOpacity — we drive opacity on fire shell and hide rock at extreme dist
+    // Rock visibility driven by fadeT — material flags are fixed at build time (never toggled)
     inst.rockMesh.visible = fadeT > 0.02;
     // Fire shell: has uIntensity, use it as combined fire + fade
     inst.fireMesh.material.uniforms.uIntensity.value = T.fireIntensity * fadeT;
