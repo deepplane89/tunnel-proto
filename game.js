@@ -20309,14 +20309,17 @@ const _origUpdateShockwave = _updateShockwave;
       const inst = _ltActive[i];
       inst.elapsed += dt;
 
-      // Scroll toward ship during warn phase only — stops when bolt strikes
-      if (inst.phase === 'warn') {
-        const scrollDt = spd * dt;
-        inst.warnMesh.position.z  += scrollDt;
-        inst.flash.position.z     += scrollDt;
-        inst.ring.position.z      += scrollDt;
-        inst.boltGroup.position.z += scrollDt;
-        inst.strikePosZ           += scrollDt;
+      // Scroll ALL phases — bolt moves toward ship like a cone, always
+      const scrollDt = spd * dt;
+      inst.warnMesh.position.z  += scrollDt;
+      inst.flash.position.z     += scrollDt;
+      inst.ring.position.z      += scrollDt;
+      inst.boltGroup.position.z += scrollDt;
+      inst.strikePosZ           += scrollDt;
+
+      // Despawn once it scrolls past ship
+      if (inst.boltGroup.position.z > _shipZ() + 20) {
+        _ltKill(inst); _ltActive.splice(i, 1); continue;
       }
 
       if (inst.phase === 'warn') {
