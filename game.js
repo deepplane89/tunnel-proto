@@ -12306,7 +12306,7 @@ function startDeathRun() {
   // Also clear any rings that were on the title screen
   if (state._tutorialActive) _ringRemoveAll();
 
-  // Prologue: ship idles, wait for tap to launch (skip in tutorial AND retry)
+  // Prologue: ship idles, wait for tap to launch (skip in tutorial and retry)
   if (!state._tutorialActive && !_retryIsFromDead) {
     state.introActive    = true;
     state.thrusterPower  = 0;
@@ -12329,7 +12329,7 @@ function startDeathRun() {
     musicFadeTo('bg', 800);
   }
 
-  // Show cinematic prologue overlay (skip in tutorial AND retry)
+  // Show cinematic prologue overlay (skip in tutorial and retry)
   const overlay = document.getElementById('intro-overlay');
   if (overlay && !state._tutorialActive && !_retryIsFromDead) {
     clearIntroTimers();
@@ -20302,13 +20302,10 @@ function startJetLightning() {
 
   // ── Re-apply JL flags AFTER startGame() resets them ─────────────────────
   state._jetLightningMode  = true;
-  // Kill ALL intro state so shipX is never clamped to 0
-  state.introActive         = false;
-  state._introLiftActive    = false;
-  state.thrusterPower       = 1;
-  clearIntroTimers();  // kill the queued 18.5s prologue launch timer
-  const _jlOverlay = document.getElementById('intro-overlay');
-  if (_jlOverlay) { _jlOverlay.style.display = 'none'; _jlOverlay.innerHTML = ''; }
+  // Campaign prologue runs normally (startGame sets introActive=true);
+  // the prologue's own _launchDeathRun() clears introActive & _introLiftActive
+  // when the player taps or the 18.5s auto-launch fires.
+
   _asteroidTuner.enabled   = true;
   _noSpawnMode             = false;
   _astTimer                = 2.0;  // 2s grace after liftoff
