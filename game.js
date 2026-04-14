@@ -19031,7 +19031,7 @@ const _asteroidTuner = {
   //            0 = dead-on the lane, higher = random side-scatter.
   trajZ:          140,     // Z distance traveled toward camera (0–160)
   trajY:          1.0,     // multiplier on the Y drop (skyHeight → 0). 1=full drop
-  trajX:          3.0,     // ± random lateral scatter at spawn (jitter)
+  trajX:          0.0,     // ± random lateral scatter at spawn (0 = straight-on, no jitter)
   fireIntensity:  1.0,     // fire shell opacity multiplier
   trailLength:    1.0,     // particle trail length multiplier
   glowRange:      14,      // PointLight range
@@ -19239,6 +19239,8 @@ function _buildAsteroidInstance() {
     vertexShader: _asteroidRockVS,
     fragmentShader: _asteroidRockFS,
     uniforms: { uTime: { value: 0 } },
+    transparent: true,
+    depthWrite: false,
   });
   const rockMesh = new THREE.Mesh(rockGeo, rockMat);
   group.add(rockMesh);
@@ -19402,8 +19404,8 @@ function _spawnAsteroid(targetX) {
   const leadX = targetX + (state.shipVelX || 0) * totalTime * T.leadFactor;
   const landX = THREE.MathUtils.clamp(leadX, T.laneMin, T.laneMax);
 
-  // Velocity vector: points from spawn straight to landing point
-  const vel = new THREE.Vector3(
+  // Velocity vector: reuse pooled vector on inst to avoid GC allocation
+  inst.vel.set(
     (landX - spawnX) / totalTime,
     (landY - spawnY) / totalTime,
     (landZ - spawnZ) / totalTime
@@ -19419,10 +19421,8 @@ function _spawnAsteroid(targetX) {
   inst.group.position.set(spawnX, spawnY, spawnZ);
   inst.group.visible = true;
 
-  // Start fully transparent — fade in as it crosses from SPAWN_Z toward camera (matching cone behaviour)
-  inst.rockMesh.material.transparent = true;
-  inst.rockMesh.material.depthWrite  = false;
-  inst.fireMesh.material.depthWrite  = false;
+  // transparent + depthWrite already set at build time — do NOT reassign here,
+  // assigning material properties triggers needsUpdate which forces a shader recompile.
 
   inst.light.position.copy(inst.group.position);
   inst.light.distance  = T.glowRange * radius;
@@ -19444,7 +19444,6 @@ function _spawnAsteroid(targetX) {
     Math.random() * Math.PI * 2
   );
 
-  inst.vel.copy(vel);
   inst.radius   = radius;
   inst.landingX = landX;
   inst.landingZ = landZ;
