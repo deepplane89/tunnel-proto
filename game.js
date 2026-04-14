@@ -19274,7 +19274,7 @@ const _asteroidTuner = {
   chaseRampEnd:   1.2,     // final mirror interval (seconds) — ruthless
   chaseRampDuration: 90,   // seconds over which ramp plays out
   // Filler (decorative background asteroids)
-  fillerEnabled:  false,   // toggle on/off
+  fillerEnabled:  true,    // toggle on/off
   fillerFreq:      0.4,    // seconds between filler spawns
   fillerLaneMin:  -20,     // X range — wider than normal to sell depth
   fillerLaneMax:   20,
