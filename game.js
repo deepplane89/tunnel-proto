@@ -19412,18 +19412,9 @@ function _spawnAsteroid(targetX) {
   // Since vel.x will be 0 (spawnX = landX), only Y and Z contribute to distance.
   const totalTime = Math.sqrt((landY - spawnY) ** 2 + (landZ - spawnZ) ** 2) / T.speed;
 
-  // Pattern offset: how far left/right of the ship this shot should land.
-  // Patterns pass targetX = state.shipX ± offset; recover offset here so we can
-  // apply it on top of the intercept even if the ship has moved since the call was queued.
-  const patternOffset = targetX - ((state && state.shipX) || 0);
-
-  // Intercept: where will the ship be when the asteroid arrives?
-  //   intercept = shipX_now + shipVelX * totalTime * leadFactor
-  // Add pattern offset so flanks/arms/spread still work correctly.
-  const shipX_now = (state && state.shipX) || 0;
-  const shipVelX_now = (state && state.shipVelX) || 0;
-  const interceptX = shipX_now + shipVelX_now * totalTime * T.leadFactor + patternOffset;
-  const landX = interceptX; // never clamp — ship can be anywhere
+  // targetX is exactly where to land — no offset math, no clamping.
+  // Callers are responsible for passing state.shipX (direct hit) or state.shipX ± spread (pattern arms).
+  const landX = targetX;
 
   // Spawn X = same as landX so trajectory is straight down-forward (vel.x = 0)
   const spawnX = landX;
@@ -19456,7 +19447,7 @@ function _spawnAsteroid(targetX) {
   // Warning disc at landing point (hidden until asteroid fades in enough)
   const warnRadius = Math.max(3.0, radius * 2.5);
   inst.warnMesh.position.set(landX, 0.12, landZ);
-  console.log('[SPAWN] targetX='+targetX.toFixed(2)+' shipX_now='+shipX_now.toFixed(2)+' patternOffset='+patternOffset.toFixed(2)+' landX='+landX.toFixed(2)+' warnZ='+landZ.toFixed(2));
+  console.log('[SPAWN] targetX='+targetX.toFixed(2)+' landX='+landX.toFixed(2)+' shipX='+((state&&state.shipX)||0).toFixed(2)+' warnZ='+landZ.toFixed(2));
   inst.warnMesh.scale.setScalar(warnRadius);
   inst.warnMesh.visible = false; // shown once fadeT > 0.3
   inst.warnMat.uniforms.uProgress.value = 0;
@@ -20007,8 +19998,8 @@ const _origUpdateShockwave = _updateShockwave;
           const half = (T.laneMax - T.laneMin) * 0.45;
           for (let si = 0; si < steps; si++) {
             const frac = si / (steps - 1);
-            // re-read shipX at fire time so each shot locks on to current position
-            setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(state.shipX + (frac - 0.5) * half * 2); }, si * T.staggerGap * 1000);
+            // full lock: fire directly at ship position at the moment each shot fires
+            setTimeout(() => { if (state.phase === 'playing') _spawnAsteroid(state.shipX); }, si * T.staggerGap * 1000);
           }
         },
       },
