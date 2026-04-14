@@ -19029,7 +19029,7 @@ const _asteroidTuner = {
   sizeVariance:   0.4,     // ± random added to size
   frequency:      3.5,     // seconds between spawns (per pattern unit)
   speed:          73,      // travel speed (units/s along trajectory)
-  leadFactor:     0.6,     // partial lead: 0=no lead (aim at current X), 1=perfect lead, 0.4=easy, 0.8=punishing
+  leadFactor:     1.0,     // partial lead: 0=no lead (aim at current X), 1=perfect intercept, 0.6=forgiving
   skyHeight:      40,      // Y spawn height above water at the horizon
   //
   // TRAJECTORY — three independent axes, all slider-controlled:
