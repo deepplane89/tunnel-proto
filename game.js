@@ -19014,6 +19014,7 @@ const _asteroidTuner = {
   sizeVariance:   0.4,     // ± random added to size
   frequency:      6.0,     // seconds between spawns (per pattern unit)
   speed:          73,      // travel speed (units/s along trajectory)
+  leadFactor:     0.6,     // partial lead: 0=no lead (aim at current X), 1=perfect lead, 0.4=easy, 0.8=punishing
   skyHeight:      40,      // Y spawn height above water at the horizon
   //
   // TRAJECTORY — three independent axes, all slider-controlled:
@@ -19389,7 +19390,7 @@ function _spawnAsteroid(targetX) {
 
   // Lead-targeting: aim at where ship WILL BE when asteroid arrives, not where it is now.
   // shipVelX is in world-units/s. Clamp so we don't lead off screen.
-  const leadX = targetX + (state.shipVelX || 0) * totalTime * 0.6; // 0.6 = partial lead (not perfect)
+  const leadX = targetX + (state.shipVelX || 0) * totalTime * T.leadFactor;
   const landX = THREE.MathUtils.clamp(leadX, T.laneMin, T.laneMax);
 
   // Velocity vector: points from spawn straight to landing point
@@ -19743,6 +19744,7 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeSlider('size', T.size, 0.3, 4.0, 0.05, v => T.size = v, '#f80').row);
     panel.appendChild(makeSlider('size variance', T.sizeVariance, 0, 2.0, 0.05, v => T.sizeVariance = v, '#f80').row);
     panel.appendChild(makeSlider('speed', T.speed, 4, 200, 0.5, v => T.speed = v, '#fa0').row);
+    panel.appendChild(makeSlider('lead factor', T.leadFactor, 0, 1, 0.01, v => T.leadFactor = v, '#fa0').row);
     panel.appendChild(makeSlider('kill radius', T.killRadius, 0.5, 6.0, 0.1, v => T.killRadius = v, '#f44').row);
 
     panel.appendChild(makeHeader('TRAJECTORY', '#8cf'));
@@ -19838,6 +19840,19 @@ const _origUpdateShockwave = _updateShockwave;
           _astSweepX += _astSweepDir * T.sweepSpeed * 0.18;
           if (_astSweepX >= 1 || _astSweepX <= 0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
           _spawnAsteroid(THREE.MathUtils.clamp(x, T.laneMin, T.laneMax));
+        },
+      },
+      {
+        label: '▷◁ PINCH (loop)',
+        color: '#f0f',
+        tick: () => {
+          // Pinch: two asteroids start wide and converge toward ship X each tick.
+          // _astSweepX tracks pinch progress 1→0. At 1=fully open, 0=both land on ship.
+          if (_astSweepX <= 0) { _astSweepX = 1.0; } // reset when converged
+          const halfSpread = _astSweepX * (T.laneMax - T.laneMin) * 0.5;
+          _spawnAsteroid(state.shipX - halfSpread); // left arm
+          _spawnAsteroid(state.shipX + halfSpread); // right arm
+          _astSweepX -= T.sweepSpeed * 0.12;         // converge each tick
         },
       },
       {
