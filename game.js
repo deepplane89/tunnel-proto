@@ -20586,8 +20586,10 @@ const _origUpdateShockwave = _updateShockwave;
     staggerGap:   0.8,
     salvoCount:   2,
     // Size
-    sizeMin:      2.5,    // base scale for ice slab
-    sizeMax:      5.5,    // max scale
+    sizeMin:      2.5,    // base XZ scale
+    sizeMax:      5.5,    // max XZ scale
+    heightMin:    4.0,    // base Y scale (how tall the glacier is)
+    heightMax:    9.0,    // max Y scale
     // Visuals
     transmission: 0.72,
     roughness:    0.12,
@@ -20631,34 +20633,48 @@ const _origUpdateShockwave = _updateShockwave;
   function _buildIceInstance() {
     const group = new THREE.Group();
     group.visible = false;
+    const mats = [];
 
-    // Main slab — Box with random vertex jitter applied at spawn time
-    const geo  = new THREE.BoxGeometry(1, 0.28, 1, 2, 1, 2);
-    const mat  = _makeIceMat();
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.castShadow    = false;
-    mesh.receiveShadow = false;
-    group.add(mesh);
+    // Base slab sitting at water level
+    const baseMat = _makeIceMat();
+    mats.push(baseMat);
+    const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.22, 0.7), baseMat);
+    baseMesh.position.y = 0.11;
+    group.add(baseMesh);
 
-    // Sub-slab stacked fragment (slightly offset, smaller) for visual richness
-    const geo2  = new THREE.BoxGeometry(0.7, 0.18, 0.65, 1, 1, 1);
-    const mat2  = _makeIceMat();
-    const mesh2 = new THREE.Mesh(geo2, mat2);
-    mesh2.position.set(0.18, 0.18, -0.12);
-    mesh2.rotation.y = 0.4;
-    group.add(mesh2);
+    // Spire cluster: 4 tall tapered cones at varying offsets/tilts
+    const spireData = [
+      { x:  0.00, z:  0.00, rx:  0.00, ry: 0.0, h: 1.00, rb: 0.28, rt: 0.04 },
+      { x: -0.28, z:  0.08, rx:  0.06, ry: 0.5, h: 0.72, rb: 0.20, rt: 0.03 },
+      { x:  0.26, z: -0.06, rx: -0.05, ry:-0.4, h: 0.82, rb: 0.22, rt: 0.03 },
+      { x:  0.04, z: -0.22, rx:  0.04, ry: 1.1, h: 0.55, rb: 0.16, rt: 0.02 },
+    ];
+    const spireMeshes = [];
+    for (let _si = 0; _si < spireData.length; _si++) {
+      const s = spireData[_si];
+      const sm = _makeIceMat();
+      mats.push(sm);
+      const spireGeo = new THREE.CylinderGeometry(s.rt, s.rb, s.h, 6, 1);
+      const spireMesh = new THREE.Mesh(spireGeo, sm);
+      spireMesh.position.set(s.x, 0.22 + s.h * 0.5, s.z);
+      spireMesh.rotation.set(s.rx, s.ry, 0);
+      group.add(spireMesh);
+      spireMeshes.push(spireMesh);
+    }
 
-    // Point light — cold blue glow
-    const light = new THREE.PointLight(0x66aaff, 0.6, 18);
-    light.position.set(0, 1.2, 0);
+    // Cold blue point light at mid-height
+    const light = new THREE.PointLight(0x66aaff, 0.8, 22);
+    light.position.set(0, 0.8, 0);
     group.add(light);
 
     scene.add(group);
 
     return {
-      group, mesh, mesh2, mat, mat2, light,
+      group, mats, spireMeshes, baseMesh, light,
+      get mat()  { return mats[0]; },
+      get mat2() { return mats[1] || mats[0]; },
       active:  false,
-      halfW:   1,   // half-width for hitbox — set at spawn
+      halfW:   1,
       elapsed: 0,
     };
   }
@@ -20699,17 +20715,18 @@ const _origUpdateShockwave = _updateShockwave;
     if (!inst) return;
 
     // Randomise size each spawn
-    const scale  = _ICE.sizeMin + Math.random() * (_ICE.sizeMax - _ICE.sizeMin);
-    const scaleZ = scale * (0.55 + Math.random() * 0.7);  // vary depth independently
-    const tiltY  = (Math.random() - 0.5) * 0.9;          // random yaw
-    const tiltX  = (Math.random() - 0.5) * 0.15;         // slight pitch — not too tall
+    const scaleX = _ICE.sizeMin   + Math.random() * (_ICE.sizeMax   - _ICE.sizeMin);
+    const scaleY = _ICE.heightMin + Math.random() * (_ICE.heightMax - _ICE.heightMin);
+    const scaleZ = scaleX * (0.55 + Math.random() * 0.7);
+    const tiltY  = (Math.random() - 0.5) * 0.9;   // random yaw
+    const tiltX  = (Math.random() - 0.5) * 0.06;  // very slight pitch — stay mostly upright
 
-    inst.group.scale.set(scale, 1, scaleZ);
+    inst.group.scale.set(scaleX, scaleY, scaleZ);
     inst.group.rotation.set(tiltX, tiltY, 0);
-    inst.halfW   = scale * _ICE.hitboxScale * 0.5;
+    inst.halfW = scaleX * _ICE.hitboxScale * 0.5;
 
-    // Live-update material params from tuner
-    for (const m of [inst.mat, inst.mat2]) {
+    // Live-update material params for all spire/base materials
+    for (const m of inst.mats) {
       m.transmission      = _ICE.transmission;
       m.roughness         = _ICE.roughness;
       m.ior               = _ICE.ior;
@@ -20912,29 +20929,31 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(mkH('SIZE', '#aef'));
     panel.appendChild(mkS('size min', _ICE.sizeMin, 0.5, 8, 0.1, v => _ICE.sizeMin = v));
     panel.appendChild(mkS('size max', _ICE.sizeMax, 1.0, 14, 0.1, v => _ICE.sizeMax = v));
+    panel.appendChild(mkS('height min', _ICE.heightMin, 1.0, 16, 0.1, v => _ICE.heightMin = v));
+    panel.appendChild(mkS('height max', _ICE.heightMax, 2.0, 24, 0.1, v => _ICE.heightMax = v));
     panel.appendChild(mkS('hitbox scale', _ICE.hitboxScale, 0.1, 1.0, 0.01, v => _ICE.hitboxScale = v));
 
     // MATERIAL
     panel.appendChild(mkH('MATERIAL', '#9cf'));
     panel.appendChild(mkS('transmission', _ICE.transmission, 0, 1, 0.01, v => {
       _ICE.transmission = v;
-      _icePool.forEach(inst => { inst.mat.transmission = v; inst.mat2.transmission = v; inst.mat.needsUpdate = true; inst.mat2.needsUpdate = true; });
+      _icePool.forEach(inst => { inst.mats.forEach(m => { m.transmission = v; m.needsUpdate = true; }); });
     }));
     panel.appendChild(mkS('roughness', _ICE.roughness, 0, 1, 0.01, v => {
       _ICE.roughness = v;
-      _icePool.forEach(inst => { inst.mat.roughness = v; inst.mat2.roughness = v; });
+      _icePool.forEach(inst => { inst.mats.forEach(m => { m.roughness = v; }); });
     }));
     panel.appendChild(mkS('IOR', _ICE.ior, 1.0, 2.5, 0.01, v => {
       _ICE.ior = v;
-      _icePool.forEach(inst => { inst.mat.ior = v; inst.mat2.ior = v; inst.mat.needsUpdate = true; inst.mat2.needsUpdate = true; });
+      _icePool.forEach(inst => { inst.mats.forEach(m => { m.ior = v; m.needsUpdate = true; }); });
     }));
     panel.appendChild(mkS('thickness', _ICE.thickness, 0.5, 20, 0.5, v => {
       _ICE.thickness = v;
-      _icePool.forEach(inst => { inst.mat.thickness = v; inst.mat2.thickness = v; });
+      _icePool.forEach(inst => { inst.mats.forEach(m => { m.thickness = v; }); });
     }));
     panel.appendChild(mkS('emissive intensity', _ICE.emissiveIntensity, 0, 1, 0.01, v => {
       _ICE.emissiveIntensity = v;
-      _icePool.forEach(inst => { inst.mat.emissiveIntensity = v; inst.mat2.emissiveIntensity = v; });
+      _icePool.forEach(inst => { inst.mats.forEach(m => { m.emissiveIntensity = v; }); });
     }));
 
     // ACTIONS
