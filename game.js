@@ -19547,6 +19547,7 @@ function _getAsteroidFromPool() {
 function _spawnAsteroid(targetX) {
   const inst = _getAsteroidFromPool();
   if (!inst) return;
+  console.log('[AST] targetX='+targetX.toFixed(2)+' shipX='+state.shipX.toFixed(2)+' diff='+(targetX-state.shipX).toFixed(2)+' pattern='+_asteroidTuner.pattern+' recenter='+_jlRecenterActive);
 
   const T = _asteroidTuner;
   const radius = T.size + (Math.random() - 0.5) * T.sizeVariance * 2;
@@ -19814,20 +19815,17 @@ function _tickAsteroidSpawner(dt) {
     _astTimer = T.frequency * (0.8 + Math.random() * 0.4) * Math.max(0.15, 1.0 - _funFloorIntensity * 0.85);
 
     if (T.pattern === 'stagger') {
-      // Sequential shots, each reading live shipX at fire time — same as tutorial button
-      const steps = Math.max(1, Math.round(T.salvoCount));
-      for (let si = 0; si < steps; si++) {
-        setTimeout(() => {
-          if (state.phase !== 'playing') return;
-          _spawnAsteroid(state.shipX);
-          // staggerDual: second shot leading where ship is heading
-          if (T.staggerDual) {
-            const spawnY = T.skyHeight;
-            const totalTime = Math.sqrt((0.15 - spawnY) ** 2 + (3.9 - T.spawnZ) ** 2) / T.speed;
-            const leadX = state.shipX + (state.shipVelX || 0) * totalTime;
-            if (Math.abs(leadX - state.shipX) > 0.8) _spawnAsteroid(leadX);
-          }
-        }, si * T.staggerGap * 1000);
+      // Use the shared _fireStagger if available (wired by tuner IIFE) — identical to loop button
+      if (window._fireStagger) { window._fireStagger(); }
+      else {
+        // Fallback: same logic inline
+        const steps = Math.max(1, Math.round(T.salvoCount));
+        for (let si = 0; si < steps; si++) {
+          setTimeout(() => {
+            if (state.phase !== 'playing') return;
+            _spawnAsteroid(state.shipX);
+          }, si * T.staggerGap * 1000);
+        }
       }
     } else if (T.pattern === 'salvo') {
       // Simultaneous wall spread across lanes centered on ship X
@@ -20084,6 +20082,25 @@ const _origUpdateShockwave = _updateShockwave;
       window._astPatternLoopActive = false;
     }
 
+    // Shared stagger fire — used by loop button AND JL auto-spawner
+    // Reads state.shipX live inside each setTimeout so it always tracks the ship
+    window._fireStagger = function _fireStagger() {
+      const T = _asteroidTuner;
+      const steps = Math.max(1, Math.round(T.salvoCount));
+      for (let si = 0; si < steps; si++) {
+        setTimeout(() => {
+          if (state.phase !== 'playing') return;
+          _spawnAsteroid(state.shipX);
+          if (T.staggerDual) {
+            const spawnY = T.skyHeight;
+            const totalTime = Math.sqrt((0 - spawnY) ** 2 + (3.9 - (-160)) ** 2) / T.speed;
+            const leadX = state.shipX + (state.shipVelX || 0) * totalTime * T.leadFactor;
+            if (Math.abs(leadX - state.shipX) > 0.8) _spawnAsteroid(leadX);
+          }
+        }, si * T.staggerGap * 1000);
+      }
+    };
+
     function _startPatternLoop(btn, color, tickFn) {
       if (_activePatternBtn === btn) { _stopPatternLoop(); return; } // toggle off
       _stopPatternLoop();
@@ -20219,23 +20236,7 @@ const _origUpdateShockwave = _updateShockwave;
         // STAGGER: rolling wall left→right, centered on ship X so no lane is permanently safe
         label: '▼ ▼▼ STAGGER (loop)',
         color: '#ff0',
-        tick: () => {
-          const steps = Math.max(2, Math.round(T.salvoCount));
-          for (let si = 0; si < steps; si++) {
-            setTimeout(() => {
-              if (state.phase !== 'playing') return;
-              // Shot 1: always dead on current position
-              _spawnAsteroid(state.shipX);
-              // Shot 2 (dual mode): leads where ship is heading
-              if (T.staggerDual) {
-                const spawnY = T.skyHeight;
-                const totalTime = Math.sqrt((0 - spawnY) ** 2 + (3.9 - (-160)) ** 2) / T.speed;
-                const leadX = state.shipX + (state.shipVelX || 0) * totalTime * T.leadFactor;
-                if (Math.abs(leadX - state.shipX) > 0.8) _spawnAsteroid(leadX);
-              }
-            }, si * T.staggerGap * 1000);
-          }
-        },
+        tick: () => { if (window._fireStagger) window._fireStagger(); },
       },
       {
         // SALVO: simultaneous wall centered on ship X — survive by reading the gaps
