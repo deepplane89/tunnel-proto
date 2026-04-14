@@ -18639,6 +18639,9 @@ function buildSkinTunerSliders() {
 
   function build() {
     let html = '<div style="color:#00eeff;font-weight:bold;margin-bottom:8px;">TERRAIN TUNER [R]</div>';
+    // ON/OFF toggle button
+    const terrainVisible = !_terrainWalls || _terrainWalls.strips[0].visible;
+    html += `<button id="tt-toggle" style="width:100%;margin-bottom:10px;padding:6px;font:bold 11px monospace;cursor:pointer;border-radius:3px;border:1px solid ${terrainVisible ? '#f44' : '#0f8'};background:${terrainVisible ? 'rgba(255,60,60,0.15)' : 'rgba(0,255,120,0.15)'};color:${terrainVisible ? '#f88' : '#0f8'};">TERRAIN: ${terrainVisible ? 'ON  — click to hide' : 'OFF — click to show'}</button>`;
     sliders.forEach(s => {
       const val = _terrainTuner[s.key];
       html += `<div style="margin:4px 0;"><label>${s.label}: <span id="tt-${s.key}-val">${val}</span></label><br>`;
@@ -18653,6 +18656,15 @@ function buildSkinTunerSliders() {
     // Rebuild button
     html += '<button id="tt-rebuild" style="margin-top:8px;width:100%;background:#222;color:#0ff;border:1px solid #0ff;padding:6px;cursor:pointer;font:11px monospace;font-weight:bold;">REBUILD TERRAIN</button>';
     panel.innerHTML = html;
+
+    // Wire terrain toggle
+    document.getElementById('tt-toggle').addEventListener('click', () => {
+      if (_terrainWalls) {
+        const next = !_terrainWalls.strips[0].visible;
+        _terrainWalls.strips.forEach(m => { m.visible = next; });
+      }
+      build(); // rebuild panel to reflect new state
+    });
 
     // Wire up sliders
     sliders.forEach(s => {
