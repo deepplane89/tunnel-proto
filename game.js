@@ -20731,7 +20731,7 @@ function _tickJetLightningRamp(dt) {
         if (_jlFatConeTimer <= 0) {
           const _fct = window._FCT || track;
           _jlFatConeTimer = (_fct.frequency / _jlIntensity) * (0.7 + Math.random() * 0.6);
-          if (typeof window._spawnFatCone === 'function') window._spawnFatCone();
+          if (typeof window._spawnFatConeRow === 'function') window._spawnFatConeRow();
         }
       }
       // custom tracks: onActivate already fired above, they manage themselves
@@ -22011,19 +22011,62 @@ window._jlDebug = {
 
   let _fcLoopActive = false, _fcLoopTimer = null, _fcActiveBtn = null;
 
+  function _spawnFatConeRow() {
+    if (state.phase !== 'playing') return;
+    // Port campaign fat cone spawner exactly:
+    // Pick 2-3 lanes from the 21-lane grid, enforce 8-lane min gap, guarantee a 2-lane gap for player
+    const count = 2 + Math.floor(Math.random() * 2); // 2 or 3 cones per row
+    const shipX = (state && state.shipX) || 0;
+    const lanes = Array.from({ length: LANE_COUNT }, (_, i) => i);
+    const shuffled = [...lanes].sort(() => Math.random() - 0.5);
+    const gapStart = Math.floor(Math.random() * (LANE_COUNT - 1));
+    const gapLanes = new Set([gapStart, gapStart + 1]);
+    const blocked = [];
+    for (const lane of shuffled) {
+      if (blocked.length >= count) break;
+      if (gapLanes.has(lane)) continue;
+      if (blocked.some(b => Math.abs(b - lane) < 8)) continue; // wide gap between fat cones
+      blocked.push(lane);
+    }
+    blocked.forEach(lane => {
+      const laneX = shipX + (lane - (LANE_COUNT - 1) / 2) * LANE_WIDTH;
+      const type = FCT.coneType < 0 ? Math.floor(Math.random() * 3) : FCT.coneType;
+      const obs = getPooledObstacle(type);
+      if (!obs) return;
+      obs.position.set(laneX, 0, SPAWN_Z);
+      obs.scale.set(FCT.scaleXZ, FCT.scaleY, FCT.scaleXZ);
+      obs.userData.velX         = 0;
+      obs.userData.slalomScaled = true;
+      obs.userData.isFatCone    = true;
+      // Apply shape tuner overrides
+      const _mc = obs.userData._meshes;
+      for (let mi = 0; mi < _mc.length; mi++) {
+        const mat = _mc[mi].material;
+        if (mat.uniforms) {
+          if (mat.uniforms.uGlowBot)  mat.uniforms.uGlowBot.value  = FCT.glowBot;
+          if (mat.uniforms.uGlowTop)  mat.uniforms.uGlowTop.value  = FCT.glowTop;
+          if (mat.uniforms.uNeon)     mat.uniforms.uNeon.value.setHex(FCT.neonColor);
+          if (mat.uniforms.uObsidian) mat.uniforms.uObsidian.value.setHex(FCT.obsidianColor);
+        }
+      }
+      activeObstacles.push(obs);
+      _sessionLogEvent('fatCone_spawn', { x: laneX, scaleXZ: FCT.scaleXZ });
+    });
+  }
+
+  // Keep _spawnFatCone as alias for single-cone manual spawn (F panel SPAWN ONE button)
   function _spawnFatCone() {
     if (state.phase !== 'playing') return;
     const type = FCT.coneType < 0 ? Math.floor(Math.random() * 3) : FCT.coneType;
     const obs = getPooledObstacle(type);
     if (!obs) return;
-    // Spawn at a random position in the lane range (not ship-relative — campaign style)
-    const clampedX = FCT.laneMin + Math.random() * (FCT.laneMax - FCT.laneMin);
-    obs.position.set(clampedX, 0, SPAWN_Z);
+    const shipX = (state && state.shipX) || 0;
+    const laneX = FCT.laneMin + Math.random() * (FCT.laneMax - FCT.laneMin);
+    obs.position.set(laneX, 0, SPAWN_Z);
     obs.scale.set(FCT.scaleXZ, FCT.scaleY, FCT.scaleXZ);
     obs.userData.velX         = 0;
     obs.userData.slalomScaled = true;
     obs.userData.isFatCone    = true;
-    // Apply per-cone shader overrides from tuner
     const _mc = obs.userData._meshes;
     for (let mi = 0; mi < _mc.length; mi++) {
       const mat = _mc[mi].material;
@@ -22035,7 +22078,7 @@ window._jlDebug = {
       }
     }
     activeObstacles.push(obs);
-    _sessionLogEvent('fatCone_spawn', { x: clampedX, scaleXZ: FCT.scaleXZ });
+    _sessionLogEvent('fatCone_spawn', { x: laneX, scaleXZ: FCT.scaleXZ });
   }
 
   function _startFcLoop(btn) {
@@ -22195,7 +22238,8 @@ window._jlDebug = {
   }
 
   // Expose to sequencer tick (outside IIFE scope)
-  window._spawnFatCone = _spawnFatCone;
+  window._spawnFatCone    = _spawnFatCone;    // single cone (manual spawn button)
+  window._spawnFatConeRow = _spawnFatConeRow; // full row with campaign algo (sequencer)
   window._FCT = FCT;
 
   let _fcVisible = false;
