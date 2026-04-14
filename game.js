@@ -20688,11 +20688,8 @@ window._jlDebug = {
         return x;
       }
       case 'stagger': {
-        if (_ltStaggerQ.length === 0) {
-          const steps = 5 + Math.floor(Math.random() * 4);
-          for (let i = 0; i < steps; i++) _ltStaggerQ.push(sx + (i/(steps-1)-0.5)*range*0.9);
-        }
-        return _ltStaggerQ.shift();
+        // Ship-tracking: each shot reads shipX live at fire time (see auto-spawner)
+        return sx + (Math.random()-0.5) * Math.min(3.0, range * 0.3);
       }
       case 'salvo': return sx + (Math.random()-0.5)*range*0.5;
       default:      return sx + (Math.random()-0.5)*3.0;
@@ -20801,7 +20798,18 @@ window._jlDebug = {
       _ltTimer -= dt;
       if (_ltTimer <= 0) {
         _ltTimer = _LT.frequency * (0.8 + Math.random()*0.4) * Math.max(0.15, 1.0 - _funFloorIntensity * 0.85);
-        _spawnLightning(_ltNextTargetX());
+        if (_LT.pattern === 'stagger') {
+          // Mirror asteroid stagger exactly: each shot reads shipX live at fire time
+          const steps = Math.max(1, Math.round(_LT.salvoCount));
+          for (let si = 0; si < steps; si++) {
+            setTimeout(() => {
+              if (state.phase !== 'playing' || !_LT.enabled) return;
+              _spawnLightning(state.shipX || 0);
+            }, si * _LT.staggerGap * 1000);
+          }
+        } else {
+          _spawnLightning(_ltNextTargetX());
+        }
       }
     }
 
