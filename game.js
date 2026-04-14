@@ -20278,6 +20278,11 @@ function startJetLightning() {
 
   // ── Start the game ────────────────────────────────────────────────────────
   startGame();
+
+  // ── Re-apply JL flags AFTER startGame() resets them ─────────────────────
+  state._jetLightningMode = true;
+  _asteroidTuner.enabled  = true;
+  _noSpawnMode            = false;
 }
 
 // ── Per-frame JL difficulty ramp — called from composer chain ────────────────
