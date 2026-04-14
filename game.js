@@ -20120,7 +20120,7 @@ const _origUpdateShockwave = _updateShockwave;
     glowRadius:   0.55,
     segments:     10,
     jaggedness:   1.2,
-    killRadius:   3.2,
+    hitboxScale:  1.0,    // multiplier on glowRadius — hitbox always matches bolt visual
     warnRadius:   3.5,
     shakeAmt:     0.18,
     shakeDuration:0.35,
@@ -20374,7 +20374,7 @@ const _origUpdateShockwave = _updateShockwave;
         if (!inst.hitChecked && state && state.phase === 'playing') {
           inst.hitChecked = true;
           const dx = (state.shipX||0) - inst.landX;
-          if (Math.abs(dx) < _LT.killRadius) {
+          if (Math.abs(dx) < (_LT.glowRadius * _LT.hitboxScale)) {
             _playThunder();
             const _ltHitSfx = document.getElementById('shield-hit-sfx');
             if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
@@ -20403,12 +20403,12 @@ const _origUpdateShockwave = _updateShockwave;
         inst.glowMat.opacity = Math.max(0, (0.5  - fadeT * 0.5) * flicker);
 
         // During linger: bolt is planted in world, ship is flying past it.
-        // Kill zone = lateral X only — if ship is within killRadius of bolt column
+        // Kill zone = lateral X only — hitbox width = glowRadius * hitboxScale (tracks bolt visual)
         // and the bolt's world Z is still near the ship (within a ship-length)
         if (state && state.phase === 'playing') {
           const dx = Math.abs((state.shipX||0) - inst.landX);
           const dz = Math.abs(_shipZ() - inst.strikePosZ);
-          const near = dx < _LT.killRadius && dz < 4;
+          const near = dx < (_LT.glowRadius * _LT.hitboxScale) && dz < 4;
           if (near && !inst.hitChecked) {
             inst.hitChecked = true;
             _playThunder();
@@ -20480,7 +20480,7 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(mkS('jaggedness',   _LT.jaggedness,  0.1,6,   0.05,v=>_LT.jaggedness=v));
     panel.appendChild(mkS('warn radius',  _LT.warnRadius,  0.5,12,  0.1, v=>_LT.warnRadius=v));
     panel.appendChild(mkH('IMPACT'));
-    panel.appendChild(mkS('kill radius',    _LT.killRadius,    0.5,10, 0.1, v=>_LT.killRadius=v));
+    panel.appendChild(mkS('hitbox scale',  _LT.hitboxScale,  0.1, 3.0, 0.05, v=>_LT.hitboxScale=v));
     panel.appendChild(mkS('shake amount',   _LT.shakeAmt,      0,  1,  0.01,v=>_LT.shakeAmt=v));
     panel.appendChild(mkS('shake duration', _LT.shakeDuration, 0,  1,  0.02,v=>_LT.shakeDuration=v));
     panel.appendChild(mkH('PATTERN LOOPS'));
