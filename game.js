@@ -20616,7 +20616,7 @@ function _tickJetLightningRamp(dt) {
         if (track.onActivate) track.onActivate();
         if (track.type === 'fatcone') {
           _jlFatConeTimer = 1.0; // fire first cone quickly on track entry
-          console.log('[FATCONE] track activated — timer reset to 1s');
+
         }
       }
 
@@ -20628,9 +20628,7 @@ function _tickJetLightningRamp(dt) {
         if (_jlFatConeTimer <= 0) {
           const _fct = window._FCT || track;
           _jlFatConeTimer = (_fct.frequency / _jlIntensity) * (0.7 + Math.random() * 0.6);
-          console.log('[FATCONE] timer fired — window._spawnFatCone='+typeof window._spawnFatCone+' window._FCT='+JSON.stringify(window._FCT));
           if (typeof window._spawnFatCone === 'function') window._spawnFatCone();
-          else console.warn('[FATCONE] _spawnFatCone not defined on window!');
         }
       }
       // custom tracks: onActivate already fired above, they manage themselves
@@ -20753,11 +20751,20 @@ function _tickJetLightningRamp(dt) {
         color,
         () => {
           if (!state._jetLightningMode) return;
-          console.log('[JUMP] clicked track='+track.id+' type='+track.type+' startT='+track.startT);
           // Reset all track activation flags so onActivate fires correctly
           for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
           _jlRampTime = track.startT;
-          _astTimer   = 0.1; // fire first asteroid quickly
+          // If jumping to a non-asteroid track, disable asteroids so they don't overlap
+          if (track.type !== 'asteroid') {
+            _asteroidTuner.enabled = false;
+          } else {
+            _asteroidTuner.enabled = true;
+            _astTimer = 0.1;
+          }
+          // If jumping to a non-lightning track, disable lightning
+          if (track.type !== 'lightning') {
+            if (window._LT) window._LT.enabled = false;
+          }
           if (track.type === 'fatcone') _jlFatConeTimer = 1.0;
           if (_lastJumpBtn) { _lastJumpBtn.style.fontWeight = 'normal'; _lastJumpBtn.style.background = 'none'; }
           btn.style.fontWeight = 'bold'; btn.style.background = color + '22';
