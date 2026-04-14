@@ -19736,7 +19736,7 @@ const _origUpdateShockwave = _updateShockwave;
     // Run during tutorial gameplay OR when chaos mode is active
     if (!window._dbgAstHookLog) { window._dbgAstHookLog = 0; }
     window._dbgAstHookLog += dt;
-    if (window._dbgAstHookLog > 2) { window._dbgAstHookLog = 0; console.log('[AST-HOOK] phase:', state.phase, 'tutActive:', state._tutorialActive, '_chaosMode:', _chaosMode, 'T.enabled:', _asteroidTuner.enabled); }
+    if (window._dbgAstHookLog > 2) { window._dbgAstHookLog = 0; console.log('[AST-HOOK] phase:', state.phase, 'tutActive:', state._tutorialActive, '_chaosMode:', _chaosMode, 'T.enabled:', _asteroidTuner.enabled, '_noSpawnMode:', _noSpawnMode, '_astPatternLoopActive:', window._astPatternLoopActive, '_astTimer:', _astTimer.toFixed(2)); }
     if (state.phase === 'playing' && !state.introActive &&
         (state._tutorialActive || _chaosMode)) {
       _tickAsteroidSpawner(dt);
