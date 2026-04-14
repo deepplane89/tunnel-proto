@@ -19411,9 +19411,7 @@ function _spawnAsteroid(targetX) {
   const shipX_now = (state && state.shipX) || 0;
   const shipVelX_now = (state && state.shipVelX) || 0;
   const interceptX = shipX_now + shipVelX_now * totalTime * T.leadFactor + patternOffset;
-  const landX = THREE.MathUtils.clamp(interceptX, T.laneMin, T.laneMax);
-  // DEBUG — remove after confirming targeting
-  console.log('[AST TARGET] shipX='+shipX_now.toFixed(2)+' shipVelX='+shipVelX_now.toFixed(2)+' totalTime='+totalTime.toFixed(2)+' patternOffset='+patternOffset.toFixed(2)+' interceptX='+interceptX.toFixed(2)+' landX='+landX.toFixed(2)+' shipGroup.x='+shipGroup.position.x.toFixed(2));
+  const landX = interceptX; // never clamp — ship can be anywhere
 
   // Spawn X = same as landX so trajectory is straight down-forward (vel.x = 0)
   const spawnX = landX;
