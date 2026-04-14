@@ -21237,6 +21237,19 @@ window._jlDebug = {
       }
 
       if (inst.phase === 'warn') {
+        // Live-track ship X during warn phase (stagger pattern only) so the
+        // strike snaps to wherever the ship actually is at the moment of impact.
+        if (_LT.pattern === 'stagger') {
+          const liveX = (state && state.shipX) || 0;
+          if (liveX !== inst.landX) {
+            inst.landX = liveX;
+            inst.warnMesh.position.x = liveX;
+            inst.flash.position.x    = liveX;
+            inst.ring.position.x     = liveX;
+            // Bolt geo stays hidden (opacity 0) during warn — rebuild at strike time
+          }
+        }
+
         // Warning disc pulses at the target position
         inst.warnMat.opacity = 0.4 + 0.35 * Math.abs(Math.sin(inst.elapsed * 8));
         const sc = 0.85 + 0.2 * Math.abs(Math.sin(inst.elapsed * 5));
@@ -21252,6 +21265,7 @@ window._jlDebug = {
           inst.flashMat.opacity = 1.0;
           inst.ringMat.opacity  = 0.9;
           _ltShakeTime = _LT.shakeDuration;
+          // Rebuild bolt geometry at the final locked landX (ship pos at strike)
           _ltRejag(inst);
         }
 
