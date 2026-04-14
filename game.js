@@ -19688,6 +19688,7 @@ function _tickAsteroidSpawner(dt) {
 
   if (_astTimer <= 0) {
     _astTimer = T.frequency * (0.8 + Math.random() * 0.4) * Math.max(0.15, 1.0 - _funFloorIntensity * 0.85);
+    console.log('[AST-SPAWN] firing pattern:', T.pattern, 'next timer:', _astTimer.toFixed(2)+'s', 'chaosMode:', _chaosMode);
 
     if (T.pattern === 'salvo') {
       // Spawn T.salvoCount at once, spread across lanes centered on ship X
