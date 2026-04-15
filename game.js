@@ -16947,7 +16947,13 @@ function animate() {
   renderer.info.reset();
   updateDebugHitboxes();
 
-  // Keep sun glow + cap aligned with camera so lateral movement doesn't split them
+  // Keep all sun layers locked to ship X — sun is effectively at infinite distance
+  // so lateral movement should never shift it on screen
+  const _sunX = state.shipX || 0;
+  sunMesh.position.x      = _sunX;
+  sunCapMesh.position.x   = _sunX;
+  sunGlowSprite.position.x = _sunX;
+  sunRimGlow.position.x   = _sunX;
   const _camWP = camera.getWorldPosition(_sunBillboardV3);
   sunGlowSprite.lookAt(_camWP);
   sunCapMesh.lookAt(_camWP);
