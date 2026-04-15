@@ -7659,7 +7659,7 @@ function _createCanyonWalls() {
   if (_canyonWalls) return;
   const T = _canyonTuner;
   const gridTex = _makeCanyonGridTexture();
-  gridTex.repeat.set(1, 3);
+  gridTex.repeat.set(1, 1);
 
   // Metalness map
   const mw = 256, mh = 256;
@@ -7721,7 +7721,8 @@ function _createCanyonWalls() {
   const rA = makeSlab( 1, SPAWN_Z);  rA.position.x = shipX + spawnHalfX;
   const rB = makeSlab( 1, SPAWN_Z - T.tileLength); rB.position.x = shipX + spawnHalfX;
   _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex,
-                   left: [lA, lB], right: [rA, rB] };
+                   left: [lA, lB], right: [rA, rB],
+                   _spawnX: shipX };
 
   // No fill light needed — MeshBasicMaterial is self-lit from canvas texture
 }
@@ -7769,22 +7770,25 @@ function _updateCanyonWalls(dt, speed) {
   }
 
   // Scroll Z + track sine center for lateral position
+  // _canyonSpawnX is locked at creation time — sine shifts relative to that, not ship
+  const spawnBase = (_canyonWalls._spawnX !== undefined) ? _canyonWalls._spawnX : 0;
   _canyonWalls.left.forEach(m => {
     m.position.z += scroll;
     if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
-    if (!T.freezeWide) m.position.x = center - halfX;
+    if (!T.freezeWide) m.position.x = spawnBase + center - halfX;
   });
   _canyonWalls.right.forEach(m => {
     m.position.z += scroll;
     if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
-    if (!T.freezeWide) m.position.x = center + halfX;
+    if (!T.freezeWide) m.position.x = spawnBase + center + halfX;
   });
 
   // Collision: kill ship if outside gap (with small buffer for fairness)
   if (state._jetLightningMode && state.phase === 'playing' && !state._godMode && !_godMode) {
     const shipX = state.shipX || 0;
     const buffer = 1.5; // units of grace
-    if (shipX < center - halfX + buffer || shipX > center + halfX - buffer) {
+    const gapCenter = spawnBase + center;
+    if (shipX < gapCenter - halfX + buffer || shipX > gapCenter + halfX - buffer) {
       if (typeof _killPlayer === 'function') _killPlayer();
       else if (typeof triggerDeath === 'function') triggerDeath();
     }
@@ -17403,7 +17407,7 @@ window.addEventListener('keydown', (e) => {
     if (!_canyonWalls) return;
     _canyonWalls.gridTex.dispose();
     const newTex = _makeCanyonGridTexture();
-    newTex.repeat.set(1, 3);
+    newTex.repeat.set(1, 1);
     _canyonWalls.mat.emissiveMap = newTex;
     _canyonWalls.mat.emissiveIntensity = _canyonTuner.brightness * 1.8;
     _canyonWalls.mat.needsUpdate = true;
@@ -19124,11 +19128,11 @@ function buildSkinTunerSliders() {
     }, '#0ef'));
     panel.appendChild(makeSlider('gridGlow', _canyonTuner.gridGlow, 0, 1, 0.05, v => {
       _canyonTuner.gridGlow = v;
-      if (_canyonWalls) { _canyonWalls.gridTex.dispose(); const t = _makeCanyonGridTexture(); t.repeat.set(1,3); _canyonWalls.mat.emissiveMap = t; _canyonWalls.mat.needsUpdate = true; _canyonWalls.gridTex = t; }
+      if (_canyonWalls) { _canyonWalls.gridTex.dispose(); const t = _makeCanyonGridTexture(); t.repeat.set(1,1); _canyonWalls.mat.emissiveMap = t; _canyonWalls.mat.needsUpdate = true; _canyonWalls.gridTex = t; }
     }, '#0ef'));
     panel.appendChild(makeSlider('veinBloom', _canyonTuner.veinBloom, 0, 1, 0.05, v => {
       _canyonTuner.veinBloom = v;
-      if (_canyonWalls) { _canyonWalls.gridTex.dispose(); const t = _makeCanyonGridTexture(); t.repeat.set(1,3); _canyonWalls.mat.emissiveMap = t; _canyonWalls.mat.needsUpdate = true; _canyonWalls.gridTex = t; }
+      if (_canyonWalls) { _canyonWalls.gridTex.dispose(); const t = _makeCanyonGridTexture(); t.repeat.set(1,1); _canyonWalls.mat.emissiveMap = t; _canyonWalls.mat.needsUpdate = true; _canyonWalls.gridTex = t; }
     }, '#0ef'));
   }
 
