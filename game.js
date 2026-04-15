@@ -7282,7 +7282,8 @@ const _canyonTuner = {
   fillLight:     0.4,   // ambient fill light intensity added to scene for canyon
   scrollSpeed:   1.0,
   freezeWide:    true,
-  baseColor:     '#2a5a72',  // mid blue-grey — visible, matches AI pic
+  baseColor:     '#2a5a72',
+  brightness:    0.5,        // 0=black, 1=full baseColor, >1=washed out
   gridColor:     '#00eeff',
   gridOpacity:   1.0,
   crackOpacity:  1.0,
@@ -7299,7 +7300,12 @@ function _makeCanyonGridTexture() {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = T.baseColor;
+  // Parse baseColor and apply brightness multiplier
+  const _bc = parseInt(T.baseColor.slice(1), 16);
+  const _br = Math.min(255, Math.round(((_bc >> 16) & 0xff) * T.brightness));
+  const _bg = Math.min(255, Math.round(((_bc >>  8) & 0xff) * T.brightness));
+  const _bb = Math.min(255, Math.round(((_bc      ) & 0xff) * T.brightness));
+  ctx.fillStyle = `rgb(${_br},${_bg},${_bb})`;
   ctx.globalAlpha = 1;
   ctx.fillRect(0, 0, w, h);
   // Cyan grid lines
@@ -17346,6 +17352,7 @@ window.addEventListener('keydown', (e) => {
 
     hdr('— TEXTURE —');
     colorPicker('baseColor',  'baseColor',  'tex');
+    slider('brightness',    'brightness',   0, 2,   0.05, 'tex');
     colorPicker('gridColor',  'gridColor',  'tex');
     slider('gridOpacity',   'gridOpacity',  0, 1,   0.05, 'tex');
     slider('crackOpacity',  'crackOpacity', 0, 1,   0.05, 'tex');
