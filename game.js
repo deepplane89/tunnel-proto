@@ -7319,26 +7319,23 @@ window._canyonLog = function() {
   const walls = _canyonWalls;
   const halfX = T.canyonHalfX || 45;
   const spawnBase = walls ? (walls._spawnX || 0) : 0;
-  // Recompute current center
-  let center = 0;
-  if (!T.freezeWide && _canyonSineRows >= 8) {
-    const cr = _canyonSineRows - 8;
-    const amp = CORRIDOR_AMP_START + (CORRIDOR_AMP_MAX - CORRIDOR_AMP_START) * Math.min(1, cr/CORRIDOR_AMP_RAMP) ** 2;
-    center = amp * Math.sin(_canyonSineT);
-  }
+  // Center comes from the real L3 algorithm via spawnCorridorRow
+  const center = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
   const out = {
-    active:       _canyonActive,
-    freezeWide:   T.freezeWide,
-    sineRows:     _canyonSineRows,
-    sineT:        +_canyonSineT.toFixed(3),
-    center:       +center.toFixed(2),
-    spawnBase:    +spawnBase.toFixed(2),
+    active:            _canyonActive,
+    freezeWide:        T.freezeWide,
+    corridorGapCenter: +(state.corridorGapCenter||0).toFixed(2),
+    corridorRowsDone:  state.corridorRowsDone||0,
+    corridorSineT:     +(state.corridorSineT||0).toFixed(3),
+    center:            +center.toFixed(2),
+    spawnBase:         +spawnBase.toFixed(2),
     halfX,
     leftX:        walls ? +walls.left[0].position.x.toFixed(2) : null,
     rightX:       walls ? +walls.right[0].position.x.toFixed(2) : null,
     gapActual:    walls ? +(walls.right[0].position.x - walls.left[0].position.x).toFixed(2) : null,
     shipX:        +(state.shipX||0).toFixed(2),
     shipInGap:    walls ? (state.shipX > walls.left[0].position.x && state.shipX < walls.right[0].position.x) : null,
+    jlCorridorActive: _jlCorridor.active,
   };
   console.log('[CANYON LOG]\n' + JSON.stringify(out, null, 2));
   return out;
@@ -7765,44 +7762,16 @@ function _updateCanyonWalls(dt, speed) {
       + ' jlCorridorActive=' + _jlCorridor.active
       + ' corridorRowsDone=' + (state.corridorRowsDone||0)
       + ' corridorSineT=' + (state.corridorSineT||0).toFixed(3)
-      + ' canyonCenter=' + (_canyonSineRows >= 8 ? (CORRIDOR_AMP_START * Math.sin(_canyonSineT)).toFixed(2) : '0(straight)')
+      + ' corridorGapCenter=' + (state.corridorGapCenter||0).toFixed(2)
       + ' leftX=' + _canyonWalls.left[0].position.x.toFixed(2)
       + ' rightX=' + _canyonWalls.right[0].position.x.toFixed(2));
   }
   const effectiveSpd = (speed && speed > 1) ? speed : BASE_SPEED;
   const scroll = effectiveSpd * dt * T.scrollSpeed;
 
-  // ── Independent squeeze: advance row counter by Z distance traveled
-  let halfX;
-  halfX = T.canyonHalfX || 45;
-
-  // ── Private sine tracker — no cone spawner, no JL mode required
-  // Advance row counter by Z distance (1 row per 7 units, same cadence as L3)
-  // Advance rows exactly as L3 does: one row per 7 units of Z travel
-  // Advance _canyonSineT once per row (not per frame) to match L3 cadence exactly
-  _canyonSineZ += scroll;
-  while (_canyonSineZ >= 7) {
-    _canyonSineZ -= 7;
-    _canyonSineRows++;
-    // Advance sine phase once per row — same as spawnCorridorRow does in L3
-    if (!T.freezeWide && _canyonSineRows >= 8) {
-      const cr   = _canyonSineRows - 8;
-      const perT = Math.min(1, cr / CORRIDOR_PERIOD_RAMP);
-      const per  = CORRIDOR_PERIOD_START - (CORRIDOR_PERIOD_START - CORRIDOR_PERIOD_MIN) * (perT * perT);
-      _canyonSineT += (2 * Math.PI) / per;
-    }
-  }
-  // Compute current center from accumulated phase
-  let center = 0;
-  if (!T.freezeWide && _canyonSineRows >= 8) {
-    const cr   = _canyonSineRows - 8;
-    const ampT = Math.min(1, cr / CORRIDOR_AMP_RAMP);
-    const amp  = CORRIDOR_AMP_START + (CORRIDOR_AMP_MAX - CORRIDOR_AMP_START) * (ampT * ampT);
-    center = amp * Math.sin(_canyonSineT);
-  }
-
-  // Scroll Z + track sine center for lateral position
-  // _canyonSpawnX is locked at creation time — sine shifts relative to that, not ship
+  const halfX = T.canyonHalfX || 45;
+  // Read corridorGapCenter directly from the real L3 algorithm — spawnCorridorRow writes it
+  const center = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
   const spawnBase = (_canyonWalls._spawnX !== undefined) ? _canyonWalls._spawnX : 0;
   _canyonWalls.left.forEach(m => {
     m.position.z += scroll;
@@ -9509,6 +9478,9 @@ function spawnCorridorRow() {
   }
 
   // center is already set above via sine computation
+  // Canyon mode: skip cone spawning, just use the sine for wall tracking
+  if (_canyonActive) { state.corridorRowsDone++; return; }
+
   const wallJitter = 0.6;
 
   for (let side = -1; side <= 1; side += 2) {
@@ -17361,14 +17333,8 @@ window.addEventListener('keydown', (e) => {
   if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
     _canyonActive = !_canyonActive;
     if (_canyonActive) {
-      _canyonSqueezeRow = 0;
-      _canyonSqueezeZ   = 0;
-      _canyonSineT = 0;
-      _canyonSineRows = 0;
-      _canyonSineZ = 0;
-      // Pause the JL corridor so it doesn't fight the canyon walls
-      _canyonWasCorridor = _jlCorridor.active;
-      if (_jlCorridor.active) _jlCorridor.active = false;
+      // Start fresh L3 corridor — sine math runs in spawnCorridorRow, cones suppressed by _canyonActive flag
+      _jlStartCorridor('l3');
       if (!_canyonWalls) _createCanyonWalls();
       const w = _canyonWalls;
       const T = _canyonTuner;
@@ -17406,12 +17372,7 @@ window.addEventListener('keydown', (e) => {
       }, null, 2));
     } else {
       _destroyCanyonWalls();
-      _canyonSineT = 0;
-      _canyonSineRows = 0;
-      _canyonSineZ = 0;
-      // Restore JL corridor if it was running before canyon
-      if (_canyonWasCorridor) _jlCorridor.active = true;
-      _canyonWasCorridor = false;
+      _jlStopCorridor();
       console.log('[CANYON] OFF');
     }
   }
@@ -20904,9 +20865,13 @@ const _origUpdateShockwave = _updateShockwave;
       // Corridor takes over — pause all JL obstacle spawning during breather
       if (_jlCorridor.active) {
         _jlTickCorridor(dt, state.speed);
-      } else {
+      } else if (!_canyonActive) {
         _tickAsteroidSpawner(dt);
       }
+    }
+    // Canyon corridor sine tick — runs even outside JL mode
+    if (_canyonActive && _jlCorridor.active && !state._jetLightningMode) {
+      _jlTickCorridor(dt, state.speed);
     }
     _updateAsteroids(dt);
     // Canyon corridor walls — runs in any mode when active
