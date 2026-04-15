@@ -7271,7 +7271,7 @@ function _updateTerrainWalls(dt, speed) {
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
   height:        55,    // shorter so top is visible in distance
-  tileLength:    400,
+  tileLength:    175,
   segsX:         10,
   segsZ:         100,
   displacement:  45,
@@ -7520,8 +7520,10 @@ function _buildCanyonSlabGeo(side) {
     const n2 = Math.sin(px * 5.7 + 2.1) * 0.25;
     const n3 = Math.abs(Math.sin(px * 3.2 + 4.4)) * 0.28;
     colNoise[col] = Math.max(0, 0.4 + n1 + n2 + n3); // 0..~1
-    const tn = Math.sin(u * 31.7) * 0.4 + Math.sin(u * 17.3 + 1.2) * 0.35 + Math.sin(u * 7.1) * 0.25;
-    colRidgeY[col] = (0.5 + tn) * T.topRagged; // extra Y at ridge peak
+    // Low-frequency plateau ridge: two slow sine waves so the top makes wide gentle bumps,
+    // not rapid wiggles. Clamped so it never goes negative.
+    const tn = Math.sin(u * 1.8 + 0.5) * 0.55 + Math.sin(u * 3.1 + 1.9) * 0.30;
+    colRidgeY[col] = Math.max(0, 0.15 + tn) * T.topRagged; // extra Y at ridge peak
   }
 
   // ── INNER FACE ─────────────────────────────────────────────────────────────
@@ -17561,6 +17563,7 @@ window.addEventListener('keydown', (e) => {
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
+    slider('tileLength',    'tileLength',   50, 400, 5,    'live');
     toggle('freeze wide',   'freezeWide');
 
     const btn = document.createElement('button');
