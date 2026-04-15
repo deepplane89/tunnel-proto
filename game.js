@@ -7778,24 +7778,26 @@ function _updateCanyonWalls(dt, speed) {
 
   // ── Private sine tracker — no cone spawner, no JL mode required
   // Advance row counter by Z distance (1 row per 7 units, same cadence as L3)
+  // Advance rows exactly as L3 does: one row per 7 units of Z travel
+  // Advance _canyonSineT once per row (not per frame) to match L3 cadence exactly
   _canyonSineZ += scroll;
-  while (_canyonSineZ >= 7) { _canyonSineZ -= 7; _canyonSineRows++; }
-  // Same constants as L3 corridor
-  const _STRAIGHT = 8;   // brief straight before bends
-  const _AMP_START = CORRIDOR_AMP_START;
-  const _AMP_MAX   = CORRIDOR_AMP_MAX;
-  const _AMP_RAMP  = CORRIDOR_AMP_RAMP;
-  const _PER_START = CORRIDOR_PERIOD_START;
-  const _PER_MIN   = CORRIDOR_PERIOD_MIN;
-  const _PER_RAMP  = CORRIDOR_PERIOD_RAMP;
+  while (_canyonSineZ >= 7) {
+    _canyonSineZ -= 7;
+    _canyonSineRows++;
+    // Advance sine phase once per row — same as spawnCorridorRow does in L3
+    if (!T.freezeWide && _canyonSineRows >= 8) {
+      const cr   = _canyonSineRows - 8;
+      const perT = Math.min(1, cr / CORRIDOR_PERIOD_RAMP);
+      const per  = CORRIDOR_PERIOD_START - (CORRIDOR_PERIOD_START - CORRIDOR_PERIOD_MIN) * (perT * perT);
+      _canyonSineT += (2 * Math.PI) / per;
+    }
+  }
+  // Compute current center from accumulated phase
   let center = 0;
-  if (!T.freezeWide && _canyonSineRows >= _STRAIGHT) {
-    const cr   = _canyonSineRows - _STRAIGHT;
-    const ampT = Math.min(1, cr / _AMP_RAMP);
-    const amp  = _AMP_START + (_AMP_MAX - _AMP_START) * (ampT * ampT);
-    const perT = Math.min(1, cr / _PER_RAMP);
-    const per  = _PER_START - (_PER_START - _PER_MIN) * (perT * perT);
-    _canyonSineT += (2 * Math.PI) / per;
+  if (!T.freezeWide && _canyonSineRows >= 8) {
+    const cr   = _canyonSineRows - 8;
+    const ampT = Math.min(1, cr / CORRIDOR_AMP_RAMP);
+    const amp  = CORRIDOR_AMP_START + (CORRIDOR_AMP_MAX - CORRIDOR_AMP_START) * (ampT * ampT);
     center = amp * Math.sin(_canyonSineT);
   }
 
