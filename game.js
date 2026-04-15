@@ -7308,9 +7308,10 @@ let _canyonFillLight = null;
 let _canyonActive = false;
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
-let _canyonSineT      = 0;
-let _canyonSineRows   = 0;
-let _canyonSineZ      = 0;
+let _canyonSineT         = 0;
+let _canyonSineRows      = 0;
+let _canyonSineZ         = 0;
+let _canyonWasCorridor   = false; // was JL corridor active before canyon paused it
 // Call window._canyonLog() from console to get a snapshot
 window._canyonLog = function() {
   const T = _canyonTuner;
@@ -17359,14 +17360,15 @@ window.addEventListener('keydown', (e) => {
   if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
     _canyonActive = !_canyonActive;
     if (_canyonActive) {
-      // Walls start wide and squeeze on their own — do NOT touch corridor cone spawner
-      _jlCorridor._lastHalfX = CORRIDOR_WIDE_X; // start wide
-      _canyonSqueezeRow = 0;                     // reset squeeze counter
+      _canyonSqueezeRow = 0;
       _canyonSqueezeZ   = 0;
-      if (!_canyonWalls) _createCanyonWalls();
-      // Reset canyon sine tracker on each activation
       _canyonSineT = 0;
       _canyonSineRows = 0;
+      _canyonSineZ = 0;
+      // Pause the JL corridor so it doesn't fight the canyon walls
+      _canyonWasCorridor = _jlCorridor.active;
+      if (_jlCorridor.active) _jlCorridor.active = false;
+      if (!_canyonWalls) _createCanyonWalls();
       const w = _canyonWalls;
       const T = _canyonTuner;
       // Also log positions after 1 frame so _updateCanyonWalls has run
@@ -17405,6 +17407,10 @@ window.addEventListener('keydown', (e) => {
       _destroyCanyonWalls();
       _canyonSineT = 0;
       _canyonSineRows = 0;
+      _canyonSineZ = 0;
+      // Restore JL corridor if it was running before canyon
+      if (_canyonWasCorridor) _jlCorridor.active = true;
+      _canyonWasCorridor = false;
       console.log('[CANYON] OFF');
     }
   }
