@@ -7284,8 +7284,8 @@ const _canyonTuner = {
   freezeWide:    false,
   canyonHalfX:   18,
   // Texture — glacier/marble aesthetic matching AI pic
-  baseColor:     '#060e18',  // near-black deep navy base
-  brightness:    0.72,       // wall body visible but not overblown
+  baseColor:     '#1a3050',  // deep blue base — visible after strata multiply
+  brightness:    0.85,       // wall body visible
   gridColor:     '#c8eeff',  // near-white cool-tint grid lines (not saturated cyan)
   gridOpacity:   0.30,       // subtle grid, not neon blasting
   crackOpacity:  0.85,       // bold magenta veins
@@ -7308,8 +7308,8 @@ const _canyonTuner = {
   corridorAmpRamp:  200,
   // Cliff strata — glacier: dark base, broad bright mid (frosty blue-white), hot rim
   strataBaseDark:   0.02,  // near-black at waterline
-  strataMidTone:    0.52,  // bright glacier face — this is the dominant value
-  strataRimBright:  1.35,  // rim blooms hot
+  strataMidTone:    0.75,  // bright glacier face — dominant value, walls must be lit
+  strataRimBright:  1.5,   // rim blooms hot
   strataRimCyan:    0.55,  // rim is mostly white with slight cyan tint
   strataSplit:      0.28,  // dark base only occupies bottom 28% — rest is bright glacier
   strataNoiseAmt:   0.08,  // slightly more facet noise for marble look
@@ -7845,7 +7845,7 @@ function _createCanyonWalls() {
         iPos[idx*3+0] = cx + dx;
         iPos[idx*3+1] = y + dy;
         iPos[idx*3+2] = z;
-        iUV[idx*2+0]  = r / (NUM_ROWS - 1);
+        iUV[idx*2+0]  = r / 10;  // tile texture every 10 rows — not one giant smear
         iUV[idx*2+1]  = v;
         // Rock strata vertex colors — driven by tuner
         const sBase  = T.strataBaseDark;
@@ -7888,7 +7888,7 @@ function _createCanyonWalls() {
         tPos[idx*3+0] = cx + t*topW*side + tn2*side*T.displacement*0.3;
         tPos[idx*3+1] = ridgeY + t*topDropY + tn2*T.displacement*0.15;
         tPos[idx*3+2] = z;
-        tUV[idx*2+0]  = r / (NUM_ROWS - 1);
+        tUV[idx*2+0]  = r / 10;  // match inner face tiling
         tUV[idx*2+1]  = 1.0 - t;
         const tFade = 1.0 - t*t;
         tCol[idx*3+0] = 0.65*tFade; tCol[idx*3+1] = 1.00*tFade; tCol[idx*3+2] = 1.00*tFade;
@@ -7930,7 +7930,7 @@ function _createCanyonWalls() {
   }
 
   const gridTex = _makeCanyonGridTexture();
-  gridTex.repeat.set(1, 1);
+  gridTex.repeat.set(1, 1); // UVs tile via r/10
   const mat = new THREE.MeshStandardMaterial({
     color:             0x000000,   // all light from emissive
     vertexColors:      false,      // strata baked into emissiveMap via multiply gradient
@@ -17617,7 +17617,7 @@ window.addEventListener('keydown', (e) => {
     if (!_canyonWalls) return;
     _canyonWalls.gridTex.dispose();
     const newTex = _makeCanyonGridTexture();
-    newTex.repeat.set(1, 1);
+    newTex.repeat.set(1, 1); // UVs tile via r/10
     _canyonWalls.mat.emissiveMap = newTex;
     _canyonWalls.mat.emissiveIntensity = _canyonTuner.brightness * 1.8;
     _canyonWalls.mat.needsUpdate = true;
@@ -19352,7 +19352,7 @@ function buildSkinTunerSliders() {
     }, '#0ef'));
     panel.appendChild(makeSlider('gridGlow', _canyonTuner.gridGlow, 0, 1, 0.05, v => {
       _canyonTuner.gridGlow = v;
-      if (_canyonWalls) { _canyonWalls.gridTex.dispose(); const t = _makeCanyonGridTexture(); t.repeat.set(1,1); _canyonWalls.mat.emissiveMap = t; _canyonWalls.mat.needsUpdate = true; _canyonWalls.gridTex = t; }
+      if (_canyonWalls) { _canyonWalls.gridTex.dispose(); const t = _makeCanyonGridTexture(); t.repeat.set(1,1); t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping; _canyonWalls.mat.emissiveMap = t; _canyonWalls.mat.needsUpdate = true; _canyonWalls.gridTex = t; }
     }, '#0ef'));
     panel.appendChild(makeSlider('veinBloom', _canyonTuner.veinBloom, 0, 1, 0.05, v => {
       _canyonTuner.veinBloom = v;
