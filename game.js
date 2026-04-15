@@ -19311,6 +19311,8 @@ const _asteroidTuner = {
   // Filler (decorative background asteroids)
   fixedXChance:   0.25,   // probability (0-1) a stagger asteroid spawns at random fixed X instead of ship X
   fixedXRange:    [20, 60], // [min, max] absolute X for fixed spawns
+  leadVelThresh:  8.0,     // shipVelX magnitude that triggers velocity-lead warning spawn
+  leadTimeMult:   2.0,     // seconds to project ahead (leadX = shipX + velX * leadTimeMult)
   fillerEnabled:  true,    // toggle on/off
   fillerFreq:      0.4,    // seconds between filler spawns
   fillerLaneMin:  -20,     // X range — wider than normal to sell depth
@@ -19723,6 +19725,7 @@ function _spawnAsteroid(targetX) {
   inst.totalFallTime = totalTime;
   inst.elapsed  = 0;
   inst.warnTimer = 0;
+  inst.forceWarning = false; // set true for lead-time spawns to show warning circle regardless of T.showWarning
   inst.tailWriteIdx = 0;
   inst.tailTimer = 0;
   // Reset tail history
@@ -19731,6 +19734,7 @@ function _spawnAsteroid(targetX) {
   inst.active = true;
 
   _asteroidActive.push(inst);
+  return inst;
 }
 
 // ── Kill one asteroid ─────────────────────────────────────────────────────────
@@ -19840,7 +19844,7 @@ function _updateAsteroids(dt) {
     inst.light.intensity = fadeT * (0.8 + progress * 2.2) * inst.radius;
 
     // Show warning disc once asteroid is visible enough (respects toggle)
-    if (T.showWarning && fadeT > 0.3 && progress < 0.88) inst.warnMesh.visible = true;
+    if ((T.showWarning || inst.forceWarning) && fadeT > 0.3 && progress < 0.88) inst.warnMesh.visible = true;
     else inst.warnMesh.visible = false;
 
     // Update shader uniforms
@@ -19999,8 +20003,14 @@ function _tickAsteroidSpawner(dt) {
             const _targetX = _useFixed
               ? _sx + (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
               : _sx;
-            console.log('[fixedX-fallback] useFixed='+_useFixed+' targetX='+_targetX.toFixed(1)+' shipX='+_sx.toFixed(1));
             _spawnAsteroid(_targetX);
+            // Velocity-lead spawn: if holding hard lateral, spawn a warned asteroid ahead
+            const _velX = state.shipVelX || 0;
+            if (Math.abs(_velX) > T.leadVelThresh) {
+              const _leadX = _sx + _velX * T.leadTimeMult;
+              const _leadInst = _spawnAsteroid(_leadX);
+              if (_leadInst) _leadInst.forceWarning = true;
+            }
           }, si * T.staggerGap * 1000);
         }
       }
@@ -20290,7 +20300,13 @@ const _origUpdateShockwave = _updateShockwave;
           const _targetX = _useFixed
             ? _sx + (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
             : _sx;
-          _spawnAsteroid(_targetX);
+          const _leadInst2 = _spawnAsteroid(_targetX);
+          // Velocity-lead warning spawn
+          const _velX2 = state.shipVelX || 0;
+          if (Math.abs(_velX2) > T.leadVelThresh) {
+            const _leadInst = _spawnAsteroid((state.shipX || 0) + _velX2 * T.leadTimeMult);
+            if (_leadInst) _leadInst.forceWarning = true;
+          }
           if (T.staggerDual && !_useFixed) {
             const spawnY = T.skyHeight;
             const totalTime = Math.sqrt((0 - spawnY) ** 2 + (3.9 - (-160)) ** 2) / T.speed;
@@ -20496,6 +20512,8 @@ const _origUpdateShockwave = _updateShockwave;
     panel.appendChild(makeSlider('fixed X chance', T.fixedXChance, 0, 1, 0.05, v => T.fixedXChance = v, '#fa4').row);
     panel.appendChild(makeSlider('fixed X min', T.fixedXRange[0], 0, 60, 1, v => T.fixedXRange[0] = v, '#fa4').row);
     panel.appendChild(makeSlider('fixed X max', T.fixedXRange[1], 0, 80, 1, v => T.fixedXRange[1] = v, '#fa4').row);
+    panel.appendChild(makeSlider('lead vel thresh', T.leadVelThresh, 1, 25, 0.5, v => T.leadVelThresh = v, '#fa4').row);
+    panel.appendChild(makeSlider('lead time mult', T.leadTimeMult, 0.5, 5.0, 0.1, v => T.leadTimeMult = v, '#fa4').row);
     // ── FILLER section
     panel.appendChild(makeHeader('FILLER (decorative)', '#88f'));
     panel.appendChild(makeToggle('enabled (JL stagger only)', () => T.fillerEnabled, v => { T.fillerEnabled = v; }));
@@ -20771,11 +20789,15 @@ function _jlApplyAsteroidTrack(track) {
   const T = _asteroidTuner;
   const s = track.settings;
   // Preserve user-tunable values that track settings must never overwrite
-  const _keepFixedXChance = T.fixedXChance;
-  const _keepFixedXRange  = T.fixedXRange;
+  const _keepFixedXChance  = T.fixedXChance;
+  const _keepFixedXRange   = T.fixedXRange;
+  const _keepLeadVelThresh = T.leadVelThresh;
+  const _keepLeadTimeMult  = T.leadTimeMult;
   for (const k of Object.keys(s)) T[k] = s[k];
-  T.fixedXChance = _keepFixedXChance;
-  T.fixedXRange  = _keepFixedXRange;
+  T.fixedXChance  = _keepFixedXChance;
+  T.fixedXRange   = _keepFixedXRange;
+  T.leadVelThresh = _keepLeadVelThresh;
+  T.leadTimeMult  = _keepLeadTimeMult;
   if (s.frequency !== undefined) T.frequency = s.frequency / _jlIntensity;
   if (s.size      !== undefined) T.size      = s.size      * _jlSizeScalar;
   T.enabled = true; // always re-enable when a track is active
