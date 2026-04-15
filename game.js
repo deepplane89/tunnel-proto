@@ -20274,8 +20274,14 @@ const _origUpdateShockwave = _updateShockwave;
       for (let si = 0; si < steps; si++) {
         setTimeout(() => {
           if (state.phase !== 'playing') return;
-          _spawnAsteroid(state.shipX);
-          if (T.staggerDual) {
+          // 1-in-N chance: spawn at random fixed X to punish lateral camping
+          const _useFixed = Math.random() < T.fixedXChance;
+          const [_fxMin, _fxMax] = T.fixedXRange;
+          const _targetX = _useFixed
+            ? (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
+            : state.shipX;
+          _spawnAsteroid(_targetX);
+          if (T.staggerDual && !_useFixed) {
             const spawnY = T.skyHeight;
             const totalTime = Math.sqrt((0 - spawnY) ** 2 + (3.9 - (-160)) ** 2) / T.speed;
             const leadX = state.shipX + (state.shipVelX || 0) * totalTime * T.leadFactor;
