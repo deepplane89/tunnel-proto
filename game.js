@@ -19783,10 +19783,7 @@ function _astNextTargetX() {
   const sx = (state && state.shipX) || 0; // always center patterns on ship
   switch (T.pattern) {
     case 'sweep': {
-      // During recenter: fix base at center so sweep corridor stays between ship and center
-      // Normal sweep: oscillates around live ship X
-      const sweepBase = _jlRecenterActive ? _jlRecenterBase : sx;
-      const x = sweepBase + (_astSweepX - 0.5) * range;
+      const x = sx + (_astSweepX - 0.5) * range;
       _astSweepX += _astSweepDir * T.sweepSpeed * T.frequency / range * 0.12;
       if (_astSweepX >= 1.0 || _astSweepX <= 0.0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
       return x;
@@ -20503,9 +20500,6 @@ const _origUpdateShockwave = _updateShockwave;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 let _jlRampTime      = 0;   // seconds elapsed in Jet Lightning mode
-let _jlRecenterActive = false; // true while funnel pattern is correcting drift
-let _jlRecenterT      = 0;    // how long recenter has been active
-let _jlRecenterBase   = 0;    // fixed sweep base X during recenter (center=0, not live shipX)
 
 function startJetLightning() {
   // ── Flag ──────────────────────────────────────────────────────────────────
@@ -20524,14 +20518,11 @@ function startJetLightning() {
   _jlRampTime      = 0;
   _jlFatConeTimer   = 99;
   _jlLrTimer        = 99;
-  _jlRecenterActive = false;
   // Clear any in-flight lethal rings from a previous session
   for (const lr of _lethalRingActive) { lr.userData.active = false; lr.visible = false; lr.position.set(0,-9999,0); }
   _lethalRingActive.length = 0;
   // Reset track activation state so onActivate fires fresh each run
   for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
-  _jlRecenterT      = 0;
-
   // ── Asteroids: on, stagger aimed at ship's current position ────────────────
   const T = _asteroidTuner;
   T.enabled      = true;
@@ -20875,46 +20866,6 @@ function _tickJetLightningRamp(dt) {
     window._LT.enabled = false;
   }
 
-  // ── Recentering funnel: fires when ship drifts past threshold ────────────────
-  // Only during asteroid-stagger phases so it never fights sweep/salvo/lightning.
-  {
-    const _T            = _asteroidTuner;
-    const _driftX       = Math.abs(state.shipX || 0);
-    const _DRIFT_THRESH = 25;  // units from center before funnel kicks in
-    const _RECENTER_DUR = 5.0; // seconds of funnel before releasing
-
-    console.log('[recenter] driftX='+_driftX.toFixed(1)+' thresh='+_DRIFT_THRESH+' active='+_jlRecenterActive+' pattern='+_T.pattern+' enabled='+_T.enabled);
-    if (!_jlRecenterActive && _driftX > _DRIFT_THRESH && _T.enabled && _T.pattern === 'stagger') {
-      _jlRecenterActive = true;
-      _jlRecenterT      = 0;
-      const _side = Math.sign(state.shipX);
-      const _shipX  = state.shipX || 0;
-      _jlRecenterBase = 0; // base at center — range is in world space
-      _T.pattern    = 'sweep';
-      _T.sweepSpeed = 0.55;
-      // Place sweep corridor just outside ship position, extending further out
-      // sweepBase=0, so x = 0 + (sweepX-0.5)*range
-      // We want x to go from _shipX to _shipX+20 (outward wall)
-      // So: laneMin=_shipX, laneMax=_shipX+20*side
-      _T.laneMin    = _side > 0 ?  _shipX        : -(_shipX + 20);
-      _T.laneMax    = _side > 0 ?  (_shipX + 20) : -_shipX;
-      _astSweepX    = _side > 0 ? 0.0 : 1.0;
-      _astSweepDir  = _side > 0 ?  1  : -1;
-      console.log('[recenter] TRIGGERED side='+_side+' shipX='+_shipX.toFixed(1)+' laneMin='+_T.laneMin.toFixed(1)+' laneMax='+_T.laneMax.toFixed(1));
-    }
-
-    if (_jlRecenterActive) {
-      _jlRecenterT += dt;
-      if (_jlRecenterT >= _RECENTER_DUR) {
-        _jlRecenterActive = false;
-        if (_T.enabled) {
-          _T.pattern = 'stagger';
-          _T.laneMin = -8;
-          _T.laneMax =  8;
-        }
-      }
-    }
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -21117,8 +21068,6 @@ window.startJetLightning = startJetLightning;
 window._jlDebug = {
   get rampTime()          { return _jlRampTime; },
   set rampTime(v)         { _jlRampTime = v; },
-  get recenterActive()    { return _jlRecenterActive; },
-  set recenterActive(v)   { _jlRecenterActive = v; },
   get jlMode()            { return state._jetLightningMode; },
   get phase()             { return state.phase; },
   get score()             { return state.score; },
@@ -21156,7 +21105,6 @@ window._jlDebug = {
       ltEnabled:       window._LT.enabled,
       ltFreq:          +window._LT.frequency.toFixed(2),
       iceEnabled:      window._ICE.enabled,
-      recenterActive:  _jlRecenterActive,
       activeAsteroids: _asteroidActive.length,
       activeObstacles: activeObstacles.length,
     };
