@@ -7344,20 +7344,26 @@ function _makeCanyonGridTexture() {
       const gc = parseInt(T.gridColor.slice(1), 16);
       const gr2 = (gc >> 16) & 0xff, gg2 = (gc >> 8) & 0xff, gb2 = gc & 0xff;
       const glowAmt = T.gridGlow || 0;
-      // Solid bright cyan base — scales from dark teal to full cyan with gridGlow
-      const baseAlpha = (0.08 + glowAmt * 0.55).toFixed(2);
-      ctx.fillStyle = `rgba(${gr2},${gg2},${gb2},${baseAlpha})`;
+      // Frosty white-blue ice base — bright white with a cyan tint, not solid cyan
+      // This is what makes it look like glowing ice rather than a flat coloured panel
+      const frostAlpha = (0.55 + glowAmt * 0.35).toFixed(2);
+      // Mix white and cyan: at low glowAmt it's near-white, at high it's cyan-white
+      const fr = Math.round(180 + (255 - 180) * (1 - glowAmt * 0.5));
+      const fg = Math.round(220 + (255 - 220) * (1 - glowAmt * 0.3));
+      const fb = 255;
+      ctx.fillStyle = `rgba(${fr},${fg},${fb},${frostAlpha})`;
       ctx.globalAlpha = 1;
       ctx.fillRect(sx0, 0, slabW, h);
-      // Centre bloom gradient on top
-      const g0 = (glowAmt * 0.25).toFixed(2);
-      const g1 = (glowAmt * 0.45).toFixed(2);
-      const grd = ctx.createRadialGradient(sx0+slabW*0.5, h*0.5, 0, sx0+slabW*0.5, h*0.5, slabW*0.7);
-      grd.addColorStop(0,   `rgba(${gr2},${gg2},${gb2},${g1})`);
-      grd.addColorStop(0.6, `rgba(${gr2},${gg2},${gb2},${g0})`);
-      grd.addColorStop(1,   'rgba(0,0,0,0)');
-      ctx.fillStyle = grd; ctx.globalAlpha = 1;
-      ctx.fillRect(sx0, 0, slabW, h);
+      // Cyan radial glow bloom in centre — controlled by gridGlow
+      if (glowAmt > 0) {
+        const g1 = (glowAmt * 0.6).toFixed(2);
+        const grd = ctx.createRadialGradient(sx0+slabW*0.5, h*0.5, 0, sx0+slabW*0.5, h*0.5, slabW*0.75);
+        grd.addColorStop(0,   `rgba(${gr2},${gg2},${gb2},${g1})`);
+        grd.addColorStop(0.5, `rgba(${gr2},${gg2},${gb2},${(glowAmt*0.2).toFixed(2)})`);
+        grd.addColorStop(1,   'rgba(0,0,0,0)');
+        ctx.fillStyle = grd; ctx.globalAlpha = 1;
+        ctx.fillRect(sx0, 0, slabW, h);
+      }
       // Diagonal X-grid lines — clipped to this slab only
       ctx.save();
       ctx.beginPath(); ctx.rect(sx0, 0, slabW, h); ctx.clip();
@@ -7671,10 +7677,17 @@ function _createCanyonWalls() {
   metalTex.wrapS = THREE.RepeatWrapping;
   metalTex.wrapT = THREE.RepeatWrapping;
 
-  // Purely emissive — self-lit like the concept art, no scene lighting needed
-  const mat = new THREE.MeshBasicMaterial({
-    map:  gridTex,
-    side: THREE.DoubleSide,
+  // MeshStandardMaterial with emissiveMap — emissiveIntensity > 1 pushes into HDR
+  // so the bloom pass (threshold=1.0) picks up the canyon glow
+  const mat = new THREE.MeshStandardMaterial({
+    color:             0x000000,   // base color black — all light comes from emissive
+    emissive:          0xffffff,   // white so emissiveMap drives the color fully
+    emissiveMap:       gridTex,
+    emissiveIntensity: T.brightness * 1.8,  // > 1.0 = HDR → triggers bloom
+    roughness:         0.9,
+    metalness:         0.0,
+    side:              THREE.DoubleSide,
+    toneMapped:        false,      // prevents tone-mapping from clamping HDR values
   });
 
   function makeSlab(side, zOff) {
@@ -17391,7 +17404,8 @@ window.addEventListener('keydown', (e) => {
     _canyonWalls.gridTex.dispose();
     const newTex = _makeCanyonGridTexture();
     newTex.repeat.set(1, 3);
-    _canyonWalls.mat.map = newTex;
+    _canyonWalls.mat.emissiveMap = newTex;
+    _canyonWalls.mat.emissiveIntensity = _canyonTuner.brightness * 1.8;
     _canyonWalls.mat.needsUpdate = true;
     _canyonWalls.gridTex = newTex;
   }
