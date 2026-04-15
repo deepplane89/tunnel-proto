@@ -7789,7 +7789,7 @@ function _updateCanyonWalls(dt, speed) {
     m.position.z += scroll;
     // Tile geometry runs from z=0 to z=-tileLength in local space.
     // When mesh.position.z > 0 the entire tile has passed the ship — recycle to back.
-    if (m.position.z > 0) {
+    if (m.position.z > T.tileLength + 4) {
       m.position.z -= T.tileLength * 2;
       // Stamp corridorGapCenter at the moment this tile resets — bakes the upcoming turn in
       const stampCenter = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
@@ -7802,7 +7802,7 @@ function _updateCanyonWalls(dt, speed) {
   });
   _canyonWalls.right.forEach(m => {
     m.position.z += scroll;
-    if (m.position.z > 0) {
+    if (m.position.z > T.tileLength + 4) {
       m.position.z -= T.tileLength * 2;
       const stampCenter = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
       m._stampedCenter = stampCenter;
@@ -20902,14 +20902,14 @@ const _origUpdateShockwave = _updateShockwave;
     if (state.phase === 'playing' && !state.introActive &&
         (state._tutorialActive || _chaosMode || state._jetLightningMode)) {
       // Corridor takes over — pause all JL obstacle spawning during breather
-      if (_jlCorridor.active) {
+      if (_jlCorridor.active && !_canyonActive) {
         _jlTickCorridor(dt, state.speed);
       } else if (!_canyonActive) {
         _tickAsteroidSpawner(dt);
       }
     }
-    // Canyon corridor sine tick — runs even outside JL mode
-    if (_canyonActive && _jlCorridor.active && !state._jetLightningMode) {
+    // Canyon corridor sine tick — always runs when canyon is active, regardless of JL mode
+    if (_canyonActive && _jlCorridor.active) {
       _jlTickCorridor(dt, state.speed);
     }
     _updateAsteroids(dt);
