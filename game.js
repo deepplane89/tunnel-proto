@@ -7270,13 +7270,13 @@ function _updateTerrainWalls(dt, speed) {
 //  CANYON CORRIDOR WALLS
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
-  height:        80,    // shorter so top is visible in distance
+  height:        55,    // shorter so top is visible in distance
   tileLength:    400,
   segsX:         10,
   segsZ:         100,
   displacement:  45,
   wallWidth:     60,   // narrow top cap overhang
-  topRagged:     55,   // strong jagged silhouette
+  topRagged:     30,   // strong jagged silhouette
   capHeight:     1.6,
   slopeLean:     0.0,
   fillLight:     0.4,
@@ -7288,7 +7288,7 @@ const _canyonTuner = {
   gridColor:     '#00eeff',
   gridOpacity:   0.45,
   crackOpacity:  0.6,   // bold veins
-  slabCount:     5,
+  slabCount:     4,
   // Per-slab type controls
   gridLineW:     1.5,   // grid line width
   gridCols:      4,     // grid columns per slab
@@ -7304,10 +7304,13 @@ const _canyonTuner = {
   dividerOpacity: 0.4,
 };
 let _canyonWalls = null;
-let _canyonFillLight = null; // dedicated fill light for canyon
+let _canyonFillLight = null;
 let _canyonActive = false;
-let _canyonSqueezeRow = 0;    // drives wall squeeze independent of cone spawner
-let _canyonSqueezeZ   = 0;    // Z accumulator — advances one row every 7 units
+let _canyonSqueezeRow = 0;
+let _canyonSqueezeZ   = 0;
+let _canyonSineT      = 0;    // sine phase accumulator for canyon lateral bends
+let _canyonSineRows   = 0;    // row counter for canyon sine (advances with Z travel)
+let _canyonSineZ      = 0;    // Z remainder accumulator for sine row advances
 
 function _makeCanyonGridTexture() {
   const T = _canyonTuner;
@@ -7727,17 +7730,32 @@ function _updateCanyonWalls(dt, speed) {
 
   // ── Independent squeeze: advance row counter by Z distance traveled
   let halfX;
-  const center = state.corridorGapCenter || 0;
-  if (T.freezeWide) {
-    halfX = T.canyonHalfX || CORRIDOR_WIDE_X;
-  } else {
-    // Use L3 corridor halfX from the live corridor system
-    halfX = _jlCorridor.active
-      ? (_jlCorridor._lastHalfX || T.canyonHalfX || CORRIDOR_WIDE_X)
-      : (T.canyonHalfX || CORRIDOR_WIDE_X);
+  halfX = T.canyonHalfX || 45;
+
+  // ── Private sine tracker — no cone spawner, no JL mode required
+  // Advance row counter by Z distance (1 row per 7 units, same cadence as L3)
+  _canyonSineZ += scroll;
+  while (_canyonSineZ >= 7) { _canyonSineZ -= 7; _canyonSineRows++; }
+  // Same constants as L3 corridor
+  const _STRAIGHT = 8;   // brief straight before bends
+  const _AMP_START = CORRIDOR_AMP_START;
+  const _AMP_MAX   = CORRIDOR_AMP_MAX;
+  const _AMP_RAMP  = CORRIDOR_AMP_RAMP;
+  const _PER_START = CORRIDOR_PERIOD_START;
+  const _PER_MIN   = CORRIDOR_PERIOD_MIN;
+  const _PER_RAMP  = CORRIDOR_PERIOD_RAMP;
+  let center = 0;
+  if (!T.freezeWide && _canyonSineRows >= _STRAIGHT) {
+    const cr   = _canyonSineRows - _STRAIGHT;
+    const ampT = Math.min(1, cr / _AMP_RAMP);
+    const amp  = _AMP_START + (_AMP_MAX - _AMP_START) * (ampT * ampT);
+    const perT = Math.min(1, cr / _PER_RAMP);
+    const per  = _PER_START - (_PER_START - _PER_MIN) * (perT * perT);
+    _canyonSineT += (2 * Math.PI) / per;
+    center = amp * Math.sin(_canyonSineT);
   }
 
-  // Scroll Z + track corridorGapCenter for lateral position
+  // Scroll Z + track sine center for lateral position
   _canyonWalls.left.forEach(m => {
     m.position.z += scroll;
     if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
@@ -17299,8 +17317,9 @@ window.addEventListener('keydown', (e) => {
       _canyonSqueezeRow = 0;                     // reset squeeze counter
       _canyonSqueezeZ   = 0;
       if (!_canyonWalls) _createCanyonWalls();
-      // POC: fire L3 corridor so sine waves + turns are visible alongside canyon walls
-      _jlStartCorridor('l3');
+      // Reset canyon sine tracker on each activation
+      _canyonSineT = 0;
+      _canyonSineRows = 0;
       const w = _canyonWalls;
       const T = _canyonTuner;
       // Also log positions after 1 frame so _updateCanyonWalls has run
@@ -17337,7 +17356,8 @@ window.addEventListener('keydown', (e) => {
       }, null, 2));
     } else {
       _destroyCanyonWalls();
-      _jlStopCorridor();
+      _canyonSineT = 0;
+      _canyonSineRows = 0;
       console.log('[CANYON] OFF');
     }
   }
