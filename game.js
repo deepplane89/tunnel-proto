@@ -7287,6 +7287,8 @@ const _canyonTuner = {
 };
 let _canyonWalls = null; // { strips: [lA,lB,rA,rB], mat, gridTex, metalTex }
 let _canyonActive = false;
+let _canyonSqueezeRow = 0;    // drives wall squeeze independent of cone spawner
+let _canyonSqueezeZ   = 0;    // Z accumulator — advances one row every 7 units
 
 function _makeCanyonGridTexture() {
   const T = _canyonTuner;
@@ -7344,27 +7346,29 @@ function _makeCanyonGridTexture() {
 }
 
 function _displaceCanyonSlab(geo, side) {
-  // side: 1=right wall (displaces +X), -1=left wall (displaces -X)
+  // Called BEFORE any rotation so axes are still in default PlaneGeometry space:
+  //   X spans width (will become Z after rotateY), Y spans height, Z=0 (will become X)
+  // We displace in Z (outward from wall face) + Y (top ragging)
   const T = _canyonTuner;
   const pos = geo.attributes.position;
   const uv  = geo.attributes.uv;
   for (let i = 0; i < pos.count; i++) {
-    const u  = uv.getX(i); // 0=bottom, 1=top  (after rotation)
-    const v  = uv.getY(i); // 0..1 along Z
-    const y  = pos.getY(i);
-    const isTop = u > 0.85; // top edge verts
-    // Face jaggedness — outward X displacement
-    const px = v * 18.0;
-    const py = u * 12.0;
+    const u = uv.getX(i);  // 0..1 across width (Z axis after rotation)
+    const v = uv.getY(i);  // 0..1 along height (Y axis)
+    const y = pos.getY(i);
+    const isTop = v > 0.85;
+    // Outward face displacement — push in Z (becomes outward X after rotateY)
+    const px = u * 18.0;
+    const py = v * 12.0;
     const n1 = Math.sin(px * 2.1 + py * 1.3) * 0.35;
     const n2 = Math.sin(px * 5.7 + py * 3.1) * 0.25;
     const n3 = Math.abs(Math.sin(px * 3.2 + py * 5.5)) * 0.28;
     const noise = 0.4 + n1 + n2 + n3;
-    const jag = Math.max(0, noise) * T.displacement * side;
-    pos.setX(i, pos.getX(i) + jag);
-    // Top edge ragged
+    // side 1=right pushes +Z (becomes +X), side -1=left pushes -Z (becomes -X)
+    pos.setZ(i, Math.max(0, noise) * T.displacement * side);
+    // Top edge ragged in Y
     if (isTop) {
-      const topNoise = Math.sin(v * 31.7) * 0.4 + Math.sin(v * 17.3 + 1.2) * 0.35 + Math.sin(v * 7.1) * 0.25;
+      const topNoise = Math.sin(u * 31.7) * 0.4 + Math.sin(u * 17.3 + 1.2) * 0.35 + Math.sin(u * 7.1) * 0.25;
       pos.setY(i, y + (0.5 + topNoise) * T.topRagged);
     }
   }
@@ -7408,23 +7412,28 @@ function _createCanyonWalls() {
   });
 
   function makeSlab(side, zOff) {
-    // Vertical plane: width=tileLength (Z), height=height (Y)
+    // PlaneGeometry default: faces +Z, X=width, Y=height
+    // We want: faces inward (+X for left wall, -X for right wall), length runs along Z
+    // Step 1: displace in Z (outward) BEFORE rotation
+    // Step 2: rotateY so the face points inward in X
+    //   left wall  (side=-1): rotateY(-PI/2) — face now points +X (toward ship)
+    //   right wall (side= 1): rotateY( PI/2) — face now points -X (toward ship)
     const geo = new THREE.PlaneGeometry(T.tileLength, T.height, T.segsZ, T.segsX);
-    // Rotate to face inward (normal points in -X for right, +X for left)
-    geo.rotateY(side === 1 ? -Math.PI / 2 : Math.PI / 2);
-    _displaceCanyonSlab(geo, side);
+    _displaceCanyonSlab(geo, side);          // displace in Z before rotation
+    geo.rotateY(side === -1 ? -Math.PI / 2 : Math.PI / 2); // now Z displacement → outward X
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.y = T.height / 2 - 25; // base at water level
-    mesh.position.z = zOff;
+    mesh.position.y = T.height / 2 - 25;    // bottom of slab at water level (baseY=-25)
+    mesh.position.z = zOff;                  // start far ahead
     mesh.frustumCulled = false;
     scene.add(mesh);
     return mesh;
   }
 
-  const lA = makeSlab(-1, -T.tileLength / 2);
-  const lB = makeSlab(-1, -T.tileLength / 2 - T.tileLength);
-  const rA = makeSlab( 1, -T.tileLength / 2);
-  const rB = makeSlab( 1, -T.tileLength / 2 - T.tileLength);
+  // Spawn both tiles far ahead in negative Z, leapfrog from there
+  const lA = makeSlab(-1, -T.tileLength);
+  const lB = makeSlab(-1, -T.tileLength * 2);
+  const rA = makeSlab( 1, -T.tileLength);
+  const rB = makeSlab( 1, -T.tileLength * 2);
   _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex, metalTex,
                    left: [lA, lB], right: [rA, rB] };
 }
@@ -7441,23 +7450,41 @@ function _destroyCanyonWalls() {
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || !_canyonActive) return;
   const T = _canyonTuner;
-  // Get current corridor center and halfX from shared state
-  const center  = state.corridorGapCenter || 0;
-  // halfX: read from whichever corridor type is active
-  // We expose halfX via _jlCorridor each tick
-  const halfX   = _jlCorridor._lastHalfX || 9;
-  const scroll  = speed * dt * T.scrollSpeed;
+  const scroll = speed * dt * T.scrollSpeed;
 
-  // Position left/right strips at corridor edges, leapfrog Z
+  // ── Independent squeeze: advance row counter by Z distance traveled
+  _canyonSqueezeZ += scroll;
+  while (_canyonSqueezeZ >= 7) {
+    _canyonSqueezeZ -= 7;
+    _canyonSqueezeRow++;
+  }
+  // Compute halfX using exact same L3 formula
+  let halfX;
+  const rd = _canyonSqueezeRow;
+  if (rd < CORRIDOR_CLOSE_ROWS) {
+    const t2 = rd / CORRIDOR_CLOSE_ROWS;
+    const ease = t2 < 0.5 ? 2*t2*t2 : -1+(4-2*t2)*t2;
+    halfX = CORRIDOR_WIDE_X + (CORRIDOR_NARROW_X - CORRIDOR_WIDE_X) * ease;
+  } else {
+    const cr = Math.max(0, rd - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS));
+    const sq = Math.min(1, cr / CORRIDOR_AMP_RAMP);
+    halfX = CORRIDOR_NARROW_X - (CORRIDOR_NARROW_X - 6) * (sq * sq);
+  }
+
+  // Canyon center follows corridorGapCenter if a cone corridor is also active,
+  // otherwise just uses ship X so walls are always centered on the player
+  const center = (_jlCorridor.active ? (state.corridorGapCenter || 0) : (state.shipX || 0));
+
+  // Position left/right strips at corridor edges, scroll toward ship, leapfrog when passed
   _canyonWalls.left.forEach(m => {
     m.position.x = center - halfX;
     m.position.z += scroll;
-    if (m.position.z > T.tileLength / 2) m.position.z -= T.tileLength * 2;
+    if (m.position.z > 20) m.position.z -= T.tileLength * 2; // passed ship — jump far ahead
   });
   _canyonWalls.right.forEach(m => {
     m.position.x = center + halfX;
     m.position.z += scroll;
-    if (m.position.z > T.tileLength / 2) m.position.z -= T.tileLength * 2;
+    if (m.position.z > 20) m.position.z -= T.tileLength * 2;
   });
 
   // Collision: kill ship if outside gap (with small buffer for fairness)
@@ -17007,19 +17034,17 @@ window.addEventListener('keydown', (e) => {
     dbgVisible = !dbgVisible;
     dbgEl.classList.toggle('visible', dbgVisible);
   }
-  // C — toggle canyon corridor test (JL mode only)
+  // C — toggle canyon corridor test (JL mode only, no cone spawning)
   if ((e.key === 'c' || e.key === 'C') && state._jetLightningMode && state.phase === 'playing') {
     _canyonActive = !_canyonActive;
     if (_canyonActive) {
-      // Start L3 corridor + canyon walls, suppress all other spawning
-      _jlStartCorridor('l3');
+      // Walls start wide and squeeze on their own — do NOT touch corridor cone spawner
+      _jlCorridor._lastHalfX = CORRIDOR_WIDE_X; // start wide
+      _canyonSqueezeRow = 0;                     // reset squeeze counter
       if (!_canyonWalls) _createCanyonWalls();
-      console.log('[CANYON] ON — L3 corridor started');
+      console.log('[CANYON] ON');
     } else {
-      _jlStopCorridor();
       _destroyCanyonWalls();
-      // Resume normal JL spawning
-      _asteroidTuner.enabled = true;
       console.log('[CANYON] OFF');
     }
   }
