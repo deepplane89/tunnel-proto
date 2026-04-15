@@ -7495,11 +7495,13 @@ function _createCanyonWalls() {
     return mesh;
   }
 
-  // Two tiles per side — start at SPAWN_Z so walls are visible immediately
-  const lA = makeSlab(-1, SPAWN_Z);
-  const lB = makeSlab(-1, SPAWN_Z - T.tileLength);
-  const rA = makeSlab( 1, SPAWN_Z);
-  const rB = makeSlab( 1, SPAWN_Z - T.tileLength);
+  // Lock X at spawn time relative to ship — never updated again, only Z scrolls
+  const shipX = state.shipX || 0;
+  const spawnHalfX = CORRIDOR_WIDE_X;
+  const lA = makeSlab(-1, SPAWN_Z);  lA.position.x = shipX - spawnHalfX;
+  const lB = makeSlab(-1, SPAWN_Z - T.tileLength); lB.position.x = shipX - spawnHalfX;
+  const rA = makeSlab( 1, SPAWN_Z);  rA.position.x = shipX + spawnHalfX;
+  const rB = makeSlab( 1, SPAWN_Z - T.tileLength); rB.position.x = shipX + spawnHalfX;
   _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex, metalTex,
                    left: [lA, lB], right: [rA, rB] };
 }
@@ -7542,18 +7544,12 @@ function _updateCanyonWalls(dt, speed) {
     }
   }
 
-  // Canyon center follows corridorGapCenter if a cone corridor is also active,
-  // otherwise just uses ship X so walls are always centered on the player
-  const center = (_jlCorridor.active ? (state.corridorGapCenter || 0) : (state.shipX || 0));
-
-  // Position left/right strips at corridor edges, scroll toward ship, leapfrog when passed
+  // Only scroll in Z — X was locked at spawn time relative to ship position, never updated
   _canyonWalls.left.forEach(m => {
-    m.position.x = center - halfX;
     m.position.z += scroll;
-    if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2; // fully past ship — jump far ahead
+    if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
   });
   _canyonWalls.right.forEach(m => {
-    m.position.x = center + halfX;
     m.position.z += scroll;
     if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
   });
