@@ -7302,6 +7302,10 @@ const _canyonTuner = {
   veinBloom:     0.5,   // radial glow intensity behind vein slabs
   gridGlow:      0.5,   // extra glow intensity on bright grid slabs
   dividerOpacity: 0.4,
+  // Corridor curve controls — override L3 constants for the baked ribbon
+  corridorAmpMax:   36,  // max swing in world units (matches CORRIDOR_AMP_MAX default)
+  corridorAmpStart: 10,  // initial swing when curves first begin
+  corridorAmpRamp:  200, // rows to reach max amplitude
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
@@ -7752,8 +7756,11 @@ function _createCanyonWalls() {
     let center = 0;
     if (r >= CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS) {
       const curveRows = r - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS);
-      const ampT   = Math.min(1, curveRows / CORRIDOR_AMP_RAMP);
-      const amp    = CORRIDOR_AMP_START + (CORRIDOR_AMP_MAX - CORRIDOR_AMP_START) * (ampT * ampT);
+      const ampRamp = T.corridorAmpRamp || CORRIDOR_AMP_RAMP;
+      const ampT   = Math.min(1, curveRows / ampRamp);
+      const ampMax = T.corridorAmpMax   !== undefined ? T.corridorAmpMax   : CORRIDOR_AMP_MAX;
+      const ampStart = T.corridorAmpStart !== undefined ? T.corridorAmpStart : CORRIDOR_AMP_START;
+      const amp    = ampStart + (ampMax - ampStart) * (ampT * ampT);
       const perT   = Math.min(1, curveRows / CORRIDOR_PERIOD_RAMP);
       const period = CORRIDOR_PERIOD_START - (CORRIDOR_PERIOD_START - CORRIDOR_PERIOD_MIN) * (perT * perT);
       bSineT += (2 * Math.PI) / period;
@@ -17651,7 +17658,7 @@ window.addEventListener('keydown', (e) => {
     slider('topRagged',     'topRagged',   0,  80, 1,    'geo');
     slider('slopeLean',     'slopeLean',   0,  5,  0.05, 'geo');
     slider('capHeight',     'capHeight',   0,  3,  0.05, 'geo');
-    slider('segsX',         'segsX',       2,  30, 1,    'geo');
+    slider('segsX',         'segsX',       2,  80, 1,    'geo');
     slider('segsZ',         'segsZ',       4, 120, 2,    'geo');
 
     hdr('— TEXTURE —');
@@ -17683,6 +17690,11 @@ window.addEventListener('keydown', (e) => {
 
     hdr('— GRID GLOW —');
     slider('gridGlow',      'gridGlow',     0,   1,  0.05,'tex');
+
+    hdr('— CORRIDOR CURVES —');
+    slider('ampMax',        'corridorAmpMax',    0, 80, 1, 'geo');
+    slider('ampStart',      'corridorAmpStart',  0, 40, 1, 'geo');
+    slider('ampRamp (rows)','corridorAmpRamp',  20, 400, 5,'geo');
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
