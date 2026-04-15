@@ -19777,8 +19777,10 @@ function _astNextTargetX() {
   const sx = (state && state.shipX) || 0; // always center patterns on ship
   switch (T.pattern) {
     case 'sweep': {
-      // Sweep offset oscillates around ship X
-      const x = sx + (_astSweepX - 0.5) * range;
+      // During recenter: fix base at center so sweep corridor stays between ship and center
+      // Normal sweep: oscillates around live ship X
+      const sweepBase = _jlRecenterActive ? _jlRecenterBase : sx;
+      const x = sweepBase + (_astSweepX - 0.5) * range;
       _astSweepX += _astSweepDir * T.sweepSpeed * T.frequency / range * 0.12;
       if (_astSweepX >= 1.0 || _astSweepX <= 0.0) { _astSweepDir *= -1; _astSweepX = THREE.MathUtils.clamp(_astSweepX, 0, 1); }
       return x;
@@ -20497,6 +20499,7 @@ const _origUpdateShockwave = _updateShockwave;
 let _jlRampTime      = 0;   // seconds elapsed in Jet Lightning mode
 let _jlRecenterActive = false; // true while funnel pattern is correcting drift
 let _jlRecenterT      = 0;    // how long recenter has been active
+let _jlRecenterBase   = 0;    // fixed sweep base X during recenter (center=0, not live shipX)
 
 function startJetLightning() {
   // ── Flag ──────────────────────────────────────────────────────────────────
@@ -20878,16 +20881,16 @@ function _tickJetLightningRamp(dt) {
       _jlRecenterActive = true;
       _jlRecenterT      = 0;
       const _side = Math.sign(state.shipX);
-      // Project where ship is heading: shipX + velocity offset so first asteroid
-      // leads the ship's current drift direction, funnelling them back to center
-      const _headingX = (state.shipX || 0) + Math.sign(state.shipVelX || _side) * 8;
+      // Lock recenter base at 0 (center) so sweep corridor is always between ship and center
+      _jlRecenterBase = 0;
       _T.pattern    = 'sweep';
       _T.sweepSpeed = 0.55;
-      // Sweep starts at heading position and walks toward center (0)
-      _T.laneMin    = _side > 0 ?  0 : Math.min(_headingX, -4);
-      _T.laneMax    = _side > 0 ? Math.max(_headingX,  4) :  0;
-      _astSweepX    = _side > 0 ? 1.0 : 0.0;  // start at the far (heading) end
-      _astSweepDir  = _side > 0 ? -1  :  1;   // sweep toward center
+      // Range covers from center (0) out to where the ship currently is + buffer
+      const _reach = Math.min(Math.abs(state.shipX || 0) + 12, 60);
+      _T.laneMin    = _side > 0 ?  0 : -_reach;
+      _T.laneMax    = _side > 0 ?  _reach :  0;
+      _astSweepX    = _side > 0 ? 1.0 : 0.0;  // start near ship, sweep toward center
+      _astSweepDir  = _side > 0 ? -1  :  1;
     }
 
     if (_jlRecenterActive) {
