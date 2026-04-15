@@ -7274,7 +7274,7 @@ const _canyonTuner = {
   tileLength:       300,   // Z length of each tile (2 tiles per side leapfrog)
   segsX:            10,    // subdivisions across face (horizontal jaggedness)
   segsZ:            60,    // subdivisions along Z (vertical scroll jaggedness)
-  displacement:     28,    // outward X jag on face verts
+  displacement:     60,    // outward X extent of cliff face beyond halfX
   topRagged:        22,    // extra Y noise on top edge
   scrollSpeed:      1.0,   // multiplier of game speed
   emissiveIntensity: 1.6,
@@ -17097,6 +17097,7 @@ window.addEventListener('keydown', (e) => {
       // Walls start wide and squeeze on their own — do NOT touch corridor cone spawner
       _jlCorridor._lastHalfX = CORRIDOR_WIDE_X; // start wide
       _canyonSqueezeRow = 0;                     // reset squeeze counter
+      _canyonSqueezeZ   = 0;
       if (!_canyonWalls) _createCanyonWalls();
       console.log('[CANYON] ON');
     } else {
