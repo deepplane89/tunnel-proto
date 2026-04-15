@@ -7284,7 +7284,7 @@ const _canyonTuner = {
   freezeWide:    false,
   canyonHalfX:   18,   // gap half-width — narrow canyon matching AI pic
   baseColor:     '#0d1a26',  // near-black dark teal-purple
-  brightness:    1.2,
+  brightness:    0.5,  // keep base fill sub-bloom; grid lines still pop via canvas HDR values
   gridColor:     '#00eeff',
   gridOpacity:   0.45,
   crackOpacity:  0.6,   // bold veins
@@ -7880,8 +7880,8 @@ function _createCanyonWalls() {
   const gridTex = _makeCanyonGridTexture();
   gridTex.repeat.set(1, 1);
   const mat = new THREE.MeshStandardMaterial({
-    color:             0xffffff,
-    vertexColors:      true,
+    color:             0x000000,   // all light from emissive
+    vertexColors:      false,      // strata baked into emissiveMap V gradient instead
     emissive:          0xffffff,
     emissiveMap:       gridTex,
     emissiveIntensity: T.brightness * 1.8,
@@ -17484,8 +17484,17 @@ window.addEventListener('keydown', (e) => {
   if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
     _canyonActive = !_canyonActive;
     if (_canyonActive) {
-      // Start fresh L3 corridor — sine math runs in spawnCorridorRow, cones suppressed by _canyonActive flag
-      _jlStartCorridor('l3');
+      // Reset corridor state to row 0 with NO delay — ribbon is pre-baked from row 0
+      // so the live sine counter must stay in lockstep with the geometry from frame 1.
+      state.corridorRowsDone  = 0;
+      state.corridorSineT     = 0;
+      state.corridorSpawnZ    = -7;
+      state.corridorDelay     = 0;   // no delay — geometry is already there
+      state.corridorGapCenter = 0;
+      state.corridorGapDir    = 1;
+      _jlCorridor.active      = true;
+      _jlCorridor.type        = 'l3';
+      _jlCorridor.totalRows   = 750;
       if (!_canyonWalls) _createCanyonWalls();
       const w = _canyonWalls;
       const T = _canyonTuner;
