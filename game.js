@@ -7271,12 +7271,14 @@ function _updateTerrainWalls(dt, speed) {
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
   height:           80,    // total slab height (Y)
-  tileLength:       300,   // Z length of each tile (2 tiles per side leapfrog)
+  tileLength:       400,   // Z length of each tile (2 tiles per side leapfrog)
   segsX:            10,    // subdivisions across face (horizontal jaggedness)
-  segsZ:            60,    // subdivisions along Z (vertical scroll jaggedness)
-  displacement:     60,    // outward X extent of cliff face beyond halfX
+  segsZ:            80,    // subdivisions along Z (vertical scroll jaggedness)
+  displacement:     60,    // outward X jaggedness on face verts
+  wallWidth:        120,   // flat lateral extent of wall face beyond halfX
   topRagged:        22,    // extra Y noise on top edge
   scrollSpeed:      1.0,   // multiplier of game speed
+  freezeWide:       true,  // DEBUG: hold walls at wide open, no squeeze
   emissiveIntensity: 1.6,
   gridColor:        '#00eeff',
   gridOpacity:      0.18,
@@ -7376,7 +7378,8 @@ function _buildCanyonSlabGeo(side) {
       const n2 = Math.sin(px * 5.7 + py * 3.1) * 0.25;
       const n3 = Math.abs(Math.sin(px * 3.2 + py * 5.5)) * 0.28;
       const noise = 0.4 + n1 + n2 + n3;
-      const dx = Math.max(0, noise) * T.displacement * side; // outward in X
+      // wallWidth = flat lateral extent, displacement = noise on top
+      const dx = (T.wallWidth + Math.max(0, noise) * T.displacement) * side;
 
       // Top-edge ragged in Y
       let dy = 0;
@@ -7512,25 +7515,30 @@ function _destroyCanyonWalls() {
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || !_canyonActive) return;
   const T = _canyonTuner;
-  const scroll = speed * dt * T.scrollSpeed;
+  const effectiveSpd = (speed && speed > 1) ? speed : BASE_SPEED;
+  const scroll = effectiveSpd * dt * T.scrollSpeed;
 
   // ── Independent squeeze: advance row counter by Z distance traveled
-  _canyonSqueezeZ += scroll;
-  while (_canyonSqueezeZ >= 7) {
-    _canyonSqueezeZ -= 7;
-    _canyonSqueezeRow++;
-  }
-  // Compute halfX using exact same L3 formula
   let halfX;
-  const rd = _canyonSqueezeRow;
-  if (rd < CORRIDOR_CLOSE_ROWS) {
-    const t2 = rd / CORRIDOR_CLOSE_ROWS;
-    const ease = t2 < 0.5 ? 2*t2*t2 : -1+(4-2*t2)*t2;
-    halfX = CORRIDOR_WIDE_X + (CORRIDOR_NARROW_X - CORRIDOR_WIDE_X) * ease;
+  if (T.freezeWide) {
+    halfX = CORRIDOR_WIDE_X; // hold wide for geometry testing
   } else {
-    const cr = Math.max(0, rd - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS));
-    const sq = Math.min(1, cr / CORRIDOR_AMP_RAMP);
-    halfX = CORRIDOR_NARROW_X - (CORRIDOR_NARROW_X - 6) * (sq * sq);
+    _canyonSqueezeZ += scroll;
+    while (_canyonSqueezeZ >= 7) {
+      _canyonSqueezeZ -= 7;
+      _canyonSqueezeRow++;
+    }
+    // Compute halfX using exact same L3 formula
+    const rd = _canyonSqueezeRow;
+    if (rd < CORRIDOR_CLOSE_ROWS) {
+      const t2 = rd / CORRIDOR_CLOSE_ROWS;
+      const ease = t2 < 0.5 ? 2*t2*t2 : -1+(4-2*t2)*t2;
+      halfX = CORRIDOR_WIDE_X + (CORRIDOR_NARROW_X - CORRIDOR_WIDE_X) * ease;
+    } else {
+      const cr = Math.max(0, rd - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS));
+      const sq = Math.min(1, cr / CORRIDOR_AMP_RAMP);
+      halfX = CORRIDOR_NARROW_X - (CORRIDOR_NARROW_X - 6) * (sq * sq);
+    }
   }
 
   // Canyon center follows corridorGapCenter if a cone corridor is also active,
