@@ -20877,21 +20877,24 @@ function _tickJetLightningRamp(dt) {
     const _DRIFT_THRESH = 25;  // units from center before funnel kicks in
     const _RECENTER_DUR = 5.0; // seconds of funnel before releasing
 
+    console.log('[recenter] driftX='+_driftX.toFixed(1)+' thresh='+_DRIFT_THRESH+' active='+_jlRecenterActive+' pattern='+_T.pattern+' enabled='+_T.enabled);
     if (!_jlRecenterActive && _driftX > _DRIFT_THRESH && _T.enabled && _T.pattern === 'stagger') {
       _jlRecenterActive = true;
       _jlRecenterT      = 0;
       const _side = Math.sign(state.shipX);
-      // Sweep is OUTSIDE the ship — asteroids spawn beyond the ship to wall it off
-      // from drifting further, forcing it to turn back toward center
       const _shipX  = state.shipX || 0;
-      _jlRecenterBase = _shipX; // base locked at ship position at trigger moment
+      _jlRecenterBase = 0; // base at center — range is in world space
       _T.pattern    = 'sweep';
       _T.sweepSpeed = 0.55;
-      // Range is outward from ship: ship edge → ship + 35 units further out
-      _T.laneMin    = _side > 0 ?  0 : -35;
-      _T.laneMax    = _side > 0 ?  35 :  0;
-      _astSweepX    = _side > 0 ? 0.0 : 1.0;  // start at ship, sweep outward
-      _astSweepDir  = _side > 0 ?  1  : -1;   // sweeps away from center (walls ship off)
+      // Place sweep corridor just outside ship position, extending further out
+      // sweepBase=0, so x = 0 + (sweepX-0.5)*range
+      // We want x to go from _shipX to _shipX+20 (outward wall)
+      // So: laneMin=_shipX, laneMax=_shipX+20*side
+      _T.laneMin    = _side > 0 ?  _shipX        : -(_shipX + 20);
+      _T.laneMax    = _side > 0 ?  (_shipX + 20) : -_shipX;
+      _astSweepX    = _side > 0 ? 0.0 : 1.0;
+      _astSweepDir  = _side > 0 ?  1  : -1;
+      console.log('[recenter] TRIGGERED side='+_side+' shipX='+_shipX.toFixed(1)+' laneMin='+_T.laneMin.toFixed(1)+' laneMax='+_T.laneMax.toFixed(1));
     }
 
     if (_jlRecenterActive) {
