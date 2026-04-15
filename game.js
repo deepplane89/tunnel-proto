@@ -19993,10 +19993,13 @@ function _tickAsteroidSpawner(dt) {
             if (state.phase !== 'playing') return;
             const _useFixed = Math.random() < T.fixedXChance;
             const [_fxMin, _fxMax] = T.fixedXRange;
+            const _sx = state.shipX || 0;
+            // Fixed X is relative to shipX so it always lands near the player
+            // offset direction is random so both sides get covered
             const _targetX = _useFixed
-              ? (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
-              : state.shipX;
-            console.log('[fixedX-fallback] useFixed='+_useFixed+' targetX='+_targetX.toFixed(1));
+              ? _sx + (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
+              : _sx;
+            console.log('[fixedX-fallback] useFixed='+_useFixed+' targetX='+_targetX.toFixed(1)+' shipX='+_sx.toFixed(1));
             _spawnAsteroid(_targetX);
           }, si * T.staggerGap * 1000);
         }
@@ -20283,10 +20286,10 @@ const _origUpdateShockwave = _updateShockwave;
           // 1-in-N chance: spawn at random fixed X to punish lateral camping
           const _useFixed = Math.random() < T.fixedXChance;
           const [_fxMin, _fxMax] = T.fixedXRange;
+          const _sx = state.shipX || 0;
           const _targetX = _useFixed
-            ? (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
-            : state.shipX;
-          console.log('[fixedX] chance='+T.fixedXChance+' useFixed='+_useFixed+' targetX='+_targetX.toFixed(1)+' range='+JSON.stringify(T.fixedXRange));
+            ? _sx + (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
+            : _sx;
           _spawnAsteroid(_targetX);
           if (T.staggerDual && !_useFixed) {
             const spawnY = T.skyHeight;
