@@ -17109,6 +17109,21 @@ window.addEventListener('keydown', (e) => {
       if (!_canyonWalls) _createCanyonWalls();
       const w = _canyonWalls;
       const T = _canyonTuner;
+      // Also log positions after 1 frame so _updateCanyonWalls has run
+      setTimeout(() => {
+        if (!_canyonWalls) return;
+        console.log('[CANYON] 500ms check — paste this:\n' + JSON.stringify({
+          meshPositions: _canyonWalls.strips.map((m,i) => ({
+            i, side: i < 2 ? 'LEFT' : 'RIGHT',
+            x: +m.position.x.toFixed(1),
+            y: +m.position.y.toFixed(1),
+            z: +m.position.z.toFixed(1),
+            geoVertCount: m.geometry.attributes.position.count,
+            firstVertX:   +m.geometry.attributes.position.getX(0).toFixed(1),
+            lastVertX:    +m.geometry.attributes.position.getX(m.geometry.attributes.position.count-1).toFixed(1),
+          }))
+        }, null, 2));
+      }, 500);
       console.log('[CANYON] ON — paste this:\n' + JSON.stringify({
         freezeWide:   T.freezeWide,
         wallWidth:    T.wallWidth,
