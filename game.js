@@ -7274,7 +7274,7 @@ const _canyonTuner = {
   tileLength:       300,   // Z length of each tile (2 tiles per side leapfrog)
   segsX:            10,    // subdivisions across face (horizontal jaggedness)
   segsZ:            60,    // subdivisions along Z (vertical scroll jaggedness)
-  displacement:     14,    // outward X jag on face verts
+  displacement:     28,    // outward X jag on face verts
   topRagged:        22,    // extra Y noise on top edge
   scrollSpeed:      1.0,   // multiplier of game speed
   emissiveIntensity: 1.6,
@@ -15756,12 +15756,6 @@ function update(dt) {
       _updateTerrainWalls(dt, effectiveSpeed);
     }
 
-    // Canyon corridor walls — update every frame when active
-    if (_canyonActive) {
-      if (!_canyonWalls) _createCanyonWalls();
-      _updateCanyonWalls(dt, effectiveSpeed);
-    }
-
     if (state._tutorialStep === 0) {
       // ── STEP 0: Show instruction box, wait for tap ──
       _tutShowInstructionBox(
@@ -17096,8 +17090,8 @@ window.addEventListener('keydown', (e) => {
     dbgVisible = !dbgVisible;
     dbgEl.classList.toggle('visible', dbgVisible);
   }
-  // C — toggle canyon corridor test (JL mode only, no cone spawning)
-  if ((e.key === 'c' || e.key === 'C') && state._jetLightningMode && state.phase === 'playing') {
+  // C — toggle canyon corridor test (any mode, no cone spawning)
+  if ((e.key === 'c' || e.key === 'C') && state.phase === 'playing') {
     _canyonActive = !_canyonActive;
     if (_canyonActive) {
       // Walls start wide and squeeze on their own — do NOT touch corridor cone spawner
@@ -20415,6 +20409,11 @@ const _origUpdateShockwave = _updateShockwave;
       }
     }
     _updateAsteroids(dt);
+    // Canyon corridor walls — runs in any mode when active
+    if (_canyonActive) {
+      if (!_canyonWalls) _createCanyonWalls();
+      _updateCanyonWalls(dt, state.speed);
+    }
     _origComposerRender(...args);
   };
 })();
