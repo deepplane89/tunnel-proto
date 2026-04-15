@@ -7345,35 +7345,92 @@ function _makeCanyonGridTexture() {
   return tex;
 }
 
-function _displaceCanyonSlab(geo, side) {
-  // Called BEFORE any rotation so axes are still in default PlaneGeometry space:
-  //   X spans width (will become Z after rotateY), Y spans height, Z=0 (will become X)
-  // We displace in Z (outward from wall face) + Y (top ragging)
+function _buildCanyonSlabGeo(side) {
+  // Builds a cliff-face wall running along Z, spanning Y in height.
+  // X position of each vert = 0 (mesh.position.x sets the wall X) plus outward displacement.
+  // side = -1: left wall, displace in -X (verts pushed left/outward)
+  // side =  1: right wall, displace in +X (verts pushed right/outward)
+  // Face normal points inward (toward ship center) naturally from winding order.
   const T = _canyonTuner;
-  const pos = geo.attributes.position;
-  const uv  = geo.attributes.uv;
-  for (let i = 0; i < pos.count; i++) {
-    const u = uv.getX(i);  // 0..1 across width (Z axis after rotation)
-    const v = uv.getY(i);  // 0..1 along height (Y axis)
-    const y = pos.getY(i);
+  const cols = T.segsZ + 1; // Z-axis subdivisions (along corridor)
+  const rows = T.segsX + 1; // Y-axis subdivisions (height)
+  const totalVerts = cols * rows;
+
+  const positions = new Float32Array(totalVerts * 3);
+  const normals   = new Float32Array(totalVerts * 3);
+  const uvs       = new Float32Array(totalVerts * 2);
+
+  for (let row = 0; row < rows; row++) {
+    const v = row / (rows - 1);                     // 0=bottom, 1=top
+    const y = (v - 0.5) * T.height;                 // centred: -height/2 to +height/2
     const isTop = v > 0.85;
-    // Outward face displacement — push in Z (becomes outward X after rotateY)
-    const px = u * 18.0;
-    const py = v * 12.0;
-    const n1 = Math.sin(px * 2.1 + py * 1.3) * 0.35;
-    const n2 = Math.sin(px * 5.7 + py * 3.1) * 0.25;
-    const n3 = Math.abs(Math.sin(px * 3.2 + py * 5.5)) * 0.28;
-    const noise = 0.4 + n1 + n2 + n3;
-    // side 1=right pushes +Z (becomes +X), side -1=left pushes -Z (becomes -X)
-    pos.setZ(i, Math.max(0, noise) * T.displacement * side);
-    // Top edge ragged in Y
-    if (isTop) {
-      const topNoise = Math.sin(u * 31.7) * 0.4 + Math.sin(u * 17.3 + 1.2) * 0.35 + Math.sin(u * 7.1) * 0.25;
-      pos.setY(i, y + (0.5 + topNoise) * T.topRagged);
+
+    for (let col = 0; col < cols; col++) {
+      const u = col / (cols - 1);                   // 0=near, 1=far
+      const z = -u * T.tileLength;                  // runs into the screen (negative Z = far)
+
+      // Fractal noise for face displacement
+      const px = u * 18.0;
+      const py = v * 12.0;
+      const n1 = Math.sin(px * 2.1 + py * 1.3) * 0.35;
+      const n2 = Math.sin(px * 5.7 + py * 3.1) * 0.25;
+      const n3 = Math.abs(Math.sin(px * 3.2 + py * 5.5)) * 0.28;
+      const noise = 0.4 + n1 + n2 + n3;
+      const dx = Math.max(0, noise) * T.displacement * side; // outward in X
+
+      // Top-edge ragged in Y
+      let dy = 0;
+      if (isTop) {
+        const topNoise = Math.sin(u * 31.7) * 0.4 + Math.sin(u * 17.3 + 1.2) * 0.35 + Math.sin(u * 7.1) * 0.25;
+        dy = (0.5 + topNoise) * T.topRagged;
+      }
+
+      const idx = row * cols + col;
+      positions[idx * 3 + 0] = dx;      // X: displacement only (mesh.position.x sets wall X)
+      positions[idx * 3 + 1] = y + dy;  // Y
+      positions[idx * 3 + 2] = z;       // Z: runs along corridor
+
+      uvs[idx * 2 + 0] = u;
+      uvs[idx * 2 + 1] = v;
+
+      // Normal points inward toward ship (opposite of side)
+      normals[idx * 3 + 0] = -side;
+      normals[idx * 3 + 1] = 0;
+      normals[idx * 3 + 2] = 0;
     }
   }
-  pos.needsUpdate = true;
+
+  // Build index buffer — two triangles per quad, winding inward
+  const numQuads = T.segsZ * T.segsX;
+  const indices = new Uint32Array(numQuads * 6);
+  let ii = 0;
+  for (let row = 0; row < T.segsX; row++) {
+    for (let col = 0; col < T.segsZ; col++) {
+      const a = row * cols + col;
+      const b = a + 1;
+      const c = a + cols;
+      const d = c + 1;
+      // Wind so inward-facing normal is correct
+      if (side === 1) {
+        // right wall: face normal = -X, CCW when viewed from -X (inside)
+        indices[ii++] = a; indices[ii++] = c; indices[ii++] = b;
+        indices[ii++] = b; indices[ii++] = c; indices[ii++] = d;
+      } else {
+        // left wall: face normal = +X, CCW when viewed from +X (inside)
+        indices[ii++] = a; indices[ii++] = b; indices[ii++] = c;
+        indices[ii++] = b; indices[ii++] = d; indices[ii++] = c;
+      }
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('normal',   new THREE.BufferAttribute(normals,   3));
+  geo.setAttribute('uv',       new THREE.BufferAttribute(uvs,       2));
+  geo.setIndex(new THREE.BufferAttribute(indices, 1));
+  // flatShading recomputes normals per face — recompute after index is set
   geo.computeVertexNormals();
+  return geo;
 }
 
 function _createCanyonWalls() {
@@ -7412,28 +7469,33 @@ function _createCanyonWalls() {
   });
 
   function makeSlab(side, zOff) {
-    // PlaneGeometry default: faces +Z, X=width, Y=height
-    // We want: faces inward (+X for left wall, -X for right wall), length runs along Z
-    // Step 1: displace in Z (outward) BEFORE rotation
-    // Step 2: rotateY so the face points inward in X
-    //   left wall  (side=-1): rotateY(-PI/2) — face now points +X (toward ship)
-    //   right wall (side= 1): rotateY( PI/2) — face now points -X (toward ship)
-    const geo = new THREE.PlaneGeometry(T.tileLength, T.height, T.segsZ, T.segsX);
-    _displaceCanyonSlab(geo, side);          // displace in Z before rotation
-    geo.rotateY(side === -1 ? -Math.PI / 2 : Math.PI / 2); // now Z displacement → outward X
+    // No rotation. Wall runs along Z, face points inward.
+    // mesh.position.x is set each frame by _updateCanyonWalls.
+    const geo = new THREE.BufferGeometry();
+    const src = _buildCanyonSlabGeo(side);
+    // Clone attributes so each tile has independent geometry (for future per-tile variance)
+    geo.setAttribute('position', src.attributes.position.clone());
+    geo.setAttribute('normal',   src.attributes.normal.clone());
+    geo.setAttribute('uv',       src.attributes.uv.clone());
+    geo.setIndex(src.index.clone());
+    src.dispose();
+
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.y = T.height / 2 - 25;    // bottom of slab at water level (baseY=-25)
-    mesh.position.z = zOff;                  // start far ahead
+    // Y: centre of geo is already centred (−height/2 to +height/2),
+    // shift so bottom sits at y = -25 (water level)
+    mesh.position.y = -25 + T.height / 2;  // = 15 for height=80
+    // Z: second tile starts one tileLength further
+    mesh.position.z = zOff;
     mesh.frustumCulled = false;
     scene.add(mesh);
     return mesh;
   }
 
-  // Spawn both tiles far ahead in negative Z, leapfrog from there
-  const lA = makeSlab(-1, -T.tileLength);
-  const lB = makeSlab(-1, -T.tileLength * 2);
-  const rA = makeSlab( 1, -T.tileLength);
-  const rB = makeSlab( 1, -T.tileLength * 2);
+  // Two tiles per side — start at SPAWN_Z so walls are visible immediately
+  const lA = makeSlab(-1, SPAWN_Z);
+  const lB = makeSlab(-1, SPAWN_Z - T.tileLength);
+  const rA = makeSlab( 1, SPAWN_Z);
+  const rB = makeSlab( 1, SPAWN_Z - T.tileLength);
   _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex, metalTex,
                    left: [lA, lB], right: [rA, rB] };
 }
