@@ -17107,7 +17107,25 @@ window.addEventListener('keydown', (e) => {
       _canyonSqueezeRow = 0;                     // reset squeeze counter
       _canyonSqueezeZ   = 0;
       if (!_canyonWalls) _createCanyonWalls();
-      console.log('[CANYON] ON');
+      const w = _canyonWalls;
+      const T = _canyonTuner;
+      console.log('[CANYON] ON — paste this:\n' + JSON.stringify({
+        freezeWide:   T.freezeWide,
+        wallWidth:    T.wallWidth,
+        displacement: T.displacement,
+        tileLength:   T.tileLength,
+        halfX:        CORRIDOR_WIDE_X,
+        speed:        state.speed,
+        phase:        state.phase,
+        jlMode:       state._jetLightningMode,
+        meshCount:    w ? w.strips.length : 0,
+        meshPositions: w ? w.strips.map(m => ({
+          x: +m.position.x.toFixed(1),
+          y: +m.position.y.toFixed(1),
+          z: +m.position.z.toFixed(1),
+          visible: m.visible
+        })) : []
+      }, null, 2));
     } else {
       _destroyCanyonWalls();
       console.log('[CANYON] OFF');
