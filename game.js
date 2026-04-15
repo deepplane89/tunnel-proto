@@ -7983,6 +7983,32 @@ function _playLightningStrike() {
   sub.start(now);  sub.stop(now + 1.1);
 }
 
+function _playAsteroidImpact() {
+  // Same boom as lightning but quieter (0.07 vs 0.22)
+  if (!audioCtx || state.muted) return;
+  _ensureCtxRunning();
+  const vol = 0.07 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (vol <= 0) return;
+  const now = audioCtx.currentTime;
+  const boom = audioCtx.createOscillator();
+  boom.type = 'sine';
+  boom.frequency.setValueAtTime(55, now);
+  boom.frequency.exponentialRampToValueAtTime(28, now + 0.9);
+  const sub = audioCtx.createOscillator();
+  sub.type = 'triangle';
+  sub.frequency.setValueAtTime(38, now);
+  sub.frequency.exponentialRampToValueAtTime(18, now + 1.1);
+  const boomGain = audioCtx.createGain();
+  boomGain.gain.setValueAtTime(0.001, now);
+  boomGain.gain.linearRampToValueAtTime(vol * 0.9, now + 0.04);
+  boomGain.gain.exponentialRampToValueAtTime(vol * 0.4, now + 0.3);
+  boomGain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+  boom.connect(boomGain).connect(audioCtx.destination);
+  sub.connect(boomGain);
+  boom.start(now); boom.stop(now + 1.1);
+  sub.start(now);  sub.stop(now + 1.1);
+}
+
 function playPickup(typeIdx) {
   if (!audioCtx || state.muted) return;
   const freqs = [880, 1100, 660, 990, 770, 660];
@@ -19309,10 +19335,11 @@ const _asteroidTuner = {
   chaseRampEnd:   1.2,     // final mirror interval (seconds) — ruthless
   chaseRampDuration: 90,   // seconds over which ramp plays out
   // Filler (decorative background asteroids)
-  fixedXChance:   0.25,   // probability (0-1) a stagger asteroid spawns at random fixed X instead of ship X
-  fixedXRange:    [20, 60], // [min, max] absolute X for fixed spawns
-  leadVelThresh:  8.0,     // shipVelX magnitude that triggers velocity-lead warning spawn
-  leadTimeMult:   2.0,     // seconds to project ahead (leadX = shipX + velX * leadTimeMult)
+  lateralEnabled: true,   // spawn lateral asteroids on own timer independent of stagger
+  lateralFreq:    0.8,    // seconds between lateral spawns
+  lateralMinOff:  15,     // min X offset from shipX
+  lateralMaxOff:  50,     // max X offset from shipX
+  _lateralTimer:  0,      // internal timer
   fillerEnabled:  true,    // toggle on/off
   fillerFreq:      0.4,    // seconds between filler spawns
   fillerLaneMin:  -20,     // X range — wider than normal to sell depth
@@ -19725,7 +19752,6 @@ function _spawnAsteroid(targetX) {
   inst.totalFallTime = totalTime;
   inst.elapsed  = 0;
   inst.warnTimer = 0;
-  inst.forceWarning = false; // set true for lead-time spawns to show warning circle regardless of T.showWarning
   inst.tailWriteIdx = 0;
   inst.tailTimer = 0;
   // Reset tail history
@@ -19749,6 +19775,7 @@ function _killAsteroid(inst, impact) {
   if (impact) {
     // Water shockwave at landing point
     _triggerShockwave(new THREE.Vector3(inst.landingX, 0.5, inst.landingZ));
+    if (!inst.isFiller) _playAsteroidImpact();
     // Burst wake rings (capped at 3 to avoid frame hitch)
     for (let ri = 0; ri < 3; ri++) {
       spawnWakeRing(
@@ -19844,7 +19871,7 @@ function _updateAsteroids(dt) {
     inst.light.intensity = fadeT * (0.8 + progress * 2.2) * inst.radius;
 
     // Show warning disc once asteroid is visible enough (respects toggle)
-    if ((T.showWarning || inst.forceWarning) && fadeT > 0.3 && progress < 0.88) inst.warnMesh.visible = true;
+    if (T.showWarning && fadeT > 0.3 && progress < 0.88) inst.warnMesh.visible = true;
     else inst.warnMesh.visible = false;
 
     // Update shader uniforms
@@ -19995,22 +20022,7 @@ function _tickAsteroidSpawner(dt) {
         for (let si = 0; si < steps; si++) {
           setTimeout(() => {
             if (state.phase !== 'playing') return;
-            const _useFixed = Math.random() < T.fixedXChance;
-            const [_fxMin, _fxMax] = T.fixedXRange;
-            const _sx = state.shipX || 0;
-            // Fixed X is relative to shipX so it always lands near the player
-            // offset direction is random so both sides get covered
-            const _targetX = _useFixed
-              ? _sx + (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
-              : _sx;
-            _spawnAsteroid(_targetX);
-            // Velocity-lead spawn: if holding hard lateral, spawn a warned asteroid ahead
-            const _velX = state.shipVelX || 0;
-            if (Math.abs(_velX) > T.leadVelThresh) {
-              const _leadX = _sx + _velX * T.leadTimeMult;
-              const _leadInst = _spawnAsteroid(_leadX);
-              if (_leadInst) _leadInst.forceWarning = true;
-            }
+            _spawnAsteroid(state.shipX || 0);
           }, si * T.staggerGap * 1000);
         }
       }
@@ -20025,14 +20037,7 @@ function _tickAsteroidSpawner(dt) {
         _spawnAsteroid(targetX);
       }
     } else {
-      // 1-in-4 chance: spawn at a random fixed X instead of tracking ship
-      // This punishes lateral camping — the outer lanes aren't safe ground
-      const _useFixed = Math.random() < T.fixedXChance;
-      const [_fxMin, _fxMax] = T.fixedXRange;
-      const _spawnX = _useFixed
-        ? (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
-        : _astNextTargetX();
-      _spawnAsteroid(_spawnX);
+      _spawnAsteroid(_astNextTargetX());
     }
   }
 
@@ -20042,6 +20047,18 @@ function _tickAsteroidSpawner(dt) {
     if (_astFillerTimer <= 0) {
       _astFillerTimer = T.fillerFreq * (0.6 + Math.random() * 0.8);
       _spawnFillerAsteroid();
+    }
+  }
+
+  // ── Lateral camp punish — independent timer, spawns offset from shipX ──
+  if (T.lateralEnabled && state._jetLightningMode) {
+    T._lateralTimer -= dt;
+    if (T._lateralTimer <= 0) {
+      T._lateralTimer = T.lateralFreq * (0.7 + Math.random() * 0.6);
+      const side = Math.random() < 0.5 ? 1 : -1;
+      const offset = T.lateralMinOff + Math.random() * (T.lateralMaxOff - T.lateralMinOff);
+      const sx = (state && state.shipX) || 0;
+      _spawnAsteroid(sx + side * offset);
     }
   }
 }
@@ -20293,21 +20310,8 @@ const _origUpdateShockwave = _updateShockwave;
       for (let si = 0; si < steps; si++) {
         setTimeout(() => {
           if (state.phase !== 'playing') return;
-          // 1-in-N chance: spawn at random fixed X to punish lateral camping
-          const _useFixed = Math.random() < T.fixedXChance;
-          const [_fxMin, _fxMax] = T.fixedXRange;
-          const _sx = state.shipX || 0;
-          const _targetX = _useFixed
-            ? _sx + (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
-            : _sx;
-          const _leadInst2 = _spawnAsteroid(_targetX);
-          // Velocity-lead warning spawn
-          const _velX2 = state.shipVelX || 0;
-          if (Math.abs(_velX2) > T.leadVelThresh) {
-            const _leadInst = _spawnAsteroid((state.shipX || 0) + _velX2 * T.leadTimeMult);
-            if (_leadInst) _leadInst.forceWarning = true;
-          }
-          if (T.staggerDual && !_useFixed) {
+          _spawnAsteroid(state.shipX || 0);
+          if (T.staggerDual) {
             const spawnY = T.skyHeight;
             const totalTime = Math.sqrt((0 - spawnY) ** 2 + (3.9 - (-160)) ** 2) / T.speed;
             const leadX = state.shipX + (state.shipVelX || 0) * totalTime * T.leadFactor;
@@ -20509,11 +20513,10 @@ const _origUpdateShockwave = _updateShockwave;
 
     // ── LATERAL section
     panel.appendChild(makeHeader('LATERAL CAMP PUNISH', '#fa4'));
-    panel.appendChild(makeSlider('fixed X chance', T.fixedXChance, 0, 1, 0.05, v => T.fixedXChance = v, '#fa4').row);
-    panel.appendChild(makeSlider('fixed X min', T.fixedXRange[0], 0, 60, 1, v => T.fixedXRange[0] = v, '#fa4').row);
-    panel.appendChild(makeSlider('fixed X max', T.fixedXRange[1], 0, 80, 1, v => T.fixedXRange[1] = v, '#fa4').row);
-    panel.appendChild(makeSlider('lead vel thresh', T.leadVelThresh, 1, 25, 0.5, v => T.leadVelThresh = v, '#fa4').row);
-    panel.appendChild(makeSlider('lead time mult', T.leadTimeMult, 0.5, 5.0, 0.1, v => T.leadTimeMult = v, '#fa4').row);
+    panel.appendChild(makeToggle('enabled', () => T.lateralEnabled, v => { T.lateralEnabled = v; }));
+    panel.appendChild(makeSlider('frequency (s)', T.lateralFreq, 0.1, 5.0, 0.1, v => T.lateralFreq = v, '#fa4').row);
+    panel.appendChild(makeSlider('min offset', T.lateralMinOff, 0, 60, 1, v => T.lateralMinOff = v, '#fa4').row);
+    panel.appendChild(makeSlider('max offset', T.lateralMaxOff, 0, 100, 1, v => T.lateralMaxOff = v, '#fa4').row);
     // ── FILLER section
     panel.appendChild(makeHeader('FILLER (decorative)', '#88f'));
     panel.appendChild(makeToggle('enabled (JL stagger only)', () => T.fillerEnabled, v => { T.fillerEnabled = v; }));
@@ -20789,15 +20792,17 @@ function _jlApplyAsteroidTrack(track) {
   const T = _asteroidTuner;
   const s = track.settings;
   // Preserve user-tunable values that track settings must never overwrite
-  const _keepFixedXChance  = T.fixedXChance;
-  const _keepFixedXRange   = T.fixedXRange;
-  const _keepLeadVelThresh = T.leadVelThresh;
-  const _keepLeadTimeMult  = T.leadTimeMult;
+  const _keepLateralEnabled = T.lateralEnabled;
+  const _keepLateralFreq    = T.lateralFreq;
+  const _keepLateralMinOff  = T.lateralMinOff;
+  const _keepLateralMaxOff  = T.lateralMaxOff;
+  const _keepLateralTimer   = T._lateralTimer;
   for (const k of Object.keys(s)) T[k] = s[k];
-  T.fixedXChance  = _keepFixedXChance;
-  T.fixedXRange   = _keepFixedXRange;
-  T.leadVelThresh = _keepLeadVelThresh;
-  T.leadTimeMult  = _keepLeadTimeMult;
+  T.lateralEnabled = _keepLateralEnabled;
+  T.lateralFreq    = _keepLateralFreq;
+  T.lateralMinOff  = _keepLateralMinOff;
+  T.lateralMaxOff  = _keepLateralMaxOff;
+  T._lateralTimer  = _keepLateralTimer;
   if (s.frequency !== undefined) T.frequency = s.frequency / _jlIntensity;
   if (s.size      !== undefined) T.size      = s.size      * _jlSizeScalar;
   T.enabled = true; // always re-enable when a track is active
