@@ -7281,7 +7281,7 @@ const _canyonTuner = {
   slopeLean:     0.0,
   fillLight:     0.4,
   scrollSpeed:   1.0,
-  freezeWide:    true,
+  freezeWide:    false,
   canyonHalfX:   45,   // gap half-width (canyon only — does not affect JL corridor)
   baseColor:     '#0d1a26',  // near-black dark teal-purple
   brightness:    1.2,
@@ -7299,6 +7299,8 @@ const _canyonTuner = {
   bloomRadius:   0.7,
   bloomColor:    '#00e6ff',
   bloomOpacity:  0.65,
+  veinBloom:     0.5,   // radial glow intensity behind vein slabs
+  gridGlow:      0.5,   // extra glow intensity on bright grid slabs
   dividerOpacity: 0.4,
 };
 let _canyonWalls = null;
@@ -7338,13 +7340,24 @@ function _makeCanyonGridTexture() {
       // Flood this slab with a bright cyan glow
       const gc = parseInt(T.gridColor.slice(1), 16);
       const gr2 = (gc >> 16) & 0xff, gg2 = (gc >> 8) & 0xff, gb2 = gc & 0xff;
-      const grd = ctx.createLinearGradient(sx0, 0, sx1, 0);
-      grd.addColorStop(0,   `rgba(${gr2},${gg2},${gb2},0.18)`);
-      grd.addColorStop(0.5, `rgba(${gr2},${gg2},${gb2},0.32)`);
-      grd.addColorStop(1,   `rgba(${gr2},${gg2},${gb2},0.18)`);
+      const glowAmt = T.gridGlow || 0;
+      // Solid bright cyan base — scales from dark teal to full cyan with gridGlow
+      const baseAlpha = (0.08 + glowAmt * 0.55).toFixed(2);
+      ctx.fillStyle = `rgba(${gr2},${gg2},${gb2},${baseAlpha})`;
+      ctx.globalAlpha = 1;
+      ctx.fillRect(sx0, 0, slabW, h);
+      // Centre bloom gradient on top
+      const g0 = (glowAmt * 0.25).toFixed(2);
+      const g1 = (glowAmt * 0.45).toFixed(2);
+      const grd = ctx.createRadialGradient(sx0+slabW*0.5, h*0.5, 0, sx0+slabW*0.5, h*0.5, slabW*0.7);
+      grd.addColorStop(0,   `rgba(${gr2},${gg2},${gb2},${g1})`);
+      grd.addColorStop(0.6, `rgba(${gr2},${gg2},${gb2},${g0})`);
+      grd.addColorStop(1,   'rgba(0,0,0,0)');
       ctx.fillStyle = grd; ctx.globalAlpha = 1;
       ctx.fillRect(sx0, 0, slabW, h);
-      // Diagonal X-grid lines (two sets of parallel diagonals crossing each other)
+      // Diagonal X-grid lines — clipped to this slab only
+      ctx.save();
+      ctx.beginPath(); ctx.rect(sx0, 0, slabW, h); ctx.clip();
       ctx.strokeStyle = T.gridColor;
       ctx.globalAlpha = T.gridOpacity;
       ctx.lineWidth = T.gridLineW;
@@ -7363,12 +7376,30 @@ function _makeCanyonGridTexture() {
         ctx.lineTo(sx0 + d, h);
         ctx.stroke();
       }
+      ctx.restore();
     } else {
       // DARK VEIN SLAB — near-black base with bold magenta lightning
       // Darken this slab relative to already-dark base
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.globalAlpha = 1;
       ctx.fillRect(sx0, 0, slabW, h);
+      // Vein bloom — soft radial glow behind the lightning
+      if (T.veinBloom > 0) {
+        const vc = parseInt(T.veinColor.slice(1), 16);
+        const vr2 = (vc >> 16) & 0xff, vg2 = (vc >> 8) & 0xff, vb2 = vc & 0xff;
+        const numGlows = 2 + Math.floor(srng() * 2);
+        for (let gi = 0; gi < numGlows; gi++) {
+          const gbx = sx0 + (0.2 + srng() * 0.6) * slabW;
+          const gby = (0.15 + srng() * 0.7) * h;
+          const gbr = slabW * (0.4 + srng() * 0.35);
+          const gg = ctx.createRadialGradient(gbx, gby, 0, gbx, gby, gbr);
+          gg.addColorStop(0,   `rgba(${vr2},${vg2},${vb2},${(T.veinBloom * 0.6).toFixed(2)})`);
+          gg.addColorStop(0.5, `rgba(${vr2},${vg2},${vb2},${(T.veinBloom * 0.2).toFixed(2)})`);
+          gg.addColorStop(1,   'rgba(0,0,0,0)');
+          ctx.fillStyle = gg; ctx.globalAlpha = 1;
+          ctx.fillRect(sx0, 0, slabW, h);
+        }
+      }
       // Bold branching lightning veins
       for (let ci = 0; ci < Math.round(T.veinCount); ci++) {
         const vx = sx0 + srng() * slabW;
@@ -7410,21 +7441,25 @@ function _makeCanyonGridTexture() {
     }
   }
 
-  // Global scatter cracks across all slabs
-  ctx.lineWidth = 1.0;
-  for (let ci = 0; ci < 10; ci++) {
-    const sx = srng() * w, sy = srng() * h;
-    const segs = 3 + Math.floor(srng() * 3);
-    ctx.strokeStyle = srng() > 0.4 ? '#ff00cc' : '#cc44ff';
-    ctx.globalAlpha = T.crackOpacity * 0.5 * (0.7 + srng() * 0.3);
-    ctx.lineWidth = 0.5 + srng() * 1.0;
-    ctx.beginPath(); ctx.moveTo(sx, sy);
-    let cx2 = sx, cy2 = sy;
-    for (let s = 0; s < segs; s++) {
-      cx2 += (srng() - 0.3) * 60; cy2 += (srng() - 0.1) * 50;
-      ctx.lineTo(cx2, cy2);
+  // Scatter cracks — only within dark-vein slab regions
+  for (let si = 0; si < nSlabs; si++) {
+    if (si % 2 === 0) continue; // skip grid slabs
+    const vsx0 = si * slabW, vsx1 = vsx0 + slabW;
+    for (let ci = 0; ci < 3; ci++) {
+      const sx = vsx0 + srng() * slabW, sy = srng() * h;
+      ctx.strokeStyle = srng() > 0.4 ? '#ff00cc' : '#cc44ff';
+      ctx.globalAlpha = T.crackOpacity * 0.35 * (0.7 + srng() * 0.3);
+      ctx.lineWidth = 0.5 + srng() * 1.0;
+      ctx.beginPath(); ctx.moveTo(sx, sy);
+      let cx2 = sx, cy2 = sy;
+      const segs = 3 + Math.floor(srng() * 3);
+      for (let s = 0; s < segs; s++) {
+        cx2 = Math.max(vsx0, Math.min(vsx1, cx2 + (srng() - 0.3) * 40));
+        cy2 += (srng() - 0.1) * 50;
+        ctx.lineTo(cx2, cy2);
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = THREE.RepeatWrapping;
@@ -7692,35 +7727,26 @@ function _updateCanyonWalls(dt, speed) {
 
   // ── Independent squeeze: advance row counter by Z distance traveled
   let halfX;
+  const center = state.corridorGapCenter || 0;
   if (T.freezeWide) {
-    halfX = CORRIDOR_WIDE_X; // hold wide for geometry testing
+    halfX = T.canyonHalfX || CORRIDOR_WIDE_X;
   } else {
-    _canyonSqueezeZ += scroll;
-    while (_canyonSqueezeZ >= 7) {
-      _canyonSqueezeZ -= 7;
-      _canyonSqueezeRow++;
-    }
-    // Compute halfX using exact same L3 formula
-    const rd = _canyonSqueezeRow;
-    if (rd < CORRIDOR_CLOSE_ROWS) {
-      const t2 = rd / CORRIDOR_CLOSE_ROWS;
-      const ease = t2 < 0.5 ? 2*t2*t2 : -1+(4-2*t2)*t2;
-      halfX = CORRIDOR_WIDE_X + (CORRIDOR_NARROW_X - CORRIDOR_WIDE_X) * ease;
-    } else {
-      const cr = Math.max(0, rd - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS));
-      const sq = Math.min(1, cr / CORRIDOR_AMP_RAMP);
-      halfX = CORRIDOR_NARROW_X - (CORRIDOR_NARROW_X - 6) * (sq * sq);
-    }
+    // Use L3 corridor halfX from the live corridor system
+    halfX = _jlCorridor.active
+      ? (_jlCorridor._lastHalfX || T.canyonHalfX || CORRIDOR_WIDE_X)
+      : (T.canyonHalfX || CORRIDOR_WIDE_X);
   }
 
-  // Only scroll in Z — X was locked at spawn time relative to ship position, never updated
+  // Scroll Z + track corridorGapCenter for lateral position
   _canyonWalls.left.forEach(m => {
     m.position.z += scroll;
     if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
+    if (!T.freezeWide) m.position.x = center - halfX;
   });
   _canyonWalls.right.forEach(m => {
     m.position.z += scroll;
     if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
+    if (!T.freezeWide) m.position.x = center + halfX;
   });
 
   // Collision: kill ship if outside gap (with small buffer for fairness)
@@ -17273,6 +17299,8 @@ window.addEventListener('keydown', (e) => {
       _canyonSqueezeRow = 0;                     // reset squeeze counter
       _canyonSqueezeZ   = 0;
       if (!_canyonWalls) _createCanyonWalls();
+      // POC: fire L3 corridor so sine waves + turns are visible alongside canyon walls
+      _jlStartCorridor('l3');
       const w = _canyonWalls;
       const T = _canyonTuner;
       // Also log positions after 1 frame so _updateCanyonWalls has run
@@ -17309,6 +17337,7 @@ window.addEventListener('keydown', (e) => {
       }, null, 2));
     } else {
       _destroyCanyonWalls();
+      _jlStopCorridor();
       console.log('[CANYON] OFF');
     }
   }
@@ -17452,6 +17481,12 @@ window.addEventListener('keydown', (e) => {
     colorPicker('bloomColor', 'bloomColor', 'tex');
     slider('bloomRadius',   'bloomRadius',  0.1, 2,  0.05,'tex');
     slider('bloomOpacity',  'bloomOpacity', 0,   1,  0.05,'tex');
+
+    hdr('— VEIN BLOOM —');
+    slider('veinBloom',     'veinBloom',    0,   1,  0.05,'tex');
+
+    hdr('— GRID GLOW —');
+    slider('gridGlow',      'gridGlow',     0,   1,  0.05,'tex');
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
