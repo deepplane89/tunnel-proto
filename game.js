@@ -7531,6 +7531,7 @@ function _buildCanyonSlabGeo(side) {
   const iTotal = iRows * cols;
   const iPos = new Float32Array(iTotal * 3);
   const iUV  = new Float32Array(iTotal * 2);
+  const iCol = new Float32Array(iTotal * 3); // vertex colors RGB
 
   const baseY = -T.height / 2; // bottom of inner face in local Y
 
@@ -7551,6 +7552,28 @@ function _buildCanyonSlabGeo(side) {
       iPos[idx*3+2] = z;
       iUV[idx*2+0]  = u;
       iUV[idx*2+1]  = v;
+      // Rock strata banding: dark wet base → mid-tone face → bright neon rim
+      // Three-stop gradient: v=0 (base), v=0.55 (mid), v=1.0 (rim)
+      let cr, cg, cb;
+      if (v < 0.55) {
+        // base → mid: near-black to dark blue-grey
+        const t2 = v / 0.55;
+        cr = 0.04 + t2 * (0.12 - 0.04);
+        cg = 0.06 + t2 * (0.18 - 0.06);
+        cb = 0.08 + t2 * (0.28 - 0.08);
+      } else {
+        // mid → rim: dark blue-grey to bright cyan-white
+        const t2 = (v - 0.55) / 0.45;
+        const ease = t2 * t2 * (3 - 2 * t2); // smoothstep — rim pops sharply
+        cr = 0.12 + ease * (0.65 - 0.12);
+        cg = 0.18 + ease * (1.00 - 0.18);
+        cb = 0.28 + ease * (1.00 - 0.28);
+      }
+      // Subtle per-column micro-variation for rocky texture
+      const noise = (colNoise[col] - 0.5) * 0.06;
+      iCol[idx*3+0] = Math.max(0, cr + noise);
+      iCol[idx*3+1] = Math.max(0, cg + noise);
+      iCol[idx*3+2] = Math.max(0, cb + noise * 0.5);
     }
   }
 
@@ -7560,6 +7583,7 @@ function _buildCanyonSlabGeo(side) {
   const tTotal = tRows * cols;
   const tPos = new Float32Array(tTotal * 3);
   const tUV  = new Float32Array(tTotal * 2);
+  const tCol = new Float32Array(tTotal * 3); // vertex colors RGB
 
   for (let row = 0; row < tRows; row++) {
     const t  = row / (tRows - 1);  // 0=ridge, 1=outer edge
@@ -7579,6 +7603,11 @@ function _buildCanyonSlabGeo(side) {
       tPos[idx*3+2] = z;
       tUV[idx*2+0]  = u;
       tUV[idx*2+1]  = 1.0 - t; // top face UV runs from 1 (ridge) to 0 (outer)
+      // Top face: bright hot rim at ridge (t=0) dimming outward to dark cap edge (t=1)
+      const tFade = 1.0 - t * t; // fast falloff
+      tCol[idx*3+0] = 0.65 * tFade;
+      tCol[idx*3+1] = 1.00 * tFade;
+      tCol[idx*3+2] = 1.00 * tFade;
     }
   }
 
@@ -7616,6 +7645,10 @@ function _buildCanyonSlabGeo(side) {
   allUV.set(iUV, 0);
   allUV.set(tUV, iTotal*2);
 
+  const allCol = new Float32Array(iTotal*3 + tTotal*3);
+  allCol.set(iCol, 0);
+  allCol.set(tCol, iTotal*3);
+
   const allIdx = new Uint32Array(iIdx.length + tIdx.length);
   allIdx.set(iIdx, 0);
   allIdx.set(tIdx, iIdx.length);
@@ -7629,6 +7662,7 @@ function _buildCanyonSlabGeo(side) {
   const capVerts = capRows * (capXSegs + 1);
   const capPos = new Float32Array(capVerts * 3);
   const capUV  = new Float32Array(capVerts * 2);
+  const capCol = new Float32Array(capVerts * 3);
 
   // Ridge Y at col=0 (near end)
   const ridgeY0 = baseY + T.height + colRidgeY[0];
@@ -7649,6 +7683,23 @@ function _buildCanyonSlabGeo(side) {
       capPos[cidx*3+2] = 0; // z=0: near face
       capUV[cidx*2+0]  = uu;
       capUV[cidx*2+1]  = vv;
+      // Cap uses same strata gradient as inner face (vv = 0 bottom, 1 top)
+      let ccr, ccg, ccb;
+      if (vv < 0.55) {
+        const t2 = vv / 0.55;
+        ccr = 0.04 + t2 * 0.08;
+        ccg = 0.06 + t2 * 0.12;
+        ccb = 0.08 + t2 * 0.20;
+      } else {
+        const t2 = (vv - 0.55) / 0.45;
+        const ease = t2 * t2 * (3 - 2 * t2);
+        ccr = 0.12 + ease * 0.53;
+        ccg = 0.18 + ease * 0.82;
+        ccb = 0.28 + ease * 0.72;
+      }
+      capCol[cidx*3+0] = ccr;
+      capCol[cidx*3+1] = ccg;
+      capCol[cidx*3+2] = ccb;
     }
   }
 
@@ -7660,12 +7711,15 @@ function _buildCanyonSlabGeo(side) {
   finalPos.set(allPos, 0); finalPos.set(capPos, allPos.length);
   const finalUV = new Float32Array(allUV.length + capUV.length);
   finalUV.set(allUV, 0); finalUV.set(capUV, allUV.length);
+  const finalCol = new Float32Array(allCol.length + capCol.length);
+  finalCol.set(allCol, 0); finalCol.set(capCol, allCol.length);
   const finalIdx = new Uint32Array(allIdx.length + capIdx.length);
   finalIdx.set(allIdx, 0); finalIdx.set(capIdx, allIdx.length);
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(finalPos, 3));
   geo.setAttribute('uv',       new THREE.BufferAttribute(finalUV,  2));
+  geo.setAttribute('color',    new THREE.BufferAttribute(finalCol, 3));
   geo.setIndex(new THREE.BufferAttribute(finalIdx, 1));
   geo.computeVertexNormals();
   return geo;
@@ -7696,7 +7750,8 @@ function _createCanyonWalls() {
   // MeshStandardMaterial with emissiveMap — emissiveIntensity > 1 pushes into HDR
   // so the bloom pass (threshold=1.0) picks up the canyon glow
   const mat = new THREE.MeshStandardMaterial({
-    color:             0x000000,   // base color black — all light comes from emissive
+    color:             0xffffff,   // white so vertex colors render at full value
+    vertexColors:      true,       // rock strata banding from geometry color attribute
     emissive:          0xffffff,   // white so emissiveMap drives the color fully
     emissiveMap:       gridTex,
     emissiveIntensity: T.brightness * 1.8,  // > 1.0 = HDR → triggers bloom
@@ -7715,13 +7770,14 @@ function _createCanyonWalls() {
     geo.setAttribute('position', src.attributes.position.clone());
     geo.setAttribute('normal',   src.attributes.normal.clone());
     geo.setAttribute('uv',       src.attributes.uv.clone());
+    geo.setAttribute('color',    src.attributes.color.clone());
     geo.setIndex(src.index.clone());
     src.dispose();
 
     const mesh = new THREE.Mesh(geo, mat);
     // Y: centre of geo is already centred (−height/2 to +height/2),
     // shift so bottom sits at y = -25 (water level)
-    mesh.position.y = -25 + T.height / 2;  // = 15 for height=80
+    mesh.position.y = T.height / 2;  // bottom at y=0 (water), top at y=height
     // Z: second tile starts one tileLength further
     mesh.position.z = zOff;
     mesh.frustumCulled = false;
