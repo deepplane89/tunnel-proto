@@ -20761,7 +20761,12 @@ const _jlTrackActive = {};
 function _jlApplyAsteroidTrack(track) {
   const T = _asteroidTuner;
   const s = track.settings;
+  // Preserve user-tunable values that track settings must never overwrite
+  const _keepFixedXChance = T.fixedXChance;
+  const _keepFixedXRange  = T.fixedXRange;
   for (const k of Object.keys(s)) T[k] = s[k];
+  T.fixedXChance = _keepFixedXChance;
+  T.fixedXRange  = _keepFixedXRange;
   if (s.frequency !== undefined) T.frequency = s.frequency / _jlIntensity;
   if (s.size      !== undefined) T.size      = s.size      * _jlSizeScalar;
   T.enabled = true; // always re-enable when a track is active
