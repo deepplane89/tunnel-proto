@@ -20871,7 +20871,7 @@ function _tickJetLightningRamp(dt) {
   {
     const _T            = _asteroidTuner;
     const _driftX       = Math.abs(state.shipX || 0);
-    const _DRIFT_THRESH = 18;  // units from center before funnel kicks in (was 7 — too narrow)
+    const _DRIFT_THRESH = 25;  // units from center before funnel kicks in
     const _RECENTER_DUR = 5.0; // seconds of funnel before releasing
 
     if (!_jlRecenterActive && _driftX > _DRIFT_THRESH && _T.enabled && _T.pattern === 'stagger') {
