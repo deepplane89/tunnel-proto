@@ -20881,16 +20881,17 @@ function _tickJetLightningRamp(dt) {
       _jlRecenterActive = true;
       _jlRecenterT      = 0;
       const _side = Math.sign(state.shipX);
-      // Lock recenter base at 0 (center) so sweep corridor is always between ship and center
-      _jlRecenterBase = 0;
+      // Sweep is OUTSIDE the ship — asteroids spawn beyond the ship to wall it off
+      // from drifting further, forcing it to turn back toward center
+      const _shipX  = state.shipX || 0;
+      _jlRecenterBase = _shipX; // base locked at ship position at trigger moment
       _T.pattern    = 'sweep';
       _T.sweepSpeed = 0.55;
-      // Range covers from center (0) out to where the ship currently is + buffer
-      const _reach = Math.min(Math.abs(state.shipX || 0) + 12, 60);
-      _T.laneMin    = _side > 0 ?  0 : -_reach;
-      _T.laneMax    = _side > 0 ?  _reach :  0;
-      _astSweepX    = _side > 0 ? 1.0 : 0.0;  // start near ship, sweep toward center
-      _astSweepDir  = _side > 0 ? -1  :  1;
+      // Range is outward from ship: ship edge → ship + 35 units further out
+      _T.laneMin    = _side > 0 ?  0 : -35;
+      _T.laneMax    = _side > 0 ?  35 :  0;
+      _astSweepX    = _side > 0 ? 0.0 : 1.0;  // start at ship, sweep outward
+      _astSweepDir  = _side > 0 ?  1  : -1;   // sweeps away from center (walls ship off)
     }
 
     if (_jlRecenterActive) {
