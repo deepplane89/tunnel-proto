@@ -7287,7 +7287,18 @@ const _canyonTuner = {
   gridColor:     '#00eeff',
   gridOpacity:   0.25,  // low — just left of center
   crackOpacity:  0.15,  // low — just left of center
-  slabCount:     5,     // number of vertical slab panels per tile
+  slabCount:     5,
+  // Per-slab type controls
+  gridLineW:     2.0,   // grid line width
+  gridCols:      4,     // grid columns per slab
+  gridRows:      6,     // grid rows per slab
+  veinCount:     6,     // cracks per vein slab
+  veinWidth:     2.5,   // max vein line width
+  veinColor:     '#ff00cc',
+  bloomRadius:   0.7,   // bloom radius as fraction of slab width
+  bloomColor:    '#00e6ff',
+  bloomOpacity:  0.55,
+  dividerOpacity: 0.3,  // slab divider line opacity
 };
 let _canyonWalls = null;
 let _canyonFillLight = null; // dedicated fill light for canyon
@@ -7322,28 +7333,27 @@ function _makeCanyonGridTexture() {
     const slabType = si % 3; // 0=grid, 1=heavy veins, 2=bloom
 
     if (slabType === 0) {
-      // Cyan grid
+      // Grid slab
       ctx.strokeStyle = T.gridColor;
       ctx.globalAlpha = T.gridOpacity;
-      ctx.lineWidth = 2.0;
-      const gx = 4, gy = 6;
-      for (let gi = 0; gi <= gx; gi++) {
-        const x = sx0 + (gi / gx) * slabW;
+      ctx.lineWidth = T.gridLineW;
+      const gCols = Math.round(T.gridCols), gRows = Math.round(T.gridRows);
+      for (let gi = 0; gi <= gCols; gi++) {
+        const x = sx0 + (gi / gCols) * slabW;
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
       }
-      for (let gj = 0; gj <= gy; gj++) {
-        const y = (gj / gy) * h;
+      for (let gj = 0; gj <= gRows; gj++) {
+        const y = (gj / gRows) * h;
         ctx.beginPath(); ctx.moveTo(sx0, y); ctx.lineTo(sx1, y); ctx.stroke();
       }
     } else if (slabType === 1) {
-      // Heavy magenta vein cracks
-      for (let ci = 0; ci < 6; ci++) {
+      // Vein slab
+      for (let ci = 0; ci < Math.round(T.veinCount); ci++) {
         const vx = sx0 + srng() * slabW;
         const vy = srng() * h;
-        const bright = srng() > 0.3;
-        ctx.strokeStyle = bright ? '#ff00cc' : '#cc44ff';
+        ctx.strokeStyle = T.veinColor;
         ctx.globalAlpha = T.crackOpacity;
-        ctx.lineWidth = 1.5 + srng() * 2.5;
+        ctx.lineWidth = 0.8 + srng() * T.veinWidth;
         ctx.beginPath(); ctx.moveTo(vx, vy);
         let cx2 = vx, cy2 = vy;
         const segs = 4 + Math.floor(srng() * 4);
@@ -7355,18 +7365,21 @@ function _makeCanyonGridTexture() {
         ctx.stroke();
       }
     } else {
-      // Bloom glow hotspot
-      const gx2 = sx0 + slabW * 0.5;
-      const gy2 = h * (0.2 + srng() * 0.6);
-      const gr = ctx.createRadialGradient(gx2, gy2, 0, gx2, gy2, slabW * 0.7);
-      gr.addColorStop(0,   'rgba(0,230,255,0.55)');
-      gr.addColorStop(0.3, 'rgba(0,100,200,0.25)');
-      gr.addColorStop(1,   'rgba(0,0,0,0.00)');
+      // Bloom slab
+      const bx = sx0 + slabW * 0.5;
+      const by = h * (0.2 + srng() * 0.6);
+      const brad = slabW * T.bloomRadius;
+      const bc = parseInt(T.bloomColor.slice(1), 16);
+      const br2 = (bc >> 16) & 0xff, bg2 = (bc >> 8) & 0xff, bb2 = bc & 0xff;
+      const gr = ctx.createRadialGradient(bx, by, 0, bx, by, brad);
+      gr.addColorStop(0,   `rgba(${br2},${bg2},${bb2},${T.bloomOpacity})`);
+      gr.addColorStop(0.4, `rgba(${Math.round(br2*0.4)},${Math.round(bg2*0.4)},${Math.round(bb2*0.4)},${T.bloomOpacity*0.4})`);
+      gr.addColorStop(1,   'rgba(0,0,0,0)');
       ctx.fillStyle = gr; ctx.globalAlpha = 1;
       ctx.fillRect(sx0, 0, slabW, h);
-      // Thin grid on top of bloom
+      // Subtle grid overlay on bloom
       ctx.strokeStyle = T.gridColor;
-      ctx.globalAlpha = T.gridOpacity * 0.5;
+      ctx.globalAlpha = T.gridOpacity * 0.4;
       ctx.lineWidth = 1.0;
       for (let gj = 0; gj <= 8; gj++) {
         const y = (gj / 8) * h;
@@ -7374,10 +7387,10 @@ function _makeCanyonGridTexture() {
       }
     }
 
-    // Slab divider line
+    // Slab divider
     if (si > 0) {
       ctx.strokeStyle = '#ffffff';
-      ctx.globalAlpha = 0.3;
+      ctx.globalAlpha = T.dividerOpacity;
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(sx0, 0); ctx.lineTo(sx0, h); ctx.stroke();
     }
@@ -17295,9 +17308,10 @@ window.addEventListener('keydown', (e) => {
   const panel = document.createElement('div');
   panel.id = 'canyon-tuner';
   panel.style.cssText = [
-    'position:fixed;top:10px;right:10px;width:240px;background:rgba(0,10,20,0.92)',
-    'border:1px solid #00eeff;color:#00eeff;font-family:monospace;font-size:11px',
-    'padding:10px;z-index:9999;display:none;border-radius:4px;'
+    'position:fixed;top:10px;right:10px;width:250px;max-height:90vh;overflow-y:auto',
+    'background:rgba(0,10,20,0.95);border:1px solid #00eeff;color:#00eeff',
+    'font-family:monospace;font-size:11px;padding:10px;z-index:9999',
+    'border-radius:4px;scrollbar-width:thin;'
   ].join(';');
   document.body.appendChild(panel);
 
@@ -17338,7 +17352,7 @@ window.addEventListener('keydown', (e) => {
     sl.type = 'range'; sl.min = min; sl.max = max; sl.step = step; sl.value = T[key];
     sl.style.cssText = 'flex:1;accent-color:#00eeff;cursor:pointer;';
     const vl = document.createElement('span');
-    vl.style.cssText = 'flex:0 0 38px;text-align:right;font-size:10px;color:#fff;';
+    vl.style.cssText = 'flex:0 0 42px;text-align:right;font-size:11px;font-weight:bold;color:#fff;';
     vl.textContent = T[key];
     sl.addEventListener('input', () => {
       T[key] = parseFloat(sl.value);
@@ -17407,6 +17421,22 @@ window.addEventListener('keydown', (e) => {
     slider('gridOpacity',   'gridOpacity',  0, 1,   0.05, 'tex');
     slider('crackOpacity',  'crackOpacity', 0, 1,   0.05, 'tex');
     slider('slabCount',     'slabCount',    1, 10,  1,    'tex');
+    slider('dividerOpacity','dividerOpacity',0, 1,  0.05, 'tex');
+
+    hdr('— GRID SLAB —');
+    slider('gridLineW',     'gridLineW',    0.5, 6,  0.5, 'tex');
+    slider('gridCols',      'gridCols',     1,  12,  1,   'tex');
+    slider('gridRows',      'gridRows',     1,  16,  1,   'tex');
+
+    hdr('— VEIN SLAB —');
+    colorPicker('veinColor',  'veinColor',  'tex');
+    slider('veinCount',     'veinCount',    1,  20,  1,   'tex');
+    slider('veinWidth',     'veinWidth',    0.5, 8,  0.5, 'tex');
+
+    hdr('— BLOOM SLAB —');
+    colorPicker('bloomColor', 'bloomColor', 'tex');
+    slider('bloomRadius',   'bloomRadius',  0.1, 2,  0.05,'tex');
+    slider('bloomOpacity',  'bloomOpacity', 0,   1,  0.05,'tex');
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
