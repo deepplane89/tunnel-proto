@@ -7274,8 +7274,8 @@ const _canyonTuner = {
   tileLength:       400,   // Z length of each tile (2 tiles per side leapfrog)
   segsX:            10,    // subdivisions across face (horizontal jaggedness)
   segsZ:            80,    // subdivisions along Z (vertical scroll jaggedness)
-  displacement:     60,    // outward X jaggedness on face verts
-  wallWidth:        120,   // flat lateral extent of wall face beyond halfX
+  displacement:     30,    // outward X jaggedness on face verts
+  wallWidth:        120,   // flat lateral extent of wall face beyond halfX (unused — kept for tuner)
   topRagged:        22,    // extra Y noise on top edge
   scrollSpeed:      1.0,   // multiplier of game speed
   freezeWide:       true,  // DEBUG: hold walls at wide open, no squeeze
@@ -7371,15 +7371,16 @@ function _buildCanyonSlabGeo(side) {
       const u = col / (cols - 1);                   // 0=near, 1=far
       const z = -u * T.tileLength;                  // runs into the screen (negative Z = far)
 
-      // Fractal noise for face displacement
+      // Fractal noise pushes verts outward — inner edge stays at dx=0 (flush with gap)
+      // and outer verts bulge out by displacement amount, creating a chunky cliff face.
       const px = u * 18.0;
       const py = v * 12.0;
       const n1 = Math.sin(px * 2.1 + py * 1.3) * 0.35;
       const n2 = Math.sin(px * 5.7 + py * 3.1) * 0.25;
       const n3 = Math.abs(Math.sin(px * 3.2 + py * 5.5)) * 0.28;
       const noise = 0.4 + n1 + n2 + n3;
-      // wallWidth = flat lateral extent, displacement = noise on top
-      const dx = (T.wallWidth + Math.max(0, noise) * T.displacement) * side;
+      // dx: 0 at inner edge (gap boundary), outward by noise*displacement
+      const dx = Math.max(0, noise) * T.displacement * side;
 
       // Top-edge ragged in Y
       let dy = 0;
@@ -7549,12 +7550,12 @@ function _updateCanyonWalls(dt, speed) {
   _canyonWalls.left.forEach(m => {
     m.position.x = center - halfX;
     m.position.z += scroll;
-    if (m.position.z > 20) m.position.z -= T.tileLength * 2; // passed ship — jump far ahead
+    if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2; // fully past ship — jump far ahead
   });
   _canyonWalls.right.forEach(m => {
     m.position.x = center + halfX;
     m.position.z += scroll;
-    if (m.position.z > 20) m.position.z -= T.tileLength * 2;
+    if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
   });
 
   // Collision: kill ship if outside gap (with small buffer for fairness)
