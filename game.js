@@ -7787,21 +7787,22 @@ function _updateCanyonWalls(dt, speed) {
   // so the corridor feel comes from flying into approaching geometry, not walls sliding in real time.
   _canyonWalls.left.forEach(m => {
     m.position.z += scroll;
-    if (m.position.z > T.tileLength) {
+    // Tile geometry runs from z=0 to z=-tileLength in local space.
+    // When mesh.position.z > 0 the entire tile has passed the ship — recycle to back.
+    if (m.position.z > 0) {
       m.position.z -= T.tileLength * 2;
-      // Stamp current center at the moment this tile resets to the back
+      // Stamp corridorGapCenter at the moment this tile resets — bakes the upcoming turn in
       const stampCenter = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
       m._stampedCenter = stampCenter;
       m._stampedHalfX  = halfX;
     }
-    // Use the stamped center (or 0 if not yet stamped)
     const sc = (m._stampedCenter !== undefined) ? m._stampedCenter : 0;
     const sh = (m._stampedHalfX  !== undefined) ? m._stampedHalfX  : halfX;
     m.position.x = sc - sh;
   });
   _canyonWalls.right.forEach(m => {
     m.position.z += scroll;
-    if (m.position.z > T.tileLength) {
+    if (m.position.z > 0) {
       m.position.z -= T.tileLength * 2;
       const stampCenter = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
       m._stampedCenter = stampCenter;
