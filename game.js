@@ -7270,19 +7270,19 @@ function _updateTerrainWalls(dt, speed) {
 //  CANYON CORRIDOR WALLS
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
-  height:        55,    // shorter so top is visible in distance
+  height:        130,   // towers far above camera (camera y=2.8, top at y=130)
   tileLength:    175,
-  segsX:         10,
+  segsX:         40,   // height segments — more = smoother cliff face
   segsZ:         100,
-  displacement:  45,
-  wallWidth:     60,   // narrow top cap overhang
-  topRagged:     30,   // strong jagged silhouette
+  displacement:  5,    // subtle rocky faceting only — walls stay near-vertical
+  wallWidth:     10,   // thin top edge, barely visible — not a roof
+  topRagged:     18,   // jagged fractured spires at ridge
   capHeight:     1.6,
-  slopeLean:     0.0,
+  slopeLean:     0.12, // slight base flare where wall meets water
   fillLight:     0.4,
   scrollSpeed:   1.0,
   freezeWide:    false,
-  canyonHalfX:   45,   // gap half-width (canyon only — does not affect JL corridor)
+  canyonHalfX:   18,   // gap half-width — narrow canyon matching AI pic
   baseColor:     '#0d1a26',  // near-black dark teal-purple
   brightness:    1.2,
   gridColor:     '#00eeff',
@@ -7728,82 +7728,190 @@ function _buildCanyonSlabGeo(side) {
 function _createCanyonWalls() {
   if (_canyonWalls) return;
   const T = _canyonTuner;
+
+  // ── PRE-BAKE 350 rows of L3 corridor sine ──
+  // Mirrors spawnCorridorRow logic exactly — same constants, same math.
+  // Each row gets its corridorGapCenter and halfX baked into vertex positions
+  // so the mesh curves match the cone corridor with zero per-frame snapping.
+  const NUM_ROWS = 350;
+  const ROW_DEPTH = 7; // world units per row — matches cone row spacing
+  const centers = new Float32Array(NUM_ROWS);
+  const halfXs  = new Float32Array(NUM_ROWS);
+  let bSineT = 0;
+  for (let r = 0; r < NUM_ROWS; r++) {
+    let halfX;
+    if (r < CORRIDOR_CLOSE_ROWS) {
+      const t = r / CORRIDOR_CLOSE_ROWS;
+      const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+      halfX = CORRIDOR_WIDE_X + (CORRIDOR_NARROW_X - CORRIDOR_WIDE_X) * ease;
+    } else {
+      const curveRowsForSqueeze = Math.max(0, r - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS));
+      const squeezeT = Math.min(1, curveRowsForSqueeze / CORRIDOR_AMP_RAMP);
+      halfX = CORRIDOR_NARROW_X - (CORRIDOR_NARROW_X - 6) * (squeezeT * squeezeT);
+    }
+    let center = 0;
+    if (r >= CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS) {
+      const curveRows = r - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS);
+      const ampT   = Math.min(1, curveRows / CORRIDOR_AMP_RAMP);
+      const amp    = CORRIDOR_AMP_START + (CORRIDOR_AMP_MAX - CORRIDOR_AMP_START) * (ampT * ampT);
+      const perT   = Math.min(1, curveRows / CORRIDOR_PERIOD_RAMP);
+      const period = CORRIDOR_PERIOD_START - (CORRIDOR_PERIOD_START - CORRIDOR_PERIOD_MIN) * (perT * perT);
+      bSineT += (2 * Math.PI) / period;
+      center = amp * Math.sin(bSineT);
+    }
+    centers[r] = center;
+    halfXs[r]  = halfX;
+  }
+
+  // ── BUILD RIBBON GEOMETRY ──
+  // One mesh per side. Each mesh has (segsX+1) * NUM_ROWS verts for inner face
+  // plus top cap rows. The corridor turns are baked into X per row.
+  function buildRibbon(side) {
+    const iRows = T.segsX + 1;
+    const tRows = 5;
+    const baseY = -T.height / 2;
+
+    // Per-row noise for rocky faceting
+    const rowNoise  = new Float32Array(NUM_ROWS);
+    const rowRidgeY = new Float32Array(NUM_ROWS);
+    for (let r = 0; r < NUM_ROWS; r++) {
+      const u  = r / Math.max(1, NUM_ROWS - 1);
+      const px = u * 18.0;
+      rowNoise[r]  = Math.max(0, 0.4 + Math.sin(px*2.1+0.9)*0.35 + Math.sin(px*5.7+2.1)*0.25 + Math.abs(Math.sin(px*3.2+4.4))*0.28);
+      const tn = Math.sin(u*1.8+0.5)*0.55 + Math.sin(u*3.1+1.9)*0.30;
+      rowRidgeY[r] = Math.max(0, 0.15 + tn) * T.topRagged;
+    }
+
+    const iTotal = iRows * NUM_ROWS;
+    const tTotal = tRows * NUM_ROWS;
+    const iPos = new Float32Array(iTotal * 3);
+    const iUV  = new Float32Array(iTotal * 2);
+    const iCol = new Float32Array(iTotal * 3);
+    const tPos = new Float32Array(tTotal * 3);
+    const tUV  = new Float32Array(tTotal * 2);
+    const tCol = new Float32Array(tTotal * 3);
+
+    // Inner face: height rows × depth rows
+    for (let hi = 0; hi < iRows; hi++) {
+      const v  = hi / (iRows - 1);
+      const y  = baseY + v * T.height;
+      for (let r = 0; r < NUM_ROWS; r++) {
+        const z  = -r * ROW_DEPTH;
+        const cx = centers[r] + halfXs[r] * side;
+        const leanFactor = 1 + T.slopeLean * v;
+        const dx = rowNoise[r] * T.displacement * leanFactor * side;
+        const dy = (v > 0.9) ? rowRidgeY[r] * v : 0;
+        const idx = hi * NUM_ROWS + r;
+        iPos[idx*3+0] = cx + dx;
+        iPos[idx*3+1] = y + dy;
+        iPos[idx*3+2] = z;
+        iUV[idx*2+0]  = r / (NUM_ROWS - 1);
+        iUV[idx*2+1]  = v;
+        // Rock strata vertex colors
+        let cr2, cg2, cb2;
+        if (v < 0.55) {
+          const t2 = v / 0.55;
+          cr2 = 0.04 + t2*0.08; cg2 = 0.06 + t2*0.12; cb2 = 0.08 + t2*0.20;
+        } else {
+          const t2 = (v-0.55)/0.45, ease = t2*t2*(3-2*t2);
+          cr2 = 0.12 + ease*0.53; cg2 = 0.18 + ease*0.82; cb2 = 0.28 + ease*0.72;
+        }
+        const noise = (rowNoise[r] - 0.5) * 0.06;
+        iCol[idx*3+0] = Math.max(0, cr2 + noise);
+        iCol[idx*3+1] = Math.max(0, cg2 + noise);
+        iCol[idx*3+2] = Math.max(0, cb2 + noise*0.5);
+      }
+    }
+
+    // Top cap
+    const topW = T.wallWidth, topDropY = -T.height * 0.35;
+    for (let ti = 0; ti < tRows; ti++) {
+      const t = ti / (tRows - 1);
+      for (let r = 0; r < NUM_ROWS; r++) {
+        const z      = -r * ROW_DEPTH;
+        const cx     = centers[r] + halfXs[r] * side;
+        const ridgeY = baseY + T.height + rowRidgeY[r];
+        const tn2    = Math.sin(r*0.4+t*5.3)*0.15 + Math.sin(r*1.1+t*3.7)*0.08;
+        const idx    = ti * NUM_ROWS + r;
+        tPos[idx*3+0] = cx + t*topW*side + tn2*side*T.displacement*0.3;
+        tPos[idx*3+1] = ridgeY + t*topDropY + tn2*T.displacement*0.15;
+        tPos[idx*3+2] = z;
+        tUV[idx*2+0]  = r / (NUM_ROWS - 1);
+        tUV[idx*2+1]  = 1.0 - t;
+        const tFade = 1.0 - t*t;
+        tCol[idx*3+0] = 0.65*tFade; tCol[idx*3+1] = 1.00*tFade; tCol[idx*3+2] = 1.00*tFade;
+      }
+    }
+
+    // Indices
+    function quadIdx(numHi, numR, colCount, offset) {
+      const buf = new Uint32Array(numHi * numR * 6); let ii = 0;
+      for (let row = 0; row < numHi; row++) {
+        for (let col = 0; col < numR; col++) {
+          const a = offset + row*colCount + col, b = a+1, c = a+colCount, d = c+1;
+          if (side === 1) { buf[ii++]=a;buf[ii++]=c;buf[ii++]=b;buf[ii++]=b;buf[ii++]=c;buf[ii++]=d; }
+          else            { buf[ii++]=a;buf[ii++]=b;buf[ii++]=c;buf[ii++]=b;buf[ii++]=d;buf[ii++]=c; }
+        }
+      }
+      return buf;
+    }
+    const iIdx = quadIdx(iRows-1, NUM_ROWS-1, NUM_ROWS, 0);
+    const tIdx = quadIdx(tRows-1, NUM_ROWS-1, NUM_ROWS, iTotal);
+
+    const totalVerts = iTotal + tTotal;
+    const allPos = new Float32Array(totalVerts*3);
+    const allUV  = new Float32Array(totalVerts*2);
+    const allCol = new Float32Array(totalVerts*3);
+    allPos.set(iPos,0); allPos.set(tPos, iTotal*3);
+    allUV.set(iUV,0);   allUV.set(tUV,  iTotal*2);
+    allCol.set(iCol,0); allCol.set(tCol, iTotal*3);
+    const allIdx = new Uint32Array(iIdx.length + tIdx.length);
+    allIdx.set(iIdx,0); allIdx.set(tIdx, iIdx.length);
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(allPos, 3));
+    geo.setAttribute('uv',       new THREE.BufferAttribute(allUV,  2));
+    geo.setAttribute('color',    new THREE.BufferAttribute(allCol, 3));
+    geo.setIndex(new THREE.BufferAttribute(allIdx, 1));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
   const gridTex = _makeCanyonGridTexture();
   gridTex.repeat.set(1, 1);
-
-  // Metalness map
-  const mw = 256, mh = 256;
-  const mc = document.createElement('canvas');
-  mc.width = mw; mc.height = mh;
-  const mctx = mc.getContext('2d');
-  for (let cy = 0; cy < 32; cy++) {
-    for (let cx2 = 0; cx2 < 16; cx2++) {
-      const bright = Math.random() > 0.6 ? 200 + Math.random() * 55 : Math.random() * 80;
-      mctx.fillStyle = `rgb(${bright},${bright},${bright})`;
-      mctx.fillRect(cx2 * (mw/16), cy * (mh/32), mw/16, mh/32);
-    }
-  }
-  const metalTex = new THREE.CanvasTexture(mc);
-  metalTex.wrapS = THREE.RepeatWrapping;
-  metalTex.wrapT = THREE.RepeatWrapping;
-
-  // MeshStandardMaterial with emissiveMap — emissiveIntensity > 1 pushes into HDR
-  // so the bloom pass (threshold=1.0) picks up the canyon glow
   const mat = new THREE.MeshStandardMaterial({
-    color:             0xffffff,   // white so vertex colors render at full value
-    vertexColors:      true,       // rock strata banding from geometry color attribute
-    emissive:          0xffffff,   // white so emissiveMap drives the color fully
+    color:             0xffffff,
+    vertexColors:      true,
+    emissive:          0xffffff,
     emissiveMap:       gridTex,
-    emissiveIntensity: T.brightness * 1.8,  // > 1.0 = HDR → triggers bloom
+    emissiveIntensity: T.brightness * 1.8,
     roughness:         0.9,
     metalness:         0.0,
     side:              THREE.DoubleSide,
-    toneMapped:        false,      // prevents tone-mapping from clamping HDR values
+    toneMapped:        false,
   });
 
-  function makeSlab(side, zOff) {
-    // No rotation. Wall runs along Z, face points inward.
-    // mesh.position.x is set each frame by _updateCanyonWalls.
-    const geo = new THREE.BufferGeometry();
-    const src = _buildCanyonSlabGeo(side);
-    // Clone attributes so each tile has independent geometry (for future per-tile variance)
-    geo.setAttribute('position', src.attributes.position.clone());
-    geo.setAttribute('normal',   src.attributes.normal.clone());
-    geo.setAttribute('uv',       src.attributes.uv.clone());
-    geo.setAttribute('color',    src.attributes.color.clone());
-    geo.setIndex(src.index.clone());
-    src.dispose();
+  const lMesh = new THREE.Mesh(buildRibbon(-1), mat);
+  const rMesh = new THREE.Mesh(buildRibbon( 1), mat);
+  lMesh.position.y = T.height / 2;
+  rMesh.position.y = T.height / 2;
+  // Row 0 (local z=0) is the near end — spawn it at SPAWN_Z so rows recede into the distance
+  lMesh.position.z = SPAWN_Z;
+  rMesh.position.z = SPAWN_Z;
+  lMesh.frustumCulled = false;
+  rMesh.frustumCulled = false;
+  scene.add(lMesh);
+  scene.add(rMesh);
 
-    const mesh = new THREE.Mesh(geo, mat);
-    // Y: centre of geo is already centred (−height/2 to +height/2),
-    // shift so bottom sits at y = -25 (water level)
-    mesh.position.y = T.height / 2;  // bottom at y=0 (water), top at y=height
-    // Z: second tile starts one tileLength further
-    mesh.position.z = zOff;
-    mesh.frustumCulled = false;
-    scene.add(mesh);
-    return mesh;
-  }
-
-  // Lock X at spawn time relative to ship — never updated again, only Z scrolls
-  const shipX = state.shipX || 0;
-  const spawnHalfX = T.canyonHalfX || CORRIDOR_WIDE_X;
-  const lA = makeSlab(-1, SPAWN_Z);  lA.position.x = shipX - spawnHalfX;
-  const lB = makeSlab(-1, SPAWN_Z - T.tileLength); lB.position.x = shipX - spawnHalfX;
-  const rA = makeSlab( 1, SPAWN_Z);  rA.position.x = shipX + spawnHalfX;
-  const rB = makeSlab( 1, SPAWN_Z - T.tileLength); rB.position.x = shipX + spawnHalfX;
-
-  // Seed stamps so tiles start at the correct position before their first leapfrog
-  const seedCenter = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
-  const seedHalfX  = spawnHalfX;
-  [lA, lB].forEach(m => { m._stampedCenter = seedCenter; m._stampedHalfX = seedHalfX; });
-  [rA, rB].forEach(m => { m._stampedCenter = seedCenter; m._stampedHalfX = seedHalfX; });
-
-  _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex,
-                   left: [lA, lB], right: [rA, rB],
-                   _spawnX: shipX };
-
-  // No fill light needed — MeshBasicMaterial is self-lit from canvas texture
+  _canyonWalls = {
+    strips:    [lMesh, rMesh],
+    left:      [lMesh],
+    right:     [rMesh],
+    mat, gridTex,
+    _spawnX:   state.shipX || 0,
+    _numRows:  NUM_ROWS,
+    _rowDepth: ROW_DEPTH,
+  };
 }
 
 function _destroyCanyonWalls() {
@@ -7818,70 +7926,19 @@ function _destroyCanyonWalls() {
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || !_canyonActive) return;
   const T = _canyonTuner;
-  // Diagnostic: log every 90 frames so you can see what's moving the ship
-  _canyonDiagFrame++;
-  if (_canyonDiagFrame % 90 === 0) {
-    console.log('[CANYON DIAG] shipX=' + (state.shipX||0).toFixed(2)
-      + ' shipVelX=' + (state.shipVelX||0).toFixed(3)
-      + ' corridorGapCenter=' + (state.corridorGapCenter||0).toFixed(2)
-      + ' jlCorridorActive=' + _jlCorridor.active
-      + ' corridorRowsDone=' + (state.corridorRowsDone||0)
-      + ' corridorSineT=' + (state.corridorSineT||0).toFixed(3)
-      + ' corridorGapCenter=' + (state.corridorGapCenter||0).toFixed(2)
-      + ' leftX=' + _canyonWalls.left[0].position.x.toFixed(2)
-      + ' rightX=' + _canyonWalls.right[0].position.x.toFixed(2));
-  }
   const effectiveSpd = (speed && speed > 1) ? speed : BASE_SPEED;
   const scroll = effectiveSpd * dt * T.scrollSpeed;
 
-  // halfX: use live L3 squeeze value from _jlCorridor if available, else tuner default
-  const halfX = (!T.freezeWide && _jlCorridor && _jlCorridor._lastHalfX != null)
-    ? _jlCorridor._lastHalfX
-    : (T.canyonHalfX || 45);
+  // Pre-baked ribbon: just scroll Z. Turns are geometry, not position.
+  _canyonWalls.strips.forEach(m => { m.position.z += scroll; });
 
-  // Stamp corridorGapCenter onto each tile at leapfrog time — bakes the turn in like a cone row,
-  // so the corridor feel comes from flying into approaching geometry, not walls sliding in real time.
-  _canyonWalls.left.forEach(m => {
-    m.position.z += scroll;
-    // Tile geometry runs from z=0 to z=-tileLength in local space.
-    // When mesh.position.z > 0 the entire tile has passed the ship — recycle to back.
-    if (m.position.z > T.tileLength + 4) {
-      m.position.z -= T.tileLength * 2;
-      // Stamp corridorGapCenter at the moment this tile resets — bakes the upcoming turn in
-      const stampCenter = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
-      m._stampedCenter = stampCenter;
-      m._stampedHalfX  = halfX;
-    }
-    const sc = (m._stampedCenter !== undefined) ? m._stampedCenter : 0;
-    const sh = (m._stampedHalfX  !== undefined) ? m._stampedHalfX  : halfX;
-    m.position.x = sc - sh;
-  });
-  _canyonWalls.right.forEach(m => {
-    m.position.z += scroll;
-    if (m.position.z > T.tileLength + 4) {
-      m.position.z -= T.tileLength * 2;
-      const stampCenter = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
-      m._stampedCenter = stampCenter;
-      m._stampedHalfX  = halfX;
-    }
-    const sc = (m._stampedCenter !== undefined) ? m._stampedCenter : 0;
-    const sh = (m._stampedHalfX  !== undefined) ? m._stampedHalfX  : halfX;
-    m.position.x = sc + sh;
-  });
-
-  // Collision: use the stamped center of whichever left tile is closest to the ship (most positive Z <= ship Z)
+  // Collision: read corridorGapCenter + halfX directly from live L3 state.
+  // The ribbon geometry matches this exactly since it was baked from the same math.
   if (state._jetLightningMode && state.phase === 'playing' && !state._godMode && !_godMode) {
-    const shipX = state.shipX || 0;
-    const shipZ = 3.9; // ship group is always at z=3.9
-    // Find the left tile closest in front of the ship
-    let closestTile = _canyonWalls.left[0];
-    let closestDist = Infinity;
-    _canyonWalls.left.forEach(m => {
-      const dz = shipZ - m.position.z; // positive = tile is behind ship
-      if (dz >= 0 && dz < closestDist) { closestDist = dz; closestTile = m; }
-    });
-    const gapCenter = (closestTile._stampedCenter !== undefined) ? closestTile._stampedCenter : 0;
-    const gapHalfX  = (closestTile._stampedHalfX  !== undefined) ? closestTile._stampedHalfX  : halfX;
+    const shipX    = state.shipX || 0;
+    const gapCenter = state.corridorGapCenter || 0;
+    const gapHalfX  = (_jlCorridor && _jlCorridor._lastHalfX != null)
+      ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
     const buffer = 1.5;
     if (shipX < gapCenter - gapHalfX + buffer || shipX > gapCenter + gapHalfX - buffer) {
       if (typeof _killPlayer === 'function') _killPlayer();
