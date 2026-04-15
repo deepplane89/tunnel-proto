@@ -20004,7 +20004,13 @@ function _tickAsteroidSpawner(dt) {
         _spawnAsteroid(targetX);
       }
     } else {
-      _spawnAsteroid(_astNextTargetX());
+      // 1-in-4 chance: spawn at a random fixed X instead of tracking ship
+      // This punishes lateral camping — the outer lanes aren't safe ground
+      const _useFixed = Math.random() < 0.25;
+      const _spawnX = _useFixed
+        ? (Math.random() < 0.5 ? -1 : 1) * (20 + Math.random() * 40)  // random X ±20–60
+        : _astNextTargetX();
+      _spawnAsteroid(_spawnX);
     }
   }
 
