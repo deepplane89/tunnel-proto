@@ -19309,6 +19309,8 @@ const _asteroidTuner = {
   chaseRampEnd:   1.2,     // final mirror interval (seconds) — ruthless
   chaseRampDuration: 90,   // seconds over which ramp plays out
   // Filler (decorative background asteroids)
+  fixedXChance:   0.25,   // probability (0-1) a stagger asteroid spawns at random fixed X instead of ship X
+  fixedXRange:    [20, 60], // [min, max] absolute X for fixed spawns
   fillerEnabled:  true,    // toggle on/off
   fillerFreq:      0.4,    // seconds between filler spawns
   fillerLaneMin:  -20,     // X range — wider than normal to sell depth
@@ -20006,9 +20008,10 @@ function _tickAsteroidSpawner(dt) {
     } else {
       // 1-in-4 chance: spawn at a random fixed X instead of tracking ship
       // This punishes lateral camping — the outer lanes aren't safe ground
-      const _useFixed = Math.random() < 0.25;
+      const _useFixed = Math.random() < T.fixedXChance;
+      const [_fxMin, _fxMax] = T.fixedXRange;
       const _spawnX = _useFixed
-        ? (Math.random() < 0.5 ? -1 : 1) * (20 + Math.random() * 40)  // random X ±20–60
+        ? (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
         : _astNextTargetX();
       _spawnAsteroid(_spawnX);
     }
@@ -20472,6 +20475,11 @@ const _origUpdateShockwave = _updateShockwave;
     setInterval(refreshCount, 500);
     panel.appendChild(countEl);
 
+    // ── LATERAL section
+    panel.appendChild(makeHeader('LATERAL CAMP PUNISH', '#fa4'));
+    panel.appendChild(makeSlider('fixed X chance', T.fixedXChance, 0, 1, 0.05, v => T.fixedXChance = v, '#fa4').row);
+    panel.appendChild(makeSlider('fixed X min', T.fixedXRange[0], 0, 60, 1, v => T.fixedXRange[0] = v, '#fa4').row);
+    panel.appendChild(makeSlider('fixed X max', T.fixedXRange[1], 0, 80, 1, v => T.fixedXRange[1] = v, '#fa4').row);
     // ── FILLER section
     panel.appendChild(makeHeader('FILLER (decorative)', '#88f'));
     panel.appendChild(makeToggle('enabled (JL stagger only)', () => T.fillerEnabled, v => { T.fillerEnabled = v; }));
