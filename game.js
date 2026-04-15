@@ -7734,6 +7734,13 @@ function _createCanyonWalls() {
   const lB = makeSlab(-1, SPAWN_Z - T.tileLength); lB.position.x = shipX - spawnHalfX;
   const rA = makeSlab( 1, SPAWN_Z);  rA.position.x = shipX + spawnHalfX;
   const rB = makeSlab( 1, SPAWN_Z - T.tileLength); rB.position.x = shipX + spawnHalfX;
+
+  // Seed stamps so tiles start at the correct position before their first leapfrog
+  const seedCenter = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
+  const seedHalfX  = spawnHalfX;
+  [lA, lB].forEach(m => { m._stampedCenter = seedCenter; m._stampedHalfX = seedHalfX; });
+  [rA, rB].forEach(m => { m._stampedCenter = seedCenter; m._stampedHalfX = seedHalfX; });
+
   _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex,
                    left: [lA, lB], right: [rA, rB],
                    _spawnX: shipX };
@@ -7769,27 +7776,55 @@ function _updateCanyonWalls(dt, speed) {
   const effectiveSpd = (speed && speed > 1) ? speed : BASE_SPEED;
   const scroll = effectiveSpd * dt * T.scrollSpeed;
 
-  const halfX = T.canyonHalfX || 45;
-  // Read corridorGapCenter directly from the real L3 algorithm — spawnCorridorRow writes it
-  const center = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
-  const spawnBase = (_canyonWalls._spawnX !== undefined) ? _canyonWalls._spawnX : 0;
+  // halfX: use live L3 squeeze value from _jlCorridor if available, else tuner default
+  const halfX = (!T.freezeWide && _jlCorridor && _jlCorridor._lastHalfX != null)
+    ? _jlCorridor._lastHalfX
+    : (T.canyonHalfX || 45);
+
+  // Stamp corridorGapCenter onto each tile at leapfrog time — bakes the turn in like a cone row,
+  // so the corridor feel comes from flying into approaching geometry, not walls sliding in real time.
   _canyonWalls.left.forEach(m => {
     m.position.z += scroll;
-    if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
-    if (!T.freezeWide) m.position.x = spawnBase + center - halfX;
+    if (m.position.z > T.tileLength) {
+      m.position.z -= T.tileLength * 2;
+      // Stamp current center at the moment this tile resets to the back
+      const stampCenter = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
+      m._stampedCenter = stampCenter;
+      m._stampedHalfX  = halfX;
+    }
+    // Use the stamped center (or 0 if not yet stamped)
+    const sc = (m._stampedCenter !== undefined) ? m._stampedCenter : 0;
+    const sh = (m._stampedHalfX  !== undefined) ? m._stampedHalfX  : halfX;
+    m.position.x = sc - sh;
   });
   _canyonWalls.right.forEach(m => {
     m.position.z += scroll;
-    if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
-    if (!T.freezeWide) m.position.x = spawnBase + center + halfX;
+    if (m.position.z > T.tileLength) {
+      m.position.z -= T.tileLength * 2;
+      const stampCenter = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
+      m._stampedCenter = stampCenter;
+      m._stampedHalfX  = halfX;
+    }
+    const sc = (m._stampedCenter !== undefined) ? m._stampedCenter : 0;
+    const sh = (m._stampedHalfX  !== undefined) ? m._stampedHalfX  : halfX;
+    m.position.x = sc + sh;
   });
 
-  // Collision: kill ship if outside gap (with small buffer for fairness)
+  // Collision: use the stamped center of whichever left tile is closest to the ship (most positive Z <= ship Z)
   if (state._jetLightningMode && state.phase === 'playing' && !state._godMode && !_godMode) {
     const shipX = state.shipX || 0;
-    const buffer = 1.5; // units of grace
-    const gapCenter = spawnBase + center;
-    if (shipX < gapCenter - halfX + buffer || shipX > gapCenter + halfX - buffer) {
+    const shipZ = 3.9; // ship group is always at z=3.9
+    // Find the left tile closest in front of the ship
+    let closestTile = _canyonWalls.left[0];
+    let closestDist = Infinity;
+    _canyonWalls.left.forEach(m => {
+      const dz = shipZ - m.position.z; // positive = tile is behind ship
+      if (dz >= 0 && dz < closestDist) { closestDist = dz; closestTile = m; }
+    });
+    const gapCenter = (closestTile._stampedCenter !== undefined) ? closestTile._stampedCenter : 0;
+    const gapHalfX  = (closestTile._stampedHalfX  !== undefined) ? closestTile._stampedHalfX  : halfX;
+    const buffer = 1.5;
+    if (shipX < gapCenter - gapHalfX + buffer || shipX > gapCenter + gapHalfX - buffer) {
       if (typeof _killPlayer === 'function') _killPlayer();
       else if (typeof triggerDeath === 'function') triggerDeath();
     }
