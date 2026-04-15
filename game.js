@@ -19986,12 +19986,18 @@ function _tickAsteroidSpawner(dt) {
       // Use the shared _fireStagger if available (wired by tuner IIFE) — identical to loop button
       if (window._fireStagger) { window._fireStagger(); }
       else {
-        // Fallback: same logic inline
+        // Fallback: same logic inline (Y panel not yet opened)
         const steps = Math.max(1, Math.round(T.salvoCount));
         for (let si = 0; si < steps; si++) {
           setTimeout(() => {
             if (state.phase !== 'playing') return;
-            _spawnAsteroid(state.shipX);
+            const _useFixed = Math.random() < T.fixedXChance;
+            const [_fxMin, _fxMax] = T.fixedXRange;
+            const _targetX = _useFixed
+              ? (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
+              : state.shipX;
+            console.log('[fixedX-fallback] useFixed='+_useFixed+' targetX='+_targetX.toFixed(1));
+            _spawnAsteroid(_targetX);
           }, si * T.staggerGap * 1000);
         }
       }
