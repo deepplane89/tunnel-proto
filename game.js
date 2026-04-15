@@ -7504,17 +7504,11 @@ function _createCanyonWalls() {
   metalTex.wrapS = THREE.RepeatWrapping;
   metalTex.wrapT = THREE.RepeatWrapping;
 
-  const mat = new THREE.MeshStandardMaterial({
-    color:             new THREE.Color(T.baseColor),
-    map:               gridTex,
-    metalnessMap:      metalTex,
-    metalness:         T.metalness,
-    roughness:         T.roughness,
-    emissive:          new THREE.Color(T.emissiveHex),
-    emissiveIntensity: T.emissiveIntensity,
-    emissiveMap:       gridTex,
-    flatShading:       true,
-    side:              THREE.DoubleSide,
+  // MeshBasicMaterial: fully self-lit, no scene lighting needed — matches concept art look
+  const mat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(T.baseColor),
+    map:   gridTex,
+    side:  THREE.DoubleSide,
   });
 
   function makeSlab(side, zOff) {
@@ -7547,7 +7541,7 @@ function _createCanyonWalls() {
   const lB = makeSlab(-1, SPAWN_Z - T.tileLength); lB.position.x = shipX - spawnHalfX;
   const rA = makeSlab( 1, SPAWN_Z);  rA.position.x = shipX + spawnHalfX;
   const rB = makeSlab( 1, SPAWN_Z - T.tileLength); rB.position.x = shipX + spawnHalfX;
-  _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex, metalTex,
+  _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex,
                    left: [lA, lB], right: [rA, rB] };
 }
 
@@ -7556,7 +7550,6 @@ function _destroyCanyonWalls() {
   _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
   _canyonWalls.mat.dispose();
   _canyonWalls.gridTex.dispose();
-  _canyonWalls.metalTex.dispose();
   _canyonWalls = null;
 }
 
@@ -17140,8 +17133,8 @@ window.addEventListener('keydown', (e) => {
     dbgVisible = !dbgVisible;
     dbgEl.classList.toggle('visible', dbgVisible);
   }
-  // C — toggle canyon corridor test (any mode, no cone spawning)
-  if ((e.key === 'c' || e.key === 'C') && state.phase === 'playing') {
+  // V — toggle canyon corridor test (any mode, no cone spawning)
+  if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
     _canyonActive = !_canyonActive;
     if (_canyonActive) {
       // Walls start wide and squeeze on their own — do NOT touch corridor cone spawner
@@ -17166,7 +17159,7 @@ window.addEventListener('keydown', (e) => {
           }))
         }, null, 2));
       }, 500);
-      console.log('[CANYON] ON — paste this:\n' + JSON.stringify({
+      console.log('[CANYON] ON (V key) — paste this:\n' + JSON.stringify({
         freezeWide:   T.freezeWide,
         wallWidth:    T.wallWidth,
         displacement: T.displacement,
