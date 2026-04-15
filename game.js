@@ -8832,7 +8832,7 @@ function spawnL5CorridorRow() {
 function spawnL4CorridorRow() {
   // ── CORRIDOR LOGGER (temporary) ──
   const _l4Row = state.l4RowsDone || 0;
-  if (_l4Row === 0)  console.log('[L4-CORR] START — speed=' + (effectiveSpeed||0).toFixed(1) + ' levelElapsed=' + ((state.levelElapsed||0).toFixed(1)) + 's');
+  if (_l4Row === 0)  console.log('[L4-CORR] START — speed=' + (state.speed||0).toFixed(1) + ' levelElapsed=' + ((state.levelElapsed||0).toFixed(1)) + 's');
   if (_l4Row === 35) console.log('[L4-CORR] squeeze done (row 35) — entering straight/sine');
   if (_l4Row % 50 === 0 && _l4Row > 0) console.log('[L4-CORR] row=' + _l4Row + ' elapsed=' + ((state.levelElapsed||0).toFixed(1)) + 's halfX logged on next line');
   state.l4RowsDone = (state.l4RowsDone || 0);
@@ -8909,7 +8909,7 @@ function spawnL4CorridorRow() {
 function spawnCorridorRow() {
   // ── CORRIDOR LOGGER (temporary) ──
   const _cRow = state.corridorRowsDone || 0;
-  if (_cRow === 0)   console.log('[L3-CORR] START — speed=' + (effectiveSpeed||0).toFixed(1));
+  if (_cRow === 0)   console.log('[L3-CORR] START — speed=' + (state.speed||0).toFixed(1));
   if (_cRow === 40)  console.log('[L3-CORR] squeeze done (row 40) — entering sine curves');
   if (_cRow % 50 === 0 && _cRow > 0) console.log('[L3-CORR] row=' + _cRow + ' elapsed=' + ((state.levelElapsed||0).toFixed(1)) + 's');
   // Row counter drives the squeeze from wide entry to tight tunnel
