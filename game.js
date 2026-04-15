@@ -7348,92 +7348,137 @@ function _makeCanyonGridTexture() {
 }
 
 function _buildCanyonSlabGeo(side) {
-  // Builds a cliff-face wall running along Z, spanning Y in height.
-  // X position of each vert = 0 (mesh.position.x sets the wall X) plus outward displacement.
-  // side = -1: left wall, displace in -X (verts pushed left/outward)
-  // side =  1: right wall, displace in +X (verts pushed right/outward)
-  // Face normal points inward (toward ship center) naturally from winding order.
+  // Two-surface cliff geometry:
+  //   INNER FACE  — vertical quad grid facing ship (dx varies per vert for jaggedness)
+  //   TOP FACE    — near-horizontal cap sloping outward, sharing the ridge row with inner face
+  // Both flat-shaded. Shared ridge verts duplicated so each surface gets its own normals.
+  //
+  // Local space: mesh.position.x = gap edge (halfX from center)
+  //   inner face verts: x spans 0 (gap edge) outward by displacement noise
+  //   top face verts:   x spans from ridge outward by topWidth, y slopes downward outward
+  //
+  // side = -1: left wall (outward = -X), side = 1: right wall (outward = +X)
+
   const T = _canyonTuner;
-  const cols = T.segsZ + 1; // Z-axis subdivisions (along corridor)
-  const rows = T.segsX + 1; // Y-axis subdivisions (height)
-  const totalVerts = cols * rows;
+  const cols  = T.segsZ + 1;  // columns along Z (corridor depth)
+  const iRows = T.segsX + 1;  // rows on inner face (height)
+  const tRows = 5;             // rows on top face (outward slope)
+  const topW  = T.wallWidth;   // X extent of top face cap
+  const topDropY = -T.height * 0.35; // how far top face drops from ridge to outer edge
 
-  const positions = new Float32Array(totalVerts * 3);
-  const normals   = new Float32Array(totalVerts * 3);
-  const uvs       = new Float32Array(totalVerts * 2);
+  // Per-column noise is shared between inner ridge and top face so they connect seamlessly
+  // Precompute per-column values
+  const colNoise = new Float32Array(cols); // ridge X displacement per column
+  const colRidgeY = new Float32Array(cols); // ridge Y (ragged top) per column
+  for (let col = 0; col < cols; col++) {
+    const u = col / (cols - 1);
+    const px = u * 18.0;
+    const n1 = Math.sin(px * 2.1 + 0.9) * 0.35;
+    const n2 = Math.sin(px * 5.7 + 2.1) * 0.25;
+    const n3 = Math.abs(Math.sin(px * 3.2 + 4.4)) * 0.28;
+    colNoise[col] = Math.max(0, 0.4 + n1 + n2 + n3); // 0..~1
+    const tn = Math.sin(u * 31.7) * 0.4 + Math.sin(u * 17.3 + 1.2) * 0.35 + Math.sin(u * 7.1) * 0.25;
+    colRidgeY[col] = (0.5 + tn) * T.topRagged; // extra Y at ridge peak
+  }
 
-  for (let row = 0; row < rows; row++) {
-    const v = row / (rows - 1);                     // 0=bottom, 1=top
-    const y = (v - 0.5) * T.height;                 // centred: -height/2 to +height/2
-    const isTop = v > 0.85;
+  // ── INNER FACE ─────────────────────────────────────────────────────────────
+  // iRows rows × cols columns. Row 0 = bottom, row iRows-1 = ridge (top).
+  const iTotal = iRows * cols;
+  const iPos = new Float32Array(iTotal * 3);
+  const iUV  = new Float32Array(iTotal * 2);
 
+  const baseY = -T.height / 2; // bottom of inner face in local Y
+
+  for (let row = 0; row < iRows; row++) {
+    const v  = row / (iRows - 1);            // 0=bottom 1=ridge
+    const y  = baseY + v * T.height;         // bottom to ridge height
     for (let col = 0; col < cols; col++) {
-      const u = col / (cols - 1);                   // 0=near, 1=far
-      const z = -u * T.tileLength;                  // runs into the screen (negative Z = far)
-
-      // Fractal noise pushes verts outward — inner edge stays at dx=0 (flush with gap)
-      // and outer verts bulge out by displacement amount, creating a chunky cliff face.
-      const px = u * 18.0;
-      const py = v * 12.0;
-      const n1 = Math.sin(px * 2.1 + py * 1.3) * 0.35;
-      const n2 = Math.sin(px * 5.7 + py * 3.1) * 0.25;
-      const n3 = Math.abs(Math.sin(px * 3.2 + py * 5.5)) * 0.28;
-      const noise = 0.4 + n1 + n2 + n3;
-      // dx: 0 at inner edge (gap boundary), outward by noise*displacement
-      const dx = Math.max(0, noise) * T.displacement * side;
-
-      // Top-edge ragged in Y
-      let dy = 0;
-      if (isTop) {
-        const topNoise = Math.sin(u * 31.7) * 0.4 + Math.sin(u * 17.3 + 1.2) * 0.35 + Math.sin(u * 7.1) * 0.25;
-        dy = (0.5 + topNoise) * T.topRagged;
-      }
-
+      const u  = col / (cols - 1);
+      const z  = -u * T.tileLength;
+      // X displacement grows toward top so facets lean outward (more dramatic at ridge)
+      const dx = colNoise[col] * T.displacement * v * side;
+      // Ridge gets extra Y bump
+      const dy = (v > 0.9) ? colRidgeY[col] * v : 0;
       const idx = row * cols + col;
-      positions[idx * 3 + 0] = dx;      // X: displacement only (mesh.position.x sets wall X)
-      positions[idx * 3 + 1] = y + dy;  // Y
-      positions[idx * 3 + 2] = z;       // Z: runs along corridor
-
-      uvs[idx * 2 + 0] = u;
-      uvs[idx * 2 + 1] = v;
-
-      // Normal points inward toward ship (opposite of side)
-      normals[idx * 3 + 0] = -side;
-      normals[idx * 3 + 1] = 0;
-      normals[idx * 3 + 2] = 0;
+      iPos[idx*3+0] = dx;
+      iPos[idx*3+1] = y + dy;
+      iPos[idx*3+2] = z;
+      iUV[idx*2+0]  = u;
+      iUV[idx*2+1]  = v;
     }
   }
 
-  // Build index buffer — two triangles per quad, winding inward
-  const numQuads = T.segsZ * T.segsX;
-  const indices = new Uint32Array(numQuads * 6);
-  let ii = 0;
-  for (let row = 0; row < T.segsX; row++) {
-    for (let col = 0; col < T.segsZ; col++) {
-      const a = row * cols + col;
-      const b = a + 1;
-      const c = a + cols;
-      const d = c + 1;
-      // Wind so inward-facing normal is correct
-      if (side === 1) {
-        // right wall: face normal = -X, CCW when viewed from -X (inside)
-        indices[ii++] = a; indices[ii++] = c; indices[ii++] = b;
-        indices[ii++] = b; indices[ii++] = c; indices[ii++] = d;
-      } else {
-        // left wall: face normal = +X, CCW when viewed from +X (inside)
-        indices[ii++] = a; indices[ii++] = b; indices[ii++] = c;
-        indices[ii++] = b; indices[ii++] = d; indices[ii++] = c;
+  // ── TOP FACE ───────────────────────────────────────────────────────────────
+  // tRows rows × cols columns. Row 0 = ridge (shared visually), row tRows-1 = outer edge.
+  // Slopes outward in X and downward in Y.
+  const tTotal = tRows * cols;
+  const tPos = new Float32Array(tTotal * 3);
+  const tUV  = new Float32Array(tTotal * 2);
+
+  for (let row = 0; row < tRows; row++) {
+    const t  = row / (tRows - 1);  // 0=ridge, 1=outer edge
+    for (let col = 0; col < cols; col++) {
+      const u  = col / (cols - 1);
+      const z  = -u * T.tileLength;
+      // Ridge Y: same as inner face top row
+      const ridgeY = baseY + T.height + ((colRidgeY[col]));
+      // Outer edge slopes down and outward
+      const xOff = t * topW * side;
+      const yOff = t * topDropY;
+      // Small per-vert noise on top surface for extra faceting
+      const tn2 = Math.sin(u * 9.1 + t * 5.3) * 0.15 + Math.sin(u * 22.3 + t * 3.7) * 0.08;
+      const idx = row * cols + col;
+      tPos[idx*3+0] = xOff + tn2 * side * T.displacement * 0.3;
+      tPos[idx*3+1] = ridgeY + yOff + tn2 * T.displacement * 0.15;
+      tPos[idx*3+2] = z;
+      tUV[idx*2+0]  = u;
+      tUV[idx*2+1]  = 1.0 - t; // top face UV runs from 1 (ridge) to 0 (outer)
+    }
+  }
+
+  // ── INDEX BUFFERS ──────────────────────────────────────────────────────────
+  function buildQuadIndices(numRowSegs, numColSegs, colCount, offset) {
+    const buf = new Uint32Array(numRowSegs * numColSegs * 6);
+    let ii = 0;
+    for (let row = 0; row < numRowSegs; row++) {
+      for (let col = 0; col < numColSegs; col++) {
+        const a = offset + row * colCount + col;
+        const b = a + 1;
+        const c = a + colCount;
+        const d = c + 1;
+        if (side === 1) {
+          buf[ii++]=a; buf[ii++]=c; buf[ii++]=b;
+          buf[ii++]=b; buf[ii++]=c; buf[ii++]=d;
+        } else {
+          buf[ii++]=a; buf[ii++]=b; buf[ii++]=c;
+          buf[ii++]=b; buf[ii++]=d; buf[ii++]=c;
+        }
       }
     }
+    return buf;
   }
+
+  const iIdx = buildQuadIndices(iRows-1, cols-1, cols, 0);
+  const tIdx = buildQuadIndices(tRows-1, cols-1, cols, iTotal);
+
+  // ── MERGE ──────────────────────────────────────────────────────────────────
+  const allPos = new Float32Array(iTotal*3 + tTotal*3);
+  allPos.set(iPos, 0);
+  allPos.set(tPos, iTotal*3);
+
+  const allUV = new Float32Array(iTotal*2 + tTotal*2);
+  allUV.set(iUV, 0);
+  allUV.set(tUV, iTotal*2);
+
+  const allIdx = new Uint32Array(iIdx.length + tIdx.length);
+  allIdx.set(iIdx, 0);
+  allIdx.set(tIdx, iIdx.length);
 
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('normal',   new THREE.BufferAttribute(normals,   3));
-  geo.setAttribute('uv',       new THREE.BufferAttribute(uvs,       2));
-  geo.setIndex(new THREE.BufferAttribute(indices, 1));
-  // flatShading recomputes normals per face — recompute after index is set
-  geo.computeVertexNormals();
+  geo.setAttribute('position', new THREE.BufferAttribute(allPos, 3));
+  geo.setAttribute('uv',       new THREE.BufferAttribute(allUV,  2));
+  geo.setIndex(new THREE.BufferAttribute(allIdx, 1));
+  geo.computeVertexNormals(); // flat shading will recompute per-face normals
   return geo;
 }
 
