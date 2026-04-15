@@ -8830,11 +8830,6 @@ function spawnL5CorridorRow() {
 }
 
 function spawnL4CorridorRow() {
-  // ── CORRIDOR LOGGER (temporary) ──
-  const _l4Row = state.l4RowsDone || 0;
-  if (_l4Row === 0)  console.log('[L4-CORR] START — speed=' + (state.speed||0).toFixed(1) + ' levelElapsed=' + ((state.levelElapsed||0).toFixed(1)) + 's');
-  if (_l4Row === 35) console.log('[L4-CORR] squeeze done (row 35) — entering straight/sine');
-  if (_l4Row % 50 === 0 && _l4Row > 0) console.log('[L4-CORR] row=' + _l4Row + ' elapsed=' + ((state.levelElapsed||0).toFixed(1)) + 's halfX logged on next line');
   state.l4RowsDone = (state.l4RowsDone || 0);
   const rowsDone = state.l4RowsDone;
   const maxRows = state._drL4MaxRows || 999;
@@ -8907,11 +8902,6 @@ function spawnL4CorridorRow() {
 }
 
 function spawnCorridorRow() {
-  // ── CORRIDOR LOGGER (temporary) ──
-  const _cRow = state.corridorRowsDone || 0;
-  if (_cRow === 0)   console.log('[L3-CORR] START — speed=' + (state.speed||0).toFixed(1));
-  if (_cRow === 40)  console.log('[L3-CORR] squeeze done (row 40) — entering sine curves');
-  if (_cRow % 50 === 0 && _cRow > 0) console.log('[L3-CORR] row=' + _cRow + ' elapsed=' + ((state.levelElapsed||0).toFixed(1)) + 's');
   // Row counter drives the squeeze from wide entry to tight tunnel
   state.corridorRowsDone = (state.corridorRowsDone || 0);
   const rowsDone = state.corridorRowsDone;
@@ -16117,7 +16107,6 @@ function update(dt) {
     } else {
       // Check if duration expired
       if (state.levelElapsed - state.l4StartElapsed >= L4_CORRIDOR_DURATION_S) {
-        console.log('[L4-CORR] END — total rows=' + state.l4RowsDone + ' duration=' + (state.levelElapsed - state.l4StartElapsed).toFixed(1) + 's');
         state.l4CorridorActive = false;
         state.l4CorridorDone   = true;
       } else {
@@ -20104,7 +20093,12 @@ const _origUpdateShockwave = _updateShockwave;
     // Run during tutorial gameplay OR when chaos mode is active
     if (state.phase === 'playing' && !state.introActive &&
         (state._tutorialActive || _chaosMode || state._jetLightningMode)) {
-      _tickAsteroidSpawner(dt);
+      // Corridor takes over — pause all JL obstacle spawning during breather
+      if (_jlCorridor.active) {
+        _jlTickCorridor(dt, state.speed);
+      } else {
+        _tickAsteroidSpawner(dt);
+      }
     }
     _updateAsteroids(dt);
     _origComposerRender(...args);
@@ -20674,6 +20668,111 @@ let _jlIntensity  = 3.0; // frequency scalar — 3.0 default (doubled from 1.5)
 let _jlSizeScalar = 1.0; // size scalar — 1.0 = approved baseline
 let _godMode      = false; // no damage — plays shield-hit sound on hit instead of killing
 
+// ─── JL Corridor — reusable self-contained corridor obstacle ─────────────────
+// Drives the existing spawnCorridorRow / spawnL4CorridorRow functions
+// independent of level/trigger system. Call _jlStartCorridor('l3' or 'l4').
+// Rows measured from main-mode playtests:
+//   L3: 750 rows at speed 72 ≈ 83s   (loop cut at 750, exit ramp last 20 rows)
+//   L4: 518 rows at speed 75.6 ≈ 50s (matches main mode, exit ramp last 20 rows)
+const _jlCorridor = {
+  active:    false,
+  type:      'l3',   // 'l3' or 'l4'
+  spawnZ:    -7,
+  delay:     2.0,    // seconds of clear gap before first row spawns
+  totalRows: 750,    // set by _jlStartCorridor
+  exitRows:  20,     // widen walls back out over last N rows
+};
+
+function _jlStartCorridor(type) {
+  const isL4 = type === 'l4';
+  // Reset shared corridor state
+  if (isL4) {
+    state.l4RowsDone  = 0;
+    state.l4SineT     = 0;
+    state.l4SpawnZ    = -7;
+    state.l4Delay     = 2.0;
+  } else {
+    state.corridorRowsDone  = 0;
+    state.corridorSineT     = 0;
+    state.corridorSpawnZ    = -7;
+    state.corridorDelay     = 2.0;
+    state.corridorGapCenter = 0;
+    state.corridorGapDir    = 1;
+  }
+  state.nearMissBendAllowed = true;
+  state.prevCorridorCenter  = 0;
+  state.prevCorridorDir     = 0;
+  // Clear existing obstacles so entry isn't blocked
+  ;[...activeObstacles].forEach(returnObstacleToPool);
+  activeObstacles.length = 0;
+  // Activate
+  _jlCorridor.active    = true;
+  _jlCorridor.type      = type;
+  _jlCorridor.spawnZ    = -7;
+  _jlCorridor.delay     = 2.0;
+  _jlCorridor.totalRows = isL4 ? 518 : 750;
+}
+
+function _jlStopCorridor() {
+  _jlCorridor.active = false;
+  // Clear corridor cones
+  for (let i = activeObstacles.length - 1; i >= 0; i--) {
+    if (activeObstacles[i].userData.isCorridor) {
+      returnObstacleToPool(activeObstacles[i]);
+      activeObstacles.splice(i, 1);
+    }
+  }
+}
+
+function _jlTickCorridor(dt, effectiveSpd) {
+  if (!_jlCorridor.active) return;
+  const isL4   = _jlCorridor.type === 'l4';
+  const rowsDone = isL4 ? (state.l4RowsDone || 0) : (state.corridorRowsDone || 0);
+  const total  = _jlCorridor.totalRows;
+  const exitAt = total - _jlCorridor.exitRows;
+
+  // Inject exit-ramp maxRows so existing row functions widen walls cleanly
+  if (isL4) {
+    state._drL4MaxRows = total;
+  } else {
+    state._drL3MaxRows = total;
+    state.isDeathRun   = state.isDeathRun || false; // preserve, but exit ramp reads isDeathRun
+  }
+
+  // Done — clean up
+  if (rowsDone >= total) {
+    _jlStopCorridor();
+    if (isL4) { state._drL4MaxRows = undefined; }
+    else      { state._drL3MaxRows = undefined; }
+    return;
+  }
+
+  // Delay (breathing room before walls appear)
+  if (isL4) {
+    if (state.l4Delay > 0) { state.l4Delay -= dt; return; }
+    state.l4SpawnZ += effectiveSpd * dt;
+    if (state.l4SpawnZ >= 0) {
+      state.l4SpawnZ = -7 + (Math.random() - 0.5) * 2;
+      spawnL4CorridorRow();
+    }
+  } else {
+    if (state.corridorDelay > 0) { state.corridorDelay -= dt; return; }
+    state.corridorSpawnZ += effectiveSpd * dt;
+    if (state.corridorSpawnZ >= 0) {
+      state.corridorSpawnZ = -7 + (Math.random() - 0.5) * 2;
+      spawnCorridorRow();
+    }
+  }
+
+  // Near-miss bend tracking (scoring/SFX — mirrors main mode)
+  const curCenter = state.corridorGapCenter || 0;
+  const delta = curCenter - state.prevCorridorCenter;
+  const curDir = delta > 0.1 ? 1 : delta < -0.1 ? -1 : state.prevCorridorDir;
+  if (curDir !== 0 && curDir !== state.prevCorridorDir) state.nearMissBendAllowed = true;
+  state.prevCorridorDir    = curDir;
+  state.prevCorridorCenter = curCenter;
+}
+
 // ── Track definitions — drop new obstacles in here as config objects ──────────
 const _JL_TRACKS = [
 
@@ -20871,6 +20970,9 @@ function _tickJetLightningRamp(dt) {
 
   _jlRampTime += dt;
   const t = _jlRampTime;
+
+  // ── Corridor breather — pause all track spawning while active
+  if (_jlCorridor.active) return;
 
   // ── Iterate tracks ────────────────────────────────────────────────────────
   // First pass: find which asteroid/lightning tracks are active this frame
