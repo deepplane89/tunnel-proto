@@ -7282,10 +7282,10 @@ const _canyonTuner = {
   fillLight:     0.4,   // ambient fill light intensity added to scene for canyon
   scrollSpeed:   1.0,
   freezeWide:    true,
-  baseColor:     '#1a3a4a',
+  baseColor:     '#2a5a72',  // mid blue-grey — visible, matches AI pic
   gridColor:     '#00eeff',
-  gridOpacity:   0.7,
-  crackOpacity:  0.9,
+  gridOpacity:   1.0,
+  crackOpacity:  1.0,
 };
 let _canyonWalls = null;
 let _canyonFillLight = null; // dedicated fill light for canyon
@@ -7305,7 +7305,7 @@ function _makeCanyonGridTexture() {
   // Cyan grid lines
   ctx.strokeStyle = T.gridColor;
   ctx.globalAlpha = T.gridOpacity;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 3.0;
   for (let i = 0; i <= T.segsX; i++) {
     const x = (i / T.segsX) * w;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
@@ -7550,11 +7550,10 @@ function _createCanyonWalls() {
   metalTex.wrapS = THREE.RepeatWrapping;
   metalTex.wrapT = THREE.RepeatWrapping;
 
-  // MeshBasicMaterial: fully self-lit, no scene lighting needed — matches concept art look
+  // Purely emissive — self-lit like the concept art, no scene lighting needed
   const mat = new THREE.MeshBasicMaterial({
-    color: new THREE.Color(T.baseColor),
-    map:   gridTex,
-    side:  THREE.DoubleSide,
+    map:  gridTex,
+    side: THREE.DoubleSide,
   });
 
   function makeSlab(side, zOff) {
@@ -7590,12 +7589,7 @@ function _createCanyonWalls() {
   _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex,
                    left: [lA, lB], right: [rA, rB] };
 
-  // Dedicated fill light so canyon walls aren't purely self-lit
-  if (!_canyonFillLight) {
-    _canyonFillLight = new THREE.PointLight(0x44ccff, T.fillLight, 400);
-    _canyonFillLight.position.set(0, 40, -80);
-    scene.add(_canyonFillLight);
-  }
+  // No fill light needed — MeshBasicMaterial is self-lit from canvas texture
 }
 
 function _destroyCanyonWalls() {
@@ -17251,97 +17245,130 @@ window.addEventListener('keydown', (e) => {
   ].join(';');
   document.body.appendChild(panel);
 
-  function rebuild() {
+  let panelVisible = false;
+
+  function rebuildGeo() {
     if (!_canyonActive) return;
     _destroyCanyonWalls();
     _createCanyonWalls();
   }
 
-  function makeSlider(label, key, min, max, step, needsRebuild) {
+  function rebuildTex() {
+    if (!_canyonWalls) return;
+    _canyonWalls.gridTex.dispose();
+    const newTex = _makeCanyonGridTexture();
+    newTex.repeat.set(1, 3);
+    _canyonWalls.mat.map = newTex;
+    _canyonWalls.mat.needsUpdate = true;
+    _canyonWalls.gridTex = newTex;
+  }
+
+  function hdr(txt) {
+    const d = document.createElement('div');
+    d.style.cssText = 'color:#ff0;font-size:10px;margin:8px 0 3px;letter-spacing:1px;';
+    d.textContent = txt;
+    panel.appendChild(d);
+  }
+
+  function slider(label, key, min, max, step, mode) {
+    // mode: 'geo' = rebuild geometry, 'tex' = rebuild texture, 'live' = instant
     const T = _canyonTuner;
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;margin:3px 0;gap:6px;';
+    row.style.cssText = 'display:flex;align-items:center;margin:2px 0;gap:5px;';
     const lbl = document.createElement('span');
-    lbl.style.cssText = 'flex:0 0 110px;font-size:10px;color:#aef;';
+    lbl.style.cssText = 'flex:0 0 105px;font-size:10px;color:#aef;';
     lbl.textContent = label;
     const sl = document.createElement('input');
-    sl.type = 'range'; sl.min = min; sl.max = max; sl.step = step;
-    sl.value = T[key];
-    sl.style.cssText = 'flex:1;accent-color:#00eeff;';
-    const val = document.createElement('span');
-    val.style.cssText = 'flex:0 0 36px;text-align:right;font-size:10px;';
-    val.textContent = T[key];
+    sl.type = 'range'; sl.min = min; sl.max = max; sl.step = step; sl.value = T[key];
+    sl.style.cssText = 'flex:1;accent-color:#00eeff;cursor:pointer;';
+    const vl = document.createElement('span');
+    vl.style.cssText = 'flex:0 0 38px;text-align:right;font-size:10px;color:#fff;';
+    vl.textContent = T[key];
     sl.addEventListener('input', () => {
       T[key] = parseFloat(sl.value);
-      val.textContent = sl.value;
-      if (_canyonFillLight && key === 'fillLight') _canyonFillLight.intensity = T.fillLight;
-      if (needsRebuild) rebuild();
+      vl.textContent = sl.value;
+      if (mode === 'geo') rebuildGeo();
+      else if (mode === 'tex') rebuildTex();
+      // 'live' — nothing extra needed, update loop reads T directly
     });
-    row.appendChild(lbl); row.appendChild(sl); row.appendChild(val);
+    row.appendChild(lbl); row.appendChild(sl); row.appendChild(vl);
+    panel.appendChild(row);
+  }
+
+  function colorPicker(label, key, mode) {
+    const T = _canyonTuner;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;margin:2px 0;gap:5px;';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'flex:0 0 105px;font-size:10px;color:#aef;';
+    lbl.textContent = label;
+    const inp = document.createElement('input');
+    inp.type = 'color'; inp.value = T[key];
+    inp.style.cssText = 'flex:1;height:22px;cursor:pointer;border:none;background:none;';
+    inp.addEventListener('input', () => {
+      T[key] = inp.value;
+      if (mode === 'tex') rebuildTex();
+      else if (mode === 'geo') rebuildGeo();
+    });
+    row.appendChild(lbl); row.appendChild(inp);
+    panel.appendChild(row);
+  }
+
+  function toggle(label, key) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;margin:4px 0;gap:8px;';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox'; chk.checked = _canyonTuner[key];
+    chk.addEventListener('change', () => { _canyonTuner[key] = chk.checked; });
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'font-size:10px;color:#aef;cursor:pointer;';
+    lbl.textContent = label;
+    row.appendChild(chk); row.appendChild(lbl);
     panel.appendChild(row);
   }
 
   function buildPanel() {
     panel.innerHTML = '';
     const title = document.createElement('div');
-    title.style.cssText = 'font-size:12px;font-weight:bold;margin-bottom:8px;color:#fff;border-bottom:1px solid #00eeff;padding-bottom:4px;';
-    title.textContent = '⛰ CANYON TUNER';
+    title.style.cssText = 'font-size:12px;font-weight:bold;color:#fff;border-bottom:1px solid #00eeff;padding-bottom:5px;margin-bottom:4px;';
+    title.textContent = 'CANYON TUNER  [V to close]';
     panel.appendChild(title);
 
-    // Geometry (needs rebuild)
-    const geoHdr = document.createElement('div');
-    geoHdr.style.cssText = 'color:#ff0;font-size:10px;margin:6px 0 2px;';
-    geoHdr.textContent = '— GEOMETRY (auto-rebuilds) —';
-    panel.appendChild(geoHdr);
-    makeSlider('height',       'height',      20, 200,  1,    true);
-    makeSlider('wallWidth',    'wallWidth',   20, 300,  5,    true);
-    makeSlider('displacement', 'displacement', 0, 80,   1,    true);
-    makeSlider('topRagged',    'topRagged',    0, 60,   1,    true);
-    makeSlider('slopeLean',    'slopeLean',    0, 2,    0.05, true);
-    makeSlider('capHeight',    'capHeight',    0, 3,    0.05, true);
-    makeSlider('segsX',        'segsX',        2, 30,   1,    true);
-    makeSlider('segsZ',        'segsZ',        4, 120,  2,    true);
+    hdr('— GEOMETRY —');
+    slider('height',        'height',      20, 200, 1,    'geo');
+    slider('wallWidth',     'wallWidth',   10, 300, 5,    'geo');
+    slider('displacement',  'displacement', 0, 100, 1,    'geo');
+    slider('topRagged',     'topRagged',   0,  80, 1,    'geo');
+    slider('slopeLean',     'slopeLean',   0,  2,  0.05, 'geo');
+    slider('capHeight',     'capHeight',   0,  3,  0.05, 'geo');
+    slider('segsX',         'segsX',       2,  30, 1,    'geo');
+    slider('segsZ',         'segsZ',       4, 120, 2,    'geo');
 
-    // Live (no rebuild)
-    const liveHdr = document.createElement('div');
-    liveHdr.style.cssText = 'color:#ff0;font-size:10px;margin:6px 0 2px;';
-    liveHdr.textContent = '— LIVE —';
-    panel.appendChild(liveHdr);
-    makeSlider('fillLight',   'fillLight',   0, 4,   0.05, false);
-    makeSlider('scrollSpeed', 'scrollSpeed', 0, 3,   0.1,  false);
+    hdr('— TEXTURE —');
+    colorPicker('baseColor',  'baseColor',  'tex');
+    colorPicker('gridColor',  'gridColor',  'tex');
+    slider('gridOpacity',   'gridOpacity',  0, 1,   0.05, 'tex');
+    slider('crackOpacity',  'crackOpacity', 0, 1,   0.05, 'tex');
 
-    // Freeze toggle
-    const fRow = document.createElement('div');
-    fRow.style.cssText = 'margin:6px 0;display:flex;align-items:center;gap:8px;';
-    const fChk = document.createElement('input');
-    fChk.type = 'checkbox'; fChk.checked = _canyonTuner.freezeWide;
-    fChk.addEventListener('change', () => { _canyonTuner.freezeWide = fChk.checked; });
-    const fLbl = document.createElement('label');
-    fLbl.style.cssText = 'font-size:10px;color:#aef;cursor:pointer;';
-    fLbl.textContent = 'freeze wide (no squeeze)';
-    fRow.appendChild(fChk); fRow.appendChild(fLbl);
-    panel.appendChild(fRow);
+    hdr('— LIVE —');
+    slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
+    toggle('freeze wide',   'freezeWide');
 
-    // Manual rebuild button
     const btn = document.createElement('button');
-    btn.textContent = '↺ REBUILD WALLS';
-    btn.style.cssText = 'margin-top:8px;width:100%;background:#001a2a;border:1px solid #00eeff;color:#00eeff;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
-    btn.onclick = rebuild;
+    btn.textContent = 'REBUILD';
+    btn.style.cssText = 'margin-top:10px;width:100%;background:#001a2a;border:1px solid #00eeff;color:#00eeff;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+    btn.onclick = rebuildGeo;
     panel.appendChild(btn);
   }
 
-  // Show/hide panel alongside V toggle
-  const origListener = window._canyonVKeyListener;
+  // Separate keydown listener — checks panelVisible flag, not _canyonActive
   window.addEventListener('keydown', (e) => {
-    if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
-      if (_canyonActive) {
-        // Canyon just turned ON — show panel
-        buildPanel();
-        panel.style.display = 'block';
-      } else {
-        panel.style.display = 'none';
-      }
-    }
+    if (e.key !== 'v' && e.key !== 'V') return;
+    if (state.phase !== 'playing') return;
+    // _canyonActive has already been toggled by the other V listener
+    panelVisible = _canyonActive; // show when canyon is on, hide when off
+    if (panelVisible) { buildPanel(); panel.style.display = 'block'; }
+    else panel.style.display = 'none';
   });
 })();
 
