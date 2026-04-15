@@ -7306,6 +7306,13 @@ const _canyonTuner = {
   corridorAmpMax:   36,  // max swing in world units (matches CORRIDOR_AMP_MAX default)
   corridorAmpStart: 10,  // initial swing when curves first begin
   corridorAmpRamp:  200, // rows to reach max amplitude
+  // Cliff strata vertex color controls
+  strataBaseDark:   0.04, // how dark the waterline base is (0=black, 1=full)
+  strataMidTone:    0.18, // brightness of the mid cliff face
+  strataRimBright:  1.00, // rim brightness at ridge top (>1 pushes into bloom)
+  strataRimCyan:    1.00, // cyan tint of rim (1=full cyan, 0=white)
+  strataSplit:      0.55, // v-axis split between base→mid and mid→rim zones
+  strataNoiseAmt:   0.06, // per-column micro-variation for rocky texture
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
@@ -7488,6 +7495,32 @@ function _makeCanyonGridTexture() {
       ctx.stroke();
     }
   }
+  // ── STRATA OVERLAY ──
+  // Multiply-blend a vertical gradient over the whole texture:
+  // rim (top/y=0) stays bright, mid darkens, base (y=h) goes near-black.
+  // Canvas V: y=0 = top of wall (rim), y=h = bottom (waterline).
+  ctx.globalCompositeOperation = 'multiply';
+  const strataGrad = ctx.createLinearGradient(0, 0, 0, h);
+  const sRim   = T.strataRimBright  !== undefined ? T.strataRimBright  : 1.0;
+  const sMid   = T.strataMidTone    !== undefined ? T.strataMidTone    : 0.18;
+  const sBase2 = T.strataBaseDark   !== undefined ? T.strataBaseDark   : 0.04;
+  const sCyan2 = T.strataRimCyan    !== undefined ? T.strataRimCyan    : 1.0;
+  const sSpl   = T.strataSplit      !== undefined ? T.strataSplit      : 0.55;
+  const rimR = Math.round(Math.min(255, sRim * (1 - sCyan2*0.35) * 255));
+  const rimG = Math.round(Math.min(255, sRim * 255));
+  const rimB = Math.round(Math.min(255, sRim * 255));
+  const midR = Math.round(sMid * 0.65 * 255);
+  const midG = Math.round(sMid * 0.90 * 255);
+  const midB = Math.round(sMid * 1.40 * 255);
+  const bv   = Math.round(sBase2 * 255);
+  strataGrad.addColorStop(0,           `rgb(${rimR},${rimG},${rimB})`);
+  strataGrad.addColorStop(1 - sSpl,    `rgb(${midR},${midG},${midB})`);
+  strataGrad.addColorStop(1,           `rgb(${bv},${bv},${bv})`);
+  ctx.fillStyle = strataGrad;
+  ctx.globalAlpha = 1;
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = 'source-over';
+
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
@@ -7814,16 +7847,28 @@ function _createCanyonWalls() {
         iPos[idx*3+2] = z;
         iUV[idx*2+0]  = r / (NUM_ROWS - 1);
         iUV[idx*2+1]  = v;
-        // Rock strata vertex colors
+        // Rock strata vertex colors — driven by tuner
+        const sBase  = T.strataBaseDark;
+        const sMid   = T.strataMidTone;
+        const sRim   = T.strataRimBright;
+        const sCyan  = T.strataRimCyan;    // 1=cyan rim, 0=white rim
+        const sSplit = T.strataSplit;
         let cr2, cg2, cb2;
-        if (v < 0.55) {
-          const t2 = v / 0.55;
-          cr2 = 0.04 + t2*0.08; cg2 = 0.06 + t2*0.12; cb2 = 0.08 + t2*0.20;
+        if (v < sSplit) {
+          const t2 = v / sSplit;
+          // base (dark) → mid: all channels scale up equally for neutral rock tone
+          cr2 = sBase + t2 * (sMid * 0.65);
+          cg2 = sBase + t2 * (sMid * 0.90);
+          cb2 = sBase + t2 * (sMid * 1.40);
         } else {
-          const t2 = (v-0.55)/0.45, ease = t2*t2*(3-2*t2);
-          cr2 = 0.12 + ease*0.53; cg2 = 0.18 + ease*0.82; cb2 = 0.28 + ease*0.72;
+          const t2 = (v - sSplit) / (1 - sSplit);
+          const ease = t2*t2*(3-2*t2); // smoothstep
+          // mid → rim: lerp to (sRim * (1-sCyan*0.35), sRim, sRim)
+          cr2 = sMid*0.65 + ease * (sRim*(1 - sCyan*0.35) - sMid*0.65);
+          cg2 = sMid*0.90 + ease * (sRim                  - sMid*0.90);
+          cb2 = sMid*1.40 + ease * (sRim                  - sMid*1.40);
         }
-        const noise = (rowNoise[r] - 0.5) * 0.06;
+        const noise = (rowNoise[r] - 0.5) * (T.strataNoiseAmt || 0.06);
         iCol[idx*3+0] = Math.max(0, cr2 + noise);
         iCol[idx*3+1] = Math.max(0, cg2 + noise);
         iCol[idx*3+2] = Math.max(0, cb2 + noise*0.5);
@@ -7888,7 +7933,7 @@ function _createCanyonWalls() {
   gridTex.repeat.set(1, 1);
   const mat = new THREE.MeshStandardMaterial({
     color:             0x000000,   // all light from emissive
-    vertexColors:      false,      // strata baked into emissiveMap V gradient instead
+    vertexColors:      false,      // strata baked into emissiveMap via multiply gradient
     emissive:          0xffffff,
     emissiveMap:       gridTex,
     emissiveIntensity: T.brightness * 1.8,
@@ -17690,6 +17735,14 @@ window.addEventListener('keydown', (e) => {
 
     hdr('— GRID GLOW —');
     slider('gridGlow',      'gridGlow',     0,   1,  0.05,'tex');
+
+    hdr('— CLIFF STRATA —');
+    slider('rimBright',     'strataRimBright',  0, 2,    0.05, 'tex');
+    slider('rimCyan',       'strataRimCyan',    0, 1,    0.05, 'tex');
+    slider('midTone',       'strataMidTone',    0, 1,    0.02, 'tex');
+    slider('baseDark',      'strataBaseDark',   0, 0.5,  0.01, 'tex');
+    slider('strataSplit',   'strataSplit',      0.1, 0.9, 0.02,'tex');
+    slider('noiseAmt',      'strataNoiseAmt',   0, 0.3,  0.01, 'tex');
 
     hdr('— CORRIDOR CURVES —');
     slider('ampMax',        'corridorAmpMax',    0, 80, 1, 'geo');
