@@ -7270,35 +7270,36 @@ function _updateTerrainWalls(dt, speed) {
 //  CANYON CORRIDOR WALLS
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
-  height:        110,   // ~60% up from bottom of range
+  height:        80,    // shorter so top is visible in distance
   tileLength:    400,
   segsX:         10,
-  segsZ:         100,   // far right
-  displacement:  45,   // ~55% up
-  wallWidth:     175,  // ~55% up
-  topRagged:     35,   // ~45% up
-  capHeight:     1.6,  // ~55% up
+  segsZ:         100,
+  displacement:  45,
+  wallWidth:     60,   // narrow top cap overhang
+  topRagged:     55,   // strong jagged silhouette
+  capHeight:     1.6,
   slopeLean:     0.0,
   fillLight:     0.4,
   scrollSpeed:   1.0,
   freezeWide:    true,
-  baseColor:     '#2a5a72',
-  brightness:    1.0,   // full
+  canyonHalfX:   45,   // gap half-width (canyon only — does not affect JL corridor)
+  baseColor:     '#0d1a26',  // near-black dark teal-purple
+  brightness:    1.2,
   gridColor:     '#00eeff',
-  gridOpacity:   0.25,  // low — just left of center
-  crackOpacity:  0.15,  // low — just left of center
+  gridOpacity:   0.45,
+  crackOpacity:  0.6,   // bold veins
   slabCount:     5,
   // Per-slab type controls
-  gridLineW:     2.0,   // grid line width
+  gridLineW:     1.5,   // grid line width
   gridCols:      4,     // grid columns per slab
   gridRows:      6,     // grid rows per slab
-  veinCount:     6,     // cracks per vein slab
-  veinWidth:     2.5,   // max vein line width
+  veinCount:     8,     // cracks per vein slab
+  veinWidth:     3.5,   // max vein line width
   veinColor:     '#ff00cc',
-  bloomRadius:   0.7,   // bloom radius as fraction of slab width
+  bloomRadius:   0.7,
   bloomColor:    '#00e6ff',
-  bloomOpacity:  0.55,
-  dividerOpacity: 0.3,  // slab divider line opacity
+  bloomOpacity:  0.65,
+  dividerOpacity: 0.4,
 };
 let _canyonWalls = null;
 let _canyonFillLight = null; // dedicated fill light for canyon
@@ -7330,60 +7331,73 @@ function _makeCanyonGridTexture() {
   for (let si = 0; si < nSlabs; si++) {
     const sx0 = si * slabW;
     const sx1 = sx0 + slabW;
-    const slabType = si % 3; // 0=grid, 1=heavy veins, 2=bloom
+    const slabType = si % 2; // strict alternating: 0=bright diagonal-grid, 1=dark vein
 
     if (slabType === 0) {
-      // Grid slab
+      // BRIGHT GRID SLAB — electric cyan base with diagonal X-pattern lines
+      // Flood this slab with a bright cyan glow
+      const gc = parseInt(T.gridColor.slice(1), 16);
+      const gr2 = (gc >> 16) & 0xff, gg2 = (gc >> 8) & 0xff, gb2 = gc & 0xff;
+      const grd = ctx.createLinearGradient(sx0, 0, sx1, 0);
+      grd.addColorStop(0,   `rgba(${gr2},${gg2},${gb2},0.18)`);
+      grd.addColorStop(0.5, `rgba(${gr2},${gg2},${gb2},0.32)`);
+      grd.addColorStop(1,   `rgba(${gr2},${gg2},${gb2},0.18)`);
+      ctx.fillStyle = grd; ctx.globalAlpha = 1;
+      ctx.fillRect(sx0, 0, slabW, h);
+      // Diagonal X-grid lines (two sets of parallel diagonals crossing each other)
       ctx.strokeStyle = T.gridColor;
       ctx.globalAlpha = T.gridOpacity;
       ctx.lineWidth = T.gridLineW;
-      const gCols = Math.round(T.gridCols), gRows = Math.round(T.gridRows);
-      for (let gi = 0; gi <= gCols; gi++) {
-        const x = sx0 + (gi / gCols) * slabW;
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      const diagStep = slabW / Math.round(T.gridCols);
+      // Forward diagonals (top-left to bottom-right)
+      for (let d = -h; d < slabW + h; d += diagStep) {
+        ctx.beginPath();
+        ctx.moveTo(sx0 + d, 0);
+        ctx.lineTo(sx0 + d + h, h);
+        ctx.stroke();
       }
-      for (let gj = 0; gj <= gRows; gj++) {
-        const y = (gj / gRows) * h;
-        ctx.beginPath(); ctx.moveTo(sx0, y); ctx.lineTo(sx1, y); ctx.stroke();
-      }
-    } else if (slabType === 1) {
-      // Vein slab
-      for (let ci = 0; ci < Math.round(T.veinCount); ci++) {
-        const vx = sx0 + srng() * slabW;
-        const vy = srng() * h;
-        ctx.strokeStyle = T.veinColor;
-        ctx.globalAlpha = T.crackOpacity;
-        ctx.lineWidth = 0.8 + srng() * T.veinWidth;
-        ctx.beginPath(); ctx.moveTo(vx, vy);
-        let cx2 = vx, cy2 = vy;
-        const segs = 4 + Math.floor(srng() * 4);
-        for (let s = 0; s < segs; s++) {
-          cx2 = Math.max(sx0, Math.min(sx1, cx2 + (srng() - 0.3) * 50));
-          cy2 += (srng() - 0.1) * 70;
-          ctx.lineTo(cx2, cy2);
-        }
+      // Back diagonals (top-right to bottom-left)
+      for (let d = -h; d < slabW + h; d += diagStep) {
+        ctx.beginPath();
+        ctx.moveTo(sx0 + d + h, 0);
+        ctx.lineTo(sx0 + d, h);
         ctx.stroke();
       }
     } else {
-      // Bloom slab
-      const bx = sx0 + slabW * 0.5;
-      const by = h * (0.2 + srng() * 0.6);
-      const brad = slabW * T.bloomRadius;
-      const bc = parseInt(T.bloomColor.slice(1), 16);
-      const br2 = (bc >> 16) & 0xff, bg2 = (bc >> 8) & 0xff, bb2 = bc & 0xff;
-      const gr = ctx.createRadialGradient(bx, by, 0, bx, by, brad);
-      gr.addColorStop(0,   `rgba(${br2},${bg2},${bb2},${T.bloomOpacity})`);
-      gr.addColorStop(0.4, `rgba(${Math.round(br2*0.4)},${Math.round(bg2*0.4)},${Math.round(bb2*0.4)},${T.bloomOpacity*0.4})`);
-      gr.addColorStop(1,   'rgba(0,0,0,0)');
-      ctx.fillStyle = gr; ctx.globalAlpha = 1;
+      // DARK VEIN SLAB — near-black base with bold magenta lightning
+      // Darken this slab relative to already-dark base
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.globalAlpha = 1;
       ctx.fillRect(sx0, 0, slabW, h);
-      // Subtle grid overlay on bloom
-      ctx.strokeStyle = T.gridColor;
-      ctx.globalAlpha = T.gridOpacity * 0.4;
-      ctx.lineWidth = 1.0;
-      for (let gj = 0; gj <= 8; gj++) {
-        const y = (gj / 8) * h;
-        ctx.beginPath(); ctx.moveTo(sx0, y); ctx.lineTo(sx1, y); ctx.stroke();
+      // Bold branching lightning veins
+      for (let ci = 0; ci < Math.round(T.veinCount); ci++) {
+        const vx = sx0 + srng() * slabW;
+        const vy = srng() * h * 0.4; // start near top 40%
+        ctx.strokeStyle = T.veinColor;
+        ctx.globalAlpha = T.crackOpacity;
+        ctx.lineWidth = 1.0 + srng() * T.veinWidth;
+        ctx.beginPath(); ctx.moveTo(vx, vy);
+        let cx2 = vx, cy2 = vy;
+        const segs = 5 + Math.floor(srng() * 5);
+        for (let s = 0; s < segs; s++) {
+          cx2 = Math.max(sx0, Math.min(sx1, cx2 + (srng() - 0.4) * 40));
+          cy2 += (srng() * 0.8 + 0.2) * (h / segs); // always travels downward
+          ctx.lineTo(cx2, cy2);
+          // Occasional branch
+          if (srng() > 0.7) {
+            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(cx2, cy2);
+            ctx.globalAlpha = T.crackOpacity * 0.55;
+            ctx.lineWidth *= 0.5;
+            const bx2 = cx2 + (srng() - 0.5) * 35;
+            const by2 = cy2 + srng() * 50;
+            ctx.lineTo(bx2, by2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(cx2, cy2);
+            ctx.globalAlpha = T.crackOpacity;
+            ctx.lineWidth *= 2;
+          }
+        }
+        ctx.stroke();
       }
     }
 
@@ -7650,7 +7664,7 @@ function _createCanyonWalls() {
 
   // Lock X at spawn time relative to ship — never updated again, only Z scrolls
   const shipX = state.shipX || 0;
-  const spawnHalfX = CORRIDOR_WIDE_X;
+  const spawnHalfX = T.canyonHalfX || CORRIDOR_WIDE_X;
   const lA = makeSlab(-1, SPAWN_Z);  lA.position.x = shipX - spawnHalfX;
   const lB = makeSlab(-1, SPAWN_Z - T.tileLength); lB.position.x = shipX - spawnHalfX;
   const rA = makeSlab( 1, SPAWN_Z);  rA.position.x = shipX + spawnHalfX;
@@ -17406,7 +17420,8 @@ window.addEventListener('keydown', (e) => {
 
     hdr('— GEOMETRY —');
     slider('height',        'height',      20, 200, 1,    'geo');
-    slider('wallWidth',     'wallWidth',   10, 300, 5,    'geo');
+    slider('canyonHalfX',   'canyonHalfX', 10, 120, 5,    'geo');
+    slider('wallWidth',     'wallWidth',   10, 200, 5,    'geo');
     slider('displacement',  'displacement', 0, 100, 1,    'geo');
     slider('topRagged',     'topRagged',   0,  80, 1,    'geo');
     slider('slopeLean',     'slopeLean',   0,  5,  0.05, 'geo');
