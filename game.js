@@ -7272,47 +7272,47 @@ function _updateTerrainWalls(dt, speed) {
 const _canyonTuner = {
   height:        130,   // towers far above camera (camera y=2.8, top at y=130)
   tileLength:    175,
-  segsX:         40,   // height segments — more = smoother cliff face
+  segsX:         40,   // height segments — smoother cliff face
   segsZ:         100,
-  displacement:  5,    // subtle rocky faceting only — walls stay near-vertical
-  wallWidth:     10,   // thin top edge, barely visible — not a roof
-  topRagged:     18,   // jagged fractured spires at ridge
-  capHeight:     1.6,
-  slopeLean:     0.12, // slight base flare where wall meets water
+  displacement:  8,    // slight rocky faceting — glacier-slab look
+  wallWidth:     12,   // thin top edge
+  topRagged:     22,   // jagged fractured spires
+  capHeight:     1.4,
+  slopeLean:     0.10, // gentle base flare
   fillLight:     0.4,
   scrollSpeed:   1.0,
   freezeWide:    false,
-  canyonHalfX:   18,   // gap half-width — narrow canyon matching AI pic
-  baseColor:     '#0d1a26',  // near-black dark teal-purple
-  brightness:    0.5,  // keep base fill sub-bloom; grid lines still pop via canvas HDR values
-  gridColor:     '#00eeff',
-  gridOpacity:   0.45,
-  crackOpacity:  0.6,   // bold veins
+  canyonHalfX:   18,
+  // Texture — glacier/marble aesthetic matching AI pic
+  baseColor:     '#060e18',  // near-black deep navy base
+  brightness:    0.72,       // wall body visible but not overblown
+  gridColor:     '#c8eeff',  // near-white cool-tint grid lines (not saturated cyan)
+  gridOpacity:   0.30,       // subtle grid, not neon blasting
+  crackOpacity:  0.85,       // bold magenta veins
   slabCount:     4,
-  // Per-slab type controls
-  gridLineW:     1.5,   // grid line width
-  gridCols:      4,     // grid columns per slab
-  gridRows:      6,     // grid rows per slab
-  veinCount:     8,     // cracks per vein slab
-  veinWidth:     3.5,   // max vein line width
-  veinColor:     '#ff00cc',
-  bloomRadius:   0.7,
-  bloomColor:    '#00e6ff',
-  bloomOpacity:  0.65,
-  veinBloom:     0.5,   // radial glow intensity behind vein slabs
-  gridGlow:      0.5,   // extra glow intensity on bright grid slabs
-  dividerOpacity: 0.4,
-  // Corridor curve controls — override L3 constants for the baked ribbon
-  corridorAmpMax:   36,  // max swing in world units (matches CORRIDOR_AMP_MAX default)
-  corridorAmpStart: 10,  // initial swing when curves first begin
-  corridorAmpRamp:  200, // rows to reach max amplitude
-  // Cliff strata vertex color controls
-  strataBaseDark:   0.04, // how dark the waterline base is (0=black, 1=full)
-  strataMidTone:    0.18, // brightness of the mid cliff face
-  strataRimBright:  1.00, // rim brightness at ridge top (>1 pushes into bloom)
-  strataRimCyan:    1.00, // cyan tint of rim (1=full cyan, 0=white)
-  strataSplit:      0.55, // v-axis split between base→mid and mid→rim zones
-  strataNoiseAmt:   0.06, // per-column micro-variation for rocky texture
+  gridLineW:     2.0,
+  gridCols:      5,
+  gridRows:      8,
+  veinCount:     10,
+  veinWidth:     4.0,
+  veinColor:     '#ff00dd',  // hot magenta — matches AI pic exactly
+  bloomRadius:   0.5,
+  bloomColor:    '#88ccff',  // soft blue-white bloom, not saturated cyan
+  bloomOpacity:  0.4,
+  veinBloom:     0.75,       // veins glow strongly
+  gridGlow:      0.2,        // grid barely glows — walls are frosty not electric
+  dividerOpacity: 0.25,
+  // Corridor curve controls
+  corridorAmpMax:   36,
+  corridorAmpStart: 10,
+  corridorAmpRamp:  200,
+  // Cliff strata — glacier: dark base, broad bright mid (frosty blue-white), hot rim
+  strataBaseDark:   0.02,  // near-black at waterline
+  strataMidTone:    0.52,  // bright glacier face — this is the dominant value
+  strataRimBright:  1.35,  // rim blooms hot
+  strataRimCyan:    0.55,  // rim is mostly white with slight cyan tint
+  strataSplit:      0.28,  // dark base only occupies bottom 28% — rest is bright glacier
+  strataNoiseAmt:   0.08,  // slightly more facet noise for marble look
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
