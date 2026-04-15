@@ -7308,9 +7308,39 @@ let _canyonFillLight = null;
 let _canyonActive = false;
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
-let _canyonSineT      = 0;    // sine phase accumulator for canyon lateral bends
-let _canyonSineRows   = 0;    // row counter for canyon sine (advances with Z travel)
-let _canyonSineZ      = 0;    // Z remainder accumulator for sine row advances
+let _canyonSineT      = 0;
+let _canyonSineRows   = 0;
+let _canyonSineZ      = 0;
+// Call window._canyonLog() from console to get a snapshot
+window._canyonLog = function() {
+  const T = _canyonTuner;
+  const walls = _canyonWalls;
+  const halfX = T.canyonHalfX || 45;
+  const spawnBase = walls ? (walls._spawnX || 0) : 0;
+  // Recompute current center
+  let center = 0;
+  if (!T.freezeWide && _canyonSineRows >= 8) {
+    const cr = _canyonSineRows - 8;
+    const amp = CORRIDOR_AMP_START + (CORRIDOR_AMP_MAX - CORRIDOR_AMP_START) * Math.min(1, cr/CORRIDOR_AMP_RAMP) ** 2;
+    center = amp * Math.sin(_canyonSineT);
+  }
+  const out = {
+    active:       _canyonActive,
+    freezeWide:   T.freezeWide,
+    sineRows:     _canyonSineRows,
+    sineT:        +_canyonSineT.toFixed(3),
+    center:       +center.toFixed(2),
+    spawnBase:    +spawnBase.toFixed(2),
+    halfX,
+    leftX:        walls ? +walls.left[0].position.x.toFixed(2) : null,
+    rightX:       walls ? +walls.right[0].position.x.toFixed(2) : null,
+    gapActual:    walls ? +(walls.right[0].position.x - walls.left[0].position.x).toFixed(2) : null,
+    shipX:        +(state.shipX||0).toFixed(2),
+    shipInGap:    walls ? (state.shipX > walls.left[0].position.x && state.shipX < walls.right[0].position.x) : null,
+  };
+  console.log('[CANYON LOG]\n' + JSON.stringify(out, null, 2));
+  return out;
+};
 
 function _makeCanyonGridTexture() {
   const T = _canyonTuner;
