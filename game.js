@@ -7311,7 +7311,8 @@ let _canyonSqueezeZ   = 0;
 let _canyonSineT         = 0;
 let _canyonSineRows      = 0;
 let _canyonSineZ         = 0;
-let _canyonWasCorridor   = false; // was JL corridor active before canyon paused it
+let _canyonWasCorridor   = false;
+let _canyonDiagFrame     = 0;     // frame counter for periodic diagnostic log
 // Call window._canyonLog() from console to get a snapshot
 window._canyonLog = function() {
   const T = _canyonTuner;
@@ -7375,26 +7376,11 @@ function _makeCanyonGridTexture() {
       const gc = parseInt(T.gridColor.slice(1), 16);
       const gr2 = (gc >> 16) & 0xff, gg2 = (gc >> 8) & 0xff, gb2 = gc & 0xff;
       const glowAmt = T.gridGlow || 0;
-      // Frosty white-blue ice base — bright white with a cyan tint, not solid cyan
-      // This is what makes it look like glowing ice rather than a flat coloured panel
-      const frostAlpha = (0.55 + glowAmt * 0.35).toFixed(2);
-      // Mix white and cyan: at low glowAmt it's near-white, at high it's cyan-white
-      const fr = Math.round(180 + (255 - 180) * (1 - glowAmt * 0.5));
-      const fg = Math.round(220 + (255 - 220) * (1 - glowAmt * 0.3));
-      const fb = 255;
-      ctx.fillStyle = `rgba(${fr},${fg},${fb},${frostAlpha})`;
+      // Solid cyan base
+      const baseAlpha = (0.4 + glowAmt * 0.5).toFixed(2);
+      ctx.fillStyle = `rgba(${gr2},${gg2},${gb2},${baseAlpha})`;
       ctx.globalAlpha = 1;
       ctx.fillRect(sx0, 0, slabW, h);
-      // Cyan radial glow bloom in centre — controlled by gridGlow
-      if (glowAmt > 0) {
-        const g1 = (glowAmt * 0.6).toFixed(2);
-        const grd = ctx.createRadialGradient(sx0+slabW*0.5, h*0.5, 0, sx0+slabW*0.5, h*0.5, slabW*0.75);
-        grd.addColorStop(0,   `rgba(${gr2},${gg2},${gb2},${g1})`);
-        grd.addColorStop(0.5, `rgba(${gr2},${gg2},${gb2},${(glowAmt*0.2).toFixed(2)})`);
-        grd.addColorStop(1,   'rgba(0,0,0,0)');
-        ctx.fillStyle = grd; ctx.globalAlpha = 1;
-        ctx.fillRect(sx0, 0, slabW, h);
-      }
       // Diagonal X-grid lines — clipped to this slab only
       ctx.save();
       ctx.beginPath(); ctx.rect(sx0, 0, slabW, h); ctx.clip();
@@ -7770,6 +7756,19 @@ function _destroyCanyonWalls() {
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || !_canyonActive) return;
   const T = _canyonTuner;
+  // Diagnostic: log every 90 frames so you can see what's moving the ship
+  _canyonDiagFrame++;
+  if (_canyonDiagFrame % 90 === 0) {
+    console.log('[CANYON DIAG] shipX=' + (state.shipX||0).toFixed(2)
+      + ' shipVelX=' + (state.shipVelX||0).toFixed(3)
+      + ' corridorGapCenter=' + (state.corridorGapCenter||0).toFixed(2)
+      + ' jlCorridorActive=' + _jlCorridor.active
+      + ' corridorRowsDone=' + (state.corridorRowsDone||0)
+      + ' corridorSineT=' + (state.corridorSineT||0).toFixed(3)
+      + ' canyonCenter=' + (_canyonSineRows >= 8 ? (CORRIDOR_AMP_START * Math.sin(_canyonSineT)).toFixed(2) : '0(straight)')
+      + ' leftX=' + _canyonWalls.left[0].position.x.toFixed(2)
+      + ' rightX=' + _canyonWalls.right[0].position.x.toFixed(2));
+  }
   const effectiveSpd = (speed && speed > 1) ? speed : BASE_SPEED;
   const scroll = effectiveSpd * dt * T.scrollSpeed;
 
