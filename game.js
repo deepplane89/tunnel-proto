@@ -7270,23 +7270,24 @@ function _updateTerrainWalls(dt, speed) {
 //  CANYON CORRIDOR WALLS
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
-  height:        80,
+  height:        110,   // ~60% up from bottom of range
   tileLength:    400,
   segsX:         10,
-  segsZ:         80,
-  displacement:  30,
-  wallWidth:     120,
-  topRagged:     22,
-  capHeight:     1.3,   // multiplier on entrance cap top Y above ridge
-  slopeLean:     0.0,   // inner face lean: 0=vertical, 1=fully leaned
-  fillLight:     0.4,   // ambient fill light intensity added to scene for canyon
+  segsZ:         100,   // far right
+  displacement:  45,   // ~55% up
+  wallWidth:     175,  // ~55% up
+  topRagged:     35,   // ~45% up
+  capHeight:     1.6,  // ~55% up
+  slopeLean:     0.0,
+  fillLight:     0.4,
   scrollSpeed:   1.0,
   freezeWide:    true,
   baseColor:     '#2a5a72',
-  brightness:    0.5,        // 0=black, 1=full baseColor, >1=washed out
+  brightness:    1.0,   // full
   gridColor:     '#00eeff',
-  gridOpacity:   1.0,
-  crackOpacity:  1.0,
+  gridOpacity:   0.25,  // low — just left of center
+  crackOpacity:  0.15,  // low — just left of center
+  slabCount:     5,     // number of vertical slab panels per tile
 };
 let _canyonWalls = null;
 let _canyonFillLight = null; // dedicated fill light for canyon
@@ -7308,46 +7309,95 @@ function _makeCanyonGridTexture() {
   ctx.fillStyle = `rgb(${_br},${_bg},${_bb})`;
   ctx.globalAlpha = 1;
   ctx.fillRect(0, 0, w, h);
-  // Cyan grid lines
-  ctx.strokeStyle = T.gridColor;
-  ctx.globalAlpha = T.gridOpacity;
-  ctx.lineWidth = 3.0;
-  for (let i = 0; i <= T.segsX; i++) {
-    const x = (i / T.segsX) * w;
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-  }
-  for (let j = 0; j <= T.segsZ; j++) {
-    const y = (j / T.segsZ) * h;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-  }
-  // Magenta crack lines
+  // Seeded RNG for deterministic texture
   let _rs = 77;
   const srng = () => { _rs = (_rs * 16807) % 2147483647; return (_rs - 1) / 2147483646; };
-  ctx.lineWidth = 1.2;
-  for (let ci = 0; ci < 20; ci++) {
+
+  // ── Vertical slab panels — each panel gets a different treatment
+  const nSlabs = Math.max(1, Math.round(T.slabCount));
+  const slabW = w / nSlabs;
+  for (let si = 0; si < nSlabs; si++) {
+    const sx0 = si * slabW;
+    const sx1 = sx0 + slabW;
+    const slabType = si % 3; // 0=grid, 1=heavy veins, 2=bloom
+
+    if (slabType === 0) {
+      // Cyan grid
+      ctx.strokeStyle = T.gridColor;
+      ctx.globalAlpha = T.gridOpacity;
+      ctx.lineWidth = 2.0;
+      const gx = 4, gy = 6;
+      for (let gi = 0; gi <= gx; gi++) {
+        const x = sx0 + (gi / gx) * slabW;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      }
+      for (let gj = 0; gj <= gy; gj++) {
+        const y = (gj / gy) * h;
+        ctx.beginPath(); ctx.moveTo(sx0, y); ctx.lineTo(sx1, y); ctx.stroke();
+      }
+    } else if (slabType === 1) {
+      // Heavy magenta vein cracks
+      for (let ci = 0; ci < 6; ci++) {
+        const vx = sx0 + srng() * slabW;
+        const vy = srng() * h;
+        const bright = srng() > 0.3;
+        ctx.strokeStyle = bright ? '#ff00cc' : '#cc44ff';
+        ctx.globalAlpha = T.crackOpacity;
+        ctx.lineWidth = 1.5 + srng() * 2.5;
+        ctx.beginPath(); ctx.moveTo(vx, vy);
+        let cx2 = vx, cy2 = vy;
+        const segs = 4 + Math.floor(srng() * 4);
+        for (let s = 0; s < segs; s++) {
+          cx2 = Math.max(sx0, Math.min(sx1, cx2 + (srng() - 0.3) * 50));
+          cy2 += (srng() - 0.1) * 70;
+          ctx.lineTo(cx2, cy2);
+        }
+        ctx.stroke();
+      }
+    } else {
+      // Bloom glow hotspot
+      const gx2 = sx0 + slabW * 0.5;
+      const gy2 = h * (0.2 + srng() * 0.6);
+      const gr = ctx.createRadialGradient(gx2, gy2, 0, gx2, gy2, slabW * 0.7);
+      gr.addColorStop(0,   'rgba(0,230,255,0.55)');
+      gr.addColorStop(0.3, 'rgba(0,100,200,0.25)');
+      gr.addColorStop(1,   'rgba(0,0,0,0.00)');
+      ctx.fillStyle = gr; ctx.globalAlpha = 1;
+      ctx.fillRect(sx0, 0, slabW, h);
+      // Thin grid on top of bloom
+      ctx.strokeStyle = T.gridColor;
+      ctx.globalAlpha = T.gridOpacity * 0.5;
+      ctx.lineWidth = 1.0;
+      for (let gj = 0; gj <= 8; gj++) {
+        const y = (gj / 8) * h;
+        ctx.beginPath(); ctx.moveTo(sx0, y); ctx.lineTo(sx1, y); ctx.stroke();
+      }
+    }
+
+    // Slab divider line
+    if (si > 0) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.globalAlpha = 0.3;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx0, 0); ctx.lineTo(sx0, h); ctx.stroke();
+    }
+  }
+
+  // Global scatter cracks across all slabs
+  ctx.lineWidth = 1.0;
+  for (let ci = 0; ci < 10; ci++) {
     const sx = srng() * w, sy = srng() * h;
     const segs = 3 + Math.floor(srng() * 3);
-    const bright = srng() > 0.4;
-    ctx.strokeStyle = bright ? '#ff00cc' : '#cc44ff';
-    ctx.globalAlpha = T.crackOpacity * (0.7 + srng() * 0.3);
-    ctx.lineWidth = 0.8 + srng() * 1.4;
+    ctx.strokeStyle = srng() > 0.4 ? '#ff00cc' : '#cc44ff';
+    ctx.globalAlpha = T.crackOpacity * 0.5 * (0.7 + srng() * 0.3);
+    ctx.lineWidth = 0.5 + srng() * 1.0;
     ctx.beginPath(); ctx.moveTo(sx, sy);
     let cx2 = sx, cy2 = sy;
-    for (let si = 0; si < segs; si++) {
-      cx2 += (srng() - 0.3) * 80; cy2 += (srng() - 0.1) * 60;
+    for (let s = 0; s < segs; s++) {
+      cx2 += (srng() - 0.3) * 60; cy2 += (srng() - 0.1) * 50;
       ctx.lineTo(cx2, cy2);
     }
     ctx.stroke();
-  }
-  // Hotspot glows
-  for (let gi = 0; gi < 8; gi++) {
-    const gx = srng() * w, gy = srng() * h;
-    const gr = ctx.createRadialGradient(gx, gy, 0, gx, gy, 18 + srng() * 22);
-    gr.addColorStop(0,   'rgba(255,0,200,0.55)');
-    gr.addColorStop(0.4, 'rgba(100,0,255,0.20)');
-    gr.addColorStop(1,   'rgba(0,0,0,0.00)');
-    ctx.fillStyle = gr; ctx.globalAlpha = 1;
-    ctx.fillRect(gx - 40, gy - 40, 80, 80);
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = THREE.RepeatWrapping;
@@ -17345,7 +17395,7 @@ window.addEventListener('keydown', (e) => {
     slider('wallWidth',     'wallWidth',   10, 300, 5,    'geo');
     slider('displacement',  'displacement', 0, 100, 1,    'geo');
     slider('topRagged',     'topRagged',   0,  80, 1,    'geo');
-    slider('slopeLean',     'slopeLean',   0,  2,  0.05, 'geo');
+    slider('slopeLean',     'slopeLean',   0,  5,  0.05, 'geo');
     slider('capHeight',     'capHeight',   0,  3,  0.05, 'geo');
     slider('segsX',         'segsX',       2,  30, 1,    'geo');
     slider('segsZ',         'segsZ',       4, 120, 2,    'geo');
@@ -17356,6 +17406,7 @@ window.addEventListener('keydown', (e) => {
     colorPicker('gridColor',  'gridColor',  'tex');
     slider('gridOpacity',   'gridOpacity',  0, 1,   0.05, 'tex');
     slider('crackOpacity',  'crackOpacity', 0, 1,   0.05, 'tex');
+    slider('slabCount',     'slabCount',    1, 10,  1,    'tex');
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
