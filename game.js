@@ -7270,24 +7270,25 @@ function _updateTerrainWalls(dt, speed) {
 //  CANYON CORRIDOR WALLS
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
-  height:           80,    // total slab height (Y)
-  tileLength:       400,   // Z length of each tile (2 tiles per side leapfrog)
-  segsX:            10,    // subdivisions across face (horizontal jaggedness)
-  segsZ:            80,    // subdivisions along Z (vertical scroll jaggedness)
-  displacement:     30,    // outward X jaggedness on face verts
-  wallWidth:        120,   // flat lateral extent of wall face beyond halfX (unused — kept for tuner)
-  topRagged:        22,    // extra Y noise on top edge
-  scrollSpeed:      1.0,   // multiplier of game speed
-  freezeWide:       true,  // DEBUG: hold walls at wide open, no squeeze
-  emissiveIntensity: 1.6,
-  gridColor:        '#00eeff',
-  gridOpacity:      0.18,
-  baseColor:        '#ffffff',
-  emissiveHex:      '#00eeff',
-  metalness:        0.85,
-  roughness:        0.22,
+  height:        80,
+  tileLength:    400,
+  segsX:         10,
+  segsZ:         80,
+  displacement:  30,
+  wallWidth:     120,
+  topRagged:     22,
+  capHeight:     1.3,   // multiplier on entrance cap top Y above ridge
+  slopeLean:     0.0,   // inner face lean: 0=vertical, 1=fully leaned
+  fillLight:     0.4,   // ambient fill light intensity added to scene for canyon
+  scrollSpeed:   1.0,
+  freezeWide:    true,
+  baseColor:     '#1a3a4a',
+  gridColor:     '#00eeff',
+  gridOpacity:   0.7,
+  crackOpacity:  0.9,
 };
-let _canyonWalls = null; // { strips: [lA,lB,rA,rB], mat, gridTex, metalTex }
+let _canyonWalls = null;
+let _canyonFillLight = null; // dedicated fill light for canyon
 let _canyonActive = false;
 let _canyonSqueezeRow = 0;    // drives wall squeeze independent of cone spawner
 let _canyonSqueezeZ   = 0;    // Z accumulator — advances one row every 7 units
@@ -7298,7 +7299,8 @@ function _makeCanyonGridTexture() {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#03080f';
+  ctx.fillStyle = T.baseColor;
+  ctx.globalAlpha = 1;
   ctx.fillRect(0, 0, w, h);
   // Cyan grid lines
   ctx.strokeStyle = T.gridColor;
@@ -7321,7 +7323,7 @@ function _makeCanyonGridTexture() {
     const segs = 3 + Math.floor(srng() * 3);
     const bright = srng() > 0.4;
     ctx.strokeStyle = bright ? '#ff00cc' : '#cc44ff';
-    ctx.globalAlpha = 0.55 + srng() * 0.35;
+    ctx.globalAlpha = T.crackOpacity * (0.7 + srng() * 0.3);
     ctx.lineWidth = 0.8 + srng() * 1.4;
     ctx.beginPath(); ctx.moveTo(sx, sy);
     let cx2 = sx, cy2 = sy;
@@ -7395,8 +7397,9 @@ function _buildCanyonSlabGeo(side) {
     for (let col = 0; col < cols; col++) {
       const u  = col / (cols - 1);
       const z  = -u * T.tileLength;
-      // X displacement grows toward top so facets lean outward (more dramatic at ridge)
-      const dx = colNoise[col] * T.displacement * v * side;
+      // slopeLean=0: vertical, slopeLean=1: fully leaned outward at top
+      const leanFactor = 1 + T.slopeLean * v;
+      const dx = colNoise[col] * T.displacement * leanFactor * side;
       // Ridge gets extra Y bump
       const dy = (v > 0.9) ? colRidgeY[col] * v : 0;
       const idx = row * cols + col;
@@ -7474,11 +7477,54 @@ function _buildCanyonSlabGeo(side) {
   allIdx.set(iIdx, 0);
   allIdx.set(tIdx, iIdx.length);
 
+  // ── ENTRANCE CAP ────────────────────────────────────────────────────────────
+  // Vertical quad at z=0 (near end) closing the corridor entrance.
+  // Spans from bottom of inner face to top of ridge, and from x=0 to x=wallWidth*side.
+  // Uses 4 corner verts from the first column of iPos and tPos.
+  const capRows = 6;
+  const capXSegs = 4;
+  const capVerts = capRows * (capXSegs + 1);
+  const capPos = new Float32Array(capVerts * 3);
+  const capUV  = new Float32Array(capVerts * 2);
+
+  // Ridge Y at col=0 (near end)
+  const ridgeY0 = baseY + T.height + colRidgeY[0];
+  const capBotY  = baseY;
+  const capTopY  = ridgeY0 * T.capHeight;        // capHeight drives how tall the entrance cap is
+  const capInX   = 0;                             // inner edge (flush with gap)
+  const capOutX  = T.wallWidth * side;            // outer edge
+
+  for (let cr = 0; cr < capRows; cr++) {
+    const vv = cr / (capRows - 1);
+    const cy = capBotY + vv * (capTopY - capBotY);
+    for (let cx = 0; cx <= capXSegs; cx++) {
+      const uu = cx / capXSegs;
+      const ex = capInX + uu * capOutX;
+      const cidx = cr * (capXSegs + 1) + cx;
+      capPos[cidx*3+0] = ex;
+      capPos[cidx*3+1] = cy;
+      capPos[cidx*3+2] = 0; // z=0: near face
+      capUV[cidx*2+0]  = uu;
+      capUV[cidx*2+1]  = vv;
+    }
+  }
+
+  const capOffset = iTotal + tTotal;
+  const capIdx = buildQuadIndices(capRows-1, capXSegs, capXSegs+1, capOffset);
+
+  // Final merge with cap
+  const finalPos = new Float32Array(allPos.length + capPos.length);
+  finalPos.set(allPos, 0); finalPos.set(capPos, allPos.length);
+  const finalUV = new Float32Array(allUV.length + capUV.length);
+  finalUV.set(allUV, 0); finalUV.set(capUV, allUV.length);
+  const finalIdx = new Uint32Array(allIdx.length + capIdx.length);
+  finalIdx.set(allIdx, 0); finalIdx.set(capIdx, allIdx.length);
+
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(allPos, 3));
-  geo.setAttribute('uv',       new THREE.BufferAttribute(allUV,  2));
-  geo.setIndex(new THREE.BufferAttribute(allIdx, 1));
-  geo.computeVertexNormals(); // flat shading will recompute per-face normals
+  geo.setAttribute('position', new THREE.BufferAttribute(finalPos, 3));
+  geo.setAttribute('uv',       new THREE.BufferAttribute(finalUV,  2));
+  geo.setIndex(new THREE.BufferAttribute(finalIdx, 1));
+  geo.computeVertexNormals();
   return geo;
 }
 
@@ -7543,6 +7589,13 @@ function _createCanyonWalls() {
   const rB = makeSlab( 1, SPAWN_Z - T.tileLength); rB.position.x = shipX + spawnHalfX;
   _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex,
                    left: [lA, lB], right: [rA, rB] };
+
+  // Dedicated fill light so canyon walls aren't purely self-lit
+  if (!_canyonFillLight) {
+    _canyonFillLight = new THREE.PointLight(0x44ccff, T.fillLight, 400);
+    _canyonFillLight.position.set(0, 40, -80);
+    scene.add(_canyonFillLight);
+  }
 }
 
 function _destroyCanyonWalls() {
@@ -7551,6 +7604,7 @@ function _destroyCanyonWalls() {
   _canyonWalls.mat.dispose();
   _canyonWalls.gridTex.dispose();
   _canyonWalls = null;
+  if (_canyonFillLight) { scene.remove(_canyonFillLight); _canyonFillLight = null; }
 }
 
 function _updateCanyonWalls(dt, speed) {
@@ -17182,6 +17236,114 @@ window.addEventListener('keydown', (e) => {
     }
   }
 });
+
+// ═══════════════════════════════════════════════════
+//  CANYON TUNER PANEL  (shown/hidden with V key alongside canyon toggle)
+// ═══════════════════════════════════════════════════
+(function _setupCanyonTunerPanel() {
+  const S = (css) => Object.assign(document.createElement('div'), { style: css });
+  const panel = document.createElement('div');
+  panel.id = 'canyon-tuner';
+  panel.style.cssText = [
+    'position:fixed;top:10px;right:10px;width:240px;background:rgba(0,10,20,0.92)',
+    'border:1px solid #00eeff;color:#00eeff;font-family:monospace;font-size:11px',
+    'padding:10px;z-index:9999;display:none;border-radius:4px;'
+  ].join(';');
+  document.body.appendChild(panel);
+
+  function rebuild() {
+    if (!_canyonActive) return;
+    _destroyCanyonWalls();
+    _createCanyonWalls();
+  }
+
+  function makeSlider(label, key, min, max, step, needsRebuild) {
+    const T = _canyonTuner;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;margin:3px 0;gap:6px;';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'flex:0 0 110px;font-size:10px;color:#aef;';
+    lbl.textContent = label;
+    const sl = document.createElement('input');
+    sl.type = 'range'; sl.min = min; sl.max = max; sl.step = step;
+    sl.value = T[key];
+    sl.style.cssText = 'flex:1;accent-color:#00eeff;';
+    const val = document.createElement('span');
+    val.style.cssText = 'flex:0 0 36px;text-align:right;font-size:10px;';
+    val.textContent = T[key];
+    sl.addEventListener('input', () => {
+      T[key] = parseFloat(sl.value);
+      val.textContent = sl.value;
+      if (_canyonFillLight && key === 'fillLight') _canyonFillLight.intensity = T.fillLight;
+      if (needsRebuild) rebuild();
+    });
+    row.appendChild(lbl); row.appendChild(sl); row.appendChild(val);
+    panel.appendChild(row);
+  }
+
+  function buildPanel() {
+    panel.innerHTML = '';
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:12px;font-weight:bold;margin-bottom:8px;color:#fff;border-bottom:1px solid #00eeff;padding-bottom:4px;';
+    title.textContent = '⛰ CANYON TUNER';
+    panel.appendChild(title);
+
+    // Geometry (needs rebuild)
+    const geoHdr = document.createElement('div');
+    geoHdr.style.cssText = 'color:#ff0;font-size:10px;margin:6px 0 2px;';
+    geoHdr.textContent = '— GEOMETRY (auto-rebuilds) —';
+    panel.appendChild(geoHdr);
+    makeSlider('height',       'height',      20, 200,  1,    true);
+    makeSlider('wallWidth',    'wallWidth',   20, 300,  5,    true);
+    makeSlider('displacement', 'displacement', 0, 80,   1,    true);
+    makeSlider('topRagged',    'topRagged',    0, 60,   1,    true);
+    makeSlider('slopeLean',    'slopeLean',    0, 2,    0.05, true);
+    makeSlider('capHeight',    'capHeight',    0, 3,    0.05, true);
+    makeSlider('segsX',        'segsX',        2, 30,   1,    true);
+    makeSlider('segsZ',        'segsZ',        4, 120,  2,    true);
+
+    // Live (no rebuild)
+    const liveHdr = document.createElement('div');
+    liveHdr.style.cssText = 'color:#ff0;font-size:10px;margin:6px 0 2px;';
+    liveHdr.textContent = '— LIVE —';
+    panel.appendChild(liveHdr);
+    makeSlider('fillLight',   'fillLight',   0, 4,   0.05, false);
+    makeSlider('scrollSpeed', 'scrollSpeed', 0, 3,   0.1,  false);
+
+    // Freeze toggle
+    const fRow = document.createElement('div');
+    fRow.style.cssText = 'margin:6px 0;display:flex;align-items:center;gap:8px;';
+    const fChk = document.createElement('input');
+    fChk.type = 'checkbox'; fChk.checked = _canyonTuner.freezeWide;
+    fChk.addEventListener('change', () => { _canyonTuner.freezeWide = fChk.checked; });
+    const fLbl = document.createElement('label');
+    fLbl.style.cssText = 'font-size:10px;color:#aef;cursor:pointer;';
+    fLbl.textContent = 'freeze wide (no squeeze)';
+    fRow.appendChild(fChk); fRow.appendChild(fLbl);
+    panel.appendChild(fRow);
+
+    // Manual rebuild button
+    const btn = document.createElement('button');
+    btn.textContent = '↺ REBUILD WALLS';
+    btn.style.cssText = 'margin-top:8px;width:100%;background:#001a2a;border:1px solid #00eeff;color:#00eeff;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+    btn.onclick = rebuild;
+    panel.appendChild(btn);
+  }
+
+  // Show/hide panel alongside V toggle
+  const origListener = window._canyonVKeyListener;
+  window.addEventListener('keydown', (e) => {
+    if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
+      if (_canyonActive) {
+        // Canyon just turned ON — show panel
+        buildPanel();
+        panel.style.display = 'block';
+      } else {
+        panel.style.display = 'none';
+      }
+    }
+  });
+})();
 
 function updateDebug() {
   if (!dbgVisible) return;
