@@ -19109,6 +19109,27 @@ function buildSkinTunerSliders() {
       laserBolts.forEach(b => { const g = b.children[1]; if (g) g.scale.z = v / 2.5; });
     }, '#f44'));
     panel.appendChild(makeSlider('fire rate', _lbFireRate, 1, 30, 0.5, v => { _lbFireRate = v; state.laserFireRate = v; }, '#f44'));
+
+    // CANYON MATERIAL
+    panel.appendChild(makeHeader('CANYON MATERIAL', '#0ef'));
+    panel.appendChild(makeSlider('emissive intensity', _canyonTuner.brightness * 1.8, 0, 8, 0.1, v => {
+      _canyonTuner.brightness = v / 1.8;
+      if (_canyonWalls) { _canyonWalls.mat.emissiveIntensity = v; }
+    }, '#0ef'));
+    panel.appendChild(makeSlider('bloom threshold', bloom.threshold, 0, 1.5, 0.05, v => {
+      bloom.threshold = v;
+    }, '#0ef'));
+    panel.appendChild(makeSlider('bloom strength', bloom.strength, 0, 3, 0.05, v => {
+      bloom.strength = v;
+    }, '#0ef'));
+    panel.appendChild(makeSlider('gridGlow', _canyonTuner.gridGlow, 0, 1, 0.05, v => {
+      _canyonTuner.gridGlow = v;
+      if (_canyonWalls) { _canyonWalls.gridTex.dispose(); const t = _makeCanyonGridTexture(); t.repeat.set(1,3); _canyonWalls.mat.emissiveMap = t; _canyonWalls.mat.needsUpdate = true; _canyonWalls.gridTex = t; }
+    }, '#0ef'));
+    panel.appendChild(makeSlider('veinBloom', _canyonTuner.veinBloom, 0, 1, 0.05, v => {
+      _canyonTuner.veinBloom = v;
+      if (_canyonWalls) { _canyonWalls.gridTex.dispose(); const t = _makeCanyonGridTexture(); t.repeat.set(1,3); _canyonWalls.mat.emissiveMap = t; _canyonWalls.mat.needsUpdate = true; _canyonWalls.gridTex = t; }
+    }, '#0ef'));
   }
 
   let visible = false;
