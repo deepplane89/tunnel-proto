@@ -7267,6 +7267,211 @@ function _updateTerrainWalls(dt, speed) {
 }
 
 // ═══════════════════════════════════════════════════
+//  CANYON CORRIDOR WALLS
+// ═══════════════════════════════════════════════════
+const _canyonTuner = {
+  height:           80,    // total slab height (Y)
+  tileLength:       300,   // Z length of each tile (2 tiles per side leapfrog)
+  segsX:            10,    // subdivisions across face (horizontal jaggedness)
+  segsZ:            60,    // subdivisions along Z (vertical scroll jaggedness)
+  displacement:     14,    // outward X jag on face verts
+  topRagged:        22,    // extra Y noise on top edge
+  scrollSpeed:      1.0,   // multiplier of game speed
+  emissiveIntensity: 1.6,
+  gridColor:        '#00eeff',
+  gridOpacity:      0.18,
+  baseColor:        '#ffffff',
+  emissiveHex:      '#00eeff',
+  metalness:        0.85,
+  roughness:        0.22,
+};
+let _canyonWalls = null; // { strips: [lA,lB,rA,rB], mat, gridTex, metalTex }
+let _canyonActive = false;
+
+function _makeCanyonGridTexture() {
+  const T = _canyonTuner;
+  const w = 512, h = 512;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#03080f';
+  ctx.fillRect(0, 0, w, h);
+  // Cyan grid lines
+  ctx.strokeStyle = T.gridColor;
+  ctx.globalAlpha = T.gridOpacity;
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i <= T.segsX; i++) {
+    const x = (i / T.segsX) * w;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  for (let j = 0; j <= T.segsZ; j++) {
+    const y = (j / T.segsZ) * h;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+  // Magenta crack lines
+  let _rs = 77;
+  const srng = () => { _rs = (_rs * 16807) % 2147483647; return (_rs - 1) / 2147483646; };
+  ctx.lineWidth = 1.2;
+  for (let ci = 0; ci < 20; ci++) {
+    const sx = srng() * w, sy = srng() * h;
+    const segs = 3 + Math.floor(srng() * 3);
+    const bright = srng() > 0.4;
+    ctx.strokeStyle = bright ? '#ff00cc' : '#cc44ff';
+    ctx.globalAlpha = 0.55 + srng() * 0.35;
+    ctx.lineWidth = 0.8 + srng() * 1.4;
+    ctx.beginPath(); ctx.moveTo(sx, sy);
+    let cx2 = sx, cy2 = sy;
+    for (let si = 0; si < segs; si++) {
+      cx2 += (srng() - 0.3) * 80; cy2 += (srng() - 0.1) * 60;
+      ctx.lineTo(cx2, cy2);
+    }
+    ctx.stroke();
+  }
+  // Hotspot glows
+  for (let gi = 0; gi < 8; gi++) {
+    const gx = srng() * w, gy = srng() * h;
+    const gr = ctx.createRadialGradient(gx, gy, 0, gx, gy, 18 + srng() * 22);
+    gr.addColorStop(0,   'rgba(255,0,200,0.55)');
+    gr.addColorStop(0.4, 'rgba(100,0,255,0.20)');
+    gr.addColorStop(1,   'rgba(0,0,0,0.00)');
+    ctx.fillStyle = gr; ctx.globalAlpha = 1;
+    ctx.fillRect(gx - 40, gy - 40, 80, 80);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+function _displaceCanyonSlab(geo, side) {
+  // side: 1=right wall (displaces +X), -1=left wall (displaces -X)
+  const T = _canyonTuner;
+  const pos = geo.attributes.position;
+  const uv  = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    const u  = uv.getX(i); // 0=bottom, 1=top  (after rotation)
+    const v  = uv.getY(i); // 0..1 along Z
+    const y  = pos.getY(i);
+    const isTop = u > 0.85; // top edge verts
+    // Face jaggedness — outward X displacement
+    const px = v * 18.0;
+    const py = u * 12.0;
+    const n1 = Math.sin(px * 2.1 + py * 1.3) * 0.35;
+    const n2 = Math.sin(px * 5.7 + py * 3.1) * 0.25;
+    const n3 = Math.abs(Math.sin(px * 3.2 + py * 5.5)) * 0.28;
+    const noise = 0.4 + n1 + n2 + n3;
+    const jag = Math.max(0, noise) * T.displacement * side;
+    pos.setX(i, pos.getX(i) + jag);
+    // Top edge ragged
+    if (isTop) {
+      const topNoise = Math.sin(v * 31.7) * 0.4 + Math.sin(v * 17.3 + 1.2) * 0.35 + Math.sin(v * 7.1) * 0.25;
+      pos.setY(i, y + (0.5 + topNoise) * T.topRagged);
+    }
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+}
+
+function _createCanyonWalls() {
+  if (_canyonWalls) return;
+  const T = _canyonTuner;
+  const gridTex = _makeCanyonGridTexture();
+  gridTex.repeat.set(1, 3);
+
+  // Metalness map
+  const mw = 256, mh = 256;
+  const mc = document.createElement('canvas');
+  mc.width = mw; mc.height = mh;
+  const mctx = mc.getContext('2d');
+  for (let cy = 0; cy < 32; cy++) {
+    for (let cx2 = 0; cx2 < 16; cx2++) {
+      const bright = Math.random() > 0.6 ? 200 + Math.random() * 55 : Math.random() * 80;
+      mctx.fillStyle = `rgb(${bright},${bright},${bright})`;
+      mctx.fillRect(cx2 * (mw/16), cy * (mh/32), mw/16, mh/32);
+    }
+  }
+  const metalTex = new THREE.CanvasTexture(mc);
+  metalTex.wrapS = THREE.RepeatWrapping;
+  metalTex.wrapT = THREE.RepeatWrapping;
+
+  const mat = new THREE.MeshStandardMaterial({
+    color:             new THREE.Color(T.baseColor),
+    map:               gridTex,
+    metalnessMap:      metalTex,
+    metalness:         T.metalness,
+    roughness:         T.roughness,
+    emissive:          new THREE.Color(T.emissiveHex),
+    emissiveIntensity: T.emissiveIntensity,
+    emissiveMap:       gridTex,
+    flatShading:       true,
+    side:              THREE.DoubleSide,
+  });
+
+  function makeSlab(side, zOff) {
+    // Vertical plane: width=tileLength (Z), height=height (Y)
+    const geo = new THREE.PlaneGeometry(T.tileLength, T.height, T.segsZ, T.segsX);
+    // Rotate to face inward (normal points in -X for right, +X for left)
+    geo.rotateY(side === 1 ? -Math.PI / 2 : Math.PI / 2);
+    _displaceCanyonSlab(geo, side);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.y = T.height / 2 - 25; // base at water level
+    mesh.position.z = zOff;
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    return mesh;
+  }
+
+  const lA = makeSlab(-1, -T.tileLength / 2);
+  const lB = makeSlab(-1, -T.tileLength / 2 - T.tileLength);
+  const rA = makeSlab( 1, -T.tileLength / 2);
+  const rB = makeSlab( 1, -T.tileLength / 2 - T.tileLength);
+  _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex, metalTex,
+                   left: [lA, lB], right: [rA, rB] };
+}
+
+function _destroyCanyonWalls() {
+  if (!_canyonWalls) return;
+  _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
+  _canyonWalls.mat.dispose();
+  _canyonWalls.gridTex.dispose();
+  _canyonWalls.metalTex.dispose();
+  _canyonWalls = null;
+}
+
+function _updateCanyonWalls(dt, speed) {
+  if (!_canyonWalls || !_canyonActive) return;
+  const T = _canyonTuner;
+  // Get current corridor center and halfX from shared state
+  const center  = state.corridorGapCenter || 0;
+  // halfX: read from whichever corridor type is active
+  // We expose halfX via _jlCorridor each tick
+  const halfX   = _jlCorridor._lastHalfX || 9;
+  const scroll  = speed * dt * T.scrollSpeed;
+
+  // Position left/right strips at corridor edges, leapfrog Z
+  _canyonWalls.left.forEach(m => {
+    m.position.x = center - halfX;
+    m.position.z += scroll;
+    if (m.position.z > T.tileLength / 2) m.position.z -= T.tileLength * 2;
+  });
+  _canyonWalls.right.forEach(m => {
+    m.position.x = center + halfX;
+    m.position.z += scroll;
+    if (m.position.z > T.tileLength / 2) m.position.z -= T.tileLength * 2;
+  });
+
+  // Collision: kill ship if outside gap (with small buffer for fairness)
+  if (state._jetLightningMode && state.phase === 'playing' && !state._godMode && !_godMode) {
+    const shipX = state.shipX || 0;
+    const buffer = 1.5; // units of grace
+    if (shipX < center - halfX + buffer || shipX > center + halfX - buffer) {
+      if (typeof _killPlayer === 'function') _killPlayer();
+      else if (typeof triggerDeath === 'function') triggerDeath();
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════
 //  ANGLED WALL POOL (DR opening weave)
 // ═══════════════════════════════════════════════════
 const _awTuner = {
@@ -15462,6 +15667,12 @@ function update(dt) {
       _updateTerrainWalls(dt, effectiveSpeed);
     }
 
+    // Canyon corridor walls — update every frame when active
+    if (_canyonActive) {
+      if (!_canyonWalls) _createCanyonWalls();
+      _updateCanyonWalls(dt, effectiveSpeed);
+    }
+
     if (state._tutorialStep === 0) {
       // ── STEP 0: Show instruction box, wait for tap ──
       _tutShowInstructionBox(
@@ -16795,6 +17006,22 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'd' || e.key === 'D') {
     dbgVisible = !dbgVisible;
     dbgEl.classList.toggle('visible', dbgVisible);
+  }
+  // C — toggle canyon corridor test (JL mode only)
+  if ((e.key === 'c' || e.key === 'C') && state._jetLightningMode && state.phase === 'playing') {
+    _canyonActive = !_canyonActive;
+    if (_canyonActive) {
+      // Start L3 corridor + canyon walls, suppress all other spawning
+      _jlStartCorridor('l3');
+      if (!_canyonWalls) _createCanyonWalls();
+      console.log('[CANYON] ON — L3 corridor started');
+    } else {
+      _jlStopCorridor();
+      _destroyCanyonWalls();
+      // Resume normal JL spawning
+      _asteroidTuner.enabled = true;
+      console.log('[CANYON] OFF');
+    }
   }
 });
 
@@ -20755,12 +20982,42 @@ function _jlTickCorridor(dt, effectiveSpd) {
       state.l4SpawnZ = -7 + (Math.random() - 0.5) * 2;
       spawnL4CorridorRow();
     }
+    // Expose current halfX for canyon walls
+    {
+      const rd = state.l4RowsDone || 0;
+      let hx = L4_CORRIDOR_NARROW_X;
+      if (rd < L4_CORRIDOR_CLOSE_ROWS) {
+        const t2 = rd / L4_CORRIDOR_CLOSE_ROWS;
+        const ease = t2 < 0.5 ? 2*t2*t2 : -1+(4-2*t2)*t2;
+        hx = CORRIDOR_WIDE_X + (L4_CORRIDOR_NARROW_X - CORRIDOR_WIDE_X) * ease;
+      } else {
+        const cr = Math.max(0, rd - (L4_CORRIDOR_CLOSE_ROWS + L4_CORRIDOR_STRAIGHT));
+        const sq = Math.min(1, cr / L4_CORRIDOR_AMP_RAMP);
+        hx = L4_CORRIDOR_NARROW_X - (L4_CORRIDOR_NARROW_X - 4.5) * (sq * sq);
+      }
+      _jlCorridor._lastHalfX = hx;
+    }
   } else {
     if (state.corridorDelay > 0) { state.corridorDelay -= dt; return; }
     state.corridorSpawnZ += effectiveSpd * dt;
     if (state.corridorSpawnZ >= 0) {
       state.corridorSpawnZ = -7 + (Math.random() - 0.5) * 2;
       spawnCorridorRow();
+    }
+    // Expose current halfX for canyon walls
+    {
+      const rd = state.corridorRowsDone || 0;
+      let hx = CORRIDOR_NARROW_X;
+      if (rd < CORRIDOR_CLOSE_ROWS) {
+        const t2 = rd / CORRIDOR_CLOSE_ROWS;
+        const ease = t2 < 0.5 ? 2*t2*t2 : -1+(4-2*t2)*t2;
+        hx = CORRIDOR_WIDE_X + (CORRIDOR_NARROW_X - CORRIDOR_WIDE_X) * ease;
+      } else {
+        const cr = Math.max(0, rd - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS));
+        const sq = Math.min(1, cr / CORRIDOR_AMP_RAMP);
+        hx = CORRIDOR_NARROW_X - (CORRIDOR_NARROW_X - 6) * (sq * sq);
+      }
+      _jlCorridor._lastHalfX = hx;
     }
   }
 
