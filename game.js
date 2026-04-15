@@ -20280,6 +20280,7 @@ const _origUpdateShockwave = _updateShockwave;
           const _targetX = _useFixed
             ? (Math.random() < 0.5 ? -1 : 1) * (_fxMin + Math.random() * (_fxMax - _fxMin))
             : state.shipX;
+          console.log('[fixedX] chance='+T.fixedXChance+' useFixed='+_useFixed+' targetX='+_targetX.toFixed(1)+' range='+JSON.stringify(T.fixedXRange));
           _spawnAsteroid(_targetX);
           if (T.staggerDual && !_useFixed) {
             const spawnY = T.skyHeight;
