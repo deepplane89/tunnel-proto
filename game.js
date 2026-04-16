@@ -7270,25 +7270,24 @@ function _updateTerrainWalls(dt, speed) {
 //  CANYON CORRIDOR WALLS
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
-  // Chunk geometry
-  chunkH:        110,   // height of each chunk (units)
-  chunkW:        22,    // Z-depth of each chunk
-  chunkDepth:    38,    // X-depth (thickness away from corridor)
+  // Chunk geometry — PlaneGeometry rotated vertical, per-vert Z displaced
+  chunkH:        120,   // height of each chunk
+  chunkW:        24,    // Z-width of each chunk
+  chunkDepth:    30,    // max Z displacement (how far verts jut in/out)
+  segsH:         10,    // vertical segments — more = more face variety
+  segsW:         5,     // horizontal segments
   poolSize:      14,    // chunks per side
   // Appearance
-  baseColor:     '#0d2235',
-  faceColors:    ['#0d3350','#1a5570','#0a1e2e','#113345','#1e6680'],
-  gridColor:     '#00eeff',
-  crackColor:    '#ff00cc',
-  gridOpacity:   0.28,
-  crackOpacity:  0.55,
-  emissiveInt:   0.55,
-  roughness:     0.80,
-  metalness:     0.08,
+  color:         0x2a7090,   // mid teal — bright enough to catch light
+  emissive:      0x001828,
+  emissiveInt:   0.6,
+  roughness:     0.75,
+  metalness:     0.10,
+  // Canyon fill light
+  ambientBoost:  0.35,  // extra ambient added when canyon is active
   // Scroll
   scrollSpeed:   1.0,
-  // Corridor
-  snapRate:      6.0,   // how fast chunks track corridor X changes
+  snapRate:      6.0,
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
@@ -7383,108 +7382,76 @@ function _makeCanyonGridTexture() {
 }
 
 function _buildCanyonSlabGeo(seed, side) {
-  // Builds a low-poly cliff chunk: a tall convex prism.
-  // The inner face (facing the corridor) is nearly vertical.
-  // The outer faces angle away dramatically — so flatShading gives each
-  // face a starkly different brightness from the directional key light.
-  //
-  // Cross-section (top-down view, right wall, side=1):
-  //
-  //   corridor gap
-  //   |  inner face (nearly flat, faces -X toward ship)
-  //   A──────B
-  //   |       \
-  //   |  chunk  C   ← angled outer face
-  //   |       /
-  //   D──────E
-  //   |  outer back face
-  //
-  // We extrude this shape along Y (height).
-  // Top/bottom caps are flat polys.
+  // Vertical plane with per-vertex random Z displacement.
+  // Key insight: each vertex gets an INDEPENDENT Z offset, so adjacent
+  // triangles face completely different directions. flatShading then gives
+  // each triangle a distinct brightness from the directional key light.
+  // This is what creates the AI-ref cliff face look.
 
-  const T   = _canyonTuner;
-  // Seeded noise for per-chunk variation
-  let _s = Math.abs(seed * 9301 + 49297) % 233280;
+  const T = _canyonTuner;
+  let _s = (Math.abs(seed) * 9301 + 49297) % 233280;
   const rng = () => { _s = (_s * 9301 + 49297) % 233280; return _s / 233280; };
 
-  const H  = T.chunkH  * (0.85 + rng() * 0.30); // height variation ±15%
-  const W  = T.chunkW  * (0.90 + rng() * 0.20); // Z-width variation
-  const D  = T.chunkDepth * (0.75 + rng() * 0.50); // X-depth variation
+  const H     = T.chunkH * (0.85 + rng() * 0.30);
+  const W     = T.chunkW * (0.90 + rng() * 0.20);
+  const segH  = T.segsH;
+  const segW  = T.segsW;
+  const vCols = segW + 1;
+  const vRows = segH + 1;
+  const D     = T.chunkDepth;
 
-  // Cross-section verts (in XZ plane, local coords):
-  // Inner face at x=0, outer face extends toward side*D
-  // Slightly irregular — 5-point cross section
-  const jag1 = (rng() - 0.5) * D * 0.35; // mid-outer jag
-  const jag2 = (rng() - 0.3) * D * 0.25;
-  // 5 cross-section points (XZ):
-  //  0: inner top-left    (0,   0)
-  //  1: inner top-right   (0,   W)
-  //  2: outer mid-right   (D,   W + jag1)
-  //  3: outer mid-center  (D*0.8+jag2, W*0.5)
-  //  4: outer mid-left    (D,   jag1*0.5)
-  // (all X coords multiplied by side to flip left/right)
-  const xs = [0,    0,    D,        D*0.8+jag2, D       ].map(x => x * side);
-  const zs = [0,    W,    W+jag1,   W*0.5,      jag1*0.5];
-
-  // Y levels: bottom, top (with small top tilt per vert for ragged peak)
-  const topJag = new Array(5).fill(0).map(() => (rng()-0.3) * H * 0.18);
-
-  // Build positions: bottom ring then top ring
-  const nRing = 5;
-  const pos = [];
-  const norms = [];
-  const uvs = [];
+  const pos = new Float32Array(vCols * vRows * 3);
+  const uvs = new Float32Array(vCols * vRows * 2);
   const idx = [];
 
-  // Bottom ring (y=0)
-  for (let i = 0; i < nRing; i++) { pos.push(xs[i], 0, zs[i]); }
-  // Top ring (y=H + per-vert jag)
-  for (let i = 0; i < nRing; i++) { pos.push(xs[i], H + topJag[i], zs[i]); }
+  for (let row = 0; row < vRows; row++) {
+    const v  = row / segH;
+    const y  = v * H;
+    // Top edge ragged: extra Z jitter at top
+    const topFactor = v > 0.85 ? (v - 0.85) / 0.15 : 0;
 
-  // Side faces: for each edge i→(i+1), build a quad (2 tris)
-  for (let i = 0; i < nRing; i++) {
-    const j  = (i + 1) % nRing;
-    const b0 = i,       b1 = j;        // bottom
-    const t0 = i+nRing, t1 = j+nRing; // top
-    // Winding: faces outward (away from interior)
-    // For right wall (side=1): interior is at -X, so outward = +X / mixed
-    // We use DoubleSide so winding doesn't matter for visibility
-    idx.push(b0, t0, b1,  b1, t0, t1);
+    for (let col = 0; col < vCols; col++) {
+      const u  = col / segW;
+      // Per-vertex Z displacement — the core of the effect
+      // Low-freq base (large boulder shapes) + high-freq detail
+      const zBase   = (rng() - 0.5) * 2.0 * D;
+      const zDetail = (rng() - 0.5) * 2.0 * D * 0.3;
+      const zTop    = topFactor * (rng() - 0.3) * D * 1.5;
+      const z = zBase + zDetail + zTop;
+
+      // X is 0 — the inner face sits at corridor edge.
+      // Side just determines which direction the chunk faces.
+      const i = row * vCols + col;
+      pos[i*3+0] = 0;
+      pos[i*3+1] = y;
+      pos[i*3+2] = u * W + z;
+      uvs[i*2+0] = u;
+      uvs[i*2+1] = v;
+    }
   }
 
-  // Bottom cap (fan from center)
-  const botCenterIdx = pos.length / 3;
-  const bcx = xs.reduce((a,b)=>a+b,0)/nRing;
-  const bcz = zs.reduce((a,b)=>a+b,0)/nRing;
-  pos.push(bcx, 0, bcz);
-  for (let i = 0; i < nRing; i++) {
-    idx.push(botCenterIdx, (i+1)%nRing, i);
-  }
-
-  // Top cap (fan from center)
-  const topCenterIdx = pos.length / 3;
-  const tcx = bcx, tcz = bcz;
-  const topCenterY = H + topJag.reduce((a,b)=>a+b,0)/nRing;
-  pos.push(tcx, topCenterY, tcz);
-  for (let i = 0; i < nRing; i++) {
-    const ti = i + nRing, tj = ((i+1)%nRing) + nRing;
-    idx.push(topCenterIdx, ti, tj);
-  }
-
-  // UVs — simple planar from XZ extent
-  const allX = xs; const allZ = zs;
-  const minX = Math.min(...allX), maxX = Math.max(...allX);
-  const minZ = Math.min(...allZ), maxZ = Math.max(...allZ);
-  const rngX = maxX - minX || 1, rngZ = maxZ - minZ || 1;
-  for (let i = 0; i < pos.length/3; i++) {
-    uvs.push((pos[i*3+0]-minX)/rngX, pos[i*3+2]/W);
+  // Quads — winding so inner face (facing corridor, -X for right wall) is front
+  for (let row = 0; row < segH; row++) {
+    for (let col = 0; col < segW; col++) {
+      const a = row * vCols + col;
+      const b = a + 1;
+      const c = a + vCols;
+      const d = c + 1;
+      if (side === 1) {
+        // Right wall — inner face faces -X (toward ship)
+        idx.push(a, c, b,  b, c, d);
+      } else {
+        // Left wall — inner face faces +X (toward ship)
+        idx.push(a, b, c,  b, d, c);
+      }
+    }
   }
 
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
-  geo.setAttribute('uv',       new THREE.BufferAttribute(new Float32Array(uvs), 2));
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('uv',       new THREE.BufferAttribute(uvs, 2));
   geo.setIndex(idx);
-  geo.computeVertexNormals();
+  geo.computeVertexNormals(); // needed for MeshStandardMaterial lighting
   return geo;
 }
 
@@ -7493,59 +7460,52 @@ function _createCanyonWalls() {
   const T  = _canyonTuner;
   const gridTex = _makeCanyonGridTexture();
 
-  // One shared material per side — face color varies via per-mesh .color
-  // flatShading: true means each triangular face gets its own flat normal →
-  // dramatically different brightness per face from the scene directional light
-  function makeMat(baseHex) {
-    return new THREE.MeshStandardMaterial({
-      color:            baseHex,
-      emissive:         0x002233,
-      emissiveMap:      gridTex,
-      emissiveIntensity: T.emissiveInt,
-      roughness:        T.roughness,
-      metalness:        T.metalness,
-      flatShading:      true,
-      side:             THREE.DoubleSide,
-    });
-  }
+  // Bump scene ambient while canyon is active so faces catching no direct
+  // light still read as dark-teal rather than pure black
+  ambientLight.intensity += T.ambientBoost;
 
-  // Face color palette — cycle through for visual variety
-  const palette = [0x0d3350, 0x1a5570, 0x0a1e2e, 0x113345, 0x1e6680];
+  // Single material — flatShading:true so each triangle gets its own flat
+  // normal → different brightness per face from scene directional light
+  const mat = new THREE.MeshStandardMaterial({
+    color:             T.color,
+    emissive:          T.emissive,
+    emissiveMap:       gridTex,
+    emissiveIntensity: T.emissiveInt,
+    roughness:         T.roughness,
+    metalness:         T.metalness,
+    flatShading:       true,
+    side:              THREE.DoubleSide,
+  });
+
+  const SPACING = T.chunkW * 1.02;
 
   function makeChunk(side, seed, zPos) {
     const geo  = _buildCanyonSlabGeo(seed, side);
-    const mat  = makeMat(palette[seed % palette.length]);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.z = zPos;
-    mesh.position.y = 0;
     mesh.frustumCulled = false;
     scene.add(mesh);
     return mesh;
   }
 
-  const SPACING = T.chunkW * 1.05; // slight overlap to avoid gaps
   const chunks = { left: [], right: [] };
-
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
     for (let i = 0; i < T.poolSize; i++) {
       const seed = i * 7 + (k === 'right' ? 100 : 0);
-      const zPos = SPAWN_Z + i * SPACING;
-      const mesh = makeChunk(side, seed, zPos);
-      // X set below after both arrays built
-      chunks[k].push(mesh);
+      chunks[k].push(makeChunk(side, seed, SPAWN_Z + i * SPACING));
     }
   });
 
-  // Set initial X positions
   const gapCenter = state.corridorGapCenter || 0;
   chunks.left.forEach(m  => { m.position.x = gapCenter - 80; });
   chunks.right.forEach(m => { m.position.x = gapCenter + 80; });
 
   _canyonWalls = {
-    strips: [...chunks.left, ...chunks.right], // for _destroyCanyonWalls compat
-    left:   chunks.left,
-    right:  chunks.right,
+    strips:   [...chunks.left, ...chunks.right],
+    left:     chunks.left,
+    right:    chunks.right,
+    mat,
     gridTex,
     _spacing: SPACING,
   };
@@ -7553,11 +7513,10 @@ function _createCanyonWalls() {
 
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
-  _canyonWalls.strips.forEach(m => {
-    scene.remove(m);
-    m.geometry.dispose();
-    m.material.dispose();
-  });
+  // Restore ambient light
+  ambientLight.intensity -= _canyonTuner.ambientBoost;
+  _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
+  if (_canyonWalls.mat)     _canyonWalls.mat.dispose();
   if (_canyonWalls.gridTex) _canyonWalls.gridTex.dispose();
   _canyonWalls = null;
   if (_canyonFillLight) {
