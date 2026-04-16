@@ -7312,6 +7312,7 @@ const _canyonTuner = {
 let _canyonWalls = null;
 let _canyonFillLight = null;
 let _canyonActive = false;
+let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
 let _canyonSineT         = 0;
@@ -9490,7 +9491,7 @@ function spawnCorridorRow() {
 
   // center is already set above via sine computation
   // Canyon mode: skip cone spawning, just use the sine for wall tracking
-  if (_canyonActive) { state.corridorRowsDone++; return; }
+  if (_canyonActive) { if (!_canyonManual) state.corridorRowsDone++; return; }
 
   const wallJitter = 0.6;
 
@@ -17351,6 +17352,7 @@ window.addEventListener('keydown', (e) => {
   // V — toggle canyon corridor test (any mode, no cone spawning)
   if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
     _canyonActive = !_canyonActive;
+    _canyonManual  = _canyonActive;
     if (_canyonActive) {
       _destroyCanyonWalls(); _createCanyonWalls();
     } else {
@@ -21539,8 +21541,8 @@ function _jlTickCorridor(dt, effectiveSpd) {
     state.isDeathRun   = state.isDeathRun || false; // preserve, but exit ramp reads isDeathRun
   }
 
-  // Done — clean up
-  if (rowsDone >= total) {
+  // Done — clean up (skip if canyon is manually active via V key)
+  if (rowsDone >= total && !_canyonManual) {
     _jlStopCorridor();
     if (isL4) { state._drL4MaxRows = undefined; }
     else      { state._drL3MaxRows = undefined; }
