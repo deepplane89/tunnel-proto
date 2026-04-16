@@ -17387,7 +17387,7 @@ window.addEventListener('keydown', (e) => {
   const panel = document.createElement('div');
   panel.id = 'canyon-tuner';
   panel.style.cssText = [
-    'position:fixed;top:10px;right:10px;width:250px;max-height:90vh;overflow-y:auto',
+    'position:fixed;top:10px;left:10px;width:calc(min(300px,90vw));max-height:90vh;overflow-y:auto',
     'background:rgba(0,10,20,0.95);border:1px solid #00eeff;color:#00eeff',
     'font-family:monospace;font-size:11px;padding:10px;z-index:9999',
     'border-radius:4px;scrollbar-width:thin;'
@@ -17426,7 +17426,7 @@ window.addEventListener('keydown', (e) => {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;margin:2px 0;gap:5px;';
     const lbl = document.createElement('span');
-    lbl.style.cssText = 'flex:0 0 105px;font-size:10px;color:#aef;';
+    lbl.style.cssText = 'flex:0 0 85px;font-size:10px;color:#aef;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
     lbl.textContent = label;
     const sl = document.createElement('input');
     sl.type = 'range'; sl.min = min; sl.max = max; sl.step = step; sl.value = T[key];
@@ -17464,7 +17464,7 @@ window.addEventListener('keydown', (e) => {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;margin:2px 0;gap:5px;';
     const lbl = document.createElement('span');
-    lbl.style.cssText = 'flex:0 0 105px;font-size:10px;color:#aef;';
+    lbl.style.cssText = 'flex:0 0 85px;font-size:10px;color:#aef;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
     lbl.textContent = label;
     const inp = document.createElement('input');
     inp.type = 'color'; inp.value = T[key];
