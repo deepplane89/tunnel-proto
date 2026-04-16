@@ -7298,9 +7298,9 @@ const _canyonTuner = {
   darkCrkBright: 1.0,
   // Corridor width override — half-gap between walls (wall foot lands at center ± halfXOverride)
   halfXOverride: 40,
-  // Entrance: the first slab pair uses this width (can be huge for a dramatic wall entrance)
-  entranceHalfX: 120,
-  entranceSlabs:  3,    // how many leading slabs use entranceHalfX before switching to halfXOverride
+  // Entrance: first N slabs get entranceThick — extends the slab outward while staying flush
+  entranceThick: 60,    // slab thickness for entrance slabs (increase to expand laterally)
+  entranceSlabs:  3,    // how many leading slabs use entranceThick
   // How far away the canyon spawns (larger = see entrance from farther away)
   spawnDepth:   -300,
   // Canyon-own sine wave (independent of L3 corridor)
@@ -7454,7 +7454,7 @@ function _makeCanyonDarkTex(seed) {
   return tex;
 }
 
-function _buildCanyonSlabGeo(seed) {
+function _buildCanyonSlabGeo(seed, thickOverride) {
   // Thick rectangular block: flat back face, angular inner face, profile-shaped cross-section.
   // Inner face verts get independent X jitter + quantized snap → flat crystalline facets.
   // Non-indexed triangle soup → computeVertexNormals gives true flat normals per face.
@@ -7464,7 +7464,7 @@ function _buildCanyonSlabGeo(seed) {
 
   const H     = T.slabH;
   const W     = T.slabW;
-  const THICK = T.slabThick;
+  const THICK = (thickOverride !== undefined) ? thickOverride : T.slabThick;
   const COLS  = T.cols;
   const ROWS  = T.rows;
   const DISP  = T.disp;
@@ -7637,9 +7637,9 @@ function _createCanyonWalls() {
   // So store footX directly; subtract it (times side) when baking position.
   const FOOT_OFF = T.footX; // signed — subtracted below, not added
 
-  function makeSlab(side, seed, zPos, idx) {
+  function makeSlab(side, seed, zPos, idx, thickOverride) {
     const isCyan = (idx % 2 === 0);
-    const geo    = _buildCanyonSlabGeo(seed);
+    const geo    = _buildCanyonSlabGeo(seed, thickOverride);
 
     // side=1 → right wall (geometry grows in +X, inner face at x≈footX)
     // side=-1 → left wall  (mirror by scale.x = -1)
@@ -7668,16 +7668,23 @@ function _createCanyonWalls() {
     const side = k === 'left' ? -1 : 1;
     for (let i = 0; i < autoPool; i++) {
       const seed = i * 7 + (k === 'right' ? 100 : 0);
-      chunks[k].push(makeSlab(side, seed, INIT_Z + i * SPACING, i));
+      const thick = (i < T.entranceSlabs) ? T.entranceThick : undefined;
+      chunks[k].push(makeSlab(side, seed, INIT_Z + i * SPACING, i, thick));
     }
   });
 
-  // Bake X at init: entrance slabs get entranceHalfX, rest get halfXOverride
+  // Sort by Z ascending to guarantee recycle order is correct (no slab near Z=0)
+  ['left','right'].forEach(k => {
+    chunks[k].sort((a, b) => a.position.z - b.position.z);
+  });
+
+  // Bake X at init: entrance slabs stay flush with corridor (same halfX as regular)
+  // Their thickness already pushes them outward visually
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
     chunks[k].forEach((m, i) => {
       const center = _canyonPredictCenter(0);
-      const halfX  = i < T.entranceSlabs ? T.entranceHalfX : _canyonPredictHalfX(0);
+      const halfX  = _canyonPredictHalfX(0);
       m.userData.bakedX = (center + halfX * side) - FOOT_OFF * side;
       m.position.x = m.userData.bakedX;
     });
@@ -17545,9 +17552,9 @@ window.addEventListener('keydown', (e) => {
     slider('Crack bright',  'darkCrkBright',  0,  2, 0.05, 'dark-tex');
 
     hdr('— CORRIDOR —');
-    slider('Wall spacing',   'halfXOverride',  1,  300, 1,   'live');
-    slider('Entrance width', 'entranceHalfX',  1,  600, 1,   'live');
-    slider('Entrance slabs', 'entranceSlabs',  1,   20, 1,   'live');
+    slider('Wall spacing',   'halfXOverride',  1,  300,  1,  'live');
+    slider('Entrance thick', 'entranceThick',  5, 2000,  5,  'geo');
+    slider('Entrance slabs', 'entranceSlabs',  1,   20,  1,  'geo');
     slider('Spawn depth',    'spawnDepth',  -600, -100, 10,  'geo');
 
     hdr('— SINE CURVES —');
