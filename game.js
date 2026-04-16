@@ -7270,25 +7270,25 @@ function _updateTerrainWalls(dt, speed) {
 //  CANYON CORRIDOR WALLS
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
-  height:        110,
-  tileLength:    400,
-  segsX:         10,
-  segsZ:         100,
-  displacement:  45,
-  wallWidth:     175,
-  topRagged:     35,
-  capHeight:     1.6,
-  slopeLean:     0.0,
-  fillLight:     0.4,
-  scrollSpeed:   1.0,
-  freezeWide:    true,
-  canyonHalfX:   80,  // = CORRIDOR_WIDE_X (can't reference const before declaration)
-  baseColor:     '#2a5a72',
-  brightness:    1.0,
+  // Chunk geometry
+  chunkH:        110,   // height of each chunk (units)
+  chunkW:        22,    // Z-depth of each chunk
+  chunkDepth:    38,    // X-depth (thickness away from corridor)
+  poolSize:      14,    // chunks per side
+  // Appearance
+  baseColor:     '#0d2235',
+  faceColors:    ['#0d3350','#1a5570','#0a1e2e','#113345','#1e6680'],
   gridColor:     '#00eeff',
-  gridOpacity:   0.25,
-  crackOpacity:  0.15,
-  slabCount:     5,
+  crackColor:    '#ff00cc',
+  gridOpacity:   0.28,
+  crackOpacity:  0.55,
+  emissiveInt:   0.55,
+  roughness:     0.80,
+  metalness:     0.08,
+  // Scroll
+  scrollSpeed:   1.0,
+  // Corridor
+  snapRate:      6.0,   // how fast chunks track corridor X changes
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
@@ -7329,295 +7329,236 @@ window._canyonLog = function() {
 };
 
 function _makeCanyonGridTexture() {
-  const T = _canyonTuner;
-  const w = 512, h = 512;
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  const ctx = c.getContext('2d');
-  // Parse baseColor and apply brightness multiplier
-  const _bc = parseInt(T.baseColor.slice(1), 16);
-  const _br = Math.min(255, Math.round(((_bc >> 16) & 0xff) * T.brightness));
-  const _bg = Math.min(255, Math.round(((_bc >>  8) & 0xff) * T.brightness));
-  const _bb = Math.min(255, Math.round(((_bc      ) & 0xff) * T.brightness));
-  ctx.fillStyle = `rgb(${_br},${_bg},${_bb})`;
-  ctx.globalAlpha = 1;
-  ctx.fillRect(0, 0, w, h);
-  // Seeded RNG for deterministic texture
-  let _rs = 77;
-  const srng = () => { _rs = (_rs * 16807) % 2147483647; return (_rs - 1) / 2147483646; };
+  const T  = _canyonTuner;
+  const W  = 512, H = 512;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
 
-  // ── Vertical slab panels — each panel gets a different treatment
-  const nSlabs = Math.max(1, Math.round(T.slabCount));
-  const slabW = w / nSlabs;
-  for (let si = 0; si < nSlabs; si++) {
-    const sx0 = si * slabW;
-    const sx1 = sx0 + slabW;
-    const slabType = si % 3; // 0=grid, 1=heavy veins, 2=bloom
+  // Transparent base — face color comes from MeshStandardMaterial.color
+  ctx.clearRect(0, 0, W, H);
 
-    if (slabType === 0) {
-      // Cyan grid
-      ctx.strokeStyle = T.gridColor;
-      ctx.globalAlpha = T.gridOpacity;
-      ctx.lineWidth = 2.0;
-      const gx = 4, gy = 6;
-      for (let gi = 0; gi <= gx; gi++) {
-        const x = sx0 + (gi / gx) * slabW;
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-      }
-      for (let gj = 0; gj <= gy; gj++) {
-        const y = (gj / gy) * h;
-        ctx.beginPath(); ctx.moveTo(sx0, y); ctx.lineTo(sx1, y); ctx.stroke();
-      }
-    } else if (slabType === 1) {
-      // Heavy magenta vein cracks
-      for (let ci = 0; ci < 6; ci++) {
-        const vx = sx0 + srng() * slabW;
-        const vy = srng() * h;
-        const bright = srng() > 0.3;
-        ctx.strokeStyle = bright ? '#ff00cc' : '#cc44ff';
-        ctx.globalAlpha = T.crackOpacity;
-        ctx.lineWidth = 1.5 + srng() * 2.5;
-        ctx.beginPath(); ctx.moveTo(vx, vy);
-        let cx2 = vx, cy2 = vy;
-        const segs = 4 + Math.floor(srng() * 4);
-        for (let s = 0; s < segs; s++) {
-          cx2 = Math.max(sx0, Math.min(sx1, cx2 + (srng() - 0.3) * 50));
-          cy2 += (srng() - 0.1) * 70;
-          ctx.lineTo(cx2, cy2);
-        }
-        ctx.stroke();
-      }
-    } else {
-      // Bloom glow hotspot
-      const gx2 = sx0 + slabW * 0.5;
-      const gy2 = h * (0.2 + srng() * 0.6);
-      const gr = ctx.createRadialGradient(gx2, gy2, 0, gx2, gy2, slabW * 0.7);
-      gr.addColorStop(0,   'rgba(0,230,255,0.55)');
-      gr.addColorStop(0.3, 'rgba(0,100,200,0.25)');
-      gr.addColorStop(1,   'rgba(0,0,0,0.00)');
-      ctx.fillStyle = gr; ctx.globalAlpha = 1;
-      ctx.fillRect(sx0, 0, slabW, h);
-      // Thin grid on top of bloom
-      ctx.strokeStyle = T.gridColor;
-      ctx.globalAlpha = T.gridOpacity * 0.5;
-      ctx.lineWidth = 1.0;
-      for (let gj = 0; gj <= 8; gj++) {
-        const y = (gj / 8) * h;
-        ctx.beginPath(); ctx.moveTo(sx0, y); ctx.lineTo(sx1, y); ctx.stroke();
-      }
-    }
+  // Seeded RNG
+  let _s = 42;
+  const rng = () => { _s = (_s * 16807) % 2147483647; return (_s-1)/2147483646; };
 
-    // Slab divider line
-    if (si > 0) {
-      ctx.strokeStyle = '#ffffff';
-      ctx.globalAlpha = 0.3;
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(sx0, 0); ctx.lineTo(sx0, h); ctx.stroke();
-    }
+  // Sparse diagonal grid lines
+  ctx.strokeStyle = T.gridColor;
+  ctx.lineWidth   = 1.5;
+  const step = 80;
+  for (let i = -H; i < W + H; i += step) {
+    ctx.globalAlpha = T.gridOpacity * (0.6 + rng() * 0.4);
+    ctx.beginPath();
+    ctx.moveTo(i, 0); ctx.lineTo(i + H, H);
+    ctx.stroke();
+  }
+  // A few horizontal hairlines
+  for (let j = 0; j < 6; j++) {
+    const y = rng() * H;
+    ctx.globalAlpha = T.gridOpacity * 0.4;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
 
-  // Global scatter cracks across all slabs
-  ctx.lineWidth = 1.0;
-  for (let ci = 0; ci < 10; ci++) {
-    const sx = srng() * w, sy = srng() * h;
-    const segs = 3 + Math.floor(srng() * 3);
-    ctx.strokeStyle = srng() > 0.4 ? '#ff00cc' : '#cc44ff';
-    ctx.globalAlpha = T.crackOpacity * 0.5 * (0.7 + srng() * 0.3);
-    ctx.lineWidth = 0.5 + srng() * 1.0;
+  // Magenta cracks — sparse, jagged, per-face contained
+  ctx.lineWidth = 1.2;
+  for (let ci = 0; ci < 7; ci++) {
+    const sx = rng() * W, sy = rng() * H;
+    ctx.strokeStyle = rng() > 0.4 ? T.crackColor : '#cc44ff';
+    ctx.globalAlpha = T.crackOpacity * (0.5 + rng() * 0.5);
+    ctx.lineWidth   = 0.8 + rng() * 2.0;
     ctx.beginPath(); ctx.moveTo(sx, sy);
-    let cx2 = sx, cy2 = sy;
+    let cx = sx, cy = sy;
+    const segs = 3 + Math.floor(rng() * 4);
     for (let s = 0; s < segs; s++) {
-      cx2 += (srng() - 0.3) * 60; cy2 += (srng() - 0.1) * 50;
-      ctx.lineTo(cx2, cy2);
+      cx += (rng() - 0.35) * 80; cy += (rng() * 0.7 + 0.1) * 60;
+      ctx.lineTo(Math.max(0,Math.min(W,cx)), Math.max(0,Math.min(H,cy)));
     }
     ctx.stroke();
   }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   return tex;
 }
 
-function _buildCanyonSlabGeo(side) {
-  // Two-surface cliff geometry:
-  //   INNER FACE  — vertical quad grid facing ship (dx varies per vert for jaggedness)
-  //   TOP FACE    — near-horizontal cap sloping outward, sharing the ridge row with inner face
-  const T = _canyonTuner;
-  const cols  = T.segsZ + 1;
-  const iRows = T.segsX + 1;
-  const tRows = 5;
-  const topW  = T.wallWidth;
-  const topDropY = -T.height * 0.35;
+function _buildCanyonSlabGeo(seed, side) {
+  // Builds a low-poly cliff chunk: a tall convex prism.
+  // The inner face (facing the corridor) is nearly vertical.
+  // The outer faces angle away dramatically — so flatShading gives each
+  // face a starkly different brightness from the directional key light.
+  //
+  // Cross-section (top-down view, right wall, side=1):
+  //
+  //   corridor gap
+  //   |  inner face (nearly flat, faces -X toward ship)
+  //   A──────B
+  //   |       \
+  //   |  chunk  C   ← angled outer face
+  //   |       /
+  //   D──────E
+  //   |  outer back face
+  //
+  // We extrude this shape along Y (height).
+  // Top/bottom caps are flat polys.
 
-  const colNoise = new Float32Array(cols);
-  const colRidgeY = new Float32Array(cols);
-  for (let col = 0; col < cols; col++) {
-    const u = col / (cols - 1);
-    const px = u * 18.0;
-    const n1 = Math.sin(px * 2.1 + 0.9) * 0.35;
-    const n2 = Math.sin(px * 5.7 + 2.1) * 0.25;
-    const n3 = Math.abs(Math.sin(px * 3.2 + 4.4)) * 0.28;
-    colNoise[col] = Math.max(0, 0.4 + n1 + n2 + n3);
-    const tn = Math.sin(u * 31.7) * 0.4 + Math.sin(u * 17.3 + 1.2) * 0.35 + Math.sin(u * 7.1) * 0.25;
-    colRidgeY[col] = (0.5 + tn) * T.topRagged;
+  const T   = _canyonTuner;
+  // Seeded noise for per-chunk variation
+  let _s = Math.abs(seed * 9301 + 49297) % 233280;
+  const rng = () => { _s = (_s * 9301 + 49297) % 233280; return _s / 233280; };
+
+  const H  = T.chunkH  * (0.85 + rng() * 0.30); // height variation ±15%
+  const W  = T.chunkW  * (0.90 + rng() * 0.20); // Z-width variation
+  const D  = T.chunkDepth * (0.75 + rng() * 0.50); // X-depth variation
+
+  // Cross-section verts (in XZ plane, local coords):
+  // Inner face at x=0, outer face extends toward side*D
+  // Slightly irregular — 5-point cross section
+  const jag1 = (rng() - 0.5) * D * 0.35; // mid-outer jag
+  const jag2 = (rng() - 0.3) * D * 0.25;
+  // 5 cross-section points (XZ):
+  //  0: inner top-left    (0,   0)
+  //  1: inner top-right   (0,   W)
+  //  2: outer mid-right   (D,   W + jag1)
+  //  3: outer mid-center  (D*0.8+jag2, W*0.5)
+  //  4: outer mid-left    (D,   jag1*0.5)
+  // (all X coords multiplied by side to flip left/right)
+  const xs = [0,    0,    D,        D*0.8+jag2, D       ].map(x => x * side);
+  const zs = [0,    W,    W+jag1,   W*0.5,      jag1*0.5];
+
+  // Y levels: bottom, top (with small top tilt per vert for ragged peak)
+  const topJag = new Array(5).fill(0).map(() => (rng()-0.3) * H * 0.18);
+
+  // Build positions: bottom ring then top ring
+  const nRing = 5;
+  const pos = [];
+  const norms = [];
+  const uvs = [];
+  const idx = [];
+
+  // Bottom ring (y=0)
+  for (let i = 0; i < nRing; i++) { pos.push(xs[i], 0, zs[i]); }
+  // Top ring (y=H + per-vert jag)
+  for (let i = 0; i < nRing; i++) { pos.push(xs[i], H + topJag[i], zs[i]); }
+
+  // Side faces: for each edge i→(i+1), build a quad (2 tris)
+  for (let i = 0; i < nRing; i++) {
+    const j  = (i + 1) % nRing;
+    const b0 = i,       b1 = j;        // bottom
+    const t0 = i+nRing, t1 = j+nRing; // top
+    // Winding: faces outward (away from interior)
+    // For right wall (side=1): interior is at -X, so outward = +X / mixed
+    // We use DoubleSide so winding doesn't matter for visibility
+    idx.push(b0, t0, b1,  b1, t0, t1);
   }
 
-  const iTotal = iRows * cols;
-  const iPos = new Float32Array(iTotal * 3);
-  const iUV  = new Float32Array(iTotal * 2);
-  const baseY = -T.height / 2;
-
-  for (let row = 0; row < iRows; row++) {
-    const v  = row / (iRows - 1);
-    const y  = baseY + v * T.height;
-    for (let col = 0; col < cols; col++) {
-      const u  = col / (cols - 1);
-      const z  = -u * T.tileLength;
-      const leanFactor = 1 + T.slopeLean * v;
-      const dx = colNoise[col] * T.displacement * leanFactor * side;
-      const dy = (v > 0.9) ? colRidgeY[col] * v : 0;
-      const idx = row * cols + col;
-      iPos[idx*3+0] = dx;
-      iPos[idx*3+1] = y + dy;
-      iPos[idx*3+2] = z;
-      iUV[idx*2+0]  = u;
-      iUV[idx*2+1]  = v;
-    }
+  // Bottom cap (fan from center)
+  const botCenterIdx = pos.length / 3;
+  const bcx = xs.reduce((a,b)=>a+b,0)/nRing;
+  const bcz = zs.reduce((a,b)=>a+b,0)/nRing;
+  pos.push(bcx, 0, bcz);
+  for (let i = 0; i < nRing; i++) {
+    idx.push(botCenterIdx, (i+1)%nRing, i);
   }
 
-  const tTotal = tRows * cols;
-  const tPos = new Float32Array(tTotal * 3);
-  const tUV  = new Float32Array(tTotal * 2);
-
-  for (let row = 0; row < tRows; row++) {
-    const t  = row / (tRows - 1);
-    for (let col = 0; col < cols; col++) {
-      const u  = col / (cols - 1);
-      const z  = -u * T.tileLength;
-      const ridgeY = baseY + T.height + colRidgeY[col];
-      const xOff = t * topW * side;
-      const yOff = t * topDropY;
-      const tn2 = Math.sin(u * 9.1 + t * 5.3) * 0.15 + Math.sin(u * 22.3 + t * 3.7) * 0.08;
-      const idx = row * cols + col;
-      tPos[idx*3+0] = xOff + tn2 * side * T.displacement * 0.3;
-      tPos[idx*3+1] = ridgeY + yOff + tn2 * T.displacement * 0.15;
-      tPos[idx*3+2] = z;
-      tUV[idx*2+0]  = u;
-      tUV[idx*2+1]  = 1.0 - t;
-    }
+  // Top cap (fan from center)
+  const topCenterIdx = pos.length / 3;
+  const tcx = bcx, tcz = bcz;
+  const topCenterY = H + topJag.reduce((a,b)=>a+b,0)/nRing;
+  pos.push(tcx, topCenterY, tcz);
+  for (let i = 0; i < nRing; i++) {
+    const ti = i + nRing, tj = ((i+1)%nRing) + nRing;
+    idx.push(topCenterIdx, ti, tj);
   }
 
-  function buildQuadIndices(numRowSegs, numColSegs, colCount, offset) {
-    const buf = new Uint32Array(numRowSegs * numColSegs * 6);
-    let ii = 0;
-    for (let row = 0; row < numRowSegs; row++) {
-      for (let col = 0; col < numColSegs; col++) {
-        const a = offset + row * colCount + col;
-        const b = a + 1;
-        const c = a + colCount;
-        const d = c + 1;
-        if (side === 1) {
-          buf[ii++]=a; buf[ii++]=c; buf[ii++]=b;
-          buf[ii++]=b; buf[ii++]=c; buf[ii++]=d;
-        } else {
-          buf[ii++]=a; buf[ii++]=b; buf[ii++]=c;
-          buf[ii++]=b; buf[ii++]=d; buf[ii++]=c;
-        }
-      }
-    }
-    return buf;
+  // UVs — simple planar from XZ extent
+  const allX = xs; const allZ = zs;
+  const minX = Math.min(...allX), maxX = Math.max(...allX);
+  const minZ = Math.min(...allZ), maxZ = Math.max(...allZ);
+  const rngX = maxX - minX || 1, rngZ = maxZ - minZ || 1;
+  for (let i = 0; i < pos.length/3; i++) {
+    uvs.push((pos[i*3+0]-minX)/rngX, pos[i*3+2]/W);
   }
-
-  const iIdx = buildQuadIndices(iRows-1, cols-1, cols, 0);
-  const tIdx = buildQuadIndices(tRows-1, cols-1, cols, iTotal);
-
-  const allPos = new Float32Array(iTotal*3 + tTotal*3);
-  allPos.set(iPos, 0); allPos.set(tPos, iTotal*3);
-  const allUV = new Float32Array(iTotal*2 + tTotal*2);
-  allUV.set(iUV, 0); allUV.set(tUV, iTotal*2);
-  const allIdx = new Uint32Array(iIdx.length + tIdx.length);
-  allIdx.set(iIdx, 0); allIdx.set(tIdx, iIdx.length);
-
-  // Entrance cap
-  const capRows = 6, capXSegs = 4;
-  const capVerts = capRows * (capXSegs + 1);
-  const capPos = new Float32Array(capVerts * 3);
-  const capUV  = new Float32Array(capVerts * 2);
-  const ridgeY0 = baseY + T.height + colRidgeY[0];
-  const capBotY = baseY, capTopY = ridgeY0 * T.capHeight;
-  const capOutX = T.wallWidth * side;
-  for (let cr = 0; cr < capRows; cr++) {
-    const vv = cr / (capRows - 1);
-    const cy2 = capBotY + vv * (capTopY - capBotY);
-    for (let cx = 0; cx <= capXSegs; cx++) {
-      const uu = cx / capXSegs;
-      const ex = uu * capOutX;
-      const cidx = cr * (capXSegs + 1) + cx;
-      capPos[cidx*3+0] = ex; capPos[cidx*3+1] = cy2; capPos[cidx*3+2] = 0;
-      capUV[cidx*2+0] = uu; capUV[cidx*2+1] = vv;
-    }
-  }
-  const capOffset = iTotal + tTotal;
-  const capIdx = buildQuadIndices(capRows-1, capXSegs, capXSegs+1, capOffset);
-
-  const finalPos = new Float32Array(allPos.length + capPos.length);
-  finalPos.set(allPos, 0); finalPos.set(capPos, allPos.length);
-  const finalUV = new Float32Array(allUV.length + capUV.length);
-  finalUV.set(allUV, 0); finalUV.set(capUV, allUV.length);
-  const finalIdx = new Uint32Array(allIdx.length + capIdx.length);
-  finalIdx.set(allIdx, 0); finalIdx.set(capIdx, allIdx.length);
 
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(finalPos, 3));
-  geo.setAttribute('uv',       new THREE.BufferAttribute(finalUV,  2));
-  geo.setIndex(new THREE.BufferAttribute(finalIdx, 1));
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  geo.setAttribute('uv',       new THREE.BufferAttribute(new Float32Array(uvs), 2));
+  geo.setIndex(idx);
   geo.computeVertexNormals();
   return geo;
 }
 
 function _createCanyonWalls() {
   if (_canyonWalls) return;
-  const T = _canyonTuner;
+  const T  = _canyonTuner;
   const gridTex = _makeCanyonGridTexture();
-  gridTex.repeat.set(1, 3);
 
-  // MeshBasicMaterial — self-lit from canvas texture, no scene lighting needed.
-  // The slab panels (grid/veins/bloom) carry all visual depth.
-  const mat = new THREE.MeshBasicMaterial({
-    map:  gridTex,
-    side: THREE.DoubleSide,
-  });
+  // One shared material per side — face color varies via per-mesh .color
+  // flatShading: true means each triangular face gets its own flat normal →
+  // dramatically different brightness per face from the scene directional light
+  function makeMat(baseHex) {
+    return new THREE.MeshStandardMaterial({
+      color:            baseHex,
+      emissive:         0x002233,
+      emissiveMap:      gridTex,
+      emissiveIntensity: T.emissiveInt,
+      roughness:        T.roughness,
+      metalness:        T.metalness,
+      flatShading:      true,
+      side:             THREE.DoubleSide,
+    });
+  }
 
-  function makeSlab(side, zOff) {
-    const geo = new THREE.BufferGeometry();
-    const src = _buildCanyonSlabGeo(side);
-    geo.setAttribute('position', src.attributes.position.clone());
-    geo.setAttribute('normal',   src.attributes.normal.clone());
-    geo.setAttribute('uv',       src.attributes.uv.clone());
-    geo.setIndex(src.index.clone());
-    src.dispose();
+  // Face color palette — cycle through for visual variety
+  const palette = [0x0d3350, 0x1a5570, 0x0a1e2e, 0x113345, 0x1e6680];
+
+  function makeChunk(side, seed, zPos) {
+    const geo  = _buildCanyonSlabGeo(seed, side);
+    const mat  = makeMat(palette[seed % palette.length]);
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.y = -25 + T.height / 2;
-    mesh.position.z = zOff;
+    mesh.position.z = zPos;
+    mesh.position.y = 0;
     mesh.frustumCulled = false;
     scene.add(mesh);
     return mesh;
   }
 
-  const shipX = state.shipX || 0;
-  const spawnHalfX = CORRIDOR_WIDE_X;
-  const lA = makeSlab(-1, SPAWN_Z);         lA.position.x = shipX - spawnHalfX;
-  const lB = makeSlab(-1, SPAWN_Z - T.tileLength); lB.position.x = shipX - spawnHalfX;
-  const rA = makeSlab( 1, SPAWN_Z);         rA.position.x = shipX + spawnHalfX;
-  const rB = makeSlab( 1, SPAWN_Z - T.tileLength); rB.position.x = shipX + spawnHalfX;
-  _canyonWalls = { strips: [lA, lB, rA, rB], mat, gridTex, left: [lA, lB], right: [rA, rB] };
+  const SPACING = T.chunkW * 1.05; // slight overlap to avoid gaps
+  const chunks = { left: [], right: [] };
+
+  ['left','right'].forEach(k => {
+    const side = k === 'left' ? -1 : 1;
+    for (let i = 0; i < T.poolSize; i++) {
+      const seed = i * 7 + (k === 'right' ? 100 : 0);
+      const zPos = SPAWN_Z + i * SPACING;
+      const mesh = makeChunk(side, seed, zPos);
+      // X set below after both arrays built
+      chunks[k].push(mesh);
+    }
+  });
+
+  // Set initial X positions
+  const gapCenter = state.corridorGapCenter || 0;
+  chunks.left.forEach(m  => { m.position.x = gapCenter - 80; });
+  chunks.right.forEach(m => { m.position.x = gapCenter + 80; });
+
+  _canyonWalls = {
+    strips: [...chunks.left, ...chunks.right], // for _destroyCanyonWalls compat
+    left:   chunks.left,
+    right:  chunks.right,
+    gridTex,
+    _spacing: SPACING,
+  };
 }
 
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
-  _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
-  _canyonWalls.mat.dispose();
-  _canyonWalls.gridTex.dispose();
+  _canyonWalls.strips.forEach(m => {
+    scene.remove(m);
+    m.geometry.dispose();
+    m.material.dispose();
+  });
+  if (_canyonWalls.gridTex) _canyonWalls.gridTex.dispose();
   _canyonWalls = null;
   if (_canyonFillLight) {
     if (_canyonFillLight.lights) _canyonFillLight.lights.forEach(l => scene.remove(l));
@@ -7628,28 +7569,44 @@ function _destroyCanyonWalls() {
 
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || !_canyonActive) return;
-  const T = _canyonTuner;
-  const effectiveSpd = (speed && speed > 1) ? speed : BASE_SPEED;
-  const scroll = effectiveSpd * dt * T.scrollSpeed;
+  const T   = _canyonTuner;
+  const spd = (speed && speed > 1) ? speed : BASE_SPEED;
+  const scroll  = spd * dt * T.scrollSpeed;
+  const spacing = _canyonWalls._spacing;
 
-  // X is locked at spawn time — only Z scrolls (leapfrog)
-  _canyonWalls.left.forEach(m => {
-    m.position.z += scroll;
-    if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
-  });
-  _canyonWalls.right.forEach(m => {
-    m.position.z += scroll;
-    if (m.position.z > T.tileLength) m.position.z -= T.tileLength * 2;
+  const gapCenter = state.corridorGapCenter || 0;
+  const gapHalfX  = (_jlCorridor && _jlCorridor._lastHalfX != null)
+    ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
+
+  ['left','right'].forEach(k => {
+    const side   = k === 'left' ? -1 : 1;
+    const edgeX  = gapCenter + gapHalfX * side;
+    const meshes = _canyonWalls[k];
+
+    meshes.forEach(m => {
+      m.position.z += scroll;
+
+      // Recycle: chunk scrolled past ship → teleport to back of queue
+      if (m.position.z > DESPAWN_Z + spacing) {
+        let minZ = Infinity;
+        for (const om of meshes) if (om !== m && om.position.z < minZ) minZ = om.position.z;
+        m.position.z = minZ - spacing;
+        m.position.x = edgeX; // snap X on recycle
+      } else {
+        // Smooth lateral tracking while in view
+        m.position.x += (edgeX - m.position.x) * Math.min(1, T.snapRate * dt);
+      }
+    });
   });
 
   // Collision
   if (state._jetLightningMode && state.phase === 'playing' && !state._godMode && !_godMode) {
-    const shipX    = state.shipX || 0;
-    const gapCenter = state.corridorGapCenter || 0;
-    const gapHalfX  = (_jlCorridor && _jlCorridor._lastHalfX != null)
-      ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
+    const shipX  = state.shipX || 0;
     const buffer = 1.5;
-    if (shipX < gapCenter - gapHalfX + buffer || shipX > gapCenter + gapHalfX - buffer) {
+    const gapC   = state.corridorGapCenter || 0;
+    const gapH   = (_jlCorridor && _jlCorridor._lastHalfX != null)
+      ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
+    if (shipX < gapC - gapH + buffer || shipX > gapC + gapH - buffer) {
       if (typeof _killPlayer === 'function') _killPlayer();
       else if (typeof triggerDeath === 'function') triggerDeath();
     }
@@ -17288,9 +17245,10 @@ window.addEventListener('keydown', (e) => {
     if (!_canyonWalls) return;
     _canyonWalls.gridTex.dispose();
     const newTex = _makeCanyonGridTexture();
-    newTex.repeat.set(1, 3);
-    _canyonWalls.mat.map = newTex;
-    _canyonWalls.mat.needsUpdate = true;
+    _canyonWalls.strips.forEach(m => {
+      m.material.emissiveMap = newTex;
+      m.material.needsUpdate = true;
+    });
     _canyonWalls.gridTex = newTex;
   }
 
@@ -19012,7 +18970,7 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeHeader('CANYON MATERIAL', '#0ef'));
     panel.appendChild(makeSlider('emissive intensity', _canyonTuner.brightness * 1.8, 0, 8, 0.1, v => {
       _canyonTuner.brightness = v / 1.8;
-      if (_canyonWalls) { _canyonWalls.mat.emissiveIntensity = v; }
+      if (_canyonWalls) { _canyonWalls.strips.forEach(m => { m.material.emissiveIntensity = v; }); }
     }, '#0ef'));
     panel.appendChild(makeSlider('bloom threshold', bloom.threshold, 0, 1.5, 0.05, v => {
       bloom.threshold = v;
@@ -19022,11 +18980,11 @@ function buildSkinTunerSliders() {
     }, '#0ef'));
     panel.appendChild(makeSlider('gridGlow', _canyonTuner.gridGlow, 0, 1, 0.05, v => {
       _canyonTuner.gridGlow = v;
-      if (_canyonWalls) { _canyonWalls.gridTex.dispose(); const t = _makeCanyonGridTexture(); t.repeat.set(1,1); t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping; _canyonWalls.mat.emissiveMap = t; _canyonWalls.mat.needsUpdate = true; _canyonWalls.gridTex = t; }
+      if (_canyonWalls) { rebuildTex(); }
     }, '#0ef'));
     panel.appendChild(makeSlider('veinBloom', _canyonTuner.veinBloom, 0, 1, 0.05, v => {
       _canyonTuner.veinBloom = v;
-      if (_canyonWalls) { _canyonWalls.gridTex.dispose(); const t = _makeCanyonGridTexture(); t.repeat.set(1,1); _canyonWalls.mat.emissiveMap = t; _canyonWalls.mat.needsUpdate = true; _canyonWalls.gridTex = t; }
+      if (_canyonWalls) { rebuildTex(); }
     }, '#0ef'));
   }
 
