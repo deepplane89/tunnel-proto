@@ -7282,7 +7282,7 @@ const _canyonTuner = {
   fillLight:     0.4,
   scrollSpeed:   1.0,
   freezeWide:    false,
-  canyonHalfX:   13,  // tighter corridor — walls loom closer like AI pic
+  canyonHalfX:   10,  // tight corridor — walls fill screen like AI pic
   // Texture — glacier/marble aesthetic matching AI pic
   baseColor:     '#0a1828',  // very dark base — glacier slabs are self-lit bright
   brightness:    0.90,       // emissiveIntensity drives glacier brightness
@@ -7457,9 +7457,9 @@ function _makeCanyonGridTexture() {
           const mv = (Math.sin(mFreq * (nx + mAmp * turb)) + 1) * 0.5;
           // Color: dark purple base → mid purple veins → bright magenta hot-lines
           const t3 = Math.pow(mv, 1.8); // push toward extremes
-          const r3 = Math.round(t3 * 80  + 4);
-          const g3 = Math.round(t3 * 0   + 2);
-          const b3 = Math.round(t3 * 40  + 8);
+          const r3 = Math.round(t3 * 160 + 10);  // bright enough to read through emissive
+          const g3 = Math.round(t3 * 8   + 4);
+          const b3 = Math.round(t3 * 90  + 15);
           ctx.fillStyle = `rgb(${r3},${g3},${b3})`;
           ctx.globalAlpha = 1;
           ctx.fillRect(sx0 + px2, py, 2, rowH);
@@ -17597,6 +17597,8 @@ window.addEventListener('keydown', (e) => {
       _jlCorridor.type        = 'l3';
       _jlCorridor.totalRows   = 750;
       if (!_canyonWalls) _createCanyonWalls();
+      bloom.strength = 0.65;  // canyon needs stronger bloom for glacier glow
+      bloom.radius   = 0.45;  // wider halo around bright faces
       const w = _canyonWalls;
       const T = _canyonTuner;
       // Also log positions after 1 frame so _updateCanyonWalls has run
@@ -17634,6 +17636,8 @@ window.addEventListener('keydown', (e) => {
     } else {
       _destroyCanyonWalls();
       _jlStopCorridor();
+      bloom.strength = 0.35;  // restore default bloom
+      bloom.radius   = 0.25;
       console.log('[CANYON] OFF');
     }
   }
