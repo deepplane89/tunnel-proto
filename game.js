@@ -7282,7 +7282,7 @@ const _canyonTuner = {
   fillLight:     0.4,
   scrollSpeed:   1.0,
   freezeWide:    true,
-  canyonHalfX:   CORRIDOR_WIDE_X,
+  canyonHalfX:   80,  // = CORRIDOR_WIDE_X (can't reference const before declaration)
   baseColor:     '#2a5a72',
   brightness:    1.0,
   gridColor:     '#00eeff',
