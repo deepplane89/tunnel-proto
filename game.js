@@ -20779,10 +20779,11 @@ function _tickAsteroidSpawner(dt) {
       else {
         // Fallback: same logic inline (Y panel not yet opened)
         const steps = Math.max(1, Math.round(T.salvoCount));
+        const snapX = state.shipX || 0;
         for (let si = 0; si < steps; si++) {
           setTimeout(() => {
             if (state.phase !== 'playing') return;
-            _spawnAsteroid(state.shipX || 0);
+            _spawnAsteroid(snapX);
           }, si * T.staggerGap * 1000);
         }
       }
@@ -21077,19 +21078,20 @@ const _origUpdateShockwave = _updateShockwave;
     }
 
     // Shared stagger fire — used by loop button AND JL auto-spawner
-    // Reads state.shipX live inside each setTimeout so it always tracks the ship
+    // Snapshots ship X at fire time — all steps land at the same X column
     window._fireStagger = function _fireStagger() {
       const T = _asteroidTuner;
       const steps = Math.max(1, Math.round(T.salvoCount));
+      const snapX = state.shipX || 0; // snapshot ship X once — don't track movement
       for (let si = 0; si < steps; si++) {
         setTimeout(() => {
           if (state.phase !== 'playing') return;
-          _spawnAsteroid(state.shipX || 0);
+          _spawnAsteroid(snapX);
           if (T.staggerDual) {
             const spawnY = T.skyHeight;
             const totalTime = Math.sqrt((0 - spawnY) ** 2 + (3.9 - (-160)) ** 2) / T.speed;
-            const leadX = state.shipX + (state.shipVelX || 0) * totalTime * T.leadFactor;
-            if (Math.abs(leadX - state.shipX) > 0.8) _spawnAsteroid(leadX);
+            const leadX = snapX + (state.shipVelX || 0) * totalTime * T.leadFactor;
+            if (Math.abs(leadX - snapX) > 0.8) _spawnAsteroid(leadX);
           }
         }, si * T.staggerGap * 1000);
       }
