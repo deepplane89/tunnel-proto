@@ -7662,11 +7662,12 @@ function _createCanyonWalls() {
     return mesh;
   }
 
-  const INIT_Z = T.spawnDepth || -300; // start far away so entrance is visible
-  // Pool must cover from INIT_Z all the way to DESPAWN_Z with no gaps
-  const autoPool = Math.ceil((DESPAWN_Z - INIT_Z) / SPACING) + 1;
-  // Safe spawn limit — no slab initialises closer than this to the ship
-  const SAFE_Z  = -150;
+  const INIT_Z  = T.spawnDepth || -400;
+  const SAFE_Z  = -150; // no slab spawns closer than this on init
+  // Only create slabs that fit between INIT_Z and SAFE_Z — recycle handles the rest
+  const initCount = Math.max(1, Math.floor((SAFE_Z - INIT_Z) / SPACING));
+  // Full pool size covers the whole visible range for recycling
+  const autoPool  = Math.ceil((DESPAWN_Z - INIT_Z) / SPACING) + 2;
 
   const chunks = { left: [], right: [] };
   ['left','right'].forEach(k => {
@@ -7674,9 +7675,10 @@ function _createCanyonWalls() {
     for (let i = 0; i < autoPool; i++) {
       const seed  = i * 7 + (k === 'right' ? 100 : 0);
       const thick = (i < T.entranceSlabs) ? T.entranceThick : undefined;
-      const rawZ  = INIT_Z + i * SPACING;
-      // Slabs that would land past SAFE_Z get stacked behind INIT_Z instead
-      const initZ = rawZ <= SAFE_Z ? rawZ : INIT_Z - (i * SPACING);
+      // Slabs within safe range placed at correct Z; overflow slabs chain backward from INIT_Z
+      const initZ = i < initCount
+        ? INIT_Z + i * SPACING
+        : INIT_Z - (i - initCount) * SPACING - SPACING;
       chunks[k].push(makeSlab(side, seed, initZ, i, thick));
     }
   });
