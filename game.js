@@ -7279,7 +7279,7 @@ const _canyonTuner = {
   disp:           4.0,  // inner-face X jitter amount
   snap:           0.7,  // quantize divisor
   // Profile shape (foot→sweep→mid→crest outward X)
-  footX:        -9.5,
+  footX:         0.0,   // 0 = straight inner wall, negative = overhang toward corridor
   sweepX:        4.0,
   midX:         17.0,
   crestX:       20.0,
@@ -7307,32 +7307,62 @@ let _canyonSineRows      = 0;
 let _canyonSineZ         = 0;
 let _canyonWasCorridor   = false;
 let _canyonDiagFrame     = 0;     // frame counter for periodic diagnostic log
-// Call window._canyonLog() from console to get a snapshot
+// Call window._canyonLog() from console to get a full snapshot of canyon state + tuner
 window._canyonLog = function() {
   const T = _canyonTuner;
   const walls = _canyonWalls;
-  const halfX = T.canyonHalfX || 45;
-  const spawnBase = walls ? (walls._spawnX || 0) : 0;
-  // Center comes from the real L3 algorithm via spawnCorridorRow
-  const center = T.freezeWide ? 0 : (state.corridorGapCenter || 0);
+  const footOff = Math.abs(T.footX);
+  // Find slabs nearest to ship for true gap measurement
+  let nearL = null, nearR = null, bestLZ = Infinity, bestRZ = Infinity;
+  if (walls) {
+    walls.left.forEach(m  => { const d = Math.abs(m.position.z - 3.9); if(d < bestLZ){ bestLZ=d; nearL=m; } });
+    walls.right.forEach(m => { const d = Math.abs(m.position.z - 3.9); if(d < bestRZ){ bestRZ=d; nearR=m; } });
+  }
+  const leftEdge  = nearL ? nearL.position.x : null;
+  const rightEdge = nearR ? nearR.position.x : null;
+  const gap = (leftEdge != null && rightEdge != null) ? +(rightEdge - leftEdge).toFixed(2) : null;
   const out = {
+    '--- CORRIDOR ---': '',
     active:            _canyonActive,
-    freezeWide:        T.freezeWide,
-    corridorGapCenter: +(state.corridorGapCenter||0).toFixed(2),
-    corridorRowsDone:  state.corridorRowsDone||0,
-    corridorSineT:     +(state.corridorSineT||0).toFixed(3),
-    center:            +center.toFixed(2),
-    spawnBase:         +spawnBase.toFixed(2),
-    halfX,
-    leftX:        walls ? +walls.left[0].position.x.toFixed(2) : null,
-    rightX:       walls ? +walls.right[0].position.x.toFixed(2) : null,
-    gapActual:    walls ? +(walls.right[0].position.x - walls.left[0].position.x).toFixed(2) : null,
-    shipX:        +(state.shipX||0).toFixed(2),
-    shipInGap:    walls ? (state.shipX > walls.left[0].position.x && state.shipX < walls.right[0].position.x) : null,
-    jlCorridorActive: _jlCorridor.active,
+    rowsDone:          state.corridorRowsDone || 0,
+    sineT:             +(state.corridorSineT||0).toFixed(3),
+    gapCenter:         +(state.corridorGapCenter||0).toFixed(2),
+    shipX:             +(state.shipX||0).toFixed(2),
+    leftEdgeX:         leftEdge != null ? +leftEdge.toFixed(2) : null,
+    rightEdgeX:        rightEdge != null ? +rightEdge.toFixed(2) : null,
+    visibleGapWidth:   gap,
+    shipInGap:         (leftEdge!=null && rightEdge!=null) ? (state.shipX > leftEdge && state.shipX < rightEdge) : null,
+    '--- TUNER ---': '',
+    slabH:        T.slabH,
+    slabW:        T.slabW,
+    slabThick:    T.slabThick,
+    cols:         T.cols,
+    rows:         T.rows,
+    disp:         T.disp,
+    snap:         T.snap,
+    footX:        T.footX,
+    sweepX:       T.sweepX,
+    midX:         T.midX,
+    crestX:       T.crestX,
+    poolSize:     T.poolSize,
+    scrollSpeed:  T.scrollSpeed,
+    cyanEmi:      T.cyanEmi,
+    cyanRgh:      T.cyanRgh,
+    holoOpacity:  T.holoOpacity,
+    holoGrid:     T.holoGrid,
+    darkCrkCount: T.darkCrkCount,
+    darkCrkBright:T.darkCrkBright,
+    '--- SLAB POSITIONS ---': '',
+    rightSlabs: walls ? walls.right.map(m => ({ x: +m.position.x.toFixed(1), z: +m.position.z.toFixed(1), bakedX: m.userData.bakedX != null ? +m.userData.bakedX.toFixed(1) : null })).sort((a,b)=>a.z-b.z) : null,
   };
   console.log('[CANYON LOG]\n' + JSON.stringify(out, null, 2));
   return out;
+};
+// Also expose tuner setter: window._canyonSet({slabH:70, footX:0, ...})
+window._canyonSet = function(vals) {
+  Object.assign(_canyonTuner, vals);
+  console.log('[CANYON SET] applied:', JSON.stringify(vals));
+  return _canyonTuner;
 };
 
 function _makeCanyonCyanTex(seed) {
