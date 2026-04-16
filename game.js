@@ -20821,7 +20821,12 @@ function _tickAsteroidSpawner(dt) {
       const side = Math.random() < 0.5 ? 1 : -1;
       const offset = T.lateralMinOff + Math.random() * (T.lateralMaxOff - T.lateralMinOff);
       const sx = (state && state.shipX) || 0;
-      _spawnAsteroid(sx + side * offset);
+      const spawnX = sx + side * offset;
+      if (window._jlActiveObstacleType === 'lightning' && typeof _spawnLightning === 'function') {
+        _spawnLightning(spawnX);
+      } else {
+        _spawnAsteroid(spawnX);
+      }
     }
   }
 }
@@ -21792,8 +21797,8 @@ function _tickJetLightningRamp(dt) {
         }
       }
 
-      if      (track.type === 'asteroid')  _activeAst = track;
-      else if (track.type === 'lightning') _activeLt  = track;
+      if      (track.type === 'asteroid')  { _activeAst = track; window._jlActiveObstacleType = 'asteroid'; }
+      else if (track.type === 'lightning') { _activeLt  = track;  window._jlActiveObstacleType = 'lightning'; }
       else if (track.type === 'fatcone') {
         // Fat cone spawner — delegates to _spawnFatCone() which uses FCT settings
         _jlFatConeTimer -= dt;
