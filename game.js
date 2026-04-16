@@ -17335,7 +17335,7 @@ window.addEventListener('keydown', (e) => {
       _jlCorridor.active      = true;
       _jlCorridor.type        = 'l3';
       _jlCorridor.totalRows   = 750;
-      if (!_canyonWalls) _createCanyonWalls();
+      _destroyCanyonWalls(); _createCanyonWalls(); // always rebuild so spawnDepth takes effect
       const w = _canyonWalls;
       const T = _canyonTuner;
       // Also log positions after 1 frame so _updateCanyonWalls has run
@@ -17535,7 +17535,7 @@ window.addEventListener('keydown', (e) => {
     slider('Wall spacing',   'halfXOverride',  1,  300, 1,   'live');
     slider('Entrance width', 'entranceHalfX',  1,  600, 1,   'live');
     slider('Entrance slabs', 'entranceSlabs',  1,   20, 1,   'live');
-    slider('Spawn depth',    'spawnDepth',  -600, -100, 10,  'live');
+    slider('Spawn depth',    'spawnDepth',  -600, -100, 10,  'geo');
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
