@@ -7272,7 +7272,7 @@ function _updateTerrainWalls(dt, speed) {
 const _canyonTuner = {
   height:        160,   // tall looming walls like AI pic
   tileLength:    175,
-  segsX:         8,    // FEW large segments — big angular slab faces like AI pic
+  segsX:         40,   // enough height rows for visible faceting
   segsZ:         100,
   displacement:  22,   // dramatic faceting
   wallWidth:     12,
@@ -7888,15 +7888,9 @@ function _createCanyonWalls() {
         const z  = -r * ROW_DEPTH;
         const cx = centers[r] + halfXs[r] * side;
         const leanFactor = 1 + T.slopeLean * v;
-        // Per-vertex displacement in BOTH X and Z — creates real 3D cliff volume
-        const pr = r * 0.31 + hi * 0.17;
-        const ph = hi * 0.43 + r * 0.11;
-        const dxLow  = (Math.sin(pr * 1.3 + 0.7) * 0.5 + Math.sin(pr * 2.9 + 1.4) * 0.3 + Math.abs(Math.sin(pr * 0.7 + 2.1)) * 0.2);
-        const dxHigh = (Math.sin(ph * 4.1 + 0.3) * 0.3 + Math.sin(ph * 7.3 + 1.9) * 0.15);
-        const dx = (dxLow * 0.7 + dxHigh * 0.3) * T.displacement * leanFactor * side;
-        // Z displacement — chunks jut toward/away from camera, creates real depth
-        const pz = r * 0.19 + hi * 0.23;
-        const dz = (Math.sin(pz * 1.7 + 1.1) * 0.5 + Math.sin(pz * 3.8 + 0.5) * 0.3 + Math.sin(pz * 6.2 + 2.3) * 0.2) * T.displacement * 0.6;
+        // Per-ROW displacement — all verts in a column share same dx
+        // This creates real silhouette variation (wall bulges/recedes) visible from inside corridor
+        const dx = rowNoise[r] * T.displacement * leanFactor * side;
         const dy = (v > 0.85) ? rowRidgeY[r] * (v - 0.85) / 0.15 : 0;
         const idx = hi * NUM_ROWS + r;
         iPos[idx*3+0] = cx + dx;
@@ -8010,287 +8004,15 @@ function _createCanyonWalls() {
   rMesh.position.z = SPAWN_Z;
   lMesh.frustumCulled = false;
   rMesh.frustumCulled = false;
-  lMesh.visible = false;  // scaffold only
-  rMesh.visible = false;
+  lMesh.visible = true;
+  rMesh.visible = true;
   scene.add(lMesh);
   scene.add(rMesh);
-
-  // ── VISUAL COLUMN SLABS ──
-  // Separate tall box columns placed along the corridor curve.
-  // Each column's X is baked from the same centers[]/halfXs[] array.
-  // Alternating glacier (cyan-white) and marble (dark purple+magenta) columns.
-
-  // Glacier material — bright frosty cyan-white, emissive glow
-  const glacierCanvas = document.createElement('canvas');
-  glacierCanvas.width = 256; glacierCanvas.height = 512;
-  const gc2 = glacierCanvas.getContext('2d');
-  // Base: bright ice blue-white gradient
-  const iceG = gc2.createLinearGradient(0, 0, 256, 0);
-  iceG.addColorStop(0,   '#b8f0ff');
-  iceG.addColorStop(0.4, '#e8ffff');
-  iceG.addColorStop(1,   '#a0e8f8');
-  gc2.fillStyle = iceG; gc2.fillRect(0, 0, 256, 512);
-  // Depth pools — dark teal crevasses
-  for (let i = 0; i < 6; i++) {
-    const px2 = 20 + Math.random()*216, py2 = 20 + Math.random()*472;
-    const pg2 = gc2.createRadialGradient(px2,py2,0,px2,py2,40+Math.random()*60);
-    pg2.addColorStop(0,   'rgba(0,40,80,0.6)');
-    pg2.addColorStop(0.5, 'rgba(0,60,100,0.25)');
-    pg2.addColorStop(1,   'rgba(0,0,0,0)');
-    gc2.fillStyle = pg2; gc2.fillRect(0,0,256,512);
-  }
-  // Flow striations
-  gc2.strokeStyle = 'rgba(255,255,255,0.22)'; gc2.lineWidth = 1.5;
-  for (let i = 0; i < 10; i++) {
-    gc2.beginPath();
-    gc2.moveTo(Math.random()*256, 0);
-    gc2.lineTo(Math.random()*256 + 80, 512);
-    gc2.stroke();
-  }
-  // Diagonal X grid
-  gc2.strokeStyle = '#00ffee'; gc2.globalAlpha = 0.45; gc2.lineWidth = 2.5;
-  for (let d = -512; d < 512; d += 60) {
-    gc2.beginPath(); gc2.moveTo(d, 0); gc2.lineTo(d+512, 512); gc2.stroke();
-    gc2.beginPath(); gc2.moveTo(d+512, 0); gc2.lineTo(d, 512); gc2.stroke();
-  }
-  gc2.globalAlpha = 1;
-  const glacierTex = new THREE.CanvasTexture(glacierCanvas);
-  const glacierMat = new THREE.MeshStandardMaterial({
-    color: 0x000000, emissive: 0xffffff, emissiveMap: glacierTex,
-    emissiveIntensity: T.brightness * 2.0,
-    vertexColors: true,
-    roughness: 0.7, metalness: 0.1,
-    flatShading: true, side: THREE.DoubleSide, toneMapped: false,
-  });
-
-  // Marble material — dark purple with magenta veins
-  const marbleCanvas = document.createElement('canvas');
-  marbleCanvas.width = 256; marbleCanvas.height = 512;
-  const mc = marbleCanvas.getContext('2d');
-  // Procedural marble via sin+turbulence
-  for (let py = 0; py < 512; py += 3) {
-    for (let px2 = 0; px2 < 256; px2 += 3) {
-      const nx = px2/256, ny = py/512;
-      let turb = 0;
-      turb += Math.abs(Math.sin(nx*11.3+ny*7.1))*1.0;
-      turb += Math.abs(Math.sin(nx*23.7+ny*15.3))*0.5;
-      turb += Math.abs(Math.sin(nx*47.1+ny*31.9))*0.25;
-      turb += Math.abs(Math.sin(nx*93.2+ny*61.7))*0.125;
-      const mv = Math.pow((Math.sin(6*(nx+3.5*turb))+1)*0.5, 1.8);
-      mc.fillStyle = `rgb(${Math.round(mv*180+8)},${Math.round(mv*8+3)},${Math.round(mv*100+12)})`;
-      mc.fillRect(px2, py, 3, 3);
-    }
-  }
-  // Bold magenta lightning veins
-  let _ms = 42;
-  const srng2 = () => { _ms = (_ms*16807)%2147483647; return (_ms-1)/2147483646; };
-  mc.strokeStyle = '#ff00ff'; mc.lineWidth = 2.5;
-  for (let ci = 0; ci < 8; ci++) {
-    const vx2 = srng2()*256, vy2 = srng2()*200;
-    mc.globalAlpha = 0.9; mc.beginPath(); mc.moveTo(vx2, vy2);
-    let cx3=vx2, cy3=vy2;
-    for (let s=0; s<7; s++) {
-      cx3 = Math.max(0,Math.min(256, cx3+(srng2()-0.4)*35));
-      cy3 += (srng2()*0.8+0.2)*(512/7);
-      mc.lineTo(cx3,cy3);
-    }
-    mc.stroke();
-  }
-  mc.globalAlpha = 1;
-  const marbleTex = new THREE.CanvasTexture(marbleCanvas);
-  const marbleMat = new THREE.MeshStandardMaterial({
-    color: 0x000000, emissive: 0xffffff, emissiveMap: marbleTex,
-    emissiveIntensity: T.brightness * 1.6,
-    vertexColors: true,
-    roughness: 0.9, metalness: 0.0,
-    flatShading: true, side: THREE.DoubleSide, toneMapped: false,
-  });
-
-  // Build tapered crystal prism columns along corridor curve
-  // Each column is a custom low-poly prism: wide flat inner face (facing gap),
-  // two angled side faces, spine ridge on outer edge, sharp tapered peak at top.
-  // This matches the AI reference: ice spires with dramatic face angles, not flat boxes.
-
-  // buildPrismGeo(colW, colH, colD, side)
-  // side: -1 = left wall (inner face points +X), +1 = right wall (inner face points -X)
-  // Local space: bottom at y=0, top at y=colH
-  // Inner face is at local x=0, outer spine at local x = outerX
-  // Z extents: -colD/2 to +colD/2
-  // Taper: at base innerHalfZ=colD/2, at peak innerHalfZ=colD*0.08 (sharp)
-  // Outer spine tapers from x=outerX at base to x=outerX*0.3 at peak (lean inward)
-  function buildPrismGeo(colW, colH, colD, side) {
-    // outerX: how far outward the spine goes (away from gap)
-    const outerX = colW * side;  // +colW for right wall, -colW for left wall
-
-    // We build 3 height levels: bottom (y=0), mid (y=colH*0.55), top (y=colH)
-    // At each level we have 4 verts defining the cross-section:
-    //   0: inner-front  (x=0,  z=-hz)
-    //   1: inner-back   (x=0,  z=+hz)
-    //   2: outer-front  (x=ox, z=-oz)
-    //   3: outer-back   (x=ox, z=+oz)
-    // hz = inner half-depth at this level (tapers to near 0 at top)
-    // ox = outer X extent at this level (tapers in slightly)
-    // oz = outer half-depth (smaller than inner — spine is narrower)
-
-    const levels = [
-      // [y,  innerHz, outerX_scale, outerHz]
-      [0,            colD*0.50,  1.00,  colD*0.28],
-      [colH*0.40,   colD*0.42,  0.88,  colD*0.22],
-      [colH*0.70,   colD*0.28,  0.70,  colD*0.14],
-      [colH*0.88,   colD*0.14,  0.45,  colD*0.07],
-      [colH,         colD*0.04,  0.15,  colD*0.04],  // sharp peak
-    ];
-    const NL = levels.length;
-
-    // 4 verts per level = NL*4 verts total
-    const positions = [];
-    const uvs = [];
-    const colors = [];
-
-    // Face brightness: inner (gap-facing) = brightest, sides darker, outer spine darkest
-    // These are emissive multipliers baked into vertex color
-    // inner face verts = 1.0, side face inner-edge = 0.85, side outer-edge = 0.45, spine = 0.20
-    const vBright = [1.0, 1.0, 0.45, 0.45]; // per vert: inner-front, inner-back, outer-front, outer-back
-
-    for (let li = 0; li < NL; li++) {
-      const [y, hz, oxScale, oz] = levels[li];
-      const ox = outerX * oxScale;
-      const vFrac = y / colH;  // 0 at base, 1 at top
-
-      // 4 verts for this level
-      const pts = [
-        [0,   y,  -hz],  // inner-front
-        [0,   y,  +hz],  // inner-back
-        [ox,  y,  -oz],  // outer-front
-        [ox,  y,  +oz],  // outer-back
-      ];
-
-      for (let vi = 0; vi < 4; vi++) {
-        positions.push(...pts[vi]);
-        // UV: u=horizontal position (0=inner, 1=outer), v=height
-        const uVal = (vi < 2) ? 0.0 : 1.0;
-        uvs.push(uVal, vFrac);
-        // Vertex color: brightness varies by face + height (brighter near top for glow)
-        const b = vBright[vi] * (0.7 + 0.3 * vFrac);
-        colors.push(b, b, b);
-      }
-    }
-
-    // Build faces between adjacent levels
-    // Each level-pair makes quads for: inner face, left-side, right-side, outer-spine
-    // Face layout per level: verts [li*4+0, li*4+1, li*4+2, li*4+3]
-    //   inner face:     verts 0,1 (bottom level) → 0,1 (top level)
-    //   left-side face: verts 0,2 (bottom) → 0,2 (top)   (front-Z edge)
-    //   right-side face:verts 1,3 (bottom) → 1,3 (top)   (back-Z edge)
-    //   outer spine:    verts 2,3 (bottom) → 2,3 (top)
-    const indices = [];
-
-    function addQuad(a, b, c, d, flip) {
-      // a,b = bottom edge; c,d = top edge (same side)
-      if (!flip) {
-        indices.push(a, b, c,  b, d, c);
-      } else {
-        indices.push(a, c, b,  b, c, d);
-      }
-    }
-
-    for (let li = 0; li < NL-1; li++) {
-      const b = li*4, t = (li+1)*4;  // base and top vert offsets for this pair
-
-      // Inner face (faces toward gap — toward -X for right wall, +X for left wall)
-      // Verts: b+0 (inner-front-bot), b+1 (inner-back-bot), t+0 (inner-front-top), t+1 (inner-back-top)
-      // Normal should point toward gap = -side X direction
-      // For side=+1 (right wall): normal points -X → wind CCW when viewed from -X
-      //   viewed from -X: b+0 is front-right, b+1 is front-left → CCW = b+0,t+0,b+1 then b+1,t+0,t+1
-      // For side=-1 (left wall): normal points +X → opposite winding
-      if (side === 1) {
-        indices.push(b+0, t+0, b+1,  b+1, t+0, t+1);
-      } else {
-        indices.push(b+0, b+1, t+0,  b+1, t+1, t+0);
-      }
-
-      // Front-Z side face (verts 0 and 2 per level — negative Z edge)
-      // For side=+1: face points -Z (front of column toward camera at some angles)
-      //   viewed from -Z: b+0 left, b+2 right → CCW = b+0,b+2,t+0 then b+2,t+2,t+0
-      if (side === 1) {
-        indices.push(b+0, b+2, t+0,  b+2, t+2, t+0);
-      } else {
-        indices.push(b+0, t+0, b+2,  b+2, t+0, t+2);
-      }
-
-      // Back-Z side face (verts 1 and 3 per level — positive Z edge)
-      if (side === 1) {
-        indices.push(b+1, t+1, b+3,  b+3, t+1, t+3);
-      } else {
-        indices.push(b+1, b+3, t+1,  b+3, t+3, t+1);
-      }
-
-      // Outer spine face (verts 2 and 3 per level — faces away from gap)
-      if (side === 1) {
-        indices.push(b+2, b+3, t+2,  b+3, t+3, t+2);
-      } else {
-        indices.push(b+2, t+2, b+3,  b+3, t+2, t+3);
-      }
-    }
-
-    // Bottom cap (close the base)
-    // Verts at level 0: 0(inner-front), 1(inner-back), 2(outer-front), 3(outer-back)
-    if (side === 1) {
-      indices.push(0, 2, 1,  1, 2, 3);
-    } else {
-      indices.push(0, 1, 2,  1, 3, 2);
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
-    geo.setAttribute('uv',       new THREE.BufferAttribute(new Float32Array(uvs), 2));
-    geo.setAttribute('color',    new THREE.BufferAttribute(new Float32Array(colors), 3));
-    geo.setIndex(indices);
-    geo.computeVertexNormals();
-    return geo;
-  }
-
-  const COL_SPACING = 18;  // world units between column centers along Z
-  const NUM_COLS = Math.floor(NUM_ROWS * ROW_DEPTH / COL_SPACING);
-  const colMeshes = [];
-  const rng3 = (() => { let s=99; return () => { s=(s*16807)%2147483647; return (s-1)/2147483646; }; })();
-
-  for (let ci2 = 0; ci2 < NUM_COLS; ci2++) {
-    const rowIdx = Math.floor(ci2 * COL_SPACING / ROW_DEPTH);
-    const r2 = Math.min(rowIdx, NUM_ROWS-1);
-    const zPos = SPAWN_Z - ci2 * COL_SPACING;
-
-    for (const side of [-1, 1]) {
-      const cx2 = centers[r2] + halfXs[r2] * side;
-      const isGlacier = ci2 % 2 === 0;
-      const cMat = isGlacier ? glacierMat : marbleMat;
-
-      // Column dimensions — vary per column
-      const colW  = 12 + rng3() * 8;   // 12–20 units wide (outer reach)
-      const colH  = 130 + rng3() * 60; // 130–190 units tall
-      const colD  = 16 + rng3() * 10;  // 16–26 units deep (Z extent)
-      const tiltX = (rng3()-0.5) * 0.14;
-      const tiltZ = (rng3()-0.5) * 0.08;
-
-      const geo = buildPrismGeo(colW, colH, colD, side);
-      const mesh = new THREE.Mesh(geo, cMat);
-      // Position: inner face of column sits at corridor gap edge (cx2)
-      // Column builds outward from cx2, bottom at y=0 (waterline)
-      mesh.position.set(cx2, 0, zPos);
-      mesh.rotation.x = tiltX;
-      mesh.rotation.z = tiltZ;
-      mesh.frustumCulled = true;
-      scene.add(mesh);
-      colMeshes.push(mesh);
-    }
-  }
 
   _canyonWalls = {
     strips:    [lMesh, rMesh],
     left:      [lMesh],
     right:     [rMesh],
-    colMeshes,
-    glacierMat, marbleMat, glacierTex, marbleTex,
     mat, gridTex,
     _spawnX:   state.shipX || 0,
     _numRows:  NUM_ROWS,
@@ -8301,11 +8023,6 @@ function _createCanyonWalls() {
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
-  if (_canyonWalls.colMeshes) {
-    _canyonWalls.colMeshes.forEach(m => { scene.remove(m); m.geometry.dispose(); });
-    _canyonWalls.glacierMat.dispose(); _canyonWalls.glacierTex.dispose();
-    _canyonWalls.marbleMat.dispose();  _canyonWalls.marbleTex.dispose();
-  }
   _canyonWalls.mat.dispose();
   _canyonWalls.gridTex.dispose();
   _canyonWalls = null;
@@ -8325,9 +8042,7 @@ function _updateCanyonWalls(dt, speed) {
   // Scroll ribbon scaffold
   _canyonWalls.strips.forEach(m => { m.position.z += scroll; });
   // Scroll visual columns
-  if (_canyonWalls.colMeshes) {
-    _canyonWalls.colMeshes.forEach(m => { m.position.z += scroll; });
-  }
+
 
   // Collision: read corridorGapCenter + halfX directly from live L3 state.
   // The ribbon geometry matches this exactly since it was baked from the same math.
