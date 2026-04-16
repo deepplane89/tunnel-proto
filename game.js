@@ -13151,8 +13151,12 @@ function startGame() {
   // ── L1 cinematic intro text (only on fresh game start at level 0, NOT on retry) ──
   // ── Canyon test mode: skip normal game, boot straight into canyon corridor ──
   if (_canyonTestMode) {
-    _skipL1Intro = true;   // suppress L1 cinematic
-    state._godMode = true; // auto god mode for testing
+    _skipL1Intro = true;            // suppress L1 cinematic
+    state._godMode = true;          // auto god mode for testing
+    state._jetLightningMode = true; // JL physics + speed
+    startJetLightning();            // sets asteroids/ramp state — we override immediately below
+    // Kill asteroids so only the canyon corridor runs
+    _asteroidTuner.enabled = false;
     state._drL3MaxRows      = 750;
     state.corridorRowsDone  = 0;
     state.corridorSineT     = 0;
