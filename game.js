@@ -7888,8 +7888,14 @@ function _createCanyonWalls() {
         const z  = -r * ROW_DEPTH;
         const cx = centers[r] + halfXs[r] * side;
         const leanFactor = 1 + T.slopeLean * v;
-        const dx = rowNoise[r] * T.displacement * leanFactor * side;
-        const dy = (v > 0.9) ? rowRidgeY[r] * v : 0;
+        // Per-vertex displacement — varies by BOTH r and hi so each face is a different angle
+        // Low-freq component (big cliff slabs) + high-freq (small chips)
+        const pr = r * 0.31 + hi * 0.17;
+        const ph = hi * 0.43 + r * 0.11;
+        const dxLow  = (Math.sin(pr * 1.3 + 0.7) * 0.5 + Math.sin(pr * 2.9 + 1.4) * 0.3 + Math.abs(Math.sin(pr * 0.7 + 2.1)) * 0.2);
+        const dxHigh = (Math.sin(ph * 4.1 + 0.3) * 0.3 + Math.sin(ph * 7.3 + 1.9) * 0.15);
+        const dx = (dxLow * 0.7 + dxHigh * 0.3) * T.displacement * leanFactor * side;
+        const dy = (v > 0.85) ? rowRidgeY[r] * (v - 0.85) / 0.15 : 0;
         const idx = hi * NUM_ROWS + r;
         iPos[idx*3+0] = cx + dx;
         iPos[idx*3+1] = y + dy;
