@@ -7639,17 +7639,17 @@ function _createCanyonWalls() {
     }
   });
 
-  const gapCenter = state.corridorGapCenter || 0;
-  const initHalfX = (_jlCorridor && _jlCorridor._lastHalfX != null)
-    ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
-  // Bake initial X into userData so update loop holds it correctly
-  chunks.left.forEach(m => {
-    m.userData.bakedX = (gapCenter - initHalfX) - FOOT_OFF;
-    m.position.x = m.userData.bakedX;
-  });
-  chunks.right.forEach(m => {
-    m.userData.bakedX = (gapCenter + initHalfX) + FOOT_OFF;
-    m.position.x = m.userData.bakedX;
+  // Predictive bake at init: each slab gets the center it will have when ship arrives,
+  // same logic as recycle. Ship at z=3.9, row spacing=7.
+  ['left','right'].forEach(k => {
+    const side = k === 'left' ? -1 : 1;
+    chunks[k].forEach(m => {
+      const rowsAhead = Math.max(0, Math.round((3.9 - m.position.z) / 7));
+      const center  = _canyonPredictCenter(rowsAhead);
+      const halfX   = _canyonPredictHalfX(rowsAhead);
+      m.userData.bakedX = (center + halfX * side) + FOOT_OFF * side;
+      m.position.x = m.userData.bakedX;
+    });
   });
 
   _canyonWalls = {
