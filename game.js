@@ -7272,7 +7272,7 @@ function _updateTerrainWalls(dt, speed) {
 const _canyonTuner = {
   height:        160,   // tall looming walls like AI pic
   tileLength:    175,
-  segsX:         80,   // MORE height segments — facets need geometry to show
+  segsX:         8,    // FEW large segments — big angular slab faces like AI pic
   segsZ:         100,
   displacement:  22,   // dramatic faceting
   wallWidth:     12,
@@ -8001,22 +8001,153 @@ function _createCanyonWalls() {
     toneMapped:        false,
   });
 
+  // ── RIBBON MESHES (invisible scaffold — corridor curve + collision only) ──
   const lMesh = new THREE.Mesh(buildRibbon(-1), mat);
   const rMesh = new THREE.Mesh(buildRibbon( 1), mat);
   lMesh.position.y = T.height / 2;
   rMesh.position.y = T.height / 2;
-  // Row 0 (local z=0) is the near end — spawn it at SPAWN_Z so rows recede into the distance
   lMesh.position.z = SPAWN_Z;
   rMesh.position.z = SPAWN_Z;
   lMesh.frustumCulled = false;
   rMesh.frustumCulled = false;
+  lMesh.visible = false;  // scaffold only
+  rMesh.visible = false;
   scene.add(lMesh);
   scene.add(rMesh);
+
+  // ── VISUAL COLUMN SLABS ──
+  // Separate tall box columns placed along the corridor curve.
+  // Each column's X is baked from the same centers[]/halfXs[] array.
+  // Alternating glacier (cyan-white) and marble (dark purple+magenta) columns.
+
+  // Glacier material — bright frosty cyan-white, emissive glow
+  const glacierCanvas = document.createElement('canvas');
+  glacierCanvas.width = 256; glacierCanvas.height = 512;
+  const gc2 = glacierCanvas.getContext('2d');
+  // Base: bright ice blue-white gradient
+  const iceG = gc2.createLinearGradient(0, 0, 256, 0);
+  iceG.addColorStop(0,   '#b8f0ff');
+  iceG.addColorStop(0.4, '#e8ffff');
+  iceG.addColorStop(1,   '#a0e8f8');
+  gc2.fillStyle = iceG; gc2.fillRect(0, 0, 256, 512);
+  // Depth pools — dark teal crevasses
+  for (let i = 0; i < 6; i++) {
+    const px2 = 20 + Math.random()*216, py2 = 20 + Math.random()*472;
+    const pg2 = gc2.createRadialGradient(px2,py2,0,px2,py2,40+Math.random()*60);
+    pg2.addColorStop(0,   'rgba(0,40,80,0.6)');
+    pg2.addColorStop(0.5, 'rgba(0,60,100,0.25)');
+    pg2.addColorStop(1,   'rgba(0,0,0,0)');
+    gc2.fillStyle = pg2; gc2.fillRect(0,0,256,512);
+  }
+  // Flow striations
+  gc2.strokeStyle = 'rgba(255,255,255,0.22)'; gc2.lineWidth = 1.5;
+  for (let i = 0; i < 10; i++) {
+    gc2.beginPath();
+    gc2.moveTo(Math.random()*256, 0);
+    gc2.lineTo(Math.random()*256 + 80, 512);
+    gc2.stroke();
+  }
+  // Diagonal X grid
+  gc2.strokeStyle = '#00ffee'; gc2.globalAlpha = 0.45; gc2.lineWidth = 2.5;
+  for (let d = -512; d < 512; d += 60) {
+    gc2.beginPath(); gc2.moveTo(d, 0); gc2.lineTo(d+512, 512); gc2.stroke();
+    gc2.beginPath(); gc2.moveTo(d+512, 0); gc2.lineTo(d, 512); gc2.stroke();
+  }
+  gc2.globalAlpha = 1;
+  const glacierTex = new THREE.CanvasTexture(glacierCanvas);
+  const glacierMat = new THREE.MeshStandardMaterial({
+    color: 0x000000, emissive: 0xffffff, emissiveMap: glacierTex,
+    emissiveIntensity: T.brightness * 2.0,
+    roughness: 0.7, metalness: 0.1,
+    flatShading: true, side: THREE.DoubleSide, toneMapped: false,
+  });
+
+  // Marble material — dark purple with magenta veins
+  const marbleCanvas = document.createElement('canvas');
+  marbleCanvas.width = 256; marbleCanvas.height = 512;
+  const mc = marbleCanvas.getContext('2d');
+  // Procedural marble via sin+turbulence
+  for (let py = 0; py < 512; py += 3) {
+    for (let px2 = 0; px2 < 256; px2 += 3) {
+      const nx = px2/256, ny = py/512;
+      let turb = 0;
+      turb += Math.abs(Math.sin(nx*11.3+ny*7.1))*1.0;
+      turb += Math.abs(Math.sin(nx*23.7+ny*15.3))*0.5;
+      turb += Math.abs(Math.sin(nx*47.1+ny*31.9))*0.25;
+      turb += Math.abs(Math.sin(nx*93.2+ny*61.7))*0.125;
+      const mv = Math.pow((Math.sin(6*(nx+3.5*turb))+1)*0.5, 1.8);
+      mc.fillStyle = `rgb(${Math.round(mv*180+8)},${Math.round(mv*8+3)},${Math.round(mv*100+12)})`;
+      mc.fillRect(px2, py, 3, 3);
+    }
+  }
+  // Bold magenta lightning veins
+  let _ms = 42;
+  const srng2 = () => { _ms = (_ms*16807)%2147483647; return (_ms-1)/2147483646; };
+  mc.strokeStyle = '#ff00ff'; mc.lineWidth = 2.5;
+  for (let ci = 0; ci < 8; ci++) {
+    const vx2 = srng2()*256, vy2 = srng2()*200;
+    mc.globalAlpha = 0.9; mc.beginPath(); mc.moveTo(vx2, vy2);
+    let cx3=vx2, cy3=vy2;
+    for (let s=0; s<7; s++) {
+      cx3 = Math.max(0,Math.min(256, cx3+(srng2()-0.4)*35));
+      cy3 += (srng2()*0.8+0.2)*(512/7);
+      mc.lineTo(cx3,cy3);
+    }
+    mc.stroke();
+  }
+  mc.globalAlpha = 1;
+  const marbleTex = new THREE.CanvasTexture(marbleCanvas);
+  const marbleMat = new THREE.MeshStandardMaterial({
+    color: 0x000000, emissive: 0xffffff, emissiveMap: marbleTex,
+    emissiveIntensity: T.brightness * 1.6,
+    roughness: 0.9, metalness: 0.0,
+    flatShading: true, side: THREE.DoubleSide, toneMapped: false,
+  });
+
+  // Build columns along corridor curve
+  const COL_SPACING = 18;  // world units between column centers along Z
+  const NUM_COLS = Math.floor(NUM_ROWS * ROW_DEPTH / COL_SPACING);
+  const colMeshes = [];
+  const rng3 = (() => { let s=99; return () => { s=(s*16807)%2147483647; return (s-1)/2147483646; }; })();
+
+  for (let ci2 = 0; ci2 < NUM_COLS; ci2++) {
+    const rowIdx = Math.floor(ci2 * COL_SPACING / ROW_DEPTH);
+    const r2 = Math.min(rowIdx, NUM_ROWS-1);
+    const zPos = SPAWN_Z - ci2 * COL_SPACING;
+
+    for (const side of [-1, 1]) {
+      const cx2 = centers[r2] + halfXs[r2] * side;
+      const isGlacier = ci2 % 2 === 0;
+      const cMat = isGlacier ? glacierMat : marbleMat;
+
+      // Column dimensions — vary width/height slightly per column
+      const colW  = 10 + rng3() * 8;   // 10–18 units wide
+      const colH  = 120 + rng3() * 60; // 120–180 units tall
+      const colD  = 14 + rng3() * 8;   // 14–22 units deep
+      const tiltX = (rng3()-0.5) * 0.18; // slight lean
+      const tiltZ = (rng3()-0.5) * 0.10;
+
+      const geo = new THREE.BoxGeometry(colW, colH, colD, 1, 3, 1);
+      const mesh = new THREE.Mesh(geo, cMat);
+      mesh.position.set(
+        cx2 + side * (colW * 0.5),  // outer face sits at corridor edge
+        colH * 0.5,                  // bottom at waterline
+        zPos
+      );
+      mesh.rotation.x = tiltX;
+      mesh.rotation.z = tiltZ;
+      mesh.frustumCulled = true;
+      scene.add(mesh);
+      colMeshes.push(mesh);
+    }
+  }
 
   _canyonWalls = {
     strips:    [lMesh, rMesh],
     left:      [lMesh],
     right:     [rMesh],
+    colMeshes,
+    glacierMat, marbleMat, glacierTex, marbleTex,
     mat, gridTex,
     _spawnX:   state.shipX || 0,
     _numRows:  NUM_ROWS,
@@ -8027,6 +8158,11 @@ function _createCanyonWalls() {
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
+  if (_canyonWalls.colMeshes) {
+    _canyonWalls.colMeshes.forEach(m => { scene.remove(m); m.geometry.dispose(); });
+    _canyonWalls.glacierMat.dispose(); _canyonWalls.glacierTex.dispose();
+    _canyonWalls.marbleMat.dispose();  _canyonWalls.marbleTex.dispose();
+  }
   _canyonWalls.mat.dispose();
   _canyonWalls.gridTex.dispose();
   _canyonWalls = null;
@@ -8043,8 +8179,12 @@ function _updateCanyonWalls(dt, speed) {
   const effectiveSpd = (speed && speed > 1) ? speed : BASE_SPEED;
   const scroll = effectiveSpd * dt * T.scrollSpeed;
 
-  // Pre-baked ribbon: just scroll Z. Turns are geometry, not position.
+  // Scroll ribbon scaffold
   _canyonWalls.strips.forEach(m => { m.position.z += scroll; });
+  // Scroll visual columns
+  if (_canyonWalls.colMeshes) {
+    _canyonWalls.colMeshes.forEach(m => { m.position.z += scroll; });
+  }
 
   // Collision: read corridorGapCenter + halfX directly from live L3 state.
   // The ribbon geometry matches this exactly since it was baked from the same math.
