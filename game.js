@@ -7737,8 +7737,18 @@ function _canyonPredictHalfX(rowsAhead) {
   return _canyonTuner.halfXOverride;
 }
 
+let _canyonDbgFrame = 0;
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || !_canyonActive) return;
+  _canyonDbgFrame++;
+  // Every 120 frames log slab positions so we can see if/when they vanish
+  if (_canyonDbgFrame % 120 === 0) {
+    const leftZs  = _canyonWalls.left.map(m  => m.position.z.toFixed(0)).join(', ');
+    const rightZs = _canyonWalls.right.map(m => m.position.z.toFixed(0)).join(', ');
+    console.log(`[CANYON DBG] frame=${_canyonDbgFrame} manual=${_canyonManual} active=${_canyonActive} walls=${!!_canyonWalls}`);
+    console.log(`  LEFT  z=[${leftZs}]`);
+    console.log(`  RIGHT z=[${rightZs}]`);
+  }
   const T   = _canyonTuner;
   const spd = (speed && speed > 1) ? speed : BASE_SPEED;
   const scroll  = spd * dt * T.scrollSpeed;
