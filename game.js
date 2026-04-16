@@ -8007,180 +8007,277 @@ function _createCanyonWalls() {
     toneMapped:        false,
   });
 
-  // ── RIBBON MESHES (invisible scaffold — corridor curve + collision only) ──
+  // ── RIBBON MESHES (invisible — collision scaffold only) ──
   const lMesh = new THREE.Mesh(buildRibbon(-1), mat);
   const rMesh = new THREE.Mesh(buildRibbon( 1), mat);
-  lMesh.position.y = T.height / 2;
-  rMesh.position.y = T.height / 2;
-  lMesh.position.z = SPAWN_Z;
-  rMesh.position.z = SPAWN_Z;
-  lMesh.frustumCulled = false;
-  rMesh.frustumCulled = false;
-  lMesh.visible = false;
-  rMesh.visible = false;
-  scene.add(lMesh);
-  scene.add(rMesh);
+  lMesh.position.y = T.height / 2; rMesh.position.y = T.height / 2;
+  lMesh.position.z = SPAWN_Z;      rMesh.position.z = SPAWN_Z;
+  lMesh.frustumCulled = false;     rMesh.frustumCulled = false;
+  lMesh.visible = false;           rMesh.visible = false;
+  scene.add(lMesh); scene.add(rMesh);
 
-  // ── PRISM COLUMNS ──
-  // Real 3D tapered prisms — each has an inner face, two side faces, outer spine.
-  // Faces point in genuinely different directions so scene lights shade them differently.
-  // Alternating glacier (cyan) and marble (magenta) columns.
-
-  const glacierCanvas = document.createElement('canvas');
-  glacierCanvas.width = 256; glacierCanvas.height = 512;
-  const gc2 = glacierCanvas.getContext('2d');
-  const iceG = gc2.createLinearGradient(0, 0, 256, 0);
-  iceG.addColorStop(0, '#b8f0ff'); iceG.addColorStop(0.4, '#e8ffff'); iceG.addColorStop(1, '#a0e8f8');
-  gc2.fillStyle = iceG; gc2.fillRect(0, 0, 256, 512);
-  for (let i = 0; i < 6; i++) {
-    const px2 = 20+Math.random()*216, py2 = 20+Math.random()*472;
-    const pg2 = gc2.createRadialGradient(px2,py2,0,px2,py2,40+Math.random()*60);
-    pg2.addColorStop(0,'rgba(0,40,80,0.6)'); pg2.addColorStop(0.5,'rgba(0,60,100,0.25)'); pg2.addColorStop(1,'rgba(0,0,0,0)');
-    gc2.fillStyle = pg2; gc2.fillRect(0,0,256,512);
-  }
-  gc2.strokeStyle = '#00ffee'; gc2.globalAlpha = 0.45; gc2.lineWidth = 2.5;
-  for (let d = -512; d < 512; d += 60) {
-    gc2.beginPath(); gc2.moveTo(d,0); gc2.lineTo(d+512,512); gc2.stroke();
-    gc2.beginPath(); gc2.moveTo(d+512,0); gc2.lineTo(d,512); gc2.stroke();
-  }
-  gc2.globalAlpha = 1;
-  const glacierTex = new THREE.CanvasTexture(glacierCanvas);
-  // Real base color so scene lights shade faces differently
-  const glacierMat = new THREE.MeshStandardMaterial({
-    color: 0x2a6080,
-    emissive: 0x00ccff, emissiveMap: glacierTex, emissiveIntensity: T.brightness * 1.0,
-    roughness: 0.7, metalness: 0.1,
-    flatShading: true, side: THREE.DoubleSide, toneMapped: false,
-  });
-
-  const marbleCanvas = document.createElement('canvas');
-  marbleCanvas.width = 256; marbleCanvas.height = 512;
-  const mc = marbleCanvas.getContext('2d');
-  for (let py = 0; py < 512; py += 3) {
-    for (let px2 = 0; px2 < 256; px2 += 3) {
-      const nx=px2/256, ny=py/512;
-      let turb=0;
-      turb+=Math.abs(Math.sin(nx*11.3+ny*7.1))*1.0;
-      turb+=Math.abs(Math.sin(nx*23.7+ny*15.3))*0.5;
-      turb+=Math.abs(Math.sin(nx*47.1+ny*31.9))*0.25;
-      turb+=Math.abs(Math.sin(nx*93.2+ny*61.7))*0.125;
-      const mv=Math.pow((Math.sin(6*(nx+3.5*turb))+1)*0.5,1.8);
-      mc.fillStyle=`rgb(${Math.round(mv*180+8)},${Math.round(mv*8+3)},${Math.round(mv*100+12)})`;
-      mc.fillRect(px2,py,3,3);
-    }
-  }
-  let _ms=42; const srng2=()=>{ _ms=(_ms*16807)%2147483647; return (_ms-1)/2147483646; };
-  mc.strokeStyle='#ff00ff'; mc.lineWidth=2.5;
-  for (let ci=0; ci<8; ci++) {
-    const vx2=srng2()*256, vy2=srng2()*200;
-    mc.globalAlpha=0.9; mc.beginPath(); mc.moveTo(vx2,vy2);
-    let cx3=vx2, cy3=vy2;
-    for (let s=0; s<7; s++) { cx3=Math.max(0,Math.min(256,cx3+(srng2()-0.4)*35)); cy3+=(srng2()*0.8+0.2)*(512/7); mc.lineTo(cx3,cy3); }
-    mc.stroke();
-  }
-  mc.globalAlpha=1;
-  const marbleTex = new THREE.CanvasTexture(marbleCanvas);
-  // Real base color so scene lights shade faces differently
-  const marbleMat = new THREE.MeshStandardMaterial({
-    color: 0x300828,
-    emissive: 0xff00cc, emissiveMap: marbleTex, emissiveIntensity: T.brightness * 0.8,
-    roughness: 0.9, metalness: 0.0,
-    flatShading: true, side: THREE.DoubleSide, toneMapped: false,
-  });
-
-  function buildPrismGeo(colW, colH, colD, side) {
-    const outerX = colW * side;
-    const levels = [
-      [0,          colD*0.50, 1.00, colD*0.28],
-      [colH*0.40,  colD*0.42, 0.88, colD*0.22],
-      [colH*0.70,  colD*0.28, 0.70, colD*0.14],
-      [colH*0.88,  colD*0.14, 0.45, colD*0.07],
-      [colH,       colD*0.04, 0.15, colD*0.04],
-    ];
-    const NL = levels.length;
-    const positions = [], uvs = [], indices = [];
-    for (let li = 0; li < NL; li++) {
-      const [y, hz, oxScale, oz] = levels[li];
-      const ox = outerX * oxScale;
-      const vFrac = y / colH;
-      const pts = [[0,y,-hz],[0,y,+hz],[ox,y,-oz],[ox,y,+oz]];
-      for (let vi = 0; vi < 4; vi++) {
-        positions.push(...pts[vi]);
-        uvs.push(vi<2?0.0:1.0, vFrac);
+  // ── ICEBERG CHUNK MATERIAL ──
+  // One ShaderMaterial for all chunks — glacier ice base with procedural magenta
+  // lightning cracks in world-space GLSL so veins look volumetric across chunks.
+  // Real base color (non-black) so flatShading gives each face a different brightness.
+  const icebergMat = new THREE.ShaderMaterial({
+    flatShading: true,
+    side: THREE.DoubleSide,
+    lights: true,
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.lights,
+      {
+        uTime:       { value: 0 },
+        uSeed:       { value: 0 },
+        uIceColor:   { value: new THREE.Color(0x0a2a40) },
+        uGlowColor:  { value: new THREE.Color(0x00eeff) },
+        uCrackColor: { value: new THREE.Color(0xff00cc) },
       }
-    }
-    for (let li = 0; li < NL-1; li++) {
-      const b=li*4, t=(li+1)*4;
-      if (side===1) {
-        indices.push(b+0,t+0,b+1, b+1,t+0,t+1); // inner
-        indices.push(b+0,b+2,t+0, b+2,t+2,t+0); // front-Z
-        indices.push(b+1,t+1,b+3, b+3,t+1,t+3); // back-Z
-        indices.push(b+2,b+3,t+2, b+3,t+3,t+2); // outer spine
+    ]),
+    vertexShader: `
+      #include <common>
+      #include <lights_pars_begin>
+      varying vec3 vWorldPos;
+      varying vec3 vNormal2;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        vNormal2  = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      #include <common>
+      #include <lights_pars_begin>
+      uniform float uTime;
+      uniform float uSeed;
+      uniform vec3  uIceColor;
+      uniform vec3  uGlowColor;
+      uniform vec3  uCrackColor;
+      varying vec3  vWorldPos;
+      varying vec3  vNormal2;
+
+      // Fast hash
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+
+      // Fractal turbulence for crack pattern
+      float turbulence(vec3 p) {
+        float t = 0.0;
+        t += abs(sin(p.x*1.1 + p.y*0.7 + p.z*0.9 + uSeed));
+        t += abs(sin(p.x*2.3 + p.y*1.9 + p.z*0.4 + uSeed*1.3)) * 0.5;
+        t += abs(sin(p.x*4.7 + p.y*3.1 + p.z*2.3 + uSeed*0.7)) * 0.25;
+        return t;
+      }
+
+      // Diagonal grid lines (cyan) in world XY space
+      float gridLines(vec3 wp) {
+        float scale = 0.08;
+        float a = abs(sin((wp.x + wp.y) * scale * 3.14159));
+        float b = abs(sin((wp.x - wp.y) * scale * 3.14159));
+        float line = pow(max(a, b), 18.0);
+        return line;
+      }
+
+      void main() {
+        // World-space domain for all patterns
+        vec3 wp = vWorldPos * 0.04;
+
+        // ─ Base ice color: dark teal → bright cyan gradient by Y (height)
+        float heightT = clamp((vWorldPos.y + 40.0) / 160.0, 0.0, 1.0);
+        vec3 baseCol = mix(uIceColor, uGlowColor * 0.55, heightT * heightT);
+
+        // ─ Directional lighting (uses scene lights via includes)
+        vec3 N = normalize(vNormal2);
+        float diffuse = 0.0;
+        #if NUM_DIR_LIGHTS > 0
+          for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
+            vec3 L = normalize(directionalLights[i].direction);
+            diffuse += max(0.0, dot(N, L)) * directionalLights[i].color.r * 0.5;
+          }
+        #endif
+        // Ambient + diffuse
+        vec3 litColor = baseCol * (0.35 + diffuse);
+
+        // ─ Magenta lightning cracks: thin bright veins in world space
+        float turb = turbulence(wp);
+        // Crack = thin bright lines where sin(x + turb) ≈ 0
+        float crackVal = abs(sin(wp.x * 6.28 + turb * 4.0 + uSeed * 2.1));
+        float crack = pow(1.0 - clamp(crackVal, 0.0, 1.0), 12.0); // thin spike at 0-crossing
+        // Also diagonal crack lines
+        float crackVal2 = abs(sin((wp.x + wp.y * 1.3) * 5.0 + turb * 3.0 + uSeed));
+        float crack2 = pow(1.0 - clamp(crackVal2, 0.0, 1.0), 10.0);
+        float cracks = clamp(crack + crack2 * 0.6, 0.0, 1.0);
+
+        // ─ Cyan diagonal grid overlay
+        float grid = gridLines(vWorldPos) * 0.5;
+
+        // ─ Compose
+        vec3 col = litColor;
+        col += uCrackColor * cracks * 1.8;       // magenta veins glow HDR
+        col += uGlowColor  * grid   * 0.6;       // cyan grid lines
+        // Subtle inner glow near base (teal horizon)
+        col += uGlowColor * 0.08 * (1.0 - heightT);
+
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+  });
+
+  // ── ICEBERG CHUNK GEOMETRY ──
+  // Each chunk is a low-poly iceberg: tall, thick, with 6-10 large flat faces
+  // at dramatically different angles. Faces built manually so flatShading
+  // gives each one a distinct brightness. Width in X, depth in Z, tall in Y.
+  // side = -1 (left wall, faces point +X into gap) or +1 (right wall, faces -X)
+  function buildIcebergGeo(seed, side) {
+    let s = seed | 1;
+    const rng = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+
+    // Chunk dimensions
+    const W  = 18 + rng() * 14;   // thickness outward (X)
+    const H  = 110 + rng() * 80;  // height (Y)
+    const D  = 22 + rng() * 18;   // depth (Z)
+
+    // 8 base verts defining a chunky low-poly shape
+    // inner face (gap-facing) at x=0, outer at x = W*side
+    // Bottom 4 verts (y=0), top 4 verts (y=H) with random offsets per vert
+    const ox = W * side;
+    const jitter = () => (rng() - 0.5);
+
+    // Bottom ring
+    const b0 = [0,           0,  -D * 0.5];              // inner front
+    const b1 = [0,           0,   D * 0.5];              // inner back
+    const b2 = [ox * 0.6,    0,  -D * 0.6 + jitter()*4];// outer front
+    const b3 = [ox * 0.6,    0,   D * 0.6 + jitter()*4];// outer back
+
+    // Mid ring (Y = H*0.45) — big angular jag here
+    const mY = H * (0.38 + rng() * 0.14);
+    const m0 = [jitter()*6,         mY,  -D*(0.4+rng()*0.2) + jitter()*5];
+    const m1 = [jitter()*6,         mY,   D*(0.4+rng()*0.2) + jitter()*5];
+    const m2 = [ox*(0.5+rng()*0.4), mY,  -D*(0.3+rng()*0.3) + jitter()*8];
+    const m3 = [ox*(0.5+rng()*0.4), mY,   D*(0.3+rng()*0.3) + jitter()*8];
+
+    // Top peak (Y = H) — narrow, jagged
+    const tY = H;
+    const t0 = [jitter()*8,         tY,   jitter()*D*0.15];
+    const t1 = [jitter()*8,         tY,   jitter()*D*0.15];
+    const t2 = [ox*(0.1+rng()*0.3), tY,   jitter()*D*0.12];
+    const t3 = [ox*(0.1+rng()*0.3), tY,   jitter()*D*0.12];
+
+    // Verts array: 12 verts (b0-b3, m0-m3, t0-t3)
+    const V = [b0,b1,b2,b3, m0,m1,m2,m3, t0,t1,t2,t3];
+    const pos = [];
+    const uvs = [];
+
+    // Build faces as independent triangles (no shared verts) for correct flatShading
+    // Each face added as 2 independent tris with their own unique verts
+    const tris = [];
+    // Face winding: for side=+1 (right wall), inner face normal points -X
+    //               for side=-1 (left wall),  inner face normal points +X
+    const addFace = (a, b, c, d) => {
+      // quad a,b,c,d → two tris, winding depends on side
+      if (side === 1) {
+        tris.push([a,c,b], [b,c,d]);
       } else {
-        indices.push(b+0,b+1,t+0, b+1,t+1,t+0); // inner
-        indices.push(b+0,t+0,b+2, b+2,t+0,t+2); // front-Z
-        indices.push(b+1,b+3,t+1, b+3,t+3,t+1); // back-Z
-        indices.push(b+2,t+2,b+3, b+3,t+2,t+3); // outer spine
+        tris.push([a,b,c], [b,d,c]);
+      }
+    };
+
+    // Inner face (gap-facing): b0,b1 → m0,m1 → t0,t1
+    addFace(V[0],V[1],V[4],V[5]);
+    addFace(V[4],V[5],V[8],V[9]);
+    // Outer spine face: b2,b3 → m2,m3 → t2,t3
+    addFace(V[3],V[2],V[7],V[6]);
+    addFace(V[7],V[6],V[11],V[10]);
+    // Front-Z face: b0,b2 → m0,m2 → t0,t2
+    addFace(V[0],V[2],V[4],V[6]);
+    addFace(V[4],V[6],V[8],V[10]);
+    // Back-Z face: b1,b3 → m1,m3 → t1,t3
+    addFace(V[1],V[3],V[5],V[7]);
+    addFace(V[5],V[7],V[9],V[11]);
+    // Bottom cap
+    if (side === 1) { tris.push([V[0],V[2],V[1]], [V[1],V[2],V[3]]); }
+    else            { tris.push([V[0],V[1],V[2]], [V[1],V[3],V[2]]); }
+
+    for (const tri of tris) {
+      for (let vi = 0; vi < 3; vi++) {
+        const v = tri[vi];
+        pos.push(v[0], v[1], v[2]);
+        uvs.push(v[0] / W, v[1] / H);
       }
     }
-    if (side===1) { indices.push(0,2,1, 1,2,3); } else { indices.push(0,1,2, 1,3,2); }
+
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
     geo.setAttribute('uv',       new THREE.BufferAttribute(new Float32Array(uvs), 2));
-    geo.setIndex(indices);
     geo.computeVertexNormals();
     return geo;
   }
 
-  const COL_SPACING = 18;
-  const NUM_COLS = Math.floor(NUM_ROWS * ROW_DEPTH / COL_SPACING);
-  const colMeshes = [];
-  const rng3 = (() => { let s=99; return ()=>{ s=(s*16807)%2147483647; return (s-1)/2147483646; }; })();
+  // ── LIVE-SPAWN POOL ──
+  // Pre-build a pool of iceberg geometries (varied seeds) per side.
+  // At runtime: recycle chunks that scroll past DESPAWN_Z, reposition at SPAWN_Z
+  // reading live corridorGapCenter + halfX so chunks always align to actual corridor.
+  const POOL_SIZE   = 16;  // chunks visible at any time per side
+  const CHUNK_SPACING = 28; // world units between chunk centers along Z
+  const NUM_GEO_VARIANTS = 12; // pre-bake these so no runtime geo build
 
-  for (let ci2 = 0; ci2 < NUM_COLS; ci2++) {
-    const rowIdx = Math.floor(ci2 * COL_SPACING / ROW_DEPTH);
-    const r2 = Math.min(rowIdx, NUM_ROWS-1);
-    const zPos = SPAWN_Z - ci2 * COL_SPACING;
-    for (const side of [-1, 1]) {
-      const cx2 = centers[r2] + halfXs[r2] * side;
-      const isGlacier = ci2 % 2 === 0;
-      const cMat = isGlacier ? glacierMat : marbleMat;
-      const colW = 12 + rng3()*8;
-      const colH = 130 + rng3()*60;
-      const colD = 16 + rng3()*10;
-      const tiltX = (rng3()-0.5)*0.14;
-      const tiltZ = (rng3()-0.5)*0.08;
-      const geo = buildPrismGeo(colW, colH, colD, side);
-      const mesh = new THREE.Mesh(geo, cMat);
-      mesh.position.set(cx2, 0, zPos);
-      mesh.rotation.x = tiltX;
-      mesh.rotation.z = tiltZ;
-      mesh.frustumCulled = true;
+  const icebergGeos = [];
+  for (let gi = 0; gi < NUM_GEO_VARIANTS; gi++) {
+    icebergGeos.push([
+      buildIcebergGeo(gi * 1000 + 7,  -1),  // left
+      buildIcebergGeo(gi * 1000 + 13,  1),  // right
+    ]);
+  }
+
+  const chunkMeshes = { left: [], right: [] };
+  let _chunkSeedCount = 0;
+
+  // Initial corridor edge X (before update loop runs)
+  const _initHalfX = CORRIDOR_NARROW_X;
+  const _initCenter = 0;
+
+  for (let pi = 0; pi < POOL_SIZE; pi++) {
+    const zPos = SPAWN_Z - pi * CHUNK_SPACING;
+    for (const [side, key] of [[-1,'left'],[1,'right']]) {
+      const geoIdx = pi % NUM_GEO_VARIANTS;
+      const geo = icebergGeos[geoIdx][side === -1 ? 0 : 1];
+      const mat2 = icebergMat.clone();
+      mat2.uniforms.uSeed.value = pi * 2.7 + (side === 1 ? 100 : 0);
+      const mesh = new THREE.Mesh(geo, mat2);
+      const initX = _initCenter + _initHalfX * side;
+      mesh.position.set(initX, 0, zPos);
+      mesh.frustumCulled = false;
+      mesh.userData.side = side;
+      mesh.userData.geoIdx = geoIdx;
       scene.add(mesh);
-      colMeshes.push(mesh);
+      chunkMeshes[key].push(mesh);
     }
   }
 
   _canyonWalls = {
-    strips:    [lMesh, rMesh],
-    left:      [lMesh],
-    right:     [rMesh],
-    colMeshes,
-    glacierMat, marbleMat, glacierTex, marbleTex,
+    strips:      [lMesh, rMesh],
+    left:        [lMesh],
+    right:       [rMesh],
+    chunkMeshes,
+    icebergMat,
+    icebergGeos,
     mat, gridTex,
-    _spawnX:   state.shipX || 0,
-    _numRows:  NUM_ROWS,
-    _rowDepth: ROW_DEPTH,
+    _spawnX:     state.shipX || 0,
+    _numRows:    NUM_ROWS,
+    _rowDepth:   ROW_DEPTH,
+    _chunkSpacing: CHUNK_SPACING,
   };
 }
 
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
-  if (_canyonWalls.colMeshes) {
-    _canyonWalls.colMeshes.forEach(m => { scene.remove(m); m.geometry.dispose(); });
-    if (_canyonWalls.glacierMat) { _canyonWalls.glacierMat.dispose(); _canyonWalls.glacierTex.dispose(); }
-    if (_canyonWalls.marbleMat)  { _canyonWalls.marbleMat.dispose();  _canyonWalls.marbleTex.dispose();  }
+  if (_canyonWalls.chunkMeshes) {
+    ['left','right'].forEach(k => {
+      _canyonWalls.chunkMeshes[k].forEach(m => { scene.remove(m); m.material.dispose(); });
+    });
+    if (_canyonWalls.icebergMat)  _canyonWalls.icebergMat.dispose();
+    if (_canyonWalls.icebergGeos) _canyonWalls.icebergGeos.forEach(pair => pair.forEach(g => g.dispose()));
   }
   _canyonWalls.mat.dispose();
   _canyonWalls.gridTex.dispose();
@@ -8198,10 +8295,37 @@ function _updateCanyonWalls(dt, speed) {
   const effectiveSpd = (speed && speed > 1) ? speed : BASE_SPEED;
   const scroll = effectiveSpd * dt * T.scrollSpeed;
 
-  // Scroll ribbon scaffold
+  // Scroll ribbon scaffold (collision only)
   _canyonWalls.strips.forEach(m => { m.position.z += scroll; });
-  // Scroll prism columns
-  if (_canyonWalls.colMeshes) _canyonWalls.colMeshes.forEach(m => { m.position.z += scroll; });
+
+  // Live-spawn iceberg chunks — recycle past DESPAWN_Z back to SPAWN_Z
+  // X position set from live corridor state each time a chunk is recycled
+  if (_canyonWalls.chunkMeshes) {
+    const gapCenter = state.corridorGapCenter || 0;
+    const gapHalfX  = (_jlCorridor && _jlCorridor._lastHalfX != null)
+      ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
+
+    const SNAP_RATE = 4.0;
+    ['left','right'].forEach(k => {
+      const side = k === 'left' ? -1 : 1;
+      const edgeX = gapCenter + gapHalfX * side;
+      _canyonWalls.chunkMeshes[k].forEach(m => {
+        m.material.uniforms.uTime.value = state.elapsed || 0;
+        m.position.z += scroll;
+        // Recycle past ship → teleport to back, snap X to live corridor edge
+        if (m.position.z > DESPAWN_Z + _canyonWalls._chunkSpacing) {
+          const meshes = _canyonWalls.chunkMeshes[k];
+          let minZ = m.position.z;
+          for (const om of meshes) { if (om !== m && om.position.z < minZ) minZ = om.position.z; }
+          m.position.z = minZ - _canyonWalls._chunkSpacing;
+          m.position.x = edgeX;
+        } else {
+          // Smooth lateral tracking for chunks already in view
+          m.position.x += (edgeX - m.position.x) * Math.min(1, SNAP_RATE * dt);
+        }
+      });
+    });
+  }
 
 
   // Collision: read corridorGapCenter + halfX directly from live L3 state.
