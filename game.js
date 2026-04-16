@@ -20098,9 +20098,9 @@ const _asteroidTuner = {
   chaseRampDuration: 90,   // seconds over which ramp plays out
   // Filler (decorative background asteroids)
   lateralEnabled: true,   // spawn lateral asteroids on own timer independent of stagger
-  lateralFreq:    0.8,    // seconds between lateral spawns
-  lateralMinOff:  15,     // min X offset from shipX
-  lateralMaxOff:  50,     // max X offset from shipX
+  lateralFreq:    0.5,    // seconds between lateral spawns
+  lateralMinOff:  8,      // min X offset from shipX
+  lateralMaxOff:  25,     // max X offset from shipX
   _lateralTimer:  0,      // internal timer
   fillerEnabled:  true,    // toggle on/off
   fillerFreq:      0.4,    // seconds between filler spawns
@@ -20822,8 +20822,8 @@ function _tickAsteroidSpawner(dt) {
       const offset = T.lateralMinOff + Math.random() * (T.lateralMaxOff - T.lateralMinOff);
       const sx = (state && state.shipX) || 0;
       const spawnX = sx + side * offset;
-      if (window._jlActiveObstacleType === 'lightning' && typeof _spawnLightning === 'function') {
-        _spawnLightning(spawnX);
+      if (window._jlActiveObstacleType === 'lightning' && window._spawnLightning) {
+        window._spawnLightning(spawnX);
       } else {
         _spawnAsteroid(spawnX);
       }
