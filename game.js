@@ -7650,60 +7650,48 @@ function _updateCanyonWalls(dt, speed) {
   const spacing = _canyonWalls._spacing;
 
   // ── Continuous smooth corridor tracking ─────────────────────────────────
-  // corridorGapCenter updates only once per row spawn (~7 world units apart),
-  // which causes visible stair-stepping. Instead we recompute center + halfX
-  // per-frame using fractional row progress so the walls glide smoothly.
+  // spawnCorridorRow fires every ~7 world units, advancing corridorSineT by
+  // (2π/period) each time and writing corridorGapCenter. Between spawns
+  // corridorGapCenter is frozen → stair-step. Fix: interpolate the phase
+  // accumulator forward by the fractional distance to the next row spawn.
   function _canyonSmoothTarget() {
-    const rd  = state.corridorRowsDone || 0;
-    const spZ = state.corridorSpawnZ   || -7;
-    // Fractional rows: how far have we advanced into the current row interval?
-    // corridorSpawnZ runs from -7 → 0, so frac = (spZ + 7) / 7
-    const ROW_DIST = 7;
-    const frac = Math.max(0, Math.min(1, (spZ + ROW_DIST) / ROW_DIST));
+    const rd   = state.corridorRowsDone || 0;
+    const spZ  = state.corridorSpawnZ   || -7;
+    // frac: 0 = just spawned a row, 1 = next row is about to spawn
+    const frac = Math.max(0, Math.min(1, (spZ + 7) / 7));
 
-    // halfX — same formula as spawnCorridorRow / _updateJLCorridor
+    // halfX — identical formula to spawnCorridorRow
     function calcHalfX(rows) {
       if (rows < CORRIDOR_CLOSE_ROWS) {
-        const t = rows / CORRIDOR_CLOSE_ROWS;
+        const t    = rows / CORRIDOR_CLOSE_ROWS;
         const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
         return CORRIDOR_WIDE_X + (CORRIDOR_NARROW_X - CORRIDOR_WIDE_X) * ease;
       }
-      const cr  = Math.max(0, rows - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS));
-      const sq  = Math.min(1, cr / CORRIDOR_AMP_RAMP);
+      const cr = Math.max(0, rows - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS));
+      const sq = Math.min(1, cr / CORRIDOR_AMP_RAMP);
       return CORRIDOR_NARROW_X - (CORRIDOR_NARROW_X - 6) * (sq * sq);
     }
 
-    // gapCenter — same sine formula, interpolated between current and next row
-    function calcCenter(rows, sineT) {
-      if (rows < CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS) return 0;
-      const curveRows = rows - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS);
+    // Interpolate the sine phase accumulator forward by frac of one row's step.
+    // state.corridorSineT was already incremented for the current row by
+    // spawnCorridorRow, so we advance it by frac * (2π/period) to get smooth
+    // sub-row position — identical path the corridor cones actually travel.
+    let gapCenter = 0;
+    if (rd >= CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS) {
+      const curveRows = rd - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS);
       const ampT   = Math.min(1, curveRows / CORRIDOR_AMP_RAMP);
       const amp    = CORRIDOR_AMP_START + (CORRIDOR_AMP_MAX - CORRIDOR_AMP_START) * (ampT * ampT);
       const perT   = Math.min(1, curveRows / CORRIDOR_PERIOD_RAMP);
       const period = CORRIDOR_PERIOD_START - (CORRIDOR_PERIOD_START - CORRIDOR_PERIOD_MIN) * (perT * perT);
-      return amp * Math.sin(sineT);
+      // Advance phase by frac of one row's phase step
+      const interpT = (state.corridorSineT || 0) + frac * (2 * Math.PI) / period;
+      gapCenter = amp * Math.sin(interpT);
     }
 
-    // Current row values (already committed by spawnCorridorRow)
     const curHalfX  = calcHalfX(rd);
-    const curSineT  = state.corridorSineT || 0;
-    const curCenter = calcCenter(rd, curSineT);
+    const nextHalfX = calcHalfX(rd + 1);
+    const gapHalfX  = curHalfX + (nextHalfX - curHalfX) * frac;
 
-    // Next row predicted values
-    const nextHalfX  = calcHalfX(rd + 1);
-    const nextSineT  = (rd >= CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS)
-      ? (() => {
-          const cr     = rd - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS);
-          const perT   = Math.min(1, cr / CORRIDOR_PERIOD_RAMP);
-          const period = CORRIDOR_PERIOD_START - (CORRIDOR_PERIOD_START - CORRIDOR_PERIOD_MIN) * (perT * perT);
-          return curSineT + (2 * Math.PI) / period;
-        })()
-      : 0;
-    const nextCenter = calcCenter(rd + 1, nextSineT);
-
-    // Lerp between current and next using sub-row fractional progress
-    const gapCenter = curCenter + (nextCenter - curCenter) * frac;
-    const gapHalfX  = curHalfX  + (nextHalfX  - curHalfX)  * frac;
     return { gapCenter, gapHalfX };
   }
 
