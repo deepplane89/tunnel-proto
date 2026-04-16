@@ -7670,8 +7670,8 @@ function _updateCanyonWalls(dt, speed) {
         m.position.z = minZ - spacing;
         m.position.x = targetX; // snap X on recycle
       } else {
-        // Smooth lateral tracking while in view
-        m.position.x += (targetX - m.position.x) * Math.min(1, T.snapRate * dt);
+        // Direct X snap — corridor geometry handles smooth path, wall just follows
+        m.position.x = targetX;
       }
     });
   });
@@ -17424,8 +17424,8 @@ window.addEventListener('keydown', (e) => {
     panel.appendChild(title);
 
     hdr('— GEOMETRY —');
-    slider('Height',        'slabH',       60, 260,  5,    'geo');
-    slider('Width (Z)',     'slabW',       40, 200,  5,    'geo');
+    slider('Height',        'slabH',        5, 260,  5,    'geo');
+    slider('Slab length',   'slabW',       10, 200,  5,    'geo');
     slider('Thickness',     'slabThick',    5, 120,  1,    'geo');
     slider('Cols',          'cols',         2,  14,  1,    'geo');
     slider('Rows',          'rows',         2,  14,  1,    'geo');
