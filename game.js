@@ -8038,11 +8038,11 @@ function _createCanyonWalls() {
       #include <common>
       #include <lights_pars_begin>
       varying vec3 vWorldPos;
-      varying vec3 vNormal2;
+      varying vec3 vLocalPos;
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vWorldPos = wp.xyz;
-        vNormal2  = normalize(normalMatrix * normal);
+        vLocalPos = position;
         gl_Position = projectionMatrix * viewMatrix * wp;
       }
     `,
@@ -8055,68 +8055,64 @@ function _createCanyonWalls() {
       uniform vec3  uGlowColor;
       uniform vec3  uCrackColor;
       varying vec3  vWorldPos;
-      varying vec3  vNormal2;
+      varying vec3  vLocalPos;
 
-      // Fast hash
-      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
-
-      // Fractal turbulence for crack pattern
+      // Turbulence in LOCAL space so cracks stay within each chunk
       float turbulence(vec3 p) {
         float t = 0.0;
-        t += abs(sin(p.x*1.1 + p.y*0.7 + p.z*0.9 + uSeed));
-        t += abs(sin(p.x*2.3 + p.y*1.9 + p.z*0.4 + uSeed*1.3)) * 0.5;
-        t += abs(sin(p.x*4.7 + p.y*3.1 + p.z*2.3 + uSeed*0.7)) * 0.25;
+        t += abs(sin(p.x*0.9 + p.y*0.5 + p.z*0.7 + uSeed));
+        t += abs(sin(p.x*1.8 + p.y*1.4 + p.z*0.9 + uSeed*1.3)) * 0.5;
+        t += abs(sin(p.x*3.7 + p.y*2.8 + p.z*1.6 + uSeed*0.7)) * 0.25;
         return t;
       }
 
-      // Diagonal grid lines (cyan) in world XY space
-      float gridLines(vec3 wp) {
-        float scale = 0.08;
-        float a = abs(sin((wp.x + wp.y) * scale * 3.14159));
-        float b = abs(sin((wp.x - wp.y) * scale * 3.14159));
-        float line = pow(max(a, b), 18.0);
-        return line;
+      // Diagonal grid in local space
+      float gridLines(vec3 lp) {
+        float a = abs(sin((lp.x * 0.18 + lp.y * 0.12) * 3.14159));
+        float b = abs(sin((lp.x * 0.18 - lp.y * 0.12) * 3.14159));
+        return pow(max(a, b), 14.0);
       }
 
       void main() {
-        // World-space domain for all patterns
-        vec3 wp = vWorldPos * 0.04;
+        // ─ Flat face normal via screen-space derivatives (true faceted look)
+        vec3 fdx = dFdx(vWorldPos);
+        vec3 fdy = dFdy(vWorldPos);
+        vec3 N   = normalize(cross(fdx, fdy));
 
-        // ─ Base ice color: dark teal → bright cyan gradient by Y (height)
-        float heightT = clamp((vWorldPos.y + 40.0) / 160.0, 0.0, 1.0);
-        vec3 baseCol = mix(uIceColor, uGlowColor * 0.55, heightT * heightT);
-
-        // ─ Directional lighting (uses scene lights via includes)
-        vec3 N = normalize(vNormal2);
+        // ─ Directional lighting
         float diffuse = 0.0;
         #if NUM_DIR_LIGHTS > 0
           for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
             vec3 L = normalize(directionalLights[i].direction);
-            diffuse += max(0.0, dot(N, L)) * directionalLights[i].color.r * 0.5;
+            diffuse += max(0.0, dot(N, L)) * directionalLights[i].color.r;
           }
         #endif
-        // Ambient + diffuse
-        vec3 litColor = baseCol * (0.35 + diffuse);
 
-        // ─ Magenta lightning cracks: thin bright veins in world space
-        float turb = turbulence(wp);
-        // Crack = thin bright lines where sin(x + turb) ≈ 0
-        float crackVal = abs(sin(wp.x * 6.28 + turb * 4.0 + uSeed * 2.1));
-        float crack = pow(1.0 - clamp(crackVal, 0.0, 1.0), 12.0); // thin spike at 0-crossing
-        // Also diagonal crack lines
-        float crackVal2 = abs(sin((wp.x + wp.y * 1.3) * 5.0 + turb * 3.0 + uSeed));
-        float crack2 = pow(1.0 - clamp(crackVal2, 0.0, 1.0), 10.0);
-        float cracks = clamp(crack + crack2 * 0.6, 0.0, 1.0);
+        // ─ Height gradient: dark teal at base → bright cyan-white at top
+        float heightT = clamp(vLocalPos.y / 140.0, 0.0, 1.0);
+        vec3 baseCol = mix(uIceColor, uGlowColor * 0.7, heightT * heightT);
 
-        // ─ Cyan diagonal grid overlay
-        float grid = gridLines(vWorldPos) * 0.5;
+        // Per-face brightness from lighting — this IS the faceted look
+        vec3 litColor = baseCol * (0.25 + diffuse * 0.8);
+
+        // ─ Cracks in LOCAL space — contained within chunk
+        vec3 lp = vLocalPos * 0.035;
+        float turb = turbulence(lp);
+        float crackV = abs(sin(lp.x * 5.0 + turb * 3.5 + uSeed));
+        float crack  = pow(1.0 - clamp(crackV, 0.0, 1.0), 14.0);
+        float crackV2 = abs(sin((lp.x * 0.8 + lp.y * 1.4) * 4.0 + turb * 2.5 + uSeed * 1.7));
+        float crack2  = pow(1.0 - clamp(crackV2, 0.0, 1.0), 10.0);
+        float cracks  = clamp(crack + crack2 * 0.7, 0.0, 1.0);
+
+        // ─ Cyan grid — only on faces that face more toward camera (inner face)
+        // Use N.x to gate: inner face has strong +X or -X component
+        float facingInward = clamp(abs(N.x) * 2.0, 0.0, 1.0);
+        float grid = gridLines(vLocalPos) * facingInward;
 
         // ─ Compose
         vec3 col = litColor;
-        col += uCrackColor * cracks * 1.8;       // magenta veins glow HDR
-        col += uGlowColor  * grid   * 0.6;       // cyan grid lines
-        // Subtle inner glow near base (teal horizon)
-        col += uGlowColor * 0.08 * (1.0 - heightT);
+        col += uCrackColor * cracks * 2.2;   // magenta veins — HDR so they bloom
+        col += uGlowColor  * grid   * 0.5;   // cyan grid on inner faces only
 
         gl_FragColor = vec4(col, 1.0);
       }
