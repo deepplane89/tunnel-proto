@@ -7414,19 +7414,17 @@ function _buildCanyonSlabGeo(seed, side) {
 
     for (let col = 0; col < vCols; col++) {
       const u  = col / segW;
-      // Per-vertex Z displacement — the core of the effect
-      // Low-freq base (large boulder shapes) + high-freq detail
-      const zBase   = (rng() - 0.5) * 2.0 * D;
-      const zDetail = (rng() - 0.5) * 2.0 * D * 0.3;
-      const zTop    = topFactor * (rng() - 0.3) * D * 1.5;
-      const z = zBase + zDetail + zTop;
+      // Per-vertex X displacement — pushes each vert in/out along the wall depth.
+      // This is what creates angled faces. Adjacent verts at different X depths
+      // mean adjacent triangles face different directions → different brightness.
+      const xDisp   = (rng() - 0.5) * 2.0 * D;        // large boulder-scale
+      const xDetail = (rng() - 0.5) * 2.0 * D * 0.35; // fine detail
+      const xTop    = topFactor * (rng() - 0.3) * D * 1.2; // ragged top
 
-      // X is 0 — the inner face sits at corridor edge.
-      // Side just determines which direction the chunk faces.
       const i = row * vCols + col;
-      pos[i*3+0] = 0;
+      pos[i*3+0] = (xDisp + xDetail + xTop) * side; // X = depth into wall
       pos[i*3+1] = y;
-      pos[i*3+2] = u * W + z;
+      pos[i*3+2] = u * W; // Z = along corridor, clean progression
       uvs[i*2+0] = u;
       uvs[i*2+1] = v;
     }
