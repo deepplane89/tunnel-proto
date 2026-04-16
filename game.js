@@ -7433,12 +7433,40 @@ function _makeCanyonGridTexture() {
 
       ctx.restore();
     } else {
-      // DARK VEIN SLAB — near-black base with bold magenta lightning
-      // Darken this slab relative to already-dark base
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.globalAlpha = 1;
-      ctx.fillRect(sx0, 0, slabW, h);
-      // Vein bloom — soft radial glow behind the lightning
+      // MARBLE VEIN SLAB — procedural marble via sin(x + turbulence) + magenta lightning on top
+      ctx.save();
+      ctx.beginPath(); ctx.rect(sx0, 0, slabW, h); ctx.clip();
+
+      // 1. Procedural marble base painted pixel-row by pixel-row
+      // marble(x,y) = sin(freq*x + amp * turbulence(x,y))  — classic Perlin marble formula
+      // turbulence = sum of abs(sin) at octaves
+      const mFreq = 6.0;   // how many veins across the slab
+      const mAmp  = 3.5;   // how much turbulence bends them
+      const rowH  = 4;     // paint in 4px strips for speed
+      for (let py = 0; py < h; py += rowH) {
+        for (let px2 = 0; px2 < slabW; px2 += 2) {
+          const nx = (sx0 + px2) / w;  // 0–1 across full texture
+          const ny = py / h;
+          // Turbulence: 4 octaves of sin-based noise (no Perlin needed)
+          let turb = 0;
+          turb += Math.abs(Math.sin(nx * 11.3 + ny * 7.1)) * 1.0;
+          turb += Math.abs(Math.sin(nx * 23.7 + ny * 15.3)) * 0.5;
+          turb += Math.abs(Math.sin(nx * 47.1 + ny * 31.9)) * 0.25;
+          turb += Math.abs(Math.sin(nx * 93.2 + ny * 61.7)) * 0.125;
+          // Marble value: 0–1
+          const mv = (Math.sin(mFreq * (nx + mAmp * turb)) + 1) * 0.5;
+          // Color: dark purple base → mid purple veins → bright magenta hot-lines
+          const t3 = Math.pow(mv, 1.8); // push toward extremes
+          const r3 = Math.round(t3 * 80  + 4);
+          const g3 = Math.round(t3 * 0   + 2);
+          const b3 = Math.round(t3 * 40  + 8);
+          ctx.fillStyle = `rgb(${r3},${g3},${b3})`;
+          ctx.globalAlpha = 1;
+          ctx.fillRect(sx0 + px2, py, 2, rowH);
+        }
+      }
+
+      // 2. Soft magenta bloom behind veins
       if (T.veinBloom > 0) {
         const vc = parseInt(T.veinColor.slice(1), 16);
         const vr2 = (vc >> 16) & 0xff, vg2 = (vc >> 8) & 0xff, vb2 = vc & 0xff;
@@ -7448,17 +7476,18 @@ function _makeCanyonGridTexture() {
           const gby = (0.15 + srng() * 0.7) * h;
           const gbr = slabW * (0.4 + srng() * 0.35);
           const gg = ctx.createRadialGradient(gbx, gby, 0, gbx, gby, gbr);
-          gg.addColorStop(0,   `rgba(${vr2},${vg2},${vb2},${(T.veinBloom * 0.6).toFixed(2)})`);
-          gg.addColorStop(0.5, `rgba(${vr2},${vg2},${vb2},${(T.veinBloom * 0.2).toFixed(2)})`);
+          gg.addColorStop(0,   `rgba(${vr2},${vg2},${vb2},${(T.veinBloom * 0.5).toFixed(2)})`);
+          gg.addColorStop(0.5, `rgba(${vr2},${vg2},${vb2},${(T.veinBloom * 0.15).toFixed(2)})`);
           gg.addColorStop(1,   'rgba(0,0,0,0)');
           ctx.fillStyle = gg; ctx.globalAlpha = 1;
           ctx.fillRect(sx0, 0, slabW, h);
         }
       }
-      // Bold branching lightning veins
+
+      // 3. Bold branching magenta lightning veins on top of marble
       for (let ci = 0; ci < Math.round(T.veinCount); ci++) {
         const vx = sx0 + srng() * slabW;
-        const vy = srng() * h * 0.4; // start near top 40%
+        const vy = srng() * h * 0.4;
         ctx.strokeStyle = T.veinColor;
         ctx.globalAlpha = T.crackOpacity;
         ctx.lineWidth = 1.0 + srng() * T.veinWidth;
@@ -7467,17 +7496,14 @@ function _makeCanyonGridTexture() {
         const segs = 5 + Math.floor(srng() * 5);
         for (let s = 0; s < segs; s++) {
           cx2 = Math.max(sx0, Math.min(sx1, cx2 + (srng() - 0.4) * 40));
-          cy2 += (srng() * 0.8 + 0.2) * (h / segs); // always travels downward
+          cy2 += (srng() * 0.8 + 0.2) * (h / segs);
           ctx.lineTo(cx2, cy2);
-          // Occasional branch
           if (srng() > 0.7) {
             ctx.stroke();
             ctx.beginPath(); ctx.moveTo(cx2, cy2);
             ctx.globalAlpha = T.crackOpacity * 0.55;
             ctx.lineWidth *= 0.5;
-            const bx2 = cx2 + (srng() - 0.5) * 35;
-            const by2 = cy2 + srng() * 50;
-            ctx.lineTo(bx2, by2); ctx.stroke();
+            ctx.lineTo(cx2 + (srng() - 0.5) * 35, cy2 + srng() * 50); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(cx2, cy2);
             ctx.globalAlpha = T.crackOpacity;
             ctx.lineWidth *= 2;
@@ -7485,6 +7511,8 @@ function _makeCanyonGridTexture() {
         }
         ctx.stroke();
       }
+
+      ctx.restore();
     }
 
     // Slab divider
