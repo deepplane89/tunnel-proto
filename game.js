@@ -11376,11 +11376,6 @@ window.addEventListener('keydown', e => {
     debugHitboxes = !debugHitboxes;
   }
   // Key T: toggle L4 aurora tendrils
-  if ((e.key === 't' || e.key === 'T') && state.phase === 'playing' && !state._tutorialActive) {
-    auroraTVisible = !auroraTVisible;
-    auroraGroup.visible = auroraTVisible;
-    l5fGroup.visible = auroraTVisible;
-  }
   // Campaign key 9: skip to right before L4 corridor
   if (state.phase === 'playing' && !state.isDeathRun && e.key === '9') {
     clearAllCorridorFlags();
