@@ -7669,7 +7669,9 @@ function _createCanyonWalls() {
     for (let i = 0; i < autoPool; i++) {
       const seed = i * 7 + (k === 'right' ? 100 : 0);
       const thick = (i < T.entranceSlabs) ? T.entranceThick : undefined;
-      chunks[k].push(makeSlab(side, seed, INIT_Z + i * SPACING, i, thick));
+      // Cap init Z so no slab spawns near or past the ship on create
+      const initZ = Math.min(INIT_Z + i * SPACING, -150);
+      chunks[k].push(makeSlab(side, seed, initZ, i, thick));
     }
   });
 
