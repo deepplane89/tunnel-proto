@@ -7605,8 +7605,11 @@ function _createCanyonWalls() {
   canyonLight.position.set(-2, 5, 3);
   scene.add(canyonLight);
 
-  const SPACING  = T.slabW;          // slabs butt up flush
-  const FOOT_OFF = Math.abs(T.footX); // foot inset offset so visual edge = hitbox edge
+  const SPACING  = T.slabW;
+  // FOOT_OFF: the foot vertex sits at local X = footX.
+  // To place foot at world X = center + halfX*side, group.x = center + halfX*side - footX*side.
+  // So store footX directly; subtract it (times side) when baking position.
+  const FOOT_OFF = T.footX; // signed — subtracted below, not added
 
   function makeSlab(side, seed, zPos, idx) {
     const isCyan = (idx % 2 === 0);
@@ -7647,7 +7650,7 @@ function _createCanyonWalls() {
       const rowsAhead = Math.max(0, Math.round((3.9 - m.position.z) / 7));
       const center  = _canyonPredictCenter(rowsAhead);
       const halfX   = _canyonPredictHalfX(rowsAhead);
-      m.userData.bakedX = (center + halfX * side) + FOOT_OFF * side;
+      m.userData.bakedX = (center + halfX * side) - FOOT_OFF * side;
       m.position.x = m.userData.bakedX;
     });
   });
@@ -7730,7 +7733,7 @@ function _updateCanyonWalls(dt, speed) {
         const rowsAhead = Math.max(0, Math.round((3.9 - slabZ) / 7));
         const center   = _canyonPredictCenter(rowsAhead);
         const halfX    = _canyonPredictHalfX(rowsAhead);
-        m.userData.bakedX = (center + halfX * side) + footOff * side;
+        m.userData.bakedX = (center + halfX * side) - footOff * side;
         m.position.x = m.userData.bakedX;
       } else {
         // Hold baked position — do NOT update X
@@ -7753,8 +7756,8 @@ function _updateCanyonWalls(dt, speed) {
       const dz = Math.abs(m.position.z - 3.9);
       if (dz < bestRZ) { bestRZ = dz; nearRight = m; }
     });
-    const leftEdge  = nearLeft  ? nearLeft.userData.bakedX  : -(CORRIDOR_NARROW_X + footOff);
-    const rightEdge = nearRight ? nearRight.userData.bakedX :  (CORRIDOR_NARROW_X + footOff);
+    const leftEdge  = nearLeft  ? nearLeft.userData.bakedX  : -(CORRIDOR_NARROW_X - footOff);
+    const rightEdge = nearRight ? nearRight.userData.bakedX :  (CORRIDOR_NARROW_X - footOff);
     if (shipX < leftEdge + buffer || shipX > rightEdge - buffer) {
       if (typeof _killPlayer === 'function') _killPlayer();
       else if (typeof triggerDeath === 'function') triggerDeath();
