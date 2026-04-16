@@ -7271,9 +7271,9 @@ function _updateTerrainWalls(dt, speed) {
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
   // Thick-block slab geometry (dialled in sandbox)
-  slabH:        140,    // height
-  slabW:        100,    // Z-length per slab
-  slabThick:     68,    // X depth of block
+  slabH:         90,    // height
+  slabW:         85,    // Z-length per slab
+  slabThick:     60,    // X depth of block
   cols:           5,    // Z subdivisions
   rows:           6,    // Y subdivisions
   disp:           4.0,  // inner-face X jitter amount
@@ -7610,9 +7610,17 @@ function _createCanyonWalls() {
   });
 
   const gapCenter = state.corridorGapCenter || 0;
-  // Offset by FOOT_OFF so the foot (visual inner edge) lands exactly at gapEdge
-  chunks.left.forEach(m  => { m.position.x = (gapCenter - CORRIDOR_NARROW_X) - FOOT_OFF; });
-  chunks.right.forEach(m => { m.position.x = (gapCenter + CORRIDOR_NARROW_X) + FOOT_OFF; });
+  const initHalfX = (_jlCorridor && _jlCorridor._lastHalfX != null)
+    ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
+  // Bake initial X into userData so update loop holds it correctly
+  chunks.left.forEach(m => {
+    m.userData.bakedX = (gapCenter - initHalfX) - FOOT_OFF;
+    m.position.x = m.userData.bakedX;
+  });
+  chunks.right.forEach(m => {
+    m.userData.bakedX = (gapCenter + initHalfX) + FOOT_OFF;
+    m.position.x = m.userData.bakedX;
+  });
 
   _canyonWalls = {
     strips:       [...chunks.left, ...chunks.right],
@@ -7649,84 +7657,57 @@ function _updateCanyonWalls(dt, speed) {
   if (_canyonWalls.holoMat) _canyonWalls.holoMat.uniforms.time.value += dt;
   const spacing = _canyonWalls._spacing;
 
-  // ── Continuous smooth corridor tracking ─────────────────────────────────
-  // spawnCorridorRow fires every ~7 world units, advancing corridorSineT by
-  // (2π/period) each time and writing corridorGapCenter. Between spawns
-  // corridorGapCenter is frozen → stair-step. Fix: interpolate the phase
-  // accumulator forward by the fractional distance to the next row spawn.
-  function _canyonSmoothTarget() {
-    const rd   = state.corridorRowsDone || 0;
-    const spZ  = state.corridorSpawnZ   || -7;
-    // frac: 0 = just spawned a row, 1 = next row is about to spawn
-    const frac = Math.max(0, Math.min(1, (spZ + 7) / 7));
+  // ── Baked-X corridor tracking ───────────────────────────────────────────
+  // Each slab gets its X baked at spawn/recycle time from corridorGapCenter
+  // and _lastHalfX at that exact moment — the same values the corridor cones
+  // at that Z receive. position.x never changes until the next recycle.
+  // This is why the cones form a curved path: each one carries its own baked X.
 
-    // halfX — identical formula to spawnCorridorRow
-    function calcHalfX(rows) {
-      if (rows < CORRIDOR_CLOSE_ROWS) {
-        const t    = rows / CORRIDOR_CLOSE_ROWS;
-        const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
-        return CORRIDOR_WIDE_X + (CORRIDOR_NARROW_X - CORRIDOR_WIDE_X) * ease;
-      }
-      const cr = Math.max(0, rows - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS));
-      const sq = Math.min(1, cr / CORRIDOR_AMP_RAMP);
-      return CORRIDOR_NARROW_X - (CORRIDOR_NARROW_X - 6) * (sq * sq);
-    }
-
-    // Interpolate the sine phase accumulator forward by frac of one row's step.
-    // state.corridorSineT was already incremented for the current row by
-    // spawnCorridorRow, so we advance it by frac * (2π/period) to get smooth
-    // sub-row position — identical path the corridor cones actually travel.
-    let gapCenter = 0;
-    if (rd >= CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS) {
-      const curveRows = rd - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS);
-      const ampT   = Math.min(1, curveRows / CORRIDOR_AMP_RAMP);
-      const amp    = CORRIDOR_AMP_START + (CORRIDOR_AMP_MAX - CORRIDOR_AMP_START) * (ampT * ampT);
-      const perT   = Math.min(1, curveRows / CORRIDOR_PERIOD_RAMP);
-      const period = CORRIDOR_PERIOD_START - (CORRIDOR_PERIOD_START - CORRIDOR_PERIOD_MIN) * (perT * perT);
-      // Advance phase by frac of one row's phase step
-      const interpT = (state.corridorSineT || 0) + frac * (2 * Math.PI) / period;
-      gapCenter = amp * Math.sin(interpT);
-    }
-
-    const curHalfX  = calcHalfX(rd);
-    const nextHalfX = calcHalfX(rd + 1);
-    const gapHalfX  = curHalfX + (nextHalfX - curHalfX) * frac;
-
-    return { gapCenter, gapHalfX };
-  }
-
-  const { gapCenter, gapHalfX } = _canyonSmoothTarget();
+  const footOff = _canyonWalls._footOff || 0;
 
   ['left','right'].forEach(k => {
-    const side    = k === 'left' ? -1 : 1;
-    const edgeX   = gapCenter + gapHalfX * side;
-    const footOff = (_canyonWalls._footOff || 0) * side;
-    const targetX = edgeX + footOff;
-    const meshes  = _canyonWalls[k];
+    const side   = k === 'left' ? -1 : 1;
+    const meshes = _canyonWalls[k];
 
     meshes.forEach(m => {
       m.position.z += scroll;
 
-      // Recycle: chunk scrolled past ship → teleport to back of queue
+      // Recycle: slab passed ship → send to back of queue and bake new X
       if (m.position.z > DESPAWN_Z + spacing) {
         let minZ = Infinity;
         for (const om of meshes) if (om !== m && om.position.z < minZ) minZ = om.position.z;
         m.position.z = minZ - spacing;
-        m.position.x = targetX;
+
+        // Bake X from current corridor state — same data the cone at this Z gets
+        const center  = state.corridorGapCenter || 0;
+        const halfX   = (_jlCorridor && _jlCorridor._lastHalfX != null)
+          ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
+        m.userData.bakedX = (center + halfX * side) + footOff * side;
+        m.position.x = m.userData.bakedX;
       } else {
-        // Continuous smooth tracking — no lerp lag, no stair-step
-        m.position.x = targetX;
+        // Hold baked position — do NOT update X
+        if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
       }
     });
   });
 
-  // Collision — uses same smooth gapCenter/gapHalfX computed above
+  // Collision — find the slabs closest to the ship (z near 0) and use their bakedX
   if (state._jetLightningMode && state.phase === 'playing' && !state._godMode && !_godMode) {
     const shipX  = state.shipX || 0;
     const buffer = 1.5;
-    const gapC   = gapCenter;
-    const gapH   = gapHalfX;
-    if (shipX < gapC - gapH + buffer || shipX > gapC + gapH - buffer) {
+    // Find nearest left and right slab to ship Z
+    let nearLeft = null, nearRight = null, bestLZ = Infinity, bestRZ = Infinity;
+    _canyonWalls.left.forEach(m => {
+      const dz = Math.abs(m.position.z - 3.9);
+      if (dz < bestLZ) { bestLZ = dz; nearLeft = m; }
+    });
+    _canyonWalls.right.forEach(m => {
+      const dz = Math.abs(m.position.z - 3.9);
+      if (dz < bestRZ) { bestRZ = dz; nearRight = m; }
+    });
+    const leftEdge  = nearLeft  ? nearLeft.userData.bakedX  : -(CORRIDOR_NARROW_X + footOff);
+    const rightEdge = nearRight ? nearRight.userData.bakedX :  (CORRIDOR_NARROW_X + footOff);
+    if (shipX < leftEdge + buffer || shipX > rightEdge - buffer) {
       if (typeof _killPlayer === 'function') _killPlayer();
       else if (typeof triggerDeath === 'function') triggerDeath();
     }
