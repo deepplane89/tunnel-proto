@@ -8016,15 +8016,157 @@ function _createCanyonWalls() {
   rMesh.position.z = SPAWN_Z;
   lMesh.frustumCulled = false;
   rMesh.frustumCulled = false;
-  lMesh.visible = true;
-  rMesh.visible = true;
+  lMesh.visible = false;
+  rMesh.visible = false;
   scene.add(lMesh);
   scene.add(rMesh);
+
+  // ── PRISM COLUMNS ──
+  // Real 3D tapered prisms — each has an inner face, two side faces, outer spine.
+  // Faces point in genuinely different directions so scene lights shade them differently.
+  // Alternating glacier (cyan) and marble (magenta) columns.
+
+  const glacierCanvas = document.createElement('canvas');
+  glacierCanvas.width = 256; glacierCanvas.height = 512;
+  const gc2 = glacierCanvas.getContext('2d');
+  const iceG = gc2.createLinearGradient(0, 0, 256, 0);
+  iceG.addColorStop(0, '#b8f0ff'); iceG.addColorStop(0.4, '#e8ffff'); iceG.addColorStop(1, '#a0e8f8');
+  gc2.fillStyle = iceG; gc2.fillRect(0, 0, 256, 512);
+  for (let i = 0; i < 6; i++) {
+    const px2 = 20+Math.random()*216, py2 = 20+Math.random()*472;
+    const pg2 = gc2.createRadialGradient(px2,py2,0,px2,py2,40+Math.random()*60);
+    pg2.addColorStop(0,'rgba(0,40,80,0.6)'); pg2.addColorStop(0.5,'rgba(0,60,100,0.25)'); pg2.addColorStop(1,'rgba(0,0,0,0)');
+    gc2.fillStyle = pg2; gc2.fillRect(0,0,256,512);
+  }
+  gc2.strokeStyle = '#00ffee'; gc2.globalAlpha = 0.45; gc2.lineWidth = 2.5;
+  for (let d = -512; d < 512; d += 60) {
+    gc2.beginPath(); gc2.moveTo(d,0); gc2.lineTo(d+512,512); gc2.stroke();
+    gc2.beginPath(); gc2.moveTo(d+512,0); gc2.lineTo(d,512); gc2.stroke();
+  }
+  gc2.globalAlpha = 1;
+  const glacierTex = new THREE.CanvasTexture(glacierCanvas);
+  // Real base color so scene lights shade faces differently
+  const glacierMat = new THREE.MeshStandardMaterial({
+    color: 0x2a6080,
+    emissive: 0x00ccff, emissiveMap: glacierTex, emissiveIntensity: T.brightness * 1.0,
+    roughness: 0.7, metalness: 0.1,
+    flatShading: true, side: THREE.DoubleSide, toneMapped: false,
+  });
+
+  const marbleCanvas = document.createElement('canvas');
+  marbleCanvas.width = 256; marbleCanvas.height = 512;
+  const mc = marbleCanvas.getContext('2d');
+  for (let py = 0; py < 512; py += 3) {
+    for (let px2 = 0; px2 < 256; px2 += 3) {
+      const nx=px2/256, ny=py/512;
+      let turb=0;
+      turb+=Math.abs(Math.sin(nx*11.3+ny*7.1))*1.0;
+      turb+=Math.abs(Math.sin(nx*23.7+ny*15.3))*0.5;
+      turb+=Math.abs(Math.sin(nx*47.1+ny*31.9))*0.25;
+      turb+=Math.abs(Math.sin(nx*93.2+ny*61.7))*0.125;
+      const mv=Math.pow((Math.sin(6*(nx+3.5*turb))+1)*0.5,1.8);
+      mc.fillStyle=`rgb(${Math.round(mv*180+8)},${Math.round(mv*8+3)},${Math.round(mv*100+12)})`;
+      mc.fillRect(px2,py,3,3);
+    }
+  }
+  let _ms=42; const srng2=()=>{ _ms=(_ms*16807)%2147483647; return (_ms-1)/2147483646; };
+  mc.strokeStyle='#ff00ff'; mc.lineWidth=2.5;
+  for (let ci=0; ci<8; ci++) {
+    const vx2=srng2()*256, vy2=srng2()*200;
+    mc.globalAlpha=0.9; mc.beginPath(); mc.moveTo(vx2,vy2);
+    let cx3=vx2, cy3=vy2;
+    for (let s=0; s<7; s++) { cx3=Math.max(0,Math.min(256,cx3+(srng2()-0.4)*35)); cy3+=(srng2()*0.8+0.2)*(512/7); mc.lineTo(cx3,cy3); }
+    mc.stroke();
+  }
+  mc.globalAlpha=1;
+  const marbleTex = new THREE.CanvasTexture(marbleCanvas);
+  // Real base color so scene lights shade faces differently
+  const marbleMat = new THREE.MeshStandardMaterial({
+    color: 0x300828,
+    emissive: 0xff00cc, emissiveMap: marbleTex, emissiveIntensity: T.brightness * 0.8,
+    roughness: 0.9, metalness: 0.0,
+    flatShading: true, side: THREE.DoubleSide, toneMapped: false,
+  });
+
+  function buildPrismGeo(colW, colH, colD, side) {
+    const outerX = colW * side;
+    const levels = [
+      [0,          colD*0.50, 1.00, colD*0.28],
+      [colH*0.40,  colD*0.42, 0.88, colD*0.22],
+      [colH*0.70,  colD*0.28, 0.70, colD*0.14],
+      [colH*0.88,  colD*0.14, 0.45, colD*0.07],
+      [colH,       colD*0.04, 0.15, colD*0.04],
+    ];
+    const NL = levels.length;
+    const positions = [], uvs = [], indices = [];
+    for (let li = 0; li < NL; li++) {
+      const [y, hz, oxScale, oz] = levels[li];
+      const ox = outerX * oxScale;
+      const vFrac = y / colH;
+      const pts = [[0,y,-hz],[0,y,+hz],[ox,y,-oz],[ox,y,+oz]];
+      for (let vi = 0; vi < 4; vi++) {
+        positions.push(...pts[vi]);
+        uvs.push(vi<2?0.0:1.0, vFrac);
+      }
+    }
+    for (let li = 0; li < NL-1; li++) {
+      const b=li*4, t=(li+1)*4;
+      if (side===1) {
+        indices.push(b+0,t+0,b+1, b+1,t+0,t+1); // inner
+        indices.push(b+0,b+2,t+0, b+2,t+2,t+0); // front-Z
+        indices.push(b+1,t+1,b+3, b+3,t+1,t+3); // back-Z
+        indices.push(b+2,b+3,t+2, b+3,t+3,t+2); // outer spine
+      } else {
+        indices.push(b+0,b+1,t+0, b+1,t+1,t+0); // inner
+        indices.push(b+0,t+0,b+2, b+2,t+0,t+2); // front-Z
+        indices.push(b+1,b+3,t+1, b+3,t+3,t+1); // back-Z
+        indices.push(b+2,t+2,b+3, b+3,t+2,t+3); // outer spine
+      }
+    }
+    if (side===1) { indices.push(0,2,1, 1,2,3); } else { indices.push(0,1,2, 1,3,2); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+    geo.setAttribute('uv',       new THREE.BufferAttribute(new Float32Array(uvs), 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  const COL_SPACING = 18;
+  const NUM_COLS = Math.floor(NUM_ROWS * ROW_DEPTH / COL_SPACING);
+  const colMeshes = [];
+  const rng3 = (() => { let s=99; return ()=>{ s=(s*16807)%2147483647; return (s-1)/2147483646; }; })();
+
+  for (let ci2 = 0; ci2 < NUM_COLS; ci2++) {
+    const rowIdx = Math.floor(ci2 * COL_SPACING / ROW_DEPTH);
+    const r2 = Math.min(rowIdx, NUM_ROWS-1);
+    const zPos = SPAWN_Z - ci2 * COL_SPACING;
+    for (const side of [-1, 1]) {
+      const cx2 = centers[r2] + halfXs[r2] * side;
+      const isGlacier = ci2 % 2 === 0;
+      const cMat = isGlacier ? glacierMat : marbleMat;
+      const colW = 12 + rng3()*8;
+      const colH = 130 + rng3()*60;
+      const colD = 16 + rng3()*10;
+      const tiltX = (rng3()-0.5)*0.14;
+      const tiltZ = (rng3()-0.5)*0.08;
+      const geo = buildPrismGeo(colW, colH, colD, side);
+      const mesh = new THREE.Mesh(geo, cMat);
+      mesh.position.set(cx2, 0, zPos);
+      mesh.rotation.x = tiltX;
+      mesh.rotation.z = tiltZ;
+      mesh.frustumCulled = true;
+      scene.add(mesh);
+      colMeshes.push(mesh);
+    }
+  }
 
   _canyonWalls = {
     strips:    [lMesh, rMesh],
     left:      [lMesh],
     right:     [rMesh],
+    colMeshes,
+    glacierMat, marbleMat, glacierTex, marbleTex,
     mat, gridTex,
     _spawnX:   state.shipX || 0,
     _numRows:  NUM_ROWS,
@@ -8035,6 +8177,11 @@ function _createCanyonWalls() {
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
+  if (_canyonWalls.colMeshes) {
+    _canyonWalls.colMeshes.forEach(m => { scene.remove(m); m.geometry.dispose(); });
+    if (_canyonWalls.glacierMat) { _canyonWalls.glacierMat.dispose(); _canyonWalls.glacierTex.dispose(); }
+    if (_canyonWalls.marbleMat)  { _canyonWalls.marbleMat.dispose();  _canyonWalls.marbleTex.dispose();  }
+  }
   _canyonWalls.mat.dispose();
   _canyonWalls.gridTex.dispose();
   _canyonWalls = null;
@@ -8053,7 +8200,8 @@ function _updateCanyonWalls(dt, speed) {
 
   // Scroll ribbon scaffold
   _canyonWalls.strips.forEach(m => { m.position.z += scroll; });
-  // Scroll visual columns
+  // Scroll prism columns
+  if (_canyonWalls.colMeshes) _canyonWalls.colMeshes.forEach(m => { m.position.z += scroll; });
 
 
   // Collision: read corridorGapCenter + halfX directly from live L3 state.
