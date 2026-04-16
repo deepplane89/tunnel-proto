@@ -17333,14 +17333,12 @@ window.addEventListener('keydown', (e) => {
   if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
     _canyonActive = !_canyonActive;
     if (_canyonActive) {
-      // Start at row 60 — skip funnel, match canyon test mode (curves already active)
-      state.corridorRowsDone  = 60;
-      state.corridorSineT     = 0.5028;
+      // Start at row 0 — full funnel-in width (halfX=80 down to 9)
+      state.corridorRowsDone  = 0;
+      state.corridorSineT     = 0;
       state.corridorSpawnZ    = -7;
       state.corridorDelay     = 0;
-      // Prime gapCenter so init bake gets correct non-zero X immediately
-      { const _cr=60-(40+4), _ampT=Math.min(1,_cr/200), _amp=10+(36-10)*(_ampT*_ampT);
-        state.corridorGapCenter = _amp * Math.sin(0.5028); }
+      state.corridorGapCenter = 0;
       state.corridorGapDir    = 1;
       state._drL3MaxRows      = 750; // exit ramp fires at row 750, matching ribbon length
       _jlCorridor.active      = true;
