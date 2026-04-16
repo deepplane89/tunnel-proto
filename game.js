@@ -7275,7 +7275,7 @@ const _canyonTuner = {
   segsX:         40,   // enough height rows for visible faceting
   segsZ:         100,
   displacement:  22,   // dramatic faceting
-  wallWidth:     12,
+  wallWidth:     40,   // wide top so it's visible from inside
   topRagged:     28,   // more jagged spires
   capHeight:     1.4,
   slopeLean:     0.10,
@@ -7880,6 +7880,16 @@ function _createCanyonWalls() {
     const tUV  = new Float32Array(tTotal * 2);
     const tCol = new Float32Array(tTotal * 3);
 
+    // Pre-bake per-height Z displacement — whole bands of verts jut toward/away camera
+    // Low frequency (3-5 waves over full height) = large boulder/overhang shapes
+    const hiNoise = new Float32Array(iRows);
+    for (let hi = 0; hi < iRows; hi++) {
+      const vn = hi / Math.max(1, iRows - 1);
+      hiNoise[hi] = (Math.sin(vn * 3.1 + 0.7) * 0.5
+                   + Math.sin(vn * 7.3 + 1.9) * 0.3
+                   + Math.sin(vn * 13.7 + 3.1) * 0.2);
+    }
+
     // Inner face: height rows × depth rows
     for (let hi = 0; hi < iRows; hi++) {
       const v  = hi / (iRows - 1);
@@ -7888,14 +7898,16 @@ function _createCanyonWalls() {
         const z  = -r * ROW_DEPTH;
         const cx = centers[r] + halfXs[r] * side;
         const leanFactor = 1 + T.slopeLean * v;
-        // Per-ROW displacement — all verts in a column share same dx
-        // This creates real silhouette variation (wall bulges/recedes) visible from inside corridor
+        // X: per-row displacement — silhouette variation
         const dx = rowNoise[r] * T.displacement * leanFactor * side;
+        // Z: per-height displacement — whole bands jut toward/away camera
+        // This is what makes it look like a cliff face, not a curtain
+        const dz = hiNoise[hi] * T.displacement * 1.4;
         const dy = (v > 0.85) ? rowRidgeY[r] * (v - 0.85) / 0.15 : 0;
         const idx = hi * NUM_ROWS + r;
         iPos[idx*3+0] = cx + dx;
         iPos[idx*3+1] = y + dy;
-        iPos[idx*3+2] = z;
+        iPos[idx*3+2] = z + dz;
         iUV[idx*2+0]  = r / 10;  // tile texture every 10 rows — not one giant smear
         iUV[idx*2+1]  = v;
         // Rock strata vertex colors — driven by tuner
