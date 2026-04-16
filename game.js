@@ -17718,6 +17718,8 @@ function animate() {
   // Keep water X in sync with ship so reflection doesn't drift
   mirrorMesh.position.x = state.shipX;
 
+  if (state.phase === 'paused') { composer.render(); return; }
+
   updateAurora(rawDt);
   updateL5Flares(rawDt);
   updateWake(rawDt);
