@@ -12814,9 +12814,9 @@ function toggleMute() {
 // ═══════════════════════════════════════════════════
 //  GAME STATE TRANSITIONS
 // ═══════════════════════════════════════════════════
-let _skipL1Intro = false;  // set by startDeathRun() so startGame() skips L1 cinematic
 // Canyon-only test mode — activated by ?canyon=1 URL param, skips normal game flow
-const _canyonTestMode = new URLSearchParams(location.search).get('canyon') === '1';
+var _canyonTestMode = new URLSearchParams(location.search).get('canyon') === '1';
+let _skipL1Intro = false;  // set by startDeathRun() so startGame() skips L1 cinematic
 let _gameStarting = false; // reentry lock — prevents double-fire from simultaneous inputs
 
 // ── Retry with cinematic camera sweep (from game over) ──
