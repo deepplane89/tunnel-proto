@@ -7271,7 +7271,7 @@ function _updateTerrainWalls(dt, speed) {
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
   // Thick-block slab geometry (dialled in sandbox)
-  slabH:         65,    // height
+  slabH:         55,    // height
   slabW:         85,    // Z-length per slab
   slabThick:     60,    // X depth of block
   cols:           5,    // Z subdivisions
@@ -7299,7 +7299,7 @@ const _canyonTuner = {
   // Corridor width override — half-gap between walls (wall foot lands at center ± halfXOverride)
   halfXOverride: 40,
   // Entrance: first N slabs get entranceThick — extends the slab outward while staying flush
-  entranceThick: 60,    // slab thickness for entrance slabs (increase to expand laterally)
+  entranceThick: 2000,  // slab thickness for entrance slabs (increase to expand laterally)
   entranceSlabs:  3,    // how many leading slabs use entranceThick
   // How far away the canyon spawns (larger = see entrance from farther away)
   spawnDepth:   -300,
@@ -7638,7 +7638,8 @@ function _createCanyonWalls() {
   const FOOT_OFF = T.footX; // signed — subtracted below, not added
 
   function makeSlab(side, seed, zPos, idx, thickOverride) {
-    const isCyan = (idx % 2 === 0);
+    const isEntrance = (thickOverride !== undefined);
+    const isCyan = isEntrance ? true : (idx % 2 === 0);
     const geo    = _buildCanyonSlabGeo(seed, thickOverride);
 
     // side=1 → right wall (geometry grows in +X, inner face at x≈footX)
@@ -7763,7 +7764,9 @@ function _updateCanyonWalls(dt, speed) {
       if (m.position.z > DESPAWN_Z + spacing) {
         let minZ = Infinity;
         for (const om of meshes) if (om !== m && om.position.z < minZ) minZ = om.position.z;
-        m.position.z = minZ - spacing;
+        // Snap to clean multiple of spacing to prevent float drift gaps
+        const snappedMin = Math.round(minZ / spacing) * spacing;
+        m.position.z = snappedMin - spacing;
 
         // Predictive bake: estimate center/halfX for when the ship reaches this slab.
         // Slab is placed at minZ - spacing. Ship is at z≈3.9, speed≈72 units/s.
