@@ -7981,13 +7981,14 @@ function _createCanyonWalls() {
   const gridTex = _makeCanyonGridTexture();
   gridTex.repeat.set(1, 1); // UVs tile via r/10
   const mat = new THREE.MeshStandardMaterial({
-    color:             0x000000,   // all light from emissive
-    vertexColors:      false,      // strata baked into emissiveMap via multiply gradient
+    color:             0x000000,
+    vertexColors:      false,
     emissive:          0xffffff,
     emissiveMap:       gridTex,
     emissiveIntensity: T.brightness * 1.8,
     roughness:         0.9,
     metalness:         0.0,
+    flatShading:       true,   // hard edges between faces — angular faceted glacier look
     side:              THREE.DoubleSide,
     toneMapped:        false,
   });
