@@ -7271,7 +7271,7 @@ function _updateTerrainWalls(dt, speed) {
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
   // Thick-block slab geometry (dialled in sandbox)
-  slabH:         90,    // height
+  slabH:         65,    // height
   slabW:         85,    // Z-length per slab
   slabThick:     60,    // X depth of block
   cols:           5,    // Z subdivisions
@@ -7279,7 +7279,7 @@ const _canyonTuner = {
   disp:           4.0,  // inner-face X jitter amount
   snap:           0.7,  // quantize divisor
   // Profile shape (foot→sweep→mid→crest outward X)
-  footX:         0.0,   // 0 = straight inner wall, negative = overhang toward corridor
+  footX:         9.0,   // 0 = straight inner wall, negative = overhang toward corridor
   sweepX:        4.0,
   midX:         17.0,
   crestX:       20.0,
