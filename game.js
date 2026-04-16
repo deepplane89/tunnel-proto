@@ -7311,7 +7311,7 @@ let _canyonDiagFrame     = 0;     // frame counter for periodic diagnostic log
 window._canyonLog = function() {
   const T = _canyonTuner;
   const walls = _canyonWalls;
-  const footOff = Math.abs(T.footX);
+  const footOff = T.footX; // signed
   // Find slabs nearest to ship for true gap measurement
   let nearL = null, nearR = null, bestLZ = Infinity, bestRZ = Infinity;
   if (walls) {
@@ -7321,17 +7321,40 @@ window._canyonLog = function() {
   const leftEdge  = nearL ? nearL.position.x : null;
   const rightEdge = nearR ? nearR.position.x : null;
   const gap = (leftEdge != null && rightEdge != null) ? +(rightEdge - leftEdge).toFixed(2) : null;
+  // L3 truth: what the path array says the edge should be at current row
+  const row = state.corridorRowsDone || 0;
+  const l3 = (typeof _L3_PATH !== 'undefined' && _L3_PATH[Math.min(row, _L3_PATH.length-1)])
+    ? _L3_PATH[Math.min(row, _L3_PATH.length-1)] : null;
+  const l3Center = l3 ? +l3[0].toFixed(2) : null;
+  const l3HalfX  = l3 ? +l3[1].toFixed(2) : null;
+  // Expected edge = center ± halfX (foot vertex world X with correct placement)
+  const l3ExpectedRight = l3 ? +(l3[0] + l3[1]).toFixed(2) : null;
+  const l3ExpectedLeft  = l3 ? +(l3[0] - l3[1]).toFixed(2) : null;
+  // Drift = slab edge minus expected edge (0 = perfect, + = slab too far out, - = too far in)
+  const driftRight = (rightEdge != null && l3ExpectedRight != null) ? +(rightEdge - l3ExpectedRight).toFixed(2) : null;
+  const driftLeft  = (leftEdge  != null && l3ExpectedLeft  != null) ? +(leftEdge  - l3ExpectedLeft ).toFixed(2) : null;
+  const accurate   = (driftRight != null) ? (Math.abs(driftRight) < 1.0 && Math.abs(driftLeft) < 1.0) : null;
   const out = {
     '--- CORRIDOR ---': '',
     active:            _canyonActive,
-    rowsDone:          state.corridorRowsDone || 0,
+    rowsDone:          row,
     sineT:             +(state.corridorSineT||0).toFixed(3),
     gapCenter:         +(state.corridorGapCenter||0).toFixed(2),
     shipX:             +(state.shipX||0).toFixed(2),
-    leftEdgeX:         leftEdge != null ? +leftEdge.toFixed(2) : null,
+    leftEdgeX:         leftEdge  != null ? +leftEdge.toFixed(2)  : null,
     rightEdgeX:        rightEdge != null ? +rightEdge.toFixed(2) : null,
     visibleGapWidth:   gap,
     shipInGap:         (leftEdge!=null && rightEdge!=null) ? (state.shipX > leftEdge && state.shipX < rightEdge) : null,
+    '--- L3 ACCURACY ---': '',
+    l3_row:            row,
+    l3_center:         l3Center,
+    l3_halfX:          l3HalfX,
+    l3_expectedRight:  l3ExpectedRight,
+    l3_expectedLeft:   l3ExpectedLeft,
+    driftRight:        driftRight,
+    driftLeft:         driftLeft,
+    accurate:          accurate,
+    verdict:           accurate === null ? 'no data' : (accurate ? 'OK ✓' : 'DRIFTED ✗ — check footX math'),
     '--- TUNER ---': '',
     slabH:        T.slabH,
     slabW:        T.slabW,
