@@ -7552,6 +7552,7 @@ function _buildCanyonSlabGeo(seed, thickOverride) {
 
 function _createCanyonWalls() {
   if (_canyonWalls) return;
+  console.warn('[CANYON] _createCanyonWalls called — manual:', _canyonManual, '| stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   const T = _canyonTuner;
 
   // Two slab types: cyan (MeshPhysical + holo overlay) and dark (MeshStandard + veins)
@@ -7711,6 +7712,7 @@ function _createCanyonWalls() {
 
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
+  console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonSinePhase = 0;
   _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
   ['cyanMat','darkMat','holoMat'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
