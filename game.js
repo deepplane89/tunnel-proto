@@ -7272,47 +7272,47 @@ function _updateTerrainWalls(dt, speed) {
 const _canyonTuner = {
   height:        160,   // tall looming walls like AI pic
   tileLength:    175,
-  segsX:         40,   // height segments — smoother cliff face
+  segsX:         80,   // MORE height segments — facets need geometry to show
   segsZ:         100,
-  displacement:  18,   // dramatic faceting — angular glacier slab faces
-  wallWidth:     12,   // thin top edge
-  topRagged:     22,   // jagged fractured spires
+  displacement:  22,   // dramatic faceting
+  wallWidth:     12,
+  topRagged:     28,   // more jagged spires
   capHeight:     1.4,
-  slopeLean:     0.10, // gentle base flare
+  slopeLean:     0.10,
   fillLight:     0.4,
   scrollSpeed:   1.0,
   freezeWide:    false,
   canyonHalfX:   10,  // tight corridor — walls fill screen like AI pic
   // Texture — glacier/marble aesthetic matching AI pic
-  baseColor:     '#0a1828',  // very dark base — glacier slabs are self-lit bright
-  brightness:    0.90,       // emissiveIntensity drives glacier brightness
-  gridColor:     '#aae8ff',  // cool cyan grid on glacier slabs
-  gridOpacity:   0.22,       // grid visible but ice texture is the hero
-  crackOpacity:  0.85,       // bold magenta veins
+  baseColor:     '#0a1828',
+  brightness:    1.1,        // higher so emissiveIntensity = 1.98 — well above bloom threshold
+  gridColor:     '#00ffee',  // saturated cyan — needs to punch through like AI pic
+  gridOpacity:   0.55,       // visible grid
+  crackOpacity:  0.90,
   slabCount:     4,
-  gridLineW:     2.0,
-  gridCols:      5,
+  gridLineW:     3.0,        // thicker lines
+  gridCols:      4,
   gridRows:      8,
-  veinCount:     10,
-  veinWidth:     4.0,
-  veinColor:     '#ff00dd',  // hot magenta — matches AI pic exactly
+  veinCount:     12,
+  veinWidth:     5.0,
+  veinColor:     '#ff00ff',  // pure magenta
   bloomRadius:   0.5,
-  bloomColor:    '#88ccff',  // soft blue-white bloom, not saturated cyan
+  bloomColor:    '#88ccff',
   bloomOpacity:  0.4,
-  veinBloom:     0.75,       // veins glow strongly
-  gridGlow:      0.2,        // grid barely glows — walls are frosty not electric
-  dividerOpacity: 0.25,
+  veinBloom:     0.9,
+  gridGlow:      0.5,        // glacier slabs glow strongly
+  dividerOpacity: 0.0,       // no dividers — let slabs blend
   // Corridor curve controls
   corridorAmpMax:   36,
   corridorAmpStart: 10,
   corridorAmpRamp:  200,
   // Cliff strata — glacier: dark base, broad bright mid (frosty blue-white), hot rim
-  strataBaseDark:   0.02,  // near-black at waterline
-  strataMidTone:    0.85,  // glacier face — walls stay bright
-  strataRimBright:  1.6,   // rim blooms very hot
-  strataRimCyan:    0.55,  // rim is mostly white with slight cyan tint
-  strataSplit:      0.28,  // dark base only occupies bottom 28% — rest is bright glacier
-  strataNoiseAmt:   0.08,  // slightly more facet noise for marble look
+  strataBaseDark:   0.04,  // slightly lighter base so bottom isn't pure black
+  strataMidTone:    0.95,  // near-white — glacier face must stay bright
+  strataRimBright:  1.8,   // rim blazes
+  strataRimCyan:    0.4,
+  strataSplit:      0.15,  // only bottom 15% goes dark, rest is full brightness
+  strataNoiseAmt:   0.12,  // more noise = more facet variation
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
