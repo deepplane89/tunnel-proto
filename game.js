@@ -8058,6 +8058,7 @@ function _createCanyonWalls() {
   const glacierMat = new THREE.MeshStandardMaterial({
     color: 0x000000, emissive: 0xffffff, emissiveMap: glacierTex,
     emissiveIntensity: T.brightness * 2.0,
+    vertexColors: true,
     roughness: 0.7, metalness: 0.1,
     flatShading: true, side: THREE.DoubleSide, toneMapped: false,
   });
@@ -8100,11 +8101,155 @@ function _createCanyonWalls() {
   const marbleMat = new THREE.MeshStandardMaterial({
     color: 0x000000, emissive: 0xffffff, emissiveMap: marbleTex,
     emissiveIntensity: T.brightness * 1.6,
+    vertexColors: true,
     roughness: 0.9, metalness: 0.0,
     flatShading: true, side: THREE.DoubleSide, toneMapped: false,
   });
 
-  // Build columns along corridor curve
+  // Build tapered crystal prism columns along corridor curve
+  // Each column is a custom low-poly prism: wide flat inner face (facing gap),
+  // two angled side faces, spine ridge on outer edge, sharp tapered peak at top.
+  // This matches the AI reference: ice spires with dramatic face angles, not flat boxes.
+
+  // buildPrismGeo(colW, colH, colD, side)
+  // side: -1 = left wall (inner face points +X), +1 = right wall (inner face points -X)
+  // Local space: bottom at y=0, top at y=colH
+  // Inner face is at local x=0, outer spine at local x = outerX
+  // Z extents: -colD/2 to +colD/2
+  // Taper: at base innerHalfZ=colD/2, at peak innerHalfZ=colD*0.08 (sharp)
+  // Outer spine tapers from x=outerX at base to x=outerX*0.3 at peak (lean inward)
+  function buildPrismGeo(colW, colH, colD, side) {
+    // outerX: how far outward the spine goes (away from gap)
+    const outerX = colW * side;  // +colW for right wall, -colW for left wall
+
+    // We build 3 height levels: bottom (y=0), mid (y=colH*0.55), top (y=colH)
+    // At each level we have 4 verts defining the cross-section:
+    //   0: inner-front  (x=0,  z=-hz)
+    //   1: inner-back   (x=0,  z=+hz)
+    //   2: outer-front  (x=ox, z=-oz)
+    //   3: outer-back   (x=ox, z=+oz)
+    // hz = inner half-depth at this level (tapers to near 0 at top)
+    // ox = outer X extent at this level (tapers in slightly)
+    // oz = outer half-depth (smaller than inner — spine is narrower)
+
+    const levels = [
+      // [y,  innerHz, outerX_scale, outerHz]
+      [0,            colD*0.50,  1.00,  colD*0.28],
+      [colH*0.40,   colD*0.42,  0.88,  colD*0.22],
+      [colH*0.70,   colD*0.28,  0.70,  colD*0.14],
+      [colH*0.88,   colD*0.14,  0.45,  colD*0.07],
+      [colH,         colD*0.04,  0.15,  colD*0.04],  // sharp peak
+    ];
+    const NL = levels.length;
+
+    // 4 verts per level = NL*4 verts total
+    const positions = [];
+    const uvs = [];
+    const colors = [];
+
+    // Face brightness: inner (gap-facing) = brightest, sides darker, outer spine darkest
+    // These are emissive multipliers baked into vertex color
+    // inner face verts = 1.0, side face inner-edge = 0.85, side outer-edge = 0.45, spine = 0.20
+    const vBright = [1.0, 1.0, 0.45, 0.45]; // per vert: inner-front, inner-back, outer-front, outer-back
+
+    for (let li = 0; li < NL; li++) {
+      const [y, hz, oxScale, oz] = levels[li];
+      const ox = outerX * oxScale;
+      const vFrac = y / colH;  // 0 at base, 1 at top
+
+      // 4 verts for this level
+      const pts = [
+        [0,   y,  -hz],  // inner-front
+        [0,   y,  +hz],  // inner-back
+        [ox,  y,  -oz],  // outer-front
+        [ox,  y,  +oz],  // outer-back
+      ];
+
+      for (let vi = 0; vi < 4; vi++) {
+        positions.push(...pts[vi]);
+        // UV: u=horizontal position (0=inner, 1=outer), v=height
+        const uVal = (vi < 2) ? 0.0 : 1.0;
+        uvs.push(uVal, vFrac);
+        // Vertex color: brightness varies by face + height (brighter near top for glow)
+        const b = vBright[vi] * (0.7 + 0.3 * vFrac);
+        colors.push(b, b, b);
+      }
+    }
+
+    // Build faces between adjacent levels
+    // Each level-pair makes quads for: inner face, left-side, right-side, outer-spine
+    // Face layout per level: verts [li*4+0, li*4+1, li*4+2, li*4+3]
+    //   inner face:     verts 0,1 (bottom level) → 0,1 (top level)
+    //   left-side face: verts 0,2 (bottom) → 0,2 (top)   (front-Z edge)
+    //   right-side face:verts 1,3 (bottom) → 1,3 (top)   (back-Z edge)
+    //   outer spine:    verts 2,3 (bottom) → 2,3 (top)
+    const indices = [];
+
+    function addQuad(a, b, c, d, flip) {
+      // a,b = bottom edge; c,d = top edge (same side)
+      if (!flip) {
+        indices.push(a, b, c,  b, d, c);
+      } else {
+        indices.push(a, c, b,  b, c, d);
+      }
+    }
+
+    for (let li = 0; li < NL-1; li++) {
+      const b = li*4, t = (li+1)*4;  // base and top vert offsets for this pair
+
+      // Inner face (faces toward gap — toward -X for right wall, +X for left wall)
+      // Verts: b+0 (inner-front-bot), b+1 (inner-back-bot), t+0 (inner-front-top), t+1 (inner-back-top)
+      // Normal should point toward gap = -side X direction
+      // For side=+1 (right wall): normal points -X → wind CCW when viewed from -X
+      //   viewed from -X: b+0 is front-right, b+1 is front-left → CCW = b+0,t+0,b+1 then b+1,t+0,t+1
+      // For side=-1 (left wall): normal points +X → opposite winding
+      if (side === 1) {
+        indices.push(b+0, t+0, b+1,  b+1, t+0, t+1);
+      } else {
+        indices.push(b+0, b+1, t+0,  b+1, t+1, t+0);
+      }
+
+      // Front-Z side face (verts 0 and 2 per level — negative Z edge)
+      // For side=+1: face points -Z (front of column toward camera at some angles)
+      //   viewed from -Z: b+0 left, b+2 right → CCW = b+0,b+2,t+0 then b+2,t+2,t+0
+      if (side === 1) {
+        indices.push(b+0, b+2, t+0,  b+2, t+2, t+0);
+      } else {
+        indices.push(b+0, t+0, b+2,  b+2, t+0, t+2);
+      }
+
+      // Back-Z side face (verts 1 and 3 per level — positive Z edge)
+      if (side === 1) {
+        indices.push(b+1, t+1, b+3,  b+3, t+1, t+3);
+      } else {
+        indices.push(b+1, b+3, t+1,  b+3, t+3, t+1);
+      }
+
+      // Outer spine face (verts 2 and 3 per level — faces away from gap)
+      if (side === 1) {
+        indices.push(b+2, b+3, t+2,  b+3, t+3, t+2);
+      } else {
+        indices.push(b+2, t+2, b+3,  b+3, t+2, t+3);
+      }
+    }
+
+    // Bottom cap (close the base)
+    // Verts at level 0: 0(inner-front), 1(inner-back), 2(outer-front), 3(outer-back)
+    if (side === 1) {
+      indices.push(0, 2, 1,  1, 2, 3);
+    } else {
+      indices.push(0, 1, 2,  1, 3, 2);
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+    geo.setAttribute('uv',       new THREE.BufferAttribute(new Float32Array(uvs), 2));
+    geo.setAttribute('color',    new THREE.BufferAttribute(new Float32Array(colors), 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
+  }
+
   const COL_SPACING = 18;  // world units between column centers along Z
   const NUM_COLS = Math.floor(NUM_ROWS * ROW_DEPTH / COL_SPACING);
   const colMeshes = [];
@@ -8120,20 +8265,18 @@ function _createCanyonWalls() {
       const isGlacier = ci2 % 2 === 0;
       const cMat = isGlacier ? glacierMat : marbleMat;
 
-      // Column dimensions — vary width/height slightly per column
-      const colW  = 10 + rng3() * 8;   // 10–18 units wide
-      const colH  = 120 + rng3() * 60; // 120–180 units tall
-      const colD  = 14 + rng3() * 8;   // 14–22 units deep
-      const tiltX = (rng3()-0.5) * 0.18; // slight lean
-      const tiltZ = (rng3()-0.5) * 0.10;
+      // Column dimensions — vary per column
+      const colW  = 12 + rng3() * 8;   // 12–20 units wide (outer reach)
+      const colH  = 130 + rng3() * 60; // 130–190 units tall
+      const colD  = 16 + rng3() * 10;  // 16–26 units deep (Z extent)
+      const tiltX = (rng3()-0.5) * 0.14;
+      const tiltZ = (rng3()-0.5) * 0.08;
 
-      const geo = new THREE.BoxGeometry(colW, colH, colD, 1, 3, 1);
+      const geo = buildPrismGeo(colW, colH, colD, side);
       const mesh = new THREE.Mesh(geo, cMat);
-      mesh.position.set(
-        cx2 + side * (colW * 0.5),  // outer face sits at corridor edge
-        colH * 0.5,                  // bottom at waterline
-        zPos
-      );
+      // Position: inner face of column sits at corridor gap edge (cx2)
+      // Column builds outward from cx2, bottom at y=0 (waterline)
+      mesh.position.set(cx2, 0, zPos);
       mesh.rotation.x = tiltX;
       mesh.rotation.z = tiltZ;
       mesh.frustumCulled = true;
