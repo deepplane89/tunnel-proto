@@ -7654,11 +7654,13 @@ function _createCanyonWalls() {
   }
 
   const INIT_Z = T.spawnDepth || -300; // start far away so entrance is visible
+  // Pool must cover from INIT_Z all the way to DESPAWN_Z with no gaps
+  const autoPool = Math.ceil((DESPAWN_Z - INIT_Z) / SPACING) + 1;
 
   const chunks = { left: [], right: [] };
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
-    for (let i = 0; i < T.poolSize; i++) {
+    for (let i = 0; i < autoPool; i++) {
       const seed = i * 7 + (k === 'right' ? 100 : 0);
       chunks[k].push(makeSlab(side, seed, INIT_Z + i * SPACING, i));
     }
@@ -20881,8 +20883,8 @@ const _origUpdateShockwave = _updateShockwave;
       _jlTickCorridor(dt, state.speed);
     }
     _updateAsteroids(dt);
-    // Canyon corridor walls — runs in any mode when active
-    if (_canyonActive) {
+    // Canyon corridor walls — only update when actually playing
+    if (_canyonActive && state.phase === 'playing') {
       if (!_canyonWalls) _createCanyonWalls();
       _updateCanyonWalls(dt, state.speed);
     }
