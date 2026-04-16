@@ -18772,7 +18772,7 @@ function buildSkinTunerSliders() {
       const intRow = makeSlider('intensity', _jlIntensity, 0.1, 3.0, 0.05, v => {
         _jlIntensity = v;
       }, '#fa0');
-      panel.appendChild(intRow.row);
+      panel.appendChild(intRow);
 
       // Live readout: ramp time + active tracks
       const seqInfo = document.createElement('div');
