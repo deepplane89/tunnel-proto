@@ -12804,6 +12804,8 @@ function toggleMute() {
 //  GAME STATE TRANSITIONS
 // ═══════════════════════════════════════════════════
 let _skipL1Intro = false;  // set by startDeathRun() so startGame() skips L1 cinematic
+// Canyon-only test mode — activated by ?canyon=1 URL param, skips normal game flow
+const _canyonTestMode = new URLSearchParams(location.search).get('canyon') === '1';
 let _gameStarting = false; // reentry lock — prevents double-fire from simultaneous inputs
 
 // ── Retry with cinematic camera sweep (from game over) ──
@@ -13147,6 +13149,24 @@ function startGame() {
   // engine hum removed
 
   // ── L1 cinematic intro text (only on fresh game start at level 0, NOT on retry) ──
+  // ── Canyon test mode: skip normal game, boot straight into canyon corridor ──
+  if (_canyonTestMode) {
+    _skipL1Intro = true;   // suppress L1 cinematic
+    state._godMode = true; // auto god mode for testing
+    state._drL3MaxRows      = 750;
+    state.corridorRowsDone  = 0;
+    state.corridorSineT     = 0;
+    state.corridorSpawnZ    = -7;
+    state.corridorDelay     = 0;
+    state.corridorGapCenter = 0;
+    state.corridorGapDir    = 1;
+    _jlCorridor.active      = true;
+    _jlCorridor.type        = 'l3';
+    _jlCorridor.totalRows   = 750;
+    _canyonActive = true;
+    if (!_canyonWalls) _createCanyonWalls();
+  }
+
   if (state.currentLevelIdx === 0 && !_skipL1Intro && !state._tutorialActive && !state._jetLightningMode && !_retryIsFromDead) {
     state.introActive = true;   // blocks cone spawning
     state.thrusterPower = 0;    // thrusters off during prologue
