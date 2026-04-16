@@ -7648,6 +7648,33 @@ function _destroyCanyonWalls() {
   }
 }
 
+// Predict corridor gap-center N rows ahead of current state — pure math, no mutation.
+// Used by slab recycle to bake the X that will be correct when the ship arrives.
+function _canyonPredictCenter(rowsAhead) {
+  const rowsDone = (state.corridorRowsDone || 0) + rowsAhead;
+  if (rowsDone < CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS) return 0;
+  const curveRows = rowsDone - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS);
+  const ampT   = Math.min(1, curveRows / CORRIDOR_AMP_RAMP);
+  const amp    = CORRIDOR_AMP_START + (CORRIDOR_AMP_MAX - CORRIDOR_AMP_START) * (ampT * ampT);
+  const perT   = Math.min(1, curveRows / CORRIDOR_PERIOD_RAMP);
+  const period = CORRIDOR_PERIOD_START - (CORRIDOR_PERIOD_START - CORRIDOR_PERIOD_MIN) * (perT * perT);
+  // Advance phase from current sineT by rowsAhead steps
+  const sineT  = (state.corridorSineT || 0) + rowsAhead * (2 * Math.PI / period);
+  return amp * Math.sin(sineT);
+}
+
+function _canyonPredictHalfX(rowsAhead) {
+  const rowsDone = (state.corridorRowsDone || 0) + rowsAhead;
+  if (rowsDone < CORRIDOR_CLOSE_ROWS) {
+    const t = rowsDone / CORRIDOR_CLOSE_ROWS;
+    const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+    return CORRIDOR_WIDE_X + (CORRIDOR_NARROW_X - CORRIDOR_WIDE_X) * ease;
+  }
+  const curveRows = Math.max(0, rowsDone - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS));
+  const squeezeT  = Math.min(1, curveRows / CORRIDOR_AMP_RAMP);
+  return CORRIDOR_NARROW_X - (CORRIDOR_NARROW_X - 6) * (squeezeT * squeezeT);
+}
+
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || !_canyonActive) return;
   const T   = _canyonTuner;
@@ -7678,10 +7705,13 @@ function _updateCanyonWalls(dt, speed) {
         for (const om of meshes) if (om !== m && om.position.z < minZ) minZ = om.position.z;
         m.position.z = minZ - spacing;
 
-        // Bake X from current corridor state — same data the cone at this Z gets
-        const center  = state.corridorGapCenter || 0;
-        const halfX   = (_jlCorridor && _jlCorridor._lastHalfX != null)
-          ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
+        // Predictive bake: estimate center/halfX for when the ship reaches this slab.
+        // Slab is placed at minZ - spacing. Ship is at z≈3.9, speed≈72 units/s.
+        // Row spacing = 7 units → rows ahead ≈ distance / 7.
+        const slabZ    = minZ - spacing;
+        const rowsAhead = Math.max(0, Math.round((3.9 - slabZ) / 7));
+        const center   = _canyonPredictCenter(rowsAhead);
+        const halfX    = _canyonPredictHalfX(rowsAhead);
         m.userData.bakedX = (center + halfX * side) + footOff * side;
         m.position.x = m.userData.bakedX;
       } else {
