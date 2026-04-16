@@ -17597,8 +17597,6 @@ window.addEventListener('keydown', (e) => {
       _jlCorridor.type        = 'l3';
       _jlCorridor.totalRows   = 750;
       if (!_canyonWalls) _createCanyonWalls();
-      bloom.strength = 0.65;  // canyon needs stronger bloom for glacier glow
-      bloom.radius   = 0.45;  // wider halo around bright faces
       const w = _canyonWalls;
       const T = _canyonTuner;
       // Also log positions after 1 frame so _updateCanyonWalls has run
@@ -17636,8 +17634,6 @@ window.addEventListener('keydown', (e) => {
     } else {
       _destroyCanyonWalls();
       _jlStopCorridor();
-      bloom.strength = 0.35;  // restore default bloom
-      bloom.radius   = 0.25;
       console.log('[CANYON] OFF');
     }
   }
