@@ -7270,11 +7270,11 @@ function _updateTerrainWalls(dt, speed) {
 //  CANYON CORRIDOR WALLS
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
-  height:        130,   // towers far above camera (camera y=2.8, top at y=130)
+  height:        160,   // tall looming walls like AI pic
   tileLength:    175,
   segsX:         40,   // height segments — smoother cliff face
   segsZ:         100,
-  displacement:  8,    // slight rocky faceting — glacier-slab look
+  displacement:  18,   // dramatic faceting — angular glacier slab faces
   wallWidth:     12,   // thin top edge
   topRagged:     22,   // jagged fractured spires
   capHeight:     1.4,
@@ -7282,12 +7282,12 @@ const _canyonTuner = {
   fillLight:     0.4,
   scrollSpeed:   1.0,
   freezeWide:    false,
-  canyonHalfX:   18,
+  canyonHalfX:   13,  // tighter corridor — walls loom closer like AI pic
   // Texture — glacier/marble aesthetic matching AI pic
-  baseColor:     '#1a3050',  // deep blue base — visible after strata multiply
-  brightness:    0.85,       // wall body visible
-  gridColor:     '#c8eeff',  // near-white cool-tint grid lines (not saturated cyan)
-  gridOpacity:   0.30,       // subtle grid, not neon blasting
+  baseColor:     '#0a1828',  // very dark base — glacier slabs are self-lit bright
+  brightness:    0.90,       // emissiveIntensity drives glacier brightness
+  gridColor:     '#aae8ff',  // cool cyan grid on glacier slabs
+  gridOpacity:   0.22,       // grid visible but ice texture is the hero
   crackOpacity:  0.85,       // bold magenta veins
   slabCount:     4,
   gridLineW:     2.0,
@@ -7308,8 +7308,8 @@ const _canyonTuner = {
   corridorAmpRamp:  200,
   // Cliff strata — glacier: dark base, broad bright mid (frosty blue-white), hot rim
   strataBaseDark:   0.02,  // near-black at waterline
-  strataMidTone:    0.75,  // bright glacier face — dominant value, walls must be lit
-  strataRimBright:  1.5,   // rim blooms hot
+  strataMidTone:    0.85,  // glacier face — walls stay bright
+  strataRimBright:  1.6,   // rim blooms very hot
   strataRimCyan:    0.55,  // rim is mostly white with slight cyan tint
   strataSplit:      0.28,  // dark base only occupies bottom 28% — rest is bright glacier
   strataNoiseAmt:   0.08,  // slightly more facet noise for marble look
@@ -7379,37 +7379,58 @@ function _makeCanyonGridTexture() {
     const slabType = si % 2; // strict alternating: 0=bright diagonal-grid, 1=dark vein
 
     if (slabType === 0) {
-      // BRIGHT GRID SLAB — electric cyan base with diagonal X-pattern lines
-      // Flood this slab with a bright cyan glow
-      const gc = parseInt(T.gridColor.slice(1), 16);
-      const gr2 = (gc >> 16) & 0xff, gg2 = (gc >> 8) & 0xff, gb2 = gc & 0xff;
-      const glowAmt = T.gridGlow || 0;
-      // Solid cyan base
-      const baseAlpha = (0.4 + glowAmt * 0.5).toFixed(2);
-      ctx.fillStyle = `rgba(${gr2},${gg2},${gb2},${baseAlpha})`;
-      ctx.globalAlpha = 1;
-      ctx.fillRect(sx0, 0, slabW, h);
-      // Diagonal X-grid lines — clipped to this slab only
+      // GLACIER ICE SLAB — frosty blue-white with depth crevasses + diagonal compression lines + X grid
       ctx.save();
       ctx.beginPath(); ctx.rect(sx0, 0, slabW, h); ctx.clip();
-      ctx.strokeStyle = T.gridColor;
-      ctx.globalAlpha = T.gridOpacity;
+
+      // 1. Base: bright icy cyan-white fill
+      const iceGrad = ctx.createLinearGradient(sx0, 0, sx1, 0);
+      iceGrad.addColorStop(0,   'rgba(180,240,255,0.92)');
+      iceGrad.addColorStop(0.5, 'rgba(210,248,255,0.98)');
+      iceGrad.addColorStop(1,   'rgba(160,225,250,0.90)');
+      ctx.fillStyle = iceGrad; ctx.globalAlpha = 1;
+      ctx.fillRect(sx0, 0, slabW, h);
+
+      // 2. Depth crevasse pools — dark teal radial gradients punching inward
+      const numPools = 3 + Math.floor(srng() * 3);
+      for (let pi = 0; pi < numPools; pi++) {
+        const px2 = sx0 + (0.1 + srng() * 0.8) * slabW;
+        const py2 = (0.1 + srng() * 0.8) * h;
+        const pr  = slabW * (0.15 + srng() * 0.25);
+        const pg  = ctx.createRadialGradient(px2, py2, 0, px2, py2, pr);
+        pg.addColorStop(0,   'rgba(0,40,80,0.55)');
+        pg.addColorStop(0.5, 'rgba(0,60,100,0.25)');
+        pg.addColorStop(1,   'rgba(0,0,0,0)');
+        ctx.fillStyle = pg; ctx.globalAlpha = 1;
+        ctx.fillRect(sx0, 0, slabW, h);
+      }
+
+      // 3. Glacier flow striations — faint diagonal lines (compression lines in real ice)
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1.0;
+      ctx.globalAlpha = 1;
+      const striaStep = slabW / 6;
+      for (let d = -h; d < slabW + h; d += striaStep) {
+        ctx.beginPath();
+        ctx.moveTo(sx0 + d + srng()*12, 0);
+        ctx.lineTo(sx0 + d + h * 0.4 + srng()*18, h);
+        ctx.stroke();
+      }
+
+      // 4. Simple diagonal X-grid on top — clean, not too dense
+      const gc = parseInt(T.gridColor.slice(1), 16);
+      const gr2 = (gc >> 16) & 0xff, gg2 = (gc >> 8) & 0xff, gb2 = gc & 0xff;
+      ctx.strokeStyle = `rgb(${gr2},${gg2},${gb2})`;
+      ctx.globalAlpha = T.gridOpacity * 1.8; // boost opacity — glacier slabs need visible grid
       ctx.lineWidth = T.gridLineW;
-      const diagStep = slabW / Math.round(T.gridCols);
-      // Forward diagonals (top-left to bottom-right)
+      const diagStep = slabW / Math.max(2, Math.round(T.gridCols));
       for (let d = -h; d < slabW + h; d += diagStep) {
-        ctx.beginPath();
-        ctx.moveTo(sx0 + d, 0);
-        ctx.lineTo(sx0 + d + h, h);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx0 + d, 0); ctx.lineTo(sx0 + d + h, h); ctx.stroke();
       }
-      // Back diagonals (top-right to bottom-left)
       for (let d = -h; d < slabW + h; d += diagStep) {
-        ctx.beginPath();
-        ctx.moveTo(sx0 + d + h, 0);
-        ctx.lineTo(sx0 + d, h);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx0 + d + h, 0); ctx.lineTo(sx0 + d, h); ctx.stroke();
       }
+
       ctx.restore();
     } else {
       // DARK VEIN SLAB — near-black base with bold magenta lightning
