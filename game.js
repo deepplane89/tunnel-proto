@@ -7334,8 +7334,10 @@ function _makeCanyonGridTexture() {
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
 
-  // Transparent base — face color comes from MeshStandardMaterial.color
-  ctx.clearRect(0, 0, W, H);
+  // Base fill — dark teal so the wall is always visible
+  ctx.fillStyle = '#1a4a60';
+  ctx.globalAlpha = 1;
+  ctx.fillRect(0, 0, W, H);
 
   // Seeded RNG
   let _s = 42;
@@ -7460,21 +7462,12 @@ function _createCanyonWalls() {
   const T  = _canyonTuner;
   const gridTex = _makeCanyonGridTexture();
 
-  // Bump scene ambient while canyon is active so faces catching no direct
-  // light still read as dark-teal rather than pure black
-  ambientLight.intensity += T.ambientBoost;
-
-  // Single material — flatShading:true so each triangle gets its own flat
-  // normal → different brightness per face from scene directional light
-  const mat = new THREE.MeshStandardMaterial({
-    color:             T.color,
-    emissive:          T.emissive,
-    emissiveMap:       gridTex,
-    emissiveIntensity: T.emissiveInt,
-    roughness:         T.roughness,
-    metalness:         T.metalness,
-    flatShading:       true,
-    side:              THREE.DoubleSide,
+  // MeshBasicMaterial — self-lit, no lighting dependency.
+  // Always visible regardless of face direction. Z displacement creates
+  // visual depth via texture stretching/compression across angled faces.
+  const mat = new THREE.MeshBasicMaterial({
+    map:  gridTex,
+    side: THREE.DoubleSide,
   });
 
   const SPACING = T.chunkW * 1.02;
@@ -7513,8 +7506,6 @@ function _createCanyonWalls() {
 
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
-  // Restore ambient light
-  ambientLight.intensity -= _canyonTuner.ambientBoost;
   _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
   if (_canyonWalls.mat)     _canyonWalls.mat.dispose();
   if (_canyonWalls.gridTex) _canyonWalls.gridTex.dispose();
