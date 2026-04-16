@@ -7819,7 +7819,7 @@ function _createCanyonWalls() {
   // Mirrors spawnCorridorRow logic exactly — same constants, same math.
   // Each row gets its corridorGapCenter and halfX baked into vertex positions
   // so the mesh curves match the cone corridor with zero per-frame snapping.
-  const NUM_ROWS = 350;
+  const NUM_ROWS = 750;  // match JL L3 corridor totalRows — full corridor duration
   const ROW_DEPTH = 7; // world units per row — matches cone row spacing
   const centers = new Float32Array(NUM_ROWS);
   const halfXs  = new Float32Array(NUM_ROWS);
@@ -17593,6 +17593,7 @@ window.addEventListener('keydown', (e) => {
       state.corridorDelay     = 0;   // no delay — geometry is already there
       state.corridorGapCenter = 0;
       state.corridorGapDir    = 1;
+      state._drL3MaxRows      = 750; // exit ramp fires at row 750, matching ribbon length
       _jlCorridor.active      = true;
       _jlCorridor.type        = 'l3';
       _jlCorridor.totalRows   = 750;
