@@ -7303,6 +7303,11 @@ const _canyonTuner = {
   entranceSlabs:  3,    // how many leading slabs use entranceHalfX before switching to halfXOverride
   // How far away the canyon spawns (larger = see entrance from farther away)
   spawnDepth:   -300,
+  // Canyon-own sine wave (independent of L3 corridor)
+  sineIntensity: 0.0,   // master multiplier 0=off, 1=full
+  sineAmp:       30.0,  // peak swing in world units
+  sinePeriod:    180.0, // rows per full cycle (larger = lazier curves)
+  sineSpeed:     1.0,   // how fast phase advances per slab scroll tick
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
@@ -7312,6 +7317,7 @@ let _canyonSqueezeZ   = 0;
 let _canyonSineT         = 0;
 let _canyonSineRows      = 0;
 let _canyonSineZ         = 0;
+let _canyonSinePhase     = 0; // canyon-own sine accumulator
 let _canyonWasCorridor   = false;
 let _canyonDiagFrame     = 0;     // frame counter for periodic diagnostic log
 // Call window._canyonLog() from console to get a full snapshot of canyon state + tuner
@@ -7691,6 +7697,7 @@ function _createCanyonWalls() {
 
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
+  _canyonSinePhase = 0;
   _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
   ['cyanMat','darkMat','holoMat'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
   ['cyanTex','darkTex'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
@@ -7704,7 +7711,11 @@ function _destroyCanyonWalls() {
 }
 
 function _canyonPredictCenter(rowsAhead) {
-  return state.corridorGapCenter || 0;
+  const T = _canyonTuner;
+  const base = state.corridorGapCenter || 0;
+  if (T.sineIntensity <= 0) return base;
+  const phase = _canyonSinePhase + rowsAhead * (2 * Math.PI / T.sinePeriod) * T.sineSpeed;
+  return base + T.sineAmp * T.sineIntensity * Math.sin(phase);
 }
 function _canyonPredictHalfX(rowsAhead) {
   return _canyonTuner.halfXOverride;
@@ -7718,6 +7729,8 @@ function _updateCanyonWalls(dt, speed) {
   // Tick holographic overlay shader time
   if (_canyonWalls.holoMat) _canyonWalls.holoMat.uniforms.time.value += dt;
   const spacing = _canyonWalls._spacing;
+  // Advance canyon sine phase proportional to world scroll
+  if (T.sineIntensity > 0) _canyonSinePhase += (scroll / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
 
   // ── Baked-X corridor tracking ───────────────────────────────────────────
   // Each slab gets its X baked at spawn/recycle time from corridorGapCenter
@@ -17536,6 +17549,12 @@ window.addEventListener('keydown', (e) => {
     slider('Entrance width', 'entranceHalfX',  1,  600, 1,   'live');
     slider('Entrance slabs', 'entranceSlabs',  1,   20, 1,   'live');
     slider('Spawn depth',    'spawnDepth',  -600, -100, 10,  'geo');
+
+    hdr('— SINE CURVES —');
+    slider('Intensity',      'sineIntensity',  0,    1, 0.01, 'live');
+    slider('Amplitude',      'sineAmp',        1,  120, 1,   'live');
+    slider('Period (rows)',   'sinePeriod',    20,  600, 5,   'live');
+    slider('Speed',          'sineSpeed',    0.1,    5, 0.1, 'live');
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
