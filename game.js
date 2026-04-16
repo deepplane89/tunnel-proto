@@ -7270,24 +7270,32 @@ function _updateTerrainWalls(dt, speed) {
 //  CANYON CORRIDOR WALLS
 // ═══════════════════════════════════════════════════
 const _canyonTuner = {
-  // Chunk geometry — PlaneGeometry rotated vertical, per-vert Z displaced
-  chunkH:        120,   // height of each chunk
-  chunkW:        24,    // Z-width of each chunk
-  chunkDepth:    30,    // max Z displacement (how far verts jut in/out)
-  segsH:         10,    // vertical segments — more = more face variety
-  segsW:         5,     // horizontal segments
-  poolSize:      14,    // chunks per side
-  // Appearance
-  color:         0x2a7090,   // mid teal — bright enough to catch light
-  emissive:      0x001828,
-  emissiveInt:   0.6,
-  roughness:     0.75,
-  metalness:     0.10,
-  // Canyon fill light
-  ambientBoost:  0.35,  // extra ambient added when canyon is active
+  // Thick-block slab geometry (dialled in sandbox)
+  slabH:        140,    // height
+  slabW:        100,    // Z-length per slab
+  slabThick:     68,    // X depth of block
+  cols:           5,    // Z subdivisions
+  rows:           6,    // Y subdivisions
+  disp:           4.0,  // inner-face X jitter amount
+  snap:           0.7,  // quantize divisor
+  // Profile shape (foot→sweep→mid→crest outward X)
+  footX:        -9.5,
+  sweepX:        4.0,
+  midX:         17.0,
+  crestX:       20.0,
+  poolSize:      10,    // slabs per side
   // Scroll
   scrollSpeed:   1.0,
   snapRate:      6.0,
+  // Cyan slab material
+  cyanEmi:       1.1,   // emissive intensity
+  cyanRgh:       0.4,   // roughness
+  // Holo overlay
+  holoOpacity:   0.5,
+  holoGrid:      6.0,
+  // Dark slab
+  darkCrkCount:  6,
+  darkCrkBright: 1.0,
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
@@ -7327,155 +7335,268 @@ window._canyonLog = function() {
   return out;
 };
 
-function _makeCanyonGridTexture() {
-  const T  = _canyonTuner;
-  const W  = 512, H = 512;
+function _makeCanyonCyanTex(seed) {
   const cv = document.createElement('canvas');
-  cv.width = W; cv.height = H;
+  cv.width = 512; cv.height = 512;
   const ctx = cv.getContext('2d');
-
-  // Base fill — dark teal so the wall is always visible
-  ctx.fillStyle = '#1a4a60';
-  ctx.globalAlpha = 1;
-  ctx.fillRect(0, 0, W, H);
-
-  // Seeded RNG
-  let _s = 42;
-  const rng = () => { _s = (_s * 16807) % 2147483647; return (_s-1)/2147483646; };
-
-  // Sparse diagonal grid lines
-  ctx.strokeStyle = T.gridColor;
-  ctx.lineWidth   = 1.5;
-  const step = 80;
-  for (let i = -H; i < W + H; i += step) {
-    ctx.globalAlpha = T.gridOpacity * (0.6 + rng() * 0.4);
-    ctx.beginPath();
-    ctx.moveTo(i, 0); ctx.lineTo(i + H, H);
-    ctx.stroke();
-  }
-  // A few horizontal hairlines
-  for (let j = 0; j < 6; j++) {
-    const y = rng() * H;
-    ctx.globalAlpha = T.gridOpacity * 0.4;
-    ctx.lineWidth = 0.8;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-  }
-
-  // Magenta cracks — sparse, jagged, per-face contained
-  ctx.lineWidth = 1.2;
-  for (let ci = 0; ci < 7; ci++) {
-    const sx = rng() * W, sy = rng() * H;
-    ctx.strokeStyle = rng() > 0.4 ? T.crackColor : '#cc44ff';
-    ctx.globalAlpha = T.crackOpacity * (0.5 + rng() * 0.5);
-    ctx.lineWidth   = 0.8 + rng() * 2.0;
-    ctx.beginPath(); ctx.moveTo(sx, sy);
-    let cx = sx, cy = sy;
-    const segs = 3 + Math.floor(rng() * 4);
-    for (let s = 0; s < segs; s++) {
-      cx += (rng() - 0.35) * 80; cy += (rng() * 0.7 + 0.1) * 60;
-      ctx.lineTo(Math.max(0,Math.min(W,cx)), Math.max(0,Math.min(H,cy)));
-    }
-    ctx.stroke();
-  }
-
+  ctx.fillStyle = '#030b14';
+  ctx.fillRect(0,0,512,512);
+  const streak = ctx.createLinearGradient(0,0,300,512);
+  streak.addColorStop(0,   'rgba(120,240,255,0.95)');
+  streak.addColorStop(0.15,'rgba(60,200,255,0.70)');
+  streak.addColorStop(0.4, 'rgba(20,120,200,0.30)');
+  streak.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = streak;
+  ctx.fillRect(0,0,512,512);
   const tex = new THREE.CanvasTexture(cv);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   return tex;
 }
 
-function _buildCanyonSlabGeo(seed, side) {
-  // Vertical plane with per-vertex random Z displacement.
-  // Key insight: each vertex gets an INDEPENDENT Z offset, so adjacent
-  // triangles face completely different directions. flatShading then gives
-  // each triangle a distinct brightness from the directional key light.
-  // This is what creates the AI-ref cliff face look.
-
-  const T = _canyonTuner;
-  let _s = (Math.abs(seed) * 9301 + 49297) % 233280;
-  const rng = () => { _s = (_s * 9301 + 49297) % 233280; return _s / 233280; };
-
-  const H     = T.chunkH * (0.85 + rng() * 0.30);
-  const W     = T.chunkW * (0.90 + rng() * 0.20);
-  const segH  = T.segsH;
-  const segW  = T.segsW;
-  const vCols = segW + 1;
-  const vRows = segH + 1;
-  const D     = T.chunkDepth;
-
-  const pos = new Float32Array(vCols * vRows * 3);
-  const uvs = new Float32Array(vCols * vRows * 2);
-  const idx = [];
-
-  for (let row = 0; row < vRows; row++) {
-    const v  = row / segH;
-    const y  = v * H;
-    // Top edge ragged: extra Z jitter at top
-    const topFactor = v > 0.85 ? (v - 0.85) / 0.15 : 0;
-
-    for (let col = 0; col < vCols; col++) {
-      const u  = col / segW;
-      // Per-vertex X displacement — pushes each vert in/out along the wall depth.
-      // This is what creates angled faces. Adjacent verts at different X depths
-      // mean adjacent triangles face different directions → different brightness.
-      const xDisp   = (rng() - 0.5) * 2.0 * D;        // large boulder-scale
-      const xDetail = (rng() - 0.5) * 2.0 * D * 0.35; // fine detail
-      const xTop    = topFactor * (rng() - 0.3) * D * 1.2; // ragged top
-
-      const i = row * vCols + col;
-      pos[i*3+0] = (xDisp + xDetail + xTop) * side; // X = depth into wall
-      pos[i*3+1] = y;
-      pos[i*3+2] = u * W; // Z = along corridor, clean progression
-      uvs[i*2+0] = u;
-      uvs[i*2+1] = v;
-    }
+function _makeCanyonDarkTex(seed) {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 512;
+  const ctx = cv.getContext('2d');
+  let s = (seed|0) || 1;
+  const rng = () => { s=(s*9301+49297)%233280; return s/233280; };
+  ctx.fillStyle = '#030608';
+  ctx.fillRect(0,0,512,512);
+  // Subtle marble veins
+  ctx.strokeStyle = '#0a1525';
+  for(let i=0;i<6;i++){
+    ctx.globalAlpha=0.3+rng()*0.3; ctx.lineWidth=6+rng()*12;
+    ctx.beginPath();
+    let x=rng()*512,y=0; ctx.moveTo(x,y);
+    for(let sg=0;sg<8;sg++){ x=Math.max(0,Math.min(512,x+(rng()-0.5)*80)); y=Math.min(512,y+rng()*70+10); ctx.lineTo(x,y); }
+    ctx.stroke();
   }
-
-  // Quads — winding so inner face (facing corridor, -X for right wall) is front
-  for (let row = 0; row < segH; row++) {
-    for (let col = 0; col < segW; col++) {
-      const a = row * vCols + col;
-      const b = a + 1;
-      const c = a + vCols;
-      const d = c + 1;
-      if (side === 1) {
-        // Right wall — inner face faces -X (toward ship)
-        idx.push(a, c, b,  b, c, d);
-      } else {
-        // Left wall — inner face faces +X (toward ship)
-        idx.push(a, b, c,  b, d, c);
+  ctx.globalAlpha=1;
+  // Magenta cracks — horizontal
+  const _crk = _canyonTuner.darkCrkCount || 6;
+  const _crkB = _canyonTuner.darkCrkBright !== undefined ? _canyonTuner.darkCrkBright : 1.0;
+  for(let ci=0;ci<_crk;ci++){
+    const bright=rng()>0.4;
+    ctx.strokeStyle=bright?'#ff00cc':'#cc44ff';
+    ctx.shadowColor='#ff00cc'; ctx.shadowBlur=bright?(14*_crkB):(6*_crkB);
+    ctx.globalAlpha=(0.7+rng()*0.3)*_crkB; ctx.lineWidth=1.5+rng()*3.0;
+    ctx.beginPath();
+    let x=rng()*60+4, y=rng()*480+16; ctx.moveTo(x,y);
+    for(let sg=0;sg<5+Math.floor(rng()*5);sg++){
+      x=Math.min(508,x+rng()*80+15);
+      y=Math.max(4,Math.min(508,y+(rng()-0.3)*60));
+      ctx.lineTo(x,y);
+      if(rng()>0.7){
+        ctx.save(); ctx.beginPath(); ctx.moveTo(x,y);
+        ctx.lineTo(Math.min(508,x+rng()*50+10),Math.max(4,Math.min(508,y+(rng()-0.5)*50)));
+        ctx.globalAlpha=(0.4+rng()*0.3); ctx.lineWidth=0.8+rng()*1.5; ctx.stroke(); ctx.restore();
       }
+      if(x>=504) break;
     }
+    ctx.stroke();
+  }
+  ctx.shadowBlur=0; ctx.globalAlpha=1;
+  const tex = new THREE.CanvasTexture(cv);
+  return tex;
+}
+
+function _buildCanyonSlabGeo(seed) {
+  // Thick rectangular block: flat back face, angular inner face, profile-shaped cross-section.
+  // Inner face verts get independent X jitter + quantized snap → flat crystalline facets.
+  // Non-indexed triangle soup → computeVertexNormals gives true flat normals per face.
+  const T = _canyonTuner;
+  let s = (seed|0) || 1;
+  const rng = () => { s=(s*9301+49297)%233280; return s/233280; };
+
+  const H     = T.slabH;
+  const W     = T.slabW;
+  const THICK = T.slabThick;
+  const COLS  = T.cols;
+  const ROWS  = T.rows;
+  const DISP  = T.disp;
+  const SNAP  = T.snap;
+
+  function profileX(v) {
+    if(v < 0.15) return T.footX  + v/0.15*(T.sweepX - T.footX);
+    if(v < 0.45) return T.sweepX + (v-0.15)/0.30*(T.midX - T.sweepX);
+    if(v < 0.85) return T.midX   + (v-0.45)/0.40*(T.crestX - T.midX);
+    return T.crestX;
   }
 
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('uv',       new THREE.BufferAttribute(uvs, 2));
-  geo.setIndex(idx);
-  geo.computeVertexNormals(); // needed for MeshStandardMaterial lighting
+  const innerX=[],innerY=[],innerZ=[];
+  for(let r=0;r<=ROWS;r++){
+    for(let c=0;c<=COLS;c++){
+      const v=r/ROWS;
+      const base=profileX(v);
+      let x=base+(rng()-0.5)*2.0*DISP;
+      if(v>0.8) x+=(rng()-0.4)*DISP*(v-0.8)/0.2*2.0;
+      x=Math.round(x*SNAP)/SNAP;
+      const y=v*H+(v>0.85?(rng()-0.4)*H*0.18:0);
+      innerX.push(x);
+      innerY.push(Math.round(y*1.5)/1.5);
+      innerZ.push(c/COLS*W);
+    }
+  }
+  const idxf=(r,c)=>r*(COLS+1)+c;
+  const pos=[],uvs=[];
+  function tri(ax,ay,az,bx,by,bz,cx,cy,cz,u0,v0,u1,v1,u2,v2){
+    pos.push(ax,ay,az,bx,by,bz,cx,cy,cz);
+    uvs.push(u0,v0,u1,v1,u2,v2);
+  }
+  // Inner face
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const i00=idxf(r,c),i10=idxf(r,c+1),i01=idxf(r+1,c),i11=idxf(r+1,c+1);
+    const u0=c/COLS,u1=(c+1)/COLS,v0=r/ROWS,v1=(r+1)/ROWS;
+    tri(innerX[i00],innerY[i00],innerZ[i00],innerX[i01],innerY[i01],innerZ[i01],innerX[i10],innerY[i10],innerZ[i10],u0,v0,u0,v1,u1,v0);
+    tri(innerX[i10],innerY[i10],innerZ[i10],innerX[i01],innerY[i01],innerZ[i01],innerX[i11],innerY[i11],innerZ[i11],u1,v0,u0,v1,u1,v1);
+  }
+  // Back face
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const z0=c/COLS*W,z1=(c+1)/COLS*W,y0=r/ROWS*H,y1=(r+1)/ROWS*H;
+    const u0=c/COLS,u1=(c+1)/COLS,v0=r/ROWS,v1=(r+1)/ROWS;
+    tri(THICK,y0,z0,THICK,y0,z1,THICK,y1,z0,u0,v0,u1,v0,u0,v1);
+    tri(THICK,y0,z1,THICK,y1,z1,THICK,y1,z0,u1,v0,u1,v1,u0,v1);
+  }
+  // Bottom
+  for(let c=0;c<COLS;c++){
+    const z0=c/COLS*W,z1=(c+1)/COLS*W,x0=innerX[idxf(0,c)],x1=innerX[idxf(0,c+1)];
+    const u0=c/COLS,u1=(c+1)/COLS;
+    tri(x0,0,z0,THICK,0,z0,x1,0,z1,u0,0,u0,0,u1,0);
+    tri(THICK,0,z0,THICK,0,z1,x1,0,z1,u0,0,u1,0,u1,0);
+  }
+  // Top crest
+  for(let c=0;c<COLS;c++){
+    const z0=c/COLS*W,z1=(c+1)/COLS*W;
+    const x0i=idxf(ROWS,c),x1i=idxf(ROWS,c+1);
+    const x0=innerX[x0i],y0=innerY[x0i],x1=innerX[x1i],y1=innerY[x1i];
+    const backY=H*(0.92+rng()*0.08);
+    const u0=c/COLS,u1=(c+1)/COLS;
+    tri(x0,y0,z0,x1,y1,z1,THICK,backY,z0,u0,1,u1,1,u0,0.8);
+    tri(x1,y1,z1,THICK,backY,z1,THICK,backY,z0,u1,1,u1,0.8,u0,0.8);
+  }
+  // Near cap
+  for(let r=0;r<ROWS;r++){
+    const y0=innerY[idxf(r,0)],y1=innerY[idxf(r+1,0)],ix0=innerX[idxf(r,0)],ix1=innerX[idxf(r+1,0)];
+    const v0=r/ROWS,v1=(r+1)/ROWS;
+    tri(ix0,y0,0,THICK,y0,0,ix1,y1,0,0,v0,1,v0,0,v1);
+    tri(THICK,y0,0,THICK,y1,0,ix1,y1,0,1,v0,1,v1,0,v1);
+  }
+  // Far cap
+  for(let r=0;r<ROWS;r++){
+    const y0=innerY[idxf(r,COLS)],y1=innerY[idxf(r+1,COLS)],ix0=innerX[idxf(r,COLS)],ix1=innerX[idxf(r+1,COLS)];
+    const v0=r/ROWS,v1=(r+1)/ROWS;
+    tri(THICK,y0,W,ix0,y0,W,THICK,y1,W,1,v0,0,v0,1,v1);
+    tri(ix0,y0,W,ix1,y1,W,THICK,y1,W,0,v0,0,v1,1,v1);
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));
+  geo.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(uvs),2));
+  geo.computeVertexNormals();
   return geo;
 }
 
 function _createCanyonWalls() {
   if (_canyonWalls) return;
-  const T  = _canyonTuner;
-  const gridTex = _makeCanyonGridTexture();
+  const T = _canyonTuner;
 
-  // MeshBasicMaterial — self-lit, no lighting dependency.
-  // Always visible regardless of face direction. Z displacement creates
-  // visual depth via texture stretching/compression across angled faces.
-  const mat = new THREE.MeshBasicMaterial({
-    map:  gridTex,
-    side: THREE.DoubleSide,
+  // Two slab types: cyan (MeshPhysical + holo overlay) and dark (MeshStandard + veins)
+  const cyanTex = _makeCanyonCyanTex(1);
+  const darkTex = _makeCanyonDarkTex(2);
+
+  const cyanMat = new THREE.MeshPhysicalMaterial({
+    color:              new THREE.Color(0x04d4f0),
+    metalness:          0.0,
+    roughness:          T.cyanRgh,
+    ior:                1.22,
+    reflectivity:       0.55,
+    clearcoat:          0.65,
+    clearcoatRoughness: 0.22,
+    emissive:           new THREE.Color(0x6ef2ff),
+    emissiveMap:        cyanTex,
+    emissiveIntensity:  T.cyanEmi,
+    transparent:        false,
+    flatShading:        true,
+    side:               THREE.DoubleSide,
   });
 
-  const SPACING = T.chunkW * 1.02;
+  const darkMat = new THREE.MeshStandardMaterial({
+    color:             new THREE.Color(0x060c14),
+    roughness:         0.85,
+    metalness:         0.05,
+    emissive:          new THREE.Color(0xff00cc),
+    emissiveMap:       darkTex,
+    emissiveIntensity: 0.9,
+    flatShading:       true,
+    side:              THREE.DoubleSide,
+  });
 
-  function makeChunk(side, seed, zPos) {
-    const geo  = _buildCanyonSlabGeo(seed, side);
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.z = zPos;
+  // Holographic grid overlay material (additive, no depth write)
+  const holoMat = new THREE.ShaderMaterial({
+    uniforms: {
+      time:    { value: 0 },
+      opacity: { value: T.holoOpacity },
+      color:   { value: new THREE.Color(0x7fd6ff) },
+      gridSz:  { value: T.holoGrid },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vPosW;
+      varying vec3 vNormW;
+      void main(){
+        vUv   = uv;
+        vPosW = (modelMatrix*vec4(position,1.0)).xyz;
+        vNormW= normalize((modelMatrix*vec4(normal,0.0)).xyz);
+        gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);
+      }`,
+    fragmentShader: `
+      varying vec2 vUv;
+      varying vec3 vPosW;
+      varying vec3 vNormW;
+      uniform float time;
+      uniform float opacity;
+      uniform vec3  color;
+      uniform float gridSz;
+      void main(){
+        vec2 g = vUv * gridSz;
+        float d1 = abs(fract((g.x+g.y)*0.5)-0.5);
+        float d2 = abs(fract((g.x-g.y)*0.5)-0.5);
+        float grid = clamp(step(d1,0.04)+step(d2,0.04),0.0,1.0);
+        float fr = clamp(0.08 - dot(normalize(cameraPosition-vPosW),vNormW)*(1.6-0.12),0.0,0.25);
+        float bright = mix(0.18, 0.45, vUv.y);
+        vec3 col = color*(grid*bright + fr);
+        gl_FragColor = vec4(col, opacity*(grid*0.9+fr*0.5));
+      }`,
+    transparent: true,
+    depthWrite:  false,
+    blending:    THREE.AdditiveBlending,
+    side:        THREE.DoubleSide,
+  });
+
+  // Canyon-scoped side directional light — removed in _destroyCanyonWalls
+  const canyonLight = new THREE.DirectionalLight(0xc8f0ff, 4.0);
+  canyonLight.position.set(-2, 5, 3);
+  scene.add(canyonLight);
+
+  const SPACING  = T.slabW;          // slabs butt up flush
+  const FOOT_OFF = Math.abs(T.footX); // foot inset offset so visual edge = hitbox edge
+
+  function makeSlab(side, seed, zPos, idx) {
+    const isCyan = (idx % 2 === 0);
+    const geo    = _buildCanyonSlabGeo(seed);
+
+    // side=1 → right wall (geometry grows in +X, inner face at x≈footX)
+    // side=-1 → left wall  (mirror by scale.x = -1)
+    const mesh = new THREE.Mesh(geo, isCyan ? cyanMat : darkMat);
+    mesh.scale.x     = side;         // mirrors left wall
+    mesh.position.z  = zPos;
     mesh.frustumCulled = false;
     scene.add(mesh);
+
+    // Holographic overlay on cyan slabs only
+    if (isCyan) {
+      const holo = new THREE.Mesh(geo, holoMat);
+      holo.scale.set(1.01, 1.0, 1.0); // tiny offset so it renders on top
+      mesh.add(holo);                  // child — moves with parent automatically
+    }
+
     return mesh;
   }
 
@@ -7484,29 +7605,33 @@ function _createCanyonWalls() {
     const side = k === 'left' ? -1 : 1;
     for (let i = 0; i < T.poolSize; i++) {
       const seed = i * 7 + (k === 'right' ? 100 : 0);
-      chunks[k].push(makeChunk(side, seed, SPAWN_Z + i * SPACING));
+      chunks[k].push(makeSlab(side, seed, SPAWN_Z + i * SPACING, i));
     }
   });
 
   const gapCenter = state.corridorGapCenter || 0;
-  chunks.left.forEach(m  => { m.position.x = gapCenter - 80; });
-  chunks.right.forEach(m => { m.position.x = gapCenter + 80; });
+  // Offset by FOOT_OFF so the foot (visual inner edge) lands exactly at gapEdge
+  chunks.left.forEach(m  => { m.position.x = (gapCenter - CORRIDOR_NARROW_X) - FOOT_OFF; });
+  chunks.right.forEach(m => { m.position.x = (gapCenter + CORRIDOR_NARROW_X) + FOOT_OFF; });
 
   _canyonWalls = {
-    strips:   [...chunks.left, ...chunks.right],
-    left:     chunks.left,
-    right:    chunks.right,
-    mat,
-    gridTex,
-    _spacing: SPACING,
+    strips:       [...chunks.left, ...chunks.right],
+    left:         chunks.left,
+    right:        chunks.right,
+    cyanMat, darkMat, holoMat,
+    cyanTex, darkTex,
+    canyonLight,
+    _spacing:     SPACING,
+    _footOff:     FOOT_OFF,
   };
 }
 
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
-  if (_canyonWalls.mat)     _canyonWalls.mat.dispose();
-  if (_canyonWalls.gridTex) _canyonWalls.gridTex.dispose();
+  ['cyanMat','darkMat','holoMat'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
+  ['cyanTex','darkTex'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
+  if (_canyonWalls.canyonLight) scene.remove(_canyonWalls.canyonLight);
   _canyonWalls = null;
   if (_canyonFillLight) {
     if (_canyonFillLight.lights) _canyonFillLight.lights.forEach(l => scene.remove(l));
@@ -7520,6 +7645,8 @@ function _updateCanyonWalls(dt, speed) {
   const T   = _canyonTuner;
   const spd = (speed && speed > 1) ? speed : BASE_SPEED;
   const scroll  = spd * dt * T.scrollSpeed;
+  // Tick holographic overlay shader time
+  if (_canyonWalls.holoMat) _canyonWalls.holoMat.uniforms.time.value += dt;
   const spacing = _canyonWalls._spacing;
 
   const gapCenter = state.corridorGapCenter || 0;
@@ -7527,9 +7654,11 @@ function _updateCanyonWalls(dt, speed) {
     ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
 
   ['left','right'].forEach(k => {
-    const side   = k === 'left' ? -1 : 1;
-    const edgeX  = gapCenter + gapHalfX * side;
-    const meshes = _canyonWalls[k];
+    const side    = k === 'left' ? -1 : 1;
+    const edgeX   = gapCenter + gapHalfX * side;
+    const footOff = (_canyonWalls._footOff || 0) * side; // push mesh outward so foot lands at edge
+    const targetX = edgeX + footOff;
+    const meshes  = _canyonWalls[k];
 
     meshes.forEach(m => {
       m.position.z += scroll;
@@ -7539,10 +7668,10 @@ function _updateCanyonWalls(dt, speed) {
         let minZ = Infinity;
         for (const om of meshes) if (om !== m && om.position.z < minZ) minZ = om.position.z;
         m.position.z = minZ - spacing;
-        m.position.x = edgeX; // snap X on recycle
+        m.position.x = targetX; // snap X on recycle
       } else {
         // Smooth lateral tracking while in view
-        m.position.x += (edgeX - m.position.x) * Math.min(1, T.snapRate * dt);
+        m.position.x += (targetX - m.position.x) * Math.min(1, T.snapRate * dt);
       }
     });
   });
@@ -17226,6 +17355,20 @@ window.addEventListener('keydown', (e) => {
       vl.textContent = sl.value;
       if (mode === 'geo') rebuildGeo();
       else if (mode === 'tex') rebuildTex();
+      else if (mode === 'live-cyan') {
+        if (_canyonWalls && _canyonWalls.cyanMat) {
+          _canyonWalls.cyanMat.emissiveIntensity = T.cyanEmi;
+          _canyonWalls.cyanMat.roughness = T.cyanRgh;
+          _canyonWalls.cyanMat.needsUpdate = true;
+        }
+      } else if (mode === 'live-holo') {
+        if (_canyonWalls && _canyonWalls.holoMat) {
+          _canyonWalls.holoMat.uniforms.opacity.value = T.holoOpacity;
+          _canyonWalls.holoMat.uniforms.gridSz.value  = T.holoGrid;
+        }
+      } else if (mode === 'dark-tex') {
+        rebuildDarkTex();
+      }
       // 'live' — nothing extra needed, update loop reads T directly
     });
     row.appendChild(lbl); row.appendChild(sl); row.appendChild(vl);
@@ -17264,6 +17407,15 @@ window.addEventListener('keydown', (e) => {
     panel.appendChild(row);
   }
 
+  function rebuildDarkTex() {
+    if (!_canyonWalls) return;
+    const newTex = _makeCanyonDarkTex(2);
+    _canyonWalls.darkMat.emissiveMap = newTex;
+    _canyonWalls.darkMat.needsUpdate = true;
+    if (_canyonWalls.darkTex) _canyonWalls.darkTex.dispose();
+    _canyonWalls.darkTex = newTex;
+  }
+
   function buildPanel() {
     panel.innerHTML = '';
     const title = document.createElement('div');
@@ -17272,66 +17424,36 @@ window.addEventListener('keydown', (e) => {
     panel.appendChild(title);
 
     hdr('— GEOMETRY —');
-    slider('height',        'height',      20, 200, 1,    'geo');
-    slider('canyonHalfX',   'canyonHalfX', 10, 120, 5,    'geo');
-    slider('wallWidth',     'wallWidth',   10, 200, 5,    'geo');
-    slider('displacement',  'displacement', 0, 100, 1,    'geo');
-    slider('topRagged',     'topRagged',   0,  80, 1,    'geo');
-    slider('slopeLean',     'slopeLean',   0,  5,  0.05, 'geo');
-    slider('capHeight',     'capHeight',   0,  3,  0.05, 'geo');
-    slider('segsX',         'segsX',       2,  80, 1,    'geo');
-    slider('segsZ',         'segsZ',       4, 120, 2,    'geo');
+    slider('Height',        'slabH',       60, 260,  5,    'geo');
+    slider('Width (Z)',     'slabW',       40, 200,  5,    'geo');
+    slider('Thickness',     'slabThick',    5, 120,  1,    'geo');
+    slider('Cols',          'cols',         2,  14,  1,    'geo');
+    slider('Rows',          'rows',         2,  14,  1,    'geo');
+    slider('Displacement',  'disp',         0,  20,  0.5,  'geo');
+    slider('Snap',          'snap',       0.1,   3,  0.1,  'geo');
 
-    hdr('— TEXTURE —');
-    colorPicker('baseColor',  'baseColor',  'tex');
-    slider('brightness',    'brightness',   0, 2,   0.05, 'tex');
-    colorPicker('gridColor',  'gridColor',  'tex');
-    slider('gridOpacity',   'gridOpacity',  0, 1,   0.05, 'tex');
-    slider('crackOpacity',  'crackOpacity', 0, 1,   0.05, 'tex');
-    slider('slabCount',     'slabCount',    1, 10,  1,    'tex');
-    slider('dividerOpacity','dividerOpacity',0, 1,  0.05, 'tex');
+    hdr('— PROFILE —');
+    slider('Foot X',        'footX',      -30,  40,  0.5,  'geo');
+    slider('Sweep X',       'sweepX',       0,  20,  0.5,  'geo');
+    slider('Mid X',         'midX',         0,  30,  0.5,  'geo');
+    slider('Crest X',       'crestX',       0,  35,  0.5,  'geo');
 
-    hdr('— GRID SLAB —');
-    slider('gridLineW',     'gridLineW',    0.5, 6,  0.5, 'tex');
-    slider('gridCols',      'gridCols',     1,  12,  1,   'tex');
-    slider('gridRows',      'gridRows',     1,  16,  1,   'tex');
+    hdr('— CYAN SLAB —');
+    slider('Emissive',      'cyanEmi',      0,   2,  0.05, 'live-cyan');
+    slider('Roughness',     'cyanRgh',      0,   1,  0.05, 'live-cyan');
+    slider('Holo opacity',  'holoOpacity',  0,   1,  0.05, 'live-holo');
+    slider('Grid size',     'holoGrid',     1,  20,  0.5,  'live-holo');
 
-    hdr('— VEIN SLAB —');
-    colorPicker('veinColor',  'veinColor',  'tex');
-    slider('veinCount',     'veinCount',    1,  20,  1,   'tex');
-    slider('veinWidth',     'veinWidth',    0.5, 8,  0.5, 'tex');
-
-    hdr('— BLOOM SLAB —');
-    colorPicker('bloomColor', 'bloomColor', 'tex');
-    slider('bloomRadius',   'bloomRadius',  0.1, 2,  0.05,'tex');
-    slider('bloomOpacity',  'bloomOpacity', 0,   1,  0.05,'tex');
-
-    hdr('— VEIN BLOOM —');
-    slider('veinBloom',     'veinBloom',    0,   1,  0.05,'tex');
-
-    hdr('— GRID GLOW —');
-    slider('gridGlow',      'gridGlow',     0,   1,  0.05,'tex');
-
-    hdr('— CLIFF STRATA —');
-    slider('rimBright',     'strataRimBright',  0, 2,    0.05, 'tex');
-    slider('rimCyan',       'strataRimCyan',    0, 1,    0.05, 'tex');
-    slider('midTone',       'strataMidTone',    0, 1,    0.02, 'tex');
-    slider('baseDark',      'strataBaseDark',   0, 0.5,  0.01, 'tex');
-    slider('strataSplit',   'strataSplit',      0.1, 0.9, 0.02,'tex');
-    slider('noiseAmt',      'strataNoiseAmt',   0, 0.3,  0.01, 'tex');
-
-    hdr('— CORRIDOR CURVES —');
-    slider('ampMax',        'corridorAmpMax',    0, 80, 1, 'geo');
-    slider('ampStart',      'corridorAmpStart',  0, 40, 1, 'geo');
-    slider('ampRamp (rows)','corridorAmpRamp',  20, 400, 5,'geo');
+    hdr('— DARK SLAB —');
+    slider('Crack count',   'darkCrkCount',   1, 15, 1,    'dark-tex');
+    slider('Crack bright',  'darkCrkBright',  0,  2, 0.05, 'dark-tex');
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
-    slider('tileLength',    'tileLength',   50, 400, 5,    'live');
     toggle('freeze wide',   'freezeWide');
 
     const btn = document.createElement('button');
-    btn.textContent = 'REBUILD';
+    btn.textContent = 'REBUILD GEO';
     btn.style.cssText = 'margin-top:10px;width:100%;background:#001a2a;border:1px solid #00eeff;color:#00eeff;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
     btn.onclick = rebuildGeo;
     panel.appendChild(btn);
@@ -18914,25 +19036,13 @@ function buildSkinTunerSliders() {
     }, '#f44'));
     panel.appendChild(makeSlider('fire rate', _lbFireRate, 1, 30, 0.5, v => { _lbFireRate = v; state.laserFireRate = v; }, '#f44'));
 
-    // CANYON MATERIAL
+    // CANYON MATERIAL — use V key to open dedicated Canyon Tuner panel
     panel.appendChild(makeHeader('CANYON MATERIAL', '#0ef'));
-    panel.appendChild(makeSlider('emissive intensity', _canyonTuner.brightness * 1.8, 0, 8, 0.1, v => {
-      _canyonTuner.brightness = v / 1.8;
-      if (_canyonWalls) { _canyonWalls.strips.forEach(m => { m.material.emissiveIntensity = v; }); }
-    }, '#0ef'));
     panel.appendChild(makeSlider('bloom threshold', bloom.threshold, 0, 1.5, 0.05, v => {
       bloom.threshold = v;
     }, '#0ef'));
     panel.appendChild(makeSlider('bloom strength', bloom.strength, 0, 3, 0.05, v => {
       bloom.strength = v;
-    }, '#0ef'));
-    panel.appendChild(makeSlider('gridGlow', _canyonTuner.gridGlow, 0, 1, 0.05, v => {
-      _canyonTuner.gridGlow = v;
-      if (_canyonWalls) { rebuildTex(); }
-    }, '#0ef'));
-    panel.appendChild(makeSlider('veinBloom', _canyonTuner.veinBloom, 0, 1, 0.05, v => {
-      _canyonTuner.veinBloom = v;
-      if (_canyonWalls) { rebuildTex(); }
     }, '#0ef'));
   }
 
