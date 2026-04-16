@@ -7302,7 +7302,7 @@ const _canyonTuner = {
   entranceThick: 2000,  // slab thickness for entrance slabs (increase to expand laterally)
   entranceSlabs:  3,    // how many leading slabs use entranceThick
   // How far away the canyon spawns (larger = see entrance from farther away)
-  spawnDepth:   -300,
+  spawnDepth:   -400,
   // Canyon-own sine wave (independent of L3 corridor)
   sineIntensity: 0.0,   // master multiplier 0=off, 1=full
   sineAmp:       30.0,  // peak swing in world units
@@ -17352,56 +17352,9 @@ window.addEventListener('keydown', (e) => {
   if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
     _canyonActive = !_canyonActive;
     if (_canyonActive) {
-      // Start at row 0 — full funnel-in width (halfX=80 down to 9)
-      state.corridorRowsDone  = 0;
-      state.corridorSineT     = 0;
-      state.corridorSpawnZ    = -7;
-      state.corridorDelay     = 0;
-      state.corridorGapCenter = 0;
-      state.corridorGapDir    = 1;
-      state._drL3MaxRows      = 750; // exit ramp fires at row 750, matching ribbon length
-      _jlCorridor.active      = true;
-      _jlCorridor.type        = 'l3';
-      _jlCorridor.totalRows   = 750;
-      _destroyCanyonWalls(); _createCanyonWalls(); // always rebuild so spawnDepth takes effect
-      const w = _canyonWalls;
-      const T = _canyonTuner;
-      // Also log positions after 1 frame so _updateCanyonWalls has run
-      setTimeout(() => {
-        if (!_canyonWalls) return;
-        console.log('[CANYON] 500ms check — paste this:\n' + JSON.stringify({
-          meshPositions: _canyonWalls.strips.map((m,i) => ({
-            i, side: i < 2 ? 'LEFT' : 'RIGHT',
-            x: +m.position.x.toFixed(1),
-            y: +m.position.y.toFixed(1),
-            z: +m.position.z.toFixed(1),
-            geoVertCount: m.geometry.attributes.position.count,
-            firstVertX:   +m.geometry.attributes.position.getX(0).toFixed(1),
-            lastVertX:    +m.geometry.attributes.position.getX(m.geometry.attributes.position.count-1).toFixed(1),
-          }))
-        }, null, 2));
-      }, 500);
-      console.log('[CANYON] ON (V key) — paste this:\n' + JSON.stringify({
-        freezeWide:   T.freezeWide,
-        wallWidth:    T.wallWidth,
-        displacement: T.displacement,
-        tileLength:   T.tileLength,
-        halfX:        CORRIDOR_WIDE_X,
-        speed:        state.speed,
-        phase:        state.phase,
-        jlMode:       state._jetLightningMode,
-        meshCount:    w ? w.strips.length : 0,
-        meshPositions: w ? w.strips.map(m => ({
-          x: +m.position.x.toFixed(1),
-          y: +m.position.y.toFixed(1),
-          z: +m.position.z.toFixed(1),
-          visible: m.visible
-        })) : []
-      }, null, 2));
+      _destroyCanyonWalls(); _createCanyonWalls();
     } else {
       _destroyCanyonWalls();
-      _jlStopCorridor();
-      console.log('[CANYON] OFF');
     }
   }
 });
