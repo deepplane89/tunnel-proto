@@ -12709,6 +12709,17 @@ function closeSettings() {
     startJetLightning();
   });
 
+  // ?canyon=1 — auto-fire JL button on first tap/click so mobile audio context unlocks
+  if (_canyonTestMode) {
+    const _canyonAutoStart = () => {
+      document.removeEventListener('click',      _canyonAutoStart);
+      document.removeEventListener('touchstart', _canyonAutoStart);
+      document.getElementById('jet-lightning-btn').click();
+    };
+    document.addEventListener('click',      _canyonAutoStart, { once: true });
+    document.addEventListener('touchstart', _canyonAutoStart, { once: true });
+  }
+
   document.getElementById('settings-overlay').addEventListener('click', (e) => {
     if (e.target.id === 'settings-overlay') closeSettings();
   });
@@ -13149,28 +13160,6 @@ function startGame() {
   // engine hum removed
 
   // ── L1 cinematic intro text (only on fresh game start at level 0, NOT on retry) ──
-  // ── Canyon test mode: skip normal game, boot straight into canyon corridor ──
-  if (_canyonTestMode) {
-    _skipL1Intro = true;            // suppress L1 cinematic
-    state._godMode = true;          // auto god mode for testing
-    state._jetLightningMode = true; // JL physics + speed
-    startJetLightning();            // sets asteroids/ramp state — we override immediately below
-    // Kill asteroids so only the canyon corridor runs
-    _asteroidTuner.enabled = false;
-    state._drL3MaxRows      = 750;
-    state.corridorRowsDone  = 0;
-    state.corridorSineT     = 0;
-    state.corridorSpawnZ    = -7;
-    state.corridorDelay     = 0;
-    state.corridorGapCenter = 0;
-    state.corridorGapDir    = 1;
-    _jlCorridor.active      = true;
-    _jlCorridor.type        = 'l3';
-    _jlCorridor.totalRows   = 750;
-    _canyonActive = true;
-    if (!_canyonWalls) _createCanyonWalls();
-  }
-
   if (state.currentLevelIdx === 0 && !_skipL1Intro && !state._tutorialActive && !state._jetLightningMode && !_retryIsFromDead) {
     state.introActive = true;   // blocks cone spawning
     state.thrusterPower = 0;    // thrusters off during prologue
@@ -22025,6 +22014,25 @@ function startJetLightning() {
   currentLevelDef     = LEVELS[3];
   targetLevelDef      = LEVELS[3];
   state.speed         = BASE_SPEED * LEVELS[3].speedMult; // 1.5x = L4
+
+  // ── Canyon test mode: activate corridor + canyon walls, kill asteroids ──
+  if (_canyonTestMode) {
+    _skipL1Intro            = true;
+    _godMode                = true;
+    _asteroidTuner.enabled  = false;
+    state._drL3MaxRows      = 750;
+    state.corridorRowsDone  = 0;
+    state.corridorSineT     = 0;
+    state.corridorSpawnZ    = -7;
+    state.corridorDelay     = 0;
+    state.corridorGapCenter = 0;
+    state.corridorGapDir    = 1;
+    _jlCorridor.active      = true;
+    _jlCorridor.type        = 'l3';
+    _jlCorridor.totalRows   = 750;
+    _canyonActive           = true;
+    if (!_canyonWalls) _createCanyonWalls();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
