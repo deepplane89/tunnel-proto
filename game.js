@@ -7888,18 +7888,20 @@ function _createCanyonWalls() {
         const z  = -r * ROW_DEPTH;
         const cx = centers[r] + halfXs[r] * side;
         const leanFactor = 1 + T.slopeLean * v;
-        // Per-vertex displacement — varies by BOTH r and hi so each face is a different angle
-        // Low-freq component (big cliff slabs) + high-freq (small chips)
+        // Per-vertex displacement in BOTH X and Z — creates real 3D cliff volume
         const pr = r * 0.31 + hi * 0.17;
         const ph = hi * 0.43 + r * 0.11;
         const dxLow  = (Math.sin(pr * 1.3 + 0.7) * 0.5 + Math.sin(pr * 2.9 + 1.4) * 0.3 + Math.abs(Math.sin(pr * 0.7 + 2.1)) * 0.2);
         const dxHigh = (Math.sin(ph * 4.1 + 0.3) * 0.3 + Math.sin(ph * 7.3 + 1.9) * 0.15);
         const dx = (dxLow * 0.7 + dxHigh * 0.3) * T.displacement * leanFactor * side;
+        // Z displacement — chunks jut toward/away from camera, creates real depth
+        const pz = r * 0.19 + hi * 0.23;
+        const dz = (Math.sin(pz * 1.7 + 1.1) * 0.5 + Math.sin(pz * 3.8 + 0.5) * 0.3 + Math.sin(pz * 6.2 + 2.3) * 0.2) * T.displacement * 0.6;
         const dy = (v > 0.85) ? rowRidgeY[r] * (v - 0.85) / 0.15 : 0;
         const idx = hi * NUM_ROWS + r;
         iPos[idx*3+0] = cx + dx;
         iPos[idx*3+1] = y + dy;
-        iPos[idx*3+2] = z;
+        iPos[idx*3+2] = z + dz;  // Z displacement — chunks jut toward/away, real 3D depth
         iUV[idx*2+0]  = r / 10;  // tile texture every 10 rows — not one giant smear
         iUV[idx*2+1]  = v;
         // Rock strata vertex colors — driven by tuner
@@ -7994,7 +7996,7 @@ function _createCanyonWalls() {
     emissiveIntensity: T.brightness * 1.8,
     roughness:         0.9,
     metalness:         0.0,
-    flatShading:       true,   // hard edges between faces — angular faceted glacier look
+    flatShading:       true,
     side:              THREE.DoubleSide,
     toneMapped:        false,
   });
@@ -8028,7 +8030,11 @@ function _destroyCanyonWalls() {
   _canyonWalls.mat.dispose();
   _canyonWalls.gridTex.dispose();
   _canyonWalls = null;
-  if (_canyonFillLight) { scene.remove(_canyonFillLight); _canyonFillLight = null; }
+  if (_canyonFillLight) {
+    if (_canyonFillLight.lights) _canyonFillLight.lights.forEach(l => scene.remove(l));
+    else scene.remove(_canyonFillLight);
+    _canyonFillLight = null;
+  }
 }
 
 function _updateCanyonWalls(dt, speed) {
