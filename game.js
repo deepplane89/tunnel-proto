@@ -21372,11 +21372,17 @@ function startJetLightning() {
     _godMode                = true;
     _asteroidTuner.enabled  = false;
     state._drL3MaxRows      = 750;
-    state.corridorRowsDone  = 0;
-    state.corridorSineT     = 0;
+    state.corridorRowsDone  = 60; // skip funnel-in, start where curves are active
+    state.corridorSineT     = 0.5028; // pre-seeded to match row 60
     state.corridorSpawnZ    = -7;
     state.corridorDelay     = 0;
-    state.corridorGapCenter = 0;
+    // Prime corridorGapCenter from the seeded sineT so slabs bake non-zero X immediately
+    {
+      const _cr = 60 - (40 + 4);
+      const _ampT = Math.min(1, _cr / 200);
+      const _amp  = 10 + (36 - 10) * (_ampT * _ampT);
+      state.corridorGapCenter = _amp * Math.sin(0.5028);
+    }
     state.corridorGapDir    = 1;
     _jlCorridor.active      = true;
     _jlCorridor.type        = 'l3';
