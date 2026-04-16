@@ -7274,7 +7274,7 @@ const _canyonTuner = {
   tileLength:    175,
   segsX:         40,   // enough height rows for visible faceting
   segsZ:         100,
-  displacement:  22,   // dramatic faceting
+  displacement:  70,   // massive Z displacement for visible cliff depth
   wallWidth:     40,   // wide top so it's visible from inside
   topRagged:     28,   // more jagged spires
   capHeight:     1.4,
@@ -7902,7 +7902,7 @@ function _createCanyonWalls() {
         const dx = rowNoise[r] * T.displacement * leanFactor * side;
         // Z: per-height displacement — whole bands jut toward/away camera
         // This is what makes it look like a cliff face, not a curtain
-        const dz = hiNoise[hi] * T.displacement * 1.4;
+        const dz = hiNoise[hi] * T.displacement * 1.0;
         const dy = (v > 0.85) ? rowRidgeY[r] * (v - 0.85) / 0.15 : 0;
         const idx = hi * NUM_ROWS + r;
         iPos[idx*3+0] = cx + dx;
