@@ -22060,13 +22060,24 @@ function _jlTickCorridor(dt, effectiveSpd) {
   state.prevCorridorCenter = curCenter;
 }
 
-// ── Track definitions — drop new obstacles in here as config objects ──────────
+// ── Track definitions ─────────────────────────────────────────────────────────
+// Act 1 — Asteroids (0–45s)
+//   0–25s:  stagger sparse → dense
+//   25–40s: salvos bleed in as stagger peaks
+//   40–45s: breathing room (nothing)
+// Act 2 — Lightning (45–100s)
+//   45–65s: LT stagger sparse → ramping, asteroids OFF
+//   65–80s: LT sweeps layer in
+//   80–95s: LT stagger + salvo peak
+//   95–100s: breathing room (nothing)
+// Act 3 — Combined (100s+)
+//   100s+: asteroid stagger + lightning both on, both ramping
 const _JL_TRACKS = [
 
-  // ════════ ASTEROID TRACKS ════════════════════════════════════════════════
+  // ════════ ACT 1 — ASTEROIDS ═══════════════════════════════════════════════
   {
-    id: 'ast_stagger', label: 'AST Stagger', type: 'asteroid',
-    startT: 0, endT: 45,
+    id: 'ast_stagger_1', label: 'A1 AST Stagger', type: 'asteroid',
+    startT: 0, endT: 25,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 1.4, staggerGap: 0.6, salvoCount: 1,
@@ -22074,38 +22085,30 @@ const _JL_TRACKS = [
     },
   },
   {
-    id: 'ast_sweep', label: 'AST Sweep', type: 'asteroid',
-    startT: 45, endT: 90,
+    id: 'ast_salvo_1', label: 'A1 AST Salvo', type: 'asteroid',
+    startT: 25, endT: 40,
     settings: {
-      enabled: true, pattern: 'sweep', leadFactor: 0.0,
-      frequency: 0.6, sweepSpeed: 0.5,
+      enabled: true, pattern: 'stagger', leadFactor: 0.0,
+      frequency: 1.1, staggerGap: 0.5, salvoCount: 2,
       size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
     },
   },
-  {
-    id: 'ast_salvo', label: 'AST Salvo', type: 'asteroid',
-    startT: 90, endT: 135,
-    settings: {
-      enabled: true, pattern: 'salvo', leadFactor: 0.0,
-      frequency: 0.5, salvoCount: 4,
-      size: 1.35, sizeVariance: 0.55, laneMin: -7.5, laneMax: 7.5,
-    },
-  },
+  // 40–45s: breathing room — no tracks active
 
-  // ════════ LIGHTNING TRACKS ════════════════════════════════════════════════
+  // ════════ ACT 2 — LIGHTNING ════════════════════════════════════════════════
   {
-    id: 'lt_stagger', label: 'LT Stagger', type: 'lightning',
-    startT: 135, endT: 210,
+    id: 'lt_stagger_1', label: 'A2 LT Stagger', type: 'lightning',
+    startT: 45, endT: 65,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 0.3, laneMin: -8, laneMax: 8,
+      frequency: 0.5, laneMin: -8, laneMax: 8,
     },
     onActivate()   { if (window._asteroidTuner) window._asteroidTuner.enabled = false; },
     onDeactivate() {},
   },
   {
-    id: 'lt_sweep', label: 'LT Sweep', type: 'lightning',
-    startT: 210, endT: 270,
+    id: 'lt_sweep_1', label: 'A2 LT Sweep', type: 'lightning',
+    startT: 65, endT: 80,
     settings: {
       enabled: true, pattern: 'sweep', leadFactor: 0.0,
       frequency: 0.4, sweepSpeed: 0.4, laneMin: -8, laneMax: 8,
@@ -22114,20 +22117,21 @@ const _JL_TRACKS = [
     onDeactivate() {},
   },
   {
-    id: 'lt_salvo', label: 'LT Salvo', type: 'lightning',
-    startT: 270, endT: 330,
+    id: 'lt_peak_1', label: 'A2 LT Peak', type: 'lightning',
+    startT: 80, endT: 95,
     settings: {
-      enabled: true, pattern: 'salvo', leadFactor: 0.0,
-      frequency: 0.5, laneMin: -8, laneMax: 8,
+      enabled: true, pattern: 'stagger', leadFactor: 0.0,
+      frequency: 0.3, laneMin: -8, laneMax: 8,
     },
     onActivate()   { if (window._asteroidTuner) window._asteroidTuner.enabled = false; },
     onDeactivate() {},
   },
+  // 95–100s: breathing room — no tracks active
 
-  // ════════ COMBINED (330s+) ════════════════════════════════════════════════
+  // ════════ ACT 3 — COMBINED (100s+) ════════════════════════════════════════
   {
-    id: 'ast_stagger_2', label: 'AST Stagger+LT', type: 'asteroid',
-    startT: 330, endT: null,
+    id: 'ast_stagger_2', label: 'A3 AST', type: 'asteroid',
+    startT: 100, endT: null,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 1.4, staggerGap: 0.6, salvoCount: 1,
@@ -22135,47 +22139,11 @@ const _JL_TRACKS = [
     },
   },
   {
-    id: 'lt_stagger_2', label: 'LT Stagger (combined)', type: 'lightning',
-    startT: 330, endT: null,
+    id: 'lt_stagger_2', label: 'A3 LT', type: 'lightning',
+    startT: 100, endT: null,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.3, laneMin: -8, laneMax: 8,
-    },
-  },
-
-  // ════════ ALWAYS-ON / CUSTOM ══════════════════════════════════════════════
-  // ════════ LETHAL RINGS ════════════════════════════════════════════════════
-  {
-    id: 'lethal_rings', label: 'Lethal Rings', type: 'lethal_rings',
-    startT: 450, endT: null,
-    settings: { frequency: 1.1 }, // seconds between rows (before intensity scalar)
-    onActivate()   {
-      if (window._asteroidTuner) window._asteroidTuner.enabled = false;
-      if (window._LT) window._LT.enabled = false;
-    },
-    onDeactivate() {
-      for (const lr of _lethalRingActive) { lr.userData.active = false; lr.visible = false; lr.position.set(0,-9999,0); }
-      _lethalRingActive.length = 0;
-    },
-  },
-
-
-  {
-    id: 'fatcone', label: 'Fat Cones', type: 'custom',
-    startT: 360, endT: null,
-    onActivate()   { if (window._startFcLoop) window._startFcLoop(null); },
-    onDeactivate() { if (window._stopFcLoop)  window._stopFcLoop(); },
-  },
-  {
-    id: 'terrain', label: 'Terrain', type: 'custom',
-    startT: 300, endT: null,
-    onActivate() {
-      if (!_terrainWalls) _createTerrainWalls();
-      else _terrainWalls.strips.forEach(m => { m.visible = true; });
-      if (window._ICE) window._ICE.enabled = false;
-    },
-    onDeactivate() {
-      if (_terrainWalls) _terrainWalls.strips.forEach(m => { m.visible = false; });
     },
   },
 ];
