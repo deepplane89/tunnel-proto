@@ -7662,15 +7662,18 @@ function _createCanyonWalls() {
   const INIT_Z = T.spawnDepth || -300; // start far away so entrance is visible
   // Pool must cover from INIT_Z all the way to DESPAWN_Z with no gaps
   const autoPool = Math.ceil((DESPAWN_Z - INIT_Z) / SPACING) + 1;
+  // Safe spawn limit — no slab initialises closer than this to the ship
+  const SAFE_Z  = -150;
 
   const chunks = { left: [], right: [] };
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
     for (let i = 0; i < autoPool; i++) {
-      const seed = i * 7 + (k === 'right' ? 100 : 0);
+      const seed  = i * 7 + (k === 'right' ? 100 : 0);
       const thick = (i < T.entranceSlabs) ? T.entranceThick : undefined;
-      // Cap init Z so no slab spawns near or past the ship on create
-      const initZ = Math.min(INIT_Z + i * SPACING, -150);
+      const rawZ  = INIT_Z + i * SPACING;
+      // Slabs that would land past SAFE_Z get stacked behind INIT_Z instead
+      const initZ = rawZ <= SAFE_Z ? rawZ : INIT_Z - (i * SPACING);
       chunks[k].push(makeSlab(side, seed, initZ, i, thick));
     }
   });
