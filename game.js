@@ -7298,6 +7298,11 @@ const _canyonTuner = {
   darkCrkBright: 1.0,
   // Corridor width override — half-gap between walls (wall foot lands at center ± halfXOverride)
   halfXOverride: 40,
+  // Entrance: the first slab pair uses this width (can be huge for a dramatic wall entrance)
+  entranceHalfX: 120,
+  entranceSlabs:  3,    // how many leading slabs use entranceHalfX before switching to halfXOverride
+  // How far away the canyon spawns (larger = see entrance from farther away)
+  spawnDepth:   -300,
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
@@ -7648,23 +7653,23 @@ function _createCanyonWalls() {
     return mesh;
   }
 
+  const INIT_Z = T.spawnDepth || -300; // start far away so entrance is visible
+
   const chunks = { left: [], right: [] };
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
     for (let i = 0; i < T.poolSize; i++) {
       const seed = i * 7 + (k === 'right' ? 100 : 0);
-      chunks[k].push(makeSlab(side, seed, SPAWN_Z + i * SPACING, i));
+      chunks[k].push(makeSlab(side, seed, INIT_Z + i * SPACING, i));
     }
   });
 
-  // Predictive bake at init: each slab gets the center it will have when ship arrives,
-  // same logic as recycle. Ship at z=3.9, row spacing=7.
+  // Bake X at init: entrance slabs get entranceHalfX, rest get halfXOverride
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
-    chunks[k].forEach(m => {
-      const rowsAhead = Math.max(0, Math.round((3.9 - m.position.z) / 7));
-      const center  = _canyonPredictCenter(rowsAhead);
-      const halfX   = _canyonPredictHalfX(rowsAhead);
+    chunks[k].forEach((m, i) => {
+      const center = _canyonPredictCenter(0);
+      const halfX  = i < T.entranceSlabs ? T.entranceHalfX : _canyonPredictHalfX(0);
       m.userData.bakedX = (center + halfX * side) - FOOT_OFF * side;
       m.position.x = m.userData.bakedX;
     });
@@ -17525,7 +17530,10 @@ window.addEventListener('keydown', (e) => {
     slider('Crack bright',  'darkCrkBright',  0,  2, 0.05, 'dark-tex');
 
     hdr('— CORRIDOR —');
-    slider('Wall spacing',  'halfXOverride',  1, 80, 0.5, 'live');
+    slider('Wall spacing',   'halfXOverride',  1,  300, 1,   'live');
+    slider('Entrance width', 'entranceHalfX',  1,  600, 1,   'live');
+    slider('Entrance slabs', 'entranceSlabs',  1,   20, 1,   'live');
+    slider('Spawn depth',    'spawnDepth',  -600, -100, 10,  'live');
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
