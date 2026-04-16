@@ -7649,14 +7649,70 @@ function _updateCanyonWalls(dt, speed) {
   if (_canyonWalls.holoMat) _canyonWalls.holoMat.uniforms.time.value += dt;
   const spacing = _canyonWalls._spacing;
 
-  const gapCenter = state.corridorGapCenter || 0;
-  const gapHalfX  = (_jlCorridor && _jlCorridor._lastHalfX != null)
-    ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
+  // ── Continuous smooth corridor tracking ─────────────────────────────────
+  // corridorGapCenter updates only once per row spawn (~7 world units apart),
+  // which causes visible stair-stepping. Instead we recompute center + halfX
+  // per-frame using fractional row progress so the walls glide smoothly.
+  function _canyonSmoothTarget() {
+    const rd  = state.corridorRowsDone || 0;
+    const spZ = state.corridorSpawnZ   || -7;
+    // Fractional rows: how far have we advanced into the current row interval?
+    // corridorSpawnZ runs from -7 → 0, so frac = (spZ + 7) / 7
+    const ROW_DIST = 7;
+    const frac = Math.max(0, Math.min(1, (spZ + ROW_DIST) / ROW_DIST));
+
+    // halfX — same formula as spawnCorridorRow / _updateJLCorridor
+    function calcHalfX(rows) {
+      if (rows < CORRIDOR_CLOSE_ROWS) {
+        const t = rows / CORRIDOR_CLOSE_ROWS;
+        const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+        return CORRIDOR_WIDE_X + (CORRIDOR_NARROW_X - CORRIDOR_WIDE_X) * ease;
+      }
+      const cr  = Math.max(0, rows - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS));
+      const sq  = Math.min(1, cr / CORRIDOR_AMP_RAMP);
+      return CORRIDOR_NARROW_X - (CORRIDOR_NARROW_X - 6) * (sq * sq);
+    }
+
+    // gapCenter — same sine formula, interpolated between current and next row
+    function calcCenter(rows, sineT) {
+      if (rows < CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS) return 0;
+      const curveRows = rows - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS);
+      const ampT   = Math.min(1, curveRows / CORRIDOR_AMP_RAMP);
+      const amp    = CORRIDOR_AMP_START + (CORRIDOR_AMP_MAX - CORRIDOR_AMP_START) * (ampT * ampT);
+      const perT   = Math.min(1, curveRows / CORRIDOR_PERIOD_RAMP);
+      const period = CORRIDOR_PERIOD_START - (CORRIDOR_PERIOD_START - CORRIDOR_PERIOD_MIN) * (perT * perT);
+      return amp * Math.sin(sineT);
+    }
+
+    // Current row values (already committed by spawnCorridorRow)
+    const curHalfX  = calcHalfX(rd);
+    const curSineT  = state.corridorSineT || 0;
+    const curCenter = calcCenter(rd, curSineT);
+
+    // Next row predicted values
+    const nextHalfX  = calcHalfX(rd + 1);
+    const nextSineT  = (rd >= CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS)
+      ? (() => {
+          const cr     = rd - (CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS);
+          const perT   = Math.min(1, cr / CORRIDOR_PERIOD_RAMP);
+          const period = CORRIDOR_PERIOD_START - (CORRIDOR_PERIOD_START - CORRIDOR_PERIOD_MIN) * (perT * perT);
+          return curSineT + (2 * Math.PI) / period;
+        })()
+      : 0;
+    const nextCenter = calcCenter(rd + 1, nextSineT);
+
+    // Lerp between current and next using sub-row fractional progress
+    const gapCenter = curCenter + (nextCenter - curCenter) * frac;
+    const gapHalfX  = curHalfX  + (nextHalfX  - curHalfX)  * frac;
+    return { gapCenter, gapHalfX };
+  }
+
+  const { gapCenter, gapHalfX } = _canyonSmoothTarget();
 
   ['left','right'].forEach(k => {
     const side    = k === 'left' ? -1 : 1;
     const edgeX   = gapCenter + gapHalfX * side;
-    const footOff = (_canyonWalls._footOff || 0) * side; // push mesh outward so foot lands at edge
+    const footOff = (_canyonWalls._footOff || 0) * side;
     const targetX = edgeX + footOff;
     const meshes  = _canyonWalls[k];
 
@@ -7668,21 +7724,20 @@ function _updateCanyonWalls(dt, speed) {
         let minZ = Infinity;
         for (const om of meshes) if (om !== m && om.position.z < minZ) minZ = om.position.z;
         m.position.z = minZ - spacing;
-        m.position.x = targetX; // snap X on recycle
+        m.position.x = targetX;
       } else {
-        // Direct X snap — corridor geometry handles smooth path, wall just follows
+        // Continuous smooth tracking — no lerp lag, no stair-step
         m.position.x = targetX;
       }
     });
   });
 
-  // Collision
+  // Collision — uses same smooth gapCenter/gapHalfX computed above
   if (state._jetLightningMode && state.phase === 'playing' && !state._godMode && !_godMode) {
     const shipX  = state.shipX || 0;
     const buffer = 1.5;
-    const gapC   = state.corridorGapCenter || 0;
-    const gapH   = (_jlCorridor && _jlCorridor._lastHalfX != null)
-      ? _jlCorridor._lastHalfX : CORRIDOR_NARROW_X;
+    const gapC   = gapCenter;
+    const gapH   = gapHalfX;
     if (shipX < gapC - gapH + buffer || shipX > gapC + gapH - buffer) {
       if (typeof _killPlayer === 'function') _killPlayer();
       else if (typeof triggerDeath === 'function') triggerDeath();
