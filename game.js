@@ -19144,7 +19144,7 @@ function buildSkinTunerSliders() {
     if (e.key === 't' || e.key === 'T') {
       visible = !visible;
       window._sceneTunerOpen = visible;
-      if (visible) { build(); panel.style.display = 'block'; }
+      if (visible) { try { build(); } catch(err) { panel.innerHTML += '<div style="color:red;font-size:10px;padding:4px">BUILD ERROR: ' + err.message + '<br>' + (err.stack||'').split('\n')[1] + '</div>'; console.error('[SCENE TUNER] build() threw:', err); } panel.style.display = 'block'; }
       else panel.style.display = 'none';
     }
   });
