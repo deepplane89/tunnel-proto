@@ -7901,7 +7901,7 @@ function _createCanyonWalls() {
         const idx = hi * NUM_ROWS + r;
         iPos[idx*3+0] = cx + dx;
         iPos[idx*3+1] = y + dy;
-        iPos[idx*3+2] = z + dz;  // Z displacement — chunks jut toward/away, real 3D depth
+        iPos[idx*3+2] = z;
         iUV[idx*2+0]  = r / 10;  // tile texture every 10 rows — not one giant smear
         iUV[idx*2+1]  = v;
         // Rock strata vertex colors — driven by tuner
