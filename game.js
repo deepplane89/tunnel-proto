@@ -17398,6 +17398,23 @@ window.addEventListener('keydown', (e) => {
     _createCanyonWalls();
   }
 
+  function rebakeAllX() {
+    if (!_canyonWalls) return;
+    const T = _canyonTuner;
+    const footOff = _canyonWalls._footOff || 0;
+    const spacing = _canyonWalls._spacing;
+    ['left','right'].forEach(k => {
+      const side = k === 'left' ? -1 : 1;
+      _canyonWalls[k].forEach(m => {
+        const rowsAhead = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
+        const center = _canyonPredictCenter(rowsAhead);
+        const halfX  = _canyonPredictHalfX(rowsAhead);
+        m.userData.bakedX = (center + halfX * side) - footOff * side;
+        m.position.x = m.userData.bakedX;
+      });
+    });
+  }
+
   function rebuildTex() {
     if (!_canyonWalls) return;
     _canyonWalls.gridTex.dispose();
@@ -17448,6 +17465,8 @@ window.addEventListener('keydown', (e) => {
         }
       } else if (mode === 'dark-tex') {
         rebuildDarkTex();
+      } else if (mode === 'live-sine') {
+        rebakeAllX();
       }
       // 'live' — nothing extra needed, update loop reads T directly
     });
@@ -17535,10 +17554,10 @@ window.addEventListener('keydown', (e) => {
     slider('Spawn depth',    'spawnDepth',  -600, -100, 10,  'geo');
 
     hdr('— SINE CURVES —');
-    slider('Intensity',      'sineIntensity',  0,    1, 0.01, 'live');
-    slider('Amplitude',      'sineAmp',        1,  120, 1,   'live');
-    slider('Period (rows)',   'sinePeriod',    20,  600, 5,   'live');
-    slider('Speed',          'sineSpeed',    0.1,    5, 0.1, 'live');
+    slider('Intensity',      'sineIntensity',  0,    1, 0.01, 'live-sine');
+    slider('Amplitude',      'sineAmp',        1,  120, 1,   'live-sine');
+    slider('Period (rows)',   'sinePeriod',    20,  600, 5,   'live-sine');
+    slider('Speed',          'sineSpeed',    0.1,    5, 0.1, 'live-sine');
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
