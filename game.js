@@ -7296,6 +7296,8 @@ const _canyonTuner = {
   // Dark slab
   darkCrkCount:  6,
   darkCrkBright: 1.0,
+  // Corridor width override (-1 = follow L3 path, 0+ = fixed halfX)
+  halfXOverride: -1,
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
@@ -7716,6 +7718,7 @@ function _canyonPredictCenter(rowsAhead) {
   return _canyonPathAtRow((state.corridorRowsDone || 0) + rowsAhead).center;
 }
 function _canyonPredictHalfX(rowsAhead) {
+  if (_canyonTuner.halfXOverride >= 0) return _canyonTuner.halfXOverride;
   return _canyonPathAtRow((state.corridorRowsDone || 0) + rowsAhead).halfX;
 }
 
@@ -17539,6 +17542,9 @@ window.addEventListener('keydown', (e) => {
     hdr('— DARK SLAB —');
     slider('Crack count',   'darkCrkCount',   1, 15, 1,    'dark-tex');
     slider('Crack bright',  'darkCrkBright',  0,  2, 0.05, 'dark-tex');
+
+    hdr('— CORRIDOR —');
+    slider('Wall spacing',  'halfXOverride', -1, 80, 0.5, 'live');
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
