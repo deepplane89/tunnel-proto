@@ -7573,6 +7573,8 @@ function _buildCanyonSlabGeo(seed, thickOverride) {
 function _createCanyonWalls() {
   if (_canyonWalls) return;
   console.warn('[CANYON] _createCanyonWalls called — manual:', _canyonManual, '| stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
+  // Align corridor center to ship X so entrance gate and walls share the same reference point
+  state.corridorGapCenter = state.shipX || 0;
   const T = _canyonTuner;
 
   // Two slab types: cyan (MeshPhysical + holo overlay) and dark (MeshStandard + veins)
