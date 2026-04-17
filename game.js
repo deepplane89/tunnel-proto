@@ -7315,11 +7315,12 @@ let _canyonFillLight = null;
 let _canyonActive = false;
 let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
-const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Regular Canyon', 'Straight Canyon'];
+const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
   1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
 };
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
@@ -7583,16 +7584,69 @@ function _createCanyonWalls() {
     side:               THREE.DoubleSide,
   });
 
-  const darkMat = new THREE.MeshStandardMaterial({
-    color:             new THREE.Color(0x060c14),
-    roughness:         0.85,
-    metalness:         0.05,
-    emissive:          new THREE.Color(0xff00cc),
-    emissiveMap:       darkTex,
-    emissiveIntensity: 0.9,
-    flatShading:       true,
-    side:              THREE.DoubleSide,
+  const darkMat = new THREE.MeshPhysicalMaterial({
+    color:              new THREE.Color(0x0a0a12),
+    roughness:          0.28,
+    metalness:          0.0,
+    clearcoat:          0.35,
+    clearcoatRoughness: 0.10,
+    reflectivity:       0.7,
+    emissive:           new THREE.Color(0xff00cc),
+    emissiveMap:        darkTex,
+    emissiveIntensity:  0.9,
+    flatShading:        false,
+    side:               THREE.DoubleSide,
   });
+  darkMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uMarbleA = { value: new THREE.Color(0x0d0d18) };
+    shader.uniforms.uMarbleB = { value: new THREE.Color(0x1e1e2e) };
+    shader.uniforms.uMarbleC = { value: new THREE.Color(0x8888aa) };
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      `#include <common>
+       varying vec3 vWPos;`
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <worldpos_vertex>',
+      `#include <worldpos_vertex>
+       vWPos = worldPosition.xyz;`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+       varying vec3 vWPos;
+       uniform vec3 uMarbleA;
+       uniform vec3 uMarbleB;
+       uniform vec3 uMarbleC;
+       float mhash(vec3 p){
+         p=fract(p*0.3183099+vec3(.1,.2,.3)); p*=17.0;
+         return fract(p.x*p.y*p.z*(p.x+p.y+p.z));
+       }
+       float mnoise(vec3 p){
+         vec3 i=floor(p),f=fract(p);
+         f=f*f*(3.0-2.0*f);
+         return mix(mix(mix(mhash(i),mhash(i+vec3(1,0,0)),f.x),mix(mhash(i+vec3(0,1,0)),mhash(i+vec3(1,1,0)),f.x),f.y),
+                    mix(mix(mhash(i+vec3(0,0,1)),mhash(i+vec3(1,0,1)),f.x),mix(mhash(i+vec3(0,1,1)),mhash(i+vec3(1,1,1)),f.x),f.y),f.z);
+       }
+       float mfbm(vec3 p){
+         float v=0.0,a=0.5;
+         for(int i=0;i<5;i++){v+=a*mnoise(p);p*=2.0;a*=0.5;}
+         return v;
+       }`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+       vec3 mp = vWPos * 0.018;
+       float turb = mfbm(mp * 2.0) * 2.4;
+       float veins = sin((mp.y * 6.0 + mp.x * 2.0 + turb) * 6.0);
+       float bands = smoothstep(-0.3, 0.9, veins);
+       float fine  = mfbm(mp * 8.0);
+       vec3 marble = mix(uMarbleA, uMarbleB, bands);
+       marble = mix(marble, uMarbleC, smoothstep(0.68, 0.95, fine) * 0.4);
+       diffuseColor.rgb = marble;`
+    );
+  };
 
   // Holographic grid overlay material (additive, no depth write)
   const holoMat = new THREE.ShaderMaterial({
@@ -17656,8 +17710,9 @@ window.addEventListener('keydown', (e) => {
     hdr('— PRESETS —');
     const PRESETS = [
       { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
-      { label: 'Regular Canyon',    mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
-      { label: 'Straight Canyon',   mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
+      { label: 'Canyon Corridor 2', mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
+      { label: 'Regular Canyon',    mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
+      { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
     ];
     PRESETS.forEach(({ label, mode, vals }) => {
       const pb = document.createElement('button');
