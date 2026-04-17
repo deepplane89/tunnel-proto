@@ -7644,22 +7644,30 @@ function _createCanyonWalls() {
     const isCyan = isEntrance ? true : (idx % 2 === 0);
     const geo    = _buildCanyonSlabGeo(seed, thickOverride);
 
-    // side=1 → right wall (geometry grows in +X, inner face at x≈footX)
-    // side=-1 → left wall  (mirror by scale.x = -1)
+    // Pivot group — sits at the inner foot edge of the corridor.
+    // Rotating the group around Y pivots the slab face inward/outward correctly.
+    const pivot = new THREE.Group();
+    pivot.position.z = zPos;
+    pivot.frustumCulled = false;
+    scene.add(pivot);
+
+    // Mesh is offset so its foot (local x=footX) sits at the pivot origin (x=0)
+    // For right wall (side=1): mesh.position.x = -footX  (foot at 0, back wall at THICK-footX)
+    // For left wall (side=-1): scale.x=-1 mirrors geometry, same offset
     const mesh = new THREE.Mesh(geo, isCyan ? cyanMat : darkMat);
-    mesh.scale.x     = side;         // mirrors left wall
-    mesh.position.z  = zPos;
+    mesh.scale.x      = side;
+    mesh.position.x   = -FOOT_OFF * side; // offset so foot sits at pivot origin
     mesh.frustumCulled = false;
-    scene.add(mesh);
+    pivot.add(mesh);
 
     // Holographic overlay on cyan slabs only
     if (isCyan) {
       const holo = new THREE.Mesh(geo, holoMat);
-      holo.scale.set(1.01, 1.0, 1.0); // tiny offset so it renders on top
-      mesh.add(holo);                  // child — moves with parent automatically
+      holo.scale.set(1.01, 1.0, 1.0);
+      mesh.add(holo);
     }
 
-    return mesh;
+    return pivot; // callers use the pivot for position/rotation
   }
 
   const INIT_Z  = T.spawnDepth || -400;
@@ -7692,19 +7700,15 @@ function _createCanyonWalls() {
   // Their thickness already pushes them outward visually
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
-    chunks[k].forEach((m, i) => {
-      const rowsAhead  = Math.max(0, Math.round((3.9 - m.position.z) / SPACING));
+    chunks[k].forEach((pivot) => {
+      const rowsAhead  = Math.max(0, Math.round((3.9 - pivot.position.z) / SPACING));
       const center     = _canyonPredictCenter(rowsAhead);
       const centerNext = _canyonPredictCenter(rowsAhead + 1);
       const halfX      = _canyonPredictHalfX(rowsAhead);
-      const angle      = Math.atan2(centerNext - center, SPACING);
-      const footX      = T.footX;
-      const bakedX     = (center + halfX * side) - footX * Math.cos(angle) * side;
-      const bakedZ     = m.position.z + footX * Math.sin(angle) * side;
-      m.userData.bakedX = bakedX;
-      m.position.x = bakedX;
-      m.position.z = bakedZ;
-      m.rotation.y = angle;
+      // Pivot sits at the foot world position; rotation.y angles the face inward
+      pivot.userData.bakedX = center + halfX * side;
+      pivot.position.x = pivot.userData.bakedX;
+      pivot.rotation.y = Math.atan2(centerNext - center, SPACING);
     });
   });
 
@@ -7724,7 +7728,11 @@ function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonSinePhase = 0;
-  _canyonWalls.strips.forEach(m => { scene.remove(m); m.geometry.dispose(); });
+  // strips are pivot Groups — remove group from scene, dispose child mesh geometry
+  _canyonWalls.strips.forEach(pivot => {
+    scene.remove(pivot);
+    pivot.children.forEach(child => { if (child.geometry) child.geometry.dispose(); });
+  });
   ['cyanMat','darkMat','holoMat'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
   ['cyanTex','darkTex'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
   if (_canyonWalls.canyonLight) scene.remove(_canyonWalls.canyonLight);
@@ -7794,23 +7802,16 @@ function _updateCanyonWalls(dt, speed) {
         // Predictive bake: estimate center/halfX for when the ship reaches this slab.
         // Slab is placed at minZ - spacing. Ship is at z≈3.9, speed≈72 units/s.
         // Row spacing = 7 units → rows ahead ≈ distance / 7.
-        const slabZ     = snappedMin - spacing;
+        const slabZ      = snappedMin - spacing;
         const rowsAhead  = Math.max(0, Math.round((3.9 - slabZ) / spacing));
         const center     = _canyonPredictCenter(rowsAhead);
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
         const halfX      = _canyonPredictHalfX(rowsAhead);
-        const footX      = _canyonTuner.footX;
-        // Y rotation so inner face angles toward corridor direction
-        // positive angle = corridor going right = right wall rotates to face left (inward)
-        const angle  = Math.atan2(centerNext - center, spacing);
-        // Pivot around foot (local x=footX): correct both X and Z position
-        const bakedX = (center + halfX * side) - footX * Math.cos(angle) * side;
-        const bakedZ = slabZ + footX * Math.sin(angle) * side;
-        m.userData.bakedX = bakedX;
-        m.position.x = bakedX;
-        m.position.z = bakedZ;
-        m.rotation.y = angle;
-        if (Math.abs(angle) > 0.01) console.log(`[CANYON ROT] side=${k} angle=${(angle*180/Math.PI).toFixed(2)}deg center=${center.toFixed(1)} next=${centerNext.toFixed(1)}`);
+        // Pivot sits at foot world X; rotation.y angles face inward on curves
+        m.userData.bakedX = center + halfX * side;
+        m.position.x = m.userData.bakedX;
+        m.position.z = slabZ;
+        m.rotation.y = Math.atan2(centerNext - center, spacing);
       } else {
         // Hold baked position — do NOT update X
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
@@ -17429,14 +17430,9 @@ window.addEventListener('keydown', (e) => {
         const center     = _canyonPredictCenter(rowsAhead);
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
         const halfX      = _canyonPredictHalfX(rowsAhead);
-        const footX      = _canyonTuner.footX;
-        const angle      = Math.atan2(centerNext - center, spacing);
-        const bakedX     = (center + halfX * side) - footX * Math.cos(angle) * side;
-        const bakedZ     = m.position.z + footX * Math.sin(angle) * side;
-        m.userData.bakedX = bakedX;
-        m.position.x = bakedX;
-        m.position.z = bakedZ;
-        m.rotation.y = angle;
+        m.userData.bakedX = center + halfX * side;
+        m.position.x = m.userData.bakedX;
+        m.rotation.y = Math.atan2(centerNext - center, spacing);
       });
     });
   }
