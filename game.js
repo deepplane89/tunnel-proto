@@ -7695,13 +7695,14 @@ function _createCanyonWalls() {
       const thick = isEntrance ? T.entranceThick : undefined;
       // Entrance slabs spawn at SAFE_Z (close to ship) so they appear as the canyon gate
       // Regular slabs fill INIT_Z → SAFE_Z; overflow parks behind INIT_Z
-      // entranceEnd: the Z of the last entrance slab (most negative entrance slab)
-      const entranceEnd = SAFE_Z - (T.entranceSlabs - 1) * SPACING; // e.g. -150 - 2*20 = -190
+      // entranceEnd: Z of last entrance slab; regular + overflow continue from here
+      const entranceEnd    = SAFE_Z - (T.entranceSlabs - 1) * SPACING;
+      const lastRegularZ   = entranceEnd - (initCount - T.entranceSlabs) * SPACING;
       const initZ = isEntrance
-        ? SAFE_Z - i * SPACING                             // entrance: -150, -170, -190
+        ? SAFE_Z - i * SPACING                                       // entrance: -150, -170, -190
         : i < initCount
-          ? entranceEnd - (i - T.entranceSlabs + 1) * SPACING  // regular: butt up against entrance end
-          : INIT_Z - (i - initCount + 1) * SPACING;        // overflow: park behind INIT_Z
+          ? entranceEnd - (i - T.entranceSlabs + 1) * SPACING        // regular: butt against entrance
+          : lastRegularZ - (i - initCount + 1) * SPACING;            // overflow: continue from last regular
       chunks[k].push(makeSlab(side, seed, initZ, i, thick));
     }
   });
