@@ -7880,7 +7880,7 @@ function _updateCanyonWalls(dt, speed) {
         m.userData._phaseLogged = true;
         const correctCenter  = _canyonXAtZ(m.position.z);
         const correctCenterAtShip = _canyonXAtZ(3.9);
-        const bakedCenter    = (m.userData.bakedX || 0) - (halfX * (k === 'left' ? -1 : 1));
+        const bakedCenter    = (m.userData.bakedX || 0) - (_canyonPredictHalfX(0) * (k === 'left' ? -1 : 1));
         const bakedAtZ       = m.userData.bakedAtZ || 0;
         console.log('[PHASE] side=' + k
           + ' slabZ=' + m.position.z.toFixed(2)
