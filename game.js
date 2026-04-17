@@ -8000,8 +8000,14 @@ function _updateCanyonWalls(dt, speed) {
         // Flip visible on first recycle — slab now scrolls in from the distance naturally
         m.visible = true;
       } else {
-        // Hold baked X — rotation frozen at bake time, only updates on recycle
+        // Hold baked X; recompute rotation live every frame from current phase
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
+        if (!m.userData.isEntrance && T.sineIntensity > 0) {
+          const rowsAhead  = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
+          const center     = _canyonPredictCenter(rowsAhead);
+          const centerNext = _canyonPredictCenter(rowsAhead + 1);
+          m.rotation.y = side * Math.atan2(centerNext - center, spacing);
+        }
       }
     });
   });
