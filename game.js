@@ -7296,6 +7296,10 @@ const _canyonTuner = {
   // Dark slab
   darkCrkCount:  6,
   darkCrkBright: 1.0,
+  darkRgh:       0.22,   // marble roughness (0=mirror, 1=matte)
+  darkClearcoat: 0.40,   // clearcoat layer strength
+  // Canyon lights
+  lightIntensity: 1.0,   // master multiplier for all 4 canyon lights
   // Corridor width override — half-gap between walls (wall foot lands at center ± halfXOverride)
   halfXOverride: 40,
   // Entrance: first N slabs get entranceThick — extends the slab outward while staying flush
@@ -7312,6 +7316,12 @@ const _canyonTuner = {
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
+const _CANYON_LIGHT_DEFS = [
+  { pos: [-3,  4,  2], intensity: 1.2 },
+  { pos: [ 3,  4,  2], intensity: 1.2 },
+  { pos: [ 0,  3, -4], intensity: 1.0 },
+  { pos: [ 0, -2,  4], intensity: 0.8 },
+];
 let _canyonActive = false;
 let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
@@ -7586,9 +7596,9 @@ function _createCanyonWalls() {
 
   const darkMat = new THREE.MeshPhysicalMaterial({
     color:              new THREE.Color(0x080810),
-    roughness:          0.22,
+    roughness:          T.darkRgh,
     metalness:          0.0,
-    clearcoat:          0.40,
+    clearcoat:          T.darkClearcoat,
     clearcoatRoughness: 0.08,
     reflectivity:       0.7,
     emissive:           new THREE.Color(0xff00cc),
@@ -7640,10 +7650,16 @@ function _createCanyonWalls() {
     side:        THREE.DoubleSide,
   });
 
-  // Canyon-scoped side directional light — removed in _destroyCanyonWalls
-  const canyonLight = new THREE.DirectionalLight(0xc8f0ff, 4.0);
-  canyonLight.position.set(-2, 5, 3);
-  scene.add(canyonLight);
+  // Canyon-scoped lights — 4 directions at low intensity to fake even box lighting
+  // Avoids single-source specular pooling on curved walls
+  const _cLightDefs = _CANYON_LIGHT_DEFS;
+  const _cLights = _cLightDefs.map(({ pos, intensity }) => {
+    const l = new THREE.DirectionalLight(0xc8f0ff, intensity * T.lightIntensity);
+    l.position.set(...pos);
+    scene.add(l);
+    return l;
+  });
+  const canyonLight = { lights: _cLights };
 
   const SPACING  = T.slabW;
   // FOOT_OFF: the foot vertex sits at local X = footX.
@@ -7767,7 +7783,10 @@ function _destroyCanyonWalls() {
   });
   ['cyanMat','darkMat','holoMat'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
   ['cyanTex','darkTex'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
-  if (_canyonWalls.canyonLight) scene.remove(_canyonWalls.canyonLight);
+  if (_canyonWalls.canyonLight) {
+    if (_canyonWalls.canyonLight.lights) _canyonWalls.canyonLight.lights.forEach(l => scene.remove(l));
+    else scene.remove(_canyonWalls.canyonLight);
+  }
   _canyonWalls = null;
   if (_canyonFillLight) {
     if (_canyonFillLight.lights) _canyonFillLight.lights.forEach(l => scene.remove(l));
@@ -17555,6 +17574,18 @@ window.addEventListener('keydown', (e) => {
         rebuildDarkTex();
       } else if (mode === 'live-sine') {
         rebakeAllX();
+      } else if (mode === 'live-lights') {
+        if (_canyonWalls && _canyonWalls.canyonLight && _canyonWalls.canyonLight.lights) {
+          _canyonWalls.canyonLight.lights.forEach((l, i) => {
+            l.intensity = _CANYON_LIGHT_DEFS[i].intensity * T.lightIntensity;
+          });
+        }
+      } else if (mode === 'live-dark-mat') {
+        if (_canyonWalls && _canyonWalls.darkMat) {
+          _canyonWalls.darkMat.roughness  = T.darkRgh;
+          _canyonWalls.darkMat.clearcoat  = T.darkClearcoat;
+          _canyonWalls.darkMat.needsUpdate = true;
+        }
       }
       // 'live' — nothing extra needed, update loop reads T directly
     });
@@ -17634,6 +17665,11 @@ window.addEventListener('keydown', (e) => {
     hdr('— DARK SLAB —');
     slider('Crack count',   'darkCrkCount',   1, 15, 1,    'dark-tex');
     slider('Crack bright',  'darkCrkBright',  0,  2, 0.05, 'dark-tex');
+    slider('Roughness',     'darkRgh',        0,  1, 0.02, 'live-dark-mat');
+    slider('Clearcoat',     'darkClearcoat',  0,  1, 0.05, 'live-dark-mat');
+
+    hdr('— LIGHTS —');
+    slider('Intensity',     'lightIntensity', 0,  3, 0.05, 'live-lights');
 
     hdr('— CORRIDOR —');
     slider('Wall spacing',   'halfXOverride',  1,  300,  1,  'live');
