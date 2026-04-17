@@ -7889,7 +7889,7 @@ function _updateCanyonWalls(dt, speed) {
   });
 
   // Collision — find the slabs closest to the ship (z near 0) and use their bakedX
-  if (state._jetLightningMode && state.phase === 'playing' && !state._godMode && !_godMode) {
+  if (_canyonActive && state.phase === 'playing' && !state._godMode && !_godMode) {
     const shipX  = state.shipX || 0;
     const buffer = 1.5;
     // Find nearest left and right slab to ship Z
@@ -7905,8 +7905,7 @@ function _updateCanyonWalls(dt, speed) {
     const leftEdge  = nearLeft  ? nearLeft.userData.bakedX  : -(CORRIDOR_NARROW_X - footOff);
     const rightEdge = nearRight ? nearRight.userData.bakedX :  (CORRIDOR_NARROW_X - footOff);
     if (shipX < leftEdge + buffer || shipX > rightEdge - buffer) {
-      if (typeof _killPlayer === 'function') _killPlayer();
-      else if (typeof triggerDeath === 'function') triggerDeath();
+      killPlayer();
     }
   }
 }
