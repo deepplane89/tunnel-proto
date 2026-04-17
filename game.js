@@ -7977,6 +7977,10 @@ function _updateCanyonWalls(dt, speed) {
         // Decrement per-side tail tracker — re-anchored each frame, unique Z per recycle even in burst
         if (k === 'left') { _tailLeft  -= spacing; } else { _tailRight -= spacing; }
         const slabZ = k === 'left' ? _tailLeft : _tailRight;
+        if (k === 'left') console.log(`[TAIL] tailBeforeDecrement=${(slabZ+spacing).toFixed(1)} slabZ=${slabZ.toFixed(1)} spacing=${spacing}`);
+
+        const center     = _canyonXAtZ(slabZ);
+        const centerNext = _canyonXAtZ(slabZ - spacing);
         const halfX      = _canyonPredictHalfX(0);
         if (m.userData.isEntrance) {
           const eHalfX = _canyonTuner.halfXOverride || 34;
@@ -7985,16 +7989,20 @@ function _updateCanyonWalls(dt, speed) {
           m.position.z = slabZ;
           m.rotation.y = 0;
         } else {
+          m.userData.bakedX   = center + halfX * side;
+          m.userData.bakedAtZ = slabZ;
+          m.userData.src      = 'RECYCLED';
+          m.userData.bakedRot = side * Math.atan2(centerNext - center, spacing);
+          m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
-          m.visible = true;
+          m.rotation.y = m.userData.bakedRot;
+          _recycleSlabDebug(m, k, slabZ, spacing, side);
         }
-      } else if (!m.userData.isEntrance) {
-        // Live X and rotation from world-Z sine — pure looper, no baking
-        const halfX  = _canyonPredictHalfX(0);
-        const cx     = _canyonXAtZ(m.position.z);
-        const cxNext = _canyonXAtZ(m.position.z + spacing);
-        m.position.x = cx + halfX * side;
-        m.rotation.y = side * Math.atan2(cxNext - cx, spacing);
+        // Flip visible on first recycle — slab now scrolls in from the distance naturally
+        m.visible = true;
+      } else {
+        // Hold baked X — rotation frozen at bake time, only updates on recycle
+        if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
       }
     });
   });
