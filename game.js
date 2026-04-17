@@ -21171,8 +21171,8 @@ const _origUpdateShockwave = _updateShockwave;
     }
     _updateAsteroids(dt);
     // Canyon corridor walls — only update when actually playing
-    if (_canyonActive && state.phase === 'playing') {
-      if (!_canyonWalls) _createCanyonWalls();
+    if ((_canyonActive || _canyonExiting) && state.phase === 'playing') {
+      if (_canyonActive && !_canyonWalls) _createCanyonWalls();
       _updateCanyonWalls(dt, state.speed);
     }
     _origComposerRender(...args);
