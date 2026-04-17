@@ -7686,21 +7686,21 @@ function _createCanyonWalls() {
   // Full pool size covers the whole visible range for recycling
   const autoPool  = Math.ceil((DESPAWN_Z - INIT_Z) / SPACING) + 2;
 
-  // Build Z positions sorted ascending (most negative first = entrance = first seen by player)
-  const allZs = [];
-  for (let i = 0; i < initCount; i++)       allZs.push(INIT_Z + i * SPACING);
-  for (let i = initCount; i < autoPool; i++) allZs.push(INIT_Z - (i - initCount + 1) * SPACING);
-  allZs.sort((a, b) => a - b); // ascending: most negative = furthest back = entrance
-
   const chunks = { left: [], right: [] };
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
-    allZs.forEach((initZ, i) => {
-      const seed  = i * 7 + (k === 'right' ? 100 : 0);
-      // i=0 is furthest back = first slab player sees = entrance
-      const thick = (i < T.entranceSlabs) ? T.entranceThick : undefined;
+    for (let i = 0; i < autoPool; i++) {
+      const seed = i * 7 + (k === 'right' ? 100 : 0);
+      // Entrance slabs explicitly placed at INIT_Z onward — always the first slabs seen
+      const isEntrance = i < T.entranceSlabs;
+      const thick = isEntrance ? T.entranceThick : undefined;
+      const initZ = isEntrance
+        ? INIT_Z + i * SPACING                              // entrance: at front of corridor
+        : i < initCount
+          ? INIT_Z + i * SPACING                           // regular: fill INIT_Z → SAFE_Z
+          : INIT_Z - (i - initCount + 1) * SPACING;        // overflow: park behind INIT_Z
       chunks[k].push(makeSlab(side, seed, initZ, i, thick));
-    });
+    }
   });
 
   // Bake X at init: entrance slabs stay flush with corridor (same halfX as regular)
