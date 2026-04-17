@@ -7684,7 +7684,7 @@ function _createCanyonWalls() {
   // Only create slabs that fit between INIT_Z and SAFE_Z — recycle handles the rest
   const initCount = Math.max(1, Math.floor((SAFE_Z - INIT_Z) / SPACING));
   // Full pool size covers the whole visible range for recycling
-  const autoPool  = Math.ceil((DESPAWN_Z - INIT_Z) / SPACING) + 2;
+  const autoPool  = Math.ceil((DESPAWN_Z - INIT_Z) / SPACING) + 2 + T.entranceSlabs;
 
   const chunks = { left: [], right: [] };
   ['left','right'].forEach(k => {
