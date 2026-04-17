@@ -7764,10 +7764,13 @@ function _updateCanyonWalls(dt, speed) {
   _canyonDbgFrame++;
   // Every 120 frames log slab positions so we can see if/when they vanish
   if (_canyonDbgFrame % 120 === 0) {
-    const leftZs  = _canyonWalls.left.map(m  => m.position.z.toFixed(0)).join(', ');
+    const leftZs  = _canyonWalls.left.map(m => m.position.z.toFixed(0)).join(', ');
     const rightZs = _canyonWalls.right.map(m => m.position.z.toFixed(0)).join(', ');
-    console.log(`[CANYON DBG] frame=${_canyonDbgFrame} manual=${_canyonManual} active=${_canyonActive} walls=${!!_canyonWalls}`);
+    const leftRots = _canyonWalls.left.map(m => (m.rotation.y*180/Math.PI).toFixed(1)).join(', ');
+    const sinePhase = _canyonSinePhase.toFixed(3);
+    console.log(`[CANYON DBG] frame=${_canyonDbgFrame} sineI=${_canyonTuner.sineIntensity} phase=${sinePhase}`);
     console.log(`  LEFT  z=[${leftZs}]`);
+    console.log(`  LEFT rot.y(deg)=[${leftRots}]`);
     console.log(`  RIGHT z=[${rightZs}]`);
   }
   const T   = _canyonTuner;
