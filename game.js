@@ -7693,10 +7693,10 @@ function _createCanyonWalls() {
       const seed  = i * 7 + (k === 'right' ? 100 : 0);
       // First entranceSlabs get entrance thickness (placed at INIT_Z = furthest back = first seen)
       const thick = (i < T.entranceSlabs) ? T.entranceThick : undefined;
-      // Slabs 0..initCount-1 fill INIT_Z → SAFE_Z; overflow slabs chain forward from SAFE_Z
+      // Slabs 0..initCount-1 fill INIT_Z → SAFE_Z; overflow slabs park behind INIT_Z
       const initZ = i < initCount
         ? INIT_Z + i * SPACING
-        : SAFE_Z + (i - initCount + 1) * SPACING;
+        : INIT_Z - (i - initCount + 1) * SPACING;
       chunks[k].push(makeSlab(side, seed, initZ, i, thick));
     }
   });
