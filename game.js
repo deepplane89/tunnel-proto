@@ -21079,7 +21079,8 @@ const _origUpdateShockwave = _updateShockwave;
     if (state.phase === 'playing' && !state.introActive &&
         (state._tutorialActive || _chaosMode || state._jetLightningMode)) {
       // Corridor takes over — pause all JL obstacle spawning during breather
-      if (_jlCorridor.active && !_canyonActive) {
+      // _canyonMode > 0 means slab canyon is active — never use old L3/L4 corridor ticker
+      if (_jlCorridor.active && !_canyonActive && !_canyonMode) {
         _jlTickCorridor(dt, state.speed);
       } else if (!_jlCorridor.active) {
         // Run asteroid spawner when no pure corridor is active
@@ -21087,8 +21088,8 @@ const _origUpdateShockwave = _updateShockwave;
         _tickAsteroidSpawner(dt);
       }
     }
-    // Canyon corridor sine tick — always runs when canyon is active, regardless of JL mode
-    if (_canyonActive && _jlCorridor.active) {
+    // Canyon corridor sine tick — only for old L3/L4 cone corridors, never for slab canyon
+    if (_canyonActive && _jlCorridor.active && !_canyonMode) {
       _jlTickCorridor(dt, state.speed);
     }
     _updateAsteroids(dt);
