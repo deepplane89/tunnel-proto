@@ -7327,10 +7327,10 @@ let _canyonManual = false; // true when triggered by V key — bypasses sequence
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-400, _allCyan:false, _allDark:true },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false, _allDark:true },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true },
 };
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
@@ -7700,8 +7700,8 @@ function _createCanyonWalls() {
     return pivot; // callers use the pivot for position/rotation
   }
 
-  const INIT_Z  = T.spawnDepth || -400;
-  const SAFE_Z  = -150; // no slab spawns closer than this on init
+  const INIT_Z  = T.spawnDepth || -600;
+  const SAFE_Z  = -350; // entrance gate spawns here — far enough to scroll in from distance
   // Offset sinePhase so the wave is at exactly 0 when ship hits the first regular slab.
   // This guarantees a smooth straight→sine transition with no snap.
   const _firstRegularZ = SAFE_Z - (T.entranceSlabs - 1) * SPACING - SPACING;
@@ -7729,9 +7729,9 @@ function _createCanyonWalls() {
           ? entranceEnd - (i - T.entranceSlabs + 1) * SPACING        // regular: butt against entrance
           : lastRegularZ - (i - initCount + 1) * SPACING;            // overflow: continue from last regular
       const slab = makeSlab(side, seed, initZ, i, thick);
-      // Regular/overflow slabs start invisible and become visible on first recycle
-      // so they scroll in naturally from the distance instead of popping
-      if (!isEntrance) slab.visible = false;
+      // Only hide slabs that are genuinely beyond the camera far clip (z < -590)
+      // Everything within view starts visible — corridor must be fully present at spawn
+      if (!isEntrance && initZ < -590) slab.visible = false;
       chunks[k].push(slab);
     }
   });
@@ -7741,10 +7741,11 @@ function _createCanyonWalls() {
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
     chunks[k].forEach((pivot) => {
-      // Entrance slabs: no rotation, fixed at corridor halfX — they are a flat gate
+      // Entrance slabs: centered on ship X so gate opening aligns with player
       if (pivot.userData.isEntrance) {
-        const halfX = T.halfXOverride || 34;
-        pivot.userData.bakedX = halfX * side;
+        const halfX   = T.halfXOverride || 34;
+        const shipX   = state.shipX || 0;
+        pivot.userData.bakedX = shipX + halfX * side;
         pivot.position.x = pivot.userData.bakedX;
         pivot.rotation.y = 0;
       } else {
@@ -17731,10 +17732,10 @@ window.addEventListener('keydown', (e) => {
 
     hdr('— PRESETS —');
     const PRESETS = [
-      { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
-      { label: 'Canyon Corridor 2', mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false, _allDark:true } },
-      { label: 'Regular Canyon',    mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
-      { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
+      { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true } },
+      { label: 'Canyon Corridor 2', mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false, _allDark:true } },
+      { label: 'Regular Canyon',    mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false } },
+      { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true } },
     ];
     PRESETS.forEach(({ label, mode, vals }) => {
       const pb = document.createElement('button');
