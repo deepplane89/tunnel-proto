@@ -7338,6 +7338,7 @@ let _canyonSineT         = 0;
 let _canyonSineRows      = 0;
 let _canyonSineZ         = 0;
 let _canyonSinePhase     = 0; // canyon-own sine accumulator
+let _canyonTailZ         = 0; // tracks pool tail Z — decremented on each recycle to prevent same-frame pile-up
 let _canyonExiting       = false; // true during scroll-out exit — slabs drift off, no recycle
 let _canyonWasCorridor   = false;
 let _canyonDiagFrame     = 0;     // frame counter for periodic diagnostic log
@@ -7765,6 +7766,9 @@ function _createCanyonWalls() {
       }
     });
   });
+  // Init tail tracker from the full recyclable pool (both sides, non-entrance)
+  const _recyclable = [...chunks.left, ...chunks.right].filter(p => !p.userData.isEntrance);
+  _canyonTailZ = Math.min(..._recyclable.map(p => p.position.z));
   console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
   console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick);
   // Log first few slabs by Z to confirm entrance slabs are at the front
@@ -7790,6 +7794,7 @@ function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonSinePhase = 0;
+  _canyonTailZ      = 0;
   _canyonExiting    = false;
   // strips are pivot Groups — remove group from scene, dispose child mesh geometry
   _canyonWalls.strips.forEach(pivot => {
@@ -7968,13 +7973,10 @@ function _updateCanyonWalls(dt, speed) {
 
       // Recycle: slab passed ship → send to back of queue and bake new X
       if (m.position.z > DESPAWN_Z + spacing) {
-        let minZ = Infinity;
-        for (const om of meshes) if (om !== m && om.visible && !om.userData.isEntrance && om.position.z < minZ) minZ = om.position.z;
-        // Snap to clean multiple of spacing to prevent float drift gaps
-        const snappedMin = Math.round(minZ / spacing) * spacing;
-        m.position.z = snappedMin - spacing;
+        // Decrement tail tracker — gives each slab a unique Z even when multiple recycle in the same frame
+        _canyonTailZ -= spacing;
+        const slabZ = _canyonTailZ;
 
-        const slabZ      = snappedMin - spacing;
         const center     = _canyonXAtZ(slabZ);
         const centerNext = _canyonXAtZ(slabZ - spacing);
         const halfX      = _canyonPredictHalfX(0);
@@ -7987,11 +7989,8 @@ function _updateCanyonWalls(dt, speed) {
         } else {
           m.userData.bakedX   = center + halfX * side;
           m.userData.bakedAtZ = slabZ;
-          // Use phase-aware predictor for rotation so angle reflects live sine, not frozen spawn-depth slope
-          const rotRowsAhead  = Math.round((3.9 - slabZ) / spacing);
-          const rotCenter     = _canyonPredictCenter(rotRowsAhead);
-          const rotCenterNext = _canyonPredictCenter(rotRowsAhead + 1);
-          m.userData.bakedRot = side * Math.atan2(rotCenterNext - rotCenter, spacing);
+          m.userData.src      = 'RECYCLED';
+          m.userData.bakedRot = side * Math.atan2(centerNext - center, spacing);
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
           m.rotation.y = m.userData.bakedRot;
