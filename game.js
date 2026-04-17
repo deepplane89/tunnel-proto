@@ -7701,6 +7701,10 @@ function _createCanyonWalls() {
 
   const INIT_Z  = T.spawnDepth || -400;
   const SAFE_Z  = -150; // no slab spawns closer than this on init
+  // Offset sinePhase so the wave is at exactly 0 when ship hits the first regular slab.
+  // This guarantees a smooth straight→sine transition with no snap.
+  const _firstRegularZ = SAFE_Z - (T.entranceSlabs - 1) * SPACING - SPACING;
+  _canyonSinePhase = -((3.9 - _firstRegularZ) / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
   // Only create slabs that fit between INIT_Z and SAFE_Z — recycle handles the rest
   const initCount = Math.max(1, Math.floor((SAFE_Z - INIT_Z) / SPACING));
   // Full pool size covers the whole visible range for recycling
