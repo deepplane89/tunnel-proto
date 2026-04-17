@@ -7691,7 +7691,8 @@ function _createCanyonWalls() {
     const side = k === 'left' ? -1 : 1;
     for (let i = 0; i < autoPool; i++) {
       const seed  = i * 7 + (k === 'right' ? 100 : 0);
-      const thick = (i < T.entranceSlabs) ? T.entranceThick : undefined;
+      // Entrance slabs are the furthest-back ones (highest i in overflow chain)
+      const thick = (i >= autoPool - T.entranceSlabs) ? T.entranceThick : undefined;
       // Slabs within safe range placed at correct Z; overflow slabs chain backward from INIT_Z
       const initZ = i < initCount
         ? INIT_Z + i * SPACING
