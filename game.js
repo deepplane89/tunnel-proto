@@ -7914,7 +7914,11 @@ function _updateCanyonWalls(dt, speed) {
         } else {
           m.userData.bakedX   = center + halfX * side;
           m.userData.bakedAtZ = slabZ;
-          m.userData.bakedRot = side * Math.atan2(centerNext - center, spacing);
+          // Use phase-aware predictor for rotation so angle reflects live sine, not frozen spawn-depth slope
+          const rotRowsAhead  = Math.round((3.9 - slabZ) / spacing);
+          const rotCenter     = _canyonPredictCenter(rotRowsAhead);
+          const rotCenterNext = _canyonPredictCenter(rotRowsAhead + 1);
+          m.userData.bakedRot = side * Math.atan2(rotCenterNext - rotCenter, spacing);
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
           m.rotation.y = m.userData.bakedRot;
