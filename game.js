@@ -22229,6 +22229,8 @@ function _tickJetLightningRamp(dt) {
           if (!state._jetLightningMode) return;
           // Reset all track activation flags so onActivate fires correctly
           for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
+          // Tear down any active canyon before jumping
+          if (_canyonActive) _jlCanyonStop();
           _jlRampTime = track.startT;
           // If jumping to a non-asteroid track, disable asteroids so they don't overlap
           if (track.type !== 'asteroid') {
