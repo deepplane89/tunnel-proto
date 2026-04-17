@@ -7327,10 +7327,10 @@ let _canyonManual = false; // true when triggered by V key — bypasses sequence
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false, _allDark:true },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true },
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false, _allDark:true },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
 };
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
@@ -7573,8 +7573,6 @@ function _buildCanyonSlabGeo(seed, thickOverride) {
 function _createCanyonWalls() {
   if (_canyonWalls) return;
   console.warn('[CANYON] _createCanyonWalls called — manual:', _canyonManual, '| stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
-  // Align corridor center to ship X so entrance gate and walls share the same reference point
-  state.corridorGapCenter = state.shipX || 0;
   const T = _canyonTuner;
 
   // Two slab types: cyan (MeshPhysical + holo overlay) and dark (MeshStandard + veins)
@@ -7702,12 +7700,8 @@ function _createCanyonWalls() {
     return pivot; // callers use the pivot for position/rotation
   }
 
-  const INIT_Z  = T.spawnDepth || -600;
-  const SAFE_Z  = -350; // entrance gate spawns here — far enough to scroll in from distance
-  // Offset sinePhase so the wave is at exactly 0 when ship hits the first regular slab.
-  // This guarantees a smooth straight→sine transition with no snap.
-  const _firstRegularZ = SAFE_Z - (T.entranceSlabs - 1) * SPACING - SPACING;
-  _canyonSinePhase = -((3.9 - _firstRegularZ) / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
+  const INIT_Z  = T.spawnDepth || -400;
+  const SAFE_Z  = -150; // no slab spawns closer than this on init
   // Only create slabs that fit between INIT_Z and SAFE_Z — recycle handles the rest
   const initCount = Math.max(1, Math.floor((SAFE_Z - INIT_Z) / SPACING));
   // Full pool size covers the whole visible range for recycling
@@ -11390,7 +11384,7 @@ window.addEventListener('keydown', e => {
   // ── Debug hotkeys: Sequencer stage jumping (numbers 1-9) + debug toggles ──
   const _digit = e.code.startsWith('Digit') ? e.code.replace('Digit','') : null;
   // ── JL mode: number keys jump to sequence sections ────────────────────────
-  if (state._jetLightningMode && !state.isDeathRun && _digit) {
+  if (state._jetLightningMode && _digit) {
     // 1=0s  2=20s  3=30s(C1)  4=60s  5=75s  6=90s(C2)  7=123s  8=153s(C1+LT)  9=183s(C2+LT)  0=213s(peak)
     const _jlMap = { '1':0, '2':20, '3':30, '4':60, '5':75, '6':90, '7':123, '8':153, '9':183, '0':213 };
     if (_jlMap[_digit] !== undefined) {
@@ -17737,10 +17731,10 @@ window.addEventListener('keydown', (e) => {
 
     hdr('— PRESETS —');
     const PRESETS = [
-      { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true } },
-      { label: 'Canyon Corridor 2', mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false, _allDark:true } },
-      { label: 'Regular Canyon',    mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false } },
-      { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true } },
+      { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
+      { label: 'Canyon Corridor 2', mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false, _allDark:true } },
+      { label: 'Regular Canyon',    mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
+      { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
     ];
     PRESETS.forEach(({ label, mode, vals }) => {
       const pb = document.createElement('button');
@@ -21874,22 +21868,16 @@ function _jlCanyonStop() {
 // Jump JL sequencer to any time — shared by panel buttons and number hotkeys
 function _jlJumpToTime(targetT) {
   if (!state._jetLightningMode) return;
-  // Find the first track whose window contains targetT (for type detection)
-  const refTrack = _JL_TRACKS.find(tr => targetT >= tr.startT && (tr.endT === null || targetT < tr.endT))
-               || _JL_TRACKS.find(tr => targetT === tr.startT)
-               || { type: 'custom' };
   for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
+  // Clear corridor state so sequencer starts clean
+  _jlCorridor.active = false;
+  _canyonExiting = false;
   if (_canyonActive) _jlCanyonStop();
   _jlRampTime = targetT;
-  if (refTrack.type !== 'asteroid') {
-    _asteroidTuner.enabled = false;
-  } else {
-    _asteroidTuner.enabled = true;
-    _astTimer = 0.1;
-  }
-  if (refTrack.type !== 'lightning') {
-    if (window._LT) window._LT.enabled = false;
-  }
+  // Always clear both — sequencer will re-enable correct ones next frame
+  _asteroidTuner.enabled = false;
+  _astTimer = 0.1;
+  if (window._LT) window._LT.enabled = false;
   if (window._stopFcLoop) window._stopFcLoop();
   for (const lr of _lethalRingActive) { lr.userData.active = false; lr.visible = false; lr.position.set(0,-9999,0); }
   _lethalRingActive.length = 0;
