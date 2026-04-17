@@ -7873,7 +7873,7 @@ function _updateCanyonWalls(dt, speed) {
       // Recycle: slab passed ship → send to back of queue and bake new X
       if (m.position.z > DESPAWN_Z + spacing) {
         let minZ = Infinity;
-        for (const om of meshes) if (om !== m && om.position.z < minZ) minZ = om.position.z;
+        for (const om of meshes) if (om !== m && om.visible && om.position.z < minZ) minZ = om.position.z;
         // Snap to clean multiple of spacing to prevent float drift gaps
         const snappedMin = Math.round(minZ / spacing) * spacing;
         m.position.z = snappedMin - spacing;
