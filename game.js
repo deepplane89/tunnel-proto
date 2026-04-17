@@ -7724,9 +7724,10 @@ function _createCanyonWalls() {
   console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
   console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick);
   // Log first few slabs by Z to confirm entrance slabs are at the front
-  const sortedLeft = [...chunks.left].sort((a,b) => a.position.z - b.position.z);
+  // Sort descending — highest Z (closest to ship) first, so entrance slabs appear at top
+  const sortedLeft = [...chunks.left].sort((a,b) => b.position.z - a.position.z);
   sortedLeft.slice(0, T.entranceSlabs + 2).forEach((p, i) => {
-    console.log('[ENTRANCE] slab '+i+' z='+p.position.z.toFixed(0)+' isEntrance='+!!p.userData.isEntrance);
+    console.log('[ENTRANCE] slab '+i+' z='+p.position.z.toFixed(0)+' isEntrance='+!!p.userData.isEntrance+' thick='+p.userData.slabThick);
   });
 
   _canyonWalls = {
