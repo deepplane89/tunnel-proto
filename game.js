@@ -7822,6 +7822,12 @@ function _updateCanyonWalls(dt, speed) {
     meshes.forEach(m => {
       m.position.z += scroll;
 
+      // Entrance slabs: scroll through once then hide — never recycle into corridor
+      if (m.userData.isEntrance && m.position.z > DESPAWN_Z + spacing) {
+        m.visible = false;
+        return;
+      }
+
       // Recycle: slab passed ship → send to back of queue and bake new X
       if (m.position.z > DESPAWN_Z + spacing) {
         let minZ = Infinity;
