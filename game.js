@@ -7573,6 +7573,7 @@ function _buildCanyonSlabGeo(seed, thickOverride) {
 function _createCanyonWalls() {
   if (_canyonWalls) return;
   console.warn('[CANYON] _createCanyonWalls called — manual:', _canyonManual, '| stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
+  _canyonDbgFrame = 0; _canyonDbgLastNearestRot = null; _canyonDbgStartTime = null;
   const T = _canyonTuner;
 
   // Two slab types: cyan (MeshPhysical + holo overlay) and dark (MeshStandard + veins)
@@ -7828,19 +7829,48 @@ function _canyonXAtZ(worldZ) {
 }
 
 let _canyonDbgFrame = 0;
+let _canyonDbgLastNearestRot = null;
+let _canyonDbgStartTime = null;
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || (!_canyonActive && !_canyonExiting)) return;
   _canyonDbgFrame++;
-  // Every 120 frames log slab positions so we can see if/when they vanish
+  if (_canyonDbgStartTime === null) _canyonDbgStartTime = performance.now();
+  const _canyonElapsed = ((performance.now() - _canyonDbgStartTime) / 1000).toFixed(1);
+
   if (_canyonDbgFrame % 120 === 0) {
-    const leftZs  = _canyonWalls.left.map(m => m.position.z.toFixed(0)).join(', ');
-    const rightZs = _canyonWalls.right.map(m => m.position.z.toFixed(0)).join(', ');
-    const leftRots = _canyonWalls.left.map(m => (m.rotation.y*180/Math.PI).toFixed(1)).join(', ');
-    const sinePhase = _canyonSinePhase.toFixed(3);
-    console.log(`[CANYON DBG] frame=${_canyonDbgFrame} sineI=${_canyonTuner.sineIntensity} phase=${sinePhase}`);
-    console.log(`  LEFT  z=[${leftZs}]`);
-    console.log(`  LEFT rot.y(deg)=[${leftRots}]`);
-    console.log(`  RIGHT z=[${rightZs}]`);
+    const meshes = _canyonWalls.left;
+    // Find slab nearest ship (z closest to 0)
+    let nearestM = null, nearestDist = Infinity;
+    for (const m of meshes) {
+      if (m.userData.isEntrance) continue;
+      const d = Math.abs(m.position.z);
+      if (d < nearestDist) { nearestDist = d; nearestM = m; }
+    }
+    const nearRot   = nearestM ? (nearestM.rotation.y * 180 / Math.PI).toFixed(2) : '?';
+    const nearZ     = nearestM ? nearestM.position.z.toFixed(1) : '?';
+    const nearBaked = nearestM ? (nearestM.userData.bakedAtZ || 0).toFixed(1) : '?';
+    const nearBRot  = nearestM ? ((nearestM.userData.bakedRot || 0) * 180 / Math.PI).toFixed(2) : '?';
+    const correctRot = nearestM ? (Math.atan2(
+      _canyonXAtZ(nearestM.position.z) - _canyonXAtZ(nearestM.position.z + 20), 20
+    ) * 180 / Math.PI).toFixed(2) : '?';
+    const initOrRecycled = (nearestM && nearestM.userData.bakedAtZ) ? 'RECYCLED' : 'INIT';
+
+    // Count visible slabs in camera range
+    const inView = meshes.filter(m => m.position.z > -590 && m.position.z < 26 && m.visible).length;
+    const poolMin = Math.min(...meshes.filter(m=>!m.userData.isEntrance).map(m=>m.position.z)).toFixed(0);
+
+    console.log(`[CANYON DBG] t=${_canyonElapsed}s frame=${_canyonDbgFrame} phase=${_canyonSinePhase.toFixed(3)}`);
+    console.log(`  NEAREST: z=${nearZ} rot=${nearRot}° correct=${correctRot}° bakedAtZ=${nearBaked} bakedRot=${nearBRot}° source=${initOrRecycled}`);
+    console.log(`  POOL: inView=${inView} poolMinZ=${poolMin}`);
+
+    // Straight detector — warn if nearest rot hasn't changed much
+    if (_canyonDbgLastNearestRot !== null) {
+      const rotDelta = Math.abs(parseFloat(nearRot) - _canyonDbgLastNearestRot);
+      if (rotDelta < 1.0) {
+        console.warn(`[STRAIGHT?] t=${_canyonElapsed}s rot stuck at ~${nearRot}° (delta=${rotDelta.toFixed(2)}° from last snapshot) source=${initOrRecycled}`);
+      }
+    }
+    _canyonDbgLastNearestRot = parseFloat(nearRot);
   }
   const T   = _canyonTuner;
   const spd = (speed && speed > 1) ? speed : BASE_SPEED;
