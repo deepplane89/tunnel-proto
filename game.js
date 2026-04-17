@@ -7878,14 +7878,19 @@ function _updateCanyonWalls(dt, speed) {
       // Phase logger — fires once per regular slab as it passes the ship
       if (!m.userData.isEntrance && !m.userData._phaseLogged && m.position.z > 0 && m.position.z < DESPAWN_Z + spacing) {
         m.userData._phaseLogged = true;
-        const rowsAheadNow = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
-        const predictedCenter = _canyonPredictCenter(rowsAheadNow);
-        console.log('[PHASE] slab at z=' + m.position.z.toFixed(2)
-          + ' sinePhase=' + _canyonSinePhase.toFixed(4)
-          + ' sin=' + Math.sin(_canyonSinePhase + rowsAheadNow * (2*Math.PI / T.sinePeriod) * T.sineSpeed).toFixed(4)
-          + ' predictedCenter=' + predictedCenter.toFixed(2)
+        const correctCenter  = _canyonXAtZ(m.position.z);
+        const correctCenterAtShip = _canyonXAtZ(3.9);
+        const bakedCenter    = (m.userData.bakedX || 0) - (halfX * (k === 'left' ? -1 : 1));
+        const bakedAtZ       = m.userData.bakedAtZ || 0;
+        console.log('[PHASE] side=' + k
+          + ' slabZ=' + m.position.z.toFixed(2)
           + ' bakedX=' + (m.userData.bakedX || 0).toFixed(2)
-          + ' isEntrance=' + !!m.userData.isEntrance);
+          + ' bakedCenter=' + bakedCenter.toFixed(2)
+          + ' bakedAtZ=' + bakedAtZ.toFixed(1)
+          + ' correctCenter@slabZ=' + correctCenter.toFixed(2)
+          + ' correctCenter@ship=' + correctCenterAtShip.toFixed(2)
+          + ' rot.y(deg)=' + (m.rotation.y * 180/Math.PI).toFixed(1)
+          + ' bakedRot(deg)=' + ((m.userData.bakedRot||0) * 180/Math.PI).toFixed(1));
       }
 
       // Recycle: slab passed ship → send to back of queue and bake new X
@@ -7907,10 +7912,12 @@ function _updateCanyonWalls(dt, speed) {
           m.position.z = slabZ;
           m.rotation.y = 0;
         } else {
-          m.userData.bakedX = center + halfX * side;
+          m.userData.bakedX   = center + halfX * side;
+          m.userData.bakedAtZ = slabZ;
+          m.userData.bakedRot = side * Math.atan(centerNext - center);
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
-          m.rotation.y = side * Math.atan(centerNext - center);
+          m.rotation.y = m.userData.bakedRot;
         }
         // Flip visible on first recycle — slab now scrolls in from the distance naturally
         m.visible = true;
