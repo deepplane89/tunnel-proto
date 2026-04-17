@@ -7802,6 +7802,30 @@ function _updateCanyonWalls(dt, speed) {
 
   const POOL = _canyonWalls.left.length;
 
+  // ── DBG: log every 90 frames ─────────────────────────────────────────────
+  if (!_canyonWalls._dbgFrame) _canyonWalls._dbgFrame = 0;
+  _canyonWalls._dbgFrame++;
+  if (_canyonWalls._dbgFrame % 90 === 1) {
+    const Lz = _canyonWalls.left.map(m => m.position.z.toFixed(0));
+    const Lx = _canyonWalls.left.map(m => m.position.x.toFixed(1));
+    const Lv = _canyonWalls.left.map(m => m.visible ? 1 : 0);
+    console.log('[CYN DBG] frame=' + _canyonWalls._dbgFrame
+      + ' trackZ=' + _canyonTrackZ.toFixed(1)
+      + ' scroll=' + scroll.toFixed(3)
+      + ' POOL=' + POOL
+      + ' spacing=' + spacing
+      + ' exiting=' + _canyonExiting
+      + ' active=' + _canyonActive);
+    console.log('  LEFT  z=[' + Lz.join(',') + ']');
+    console.log('  LEFT  x=[' + Lx.join(',') + ']');
+    console.log('  LEFT  v=[' + Lv.join(',') + ']');
+    console.log('  trackZ+0*sp=' + (_canyonTrackZ).toFixed(1)
+      + '  trackZ+' + (POOL-1) + '*sp=' + (_canyonTrackZ + (POOL-1)*spacing).toFixed(1));
+    console.log('  _canyonXAtZ(trackZ)=' + _canyonXAtZ(_canyonTrackZ).toFixed(2)
+      + '  _canyonXAtZ(3.9)=' + _canyonXAtZ(3.9).toFixed(2));
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   ['left','right'].forEach(k => {
     const side   = k === 'left' ? -1 : 1;
     const meshes = _canyonWalls[k];
