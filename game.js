@@ -22197,11 +22197,7 @@ function _tickJetLightningRamp(dt) {
     for (const track of _JL_TRACKS) {
       if (track.type !== 'custom') continue;
       const active = t >= track.startT && (track.endT === null || t < track.endT);
-      if (active && !_jlTrackActive[track.id]) {
-        // New custom track starting while corridor is active — fire onActivate (e.g. C1 exit overlaps C2 start)
-        _jlTrackActive[track.id] = true;
-        if (track.onActivate) track.onActivate();
-      } else if (!active && _jlTrackActive[track.id]) {
+      if (!active && _jlTrackActive[track.id]) {
         _jlTrackActive[track.id] = false;
         if (track.onDeactivate) track.onDeactivate();
       }
