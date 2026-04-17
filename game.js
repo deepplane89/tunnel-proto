@@ -7709,16 +7709,23 @@ function _createCanyonWalls() {
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
     chunks[k].forEach((pivot) => {
-      const rowsAhead  = Math.max(0, Math.round((3.9 - pivot.position.z) / SPACING));
-      const center     = _canyonPredictCenter(rowsAhead);
-      const centerNext = _canyonPredictCenter(rowsAhead + 1);
-      const halfX      = _canyonPredictHalfX(rowsAhead);
-      // Pivot sits at the foot world position; rotation.y angles the face inward
-      const angle = side * Math.atan(centerNext - center);
-      pivot.userData.bakedX = center + halfX * side;
-      pivot.position.x = pivot.userData.bakedX;
-      pivot.rotation.y = angle;
-      if (k === 'right' && Math.abs(angle) > 0.001) console.log(`[INIT ROT] rowsAhead=${rowsAhead} center=${center.toFixed(2)} centerNext=${centerNext.toFixed(2)} angle=${(angle*180/Math.PI).toFixed(2)}deg sineIntensity=${_canyonTuner.sineIntensity} sinePhase=${_canyonSinePhase.toFixed(3)}`);
+      // Entrance slabs: no rotation, fixed at corridor halfX — they are a flat gate
+      if (pivot.userData.isEntrance) {
+        const halfX = T.halfXOverride || 34;
+        pivot.userData.bakedX = halfX * side;
+        pivot.position.x = pivot.userData.bakedX;
+        pivot.rotation.y = 0;
+      } else {
+        const rowsAhead  = Math.max(0, Math.round((3.9 - pivot.position.z) / SPACING));
+        const center     = _canyonPredictCenter(rowsAhead);
+        const centerNext = _canyonPredictCenter(rowsAhead + 1);
+        const halfX      = _canyonPredictHalfX(rowsAhead);
+        const angle = side * Math.atan(centerNext - center);
+        pivot.userData.bakedX = center + halfX * side;
+        pivot.position.x = pivot.userData.bakedX;
+        pivot.rotation.y = angle;
+        if (k === 'right' && Math.abs(angle) > 0.001) console.log(`[INIT ROT] rowsAhead=${rowsAhead} center=${center.toFixed(2)} centerNext=${centerNext.toFixed(2)} angle=${(angle*180/Math.PI).toFixed(2)}deg sineIntensity=${_canyonTuner.sineIntensity} sinePhase=${_canyonSinePhase.toFixed(3)}`);
+      }
     });
   });
   console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
