@@ -7318,7 +7318,7 @@ let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
   1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false, _allDark:true },
   3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
   4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
 };
@@ -7653,7 +7653,7 @@ function _createCanyonWalls() {
 
   function makeSlab(side, seed, zPos, idx, thickOverride) {
     const isEntrance = (thickOverride !== undefined);
-    const isCyan = T._allCyan ? true : (idx % 2 === 0);
+    const isCyan = T._allCyan ? true : T._allDark ? false : (idx % 2 === 0);
     const geo    = _buildCanyonSlabGeo(seed, thickOverride);
 
     // Pivot group — sits at the inner foot edge of the corridor.
@@ -17660,7 +17660,7 @@ window.addEventListener('keydown', (e) => {
     hdr('— PRESETS —');
     const PRESETS = [
       { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
-      { label: 'Canyon Corridor 2', mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
+      { label: 'Canyon Corridor 2', mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false, _allDark:true } },
       { label: 'Regular Canyon',    mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
       { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
     ];
