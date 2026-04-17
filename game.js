@@ -7308,11 +7308,19 @@ const _canyonTuner = {
   sineAmp:       30.0,  // peak swing in world units
   sinePeriod:    25.0,  // rows per full cycle (larger = lazier curves)
   sineSpeed:     1.0,   // how fast phase advances per slab scroll tick
+  _allCyan:      true,  // true = all slabs cyan, false = alternating cyan/dark
 };
 let _canyonWalls = null;
 let _canyonFillLight = null;
 let _canyonActive = false;
 let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
+let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
+const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Regular Canyon', 'Straight Canyon'];
+const _CANYON_PRESETS = {
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
+};
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
 let _canyonSineT         = 0;
@@ -7641,7 +7649,7 @@ function _createCanyonWalls() {
 
   function makeSlab(side, seed, zPos, idx, thickOverride) {
     const isEntrance = (thickOverride !== undefined);
-    const isCyan = true; // all slabs use cyan mat for uniform look
+    const isCyan = T._allCyan ? true : (idx % 2 === 0);
     const geo    = _buildCanyonSlabGeo(seed, thickOverride);
 
     // Pivot group — sits at the inner foot edge of the corridor.
@@ -12402,6 +12410,7 @@ function startGame() {
   if (_canyonActive || _canyonWalls) { _destroyCanyonWalls(); }
   _canyonActive = false;
   _canyonManual = false;
+  _canyonMode = 0;
   _canyonSinePhase = 0;
   // Clean up lightning if active
   if (typeof window._clearAllLightning === 'function') window._clearAllLightning();
@@ -17396,14 +17405,21 @@ window.addEventListener('keydown', (e) => {
     dbgVisible = !dbgVisible;
     dbgEl.classList.toggle('visible', dbgVisible);
   }
-  // V — toggle canyon corridor test (any mode, no cone spawning)
+  // V — cycle canyon mode: 0=off → 1=Corridor1 → 2=Regular → 3=Straight → 0=off
   if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
-    _canyonActive = !_canyonActive;
-    _canyonManual  = _canyonActive;
-    if (_canyonActive) {
-      _destroyCanyonWalls(); _createCanyonWalls();
+    _canyonMode = (_canyonMode + 1) % 4;
+    _destroyCanyonWalls();
+    if (_canyonMode === 0) {
+      _canyonActive = false;
+      _canyonManual = false;
+      console.log('[CANYON] OFF');
     } else {
-      _destroyCanyonWalls();
+      Object.assign(_canyonTuner, _CANYON_PRESETS[_canyonMode]);
+      _canyonSinePhase = 0;
+      _canyonActive = true;
+      _canyonManual = true;
+      _createCanyonWalls();
+      console.log('[CANYON] Mode:', _CANYON_MODE_NAMES[_canyonMode]);
     }
   }
 });
