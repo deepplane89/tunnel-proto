@@ -7272,7 +7272,7 @@ function _updateTerrainWalls(dt, speed) {
 const _canyonTuner = {
   // Thick-block slab geometry (dialled in sandbox)
   slabH:         55,    // height
-  slabW:         85,    // Z-length per slab
+  slabW:         20,    // Z-length per slab
   slabThick:     60,    // X depth of block
   cols:           5,    // Z subdivisions
   rows:           6,    // Y subdivisions
@@ -7306,7 +7306,7 @@ const _canyonTuner = {
   // Canyon-own sine wave (independent of L3 corridor)
   sineIntensity: 0.0,   // master multiplier 0=off, 1=full
   sineAmp:       30.0,  // peak swing in world units
-  sinePeriod:    180.0, // rows per full cycle (larger = lazier curves)
+  sinePeriod:    25.0,  // rows per full cycle (larger = lazier curves)
   sineSpeed:     1.0,   // how fast phase advances per slab scroll tick
 };
 let _canyonWalls = null;
