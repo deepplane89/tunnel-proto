@@ -7693,10 +7693,15 @@ function _createCanyonWalls() {
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
     chunks[k].forEach((m, i) => {
-      const center = _canyonPredictCenter(0);
-      const halfX  = _canyonPredictHalfX(0);
-      m.userData.bakedX = (center + halfX * side) - FOOT_OFF * side;
-      m.position.x = m.userData.bakedX;
+      const rowsAhead  = Math.max(0, Math.round((3.9 - m.position.z) / SPACING));
+      const center     = _canyonPredictCenter(rowsAhead);
+      const centerNext = _canyonPredictCenter(rowsAhead + 1);
+      const halfX      = _canyonPredictHalfX(rowsAhead);
+      const angle      = -Math.atan2(centerNext - center, SPACING);
+      const bakedX     = (center + halfX * side) - FOOT_OFF * Math.cos(angle) * side;
+      m.userData.bakedX = bakedX;
+      m.position.x = bakedX;
+      m.rotation.y = angle;
     });
   });
 
