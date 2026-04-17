@@ -7929,12 +7929,6 @@ function _updateCanyonWalls(dt, speed) {
 
   const footOff = _canyonWalls._footOff || 0;
 
-  // Per-frame tail trackers — re-anchored to actual pool min each frame so they never drift
-  // Decremented per-recycle within the frame to give each slab a unique Z even in burst-recycles
-  let _tailLeft = Infinity, _tailRight = Infinity;
-  for (const m of _canyonWalls.left)  if (!m.userData.isEntrance && m.position.z < _tailLeft)  _tailLeft  = m.position.z;
-  for (const m of _canyonWalls.right) if (!m.userData.isEntrance && m.position.z < _tailRight) _tailRight = m.position.z;
-
   ['left','right'].forEach(k => {
     const side   = k === 'left' ? -1 : 1;
     const meshes = _canyonWalls[k];
@@ -7954,33 +7948,18 @@ function _updateCanyonWalls(dt, speed) {
         return;
       }
 
-      // Phase logger — fires once per regular slab as it passes the ship
-      if (!m.userData.isEntrance && !m.userData._phaseLogged && m.position.z > 0 && m.position.z < DESPAWN_Z + spacing) {
-        m.userData._phaseLogged = true;
-        const correctCenter  = _canyonXAtZ(m.position.z);
-        const correctCenterAtShip = _canyonXAtZ(3.9);
-        const bakedCenter    = (m.userData.bakedX || 0) - (_canyonPredictHalfX(0) * (k === 'left' ? -1 : 1));
-        const bakedAtZ       = m.userData.bakedAtZ || 0;
-        console.log('[PHASE] side=' + k
-          + ' slabZ=' + m.position.z.toFixed(2)
-          + ' bakedX=' + (m.userData.bakedX || 0).toFixed(2)
-          + ' bakedCenter=' + bakedCenter.toFixed(2)
-          + ' bakedAtZ=' + bakedAtZ.toFixed(1)
-          + ' correctCenter@slabZ=' + correctCenter.toFixed(2)
-          + ' correctCenter@ship=' + correctCenterAtShip.toFixed(2)
-          + ' rot.y(deg)=' + (m.rotation.y * 180/Math.PI).toFixed(1)
-          + ' bakedRot(deg)=' + ((m.userData.bakedRot||0) * 180/Math.PI).toFixed(1));
-      }
-
       // Recycle: slab passed ship → send to back of queue and bake new X
       if (m.position.z > DESPAWN_Z + spacing) {
-        // Decrement per-side tail tracker — re-anchored each frame, unique Z per recycle even in burst
-        if (k === 'left') { _tailLeft  -= spacing; } else { _tailRight -= spacing; }
-        const slabZ = k === 'left' ? _tailLeft : _tailRight;
+        // Find minimum Z in this side's pool (excluding self) and place just behind it
+        let minZ = Infinity;
+        for (const om of meshes) if (om !== m && !om.userData.isEntrance && om.position.z < minZ) minZ = om.position.z;
+        const snappedMin = Math.round(minZ / spacing) * spacing;
+        const slabZ = snappedMin - spacing;
 
-        const center     = _canyonXAtZ(slabZ);
-        const centerNext = _canyonXAtZ(slabZ - spacing);
-        const halfX      = _canyonPredictHalfX(0);
+        const rowsAhead  = Math.max(0, Math.round((3.9 - slabZ) / spacing));
+        const center     = _canyonPredictCenter(rowsAhead);
+        const centerNext = _canyonPredictCenter(rowsAhead + 1);
+        const halfX      = _canyonPredictHalfX(rowsAhead);
         if (m.userData.isEntrance) {
           const eHalfX = _canyonTuner.halfXOverride || 34;
           m.userData.bakedX = eHalfX * side;
@@ -7988,16 +7967,11 @@ function _updateCanyonWalls(dt, speed) {
           m.position.z = slabZ;
           m.rotation.y = 0;
         } else {
-          m.userData.bakedX   = center + halfX * side;
-          m.userData.bakedAtZ = slabZ;
-          m.userData.src      = 'RECYCLED';
-          m.userData.bakedRot = side * Math.atan2(centerNext - center, spacing);
+          m.userData.bakedX = center + halfX * side;
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
-          m.rotation.y = m.userData.bakedRot;
-          _recycleSlabDebug(m, k, slabZ, spacing, side);
+          m.rotation.y = side * Math.atan2(centerNext - center, spacing);
         }
-        // Flip visible on first recycle — slab now scrolls in from the distance naturally
         m.visible = true;
       } else {
         // Hold baked X — rotation frozen at bake time, only updates on recycle
