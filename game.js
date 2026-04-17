@@ -8000,13 +8000,13 @@ function _updateCanyonWalls(dt, speed) {
         // Flip visible on first recycle — slab now scrolls in from the distance naturally
         m.visible = true;
       } else {
-        // Hold baked X; recompute rotation live every frame from world-Z sine
+        // Hold baked X; recompute rotation live every frame from current phase
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
         if (!m.userData.isEntrance && T.sineIntensity > 0) {
-          m.rotation.y = side * Math.atan2(
-            _canyonXAtZ(m.position.z + spacing) - _canyonXAtZ(m.position.z),
-            spacing
-          );
+          const rowsAhead  = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
+          const center     = _canyonPredictCenter(rowsAhead);
+          const centerNext = _canyonPredictCenter(rowsAhead + 1);
+          m.rotation.y = side * Math.atan2(centerNext - center, spacing);
         }
       }
     });
@@ -17660,12 +17660,13 @@ window.addEventListener('keydown', (e) => {
     ['left','right'].forEach(k => {
       const side = k === 'left' ? -1 : 1;
       _canyonWalls[k].forEach(m => {
-        const halfX      = _canyonPredictHalfX(0);
-        const center     = _canyonXAtZ(m.position.z);
-        const centerNext = _canyonXAtZ(m.position.z + spacing);
+        const rowsAhead  = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
+        const center     = _canyonPredictCenter(rowsAhead);
+        const centerNext = _canyonPredictCenter(rowsAhead + 1);
+        const halfX      = _canyonPredictHalfX(rowsAhead);
         m.userData.bakedX = center + halfX * side;
         m.position.x = m.userData.bakedX;
-        m.rotation.y = side * Math.atan2(centerNext - center, spacing);
+        m.rotation.y = side * Math.atan(centerNext - center);
       });
     });
   }
