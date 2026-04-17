@@ -7338,6 +7338,7 @@ let _canyonSineT         = 0;
 let _canyonSineRows      = 0;
 let _canyonSineZ         = 0;
 let _canyonSinePhase     = 0; // canyon-own sine accumulator
+let _canyonExiting       = false; // true during scroll-out exit — slabs drift off, no recycle
 let _canyonWasCorridor   = false;
 let _canyonDiagFrame     = 0;     // frame counter for periodic diagnostic log
 // Call window._canyonLog() from console to get a full snapshot of canyon state + tuner
@@ -7727,7 +7728,11 @@ function _createCanyonWalls() {
         : i < initCount
           ? entranceEnd - (i - T.entranceSlabs + 1) * SPACING        // regular: butt against entrance
           : lastRegularZ - (i - initCount + 1) * SPACING;            // overflow: continue from last regular
-      chunks[k].push(makeSlab(side, seed, initZ, i, thick));
+      const slab = makeSlab(side, seed, initZ, i, thick);
+      // Regular/overflow slabs start invisible and become visible on first recycle
+      // so they scroll in naturally from the distance instead of popping
+      if (!isEntrance) slab.visible = false;
+      chunks[k].push(slab);
     }
   });
 
@@ -7780,6 +7785,7 @@ function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonSinePhase = 0;
+  _canyonExiting    = false;
   // strips are pivot Groups — remove group from scene, dispose child mesh geometry
   _canyonWalls.strips.forEach(pivot => {
     scene.remove(pivot);
@@ -7849,6 +7855,12 @@ function _updateCanyonWalls(dt, speed) {
     meshes.forEach(m => {
       m.position.z += scroll;
 
+      // ── EXITING: slabs drift forward, no recycle, hide when past despawn ──
+      if (_canyonExiting) {
+        if (m.position.z > DESPAWN_Z + spacing) m.visible = false;
+        return;
+      }
+
       // Entrance slabs: scroll through once then hide — never recycle into corridor
       if (m.userData.isEntrance && m.position.z > DESPAWN_Z + spacing) {
         m.visible = false;
@@ -7863,16 +7875,11 @@ function _updateCanyonWalls(dt, speed) {
         const snappedMin = Math.round(minZ / spacing) * spacing;
         m.position.z = snappedMin - spacing;
 
-        // Predictive bake: estimate center/halfX for when the ship reaches this slab.
-        // Slab is placed at minZ - spacing. Ship is at z≈3.9, speed≈72 units/s.
-        // Row spacing = 7 units → rows ahead ≈ distance / 7.
         const slabZ      = snappedMin - spacing;
         const rowsAhead  = Math.max(0, Math.round((3.9 - slabZ) / spacing));
         const center     = _canyonPredictCenter(rowsAhead);
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
         const halfX      = _canyonPredictHalfX(rowsAhead);
-        // Pivot sits at foot world X; rotation.y angles face inward on curves
-        // Entrance slabs keep fixed halfX and rotation=0 — they are a flat gate, not part of the curve
         if (m.userData.isEntrance) {
           const eHalfX = _canyonTuner.halfXOverride || 34;
           m.userData.bakedX = eHalfX * side;
@@ -7885,12 +7892,20 @@ function _updateCanyonWalls(dt, speed) {
           m.position.z = slabZ;
           m.rotation.y = side * Math.atan(centerNext - center);
         }
+        // Flip visible on first recycle — slab now scrolls in from the distance naturally
+        m.visible = true;
       } else {
         // Hold baked X — rotation frozen at bake time, only updates on recycle
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
       }
     });
   });
+
+  // Auto-destroy once all slabs have scrolled off during exit
+  if (_canyonExiting && _canyonWalls) {
+    const allGone = _canyonWalls.strips.every(m => !m.visible || m.position.z > DESPAWN_Z + spacing);
+    if (allGone) _destroyCanyonWalls();
+  }
 
   // Collision — find the slabs closest to the ship (z near 0) and use their bakedX
   if (_canyonActive && state.phase === 'playing' && !state._godMode && !_godMode) {
@@ -21840,7 +21855,12 @@ function _jlCanyonStartOpen(mode) {
 }
 // Helper — tear down canyon from JL sequencer
 function _jlCanyonStop() {
-  if (_canyonActive) _destroyCanyonWalls();
+  if (_canyonActive && _canyonWalls) {
+    // Scroll-out exit: let slabs drift off naturally instead of instant pop
+    _canyonExiting = true;
+  } else if (_canyonWalls) {
+    _destroyCanyonWalls();
+  }
   _canyonActive      = false;
   _jlCorridor.active = false;
 }
