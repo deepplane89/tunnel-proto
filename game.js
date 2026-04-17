@@ -17428,21 +17428,22 @@ window.addEventListener('keydown', (e) => {
     dbgVisible = !dbgVisible;
     dbgEl.classList.toggle('visible', dbgVisible);
   }
-  // V — cycle canyon mode: 0=off → 1=Corridor1 → 2=Regular → 3=Straight → 0=off
+  // V — toggle canyon on/off
   if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
-    _canyonMode = (_canyonMode + 1) % 4;
-    _destroyCanyonWalls();
-    if (_canyonMode === 0) {
+    if (_canyonActive) {
+      _destroyCanyonWalls();
       _canyonActive = false;
       _canyonManual = false;
+      _canyonMode   = 0;
       console.log('[CANYON] OFF');
     } else {
-      Object.assign(_canyonTuner, _CANYON_PRESETS[_canyonMode]);
       _canyonSinePhase = 0;
       _canyonActive = true;
       _canyonManual = true;
+      if (_canyonMode === 0) _canyonMode = 1; // default to Corridor 1 if no mode set
+      Object.assign(_canyonTuner, _CANYON_PRESETS[_canyonMode] || _CANYON_PRESETS[1]);
       _createCanyonWalls();
-      console.log('[CANYON] Mode:', _CANYON_MODE_NAMES[_canyonMode]);
+      console.log('[CANYON] ON — mode:', _canyonMode);
     }
   }
 });
@@ -17644,17 +17645,20 @@ window.addEventListener('keydown', (e) => {
     panel.appendChild(btn);
 
     hdr('— PRESETS —');
-    const PRESETS = {
-      'Canyon Corridor 1': { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400 },
-    };
-    Object.entries(PRESETS).forEach(([name, vals]) => {
+    const PRESETS = [
+      { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
+      { label: 'Regular Canyon',    mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
+      { label: 'Straight Canyon',   mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
+    ];
+    PRESETS.forEach(({ label, mode, vals }) => {
       const pb = document.createElement('button');
-      pb.textContent = name;
+      pb.textContent = label;
       pb.style.cssText = 'margin-top:6px;width:100%;background:#0a1a0a;border:1px solid #00ff88;color:#00ff88;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
       pb.onclick = () => {
+        _canyonMode = mode;
         Object.assign(_canyonTuner, vals);
-        _destroyCanyonWalls();
-        _createCanyonWalls();
+        _canyonSinePhase = 0;
+        if (_canyonActive) { _destroyCanyonWalls(); _createCanyonWalls(); }
         buildPanel();
       };
       panel.appendChild(pb);
