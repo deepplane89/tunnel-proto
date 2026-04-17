@@ -7816,6 +7816,13 @@ function _canyonPredictCenter(rowsAhead) {
 function _canyonPredictHalfX(rowsAhead) {
   return _canyonTuner.halfXOverride;
 }
+function _canyonXAtZ(worldZ) {
+  const T = _canyonTuner;
+  const base = state.corridorGapCenter || 0;
+  if (T.sineIntensity <= 0) return base;
+  const phase = (worldZ / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
+  return base + T.sineAmp * T.sineIntensity * Math.sin(phase);
+}
 
 let _canyonDbgFrame = 0;
 function _updateCanyonWalls(dt, speed) {
