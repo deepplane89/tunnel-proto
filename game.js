@@ -7776,7 +7776,7 @@ function _canyonPredictCenter(rowsAhead) {
   const T = _canyonTuner;
   const base = state.corridorGapCenter || 0;
   if (T.sineIntensity <= 0) return base;
-  const phase = _canyonSinePhase + rowsAhead * (2 * Math.PI / T.sinePeriod) * T.sineSpeed * T.slabW;
+  const phase = _canyonSinePhase + rowsAhead * (2 * Math.PI / T.sinePeriod) * T.sineSpeed;
   return base + T.sineAmp * T.sineIntensity * Math.sin(phase);
 }
 function _canyonPredictHalfX(rowsAhead) {
