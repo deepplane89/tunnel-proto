@@ -12398,6 +12398,13 @@ function startGame() {
   _killExplosion();
   // Clean up terrain walls if active
   _destroyTerrainWalls();
+  // Clean up canyon if active
+  if (_canyonActive || _canyonWalls) { _destroyCanyonWalls(); }
+  _canyonActive = false;
+  _canyonManual = false;
+  _canyonSinePhase = 0;
+  // Clean up lightning if active
+  if (typeof window._clearAllLightning === 'function') window._clearAllLightning();
   if (_gameOverDelayTimer) { clearTimeout(_gameOverDelayTimer); _gameOverDelayTimer = null; }
   state.score          = 0;
   state.multiplier     = 1;
@@ -22564,6 +22571,7 @@ window._jlDebug = {
   // Expose config + spawner so external systems (chaos mode) can drive lightning
   window._LT             = _LT;
   window._spawnLightning = _spawnLightning;
+  window._clearAllLightning = () => { _stopLtLoop(); _clearAllLightning(); };
 
   let visible=false;
   document.addEventListener('keydown',e=>{
