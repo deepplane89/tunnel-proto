@@ -7906,6 +7906,8 @@ function _updateCanyonWalls(dt, speed) {
     const rightEdge = nearRight ? nearRight.userData.bakedX :  (CORRIDOR_NARROW_X - footOff);
     if (shipX < leftEdge + buffer || shipX > rightEdge - buffer) {
       killPlayer();
+      // Brief invincibility window so a single wall contact doesn't fire 60x/s
+      if (state.phase === 'playing') state.invincibleTimer = Math.max(state.invincibleTimer, 0.5);
     }
   }
 }
@@ -21794,12 +21796,39 @@ function _jlTickCorridor(dt, effectiveSpd) {
 //   95–100s: breathing room (nothing)
 // Act 3 — Combined (100s+)
 //   100s+: asteroid stagger + lightning both on, both ramping
+// Helper — activate a canyon preset from the JL sequencer (pure obstacle, pauses spawner)
+function _jlCanyonStart(mode) {
+  if (_canyonActive) _destroyCanyonWalls();
+  _canyonMode = mode;
+  Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
+  _canyonActive      = true;
+  _canyonManual      = false;
+  _jlCorridor.active = true;  // pause asteroid/lightning spawner
+  _createCanyonWalls();
+}
+// Helper — activate canyon alongside obstacles (does NOT pause spawner)
+function _jlCanyonStartOpen(mode) {
+  if (_canyonActive) _destroyCanyonWalls();
+  _canyonMode = mode;
+  Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
+  _canyonActive      = true;
+  _canyonManual      = false;
+  _jlCorridor.active = false; // keep spawner ticking
+  _createCanyonWalls();
+}
+// Helper — tear down canyon from JL sequencer
+function _jlCanyonStop() {
+  if (_canyonActive) _destroyCanyonWalls();
+  _canyonActive      = false;
+  _jlCorridor.active = false;
+}
+
 const _JL_TRACKS = [
 
-  // ════════ ACT 1 — ASTEROIDS ═══════════════════════════════════════════════
+  // ════════ ACT 1 — ASTEROIDS (0–30s) ══════════════════════════════════════
   {
     id: 'ast_stagger_1', label: 'A1 AST Stagger', type: 'asteroid',
-    startT: 0, endT: 25,
+    startT: 0, endT: 20,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 1.4, staggerGap: 0.6, salvoCount: 1,
@@ -21808,19 +21837,26 @@ const _JL_TRACKS = [
   },
   {
     id: 'ast_salvo_1', label: 'A1 AST Salvo', type: 'asteroid',
-    startT: 25, endT: 40,
+    startT: 20, endT: 30,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 1.1, staggerGap: 0.5, salvoCount: 2,
       size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
     },
   },
-  // 40–45s: breathing room — no tracks active
 
-  // ════════ ACT 2 — LIGHTNING ════════════════════════════════════════════════
+  // ════════ CANYON 1 (30–60s) — pure corridor, pauses spawner ══════════════
+  {
+    id: 'canyon_1', label: 'Canyon C1', type: 'custom',
+    startT: 30, endT: 60,
+    onActivate()   { _jlCanyonStart(1); },
+    onDeactivate() { _jlCanyonStop(); },
+  },
+
+  // ════════ ACT 2 — LIGHTNING ONLY (60–90s) ════════════════════════════════
   {
     id: 'lt_stagger_1', label: 'A2 LT Stagger', type: 'lightning',
-    startT: 45, endT: 65,
+    startT: 60, endT: 75,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.5, laneMin: -8, laneMax: 8,
@@ -21830,7 +21866,7 @@ const _JL_TRACKS = [
   },
   {
     id: 'lt_sweep_1', label: 'A2 LT Sweep', type: 'lightning',
-    startT: 65, endT: 80,
+    startT: 75, endT: 90,
     settings: {
       enabled: true, pattern: 'sweep', leadFactor: 0.0,
       frequency: 0.4, sweepSpeed: 0.4, laneMin: -8, laneMax: 8,
@@ -21838,34 +21874,90 @@ const _JL_TRACKS = [
     onActivate()   { if (window._asteroidTuner) window._asteroidTuner.enabled = false; },
     onDeactivate() {},
   },
-  {
-    id: 'lt_peak_1', label: 'A2 LT Peak', type: 'lightning',
-    startT: 80, endT: 95,
-    settings: {
-      enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 0.3, laneMin: -8, laneMax: 8,
-    },
-    onActivate()   { if (window._asteroidTuner) window._asteroidTuner.enabled = false; },
-    onDeactivate() {},
-  },
-  // 95–100s: breathing room — no tracks active
 
-  // ════════ ACT 3 — COMBINED (100s+) ════════════════════════════════════════
+  // ════════ CANYON 2 (90–120s) — pure corridor, pauses spawner ═════════════
   {
-    id: 'ast_stagger_2', label: 'A3 AST', type: 'asteroid',
-    startT: 100, endT: null,
+    id: 'canyon_2', label: 'Canyon C2', type: 'custom',
+    startT: 90, endT: 120,
+    onActivate()   { _jlCanyonStart(2); },
+    onDeactivate() { _jlCanyonStop(); },
+  },
+
+  // ════════ BREATHER (120–123s) — nothing ══════════════════════════════════
+
+  // ════════ STRAIGHT CANYON + AST + LT PEAK (123–153s) ════════════════════
+  {
+    id: 'canyon_straight', label: 'Straight Canyon', type: 'custom',
+    startT: 123, endT: 153,
+    onActivate()   { _jlCanyonStartOpen(4); },
+    onDeactivate() { _jlCanyonStop(); },
+  },
+  {
+    id: 'ast_straight', label: 'Straight AST', type: 'asteroid',
+    startT: 123, endT: 153,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 1.4, staggerGap: 0.6, salvoCount: 1,
+      frequency: 1.1, staggerGap: 0.5, salvoCount: 2,
       size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
     },
   },
   {
-    id: 'lt_stagger_2', label: 'A3 LT', type: 'lightning',
-    startT: 100, endT: null,
+    id: 'lt_straight', label: 'Straight LT', type: 'lightning',
+    startT: 123, endT: 153,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.3, laneMin: -8, laneMax: 8,
+    },
+  },
+
+  // ════════ CORRIDOR 1 + LIGHTNING (153–183s) ═══════════════════════════════
+  {
+    id: 'canyon_1_lt', label: 'Canyon C1+LT', type: 'custom',
+    startT: 153, endT: 183,
+    onActivate()   { _jlCanyonStartOpen(1); },
+    onDeactivate() { _jlCanyonStop(); },
+  },
+  {
+    id: 'lt_canyon_1', label: 'C1 LT', type: 'lightning',
+    startT: 153, endT: 183,
+    settings: {
+      enabled: true, pattern: 'stagger', leadFactor: 0.0,
+      frequency: 0.3, laneMin: -8, laneMax: 8,
+    },
+  },
+
+  // ════════ CORRIDOR 2 + LIGHTNING (183–213s) ═══════════════════════════════
+  {
+    id: 'canyon_2_lt', label: 'Canyon C2+LT', type: 'custom',
+    startT: 183, endT: 213,
+    onActivate()   { _jlCanyonStartOpen(2); },
+    onDeactivate() { _jlCanyonStop(); },
+  },
+  {
+    id: 'lt_canyon_2', label: 'C2 LT', type: 'lightning',
+    startT: 183, endT: 213,
+    settings: {
+      enabled: true, pattern: 'stagger', leadFactor: 0.0,
+      frequency: 0.25, laneMin: -8, laneMax: 8,
+    },
+  },
+
+  // ════════ ENDLESS PEAK — AST + LT (213s+) ════════════════════════════════
+  {
+    id: 'ast_peak', label: 'Peak AST', type: 'asteroid',
+    startT: 213, endT: null,
+    settings: {
+      enabled: true, pattern: 'stagger', leadFactor: 0.0,
+      frequency: 1.1, staggerGap: 0.5, salvoCount: 2,
+      size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
+    },
+  },
+  {
+    id: 'lt_peak', label: 'Peak LT', type: 'lightning',
+    startT: 213, endT: null,
+    settings: {
+      enabled: true, pattern: 'stagger', leadFactor: 0.0,
+      frequency: 0.25, laneMin: -8, laneMax: 8,
     },
   },
 ];
