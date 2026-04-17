@@ -7601,34 +7601,24 @@ function _createCanyonWalls() {
     shader.uniforms.uMarbleA = { value: new THREE.Color(0x0d0d18) };
     shader.uniforms.uMarbleB = { value: new THREE.Color(0x1e1e2e) };
     shader.uniforms.uMarbleC = { value: new THREE.Color(0x8888aa) };
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <common>',
-      `#include <common>
-       varying vec3 vWPos;`
-    );
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <worldpos_vertex>',
-      `#include <worldpos_vertex>
-       vWPos = worldPosition.xyz;`
-    );
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <common>',
       `#include <common>
-       varying vec3 vWPos;
        uniform vec3 uMarbleA;
        uniform vec3 uMarbleB;
        uniform vec3 uMarbleC;
-       float mhash(vec3 p){
-         p=fract(p*0.3183099+vec3(.1,.2,.3)); p*=17.0;
-         return fract(p.x*p.y*p.z*(p.x+p.y+p.z));
+       float mhash(vec2 p){
+         p=fract(p*vec2(0.3183099,0.3678794));
+         p+=dot(p,p*vec2(17.0,23.0));
+         return fract((p.x+p.y)*p.x);
        }
-       float mnoise(vec3 p){
-         vec3 i=floor(p),f=fract(p);
+       float mnoise(vec2 p){
+         vec2 i=floor(p),f=fract(p);
          f=f*f*(3.0-2.0*f);
-         return mix(mix(mix(mhash(i),mhash(i+vec3(1,0,0)),f.x),mix(mhash(i+vec3(0,1,0)),mhash(i+vec3(1,1,0)),f.x),f.y),
-                    mix(mix(mhash(i+vec3(0,0,1)),mhash(i+vec3(1,0,1)),f.x),mix(mhash(i+vec3(0,1,1)),mhash(i+vec3(1,1,1)),f.x),f.y),f.z);
+         return mix(mix(mhash(i),mhash(i+vec2(1,0)),f.x),
+                    mix(mhash(i+vec2(0,1)),mhash(i+vec2(1,1)),f.x),f.y);
        }
-       float mfbm(vec3 p){
+       float mfbm(vec2 p){
          float v=0.0,a=0.5;
          for(int i=0;i<5;i++){v+=a*mnoise(p);p*=2.0;a*=0.5;}
          return v;
@@ -7637,11 +7627,11 @@ function _createCanyonWalls() {
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <color_fragment>',
       `#include <color_fragment>
-       vec3 mp = vWPos * 0.018;
-       float turb = mfbm(mp * 2.0) * 2.4;
-       float veins = sin((mp.y * 6.0 + mp.x * 2.0 + turb) * 6.0);
+       vec2 mp = vUv * vec2(4.0, 6.0);
+       float turb = mfbm(mp * 1.5) * 2.4;
+       float veins = sin((mp.y + turb) * 5.0 + mp.x * 1.2);
        float bands = smoothstep(-0.3, 0.9, veins);
-       float fine  = mfbm(mp * 8.0);
+       float fine  = mfbm(mp * 4.0);
        vec3 marble = mix(uMarbleA, uMarbleB, bands);
        marble = mix(marble, uMarbleC, smoothstep(0.68, 0.95, fine) * 0.4);
        diffuseColor.rgb = marble;`
