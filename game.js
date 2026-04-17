@@ -11390,7 +11390,7 @@ window.addEventListener('keydown', e => {
   // ── Debug hotkeys: Sequencer stage jumping (numbers 1-9) + debug toggles ──
   const _digit = e.code.startsWith('Digit') ? e.code.replace('Digit','') : null;
   // ── JL mode: number keys jump to sequence sections ────────────────────────
-  if (state._jetLightningMode && _digit) {
+  if (state._jetLightningMode && !state.isDeathRun && _digit) {
     // 1=0s  2=20s  3=30s(C1)  4=60s  5=75s  6=90s(C2)  7=123s  8=153s(C1+LT)  9=183s(C2+LT)  0=213s(peak)
     const _jlMap = { '1':0, '2':20, '3':30, '4':60, '5':75, '6':90, '7':123, '8':153, '9':183, '0':213 };
     if (_jlMap[_digit] !== undefined) {
