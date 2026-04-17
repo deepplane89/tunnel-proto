@@ -7788,10 +7788,18 @@ function _updateCanyonWalls(dt, speed) {
         // Row spacing = 7 units → rows ahead ≈ distance / 7.
         const slabZ    = minZ - spacing;
         const rowsAhead = Math.max(0, Math.round((3.9 - slabZ) / 7));
-        const center   = _canyonPredictCenter(rowsAhead);
-        const halfX    = _canyonPredictHalfX(rowsAhead);
-        m.userData.bakedX = (center + halfX * side) - footOff * side;
-        m.position.x = m.userData.bakedX;
+        const center     = _canyonPredictCenter(rowsAhead);
+        const centerNext = _canyonPredictCenter(rowsAhead + 1);
+        const halfX      = _canyonPredictHalfX(rowsAhead);
+        // angle: positive = corridor turning right, right wall rotates CCW, left wall CW
+        // scale.x=-1 on left wall mirrors rotation, so same angle works for both
+        const angle = Math.atan2(centerNext - center, spacing);
+        const footX = _canyonTuner.footX;
+        // Compensate position for pivot offset so foot stays planted at corridor edge
+        const bakedX = (center + halfX * side) - footOff * side + footX * (1 - Math.cos(angle)) * side;
+        m.userData.bakedX = bakedX;
+        m.position.x = bakedX;
+        m.rotation.y = angle;
       } else {
         // Hold baked position — do NOT update X
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
@@ -17406,11 +17414,16 @@ window.addEventListener('keydown', (e) => {
     ['left','right'].forEach(k => {
       const side = k === 'left' ? -1 : 1;
       _canyonWalls[k].forEach(m => {
-        const rowsAhead = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
-        const center = _canyonPredictCenter(rowsAhead);
-        const halfX  = _canyonPredictHalfX(rowsAhead);
-        m.userData.bakedX = (center + halfX * side) - footOff * side;
-        m.position.x = m.userData.bakedX;
+        const rowsAhead  = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
+        const center     = _canyonPredictCenter(rowsAhead);
+        const centerNext = _canyonPredictCenter(rowsAhead + 1);
+        const halfX      = _canyonPredictHalfX(rowsAhead);
+        const angle      = Math.atan2(centerNext - center, spacing);
+        const footX      = _canyonTuner.footX;
+        const bakedX     = (center + halfX * side) - footOff * side + footX * (1 - Math.cos(angle)) * side;
+        m.userData.bakedX = bakedX;
+        m.position.x = bakedX;
+        m.rotation.y = angle;
       });
     });
   }
