@@ -7743,11 +7743,11 @@ function _createCanyonWalls() {
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
     chunks[k].forEach((pivot) => {
-      // Entrance slabs: centered on ship X so gate opening aligns with player
+      // Entrance slabs: X matches corridor at that Z so gate is flush with walls, rotation always perpendicular
       if (pivot.userData.isEntrance) {
         const halfX   = T.halfXOverride || 34;
-        const shipX   = state.shipX || 0;
-        pivot.userData.bakedX = shipX + halfX * side;
+        const center  = _canyonXAtZ(pivot.position.z);
+        pivot.userData.bakedX = center + halfX * side;
         pivot.position.x = pivot.userData.bakedX;
         pivot.rotation.y = 0;
       } else {
@@ -21916,6 +21916,7 @@ function _jlTickCorridor(dt, effectiveSpd) {
 // Act 3 — Combined (100s+)
 //   100s+: asteroid stagger + lightning both on, both ramping
 // Helper — activate a canyon preset from the JL sequencer (pure obstacle, pauses spawner)
+let _canyonSavedDirLight = null;
 function _jlCanyonStart(mode) {
   if (_canyonActive) _destroyCanyonWalls();
   _canyonMode = mode;
@@ -21923,6 +21924,8 @@ function _jlCanyonStart(mode) {
   _canyonActive      = true;
   _canyonManual      = false;
   _jlCorridor.active = true;  // pause asteroid/lightning spawner
+  _canyonSavedDirLight = dirLight.intensity;
+  dirLight.intensity = 0;
   _createCanyonWalls();
 }
 // Helper — activate canyon alongside obstacles (does NOT pause spawner)
@@ -21933,6 +21936,8 @@ function _jlCanyonStartOpen(mode) {
   _canyonActive      = true;
   _canyonManual      = false;
   _jlCorridor.active = false; // keep spawner ticking
+  _canyonSavedDirLight = dirLight.intensity;
+  dirLight.intensity = 0;
   _createCanyonWalls();
 }
 // Helper — tear down canyon from JL sequencer
@@ -21945,6 +21950,7 @@ function _jlCanyonStop() {
   }
   _canyonActive      = false;
   _jlCorridor.active = false;
+  if (_canyonSavedDirLight !== null) { dirLight.intensity = _canyonSavedDirLight; _canyonSavedDirLight = null; }
 }
 
 // Jump JL sequencer to any time — shared by panel buttons and number hotkeys
