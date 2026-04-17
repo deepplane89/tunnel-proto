@@ -7338,7 +7338,6 @@ let _canyonSineT         = 0;
 let _canyonSineRows      = 0;
 let _canyonSineZ         = 0;
 let _canyonSinePhase     = 0; // canyon-own sine accumulator
-let _canyonTailZ         = 0; // tracks pool tail Z — decremented on each recycle to prevent same-frame pile-up
 let _canyonExiting       = false; // true during scroll-out exit — slabs drift off, no recycle
 let _canyonWasCorridor   = false;
 let _canyonDiagFrame     = 0;     // frame counter for periodic diagnostic log
@@ -7766,9 +7765,6 @@ function _createCanyonWalls() {
       }
     });
   });
-  // Init tail tracker from the full recyclable pool (both sides, non-entrance)
-  const _recyclable = [...chunks.left, ...chunks.right].filter(p => !p.userData.isEntrance);
-  _canyonTailZ = Math.min(..._recyclable.map(p => p.position.z));
   console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
   console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick);
   // Log first few slabs by Z to confirm entrance slabs are at the front
@@ -7794,7 +7790,6 @@ function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonSinePhase = 0;
-  _canyonTailZ      = 0;
   _canyonExiting    = false;
   // strips are pivot Groups — remove group from scene, dispose child mesh geometry
   _canyonWalls.strips.forEach(pivot => {
@@ -7934,6 +7929,12 @@ function _updateCanyonWalls(dt, speed) {
 
   const footOff = _canyonWalls._footOff || 0;
 
+  // Per-frame tail trackers — re-anchored to actual pool min each frame so they never drift
+  // Decremented per-recycle within the frame to give each slab a unique Z even in burst-recycles
+  let _tailLeft = Infinity, _tailRight = Infinity;
+  for (const m of _canyonWalls.left)  if (!m.userData.isEntrance && m.position.z < _tailLeft)  _tailLeft  = m.position.z;
+  for (const m of _canyonWalls.right) if (!m.userData.isEntrance && m.position.z < _tailRight) _tailRight = m.position.z;
+
   ['left','right'].forEach(k => {
     const side   = k === 'left' ? -1 : 1;
     const meshes = _canyonWalls[k];
@@ -7973,9 +7974,9 @@ function _updateCanyonWalls(dt, speed) {
 
       // Recycle: slab passed ship → send to back of queue and bake new X
       if (m.position.z > DESPAWN_Z + spacing) {
-        // Decrement tail tracker — gives each slab a unique Z even when multiple recycle in the same frame
-        _canyonTailZ -= spacing;
-        const slabZ = _canyonTailZ;
+        // Decrement per-side tail tracker — re-anchored each frame, unique Z per recycle even in burst
+        if (k === 'left') { _tailLeft  -= spacing; } else { _tailRight -= spacing; }
+        const slabZ = k === 'left' ? _tailLeft : _tailRight;
 
         const center     = _canyonXAtZ(slabZ);
         const centerNext = _canyonXAtZ(slabZ - spacing);
