@@ -7791,12 +7791,12 @@ function _updateCanyonWalls(dt, speed) {
         const center     = _canyonPredictCenter(rowsAhead);
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
         const halfX      = _canyonPredictHalfX(rowsAhead);
-        // angle: positive = corridor turning right, right wall rotates CCW, left wall CW
-        // scale.x=-1 on left wall mirrors rotation, so same angle works for both
-        const angle = Math.atan2(centerNext - center, spacing);
+        // Negate: right wall turns CW (face toward -X) when corridor goes right
+        // scale.x=-1 on left wall auto-mirrors so same angle works for both sides
+        const angle = -Math.atan2(centerNext - center, spacing);
         const footX = _canyonTuner.footX;
-        // Compensate position for pivot offset so foot stays planted at corridor edge
-        const bakedX = (center + halfX * side) - footOff * side + footX * (1 - Math.cos(angle)) * side;
+        // Keep foot planted: position compensates for pivot being at mesh origin not foot
+        const bakedX = (center + halfX * side) - footX * Math.cos(angle) * side;
         m.userData.bakedX = bakedX;
         m.position.x = bakedX;
         m.rotation.y = angle;
@@ -17418,9 +17418,9 @@ window.addEventListener('keydown', (e) => {
         const center     = _canyonPredictCenter(rowsAhead);
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
         const halfX      = _canyonPredictHalfX(rowsAhead);
-        const angle      = Math.atan2(centerNext - center, spacing);
+        const angle      = -Math.atan2(centerNext - center, spacing);
         const footX      = _canyonTuner.footX;
-        const bakedX     = (center + halfX * side) - footOff * side + footX * (1 - Math.cos(angle)) * side;
+        const bakedX     = (center + halfX * side) - footX * Math.cos(angle) * side;
         m.userData.bakedX = bakedX;
         m.position.x = bakedX;
         m.rotation.y = angle;
