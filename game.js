@@ -7733,7 +7733,8 @@ function _createCanyonWalls() {
       const slab = makeSlab(side, seed, initZ, i, thick);
       // Only hide slabs that are genuinely beyond the camera far clip (z < -590)
       // Everything within view starts visible — corridor must be fully present at spawn
-      if (!isEntrance && initZ < -590) slab.visible = false;
+      // All regular slabs start visible — overflow slabs are beyond far clip (~-600)
+      // so the GPU never renders them, but they must be visible so recycle minZ anchors correctly.
       chunks[k].push(slab);
     }
   });
@@ -7924,8 +7925,10 @@ function _updateCanyonWalls(dt, speed) {
       const dz = Math.abs(m.position.z - 3.9);
       if (dz < bestRZ) { bestRZ = dz; nearRight = m; }
     });
-    const leftEdge  = nearLeft  ? nearLeft.userData.bakedX  : -(CORRIDOR_NARROW_X - footOff);
-    const rightEdge = nearRight ? nearRight.userData.bakedX :  (CORRIDOR_NARROW_X - footOff);
+    // Only collide if the nearest slab is actually close in Z — skip if gap is passing through
+    const maxCollisionDZ = spacing * 1.5;
+    const leftEdge  = (nearLeft  && bestLZ < maxCollisionDZ) ? nearLeft.userData.bakedX  : -(CORRIDOR_NARROW_X - footOff);
+    const rightEdge = (nearRight && bestRZ < maxCollisionDZ) ? nearRight.userData.bakedX :  (CORRIDOR_NARROW_X - footOff);
     if (shipX < leftEdge + buffer || shipX > rightEdge - buffer) {
       killPlayer();
       // Brief invincibility window so a single wall contact doesn't fire 60x/s
