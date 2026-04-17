@@ -7706,11 +7706,14 @@ function _createCanyonWalls() {
       const centerNext = _canyonPredictCenter(rowsAhead + 1);
       const halfX      = _canyonPredictHalfX(rowsAhead);
       // Pivot sits at the foot world position; rotation.y angles the face inward
+      const angle = Math.atan2(centerNext - center, SPACING);
       pivot.userData.bakedX = center + halfX * side;
       pivot.position.x = pivot.userData.bakedX;
-      pivot.rotation.y = Math.atan2(centerNext - center, SPACING);
+      pivot.rotation.y = angle;
+      if (k === 'right' && Math.abs(angle) > 0.001) console.log(`[INIT ROT] rowsAhead=${rowsAhead} center=${center.toFixed(2)} centerNext=${centerNext.toFixed(2)} angle=${(angle*180/Math.PI).toFixed(2)}deg sineIntensity=${_canyonTuner.sineIntensity} sinePhase=${_canyonSinePhase.toFixed(3)}`);
     });
   });
+  console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
 
   _canyonWalls = {
     strips:       [...chunks.left, ...chunks.right],
