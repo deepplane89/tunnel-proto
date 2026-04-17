@@ -21049,7 +21049,9 @@ const _origUpdateShockwave = _updateShockwave;
       // Corridor takes over — pause all JL obstacle spawning during breather
       if (_jlCorridor.active && !_canyonActive) {
         _jlTickCorridor(dt, state.speed);
-      } else if (!_canyonActive) {
+      } else if (!_jlCorridor.active) {
+        // Run asteroid spawner when no pure corridor is active
+        // (open canyon segments have _canyonActive=true but _jlCorridor.active=false — still spawn)
         _tickAsteroidSpawner(dt);
       }
     }
