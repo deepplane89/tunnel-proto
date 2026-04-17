@@ -7914,7 +7914,7 @@ function _updateCanyonWalls(dt, speed) {
         } else {
           m.userData.bakedX   = center + halfX * side;
           m.userData.bakedAtZ = slabZ;
-          m.userData.bakedRot = side * Math.atan(centerNext - center);
+          m.userData.bakedRot = side * Math.atan2(centerNext - center, spacing);
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
           m.rotation.y = m.userData.bakedRot;
