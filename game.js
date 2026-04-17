@@ -7691,12 +7691,12 @@ function _createCanyonWalls() {
     const side = k === 'left' ? -1 : 1;
     for (let i = 0; i < autoPool; i++) {
       const seed  = i * 7 + (k === 'right' ? 100 : 0);
-      // Entrance slabs are the furthest-back ones (highest i in overflow chain)
-      const thick = (i >= autoPool - T.entranceSlabs) ? T.entranceThick : undefined;
-      // Slabs within safe range placed at correct Z; overflow slabs chain backward from INIT_Z
+      // First entranceSlabs get entrance thickness (placed at INIT_Z = furthest back = first seen)
+      const thick = (i < T.entranceSlabs) ? T.entranceThick : undefined;
+      // Slabs 0..initCount-1 fill INIT_Z → SAFE_Z; overflow slabs chain forward from SAFE_Z
       const initZ = i < initCount
         ? INIT_Z + i * SPACING
-        : INIT_Z - (i - initCount) * SPACING - SPACING;
+        : SAFE_Z + (i - initCount + 1) * SPACING;
       chunks[k].push(makeSlab(side, seed, initZ, i, thick));
     }
   });
