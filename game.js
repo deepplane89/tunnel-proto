@@ -7337,8 +7337,7 @@ let _canyonSqueezeZ   = 0;
 let _canyonSineT         = 0;
 let _canyonSineRows      = 0;
 let _canyonSineZ         = 0;
-let _canyonSinePhase     = 0; // canyon-own sine accumulator (legacy, kept for destroy reset)
-let _canyonTrackZ        = 0; // world-space z origin of the canyon track — advances each frame
+let _canyonSinePhase     = 0; // canyon-own sine accumulator
 let _canyonExiting       = false; // true during scroll-out exit — slabs drift off, no recycle
 let _canyonWasCorridor   = false;
 let _canyonDiagFrame     = 0;     // frame counter for periodic diagnostic log
@@ -7701,32 +7700,76 @@ function _createCanyonWalls() {
     return pivot; // callers use the pivot for position/rotation
   }
 
-  // ── Position-derived canyon: no baking, no phase accumulator, no recycle pool ──
-  // Each slab's X is recomputed every frame from its current Z position.
-  // _canyonTrackZ advances each frame — slabs are placed at fixed row offsets from it.
-  // First N slabs use entranceThick for the gate visual.
-  const POOL = Math.ceil((DESPAWN_Z - (T.spawnDepth || -400)) / SPACING) + 2;
-  _canyonTrackZ = T.spawnDepth || -400; // track starts at spawn depth, advances to ship
+  const INIT_Z  = T.spawnDepth || -400;
+  const SAFE_Z  = -150; // no slab spawns closer than this on init
+  // Init sinePhase so sin=0 exactly when ship hits the first regular slab — no jut
+  const _firstRegularZ = SAFE_Z - (T.entranceSlabs - 1) * SPACING - SPACING;
+  const rowsToFirst = Math.round((3.9 - _firstRegularZ) / SPACING);
+  _canyonSinePhase = -(rowsToFirst * (2 * Math.PI / T.sinePeriod) * T.sineSpeed);
+  // Only create slabs that fit between INIT_Z and SAFE_Z — recycle handles the rest
+  const initCount = Math.max(1, Math.floor((SAFE_Z - INIT_Z) / SPACING));
+  // Full pool size covers the whole visible range for recycling
+  const autoPool  = Math.ceil((DESPAWN_Z - INIT_Z) / SPACING) + 2 + T.entranceSlabs;
 
   const chunks = { left: [], right: [] };
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
-    for (let i = 0; i < POOL; i++) {
-      const seed  = i * 7 + (k === 'right' ? 100 : 0);
-      const thick = i < T.entranceSlabs ? T.entranceThick : undefined;
-      const initZ = _canyonTrackZ + i * SPACING; // row 0 at trackZ, row 1 further back, etc
-      const slab  = makeSlab(side, seed, initZ, i, thick);
-      // Position X correctly from z at init
-      const center     = _canyonXAtZ(initZ);
-      const centerNext = _canyonXAtZ(initZ - SPACING);
-      const halfX      = T.halfXOverride || 34;
-      slab.position.x  = center + halfX * side;
-      slab.rotation.y  = side * Math.atan2(centerNext - center, SPACING);
-      slab.visible     = initZ > -590; // hide beyond far clip
+    for (let i = 0; i < autoPool; i++) {
+      const seed = i * 7 + (k === 'right' ? 100 : 0);
+      const isEntrance = i < T.entranceSlabs;
+      const thick = isEntrance ? T.entranceThick : undefined;
+      // Entrance slabs spawn at SAFE_Z (close to ship) so they appear as the canyon gate
+      // Regular slabs fill INIT_Z → SAFE_Z; overflow parks behind INIT_Z
+      // entranceEnd: Z of last entrance slab; regular + overflow continue from here
+      const entranceEnd    = SAFE_Z - (T.entranceSlabs - 1) * SPACING;
+      const lastRegularZ   = entranceEnd - (initCount - T.entranceSlabs) * SPACING;
+      const initZ = isEntrance
+        ? SAFE_Z - i * SPACING                                       // entrance: -150, -170, -190
+        : i < initCount
+          ? entranceEnd - (i - T.entranceSlabs + 1) * SPACING        // regular: butt against entrance
+          : lastRegularZ - (i - initCount + 1) * SPACING;            // overflow: continue from last regular
+      const slab = makeSlab(side, seed, initZ, i, thick);
+      // Only hide slabs that are genuinely beyond the camera far clip (z < -590)
+      // Everything within view starts visible — corridor must be fully present at spawn
+      // All regular slabs start visible — overflow slabs are beyond far clip (~-600)
+      // so the GPU never renders them, but they must be visible so recycle minZ anchors correctly.
       chunks[k].push(slab);
     }
   });
-  console.log('[INIT] pool='+POOL+' trackZ='+_canyonTrackZ+' entranceSlabs='+T.entranceSlabs);
+
+  // Bake X at init: entrance slabs stay flush with corridor (same halfX as regular)
+  // Their thickness already pushes them outward visually
+  ['left','right'].forEach(k => {
+    const side = k === 'left' ? -1 : 1;
+    chunks[k].forEach((pivot) => {
+      // Entrance slabs: centered on ship X so gate opening aligns with player
+      if (pivot.userData.isEntrance) {
+        const halfX   = T.halfXOverride || 34;
+        const shipX   = state.shipX || 0;
+        pivot.userData.bakedX = shipX + halfX * side;
+        pivot.position.x = pivot.userData.bakedX;
+        pivot.rotation.y = 0;
+      } else {
+        const rowsAhead  = Math.max(0, Math.round((3.9 - pivot.position.z) / SPACING));
+        const center     = _canyonPredictCenter(rowsAhead);
+        const centerNext = _canyonPredictCenter(rowsAhead + 1);
+        const halfX      = _canyonPredictHalfX(rowsAhead);
+        const angle = side * Math.atan(centerNext - center);
+        pivot.userData.bakedX = center + halfX * side;
+        pivot.position.x = pivot.userData.bakedX;
+        pivot.rotation.y = angle;
+        if (k === 'right' && Math.abs(angle) > 0.001) console.log(`[INIT ROT] rowsAhead=${rowsAhead} center=${center.toFixed(2)} centerNext=${centerNext.toFixed(2)} angle=${(angle*180/Math.PI).toFixed(2)}deg sineIntensity=${_canyonTuner.sineIntensity} sinePhase=${_canyonSinePhase.toFixed(3)}`);
+      }
+    });
+  });
+  console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
+  console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick);
+  // Log first few slabs by Z to confirm entrance slabs are at the front
+  // Sort descending — highest Z (closest to ship) first, so entrance slabs appear at top
+  const sortedLeft = [...chunks.left].sort((a,b) => b.position.z - a.position.z);
+  sortedLeft.slice(0, T.entranceSlabs + 2).forEach((p, i) => {
+    console.log('[ENTRANCE] slab '+i+' z='+p.position.z.toFixed(0)+' isEntrance='+!!p.userData.isEntrance+' thick='+p.userData.slabThick);
+  });
 
   _canyonWalls = {
     strips:       [...chunks.left, ...chunks.right],
@@ -7744,7 +7787,6 @@ function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonSinePhase = 0;
-  _canyonTrackZ    = 0;
   _canyonExiting    = false;
   // strips are pivot Groups — remove group from scene, dispose child mesh geometry
   _canyonWalls.strips.forEach(pivot => {
@@ -7775,94 +7817,132 @@ function _canyonPredictCenter(rowsAhead) {
 function _canyonPredictHalfX(rowsAhead) {
   return _canyonTuner.halfXOverride;
 }
-// Position-derived centerline: X is a pure function of world-space Z.
-// sinePeriod is in world units (not rows). No accumulator needed.
-function _canyonXAtZ(worldZ) {
-  const T = _canyonTuner;
-  const base = state.corridorGapCenter || 0;
-  if (T.sineIntensity <= 0) return base;
-  const phase = (worldZ / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
-  return base + T.sineAmp * T.sineIntensity * Math.sin(phase);
-}
 
 let _canyonDbgFrame = 0;
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || (!_canyonActive && !_canyonExiting)) return;
-  const T      = _canyonTuner;
-  const spd    = (speed && speed > 1) ? speed : BASE_SPEED;
-  const scroll = spd * dt * (T.scrollSpeed || 1);
-  const spacing = _canyonWalls._spacing;
-  const halfX   = T.halfXOverride || 34;
-  const footOff = _canyonWalls._footOff || 0;
-
-  if (_canyonWalls.holoMat) _canyonWalls.holoMat.uniforms.time.value += dt;
-
-  // Advance world-space track — row 0 is at _canyonTrackZ, row i at _canyonTrackZ + i*spacing
-  _canyonTrackZ += scroll;
-
-  const POOL = _canyonWalls.left.length;
-
-  // ── DBG: log every 90 frames ─────────────────────────────────────────────
-  if (!_canyonWalls._dbgFrame) _canyonWalls._dbgFrame = 0;
-  _canyonWalls._dbgFrame++;
-  if (_canyonWalls._dbgFrame % 90 === 1) {
-    const Lz = _canyonWalls.left.map(m => m.position.z.toFixed(0));
-    const Lx = _canyonWalls.left.map(m => m.position.x.toFixed(1));
-    const Lv = _canyonWalls.left.map(m => m.visible ? 1 : 0);
-    console.log('[CYN DBG] frame=' + _canyonWalls._dbgFrame
-      + ' trackZ=' + _canyonTrackZ.toFixed(1)
-      + ' scroll=' + scroll.toFixed(3)
-      + ' POOL=' + POOL
-      + ' spacing=' + spacing
-      + ' exiting=' + _canyonExiting
-      + ' active=' + _canyonActive);
-    console.log('  LEFT  z=[' + Lz.join(',') + ']');
-    console.log('  LEFT  x=[' + Lx.join(',') + ']');
-    console.log('  LEFT  v=[' + Lv.join(',') + ']');
-    console.log('  trackZ+0*sp=' + (_canyonTrackZ).toFixed(1)
-      + '  trackZ+' + (POOL-1) + '*sp=' + (_canyonTrackZ + (POOL-1)*spacing).toFixed(1));
-    console.log('  _canyonXAtZ(trackZ)=' + _canyonXAtZ(_canyonTrackZ).toFixed(2)
-      + '  _canyonXAtZ(3.9)=' + _canyonXAtZ(3.9).toFixed(2));
+  _canyonDbgFrame++;
+  // Every 120 frames log slab positions so we can see if/when they vanish
+  if (_canyonDbgFrame % 120 === 0) {
+    const leftZs  = _canyonWalls.left.map(m => m.position.z.toFixed(0)).join(', ');
+    const rightZs = _canyonWalls.right.map(m => m.position.z.toFixed(0)).join(', ');
+    const leftRots = _canyonWalls.left.map(m => (m.rotation.y*180/Math.PI).toFixed(1)).join(', ');
+    const sinePhase = _canyonSinePhase.toFixed(3);
+    console.log(`[CANYON DBG] frame=${_canyonDbgFrame} sineI=${_canyonTuner.sineIntensity} phase=${sinePhase}`);
+    console.log(`  LEFT  z=[${leftZs}]`);
+    console.log(`  LEFT rot.y(deg)=[${leftRots}]`);
+    console.log(`  RIGHT z=[${rightZs}]`);
   }
-  // ─────────────────────────────────────────────────────────────────────────
+  const T   = _canyonTuner;
+  const spd = (speed && speed > 1) ? speed : BASE_SPEED;
+  const scroll  = spd * dt * T.scrollSpeed;
+  // Tick holographic overlay shader time
+  if (_canyonWalls.holoMat) _canyonWalls.holoMat.uniforms.time.value += dt;
+  const spacing = _canyonWalls._spacing;
+  // Advance canyon sine phase proportional to world scroll
+  if (T.sineIntensity > 0) _canyonSinePhase += (scroll / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
+
+  // ── Baked-X corridor tracking ───────────────────────────────────────────
+  // Each slab gets its X baked at spawn/recycle time from corridorGapCenter
+  // and _lastHalfX at that exact moment — the same values the corridor cones
+  // at that Z receive. position.x never changes until the next recycle.
+  // This is why the cones form a curved path: each one carries its own baked X.
+
+  const footOff = _canyonWalls._footOff || 0;
 
   ['left','right'].forEach(k => {
     const side   = k === 'left' ? -1 : 1;
     const meshes = _canyonWalls[k];
 
-    for (let i = 0; i < POOL; i++) {
-      const m      = meshes[i];
-      const worldZ = _canyonTrackZ + i * spacing;
+    meshes.forEach(m => {
+      m.position.z += scroll;
 
+      // ── EXITING: slabs drift forward, no recycle, hide when past despawn ──
       if (_canyonExiting) {
-        m.position.z += scroll;
         if (m.position.z > DESPAWN_Z + spacing) m.visible = false;
-        continue;
+        return;
       }
 
-      const center     = _canyonXAtZ(worldZ);
-      const centerPrev = _canyonXAtZ(worldZ - spacing);
-      m.position.z  = worldZ;
-      m.position.x  = center + halfX * side;
-      m.rotation.y  = side * Math.atan2(centerPrev - center, spacing);
-      m.visible     = worldZ > -590 && worldZ < DESPAWN_Z + spacing;
-    }
+      // Entrance slabs: scroll through once then hide — never recycle into corridor
+      if (m.userData.isEntrance && m.position.z > DESPAWN_Z + spacing) {
+        m.visible = false;
+        return;
+      }
+
+      // Phase logger — fires once per regular slab as it passes the ship
+      if (!m.userData.isEntrance && !m.userData._phaseLogged && m.position.z > 0 && m.position.z < DESPAWN_Z + spacing) {
+        m.userData._phaseLogged = true;
+        const rowsAheadNow = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
+        const predictedCenter = _canyonPredictCenter(rowsAheadNow);
+        console.log('[PHASE] slab at z=' + m.position.z.toFixed(2)
+          + ' sinePhase=' + _canyonSinePhase.toFixed(4)
+          + ' sin=' + Math.sin(_canyonSinePhase + rowsAheadNow * (2*Math.PI / T.sinePeriod) * T.sineSpeed).toFixed(4)
+          + ' predictedCenter=' + predictedCenter.toFixed(2)
+          + ' bakedX=' + (m.userData.bakedX || 0).toFixed(2)
+          + ' isEntrance=' + !!m.userData.isEntrance);
+      }
+
+      // Recycle: slab passed ship → send to back of queue and bake new X
+      if (m.position.z > DESPAWN_Z + spacing) {
+        let minZ = Infinity;
+        for (const om of meshes) if (om !== m && om.visible && om.position.z < minZ) minZ = om.position.z;
+        // Snap to clean multiple of spacing to prevent float drift gaps
+        const snappedMin = Math.round(minZ / spacing) * spacing;
+        m.position.z = snappedMin - spacing;
+
+        const slabZ      = snappedMin - spacing;
+        const rowsAhead  = Math.max(0, Math.round((3.9 - slabZ) / spacing));
+        const center     = _canyonPredictCenter(rowsAhead);
+        const centerNext = _canyonPredictCenter(rowsAhead + 1);
+        const halfX      = _canyonPredictHalfX(rowsAhead);
+        if (m.userData.isEntrance) {
+          const eHalfX = _canyonTuner.halfXOverride || 34;
+          m.userData.bakedX = eHalfX * side;
+          m.position.x = m.userData.bakedX;
+          m.position.z = slabZ;
+          m.rotation.y = 0;
+        } else {
+          m.userData.bakedX = center + halfX * side;
+          m.position.x = m.userData.bakedX;
+          m.position.z = slabZ;
+          m.rotation.y = side * Math.atan(centerNext - center);
+        }
+        // Flip visible on first recycle — slab now scrolls in from the distance naturally
+        m.visible = true;
+      } else {
+        // Hold baked X — rotation frozen at bake time, only updates on recycle
+        if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
+      }
+    });
   });
 
   // Auto-destroy once all slabs have scrolled off during exit
   if (_canyonExiting && _canyonWalls) {
-    const allGone = _canyonWalls.strips.every(m => !m.visible);
+    const allGone = _canyonWalls.strips.every(m => !m.visible || m.position.z > DESPAWN_Z + spacing);
     if (allGone) _destroyCanyonWalls();
   }
 
-  // Collision — X at ship Z exact from _canyonXAtZ, no slab search needed
+  // Collision — find the slabs closest to the ship (z near 0) and use their bakedX
   if (_canyonActive && state.phase === 'playing' && !state._godMode && !_godMode) {
-    const shipX     = state.shipX || 0;
-    const center    = _canyonXAtZ(3.9);
-    const leftEdge  = center - halfX + footOff;
-    const rightEdge = center + halfX - footOff;
-    if (shipX < leftEdge + 1.5 || shipX > rightEdge - 1.5) {
+    const shipX  = state.shipX || 0;
+    const buffer = 1.5;
+    // Find nearest left and right slab to ship Z
+    let nearLeft = null, nearRight = null, bestLZ = Infinity, bestRZ = Infinity;
+    _canyonWalls.left.forEach(m => {
+      const dz = Math.abs(m.position.z - 3.9);
+      if (dz < bestLZ) { bestLZ = dz; nearLeft = m; }
+    });
+    _canyonWalls.right.forEach(m => {
+      const dz = Math.abs(m.position.z - 3.9);
+      if (dz < bestRZ) { bestRZ = dz; nearRight = m; }
+    });
+    // Only collide if the nearest slab is actually close in Z — skip if gap is passing through
+    const maxCollisionDZ = spacing * 1.5;
+    const leftEdge  = (nearLeft  && bestLZ < maxCollisionDZ) ? nearLeft.userData.bakedX  : -(CORRIDOR_NARROW_X - footOff);
+    const rightEdge = (nearRight && bestRZ < maxCollisionDZ) ? nearRight.userData.bakedX :  (CORRIDOR_NARROW_X - footOff);
+    if (shipX < leftEdge + buffer || shipX > rightEdge - buffer) {
       killPlayer();
+      // Brief invincibility window so a single wall contact doesn't fire 60x/s
       if (state.phase === 'playing') state.invincibleTimer = Math.max(state.invincibleTimer, 0.5);
     }
   }
