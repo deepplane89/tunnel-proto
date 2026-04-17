@@ -7641,7 +7641,7 @@ function _createCanyonWalls() {
 
   function makeSlab(side, seed, zPos, idx, thickOverride) {
     const isEntrance = (thickOverride !== undefined);
-    const isCyan = isEntrance ? true : (idx % 2 === 0);
+    const isCyan = true; // all slabs use cyan mat for uniform look
     const geo    = _buildCanyonSlabGeo(seed, thickOverride);
 
     // Pivot group — sits at the inner foot edge of the corridor.
@@ -17590,7 +17590,7 @@ window.addEventListener('keydown', (e) => {
 
     hdr('— SINE CURVES —');
     slider('Intensity',      'sineIntensity',  0,    1, 0.01, 'live-sine');
-    slider('Amplitude',      'sineAmp',        1,  120, 1,   'live-sine');
+    slider('Amplitude',      'sineAmp',        1,  400, 1,   'live-sine');
     slider('Period (rows)',   'sinePeriod',    20,  600, 5,   'live-sine');
     slider('Speed',          'sineSpeed',    0.1,    5, 0.1, 'live-sine');
 
@@ -17603,6 +17603,23 @@ window.addEventListener('keydown', (e) => {
     btn.style.cssText = 'margin-top:10px;width:100%;background:#001a2a;border:1px solid #00eeff;color:#00eeff;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
     btn.onclick = rebuildGeo;
     panel.appendChild(btn);
+
+    hdr('— PRESETS —');
+    const PRESETS = {
+      'Canyon Corridor 1': { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400 },
+    };
+    Object.entries(PRESETS).forEach(([name, vals]) => {
+      const pb = document.createElement('button');
+      pb.textContent = name;
+      pb.style.cssText = 'margin-top:6px;width:100%;background:#0a1a0a;border:1px solid #00ff88;color:#00ff88;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+      pb.onclick = () => {
+        Object.assign(_canyonTuner, vals);
+        _destroyCanyonWalls();
+        _createCanyonWalls();
+        buildPanel();
+      };
+      panel.appendChild(pb);
+    });
   }
 
   // Separate keydown listener — checks panelVisible flag, not _canyonActive
