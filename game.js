@@ -7303,7 +7303,7 @@ const _canyonTuner = {
   // Corridor width override — half-gap between walls (wall foot lands at center ± halfXOverride)
   halfXOverride: 40,
   // Entrance: first N slabs get entranceThick — extends the slab outward while staying flush
-  entranceThick: 2000,  // slab thickness for entrance slabs (increase to expand laterally)
+  entranceThick: 450,   // slab thickness for entrance slabs (increase to expand laterally)
   entranceSlabs:  3,    // how many leading slabs use entranceThick
   // How far away the canyon spawns (larger = see entrance from farther away)
   spawnDepth:   -400,
@@ -7327,10 +7327,10 @@ let _canyonManual = false; // true when triggered by V key — bypasses sequence
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false, _allDark:true },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-400, _allCyan:false, _allDark:true },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
 };
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
@@ -7891,7 +7891,7 @@ function _updateCanyonWalls(dt, speed) {
       // Recycle: slab passed ship → send to back of queue and bake new X
       if (m.position.z > DESPAWN_Z + spacing) {
         let minZ = Infinity;
-        for (const om of meshes) if (om !== m && om.visible && om.position.z < minZ) minZ = om.position.z;
+        for (const om of meshes) if (om !== m && om.visible && !om.userData.isEntrance && om.position.z < minZ) minZ = om.position.z;
         // Snap to clean multiple of spacing to prevent float drift gaps
         const snappedMin = Math.round(minZ / spacing) * spacing;
         m.position.z = snappedMin - spacing;
