@@ -7317,7 +7317,7 @@ let _canyonManual = false; // true when triggered by V key — bypasses sequence
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
   2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
   3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false },
   4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true },
@@ -7585,11 +7585,11 @@ function _createCanyonWalls() {
   });
 
   const darkMat = new THREE.MeshPhysicalMaterial({
-    color:              new THREE.Color(0x0a0a12),
-    roughness:          0.28,
+    color:              new THREE.Color(0x080810),
+    roughness:          0.22,
     metalness:          0.0,
-    clearcoat:          0.35,
-    clearcoatRoughness: 0.10,
+    clearcoat:          0.40,
+    clearcoatRoughness: 0.08,
     reflectivity:       0.7,
     emissive:           new THREE.Color(0xff00cc),
     emissiveMap:        darkTex,
@@ -7597,46 +7597,6 @@ function _createCanyonWalls() {
     flatShading:        false,
     side:               THREE.DoubleSide,
   });
-  darkMat.onBeforeCompile = (shader) => {
-    shader.uniforms.uMarbleA = { value: new THREE.Color(0x0d0d18) };
-    shader.uniforms.uMarbleB = { value: new THREE.Color(0x1e1e2e) };
-    shader.uniforms.uMarbleC = { value: new THREE.Color(0x8888aa) };
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <common>',
-      `#include <common>
-       uniform vec3 uMarbleA;
-       uniform vec3 uMarbleB;
-       uniform vec3 uMarbleC;
-       float mhash(vec2 p){
-         p=fract(p*vec2(0.3183099,0.3678794));
-         p+=dot(p,p*vec2(17.0,23.0));
-         return fract((p.x+p.y)*p.x);
-       }
-       float mnoise(vec2 p){
-         vec2 i=floor(p),f=fract(p);
-         f=f*f*(3.0-2.0*f);
-         return mix(mix(mhash(i),mhash(i+vec2(1,0)),f.x),
-                    mix(mhash(i+vec2(0,1)),mhash(i+vec2(1,1)),f.x),f.y);
-       }
-       float mfbm(vec2 p){
-         float v=0.0,a=0.5;
-         for(int i=0;i<5;i++){v+=a*mnoise(p);p*=2.0;a*=0.5;}
-         return v;
-       }`
-    );
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <color_fragment>',
-      `#include <color_fragment>
-       vec2 mp = vUv * vec2(4.0, 6.0);
-       float turb = mfbm(mp * 1.5) * 2.4;
-       float veins = sin((mp.y + turb) * 5.0 + mp.x * 1.2);
-       float bands = smoothstep(-0.3, 0.9, veins);
-       float fine  = mfbm(mp * 4.0);
-       vec3 marble = mix(uMarbleA, uMarbleB, bands);
-       marble = mix(marble, uMarbleC, smoothstep(0.68, 0.95, fine) * 0.4);
-       diffuseColor.rgb = marble;`
-    );
-  };
 
   // Holographic grid overlay material (additive, no depth write)
   const holoMat = new THREE.ShaderMaterial({
@@ -17699,7 +17659,7 @@ window.addEventListener('keydown', (e) => {
 
     hdr('— PRESETS —');
     const PRESETS = [
-      { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
+      { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
       { label: 'Canyon Corridor 2', mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
       { label: 'Regular Canyon',    mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
       { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
