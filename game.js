@@ -7752,9 +7752,13 @@ function _createCanyonWalls() {
       } else {
         const initZ      = pivot.position.z;
         const center     = _canyonXAtZ(initZ);
-        const centerNext = _canyonXAtZ(initZ - SPACING);
         const halfX      = _canyonPredictHalfX(0);
-        const angle = side * Math.atan2(centerNext - center, SPACING);
+        // Use phase-aware predictCenter for rotation (same as recycle path)
+        // so all slabs — including overflow ones — get consistent slope at init
+        const rotRowsAhead  = Math.round((3.9 - initZ) / SPACING);
+        const rotCenter     = _canyonPredictCenter(rotRowsAhead);
+        const rotCenterNext = _canyonPredictCenter(rotRowsAhead + 1);
+        const angle = side * Math.atan2(rotCenterNext - rotCenter, SPACING);
         pivot.userData.bakedX = center + halfX * side;
         pivot.position.x = pivot.userData.bakedX;
         pivot.rotation.y = angle;
