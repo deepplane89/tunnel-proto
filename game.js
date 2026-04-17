@@ -7338,6 +7338,7 @@ let _canyonSineT         = 0;
 let _canyonSineRows      = 0;
 let _canyonSineZ         = 0;
 let _canyonSinePhase     = 0; // canyon-own sine accumulator
+let _canyonRegularRecycled = 0; // non-entrance slabs recycled since spawn — drives ramp-in
 let _canyonWasCorridor   = false;
 let _canyonDiagFrame     = 0;     // frame counter for periodic diagnostic log
 // Call window._canyonLog() from console to get a full snapshot of canyon state + tuner
@@ -7755,6 +7756,8 @@ function _createCanyonWalls() {
       }
     });
   });
+  // Seed ramp counter: init already placed (initCount - entranceSlabs) regular slabs with ramp applied
+  _canyonRegularRecycled = initCount - T.entranceSlabs;
   console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
   console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick);
   // Log first few slabs by Z to confirm entrance slabs are at the front
@@ -7780,6 +7783,7 @@ function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonSinePhase = 0;
+  _canyonRegularRecycled = 0;
   // strips are pivot Groups — remove group from scene, dispose child mesh geometry
   _canyonWalls.strips.forEach(pivot => {
     scene.remove(pivot);
@@ -7880,10 +7884,15 @@ function _updateCanyonWalls(dt, speed) {
           m.position.z = slabZ;
           m.rotation.y = 0;
         } else {
-          m.userData.bakedX = center + halfX * side;
+          // Ramp-in: apply same 8-row ramp for recycled slabs just after spawn
+          const RAMP_ROWS = 8;
+          const recycleRampT = Math.min(1.0, _canyonRegularRecycled / RAMP_ROWS);
+          _canyonRegularRecycled++;
+          const angle = side * Math.atan(centerNext - center);
+          m.userData.bakedX = (center * recycleRampT) + halfX * side;
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
-          m.rotation.y = side * Math.atan(centerNext - center);
+          m.rotation.y = angle * recycleRampT;
         }
       } else {
         // Hold baked X — rotation frozen at bake time, only updates on recycle
