@@ -7706,7 +7706,7 @@ function _createCanyonWalls() {
       const centerNext = _canyonPredictCenter(rowsAhead + 1);
       const halfX      = _canyonPredictHalfX(rowsAhead);
       // Pivot sits at the foot world position; rotation.y angles the face inward
-      const angle = Math.atan2(centerNext - center, SPACING);
+      const angle = side * Math.atan(centerNext - center);
       pivot.userData.bakedX = center + halfX * side;
       pivot.position.x = pivot.userData.bakedX;
       pivot.rotation.y = angle;
@@ -7817,14 +7817,14 @@ function _updateCanyonWalls(dt, speed) {
         m.userData.bakedX = center + halfX * side;
         m.position.x = m.userData.bakedX;
         m.position.z = slabZ;
-        m.rotation.y = Math.atan2(centerNext - center, spacing);
+        m.rotation.y = side * Math.atan(centerNext - center);
       } else {
         // Hold baked X position but update rotation every frame as sine phase advances
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
         const ra  = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
         const c0  = _canyonPredictCenter(ra);
         const c1  = _canyonPredictCenter(ra + 1);
-        m.rotation.y = Math.atan2(c1 - c0, spacing);
+        m.rotation.y = side * Math.atan(c1 - c0);
       }
     });
   });
@@ -17442,7 +17442,7 @@ window.addEventListener('keydown', (e) => {
         const halfX      = _canyonPredictHalfX(rowsAhead);
         m.userData.bakedX = center + halfX * side;
         m.position.x = m.userData.bakedX;
-        m.rotation.y = Math.atan2(centerNext - center, spacing);
+        m.rotation.y = side * Math.atan(centerNext - center);
       });
     });
   }
