@@ -17468,6 +17468,13 @@ window.addEventListener('keydown', (e) => {
       _canyonActive = false;
       _canyonManual = false;
       _canyonMode   = 0;
+      // If JL sequencer owns this canyon segment, clear its track state so sequencer resumes
+      if (state._jetLightningMode) {
+        _jlCorridor.active = false;
+        for (const id of ['canyon_1','canyon_2','canyon_straight','canyon_1_lt','canyon_2_lt']) {
+          _jlTrackActive[id] = false;
+        }
+      }
       console.log('[CANYON] OFF');
     } else {
       _canyonSinePhase = 0;
@@ -22040,8 +22047,19 @@ function _tickJetLightningRamp(dt) {
   _jlRampTime += dt;
   const t = _jlRampTime;
 
-  // ── Corridor breather — pause all track spawning while active
-  if (_jlCorridor.active) return;
+  // ── Corridor breather — pause asteroid/lightning spawning, but still check
+  // custom track deactivation so canyon onDeactivate fires at endT
+  if (_jlCorridor.active) {
+    for (const track of _JL_TRACKS) {
+      if (track.type !== 'custom') continue;
+      const active = t >= track.startT && (track.endT === null || t < track.endT);
+      if (!active && _jlTrackActive[track.id]) {
+        _jlTrackActive[track.id] = false;
+        if (track.onDeactivate) track.onDeactivate();
+      }
+    }
+    return;
+  }
 
   // ── Iterate tracks ────────────────────────────────────────────────────────
   // First pass: find which asteroid/lightning tracks are active this frame
