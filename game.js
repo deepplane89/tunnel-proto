@@ -11368,6 +11368,15 @@ window.addEventListener('keydown', e => {
   // Level skipper for testing: press 1-5
   // ── Debug hotkeys: Sequencer stage jumping (numbers 1-9) + debug toggles ──
   const _digit = e.code.startsWith('Digit') ? e.code.replace('Digit','') : null;
+  // ── JL mode: number keys jump to sequence sections ────────────────────────
+  if (state._jetLightningMode && _digit) {
+    // 1=0s  2=20s  3=30s(C1)  4=60s  5=75s  6=90s(C2)  7=123s  8=153s(C1+LT)  9=183s(C2+LT)  0=213s(peak)
+    const _jlMap = { '1':0, '2':20, '3':30, '4':60, '5':75, '6':90, '7':123, '8':153, '9':183, '0':213 };
+    if (_jlMap[_digit] !== undefined) {
+      _jlJumpToTime(_jlMap[_digit]);
+      return;
+    }
+  }
   if (state.phase === 'playing' && state.isDeathRun && _digit) {
     // 1=T1_WARMUP  2=T2_RAMPUP  3=T3A_ZIPS  4=T3B_L3BOSS
     // 5=T4A_ANGLED  6=T4B_LETHAL  7=T4C_L4BOSS  8=T5A_FATCONES
@@ -21834,6 +21843,30 @@ function _jlCanyonStop() {
   if (_canyonActive) _destroyCanyonWalls();
   _canyonActive      = false;
   _jlCorridor.active = false;
+}
+
+// Jump JL sequencer to any time — shared by panel buttons and number hotkeys
+function _jlJumpToTime(targetT) {
+  if (!state._jetLightningMode) return;
+  // Find the first track whose window contains targetT (for type detection)
+  const refTrack = _JL_TRACKS.find(tr => targetT >= tr.startT && (tr.endT === null || targetT < tr.endT))
+               || _JL_TRACKS.find(tr => targetT === tr.startT)
+               || { type: 'custom' };
+  for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
+  if (_canyonActive) _jlCanyonStop();
+  _jlRampTime = targetT;
+  if (refTrack.type !== 'asteroid') {
+    _asteroidTuner.enabled = false;
+  } else {
+    _asteroidTuner.enabled = true;
+    _astTimer = 0.1;
+  }
+  if (refTrack.type !== 'lightning') {
+    if (window._LT) window._LT.enabled = false;
+  }
+  if (window._stopFcLoop) window._stopFcLoop();
+  for (const lr of _lethalRingActive) { lr.userData.active = false; lr.visible = false; lr.position.set(0,-9999,0); }
+  _lethalRingActive.length = 0;
 }
 
 const _JL_TRACKS = [
