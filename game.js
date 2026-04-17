@@ -7675,6 +7675,7 @@ function _createCanyonWalls() {
       mesh.add(holo);
     }
 
+    pivot.userData.isEntrance = isEntrance;
     return pivot; // callers use the pivot for position/rotation
   }
 
@@ -7722,6 +7723,12 @@ function _createCanyonWalls() {
     });
   });
   console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
+  console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick);
+  // Log first few slabs by Z to confirm entrance slabs are at the front
+  const sortedLeft = [...chunks.left].sort((a,b) => a.position.z - b.position.z);
+  sortedLeft.slice(0, T.entranceSlabs + 2).forEach((p, i) => {
+    console.log('[ENTRANCE] slab '+i+' z='+p.position.z.toFixed(0)+' isEntrance='+!!p.userData.isEntrance);
+  });
 
   _canyonWalls = {
     strips:       [...chunks.left, ...chunks.right],
