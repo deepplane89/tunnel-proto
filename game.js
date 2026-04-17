@@ -7977,6 +7977,7 @@ function _updateCanyonWalls(dt, speed) {
         // Decrement per-side tail tracker — re-anchored each frame, unique Z per recycle even in burst
         if (k === 'left') { _tailLeft  -= spacing; } else { _tailRight -= spacing; }
         const slabZ = k === 'left' ? _tailLeft : _tailRight;
+        if (k === 'left') console.log(`[TAIL] tailBeforeDecrement=${(slabZ+spacing).toFixed(1)} slabZ=${slabZ.toFixed(1)} spacing=${spacing}`);
 
         const center     = _canyonXAtZ(slabZ);
         const centerNext = _canyonXAtZ(slabZ - spacing);
