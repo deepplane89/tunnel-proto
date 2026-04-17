@@ -7697,10 +7697,13 @@ function _createCanyonWalls() {
       const center     = _canyonPredictCenter(rowsAhead);
       const centerNext = _canyonPredictCenter(rowsAhead + 1);
       const halfX      = _canyonPredictHalfX(rowsAhead);
-      const angle      = -Math.atan2(centerNext - center, SPACING);
-      const bakedX     = (center + halfX * side) - FOOT_OFF * Math.cos(angle) * side;
+      const angle      = Math.atan2(centerNext - center, SPACING);
+      const footX      = T.footX;
+      const bakedX     = (center + halfX * side) - footX * Math.cos(angle) * side;
+      const bakedZ     = m.position.z + footX * Math.sin(angle) * side;
       m.userData.bakedX = bakedX;
       m.position.x = bakedX;
+      m.position.z = bakedZ;
       m.rotation.y = angle;
     });
   });
@@ -7791,20 +7794,23 @@ function _updateCanyonWalls(dt, speed) {
         // Predictive bake: estimate center/halfX for when the ship reaches this slab.
         // Slab is placed at minZ - spacing. Ship is at z≈3.9, speed≈72 units/s.
         // Row spacing = 7 units → rows ahead ≈ distance / 7.
-        const slabZ    = minZ - spacing;
-        const rowsAhead = Math.max(0, Math.round((3.9 - slabZ) / 7));
+        const slabZ     = snappedMin - spacing;
+        const rowsAhead  = Math.max(0, Math.round((3.9 - slabZ) / spacing));
         const center     = _canyonPredictCenter(rowsAhead);
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
         const halfX      = _canyonPredictHalfX(rowsAhead);
-        // Negate: right wall turns CW (face toward -X) when corridor goes right
-        // scale.x=-1 on left wall auto-mirrors so same angle works for both sides
-        const angle = -Math.atan2(centerNext - center, spacing);
-        const footX = _canyonTuner.footX;
+        const footX      = _canyonTuner.footX;
+        // Y rotation so inner face angles toward corridor direction
+        // positive angle = corridor going right = right wall rotates to face left (inward)
+        const angle  = Math.atan2(centerNext - center, spacing);
+        // Pivot around foot (local x=footX): correct both X and Z position
         const bakedX = (center + halfX * side) - footX * Math.cos(angle) * side;
+        const bakedZ = slabZ + footX * Math.sin(angle) * side;
         m.userData.bakedX = bakedX;
         m.position.x = bakedX;
+        m.position.z = bakedZ;
         m.rotation.y = angle;
-        if (Math.abs(angle) > 0.01) console.log(`[CANYON ROT] side=${k} angle=${(angle*180/Math.PI).toFixed(2)}deg center=${center.toFixed(1)} centerNext=${centerNext.toFixed(1)} bakedX=${bakedX.toFixed(1)} rotation.y=${(m.rotation.y*180/Math.PI).toFixed(2)}`);
+        if (Math.abs(angle) > 0.01) console.log(`[CANYON ROT] side=${k} angle=${(angle*180/Math.PI).toFixed(2)}deg center=${center.toFixed(1)} next=${centerNext.toFixed(1)}`);
       } else {
         // Hold baked position — do NOT update X
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
@@ -17423,11 +17429,13 @@ window.addEventListener('keydown', (e) => {
         const center     = _canyonPredictCenter(rowsAhead);
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
         const halfX      = _canyonPredictHalfX(rowsAhead);
-        const angle      = -Math.atan2(centerNext - center, spacing);
         const footX      = _canyonTuner.footX;
+        const angle      = Math.atan2(centerNext - center, spacing);
         const bakedX     = (center + halfX * side) - footX * Math.cos(angle) * side;
+        const bakedZ     = m.position.z + footX * Math.sin(angle) * side;
         m.userData.bakedX = bakedX;
         m.position.x = bakedX;
+        m.position.z = bakedZ;
         m.rotation.y = angle;
       });
     });
