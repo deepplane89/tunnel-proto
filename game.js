@@ -7831,6 +7831,43 @@ function _canyonXAtZ(worldZ) {
 let _canyonDbgFrame = 0;
 let _canyonDbgLastNearestRot = null;
 let _canyonDbgStartTime = null;
+
+function _debugCanyonNearShip() {
+  const shipZ = 3.9;
+  const spacing = _canyonWalls._spacing;
+  ['left','right'].forEach(k => {
+    const slabs = _canyonWalls[k];
+    const sorted = slabs
+      .filter(m => !m.userData.isEntrance)
+      .map(m => ({ m, dz: Math.abs(m.position.z - shipZ), z: m.position.z }))
+      .sort((a,b) => a.dz - b.dz)
+      .slice(0, 5);
+    const entries = sorted.map((s,idx) => {
+      const z = s.z;
+      const centerHere = _canyonXAtZ(z);
+      const centerNext = _canyonXAtZ(z + spacing);
+      const dx = centerNext - centerHere;
+      const yawPredDeg  = Math.atan2(dx, spacing) * 180 / Math.PI;
+      const yawBakedDeg = s.m.rotation.y * 180 / Math.PI;
+      const src = s.m.userData.bakedAtZ ? 'R' : 'I';
+      return `i${idx}[${src}] z=${z.toFixed(1)} yawPred=${yawPredDeg.toFixed(1)} yawBaked=${yawBakedDeg.toFixed(1)} dx=${dx.toFixed(2)}`;
+    });
+    console.log(`[NEAR ${k.toUpperCase()}] ${entries.join(' | ')}`);
+  });
+}
+
+function _recycleSlabDebug(m, k, slabZ, spacing, side) {
+  const centerOld  = _canyonXAtZ(slabZ);
+  const centerNext = _canyonXAtZ(slabZ + spacing);
+  const dx = centerNext - centerOld;
+  const yawStatic  = Math.atan2(dx, spacing) * 180 / Math.PI;
+  const rowsAhead  = Math.round((3.9 - slabZ) / spacing);
+  const rotCenter  = _canyonPredictCenter(rowsAhead);
+  const rotNext    = _canyonPredictCenter(rowsAhead + 1);
+  const yawPhase   = Math.atan2(rotNext - rotCenter, spacing) * 180 / Math.PI;
+  console.log(`[RECYCLE ${k.toUpperCase()}] slabZ=${slabZ.toFixed(1)} yawStatic=${yawStatic.toFixed(1)} yawPhase=${yawPhase.toFixed(1)} rowsAhead=${rowsAhead} side=${side}`);
+}
+
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || (!_canyonActive && !_canyonExiting)) return;
   _canyonDbgFrame++;
@@ -7838,39 +7875,42 @@ function _updateCanyonWalls(dt, speed) {
   const _canyonElapsed = ((performance.now() - _canyonDbgStartTime) / 1000).toFixed(1);
 
   if (_canyonDbgFrame % 120 === 0) {
-    const meshes = _canyonWalls.left;
-    // Find slab nearest ship (z closest to 0)
+    const spacing2 = _canyonWalls._spacing;
+    // Global snapshot
+    console.log(`[CANYON SNAP] t=${_canyonElapsed}s frame=${_canyonDbgFrame} phase=${_canyonSinePhase.toFixed(3)} pool=${_canyonWalls.left.length}`);
+
+    // Coverage check
+    const allZ = _canyonWalls.left.concat(_canyonWalls.right)
+      .filter(m => m.visible).map(m => m.position.z).sort((a,b)=>a-b);
+    const minZ = allZ.length ? allZ[0].toFixed(1) : '?';
+    const maxZ = allZ.length ? allZ[allZ.length-1].toFixed(1) : '?';
+    console.log(`[COVERAGE] slabsZ=[${minZ},${maxZ}] count=${allZ.length}`);
+
+    // Nearest slab detail
     let nearestM = null, nearestDist = Infinity;
-    for (const m of meshes) {
+    for (const m of _canyonWalls.left) {
       if (m.userData.isEntrance) continue;
       const d = Math.abs(m.position.z);
       if (d < nearestDist) { nearestDist = d; nearestM = m; }
     }
-    const nearRot   = nearestM ? (nearestM.rotation.y * 180 / Math.PI).toFixed(2) : '?';
-    const nearZ     = nearestM ? nearestM.position.z.toFixed(1) : '?';
-    const nearBaked = nearestM ? (nearestM.userData.bakedAtZ || 0).toFixed(1) : '?';
-    const nearBRot  = nearestM ? ((nearestM.userData.bakedRot || 0) * 180 / Math.PI).toFixed(2) : '?';
-    const correctRot = nearestM ? (Math.atan2(
-      _canyonXAtZ(nearestM.position.z) - _canyonXAtZ(nearestM.position.z + 20), 20
-    ) * 180 / Math.PI).toFixed(2) : '?';
-    const initOrRecycled = (nearestM && nearestM.userData.bakedAtZ) ? 'RECYCLED' : 'INIT';
-
-    // Count visible slabs in camera range
-    const inView = meshes.filter(m => m.position.z > -590 && m.position.z < 26 && m.visible).length;
-    const poolMin = Math.min(...meshes.filter(m=>!m.userData.isEntrance).map(m=>m.position.z)).toFixed(0);
-
-    console.log(`[CANYON DBG] t=${_canyonElapsed}s frame=${_canyonDbgFrame} phase=${_canyonSinePhase.toFixed(3)}`);
-    console.log(`  NEAREST: z=${nearZ} rot=${nearRot}° correct=${correctRot}° bakedAtZ=${nearBaked} bakedRot=${nearBRot}° source=${initOrRecycled}`);
-    console.log(`  POOL: inView=${inView} poolMinZ=${poolMin}`);
-
-    // Straight detector — warn if nearest rot hasn't changed much
-    if (_canyonDbgLastNearestRot !== null) {
-      const rotDelta = Math.abs(parseFloat(nearRot) - _canyonDbgLastNearestRot);
-      if (rotDelta < 1.0) {
-        console.warn(`[STRAIGHT?] t=${_canyonElapsed}s rot stuck at ~${nearRot}° (delta=${rotDelta.toFixed(2)}° from last snapshot) source=${initOrRecycled}`);
+    if (nearestM) {
+      const nearRot    = (nearestM.rotation.y * 180 / Math.PI).toFixed(2);
+      const nearZ2     = nearestM.position.z.toFixed(1);
+      const nearBaked  = (nearestM.userData.bakedAtZ || 0).toFixed(1);
+      const nearBRot   = ((nearestM.userData.bakedRot || 0) * 180 / Math.PI).toFixed(2);
+      const dx2        = _canyonXAtZ(nearestM.position.z + spacing2) - _canyonXAtZ(nearestM.position.z);
+      const correctRot = (Math.atan2(dx2, spacing2) * 180 / Math.PI).toFixed(2);
+      const src        = nearestM.userData.bakedAtZ ? 'RECYCLED' : 'INIT';
+      console.log(`[NEAREST] z=${nearZ2} rot=${nearRot}° correct=${correctRot}° bakedAtZ=${nearBaked} bakedRot=${nearBRot}° src=${src}`);
+      if (_canyonDbgLastNearestRot !== null) {
+        const delta = Math.abs(parseFloat(nearRot) - _canyonDbgLastNearestRot);
+        if (delta < 1.0) console.warn(`[STRAIGHT?] t=${_canyonElapsed}s rot=${nearRot}° stuck (delta=${delta.toFixed(2)}°) src=${src}`);
       }
+      _canyonDbgLastNearestRot = parseFloat(nearRot);
     }
-    _canyonDbgLastNearestRot = parseFloat(nearRot);
+
+    // Near-ship detail for 5 closest slabs
+    _debugCanyonNearShip();
   }
   const T   = _canyonTuner;
   const spd = (speed && speed > 1) ? speed : BASE_SPEED;
@@ -7955,6 +7995,7 @@ function _updateCanyonWalls(dt, speed) {
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
           m.rotation.y = m.userData.bakedRot;
+          _recycleSlabDebug(m, k, slabZ, spacing, side);
         }
         // Flip visible on first recycle — slab now scrolls in from the distance naturally
         m.visible = true;
