@@ -7816,8 +7816,12 @@ function _updateCanyonWalls(dt, speed) {
         m.position.z = slabZ;
         m.rotation.y = Math.atan2(centerNext - center, spacing);
       } else {
-        // Hold baked position — do NOT update X
+        // Hold baked X position but update rotation every frame as sine phase advances
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
+        const ra  = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
+        const c0  = _canyonPredictCenter(ra);
+        const c1  = _canyonPredictCenter(ra + 1);
+        m.rotation.y = Math.atan2(c1 - c0, spacing);
       }
     });
   });
