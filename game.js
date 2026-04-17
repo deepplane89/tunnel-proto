@@ -7820,7 +7820,7 @@ function _canyonPredictHalfX(rowsAhead) {
 
 let _canyonDbgFrame = 0;
 function _updateCanyonWalls(dt, speed) {
-  if (!_canyonWalls || !_canyonActive) return;
+  if (!_canyonWalls || (!_canyonActive && !_canyonExiting)) return;
   _canyonDbgFrame++;
   // Every 120 frames log slab positions so we can see if/when they vanish
   if (_canyonDbgFrame % 120 === 0) {
@@ -7867,6 +7867,19 @@ function _updateCanyonWalls(dt, speed) {
       if (m.userData.isEntrance && m.position.z > DESPAWN_Z + spacing) {
         m.visible = false;
         return;
+      }
+
+      // Phase logger — fires once per regular slab as it passes the ship
+      if (!m.userData.isEntrance && !m.userData._phaseLogged && m.position.z > 0 && m.position.z < DESPAWN_Z + spacing) {
+        m.userData._phaseLogged = true;
+        const rowsAheadNow = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
+        const predictedCenter = _canyonPredictCenter(rowsAheadNow);
+        console.log('[PHASE] slab at z=' + m.position.z.toFixed(2)
+          + ' sinePhase=' + _canyonSinePhase.toFixed(4)
+          + ' sin=' + Math.sin(_canyonSinePhase + rowsAheadNow * (2*Math.PI / T.sinePeriod) * T.sineSpeed).toFixed(4)
+          + ' predictedCenter=' + predictedCenter.toFixed(2)
+          + ' bakedX=' + (m.userData.bakedX || 0).toFixed(2)
+          + ' isEntrance=' + !!m.userData.isEntrance);
       }
 
       // Recycle: slab passed ship → send to back of queue and bake new X
