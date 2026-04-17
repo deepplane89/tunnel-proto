@@ -7836,10 +7836,19 @@ function _updateCanyonWalls(dt, speed) {
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
         const halfX      = _canyonPredictHalfX(rowsAhead);
         // Pivot sits at foot world X; rotation.y angles face inward on curves
-        m.userData.bakedX = center + halfX * side;
-        m.position.x = m.userData.bakedX;
-        m.position.z = slabZ;
-        m.rotation.y = side * Math.atan(centerNext - center);
+        // Entrance slabs keep fixed halfX and rotation=0 — they are a flat gate, not part of the curve
+        if (m.userData.isEntrance) {
+          const eHalfX = _canyonTuner.halfXOverride || 34;
+          m.userData.bakedX = eHalfX * side;
+          m.position.x = m.userData.bakedX;
+          m.position.z = slabZ;
+          m.rotation.y = 0;
+        } else {
+          m.userData.bakedX = center + halfX * side;
+          m.position.x = m.userData.bakedX;
+          m.position.z = slabZ;
+          m.rotation.y = side * Math.atan(centerNext - center);
+        }
       } else {
         // Hold baked X — rotation frozen at bake time, only updates on recycle
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
