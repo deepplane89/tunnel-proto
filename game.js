@@ -7800,11 +7800,11 @@ function _updateCanyonWalls(dt, speed) {
         // scale.x=-1 on left wall auto-mirrors so same angle works for both sides
         const angle = -Math.atan2(centerNext - center, spacing);
         const footX = _canyonTuner.footX;
-        // Keep foot planted: position compensates for pivot being at mesh origin not foot
         const bakedX = (center + halfX * side) - footX * Math.cos(angle) * side;
         m.userData.bakedX = bakedX;
         m.position.x = bakedX;
         m.rotation.y = angle;
+        if (Math.abs(angle) > 0.01) console.log(`[CANYON ROT] side=${k} angle=${(angle*180/Math.PI).toFixed(2)}deg center=${center.toFixed(1)} centerNext=${centerNext.toFixed(1)} bakedX=${bakedX.toFixed(1)} rotation.y=${(m.rotation.y*180/Math.PI).toFixed(2)}`);
       } else {
         // Hold baked position — do NOT update X
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
