@@ -21818,7 +21818,7 @@ function _jlStartCorridor(type) {
     state.l4SpawnZ    = -7;
     state.l4Delay     = 2.0;
   } else {
-    state.corridorRowsDone  = CORRIDOR_CLOSE_ROWS + CORRIDOR_STRAIGHT_ROWS; // skip straight intro — sine active immediately
+    state.corridorRowsDone  = 0;
     state.corridorSineT     = 0;
     state.corridorSpawnZ    = -7;
     state.corridorDelay     = 2.0;
