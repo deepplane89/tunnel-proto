@@ -7338,7 +7338,6 @@ let _canyonSineT         = 0;
 let _canyonSineRows      = 0;
 let _canyonSineZ         = 0;
 let _canyonSinePhase     = 0; // canyon-own sine accumulator
-let _canyonRegularRecycled = 0; // non-entrance slabs recycled since spawn — drives ramp-in
 let _canyonWasCorridor   = false;
 let _canyonDiagFrame     = 0;     // frame counter for periodic diagnostic log
 // Call window._canyonLog() from console to get a full snapshot of canyon state + tuner
@@ -7732,7 +7731,7 @@ function _createCanyonWalls() {
   // Their thickness already pushes them outward visually
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
-    chunks[k].forEach((pivot, slabIdx) => {
+    chunks[k].forEach((pivot) => {
       // Entrance slabs: no rotation, fixed at corridor halfX — they are a flat gate
       if (pivot.userData.isEntrance) {
         const halfX = T.halfXOverride || 34;
@@ -7745,19 +7744,13 @@ function _createCanyonWalls() {
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
         const halfX      = _canyonPredictHalfX(rowsAhead);
         const angle = side * Math.atan(centerNext - center);
-        // Ramp-in: first RAMP_ROWS slabs after entrance lerp from 0 to full sine
-        // so the corridor curves in gradually instead of snapping from flat to 32deg
-        const RAMP_ROWS = 8;
-        const rowsPastEntrance = slabIdx - T.entranceSlabs;
-        const rampT = Math.min(1.0, rowsPastEntrance / RAMP_ROWS);
-        pivot.userData.bakedX = (center * rampT) + halfX * side;
+        pivot.userData.bakedX = center + halfX * side;
         pivot.position.x = pivot.userData.bakedX;
-        pivot.rotation.y = angle * rampT;
+        pivot.rotation.y = angle;
+        if (k === 'right' && Math.abs(angle) > 0.001) console.log(`[INIT ROT] rowsAhead=${rowsAhead} center=${center.toFixed(2)} centerNext=${centerNext.toFixed(2)} angle=${(angle*180/Math.PI).toFixed(2)}deg sineIntensity=${_canyonTuner.sineIntensity} sinePhase=${_canyonSinePhase.toFixed(3)}`);
       }
     });
   });
-  // Seed ramp counter: init already placed (initCount - entranceSlabs) regular slabs with ramp applied
-  _canyonRegularRecycled = initCount - T.entranceSlabs;
   console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
   console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick);
   // Log first few slabs by Z to confirm entrance slabs are at the front
@@ -7783,7 +7776,6 @@ function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonSinePhase = 0;
-  _canyonRegularRecycled = 0;
   // strips are pivot Groups — remove group from scene, dispose child mesh geometry
   _canyonWalls.strips.forEach(pivot => {
     scene.remove(pivot);
@@ -7884,15 +7876,10 @@ function _updateCanyonWalls(dt, speed) {
           m.position.z = slabZ;
           m.rotation.y = 0;
         } else {
-          // Ramp-in: apply same 8-row ramp for recycled slabs just after spawn
-          const RAMP_ROWS = 8;
-          const recycleRampT = Math.min(1.0, _canyonRegularRecycled / RAMP_ROWS);
-          _canyonRegularRecycled++;
-          const angle = side * Math.atan(centerNext - center);
-          m.userData.bakedX = (center * recycleRampT) + halfX * side;
+          m.userData.bakedX = center + halfX * side;
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
-          m.rotation.y = angle * recycleRampT;
+          m.rotation.y = side * Math.atan(centerNext - center);
         }
       } else {
         // Hold baked X — rotation frozen at bake time, only updates on recycle
