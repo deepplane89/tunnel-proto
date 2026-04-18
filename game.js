@@ -7337,6 +7337,7 @@ const _CANYON_PERSISTENT_LIGHTS = _CANYON_LIGHT_DEFS.map(({ pos }) => {
   return l;
 });
 let _canyonActive = false;
+let _canyonCollideBox = null; // lazily-created THREE.Box3 reused every frame for mesh collision
 let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
@@ -8060,27 +8061,42 @@ function _updateCanyonWalls(dt, speed) {
     if (allGone) _destroyCanyonWalls();
   }
 
-  // Collision — find the slabs closest to the ship (z near 0) and use their bakedX
+  // Collision — real mesh AABB overlap against every visible slab near ship Z.
+  // Replaces bakedX-based picking (which went stale on curves, caused phantom deaths).
+  // Uses each slab's geometry bounding box transformed by its world matrix — so slab
+  // rotation/scale/position are all respected.
   if (_canyonActive && state.phase === 'playing' && !state._godMode && !_godMode) {
-    const shipX  = state.shipX || 0;
-    const buffer = 1.5;
-    // Find nearest left and right slab to ship Z
-    let nearLeft = null, nearRight = null, bestLZ = Infinity, bestRZ = Infinity;
-    _canyonWalls.left.forEach(m => {
-      const dz = Math.abs(m.position.z - 3.9);
-      if (dz < bestLZ) { bestLZ = dz; nearLeft = m; }
-    });
-    _canyonWalls.right.forEach(m => {
-      const dz = Math.abs(m.position.z - 3.9);
-      if (dz < bestRZ) { bestRZ = dz; nearRight = m; }
-    });
-    // Only collide if the nearest slab is actually close in Z — skip if gap is passing through
-    const maxCollisionDZ = spacing * 1.5;
-    const leftEdge  = (nearLeft  && bestLZ < maxCollisionDZ) ? nearLeft.userData.bakedX  : -9999;
-    const rightEdge = (nearRight && bestRZ < maxCollisionDZ) ? nearRight.userData.bakedX :  9999;
-    if (shipX < leftEdge + buffer || shipX > rightEdge - buffer) {
+    const shipX = state.shipX || 0;
+    const shipZ = 3.9;
+    const shipHalfW = SHIP_HALF_WIDTH; // 1.2
+    const shipHalfL = 1.0;             // ship length half — tunable
+    const shipMinX = shipX - shipHalfW, shipMaxX = shipX + shipHalfW;
+    const shipMinZ = shipZ - shipHalfL, shipMaxZ = shipZ + shipHalfL;
+
+    if (!_canyonCollideBox) _canyonCollideBox = new THREE.Box3();
+    const box = _canyonCollideBox;
+    let hit = false;
+
+    outer:
+    for (const arr of [_canyonWalls.left, _canyonWalls.right]) {
+      for (const pivot of arr) {
+        if (!pivot.visible) continue;
+        // Fast Z reject — slab pivot Z range roughly [pivot.z, pivot.z + slabW]
+        if (pivot.position.z + spacing < shipMinZ) continue;
+        if (pivot.position.z > shipMaxZ) continue;
+        const mesh = pivot.children[0];
+        if (!mesh || !mesh.geometry) continue;
+        if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+        pivot.updateMatrixWorld(true);
+        box.copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld);
+        if (box.max.x < shipMinX || box.min.x > shipMaxX) continue;
+        if (box.max.z < shipMinZ || box.min.z > shipMaxZ) continue;
+        hit = true; break outer;
+      }
+    }
+
+    if (hit) {
       killPlayer();
-      // Brief invincibility window so a single wall contact doesn't fire 60x/s
       if (state.phase === 'playing') state.invincibleTimer = Math.max(state.invincibleTimer, 0.5);
     }
   }
@@ -20681,8 +20697,8 @@ const _asteroidTuner = {
   enabled:        false,   // master on/off (tutorial only)
   size:           1.2,     // base radius (world units)
   sizeVariance:   0.4,     // ± random added to size
-  frequency:      3.85,    // seconds between spawns (per pattern unit) — was 3.5, −10%
-  speed:          180,     // travel speed (units/s along trajectory) — was 200, −10%
+  frequency:      4.24,    // seconds between spawns — was 3.85, additional −10% pass
+  speed:          162,     // travel speed (units/s along trajectory) — was 180, additional −10% pass
   leadFactor:     1.0,     // partial lead: 0=no lead (aim at current X), 1=perfect intercept, 0.6=forgiving
   skyHeight:      42,      // Y spawn height above water at the horizon
   //
@@ -22333,10 +22349,11 @@ const _JL_TRACKS = [
   // ════════ ACT 1 — ASTEROIDS (0–30s) ══════════════════════════════════════
   {
     id: 'ast_stagger_1', label: 'A1 AST Stagger', type: 'asteroid',
+    // freq 1.8 → 1.98 (-10%)
     startT: 4, endT: 20,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 1.8, staggerGap: 0.6, salvoCount: 1,
+      frequency: 1.98, staggerGap: 0.6, salvoCount: 1,
       size: 1.0, sizeVariance: 0.45, laneMin: -8, laneMax: 8,
     },
   },
@@ -22345,7 +22362,7 @@ const _JL_TRACKS = [
     startT: 20, endT: 30,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 1.1, staggerGap: 0.5, salvoCount: 2,
+      frequency: 1.21, staggerGap: 0.5, salvoCount: 2,
       size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
     },
   },
@@ -22402,7 +22419,7 @@ const _JL_TRACKS = [
     startT: 132, endT: 162,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 1.1, staggerGap: 0.5, salvoCount: 2,
+      frequency: 1.21, staggerGap: 0.5, salvoCount: 2,
       size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
     },
   },
@@ -22453,7 +22470,7 @@ const _JL_TRACKS = [
     startT: 222, endT: null,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 1.1, staggerGap: 0.5, salvoCount: 2,
+      frequency: 1.21, staggerGap: 0.5, salvoCount: 2,
       size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
     },
   },
@@ -22544,6 +22561,18 @@ function _tickJetLightningRamp(dt) {
 
   _jlRampTime += dt;
   const t = _jlRampTime;
+
+  // ── Canyon speed bump: +15% while any canyon (pure or open) is active.
+  // FOV widens automatically (see render loop targetFOV = _baseFOV + _fovSpeedBoost*speedFrac).
+  // Reassign every frame canyon is active/inactive — safe because JL never sets speed
+  // outside the initial liftoff transition at line ~22540.
+  const _jlBaseSpeed   = BASE_SPEED * LEVELS[3].speedMult;        // 54 u/s
+  const _jlCanyonSpeed = _jlBaseSpeed * 1.15;                     // ~62 u/s
+  if (_canyonActive || _canyonExiting) {
+    state.speed = _jlCanyonSpeed;
+  } else {
+    state.speed = _jlBaseSpeed;
+  }
 
   // ── Corridor breather — pause asteroid/lightning spawning, but still check
   // custom track deactivation so canyon onDeactivate fires at endT
