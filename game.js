@@ -21021,7 +21021,7 @@ function _tickAsteroidSpawner(dt) {
   const T = _asteroidTuner;
 
   // ── Lateral camp punish — runs regardless of T.enabled so it fires during pure LT segments ──
-  if (T.lateralEnabled && state._jetLightningMode && _jlRampTime >= 2) {
+  if (T.lateralEnabled && state._jetLightningMode && _jlRampTime >= 4) {
     T._lateralTimer -= dt;
     if (T._lateralTimer <= 0) {
       T._lateralTimer = T.lateralFreq * (0.7 + Math.random() * 0.6);
@@ -21632,9 +21632,9 @@ function startJetLightning() {
   _lethalRingActive.length = 0;
   // Reset track activation state so onActivate fires fresh each run
   for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
-  // ── Asteroids: on, stagger aimed at ship's current position ────────────────
+  // ── Asteroids: disabled at start — track system enables at startT:4 ────────
   const T = _asteroidTuner;
-  T.enabled      = true;
+  T.enabled      = false;
   T.pattern      = 'stagger';
   T.frequency    = 1.4;    // locked from session log (rchouake approved)
   T.staggerGap   = 0.6;    // locked from session log
