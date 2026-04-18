@@ -20607,7 +20607,7 @@ let _chaosLevel = 0.0;    // 0=chill stagger, 1=physically impossible
 
 // Chaos curve helpers — called every tick when _chaosMode is on
 // Returns the effective frequency (seconds) for a given chaos level
-function _chaosAstFreq(c)  { return 3.0 - c * 2.6; }          // 3.0s → 0.4s
+function _chaosAstFreq(c)  { return 3.3 - c * 2.86; }         // 3.3s → 0.44s (−10%)
 function _chaosLtFreq(c)   { return 3.5 - c * 3.2; }          // 3.5s → 0.3s
 function _chaosStaggerGap(c){ return 0.8 - c * 0.65; }        // 0.8s → 0.15s
 function _chaosLtStaggerGap(c){ return 0.7 - c * 0.58; }      // 0.7s → 0.12s
@@ -20617,8 +20617,8 @@ const _asteroidTuner = {
   enabled:        false,   // master on/off (tutorial only)
   size:           1.2,     // base radius (world units)
   sizeVariance:   0.4,     // ± random added to size
-  frequency:      3.5,     // seconds between spawns (per pattern unit)
-  speed:          200,     // travel speed (units/s along trajectory)
+  frequency:      3.85,    // seconds between spawns (per pattern unit) — was 3.5, −10%
+  speed:          180,     // travel speed (units/s along trajectory) — was 200, −10%
   leadFactor:     1.0,     // partial lead: 0=no lead (aim at current X), 1=perfect intercept, 0.6=forgiving
   skyHeight:      42,      // Y spawn height above water at the horizon
   //
@@ -20882,10 +20882,11 @@ function _buildAsteroidInstance() {
   fireMesh.scale.setScalar(1.28);
   group.add(fireMesh);
 
-  // PointLight (orange glow, added to scene not group so it doesn't inherit scale issues)
-  const light = new THREE.PointLight(0xff5500, 0, 14);
-  light.visible = false;
-  scene.add(light);
+  // PointLight removed: per-asteroid dynamic PointLights were bumping scene's
+  // light-count hash on every spawn/despawn/visibility toggle, invalidating all
+  // standard/physical/basic/mirror material program cacheKeys → 8-shader recompile
+  // per event = 130–400ms freeze. Fire mesh is additive+emissive and drives enough
+  // bloom on its own. Keep glowRange slider as cosmetic no-op for now.
 
   // Tail particles
   const tailPositions = new Float32Array(_AST_TAIL_COUNT * 3);
@@ -20942,7 +20943,7 @@ function _buildAsteroidInstance() {
   for (let i = 0; i < _AST_TAIL_COUNT; i++) tailHistory.push(new THREE.Vector3(0, 999, 0));
 
   return {
-    group, rockMesh, fireMesh, light, tailGeo, tailPts, tailHistory,
+    group, rockMesh, fireMesh, tailGeo, tailPts, tailHistory,
     warnMesh, warnMat,
     active: false,
     // per-instance state
@@ -21049,10 +21050,7 @@ function _spawnAsteroid(targetX) {
   // transparent + depthWrite already set at build time — do NOT reassign here,
   // assigning material properties triggers needsUpdate which forces a shader recompile.
 
-  inst.light.position.copy(inst.group.position);
-  inst.light.distance  = T.glowRange * radius;
-  inst.light.intensity = 0; // fades in with opacity
-  inst.light.visible   = true;
+  // (light removed — see _buildAsteroidInstance comment)
 
   // Warning disc at landing point (hidden until asteroid fades in enough)
   const warnRadius = Math.max(3.0, radius * 2.5);
@@ -21091,7 +21089,6 @@ function _killAsteroid(inst, impact) {
   inst.active = false;
   inst.isFiller = false; // reset so pool reuse is clean
   inst.group.visible = false;
-  inst.light.visible = false;
   inst.tailPts.visible = false;
   inst.warnMesh.visible = false;
 
@@ -21189,9 +21186,7 @@ function _updateAsteroids(dt) {
     // Tail: fade alpha with fadeT
     inst.tailPts.material.opacity !== undefined && (inst.tailPts.material.opacity = fadeT);
 
-    // Light: fades in with opacity
-    inst.light.position.copy(inst.group.position);
-    inst.light.intensity = fadeT * (0.8 + progress * 2.2) * inst.radius;
+    // (light removed)
 
     // Show warning disc once asteroid is visible enough (respects toggle)
     if (T.showWarning && fadeT > 0.3 && progress < 0.88) inst.warnMesh.visible = true;
@@ -21279,10 +21274,7 @@ function _spawnFillerAsteroid() {
   inst.group.position.set(x, spawnY, spawnZ);
   inst.group.visible = true;
 
-  inst.light.position.copy(inst.group.position);
-  inst.light.distance  = T.glowRange * radius * 0.5;
-  inst.light.intensity = 0;
-  inst.light.visible   = true;
+  // (light removed)
 
   inst.warnMesh.visible = false; // no warning disc for fillers
 
@@ -21560,8 +21552,7 @@ const _origUpdateShockwave = _updateShockwave;
     }, '#f84').row);
     panel.appendChild(makeSlider('trail length', T.trailLength, 0, 3.0, 0.05, v => T.trailLength = v, '#fa0').row);
     panel.appendChild(makeSlider('glow range', T.glowRange, 0, 40, 0.5, v => {
-      T.glowRange = v;
-      _asteroidActive.forEach(a => { a.light.distance = v * a.radius; });
+      T.glowRange = v; // cosmetic: per-asteroid PointLight removed (perf)
     }, '#f60').row);
 
     // PATTERN
