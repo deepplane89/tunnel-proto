@@ -7344,7 +7344,7 @@ const _CANYON_PRESETS = {
   1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, _allCyan:true },
   2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
   3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, _allCyan:true },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, _allCyan:false },
 };
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
@@ -17858,7 +17858,7 @@ window.addEventListener('keydown', (e) => {
       { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
       { label: 'Canyon Corridor 2', mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false, _allDark:true } },
       { label: 'Regular Canyon',    mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
-      { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
+      { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
     ];
     PRESETS.forEach(({ label, mode, vals }) => {
       const pb = document.createElement('button');
@@ -22329,18 +22329,18 @@ const _JL_TRACKS = [
     onDeactivate() { _jlCanyonStop(); },
   },
 
-  // ════════ BREATHER (120–123s) — nothing ══════════════════════════════════
+  // ════════ BREATHER (120–126s) — 6s for canyon 2 scroll-out to finish cleanly ═
 
-  // ════════ STRAIGHT CANYON + AST + LT PEAK (123–153s) ════════════════════
+  // ════════ STRAIGHT CANYON + AST + LT PEAK (126–156s) ════════════════════
   {
     id: 'canyon_straight', label: 'Straight Canyon', type: 'custom',
-    startT: 123, endT: 153,
+    startT: 126, endT: 156,
     onActivate()   { _jlCanyonStartOpen(4); },
     onDeactivate() { _jlCanyonStop(); },
   },
   {
     id: 'ast_straight', label: 'Straight AST', type: 'asteroid',
-    startT: 123, endT: 153,
+    startT: 126, endT: 156,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 1.1, staggerGap: 0.5, salvoCount: 2,
@@ -22349,49 +22349,49 @@ const _JL_TRACKS = [
   },
   {
     id: 'lt_straight', label: 'Straight LT', type: 'lightning',
-    startT: 123, endT: 153,
+    startT: 126, endT: 156,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.3, laneMin: -8, laneMax: 8,
     },
   },
 
-  // ════════ CORRIDOR 1 + LIGHTNING (153–183s) ═══════════════════════════════
+  // ════════ CORRIDOR 1 + LIGHTNING (156–186s) ═══════════════════════════════
   {
     id: 'canyon_1_lt', label: 'Canyon C1+LT', type: 'custom',
-    startT: 153, endT: 183,
+    startT: 156, endT: 186,
     onActivate()   { _jlCanyonStartOpen(1); },
     onDeactivate() { _jlCanyonStop(); },
   },
   {
     id: 'lt_canyon_1', label: 'C1 LT', type: 'lightning',
-    startT: 153, endT: 183,
+    startT: 156, endT: 186,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.3, laneMin: -8, laneMax: 8,
     },
   },
 
-  // ════════ CORRIDOR 2 + LIGHTNING (183–213s) ═══════════════════════════════
+  // ════════ CORRIDOR 2 + LIGHTNING (186–216s) ═══════════════════════════════
   {
     id: 'canyon_2_lt', label: 'Canyon C2+LT', type: 'custom',
-    startT: 183, endT: 213,
+    startT: 186, endT: 216,
     onActivate()   { _jlCanyonStartOpen(2); },
     onDeactivate() { _jlCanyonStop(); },
   },
   {
     id: 'lt_canyon_2', label: 'C2 LT', type: 'lightning',
-    startT: 183, endT: 213,
+    startT: 186, endT: 216,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.25, laneMin: -8, laneMax: 8,
     },
   },
 
-  // ════════ ENDLESS PEAK — AST + LT (213s+) ════════════════════════════════
+  // ════════ ENDLESS PEAK — AST + LT (216s+) ════════════════════════════════
   {
     id: 'ast_peak', label: 'Peak AST', type: 'asteroid',
-    startT: 213, endT: null,
+    startT: 216, endT: null,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 1.1, staggerGap: 0.5, salvoCount: 2,
@@ -22400,7 +22400,7 @@ const _JL_TRACKS = [
   },
   {
     id: 'lt_peak', label: 'Peak LT', type: 'lightning',
-    startT: 213, endT: null,
+    startT: 216, endT: null,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.25, laneMin: -8, laneMax: 8,
