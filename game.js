@@ -17574,17 +17574,18 @@ window.addEventListener('keydown', (e) => {
   // V — toggle canyon on/off
   if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
     if (_canyonActive) {
-      _destroyCanyonWalls();
-      _canyonActive = false;
-      _canyonManual = false;
-      _canyonMode   = 0;
-      // If JL sequencer owns this canyon segment, clear its track state so sequencer resumes
+      // Use _jlCanyonStop in JL mode for clean teardown (restores dirLight, clears track state)
       if (state._jetLightningMode) {
-        _jlCorridor.active = false;
+        _jlCanyonStop();
         for (const id of ['canyon_1','canyon_2','canyon_straight','canyon_1_lt','canyon_2_lt']) {
           _jlTrackActive[id] = false;
         }
+      } else {
+        _destroyCanyonWalls();
       }
+      _canyonActive = false;
+      _canyonManual = false;
+      _canyonMode   = 0;
       console.log('[CANYON] OFF');
     } else {
       _canyonSinePhase = 0;
@@ -21920,11 +21921,12 @@ function _jlTickCorridor(dt, effectiveSpd) {
 let _canyonSavedDirLight = null;
 function _jlCanyonStart(mode) {
   if (_canyonActive) _destroyCanyonWalls();
-  _canyonMode = mode;
+  _canyonMode    = mode;
+  _canyonExiting = false;
   Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
   _canyonActive      = true;
   _canyonManual      = false;
-  _jlCorridor.active = true;  // pause asteroid/lightning spawner
+  _jlCorridor.active = true;
   state.corridorGapCenter = state.shipX || 0;
   _canyonSavedDirLight = dirLight.intensity;
   dirLight.intensity = 0;
@@ -21933,11 +21935,12 @@ function _jlCanyonStart(mode) {
 // Helper — activate canyon alongside obstacles (does NOT pause spawner)
 function _jlCanyonStartOpen(mode) {
   if (_canyonActive) _destroyCanyonWalls();
-  _canyonMode = mode;
+  _canyonMode    = mode;
+  _canyonExiting = false;
   Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
   _canyonActive      = true;
   _canyonManual      = false;
-  _jlCorridor.active = false; // keep spawner ticking
+  _jlCorridor.active = false;
   state.corridorGapCenter = state.shipX || 0;
   _canyonSavedDirLight = dirLight.intensity;
   dirLight.intensity = 0;
