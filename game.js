@@ -17983,15 +17983,23 @@ const _perfDiag = (function() {
     return 0;
   }
 
+  let _newProgramNames = []; // populated by _detectNewPrograms each frame
   function _detectNewPrograms() {
     // Walk renderer.info.programs; return count of programs not yet seen.
     // First render of a new material = shader compile stall this frame.
+    // Also capture each new program's name/type so we know WHICH material compiled.
+    _newProgramNames.length = 0;
     if (!renderer || !renderer.info || !renderer.info.programs) return 0;
     let newCount = 0;
     for (const p of renderer.info.programs) {
       if (!_seenPrograms.has(p)) {
         _seenPrograms.add(p);
         newCount++;
+        // p.name = THREE material type (e.g. 'MeshStandardMaterial', 'ShaderMaterial')
+        // cacheKey encodes #define flags; truncate for readability.
+        const name = p.name || '?';
+        const ck = (p.cacheKey || '').slice(0, 40);
+        _newProgramNames.push(name + (ck ? '[' + ck + ']' : ''));
       }
     }
     return newCount;
@@ -18055,7 +18063,16 @@ const _perfDiag = (function() {
       const evts = _frameEvents.length ? _frameEvents.join(', ') : '(none)';
       const heapStr = heap > 0 ? (' heap='+(heap/1048576).toFixed(1)+'MB d=' + (heapDelta>=0?'+':'') + (heapDelta/1048576).toFixed(1)+'MB') : '';
       const shaderStr = newShaders > 0 ? (' newShaders='+newShaders) : '';
-      console.log('[FREEZE] '+frameMs.toFixed(1)+'ms | js='+jsMs.toFixed(1)+' render='+renderMs.toFixed(1)+' | draws='+draws+'(d'+(drawsDelta>=0?'+':'')+drawsDelta+') tris='+Math.round(tris/1000)+'k(d'+(trisDelta>=0?'+':'')+Math.round(trisDelta/1000)+'k)'+heapStr+shaderStr+' | events: '+evts);
+      // Tally duplicate material names so log stays compact.
+      let shaderDetail = '';
+      if (_newProgramNames.length) {
+        const counts = {};
+        for (const n of _newProgramNames) counts[n] = (counts[n]||0) + 1;
+        const parts = [];
+        for (const k of Object.keys(counts)) parts.push(counts[k] > 1 ? (k+'×'+counts[k]) : k);
+        shaderDetail = ' compiled: [' + parts.join(', ') + ']';
+      }
+      console.log('[FREEZE] '+frameMs.toFixed(1)+'ms | js='+jsMs.toFixed(1)+' render='+renderMs.toFixed(1)+' | draws='+draws+'(d'+(drawsDelta>=0?'+':'')+drawsDelta+') tris='+Math.round(tris/1000)+'k(d'+(trisDelta>=0?'+':'')+Math.round(trisDelta/1000)+'k)'+heapStr+shaderStr+' | events: '+evts+shaderDetail);
     }
 
     _prevDraws = draws;
