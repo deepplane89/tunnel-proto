@@ -7573,48 +7573,9 @@ function _buildCanyonSlabGeo(seed, thickOverride) {
 }
 
 function _createCanyonWalls() {
+  if (_canyonWalls) return;
+  console.warn('[CANYON] _createCanyonWalls called — manual:', _canyonManual, '| stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonDbgFrame = 0; _canyonDbgLastNearestRot = null; _canyonDbgStartTime = null;
-  if (_canyonWalls) {
-    // Reuse existing pool — reposition, rebake, show. No geometry rebuild.
-    _canyonWalls.strips.forEach(p => { p.visible = true; });
-    if (_canyonWalls.canyonLight && _canyonWalls.canyonLight.lights)
-      _canyonWalls.canyonLight.lights.forEach(l => { l.visible = true; });
-    _canyonSinePhase = 0;
-    _canyonExiting   = false;
-    const T2 = _canyonTuner;
-    const SPACING2   = 20;
-    const SAFE_Z2    = -150;
-    const INIT_Z2    = T2.spawnDepth || -250;
-    const halfX2     = T2.halfXOverride || 34;
-    state.corridorGapCenter = state.shipX || 0;
-    const rowsToShip2 = Math.round((3.9 - SAFE_Z2) / SPACING2);
-    _canyonSinePhase = -(rowsToShip2 * (2 * Math.PI / T2.sinePeriod) * T2.sineSpeed);
-    ['left','right'].forEach(k => {
-      const side2  = k === 'left' ? -1 : 1;
-      const slabs2 = _canyonWalls[k];
-      let regIdx = 0;
-      slabs2.forEach(pivot => {
-        pivot.visible = true;
-        if (pivot.userData.isEntrance) {
-          const center2 = _canyonXAtZ(pivot.position.z);
-          pivot.userData.bakedX = center2 + halfX2 * side2;
-          pivot.position.x = pivot.userData.bakedX;
-          pivot.rotation.y = 0;
-        } else {
-          const zPos2 = INIT_Z2 + regIdx * SPACING2;
-          pivot.position.z = zPos2;
-          const center2 = _canyonXAtZ(zPos2);
-          pivot.userData.bakedX = center2 + halfX2 * side2;
-          pivot.position.x = pivot.userData.bakedX;
-          const cn2 = _canyonXAtZ(zPos2 + SPACING2);
-          pivot.rotation.y = Math.atan2(cn2 - center2, SPACING2) * side2;
-          pivot.userData.bakedAtZ = zPos2;
-          regIdx++;
-        }
-      });
-    });
-    return;
-  }
   const T = _canyonTuner;
 
   // Two slab types: cyan (MeshPhysical + holo overlay) and dark (MeshStandard + veins)
@@ -7829,16 +7790,6 @@ function _createCanyonWalls() {
   };
 }
 
-
-function _hideCanyonWalls() {
-  // Hide all slabs without destroying geometry — avoids rebuild stutter on next activation
-  if (!_canyonWalls) return;
-  _canyonWalls.strips.forEach(p => { p.visible = false; });
-  if (_canyonWalls.canyonLight && _canyonWalls.canyonLight.lights)
-    _canyonWalls.canyonLight.lights.forEach(l => { l.visible = false; });
-  _canyonSinePhase = 0;
-  _canyonExiting   = false;
-}
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
@@ -7988,6 +7939,18 @@ function _updateCanyonWalls(dt, speed) {
 
     meshes.forEach(m => {
       m.position.z += scroll;
+
+      // ── Distance fade-in: ramp emissive from 0 at spawnDepth to full by -150 ──
+      if (m.children[0]) {
+        const fadeStart = T.spawnDepth || -250;
+        const fadeEnd   = -150;
+        const fadeT     = Math.min(1, Math.max(0, (m.position.z - fadeStart) / (fadeEnd - fadeStart)));
+        const mat = m.children[0].material;
+        if (mat.emissiveIntensity !== undefined) {
+          const baseEmi = mat.color && mat.color.r > 0.5 ? T.cyanEmi : T.darkEmi;
+          mat.emissiveIntensity = baseEmi * fadeT;
+        }
+      }
 
       // ── EXITING: slabs drift forward, no recycle, hide when past despawn ──
       if (_canyonExiting) {
@@ -21787,20 +21750,12 @@ function startJetLightning() {
     if (!_canyonWalls) _createCanyonWalls();
   }
 
-  // ── Pre-warm canyon textures + geometry pool at JL start ────────────────────
+  // ── Pre-warm canyon textures so first corridor spawn has no stutter ────────
   if (!_canyonTexCache) {
     _canyonTexCache = {
       cyanTex: _makeCanyonCyanTex(1),
       darkTex: _makeCanyonDarkTex(2),
     };
-  }
-  if (!_canyonWalls) {
-    // Build pool with generous spawnDepth so all modes have enough slabs
-    const _savedDepth = _canyonTuner.spawnDepth;
-    _canyonTuner.spawnDepth = -400;
-    _createCanyonWalls();
-    _canyonTuner.spawnDepth = _savedDepth;
-    _hideCanyonWalls();
   }
 }
 
@@ -21969,7 +21924,7 @@ function _jlTickCorridor(dt, effectiveSpd) {
 // Helper — activate a canyon preset from the JL sequencer (pure obstacle, pauses spawner)
 let _canyonSavedDirLight = null;
 function _jlCanyonStart(mode) {
-  if (_canyonActive) _hideCanyonWalls();
+  if (_canyonActive) _destroyCanyonWalls();
   _canyonMode    = mode;
   _canyonExiting = false;
   Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
@@ -21983,7 +21938,7 @@ function _jlCanyonStart(mode) {
 }
 // Helper — activate canyon alongside obstacles (does NOT pause spawner)
 function _jlCanyonStartOpen(mode) {
-  if (_canyonActive) _hideCanyonWalls();
+  if (_canyonActive) _destroyCanyonWalls();
   _canyonMode    = mode;
   _canyonExiting = false;
   Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
