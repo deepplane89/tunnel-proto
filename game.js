@@ -7337,7 +7337,6 @@ const _CANYON_PERSISTENT_LIGHTS = _CANYON_LIGHT_DEFS.map(({ pos }) => {
   return l;
 });
 let _canyonActive = false;
-let _canyonCollideBox = null; // lazily-created THREE.Box3 reused every frame for mesh collision
 let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
@@ -8061,37 +8060,37 @@ function _updateCanyonWalls(dt, speed) {
     if (allGone) _destroyCanyonWalls();
   }
 
-  // Collision — real mesh AABB overlap against every visible slab near ship Z.
-  // Replaces bakedX-based picking (which went stale on curves, caused phantom deaths).
-  // Uses each slab's geometry bounding box transformed by its world matrix — so slab
-  // rotation/scale/position are all respected.
+  // Collision — per-slab bakedX inner-edge test against every visible slab near ship Z.
+  // bakedX is the slab foot (inner edge of wall). For right wall (side=1) the wall
+  // occupies world X >= bakedX; for left wall (side=-1), world X <= bakedX.
+  // Test ALL slabs overlapping ship Z range — not just nearest — so angled/entrance
+  // slabs that cross into ship's Z band are caught.
   if (_canyonActive && state.phase === 'playing' && !state._godMode && !_godMode) {
     const shipX = state.shipX || 0;
     const shipZ = 3.9;
     const shipHalfW = SHIP_HALF_WIDTH; // 1.2
-    const shipHalfL = 1.0;             // ship length half — tunable
-    const shipMinX = shipX - shipHalfW, shipMaxX = shipX + shipHalfW;
+    const shipHalfL = 1.0;             // ship Z half-length
     const shipMinZ = shipZ - shipHalfL, shipMaxZ = shipZ + shipHalfL;
+    const shipMaxX = shipX + shipHalfW, shipMinX = shipX - shipHalfW;
+    // 0.3u grace buffer — matches pre-Push-4 feel (ship can kiss wall without insta-die)
+    const GRACE = 0.3;
 
-    if (!_canyonCollideBox) _canyonCollideBox = new THREE.Box3();
-    const box = _canyonCollideBox;
     let hit = false;
-
-    outer:
-    for (const arr of [_canyonWalls.left, _canyonWalls.right]) {
-      for (const pivot of arr) {
-        if (!pivot.visible) continue;
-        // Fast Z reject — slab pivot Z range roughly [pivot.z, pivot.z + slabW]
+    // Right wall: wall occupies X >= bakedX. Ship collides if shipMaxX >= bakedX - GRACE.
+    for (const pivot of _canyonWalls.right) {
+      if (!pivot.visible || pivot.userData.bakedX === undefined) continue;
+      // Z overlap: slab Z range = [pivot.z, pivot.z + spacing]
+      if (pivot.position.z + spacing < shipMinZ) continue;
+      if (pivot.position.z > shipMaxZ) continue;
+      if (shipMaxX >= pivot.userData.bakedX - GRACE) { hit = true; break; }
+    }
+    // Left wall: wall occupies X <= bakedX. Ship collides if shipMinX <= bakedX + GRACE.
+    if (!hit) {
+      for (const pivot of _canyonWalls.left) {
+        if (!pivot.visible || pivot.userData.bakedX === undefined) continue;
         if (pivot.position.z + spacing < shipMinZ) continue;
         if (pivot.position.z > shipMaxZ) continue;
-        const mesh = pivot.children[0];
-        if (!mesh || !mesh.geometry) continue;
-        if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-        pivot.updateMatrixWorld(true);
-        box.copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld);
-        if (box.max.x < shipMinX || box.min.x > shipMaxX) continue;
-        if (box.max.z < shipMinZ || box.min.z > shipMaxZ) continue;
-        hit = true; break outer;
+        if (shipMinX <= pivot.userData.bakedX + GRACE) { hit = true; break; }
       }
     }
 
