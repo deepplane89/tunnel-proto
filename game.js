@@ -7770,13 +7770,29 @@ function _createCanyonWalls() {
     });
   });
   console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
-  console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick);
-  // Log first few slabs by Z to confirm entrance slabs are at the front
-  // Sort descending — highest Z (closest to ship) first, so entrance slabs appear at top
-  const sortedLeft = [...chunks.left].sort((a,b) => b.position.z - a.position.z);
-  sortedLeft.slice(0, T.entranceSlabs + 2).forEach((p, i) => {
-    console.log('[ENTRANCE] slab '+i+' z='+p.position.z.toFixed(0)+' isEntrance='+!!p.userData.isEntrance+' thick='+p.userData.slabThick);
+  console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick+' spawnDepth='+T.spawnDepth);
+
+  // ==== SPAWN DUMP: where every slab actually starts on the Z axis ====
+  // Camera far clip ~600, camera at z=9, so slabs past z=-591 are frustum-culled.
+  const _leftSorted = [...chunks.left].sort((a,b) => b.position.z - a.position.z);
+  const _ent = _leftSorted.filter(p => p.userData.isEntrance);
+  const _reg = _leftSorted.filter(p => !p.userData.isEntrance);
+  console.log('[SPAWN] ===== LEFT SIDE SLAB Z POSITIONS =====');
+  console.log('[SPAWN] entrance count='+_ent.length+' regular count='+_reg.length);
+  _ent.forEach((p, i) => {
+    console.log('[SPAWN ENT] '+i+' z='+p.position.z.toFixed(1)+' x='+p.position.x.toFixed(1)+' visible='+p.visible);
   });
+  _reg.forEach((p, i) => {
+    const beyondFarClip = p.position.z < -591;
+    console.log('[SPAWN REG] '+i+' z='+p.position.z.toFixed(1)+' x='+p.position.x.toFixed(1)+' visible='+p.visible+(beyondFarClip?' [BEYOND FAR CLIP]':''));
+  });
+  if (_reg.length > 0) {
+    const zMax = _reg[0].position.z;
+    const zMin = _reg[_reg.length-1].position.z;
+    console.log('[SPAWN] regular Z range: max(closest to ship)='+zMax.toFixed(1)+' min(farthest)='+zMin.toFixed(1)+' span='+(zMax-zMin).toFixed(1));
+    console.log('[SPAWN] expected: closest regular should be just behind last entrance (entrance at z=-150,-170,-190), farthest regular near spawnDepth='+T.spawnDepth);
+  }
+  console.log('[SPAWN] =====================================');
 
   _canyonWalls = {
     strips:       [...chunks.left, ...chunks.right],
