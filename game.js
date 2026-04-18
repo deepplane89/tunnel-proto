@@ -23015,10 +23015,11 @@ window._jlDebug = {
   // Everything spawns at a Z offset ahead of the ship.
   // Warning disc pulses for warningTime seconds, then bolt slams and lingers.
   // After the strike the bolt is a planted world-space column — ship flies past it.
-  function _spawnLightning(targetX) {
+  function _spawnLightning(targetX, landZOverride) {
     if (window._perfDiag) window._perfDiag.tag('lightning_spawn');
     const shipZ  = _shipZ();
-    const landZ  = shipZ + _LT.spawnZ;  // spawnZ is negative = ahead of ship
+    // landZOverride lets callers (e.g. lateral) spawn at a custom Z without touching _LT.spawnZ
+    const landZ  = (landZOverride !== undefined) ? landZOverride : (shipZ + _LT.spawnZ);
     const velX   = (state && state.shipVelX) || 0;
     const travelTime = Math.abs(_LT.spawnZ) / Math.max(1, state.speed || 73);
     const landX  = targetX + velX * travelTime * _LT.leadFactor;
@@ -23099,6 +23100,9 @@ window._jlDebug = {
     freq:    0.8,   // seconds between fires (with 0.7–1.3x jitter)
     minOff:  4,     // minimum lateral offset from predicted shipX
     maxOff:  10,    // maximum lateral offset
+    spawnZ:  -200,  // lateral-specific spawn Z (farther than main _LT.spawnZ=-83)
+                    // 3.7s warn-to-impact at 54 u/s — visually disconnects ship slide from bolt location
+    leadFactor: 0.5, // half-lead prediction: punish camping without aimbot behavior
   };
   function _tickLightningLateral(dt) {
     // ALWAYS-ON DIAG: throttled once/3s so we can see why LT lateral isn't firing.
@@ -23135,15 +23139,18 @@ window._jlDebug = {
     const offset = _LT_LATERAL.minOff + Math.random() * (_LT_LATERAL.maxOff - _LT_LATERAL.minOff);
     const sx     = (state && state.shipX)    || 0;
     const velX   = (state && state.shipVelX) || 0;
-    // Time between _spawnLightning call and strike landing. Predict ship X at that moment
-    // so bolt lands where ship WILL BE if it keeps sliding — punishes camping.
-    const travelTime = Math.abs(_LT.spawnZ) / Math.max(1, (state && state.speed) || 73);
-    const predictedX = sx + velX * travelTime;
+    // Lateral uses ITS OWN spawnZ (farther than main) so warn disc appears well ahead —
+    // ship's X at spawn time visually disconnects from bolt's landing X.
+    // Half-lead prediction (leadFactor=0.5) still punishes camping without aimbot overshoot.
+    const travelTime = Math.abs(_LT_LATERAL.spawnZ) / Math.max(1, (state && state.speed) || 73);
+    const predictedX = sx + velX * travelTime * _LT_LATERAL.leadFactor;
     const spawnX    = predictedX + side * offset;
+    const landZ     = (_shipZ ? _shipZ() : 3.9) + _LT_LATERAL.spawnZ;
     console.log('[LT_LAT_FIRE] sx='+sx.toFixed(1)+' velX='+velX.toFixed(2)
-      +' predX='+predictedX.toFixed(1)+' side='+side+' spawnX='+spawnX.toFixed(1));
+      +' predX='+predictedX.toFixed(1)+' side='+side+' spawnX='+spawnX.toFixed(1)
+      +' landZ='+landZ.toFixed(1));
     if (window._perfDiag) window._perfDiag.tag('lateral_lt');
-    _spawnLightning(spawnX);
+    _spawnLightning(spawnX, landZ);
   }
 
   function _updateLightning(dt) {
