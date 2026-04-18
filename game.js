@@ -7594,7 +7594,7 @@ function _createCanyonWalls() {
     emissive:           new THREE.Color(0x6ef2ff),
     emissiveMap:        cyanTex,
     emissiveIntensity:  T.cyanEmi,
-    transparent:        true,
+    transparent:        false,
     flatShading:        true,
     side:               THREE.DoubleSide,
   });
@@ -7609,7 +7609,7 @@ function _createCanyonWalls() {
     emissive:           new THREE.Color(0xff00cc),
     emissiveMap:        darkTex,
     emissiveIntensity:  T.darkEmi,
-    transparent:        true,
+    transparent:        false,
     flatShading:        false,
     side:               THREE.DoubleSide,
   });
@@ -7940,12 +7940,16 @@ function _updateCanyonWalls(dt, speed) {
     meshes.forEach(m => {
       m.position.z += scroll;
 
-      // ── Distance fade-in: transparent at spawnDepth, opaque by SAFE_Z (-150) ──
+      // ── Distance fade-in: ramp emissive from 0 at spawnDepth to full by -150 ──
       if (m.children[0]) {
         const fadeStart = T.spawnDepth || -250;
         const fadeEnd   = -150;
         const fadeT     = Math.min(1, Math.max(0, (m.position.z - fadeStart) / (fadeEnd - fadeStart)));
-        m.children[0].material.opacity = fadeT;
+        const mat = m.children[0].material;
+        if (mat.emissiveIntensity !== undefined) {
+          const baseEmi = mat.color && mat.color.r > 0.5 ? T.cyanEmi : T.darkEmi;
+          mat.emissiveIntensity = baseEmi * fadeT;
+        }
       }
 
       // ── EXITING: slabs drift forward, no recycle, hide when past despawn ──
@@ -21634,10 +21638,15 @@ function startJetLightning() {
   _bankMax        = 0.04;
   _bankSmoothing  = 8;
 
-  // ── Reset ramp timer ──────────────────────────────────────────────────────
-  _jlRampTime      = 0;
-  _jlFatConeTimer   = 99;
-  _jlLrTimer        = 99;
+  // ── Reset ramp timer + corridor/canyon state ──────────────────────────────
+  _jlRampTime          = 0;
+  _jlCorridor.active   = false;
+  _canyonActive        = false;
+  _canyonExiting       = false;
+  _canyonMode          = 0;
+  if (_canyonWalls) _destroyCanyonWalls();
+  _jlFatConeTimer      = 99;
+  _jlLrTimer           = 99;
   // Clear any in-flight lethal rings from a previous session
   for (const lr of _lethalRingActive) { lr.userData.active = false; lr.visible = false; lr.position.set(0,-9999,0); }
   _lethalRingActive.length = 0;
