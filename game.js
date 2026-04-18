@@ -7614,47 +7614,8 @@ function _createCanyonWalls() {
     side:               THREE.DoubleSide,
   });
 
-  // Holographic grid overlay material (additive, no depth write)
-  const holoMat = new THREE.ShaderMaterial({
-    uniforms: {
-      time:    { value: 0 },
-      opacity: { value: T.holoOpacity },
-      color:   { value: new THREE.Color(0x7fd6ff) },
-      gridSz:  { value: T.holoGrid },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      varying vec3 vPosW;
-      varying vec3 vNormW;
-      void main(){
-        vUv   = uv;
-        vPosW = (modelMatrix*vec4(position,1.0)).xyz;
-        vNormW= normalize((modelMatrix*vec4(normal,0.0)).xyz);
-        gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);
-      }`,
-    fragmentShader: `
-      varying vec2 vUv;
-      varying vec3 vPosW;
-      varying vec3 vNormW;
-      uniform float time;
-      uniform float opacity;
-      uniform vec3  color;
-      uniform float gridSz;
-      void main(){
-        vec2 g = vUv * gridSz;
-        float d1 = abs(fract((g.x+g.y)*0.5)-0.5);
-        float d2 = abs(fract((g.x-g.y)*0.5)-0.5);
-        float grid = clamp(step(d1,0.04)+step(d2,0.04),0.0,1.0);
-        float fr = clamp(0.08 - dot(normalize(cameraPosition-vPosW),vNormW)*(1.6-0.12),0.0,0.25);
-        float bright = mix(0.18, 0.45, vUv.y);
-        vec3 col = color*(grid*bright + fr);
-        gl_FragColor = vec4(col, opacity*(grid*0.9+fr*0.5));
-      }`,
-    transparent: true,
-    depthWrite:  false,
-    blending:    THREE.AdditiveBlending,
-    side:        THREE.DoubleSide,
-  });
+  // Holographic grid overlay REMOVED for perf (was doubling draw calls on cyan slabs).
+  // Post-processing _holoPass (screen-space) is separate and still active.
 
   // Canyon-scoped lights — 4 directions at low intensity to fake even box lighting
   // Avoids single-source specular pooling on curved walls
@@ -7693,13 +7654,6 @@ function _createCanyonWalls() {
     mesh.position.x   = -FOOT_OFF * side; // offset so foot sits at pivot origin
     mesh.frustumCulled = false;
     pivot.add(mesh);
-
-    // Holographic overlay on cyan slabs only
-    if (isCyan) {
-      const holo = new THREE.Mesh(geo, holoMat);
-      holo.scale.set(1.01, 1.0, 1.0);
-      mesh.add(holo);
-    }
 
     pivot.userData.isEntrance = isEntrance;
     return pivot; // callers use the pivot for position/rotation
@@ -7806,7 +7760,7 @@ function _createCanyonWalls() {
     strips:       [...chunks.left, ...chunks.right],
     left:         chunks.left,
     right:        chunks.right,
-    cyanMat, darkMat, holoMat,
+    cyanMat, darkMat,
     cyanTex, darkTex,
     canyonLight,
     _spacing:     SPACING,
@@ -7861,7 +7815,7 @@ function _destroyCanyonWalls() {
     scene.remove(pivot);
     pivot.children.forEach(child => { if (child.geometry) child.geometry.dispose(); });
   });
-  ['cyanMat','darkMat','holoMat'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
+  ['cyanMat','darkMat'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
   ['cyanTex','darkTex'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
   if (_canyonWalls.canyonLight) {
     if (_canyonWalls.canyonLight.lights) _canyonWalls.canyonLight.lights.forEach(l => scene.remove(l));
@@ -7980,8 +7934,6 @@ function _updateCanyonWalls(dt, speed) {
   const T   = _canyonTuner;
   const spd = (speed && speed > 1) ? speed : BASE_SPEED;
   const scroll  = spd * dt * T.scrollSpeed;
-  // Tick holographic overlay shader time
-  if (_canyonWalls.holoMat) _canyonWalls.holoMat.uniforms.time.value += dt;
   const spacing = _canyonWalls._spacing;
   // Advance canyon sine phase proportional to world scroll.
   // Paused until corridor reveal — keeps init-baked X values consistent with
@@ -17761,9 +17713,10 @@ window.addEventListener('keydown', (e) => {
           _canyonWalls.cyanMat.needsUpdate = true;
         }
       } else if (mode === 'live-holo') {
-        if (_canyonWalls && _canyonWalls.holoMat) {
-          _canyonWalls.holoMat.uniforms.opacity.value = T.holoOpacity;
-          _canyonWalls.holoMat.uniforms.gridSz.value  = T.holoGrid;
+        // Slab holo overlay removed — sliders are no-ops now (preserved so tuner UI doesn't crash)
+        if (false && _canyonWalls) {
+          // no-op
+          void T;
         }
       } else if (mode === 'dark-tex') {
         rebuildDarkTex();
