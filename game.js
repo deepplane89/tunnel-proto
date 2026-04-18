@@ -21332,6 +21332,7 @@ function _tickAsteroidSpawner(dt) {
       const offset = T.lateralMinOff + Math.random() * (T.lateralMaxOff - T.lateralMinOff);
       const sx = (state && state.shipX) || 0;
       const spawnX = sx + side * offset;
+      if (window._perfDiag) window._perfDiag.tag('lateral_' + (window._jlActiveObstacleType || 'ast'));
       if (window._jlActiveObstacleType === 'lightning' && window._spawnLightning) {
         window._spawnLightning(spawnX);
       } else {
@@ -22211,7 +22212,7 @@ function _jlTickCorridor(dt, effectiveSpd) {
 // Helper — activate a canyon preset from the JL sequencer (pure obstacle, pauses spawner)
 let _canyonSavedDirLight = null;
 function _jlCanyonStart(mode) {
-  if (_canyonActive) _destroyCanyonWalls();
+  if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
   _canyonMode    = mode;
   _canyonExiting = false;
   Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
@@ -22225,7 +22226,7 @@ function _jlCanyonStart(mode) {
 }
 // Helper — activate canyon alongside obstacles (does NOT pause spawner)
 function _jlCanyonStartOpen(mode) {
-  if (_canyonActive) _destroyCanyonWalls();
+  if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
   _canyonMode    = mode;
   _canyonExiting = false;
   Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
