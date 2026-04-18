@@ -7328,10 +7328,10 @@ let _canyonManual = false; // true when triggered by V key — bypasses sequence
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-350, _allCyan:true },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-350, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-350, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-350, _allCyan:true },
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-250, _allCyan:true },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-250, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-250, _allCyan:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-250, _allCyan:true },
 };
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
@@ -7592,7 +7592,7 @@ function _createCanyonWalls() {
     emissive:           new THREE.Color(0x6ef2ff),
     emissiveMap:        cyanTex,
     emissiveIntensity:  T.cyanEmi,
-    transparent:        false,
+    transparent:        true,
     flatShading:        true,
     side:               THREE.DoubleSide,
   });
@@ -7607,6 +7607,7 @@ function _createCanyonWalls() {
     emissive:           new THREE.Color(0xff00cc),
     emissiveMap:        darkTex,
     emissiveIntensity:  T.darkEmi,
+    transparent:        true,
     flatShading:        false,
     side:               THREE.DoubleSide,
   });
@@ -7936,6 +7937,14 @@ function _updateCanyonWalls(dt, speed) {
 
     meshes.forEach(m => {
       m.position.z += scroll;
+
+      // ── Distance fade-in: transparent at spawnDepth, opaque by SAFE_Z (-150) ──
+      if (!m.userData.isEntrance && m.children[0]) {
+        const fadeStart = T.spawnDepth || -250;
+        const fadeEnd   = -150;
+        const fadeT     = Math.min(1, Math.max(0, (m.position.z - fadeStart) / (fadeEnd - fadeStart)));
+        m.children[0].material.opacity = fadeT;
+      }
 
       // ── EXITING: slabs drift forward, no recycle, hide when past despawn ──
       if (_canyonExiting) {
