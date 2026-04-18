@@ -21982,7 +21982,7 @@ const _JL_TRACKS = [
   // ════════ ACT 1 — ASTEROIDS (0–30s) ══════════════════════════════════════
   {
     id: 'ast_stagger_1', label: 'A1 AST Stagger', type: 'asteroid',
-    startT: 0, endT: 20,
+    startT: 2, endT: 20,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 1.4, staggerGap: 0.6, salvoCount: 1,
