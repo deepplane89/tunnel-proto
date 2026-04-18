@@ -7315,7 +7315,8 @@ const _canyonTuner = {
   sineSpeed:     1.0,   // how fast phase advances per slab scroll tick
   _allCyan:      true,  // true = all slabs cyan, false = alternating cyan/dark
 };
-let _canyonWalls = null;
+let _canyonWalls     = null;
+let _canyonTexCache  = null; // pre-warmed textures + materials to avoid first-spawn stutter
 let _canyonFillLight = null;
 const _CANYON_LIGHT_DEFS = [
   { pos: [-3,  4,  2], intensity: 1.2 },
@@ -7578,8 +7579,9 @@ function _createCanyonWalls() {
   const T = _canyonTuner;
 
   // Two slab types: cyan (MeshPhysical + holo overlay) and dark (MeshStandard + veins)
-  const cyanTex = _makeCanyonCyanTex(1);
-  const darkTex = _makeCanyonDarkTex(2);
+  // Use pre-warmed cache if available (built at JL start to avoid first-spawn stutter)
+  const cyanTex = _canyonTexCache ? _canyonTexCache.cyanTex : _makeCanyonCyanTex(1);
+  const darkTex = _canyonTexCache ? _canyonTexCache.darkTex : _makeCanyonDarkTex(2);
 
   const cyanMat = new THREE.MeshPhysicalMaterial({
     color:              new THREE.Color(0x04d4f0),
@@ -21737,6 +21739,14 @@ function startJetLightning() {
     _jlCorridor.totalRows   = 750;
     _canyonActive           = true;
     if (!_canyonWalls) _createCanyonWalls();
+  }
+
+  // ── Pre-warm canyon textures so first corridor spawn has no stutter ────────
+  if (!_canyonTexCache) {
+    _canyonTexCache = {
+      cyanTex: _makeCanyonCyanTex(1),
+      darkTex: _makeCanyonDarkTex(2),
+    };
   }
 }
 
