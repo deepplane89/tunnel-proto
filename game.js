@@ -23022,7 +23022,12 @@ window._jlDebug = {
     const landZ  = (landZOverride !== undefined) ? landZOverride : (shipZ + _LT.spawnZ);
     const velX   = (state && state.shipVelX) || 0;
     const travelTime = Math.abs(_LT.spawnZ) / Math.max(1, state.speed || 73);
-    const landX  = targetX + velX * travelTime * _LT.leadFactor;
+    // When a caller passes landZOverride (lateral), they've already computed the
+    // final world X. Re-applying _LT.leadFactor here would double-dip and pull
+    // bolts back toward ship's predicted path — turning lateral bolts medial.
+    const landX  = (landZOverride !== undefined)
+      ? targetX
+      : targetX + velX * travelTime * _LT.leadFactor;
     // radiiOverride: { coreRadius, glowRadius } to override _LT defaults for this instance
     const _core  = (radiiOverride && radiiOverride.coreRadius != null) ? radiiOverride.coreRadius : _LT.coreRadius;
     const _glow  = (radiiOverride && radiiOverride.glowRadius != null) ? radiiOverride.glowRadius : _LT.glowRadius;
