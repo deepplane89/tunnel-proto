@@ -17983,6 +17983,8 @@ const _perfDiag = (function() {
   let _prevHeap = 0;
   let _prevProgramCount = 0;         // for churn detection: same count + different programs = eviction
   let _seenPrograms = new WeakSet(); // track compiled programs
+  let _seenProgramNames = new Map(); // program ref -> name, for eviction-diff
+  let _prevProgramRefs = [];         // refs seen last frame, for churn detection
   let _frameEvents = [];              // events tagged this frame
   let _rollingFrames = [];            // frame times for last 2s
   let _rollingStart = 0;
@@ -18011,10 +18013,29 @@ const _perfDiag = (function() {
         // cacheKey encodes #define flags; truncate for readability.
         const name = p.name || '?';
         const ck = (p.cacheKey || '').slice(0, 40);
-        _newProgramNames.push(name + (ck ? '[' + ck + ']' : ''));
+        const label = name + (ck ? '[' + ck + ']' : '');
+        _newProgramNames.push(label);
+        _seenProgramNames.set(p, label);
       }
     }
     return newCount;
+  }
+
+  // Diff current program refs against last-frame snapshot — returns labels of evicted programs
+  function _detectEvictedPrograms() {
+    if (!renderer || !renderer.info || !renderer.info.programs) return [];
+    const curr = renderer.info.programs;
+    const currSet = new Set(curr);
+    const evicted = [];
+    for (const p of _prevProgramRefs) {
+      if (!currSet.has(p)) {
+        const label = _seenProgramNames.get(p) || '?';
+        evicted.push(label);
+      }
+    }
+    // Snapshot current for next frame
+    _prevProgramRefs = curr.slice();
+    return evicted;
   }
 
   function frameStart() {
@@ -18065,14 +18086,21 @@ const _perfDiag = (function() {
 
   // Sample toggleable game state flags that might drive material variant churn.
   function _sampleState() {
-    const s = (window.state) || {};
-    const cw = window._canyonWalls;
-    const astActive = (window._asteroidPool || []).filter(a => a.active).length;
+    // Use module-local state via closure (window.state is not set)
+    const s = state || {};
+    const cw = (typeof _canyonWalls !== 'undefined') ? _canyonWalls : null;
+    const ap = (typeof _asteroidActive !== 'undefined') ? _asteroidActive : [];
+    const astActive = ap.length;
     const canyonVis = cw ? (cw.left || []).filter(m => m.visible).length : 0;
+    const rampT = (typeof _jlRampTime !== 'undefined') ? _jlRampTime.toFixed(1) : '?';
+    const corridor = (typeof _jlCorridor !== 'undefined' && _jlCorridor.active) ? 1 : 0;
+    const canyonAct = (typeof _canyonActive !== 'undefined' && _canyonActive) ? 1 : 0;
     return 'phase='+(s.phase||'?')
       + ' jl='+(s._jetLightningMode?1:0)
+      + ' rampT='+rampT
+      + ' corridor='+corridor
+      + ' canyonAct='+canyonAct
       + ' chaos='+(window._chaosMode?1:0)
-      + ' corrMode='+(s.corridorMode?1:0)
       + ' revealed='+(cw && cw._corridorRevealed?1:0)
       + ' astActive='+astActive
       + ' canyonVis='+canyonVis;
@@ -18128,9 +18156,17 @@ const _perfDiag = (function() {
       }
       // KEY churn indicator: if programs count didn't grow but newShaders>0 → eviction/recompile.
       // If it grew by newShaders → first-time compile (cache growing).
-      const churnMarker = (newShaders > 0 && programDelta < newShaders)
-        ? ' CHURN(evicted='+(newShaders - programDelta)+')'
-        : '';
+      let churnMarker = '';
+      if (newShaders > 0 && programDelta < newShaders) {
+        const evictedLabels = _detectEvictedPrograms();
+        const evSummary = evictedLabels.length
+          ? ' [' + evictedLabels.slice(0, 8).join(', ') + (evictedLabels.length > 8 ? ',+' + (evictedLabels.length - 8) : '') + ']'
+          : '';
+        churnMarker = ' CHURN(evicted=' + (newShaders - programDelta) + evSummary + ')';
+      } else {
+        // Still snapshot refs even on non-churn frames so we have a baseline
+        _detectEvictedPrograms();
+      }
       // Light sample — detects light count/visibility toggles that drive cacheKey churn.
       const lights = _sampleLights();
       const lightStr = ' lights='+lights.effective+'/'+lights.total+'['+lights.summary+']';
@@ -21323,6 +21359,21 @@ function _spawnFillerAsteroid() {
 function _tickAsteroidSpawner(dt) {
   const T = _asteroidTuner;
 
+  // DIAG: always-logged (throttled once/3s) — prove this function runs and show guard state
+  // Logs to console unconditionally so we can see it in a normal playtest log
+  if (state._jetLightningMode) {
+    window._latTickCounter = (window._latTickCounter || 0) + 1;
+    if (window._latTickCounter >= 180) {
+      window._latTickCounter = 0;
+      console.log('[LAT_DIAG] tick jl=1 le='+(T.lateralEnabled?1:0)
+        +' rT='+_jlRampTime.toFixed(1)
+        +' corridor='+(_jlCorridor && _jlCorridor.active?1:0)
+        +' obs='+(window._jlActiveObstacleType||'-')
+        +' timer='+(T._lateralTimer!=null?T._lateralTimer.toFixed(2):'?')
+        +' gateOK='+((T.lateralEnabled && _jlRampTime>=4)?1:0));
+    }
+  }
+
   // ── Lateral camp punish — runs regardless of T.enabled so it fires during pure LT segments ──
   if (T.lateralEnabled && state._jetLightningMode && _jlRampTime >= 4) {
     T._lateralTimer -= dt;
@@ -21332,6 +21383,9 @@ function _tickAsteroidSpawner(dt) {
       const offset = T.lateralMinOff + Math.random() * (T.lateralMaxOff - T.lateralMinOff);
       const sx = (state && state.shipX) || 0;
       const spawnX = sx + side * offset;
+      // DIAG: always log lateral fires
+      console.log('[LAT_FIRE] obs='+(window._jlActiveObstacleType||'ast')
+        +' rT='+_jlRampTime.toFixed(1)+' side='+side+' x='+spawnX.toFixed(1));
       if (window._perfDiag) window._perfDiag.tag('lateral_' + (window._jlActiveObstacleType || 'ast'));
       if (window._jlActiveObstacleType === 'lightning' && window._spawnLightning) {
         window._spawnLightning(spawnX);
