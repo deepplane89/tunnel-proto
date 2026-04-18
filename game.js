@@ -23131,8 +23131,9 @@ window._jlDebug = {
     minOff:  8,     // minimum lateral offset — bolts ALWAYS visibly to the side, never medial
     maxOff:  25,    // maximum lateral offset — covers realistic slide distance
     spawnZ:  -150,  // lateral-specific spawn Z — ~2.78s travel at 54 u/s
-    leadFactor: 0,  // no prediction — offset is from CURRENT shipX, random within [min,max].
-                    // Intent: ship holding a direction eventually plows into one.
+    leadFactor: 1.0, // FULL prediction — offset from WHERE SHIP WILL BE at landZ, not current X.
+                    // At velX=26 × 2.78s travel = 72u drift; without lead bolt ends up 72u behind ship = medial.
+                    // With lead=1.0, bolt spawns at predictedShipX±offset so it's lateral AT IMPACT.
     slideBias: 0.7, // probability bolt spawns in direction of current slide (1=always, 0.5=random)
                     // sliding left → 70% of bolts spawn left (ship heading into them)
     coreRadius: 0.4, // 3.3x main (_LT.coreRadius=0.12) — fatter visual
