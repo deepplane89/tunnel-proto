@@ -7328,10 +7328,10 @@ let _canyonManual = false; // true when triggered by V key — bypasses sequence
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-250, _allCyan:true },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-250, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-250, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-250, _allCyan:true },
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-350, _allCyan:true },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-350, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-350, _allCyan:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-350, _allCyan:true },
 };
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
@@ -21093,7 +21093,7 @@ function _tickAsteroidSpawner(dt) {
   }
 
   // ── Filler asteroids (decorative, no hit check) ─────────────────────
-  if (T.fillerEnabled && state._jetLightningMode && _jlRampTime >= 2) {
+  if (T.fillerEnabled && state._jetLightningMode && _jlRampTime >= 4) {
     _astFillerTimer -= dt;
     if (_astFillerTimer <= 0) {
       _astFillerTimer = T.fillerFreq * (0.6 + Math.random() * 0.8);
@@ -21958,7 +21958,7 @@ const _JL_TRACKS = [
   // ════════ ACT 1 — ASTEROIDS (0–30s) ══════════════════════════════════════
   {
     id: 'ast_stagger_1', label: 'A1 AST Stagger', type: 'asteroid',
-    startT: 2, endT: 20,
+    startT: 4, endT: 20,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 1.4, staggerGap: 0.6, salvoCount: 1,
