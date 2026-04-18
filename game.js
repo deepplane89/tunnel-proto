@@ -23015,7 +23015,7 @@ window._jlDebug = {
   // Everything spawns at a Z offset ahead of the ship.
   // Warning disc pulses for warningTime seconds, then bolt slams and lingers.
   // After the strike the bolt is a planted world-space column — ship flies past it.
-  function _spawnLightning(targetX, landZOverride) {
+  function _spawnLightning(targetX, landZOverride, skipWarn) {
     if (window._perfDiag) window._perfDiag.tag('lightning_spawn');
     const shipZ  = _shipZ();
     // landZOverride lets callers (e.g. lateral) spawn at a custom Z without touching _LT.spawnZ
@@ -23059,7 +23059,7 @@ window._jlDebug = {
     boltGroup.add(coreMesh); boltGroup.add(glowMesh);
     scene.add(boltGroup);
 
-    _ltActive.push({
+    const inst = {
       landX, landZ, strikePosZ: landZ,
       phase: 'warn', elapsed: 0, strikeElapsed: 0, lingerElapsed: 0,
       warnMesh, warnGeo, warnMat,
@@ -23068,7 +23068,23 @@ window._jlDebug = {
       boltGroup, coreMesh, coreGeo, coreMat,
       glowMesh, glowGeo, glowMat,
       ringScale: 0.3, hitChecked: false,
-    });
+    };
+
+    // skipWarn: bolt pops in pre-struck at landZ (no warn disc, no flash, no ring).
+    // Ship sees a planted column drifting in from distance — the bolt IS the warning.
+    // Used for lateral bolts where a warn disc would reveal the ambush too early.
+    if (skipWarn) {
+      inst.phase          = 'strike';
+      inst.strikeElapsed  = 0;
+      warnMat.opacity     = 0;
+      flashMat.opacity    = 0;
+      ringMat.opacity     = 0;
+      coreMat.opacity     = 1.0;
+      glowMat.opacity     = 0.5;
+      _ltRejag(inst);
+    }
+
+    _ltActive.push(inst);
   }
 
   function _ltKill(inst) {
@@ -23150,7 +23166,8 @@ window._jlDebug = {
       +' predX='+predictedX.toFixed(1)+' side='+side+' spawnX='+spawnX.toFixed(1)
       +' landZ='+landZ.toFixed(1));
     if (window._perfDiag) window._perfDiag.tag('lateral_lt');
-    _spawnLightning(spawnX, landZ);
+    // skipWarn=true: bolt pops in pre-struck — no telegraph disc, bolt itself is the warning.
+    _spawnLightning(spawnX, landZ, true);
   }
 
   function _updateLightning(dt) {
