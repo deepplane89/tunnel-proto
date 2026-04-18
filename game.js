@@ -23123,12 +23123,13 @@ window._jlDebug = {
     enabled: true,
     timer:   0,
     freq:    0.8,   // seconds between fires (with 0.7–1.3x jitter)
-    minOff:  0,     // minimum lateral offset from shipX (0 = can spawn right at ship X)
-    maxOff:  25,    // maximum lateral offset — covers realistic slide distance so a ship
-                    // holding left/right at ~15 u/s will sweep through this range
+    minOff:  8,     // minimum lateral offset — bolts ALWAYS visibly to the side, never medial
+    maxOff:  25,    // maximum lateral offset — covers realistic slide distance
     spawnZ:  -150,  // lateral-specific spawn Z — ~2.78s travel at 54 u/s
     leadFactor: 0,  // no prediction — offset is from CURRENT shipX, random within [min,max].
                     // Intent: ship holding a direction eventually plows into one.
+    slideBias: 0.7, // probability bolt spawns in direction of current slide (1=always, 0.5=random)
+                    // sliding left → 70% of bolts spawn left (ship heading into them)
     coreRadius: 0.4, // 3.3x main (_LT.coreRadius=0.12) — fatter visual
     glowRadius: 0.8, // 3.2x main (_LT.glowRadius=0.25) — hitbox 0.8u wide
   };
@@ -23163,10 +23164,19 @@ window._jlDebug = {
     if (_LT_LATERAL.timer > 0) return;
     _LT_LATERAL.timer = _LT_LATERAL.freq * (0.7 + Math.random() * 0.6);
 
-    const side   = Math.random() < 0.5 ? 1 : -1;
-    const offset = _LT_LATERAL.minOff + Math.random() * (_LT_LATERAL.maxOff - _LT_LATERAL.minOff);
     const sx     = (state && state.shipX)    || 0;
     const velX   = (state && state.shipVelX) || 0;
+    // Side bias: if ship is sliding, bolts favor the slide direction so ship
+    // heads INTO them. Not-sliding → pure 50/50. slideBias=0.7 means 70% of the
+    // time the bolt spawns in slide direction, 30% opposite.
+    let side;
+    if (Math.abs(velX) > 0.5) {
+      const slideSign = velX > 0 ? 1 : -1;
+      side = (Math.random() < _LT_LATERAL.slideBias) ? slideSign : -slideSign;
+    } else {
+      side = Math.random() < 0.5 ? 1 : -1;
+    }
+    const offset = _LT_LATERAL.minOff + Math.random() * (_LT_LATERAL.maxOff - _LT_LATERAL.minOff);
     // Lateral uses ITS OWN spawnZ (farther than main) so warn disc appears well ahead —
     // ship's X at spawn time visually disconnects from bolt's landing X.
     // Half-lead prediction (leadFactor=0.5) still punishes camping without aimbot overshoot.
