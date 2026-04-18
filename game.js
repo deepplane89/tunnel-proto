@@ -23015,7 +23015,7 @@ window._jlDebug = {
   // Everything spawns at a Z offset ahead of the ship.
   // Warning disc pulses for warningTime seconds, then bolt slams and lingers.
   // After the strike the bolt is a planted world-space column — ship flies past it.
-  function _spawnLightning(targetX, landZOverride, skipWarn) {
+  function _spawnLightning(targetX, landZOverride, skipWarn, radiiOverride) {
     if (window._perfDiag) window._perfDiag.tag('lightning_spawn');
     const shipZ  = _shipZ();
     // landZOverride lets callers (e.g. lateral) spawn at a custom Z without touching _LT.spawnZ
@@ -23023,6 +23023,9 @@ window._jlDebug = {
     const velX   = (state && state.shipVelX) || 0;
     const travelTime = Math.abs(_LT.spawnZ) / Math.max(1, state.speed || 73);
     const landX  = targetX + velX * travelTime * _LT.leadFactor;
+    // radiiOverride: { coreRadius, glowRadius } to override _LT defaults for this instance
+    const _core  = (radiiOverride && radiiOverride.coreRadius != null) ? radiiOverride.coreRadius : _LT.coreRadius;
+    const _glow  = (radiiOverride && radiiOverride.glowRadius != null) ? radiiOverride.glowRadius : _LT.glowRadius;
 
     // Warning disc — visible immediately at landZ ahead of ship
     const warnGeo  = new THREE.CircleGeometry(_LT.warnRadius, 32);
@@ -23052,8 +23055,8 @@ window._jlDebug = {
     boltGroup.position.set(0, 0, landZ);
     const coreMat  = new THREE.MeshBasicMaterial({ color:_LT.coreColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
     const glowMat  = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
-    const coreGeo  = _ltBoltGeo(_LT.skyHeight, landX, _LT.segments, _LT.jaggedness,       _LT.coreRadius);
-    const glowGeo  = _ltBoltGeo(_LT.skyHeight, landX, _LT.segments, _LT.jaggedness * 1.4, _LT.glowRadius);
+    const coreGeo  = _ltBoltGeo(_LT.skyHeight, landX, _LT.segments, _LT.jaggedness,       _core);
+    const glowGeo  = _ltBoltGeo(_LT.skyHeight, landX, _LT.segments, _LT.jaggedness * 1.4, _glow);
     const coreMesh = new THREE.Mesh(coreGeo, coreMat);
     const glowMesh = new THREE.Mesh(glowGeo, glowMat);
     boltGroup.add(coreMesh); boltGroup.add(glowMesh);
@@ -23068,6 +23071,9 @@ window._jlDebug = {
       boltGroup, coreMesh, coreGeo, coreMat,
       glowMesh, glowGeo, glowMat,
       ringScale: 0.3, hitChecked: false,
+      // Per-instance radii — _ltRejag reads these instead of _LT.* so overrides persist
+      _coreRadius: _core,
+      _glowRadius: _glow,
     };
 
     // skipWarn: bolt pops in pre-struck at landZ (no warn disc, no flash, no ring).
@@ -23096,8 +23102,11 @@ window._jlDebug = {
 
   function _ltRejag(inst) {
     inst.coreGeo.dispose(); inst.glowGeo.dispose();
-    const ng = _ltBoltGeo(_LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness,     _LT.coreRadius);
-    const gg = _ltBoltGeo(_LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness*1.4, _LT.glowRadius);
+    // Use per-instance radii (set at spawn) so lateral fat bolts stay fat through rejags
+    const cr = (inst._coreRadius != null) ? inst._coreRadius : _LT.coreRadius;
+    const gr = (inst._glowRadius != null) ? inst._glowRadius : _LT.glowRadius;
+    const ng = _ltBoltGeo(_LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness,     cr);
+    const gg = _ltBoltGeo(_LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness*1.4, gr);
     inst.coreMesh.geometry = ng; inst.coreGeo = ng;
     inst.glowMesh.geometry = gg; inst.glowGeo = gg;
   }
@@ -23114,11 +23123,14 @@ window._jlDebug = {
     enabled: true,
     timer:   0,
     freq:    0.8,   // seconds between fires (with 0.7–1.3x jitter)
-    minOff:  4,     // minimum lateral offset from predicted shipX
-    maxOff:  10,    // maximum lateral offset
-    spawnZ:  -200,  // lateral-specific spawn Z (farther than main _LT.spawnZ=-83)
-                    // 3.7s warn-to-impact at 54 u/s — visually disconnects ship slide from bolt location
-    leadFactor: 0.5, // half-lead prediction: punish camping without aimbot behavior
+    minOff:  0,     // minimum lateral offset from shipX (0 = can spawn right at ship X)
+    maxOff:  25,    // maximum lateral offset — covers realistic slide distance so a ship
+                    // holding left/right at ~15 u/s will sweep through this range
+    spawnZ:  -150,  // lateral-specific spawn Z — ~2.78s travel at 54 u/s
+    leadFactor: 0,  // no prediction — offset is from CURRENT shipX, random within [min,max].
+                    // Intent: ship holding a direction eventually plows into one.
+    coreRadius: 0.4, // 3.3x main (_LT.coreRadius=0.12) — fatter visual
+    glowRadius: 0.8, // 3.2x main (_LT.glowRadius=0.25) — hitbox 0.8u wide
   };
   function _tickLightningLateral(dt) {
     // ALWAYS-ON DIAG: throttled once/3s so we can see why LT lateral isn't firing.
@@ -23163,11 +23175,15 @@ window._jlDebug = {
     const spawnX    = predictedX + side * offset;
     const landZ     = (_shipZ ? _shipZ() : 3.9) + _LT_LATERAL.spawnZ;
     console.log('[LT_LAT_FIRE] sx='+sx.toFixed(1)+' velX='+velX.toFixed(2)
-      +' predX='+predictedX.toFixed(1)+' side='+side+' spawnX='+spawnX.toFixed(1)
-      +' landZ='+landZ.toFixed(1));
+      +' predX='+predictedX.toFixed(1)+' side='+side+' off='+offset.toFixed(1)
+      +' spawnX='+spawnX.toFixed(1)+' landZ='+landZ.toFixed(1));
     if (window._perfDiag) window._perfDiag.tag('lateral_lt');
     // skipWarn=true: bolt pops in pre-struck — no telegraph disc, bolt itself is the warning.
-    _spawnLightning(spawnX, landZ, true);
+    // Fat radii: lateral bolts are 3x chunkier than main pattern bolts.
+    _spawnLightning(spawnX, landZ, true, {
+      coreRadius: _LT_LATERAL.coreRadius,
+      glowRadius: _LT_LATERAL.glowRadius,
+    });
   }
 
   function _updateLightning(dt) {
