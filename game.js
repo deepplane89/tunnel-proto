@@ -7344,7 +7344,7 @@ const _CANYON_PRESETS = {
   1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, _allCyan:true },
   2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
   3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, _allCyan:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:3, spawnDepth:-250, _allCyan:false },
 };
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
@@ -8037,6 +8037,14 @@ function _updateCanyonWalls(dt, speed) {
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
           m.rotation.y = side * Math.atan2(centerNext - center, spacing);
+          // Reassign cyan/dark material based on positional idx — otherwise recycling
+          // scrambles the alternation pattern that was baked at makeSlab time.
+          if (m.children[0]) {
+            const posIdx = Math.round(-slabZ / spacing);
+            const wantCyan = T._allCyan ? true : T._allDark ? false : (posIdx % 2 === 0);
+            const wantMat = wantCyan ? cyanMat : darkMat;
+            if (m.children[0].material !== wantMat) m.children[0].material = wantMat;
+          }
         }
         m.visible = true;
       } else {
@@ -17858,7 +17866,7 @@ window.addEventListener('keydown', (e) => {
       { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
       { label: 'Canyon Corridor 2', mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false, _allDark:true } },
       { label: 'Regular Canyon',    mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
-      { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
+      { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
     ];
     PRESETS.forEach(({ label, mode, vals }) => {
       const pb = document.createElement('button');
@@ -21386,12 +21394,9 @@ function _tickAsteroidSpawner(dt) {
       // DIAG: always log lateral fires
       console.log('[LAT_FIRE] obs='+(window._jlActiveObstacleType||'ast')
         +' rT='+_jlRampTime.toFixed(1)+' side='+side+' x='+spawnX.toFixed(1));
-      if (window._perfDiag) window._perfDiag.tag('lateral_' + (window._jlActiveObstacleType || 'ast'));
-      if (window._jlActiveObstacleType === 'lightning' && window._spawnLightning) {
-        window._spawnLightning(spawnX);
-      } else {
-        _spawnAsteroid(spawnX);
-      }
+      if (window._perfDiag) window._perfDiag.tag('lateral_ast');
+      // Asteroid lateral is asteroid-only; lightning has its own _tickLightningLateral.
+      _spawnAsteroid(spawnX);
     }
   }
 
@@ -22383,18 +22388,18 @@ const _JL_TRACKS = [
     onDeactivate() { _jlCanyonStop(); },
   },
 
-  // ════════ BREATHER (120–126s) — 6s for canyon 2 scroll-out to finish cleanly ═
+  // ════════ BREATHER (120–132s) — 12s for canyon 2 scroll-out + pacing ══════
 
-  // ════════ STRAIGHT CANYON + AST + LT PEAK (126–156s) ════════════════════
+  // ════════ STRAIGHT CANYON + AST + LT PEAK (132–162s) ════════════════════
   {
     id: 'canyon_straight', label: 'Straight Canyon', type: 'custom',
-    startT: 126, endT: 156,
+    startT: 132, endT: 162,
     onActivate()   { _jlCanyonStartOpen(4); },
     onDeactivate() { _jlCanyonStop(); },
   },
   {
     id: 'ast_straight', label: 'Straight AST', type: 'asteroid',
-    startT: 126, endT: 156,
+    startT: 132, endT: 162,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 1.1, staggerGap: 0.5, salvoCount: 2,
@@ -22403,49 +22408,49 @@ const _JL_TRACKS = [
   },
   {
     id: 'lt_straight', label: 'Straight LT', type: 'lightning',
-    startT: 126, endT: 156,
+    startT: 132, endT: 162,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.3, laneMin: -8, laneMax: 8,
     },
   },
 
-  // ════════ CORRIDOR 1 + LIGHTNING (156–186s) ═══════════════════════════════
+  // ════════ CORRIDOR 1 + LIGHTNING (162–192s) ═══════════════════════════════
   {
     id: 'canyon_1_lt', label: 'Canyon C1+LT', type: 'custom',
-    startT: 156, endT: 186,
+    startT: 162, endT: 192,
     onActivate()   { _jlCanyonStartOpen(1); },
     onDeactivate() { _jlCanyonStop(); },
   },
   {
     id: 'lt_canyon_1', label: 'C1 LT', type: 'lightning',
-    startT: 156, endT: 186,
+    startT: 162, endT: 192,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.3, laneMin: -8, laneMax: 8,
     },
   },
 
-  // ════════ CORRIDOR 2 + LIGHTNING (186–216s) ═══════════════════════════════
+  // ════════ CORRIDOR 2 + LIGHTNING (192–222s) ═══════════════════════════════
   {
     id: 'canyon_2_lt', label: 'Canyon C2+LT', type: 'custom',
-    startT: 186, endT: 216,
+    startT: 192, endT: 222,
     onActivate()   { _jlCanyonStartOpen(2); },
     onDeactivate() { _jlCanyonStop(); },
   },
   {
     id: 'lt_canyon_2', label: 'C2 LT', type: 'lightning',
-    startT: 186, endT: 216,
+    startT: 192, endT: 222,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.25, laneMin: -8, laneMax: 8,
     },
   },
 
-  // ════════ ENDLESS PEAK — AST + LT (216s+) ════════════════════════════════
+  // ════════ ENDLESS PEAK — AST + LT (222s+) ════════════════════════════════
   {
     id: 'ast_peak', label: 'Peak AST', type: 'asteroid',
-    startT: 216, endT: null,
+    startT: 222, endT: null,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 1.1, staggerGap: 0.5, salvoCount: 2,
@@ -22454,7 +22459,7 @@ const _JL_TRACKS = [
   },
   {
     id: 'lt_peak', label: 'Peak LT', type: 'lightning',
-    startT: 216, endT: null,
+    startT: 222, endT: null,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
       frequency: 0.25, laneMin: -8, laneMax: 8,
@@ -23055,7 +23060,48 @@ window._jlDebug = {
   let _ltShakeOffX = 0, _ltShakeOffY = 0;
   const _shipZ = () => shipGroup ? shipGroup.position.z : 3.9;
 
+  // ── Lightning lateral punish ──────────────────────────────────────────────
+  // Mirrors asteroid lateral, but predicts where ship will be when bolt strikes
+  // so sliding doesn't just skate past a static column. Only fires when there
+  // are no walls (canyon inactive) — walls already hold the ship in place.
+  const _LT_LATERAL = {
+    enabled: true,
+    timer:   0,
+    freq:    0.8,   // seconds between fires (with 0.7–1.3x jitter)
+    minOff:  4,     // minimum lateral offset from predicted shipX
+    maxOff:  10,    // maximum lateral offset
+  };
+  function _tickLightningLateral(dt) {
+    if (!_LT_LATERAL.enabled) return;
+    if (!state || !state._jetLightningMode) return;
+    if (typeof _jlRampTime === 'undefined' || _jlRampTime < 4) return;
+    if (window._jlActiveObstacleType !== 'lightning') return;
+    // Walls present — they already hold the ship; no lateral needed.
+    if (typeof _canyonActive !== 'undefined' && (_canyonActive || _canyonExiting)) return;
+
+    _LT_LATERAL.timer -= dt;
+    if (_LT_LATERAL.timer > 0) return;
+    _LT_LATERAL.timer = _LT_LATERAL.freq * (0.7 + Math.random() * 0.6);
+
+    const side   = Math.random() < 0.5 ? 1 : -1;
+    const offset = _LT_LATERAL.minOff + Math.random() * (_LT_LATERAL.maxOff - _LT_LATERAL.minOff);
+    const sx     = (state && state.shipX)    || 0;
+    const velX   = (state && state.shipVelX) || 0;
+    // Time between _spawnLightning call and strike landing. Predict ship X at that moment
+    // so bolt lands where ship WILL BE if it keeps sliding — punishes camping.
+    const travelTime = Math.abs(_LT.spawnZ) / Math.max(1, (state && state.speed) || 73);
+    const predictedX = sx + velX * travelTime;
+    const spawnX    = predictedX + side * offset;
+    console.log('[LT_LAT_FIRE] sx='+sx.toFixed(1)+' velX='+velX.toFixed(2)
+      +' predX='+predictedX.toFixed(1)+' side='+side+' spawnX='+spawnX.toFixed(1));
+    if (window._perfDiag) window._perfDiag.tag('lateral_lt');
+    _spawnLightning(spawnX);
+  }
+
   function _updateLightning(dt) {
+    // Lateral punish tick — runs before main spawn loop
+    _tickLightningLateral(dt);
+
     // Auto-spawn
     if (_LT.enabled && !_noSpawnMode && !_ltLoopActive) {
       _ltTimer -= dt;
