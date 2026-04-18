@@ -7329,10 +7329,10 @@ let _canyonManual = false; // true when triggered by V key — bypasses sequence
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-500, _allCyan:true },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-500, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-500, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-500, _allCyan:true },
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-250, _allCyan:true },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-250, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-250, _allCyan:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:450, entranceSlabs:3, spawnDepth:-250, _allCyan:true },
 };
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
@@ -7755,16 +7755,17 @@ function _createCanyonWalls() {
         pivot.position.x = pivot.userData.bakedX;
         pivot.rotation.y = 0;
       } else {
-        // Loose init: straight line at halfX, rotation 0, uncommitted.
-        // Slab rebakes to true corridor position when it crosses Z=-200
-        // via commit logic in _updateCanyonWalls (uses live _canyonSinePhase).
-        // This avoids the init-vs-recycle formula mismatch that caused past
-        // far-spawn gaps, and produces natural "emerge from distance" look.
-        const halfX = _canyonTuner.halfXOverride || 34;
-        pivot.userData.bakedX     = halfX * side;
-        pivot.userData._committed = false;
+        const initZ      = pivot.position.z;
+        const center     = _canyonXAtZ(initZ);
+        const centerNext = _canyonXAtZ(initZ - SPACING);
+        const halfX      = _canyonPredictHalfX(0);
+        // Init rotation: _canyonXAtZ is correct here — each slab is at a unique Z
+        // so the stateless sine naturally gives the right angle per slab.
+        // (predictCenter is wrong at init — it's near phase=0 so all deltas are equal)
+        const angle = side * Math.atan2(centerNext - center, SPACING);
+        pivot.userData.bakedX = center + halfX * side;
         pivot.position.x = pivot.userData.bakedX;
-        pivot.rotation.y = 0;
+        pivot.rotation.y = angle;
       }
     });
   });
@@ -7951,20 +7952,6 @@ function _updateCanyonWalls(dt, speed) {
         }
       }
 
-      // ── Commit: loose slab crosses Z=-200 → bake true corridor X/rotation ──
-      // Uses live _canyonSinePhase via _canyonPredictCenter — same math as
-      // recycle path. One-time per slab until it recycles and goes loose again.
-      if (!m.userData.isEntrance && m.userData._committed === false && m.position.z >= -200) {
-        const rowsAhead  = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
-        const center     = _canyonPredictCenter(rowsAhead);
-        const centerNext = _canyonPredictCenter(rowsAhead + 1);
-        const halfX      = _canyonPredictHalfX(rowsAhead);
-        m.userData.bakedX     = center + halfX * side;
-        m.userData._committed = true;
-        m.position.x = m.userData.bakedX;
-        m.rotation.y = side * Math.atan2(centerNext - center, spacing);
-      }
-
       // ── EXITING: slabs drift forward, no recycle, hide when past despawn ──
       if (_canyonExiting) {
         if (m.position.z > DESPAWN_Z + spacing) m.visible = false;
@@ -7996,14 +7983,10 @@ function _updateCanyonWalls(dt, speed) {
           m.position.z = slabZ;
           m.rotation.y = 0;
         } else {
-          // Loose recycle: straight X, rotation 0, uncommitted.
-          // Slab will rebake to corridor when it scrolls to Z=-200 (commit block above).
-          const straightHalfX = _canyonTuner.halfXOverride || 34;
-          m.userData.bakedX     = straightHalfX * side;
-          m.userData._committed = false;
+          m.userData.bakedX = center + halfX * side;
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
-          m.rotation.y = 0;
+          m.rotation.y = side * Math.atan2(centerNext - center, spacing);
         }
         m.visible = true;
       } else {
