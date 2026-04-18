@@ -17971,10 +17971,12 @@ const _perfDiag = (function() {
   let _prevDraws = 0;
   let _prevTris = 0;
   let _prevHeap = 0;
+  let _prevProgramCount = 0;         // for churn detection: same count + different programs = eviction
   let _seenPrograms = new WeakSet(); // track compiled programs
   let _frameEvents = [];              // events tagged this frame
   let _rollingFrames = [];            // frame times for last 2s
   let _rollingStart = 0;
+  let _needsUpdateHits = [];          // captured by needsUpdate setter trap
 
   function _getHeap() {
     if (performance.memory && performance.memory.usedJSHeapSize) {
@@ -18026,6 +18028,46 @@ const _perfDiag = (function() {
     _frameEvents.push(extra ? (name + '(' + extra + ')') : name);
   }
 
+  // Walk entire scene graph (not just top-level children) counting ALL lights.
+  // Also captures toggle state. Only called on bad frames — too slow for every frame.
+  function _sampleLights() {
+    if (!scene) return { count: 0, summary: '' };
+    const lights = [];
+    scene.traverse(obj => {
+      if (obj.isLight) {
+        lights.push({
+          type: obj.type,
+          visible: obj.visible && (obj.parent ? obj.parent.visible !== false : true),
+          intensity: obj.intensity,
+          color: obj.color ? ('#' + obj.color.getHexString()) : null,
+          name: obj.name || '',
+        });
+      }
+    });
+    // THREE's uniform setup counts lights that are .visible AND .intensity > 0 AND in scene graph.
+    // That's what drives the lights hash in cacheKey.
+    const effective = lights.filter(l => l.visible && l.intensity > 0);
+    const byType = {};
+    for (const l of effective) byType[l.type] = (byType[l.type]||0) + 1;
+    const summary = Object.keys(byType).map(k => k+'×'+byType[k]).join(',');
+    return { total: lights.length, effective: effective.length, summary };
+  }
+
+  // Sample toggleable game state flags that might drive material variant churn.
+  function _sampleState() {
+    const s = (window.state) || {};
+    const cw = window._canyonWalls;
+    const astActive = (window._asteroidPool || []).filter(a => a.active).length;
+    const canyonVis = cw ? (cw.left || []).filter(m => m.visible).length : 0;
+    return 'phase='+(s.phase||'?')
+      + ' jl='+(s._jetLightningMode?1:0)
+      + ' chaos='+(window._chaosMode?1:0)
+      + ' corrMode='+(s.corridorMode?1:0)
+      + ' revealed='+(cw && cw._corridorRevealed?1:0)
+      + ' astActive='+astActive
+      + ' canyonVis='+canyonVis;
+  }
+
   function frameEnd() {
     if (!window._perfDiagOn) return;
     if (_frameStartTs === 0) return; // not initialized
@@ -18043,6 +18085,8 @@ const _perfDiag = (function() {
     const heapDelta  = heap - _prevHeap;
 
     const newShaders = _detectNewPrograms();
+    const totalPrograms = (renderer && renderer.info && renderer.info.programs) ? renderer.info.programs.length : 0;
+    const programDelta = totalPrograms - _prevProgramCount;
 
     // Rolling window for p95/p99
     _rollingFrames.push(frameMs);
@@ -18072,13 +18116,69 @@ const _perfDiag = (function() {
         for (const k of Object.keys(counts)) parts.push(counts[k] > 1 ? (k+'×'+counts[k]) : k);
         shaderDetail = ' compiled: [' + parts.join(', ') + ']';
       }
-      console.log('[FREEZE] '+frameMs.toFixed(1)+'ms | js='+jsMs.toFixed(1)+' render='+renderMs.toFixed(1)+' | draws='+draws+'(d'+(drawsDelta>=0?'+':'')+drawsDelta+') tris='+Math.round(tris/1000)+'k(d'+(trisDelta>=0?'+':'')+Math.round(trisDelta/1000)+'k)'+heapStr+shaderStr+' | events: '+evts+shaderDetail);
+      // KEY churn indicator: if programs count didn't grow but newShaders>0 → eviction/recompile.
+      // If it grew by newShaders → first-time compile (cache growing).
+      const churnMarker = (newShaders > 0 && programDelta < newShaders)
+        ? ' CHURN(evicted='+(newShaders - programDelta)+')'
+        : '';
+      // Light sample — detects light count/visibility toggles that drive cacheKey churn.
+      const lights = _sampleLights();
+      const lightStr = ' lights='+lights.effective+'/'+lights.total+'['+lights.summary+']';
+      // State flags
+      const stateStr = ' state:['+_sampleState()+']';
+      // needsUpdate hits since last bad frame
+      const nuStr = _needsUpdateHits.length ? (' needsUpdate=['+_needsUpdateHits.join(',')+']') : '';
+      _needsUpdateHits.length = 0;
+      console.log('[FREEZE] '+frameMs.toFixed(1)+'ms | js='+jsMs.toFixed(1)+' render='+renderMs.toFixed(1)
+        +' | progs='+totalPrograms+'(d'+(programDelta>=0?'+':'')+programDelta+')'+churnMarker
+        +' draws='+draws+'(d'+(drawsDelta>=0?'+':'')+drawsDelta+')'
+        +' tris='+Math.round(tris/1000)+'k(d'+(trisDelta>=0?'+':'')+Math.round(trisDelta/1000)+'k)'
+        +heapStr+shaderStr+lightStr+stateStr
+        +' | events: '+evts+shaderDetail+nuStr);
     }
 
     _prevDraws = draws;
     _prevTris = tris;
     _prevHeap = heap;
+    _prevProgramCount = totalPrograms;
   }
+
+  // needsUpdate trap — wraps THREE's existing needsUpdate setter so we can count
+  // how many times code sets it = true during gameplay. Classic cause of
+  // "everything recompiles" when code sets it on a shared material.
+  // We delegate to the original setter to preserve THREE's internal behavior.
+  function _installNeedsUpdateTrap() {
+    if (typeof THREE === 'undefined' || !THREE.Material) return;
+    const proto = THREE.Material.prototype;
+    if (proto._perfDiagTrapped) return;
+    // Find the existing descriptor (may be on prototype or up the chain)
+    let existing = null;
+    let target = proto;
+    while (target && !existing) {
+      existing = Object.getOwnPropertyDescriptor(target, 'needsUpdate');
+      if (!existing) target = Object.getPrototypeOf(target);
+    }
+    if (!existing || !existing.set) {
+      console.warn('[PERF DIAG] could not find needsUpdate setter, trap not installed');
+      return;
+    }
+    const origSet = existing.set;
+    const origGet = existing.get || function(){return false;};
+    proto._perfDiagTrapped = true;
+    Object.defineProperty(proto, 'needsUpdate', {
+      set: function(v) {
+        if (v && window._perfDiagOn) {
+          const name = this.type + (this.name ? ('/'+this.name) : '') + '#' + (this.id||'?');
+          _needsUpdateHits.push(name);
+        }
+        origSet.call(this, v);
+      },
+      get: function() { return origGet.call(this); },
+      configurable: true,
+    });
+    console.log('[PERF DIAG] needsUpdate trap installed');
+  }
+  setTimeout(_installNeedsUpdateTrap, 100);
 
   return { frameStart, markRenderStart, markRenderEnd, frameEnd, tag };
 })();
