@@ -21787,12 +21787,20 @@ function startJetLightning() {
     if (!_canyonWalls) _createCanyonWalls();
   }
 
-  // ── Pre-warm canyon textures so first corridor spawn has no stutter ────────
+  // ── Pre-warm canyon textures + geometry pool at JL start ────────────────────
   if (!_canyonTexCache) {
     _canyonTexCache = {
       cyanTex: _makeCanyonCyanTex(1),
       darkTex: _makeCanyonDarkTex(2),
     };
+  }
+  if (!_canyonWalls) {
+    // Build pool with generous spawnDepth so all modes have enough slabs
+    const _savedDepth = _canyonTuner.spawnDepth;
+    _canyonTuner.spawnDepth = -400;
+    _createCanyonWalls();
+    _canyonTuner.spawnDepth = _savedDepth;
+    _hideCanyonWalls();
   }
 }
 
