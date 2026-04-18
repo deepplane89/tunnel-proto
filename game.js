@@ -7324,6 +7324,18 @@ const _CANYON_LIGHT_DEFS = [
   { pos: [ 0,  3, -4], intensity: 1.0 },
   { pos: [ 0, -2,  4], intensity: 0.8 },
 ];
+
+// Persistent canyon lights: pre-added at scene init with intensity=0 so the
+// lights-hash (which drives every material's program cacheKey) is stable across
+// the entire session. Canyon activate/deactivate just flips intensity — no
+// visibility toggle, no scene.add/remove — so no material recompile wave.
+// (THREE.js: changing intensity does NOT recompile; visibility or presence does.)
+const _CANYON_PERSISTENT_LIGHTS = _CANYON_LIGHT_DEFS.map(({ pos }) => {
+  const l = new THREE.DirectionalLight(0xc8f0ff, 0); // intensity=0 until canyon active
+  l.position.set(...pos);
+  scene.add(l);
+  return l;
+});
 let _canyonActive = false;
 let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
@@ -7617,16 +7629,13 @@ function _createCanyonWalls() {
   // Holographic grid overlay REMOVED for perf (was doubling draw calls on cyan slabs).
   // Post-processing _holoPass (screen-space) is separate and still active.
 
-  // Canyon-scoped lights — 4 directions at low intensity to fake even box lighting
-  // Avoids single-source specular pooling on curved walls
-  const _cLightDefs = _CANYON_LIGHT_DEFS;
-  const _cLights = _cLightDefs.map(({ pos, intensity }) => {
-    const l = new THREE.DirectionalLight(0xc8f0ff, intensity * T.lightIntensity);
-    l.position.set(...pos);
-    scene.add(l);
-    return l;
+  // Canyon-scoped lights — reuse persistent lights created at module init.
+  // Turn them on by setting intensity; light-count hash stays constant so no
+  // standard/physical/basic/mirror material recompiles (previously 161ms hitch).
+  _CANYON_PERSISTENT_LIGHTS.forEach((l, i) => {
+    l.intensity = _CANYON_LIGHT_DEFS[i].intensity * T.lightIntensity;
   });
-  const canyonLight = { lights: _cLights };
+  const canyonLight = { lights: _CANYON_PERSISTENT_LIGHTS };
 
   const SPACING  = T.slabW;
   // FOOT_OFF: the foot vertex sits at local X = footX.
@@ -7818,9 +7827,10 @@ function _destroyCanyonWalls() {
   });
   ['cyanMat','darkMat'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
   ['cyanTex','darkTex'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
-  if (_canyonWalls.canyonLight) {
-    if (_canyonWalls.canyonLight.lights) _canyonWalls.canyonLight.lights.forEach(l => scene.remove(l));
-    else scene.remove(_canyonWalls.canyonLight);
+  // Canyon lights: don't remove from scene (would trigger light-hash change →
+  // recompile wave). Just zero their intensity so they contribute nothing.
+  if (_canyonWalls.canyonLight && _canyonWalls.canyonLight.lights) {
+    _canyonWalls.canyonLight.lights.forEach(l => { l.intensity = 0; });
   }
   _canyonWalls = null;
   if (_canyonFillLight) {
@@ -18483,6 +18493,16 @@ applySkin(loadSkinData().selected); // re-apply skin lighting after level visual
 applyTitleSkin(loadSkinData().selected);
 updateTitleBadges();
 updateCameraFOV(); // set correct FOV on load (mobile landscape)
+
+// Title-screen shader prewarm: compile all materials that are already in the
+// scene graph so the 33-shader / 400ms+ first-frame hitch happens during
+// loading instead of on the first rendered frame. Safe because renderer.compile()
+// is a no-op for materials already compiled.
+try {
+  renderer.compile(scene, camera);
+  if (typeof titleScene !== 'undefined' && titleScene) renderer.compile(titleScene, camera);
+} catch (e) { /* non-fatal */ }
+
 clock.start();
 animate();
 // iOS Safari: viewport may not be settled on first paint (address bar, safe area).
