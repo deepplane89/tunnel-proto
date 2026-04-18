@@ -21397,8 +21397,10 @@ function _tickAsteroidSpawner(dt) {
     }
   }
 
-  // ── Lateral camp punish — runs regardless of T.enabled so it fires during pure LT segments ──
-  if (T.lateralEnabled && state._jetLightningMode && _jlRampTime >= 4) {
+  // ── Lateral camp punish — asteroid-ONLY. Only fires when the active obstacle is 'asteroid'.
+  // Prevents asteroids from firing during LT-only segments (60-90s) and LT-combined segments.
+  if (T.lateralEnabled && state._jetLightningMode && _jlRampTime >= 4
+      && window._jlActiveObstacleType === 'asteroid') {
     T._lateralTimer -= dt;
     if (T._lateralTimer <= 0) {
       T._lateralTimer = T.lateralFreq * (0.7 + Math.random() * 0.6);
@@ -21410,7 +21412,6 @@ function _tickAsteroidSpawner(dt) {
       console.log('[LAT_FIRE] obs='+(window._jlActiveObstacleType||'ast')
         +' rT='+_jlRampTime.toFixed(1)+' side='+side+' x='+spawnX.toFixed(1));
       if (window._perfDiag) window._perfDiag.tag('lateral_ast');
-      // Asteroid lateral is asteroid-only; lightning has its own _tickLightningLateral.
       _spawnAsteroid(spawnX);
     }
   }
@@ -23100,6 +23101,25 @@ window._jlDebug = {
     maxOff:  10,    // maximum lateral offset
   };
   function _tickLightningLateral(dt) {
+    // ALWAYS-ON DIAG: throttled once/3s so we can see why LT lateral isn't firing.
+    // Mirrors [LAT_DIAG] in _tickAsteroidSpawner. Logs every gate state.
+    if (state && state._jetLightningMode) {
+      window._ltLatTickCounter = (window._ltLatTickCounter || 0) + 1;
+      if (window._ltLatTickCounter >= 180) {
+        window._ltLatTickCounter = 0;
+        console.log('[LT_LAT_DIAG] en='+(_LT_LATERAL.enabled?1:0)
+          +' jl='+(state._jetLightningMode?1:0)
+          +' rT='+(typeof _jlRampTime!=='undefined'?_jlRampTime.toFixed(1):'?')
+          +' obs='+(window._jlActiveObstacleType||'-')
+          +' canyon='+((typeof _canyonActive!=='undefined'&&(_canyonActive||_canyonExiting))?1:0)
+          +' timer='+_LT_LATERAL.timer.toFixed(2)
+          +' gateOK='+((_LT_LATERAL.enabled
+              && typeof _jlRampTime!=='undefined' && _jlRampTime>=4
+              && window._jlActiveObstacleType==='lightning'
+              && !(typeof _canyonActive!=='undefined'&&(_canyonActive||_canyonExiting)))?1:0));
+      }
+    }
+
     if (!_LT_LATERAL.enabled) return;
     if (!state || !state._jetLightningMode) return;
     if (typeof _jlRampTime === 'undefined' || _jlRampTime < 4) return;
