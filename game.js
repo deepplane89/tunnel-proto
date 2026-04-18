@@ -21075,7 +21075,7 @@ function _tickAsteroidSpawner(dt) {
   }
 
   // ── Filler asteroids (decorative, no hit check) ─────────────────────
-  if (T.fillerEnabled && state._jetLightningMode) {
+  if (T.fillerEnabled && state._jetLightningMode && _jlRampTime >= 2) {
     _astFillerTimer -= dt;
     if (_astFillerTimer <= 0) {
       _astFillerTimer = T.fillerFreq * (0.6 + Math.random() * 0.8);
