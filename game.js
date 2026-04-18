@@ -9687,16 +9687,15 @@ function spawnCorridorRow() {
     // Advance phase accumulator — one row = 2π/period radians
     state.corridorSineT += (2 * Math.PI) / period;
     center = amp * Math.sin(state.corridorSineT);
-    state.corridorGapCenter = center;
   } else {
     state.corridorSineT = 0;
     center = 0;
-    state.corridorGapCenter = 0;
   }
 
-  // center is already set above via sine computation
   // Canyon mode: skip cone spawning, just use the sine for wall tracking
+  // Do NOT overwrite corridorGapCenter when slab canyon is active — it owns that value
   if (_canyonActive) { if (!_canyonManual) state.corridorRowsDone++; return; }
+  state.corridorGapCenter = center;
 
   const wallJitter = 0.6;
 
@@ -17572,31 +17571,7 @@ window.addEventListener('keydown', (e) => {
     dbgEl.classList.toggle('visible', dbgVisible);
   }
   // V — toggle canyon on/off
-  if ((e.key === 'v' || e.key === 'V') && state.phase === 'playing') {
-    if (_canyonActive) {
-      // Use _jlCanyonStop in JL mode for clean teardown (restores dirLight, clears track state)
-      if (state._jetLightningMode) {
-        _jlCanyonStop();
-        for (const id of ['canyon_1','canyon_2','canyon_straight','canyon_1_lt','canyon_2_lt']) {
-          _jlTrackActive[id] = false;
-        }
-      } else {
-        _destroyCanyonWalls();
-      }
-      _canyonActive = false;
-      _canyonManual = false;
-      _canyonMode   = 0;
-      console.log('[CANYON] OFF');
-    } else {
-      _canyonSinePhase = 0;
-      _canyonActive = true;
-      _canyonManual = true;
-      if (_canyonMode === 0) _canyonMode = 1; // default to Corridor 1 if no mode set
-      Object.assign(_canyonTuner, _CANYON_PRESETS[_canyonMode] || _CANYON_PRESETS[1]);
-      _createCanyonWalls();
-      console.log('[CANYON] ON — mode:', _canyonMode);
-    }
-  }
+  // V key is handled by the canyon tuner panel listener below
 });
 
 // ═══════════════════════════════════════════════════
@@ -17834,12 +17809,11 @@ window.addEventListener('keydown', (e) => {
     });
   }
 
-  // Separate keydown listener — checks panelVisible flag, not _canyonActive
+  // V key — toggle tuner panel independently of canyon state
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'v' && e.key !== 'V') return;
     if (state.phase !== 'playing') return;
-    // _canyonActive has already been toggled by the other V listener
-    panelVisible = _canyonActive; // show when canyon is on, hide when off
+    panelVisible = !panelVisible;
     if (panelVisible) { buildPanel(); panel.style.display = 'block'; }
     else panel.style.display = 'none';
   });
