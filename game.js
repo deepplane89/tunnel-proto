@@ -7728,16 +7728,19 @@ function _createCanyonWalls() {
       // entranceEnd: Z of last entrance slab; regular + overflow continue from here
       const entranceEnd    = SAFE_Z - (T.entranceSlabs - 1) * SPACING;
       const lastRegularZ   = entranceEnd - (initCount - T.entranceSlabs) * SPACING;
+      // ENTRANCE spawns far out at -500 (scrolls in from distance).
+      // Final resting pattern (where it would have been at spawn pre-change): -150/-170/-190.
+      // Regular slabs unchanged (near spawn, hidden until entrance arrives).
+      const ENTRANCE_SPAWN_Z = -500;
       const initZ = isEntrance
-        ? SAFE_Z - i * SPACING                                       // entrance: -150, -170, -190
+        ? ENTRANCE_SPAWN_Z - i * SPACING                             // entrance far: -500/-520/-540
         : i < initCount
-          ? entranceEnd - (i - T.entranceSlabs + 1) * SPACING        // regular: butt against entrance
-          : lastRegularZ - (i - initCount + 1) * SPACING;            // overflow: continue from last regular
+          ? entranceEnd - (i - T.entranceSlabs + 1) * SPACING        // regular: same as today
+          : lastRegularZ - (i - initCount + 1) * SPACING;            // overflow: same as today
       const slab = makeSlab(side, seed, initZ, i, thick);
-      // Only hide slabs that are genuinely beyond the camera far clip (z < -590)
-      // Everything within view starts visible — corridor must be fully present at spawn
-      // All regular slabs start visible — overflow slabs are beyond far clip (~-600)
-      // so the GPU never renders them, but they must be visible so recycle minZ anchors correctly.
+      // Regular slabs hidden at init — revealed when entrance reaches corridor front zone.
+      // Entrance visible immediately (it's the thing emerging from distance).
+      if (!isEntrance) slab.visible = false;
       chunks[k].push(slab);
     }
   });
@@ -7747,11 +7750,16 @@ function _createCanyonWalls() {
   ['left','right'].forEach(k => {
     const side = k === 'left' ? -1 : 1;
     chunks[k].forEach((pivot) => {
-      // Entrance slabs: X matches corridor at that Z so gate is flush with walls, rotation always perpendicular
+      // Entrance: X frozen at FINAL resting Z (-150/-170/-190), not spawn Z (-500/-520/-540).
+      // This way the gate visually sits where it would end up, flying at the ship as a stable shape.
       if (pivot.userData.isEntrance) {
-        const halfX   = T.halfXOverride || 34;
-        const center  = _canyonXAtZ(pivot.position.z);
-        pivot.userData.bakedX = center + halfX * side;
+        const halfX    = T.halfXOverride || 34;
+        // Find this entrance slab's index by its Z offset from ENTRANCE_SPAWN_Z=-500
+        const entIdx   = Math.round((-500 - pivot.position.z) / SPACING); // 0,1,2
+        const finalZ   = SAFE_Z - entIdx * SPACING;                       // -150,-170,-190
+        const center   = _canyonXAtZ(finalZ);
+        pivot.userData.bakedX    = center + halfX * side;
+        pivot.userData.entFinalZ = finalZ; // for trigger check later
         pivot.position.x = pivot.userData.bakedX;
         pivot.rotation.y = 0;
       } else {
@@ -7775,7 +7783,8 @@ function _createCanyonWalls() {
   {
     const halfX     = T.halfXOverride || 34;
     const H         = T.slabH;
-    const lintelZ   = SAFE_Z - ((T.entranceSlabs - 1) * SPACING) / 2; // midpoint of entrance stack
+    // Lintel spawns far out with entrance (matches entrance middle slab Z=-520).
+    const lintelZ   = -500 - ((T.entranceSlabs - 1) * SPACING) / 2;   // e.g. -520
     const lintelW   = (halfX * 2) + 10;                               // span L→R with small overlap into walls
     const lintelH   = H * 0.5;                                        // top half of wall height
     const lintelD   = T.entranceThick;                                // same Z-depth as entrance
@@ -7826,6 +7835,7 @@ function _createCanyonWalls() {
     canyonLight,
     _spacing:     SPACING,
     _footOff:     FOOT_OFF,
+    _corridorRevealed: false, // flips true when entrance reaches trigger Z
   };
 }
 
@@ -7965,13 +7975,33 @@ function _updateCanyonWalls(dt, speed) {
   // Tick holographic overlay shader time
   if (_canyonWalls.holoMat) _canyonWalls.holoMat.uniforms.time.value += dt;
   const spacing = _canyonWalls._spacing;
-  // Advance canyon sine phase proportional to world scroll
-  if (T.sineIntensity > 0) _canyonSinePhase += (scroll / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
+  // Advance canyon sine phase proportional to world scroll.
+  // Paused until corridor reveal — keeps init-baked X values consistent with
+  // the phase the recycle path will see on frame 1 of corridor motion.
+  if (T.sineIntensity > 0 && _canyonWalls._corridorRevealed) {
+    _canyonSinePhase += (scroll / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
+  }
 
   // ── Lintel: scroll forward with world, hide when past despawn (one-shot, like entrance) ──
   if (_canyonWalls.lintel) {
     _canyonWalls.lintel.position.z += scroll;
     if (_canyonWalls.lintel.position.z > DESPAWN_Z + spacing) _canyonWalls.lintel.visible = false;
+  }
+
+  // ── Corridor reveal: when nearest entrance slab reaches Z=-210 (front of corridor),
+  //    unhide all regular slabs. Before this, regular slabs are frozen in place + invisible.
+  //    After, they scroll/recycle normally. One-shot.
+  if (!_canyonWalls._corridorRevealed && !_canyonExiting) {
+    let nearestEntZ = -Infinity;
+    for (const m of _canyonWalls.left) {
+      if (m.userData.isEntrance && m.visible && m.position.z > nearestEntZ) nearestEntZ = m.position.z;
+    }
+    if (nearestEntZ >= -210) {
+      _canyonWalls._corridorRevealed = true;
+      _canyonWalls.left.forEach(m => { if (!m.userData.isEntrance) m.visible = true; });
+      _canyonWalls.right.forEach(m => { if (!m.userData.isEntrance) m.visible = true; });
+      console.log('[CANYON] corridor revealed at entrance Z='+nearestEntZ.toFixed(1));
+    }
   }
 
   // ── Baked-X corridor tracking ───────────────────────────────────────────
@@ -7987,6 +8017,11 @@ function _updateCanyonWalls(dt, speed) {
     const meshes = _canyonWalls[k];
 
     meshes.forEach(m => {
+      // Freeze regular slabs at their init Z until entrance arrives and reveal fires.
+      // Entrance scrolls normally. This keeps the corridor exactly where today's baseline
+      // places it (Z=-210 to -490) at the moment of reveal, so corridor math is identical.
+      if (!m.userData.isEntrance && !_canyonWalls._corridorRevealed) return;
+
       m.position.z += scroll;
 
       // ── Distance fade-in: ramp emissive from 0 at spawnDepth to full by -150 ──
