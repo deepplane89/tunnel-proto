@@ -21704,10 +21704,10 @@ function startJetLightning() {
   _bankMax        = 0.04;
   _bankSmoothing  = 8;
 
-  _asteroidTuner.enabled     = true;
+  _asteroidTuner.enabled     = false;  // track system enables at startT:4
   _asteroidTuner.showWarning  = false;
   _noSpawnMode               = false;
-  _astTimer                = 2.0;  // 2s grace after liftoff
+  _astTimer                = 4.0;  // 4s grace after liftoff
   state.l4CorridorActive   = false;
   state.l4CorridorDone     = true;
   state.score         = 490; // LEVELS[3].scoreThreshold
@@ -21980,8 +21980,8 @@ const _JL_TRACKS = [
     startT: 4, endT: 20,
     settings: {
       enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 1.4, staggerGap: 0.6, salvoCount: 1,
-      size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
+      frequency: 1.8, staggerGap: 0.6, salvoCount: 1,
+      size: 1.0, sizeVariance: 0.45, laneMin: -8, laneMax: 8,
     },
   },
   {
