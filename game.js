@@ -7939,7 +7939,7 @@ function _updateCanyonWalls(dt, speed) {
       m.position.z += scroll;
 
       // ── Distance fade-in: transparent at spawnDepth, opaque by SAFE_Z (-150) ──
-      if (!m.userData.isEntrance && m.children[0]) {
+      if (m.children[0]) {
         const fadeStart = T.spawnDepth || -250;
         const fadeEnd   = -150;
         const fadeT     = Math.min(1, Math.max(0, (m.position.z - fadeStart) / (fadeEnd - fadeStart)));
