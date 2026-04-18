@@ -7328,10 +7328,10 @@ let _canyonManual = false; // true when triggered by V key — bypasses sequence
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true },
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-250, _allCyan:true },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-250, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-250, _allCyan:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-250, _allCyan:true },
 };
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
@@ -8003,8 +8003,8 @@ function _updateCanyonWalls(dt, speed) {
     });
     // Only collide if the nearest slab is actually close in Z — skip if gap is passing through
     const maxCollisionDZ = spacing * 1.5;
-    const leftEdge  = (nearLeft  && bestLZ < maxCollisionDZ) ? nearLeft.userData.bakedX  : -(CORRIDOR_NARROW_X - footOff);
-    const rightEdge = (nearRight && bestRZ < maxCollisionDZ) ? nearRight.userData.bakedX :  (CORRIDOR_NARROW_X - footOff);
+    const leftEdge  = (nearLeft  && bestLZ < maxCollisionDZ) ? nearLeft.userData.bakedX  : -9999;
+    const rightEdge = (nearRight && bestRZ < maxCollisionDZ) ? nearRight.userData.bakedX :  9999;
     if (shipX < leftEdge + buffer || shipX > rightEdge - buffer) {
       killPlayer();
       // Brief invincibility window so a single wall contact doesn't fire 60x/s
