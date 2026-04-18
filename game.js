@@ -21019,6 +21019,24 @@ function _spawnFillerAsteroid() {
 
 function _tickAsteroidSpawner(dt) {
   const T = _asteroidTuner;
+
+  // ── Lateral camp punish — runs regardless of T.enabled so it fires during pure LT segments ──
+  if (T.lateralEnabled && state._jetLightningMode && _jlRampTime >= 2) {
+    T._lateralTimer -= dt;
+    if (T._lateralTimer <= 0) {
+      T._lateralTimer = T.lateralFreq * (0.7 + Math.random() * 0.6);
+      const side = Math.random() < 0.5 ? 1 : -1;
+      const offset = T.lateralMinOff + Math.random() * (T.lateralMaxOff - T.lateralMinOff);
+      const sx = (state && state.shipX) || 0;
+      const spawnX = sx + side * offset;
+      if (window._jlActiveObstacleType === 'lightning' && window._spawnLightning) {
+        window._spawnLightning(spawnX);
+      } else {
+        _spawnAsteroid(spawnX);
+      }
+    }
+  }
+
   if (!T.enabled) return;
   if (_noSpawnMode && !_chaosMode && !state._jetLightningMode) return;
   // Keep chaos params live every tick so slider changes take effect instantly
@@ -21083,22 +21101,6 @@ function _tickAsteroidSpawner(dt) {
     }
   }
 
-  // ── Lateral camp punish — independent timer, spawns offset from shipX ──
-  if (T.lateralEnabled && state._jetLightningMode) {
-    T._lateralTimer -= dt;
-    if (T._lateralTimer <= 0) {
-      T._lateralTimer = T.lateralFreq * (0.7 + Math.random() * 0.6);
-      const side = Math.random() < 0.5 ? 1 : -1;
-      const offset = T.lateralMinOff + Math.random() * (T.lateralMaxOff - T.lateralMinOff);
-      const sx = (state && state.shipX) || 0;
-      const spawnX = sx + side * offset;
-      if (window._jlActiveObstacleType === 'lightning' && window._spawnLightning) {
-        window._spawnLightning(spawnX);
-      } else {
-        _spawnAsteroid(spawnX);
-      }
-    }
-  }
 }
 
 // ── Cleanup: remove all active asteroids ─────────────────────────────────────
