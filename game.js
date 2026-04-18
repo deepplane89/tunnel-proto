@@ -7798,6 +7798,7 @@ function _createCanyonWalls() {
     }
     renderer.compile(_warmScene, _warmCam);
     console.log('[CANYON PREWARM] compiled '+_seenGeos.size+' unique geometries (shaders compile on first use)');
+    if (window._perfDiag) window._perfDiag.tag('canyon_prewarm', _seenGeos.size+'geos');
     // Don't dispose proxy geometries — they reference real slab geometries still in use
     // _warmScene goes out of scope, proxy meshes GC naturally
   } catch(e) {
@@ -7955,6 +7956,7 @@ function _updateCanyonWalls(dt, speed) {
       _canyonWalls.left.forEach(m => { if (!m.userData.isEntrance) m.visible = true; });
       _canyonWalls.right.forEach(m => { if (!m.userData.isEntrance) m.visible = true; });
       console.log('[CANYON] corridor revealed at entrance Z='+nearestEntZ.toFixed(1));
+      if (window._perfDiag) window._perfDiag.tag('canyon_reveal');
     }
   }
 
@@ -17953,8 +17955,121 @@ const _fpsEl = document.getElementById('fps-overlay');
   });
 })();
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  PERF DIAGNOSTIC — per-frame timing + event tags + first-render detection
+//  Purpose: pinpoint source of freeze (shader compile vs geo upload vs GC vs
+//  draw-call spike vs JS stall). Pure additive — no behavior changes.
+//  Toggle: window._perfDiagOn = false to silence.
+//  Threshold: frames >20ms log as [FREEZE]. Rolling p95/p99 every 2s as [PERF].
+// ═══════════════════════════════════════════════════════════════════════════
+window._perfDiagOn = true;
+const _perfDiag = (function() {
+  let _frameStartTs = 0;
+  let _renderStartTs = 0;
+  let _renderEndTs = 0;
+  let _lastFrameEndTs = 0;
+  let _prevDraws = 0;
+  let _prevTris = 0;
+  let _prevHeap = 0;
+  let _seenPrograms = new WeakSet(); // track compiled programs
+  let _frameEvents = [];              // events tagged this frame
+  let _rollingFrames = [];            // frame times for last 2s
+  let _rollingStart = 0;
+
+  function _getHeap() {
+    if (performance.memory && performance.memory.usedJSHeapSize) {
+      return performance.memory.usedJSHeapSize;
+    }
+    return 0;
+  }
+
+  function _detectNewPrograms() {
+    // Walk renderer.info.programs; return count of programs not yet seen.
+    // First render of a new material = shader compile stall this frame.
+    if (!renderer || !renderer.info || !renderer.info.programs) return 0;
+    let newCount = 0;
+    for (const p of renderer.info.programs) {
+      if (!_seenPrograms.has(p)) {
+        _seenPrograms.add(p);
+        newCount++;
+      }
+    }
+    return newCount;
+  }
+
+  function frameStart() {
+    if (!window._perfDiagOn) return;
+    _frameStartTs = performance.now();
+    _frameEvents.length = 0;
+  }
+
+  function markRenderStart() {
+    if (!window._perfDiagOn) return;
+    _renderStartTs = performance.now();
+  }
+
+  function markRenderEnd() {
+    if (!window._perfDiagOn) return;
+    _renderEndTs = performance.now();
+  }
+
+  function tag(name, extra) {
+    if (!window._perfDiagOn) return;
+    _frameEvents.push(extra ? (name + '(' + extra + ')') : name);
+  }
+
+  function frameEnd() {
+    if (!window._perfDiagOn) return;
+    if (_frameStartTs === 0) return; // not initialized
+    const now = performance.now();
+    const frameMs = now - _frameStartTs;
+    const jsMs = (_renderStartTs > 0) ? (_renderStartTs - _frameStartTs) : 0;
+    const renderMs = (_renderEndTs > _renderStartTs) ? (_renderEndTs - _renderStartTs) : 0;
+
+    const draws = (renderer && renderer.info) ? renderer.info.render.calls : 0;
+    const tris  = (renderer && renderer.info) ? renderer.info.render.triangles : 0;
+    const heap  = _getHeap();
+
+    const drawsDelta = draws - _prevDraws;
+    const trisDelta  = tris - _prevTris;
+    const heapDelta  = heap - _prevHeap;
+
+    const newShaders = _detectNewPrograms();
+
+    // Rolling window for p95/p99
+    _rollingFrames.push(frameMs);
+    if (_rollingStart === 0) _rollingStart = now;
+    if (now - _rollingStart >= 2000) {
+      const sorted = _rollingFrames.slice().sort((a,b)=>a-b);
+      const p50 = sorted[Math.floor(sorted.length*0.5)];
+      const p95 = sorted[Math.floor(sorted.length*0.95)];
+      const p99 = sorted[Math.floor(sorted.length*0.99)];
+      const worst = sorted[sorted.length-1];
+      console.log('[PERF] '+sorted.length+' frames / 2s — p50='+p50.toFixed(1)+'ms p95='+p95.toFixed(1)+'ms p99='+p99.toFixed(1)+'ms worst='+worst.toFixed(1)+'ms');
+      _rollingFrames.length = 0;
+      _rollingStart = now;
+    }
+
+    // Bad frame: emit detailed log
+    if (frameMs > 20) {
+      const evts = _frameEvents.length ? _frameEvents.join(', ') : '(none)';
+      const heapStr = heap > 0 ? (' heap='+(heap/1048576).toFixed(1)+'MB d=' + (heapDelta>=0?'+':'') + (heapDelta/1048576).toFixed(1)+'MB') : '';
+      const shaderStr = newShaders > 0 ? (' newShaders='+newShaders) : '';
+      console.log('[FREEZE] '+frameMs.toFixed(1)+'ms | js='+jsMs.toFixed(1)+' render='+renderMs.toFixed(1)+' | draws='+draws+'(d'+(drawsDelta>=0?'+':'')+drawsDelta+') tris='+Math.round(tris/1000)+'k(d'+(trisDelta>=0?'+':'')+Math.round(trisDelta/1000)+'k)'+heapStr+shaderStr+' | events: '+evts);
+    }
+
+    _prevDraws = draws;
+    _prevTris = tris;
+    _prevHeap = heap;
+  }
+
+  return { frameStart, markRenderStart, markRenderEnd, frameEnd, tag };
+})();
+window._perfDiag = _perfDiag;
+
 function animate() {
   requestAnimationFrame(animate);
+  _perfDiag.frameStart();
   // FPS + draw call measurement
   if (_fpsOn) {
     _fpsFrames++;
@@ -18042,7 +18157,7 @@ function animate() {
   // Keep water X in sync with ship so reflection doesn't drift
   mirrorMesh.position.x = state.shipX;
 
-  if (state.phase === 'paused') { composer.render(); return; }
+  if (state.phase === 'paused') { _perfDiag.markRenderStart(); composer.render(); _perfDiag.markRenderEnd(); _perfDiag.frameEnd(); return; }
 
   updateAurora(rawDt);
   updateL5Flares(rawDt);
@@ -18105,9 +18220,12 @@ function animate() {
       _thrusterHazePass.uniforms.uAspect.value = window.innerWidth / window.innerHeight;
     }
   }
+  _perfDiag.markRenderStart();
   composer.render();
+  _perfDiag.markRenderEnd();
   if (_fpsOn) _lastDC = renderer.info.render.calls;
   updateDebug();
+  _perfDiag.frameEnd();
 }
 
 // ═══════════════════════════════════════════════════
@@ -20760,6 +20878,8 @@ function _getAsteroidFromPool() {
 function _spawnAsteroid(targetX) {
   const inst = _getAsteroidFromPool();
   if (!inst) return;
+  if (window._perfDiag) window._perfDiag.tag('asteroid_spawn', inst.userData && inst.userData._hasRendered ? 'pooled' : 'fresh');
+  if (inst.userData) inst.userData._hasRendered = true;
   const T = _asteroidTuner;
   const radius = T.size + (Math.random() - 0.5) * T.sizeVariance * 2;
 
@@ -22679,6 +22799,7 @@ window._jlDebug = {
   // Warning disc pulses for warningTime seconds, then bolt slams and lingers.
   // After the strike the bolt is a planted world-space column — ship flies past it.
   function _spawnLightning(targetX) {
+    if (window._perfDiag) window._perfDiag.tag('lightning_spawn');
     const shipZ  = _shipZ();
     const landZ  = shipZ + _LT.spawnZ;  // spawnZ is negative = ahead of ship
     const velX   = (state && state.shipVelX) || 0;
