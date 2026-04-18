@@ -7777,31 +7777,8 @@ function _createCanyonWalls() {
       }
     });
   });
-  // ==== LINTEL: horizontal slab bridging entrance walls, occludes view into corridor ====
-  // Positioned at entrance center Z, centered X=0, spans full left-right gap.
-  // Y covers top half of wall height (H/2 to H). Scrolls with world, hides past despawn, never recycles.
-  {
-    const halfX     = T.halfXOverride || 34;
-    const H         = T.slabH;
-    // Lintel spawns far out with entrance (matches entrance middle slab Z=-520).
-    const lintelZ   = -500 - ((T.entranceSlabs - 1) * SPACING) / 2;   // e.g. -520
-    const lintelW   = (halfX * 2) + 10;                               // span L→R with small overlap into walls
-    const lintelH   = H * 0.5;                                        // top half of wall height
-    const lintelD   = T.entranceThick;                                // same Z-depth as entrance
-    const lintelGeo = new THREE.BoxGeometry(lintelW, lintelH, lintelD);
-    // Use cyan material if _allCyan (to match entrance), dark otherwise. Matches first entrance slab.
-    const lintelMat = T._allCyan ? cyanMat : (T._allDark ? darkMat : cyanMat);
-    const lintel = new THREE.Mesh(lintelGeo, lintelMat);
-    lintel.position.set(0, H - lintelH/2, lintelZ); // top edge at Y=H, bottom at Y=H/2
-    lintel.frustumCulled = false;
-    lintel.userData.isLintel = true;
-    scene.add(lintel);
-    chunks.lintel = lintel;
-  }
-
   console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
   console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick+' spawnDepth='+T.spawnDepth);
-  if (chunks.lintel) console.log('[LINTEL] z='+chunks.lintel.position.z.toFixed(1)+' y='+chunks.lintel.position.y.toFixed(1)+' size=('+chunks.lintel.geometry.parameters.width+','+chunks.lintel.geometry.parameters.height+','+chunks.lintel.geometry.parameters.depth+')');
 
   // ==== SPAWN DUMP: where every slab actually starts on the Z axis ====
   // Camera far clip ~600, camera at z=9, so slabs past z=-591 are frustum-culled.
@@ -7829,7 +7806,6 @@ function _createCanyonWalls() {
     strips:       [...chunks.left, ...chunks.right],
     left:         chunks.left,
     right:        chunks.right,
-    lintel:       chunks.lintel || null,
     cyanMat, darkMat, holoMat,
     cyanTex, darkTex,
     canyonLight,
@@ -7849,10 +7825,6 @@ function _destroyCanyonWalls() {
     scene.remove(pivot);
     pivot.children.forEach(child => { if (child.geometry) child.geometry.dispose(); });
   });
-  if (_canyonWalls.lintel) {
-    scene.remove(_canyonWalls.lintel);
-    if (_canyonWalls.lintel.geometry) _canyonWalls.lintel.geometry.dispose();
-  }
   ['cyanMat','darkMat','holoMat'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
   ['cyanTex','darkTex'].forEach(k => { if(_canyonWalls[k]) _canyonWalls[k].dispose(); });
   if (_canyonWalls.canyonLight) {
@@ -7980,12 +7952,6 @@ function _updateCanyonWalls(dt, speed) {
   // the phase the recycle path will see on frame 1 of corridor motion.
   if (T.sineIntensity > 0 && _canyonWalls._corridorRevealed) {
     _canyonSinePhase += (scroll / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
-  }
-
-  // ── Lintel: scroll forward with world, hide when past despawn (one-shot, like entrance) ──
-  if (_canyonWalls.lintel) {
-    _canyonWalls.lintel.position.z += scroll;
-    if (_canyonWalls.lintel.position.z > DESPAWN_Z + spacing) _canyonWalls.lintel.visible = false;
   }
 
   // ── Corridor reveal: when nearest entrance slab reaches Z=-210 (front of corridor),
