@@ -7329,7 +7329,7 @@ let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
   1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true },
-  2: { slabH:55, slabW:26, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
   3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:false },
   4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:200, entranceSlabs:3, spawnDepth:-600, _allCyan:true },
 };
