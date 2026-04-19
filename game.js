@@ -7356,12 +7356,13 @@ const _CANYON_PRESETS = {
   // Has optional ramp fields: sineStartI/Z/FullZ for gradual sine-intensity along Z,
   // halfXStart/Full/StartZ/FullZ for corridor width squeeze along Z.
   // Undefined fields → flat behavior.
+  // Default: dynamic canyon — strong sine ramping in, tight x-wing exit.
   5: { slabH:55, slabW:20, slabThick:60,
-       sineIntensity:0.30, sineAmp:120, sinePeriod:330, sineSpeed:1,
-       sineStartI:0.0,   sineStartZ:-150, sineFullZ:-500,
-       halfXOverride:50,
-       halfXStart:60,    halfXFull:25, halfXStartZ:-150, halfXFullZ:-500,
-       entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.5,
+       sineIntensity:0.55, sineAmp:180, sinePeriod:220, sineSpeed:1.2,
+       sineStartI:0.15,  sineStartZ:-150, sineFullZ:-500,
+       halfXOverride:70,
+       halfXStart:70,    halfXFull:8,  halfXStartZ:-150, halfXFullZ:-500,
+       entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.6,
        _allCyan:false },
 };
 let _canyonSqueezeRow = 0;
@@ -8116,6 +8117,19 @@ function _updateCanyonWalls(dt, speed) {
           }
         }
         m.visible = true;
+      } else if (_canyonMode === 5 && !m.userData.isEntrance) {
+        // Mode 5 live-rebake: recompute bakedX + rotation every frame against current Z.
+        // Required because halfX tapers along Z — a slab spawned deep with tight halfX
+        // would keep its tight bake as it scrolls into the wide zone, mismatching the
+        // intended wall shape. Rebaking per-frame lets the wall "morph" smoothly as it
+        // approaches the ship. Only mode 5 does this; C1-C4 keep stable-wall behavior.
+        const slabZ = m.position.z;
+        const center = _canyonXAtZ(slabZ);
+        const centerNext = _canyonXAtZ(slabZ - spacing);
+        const halfX  = _canyonHalfXAtZ(slabZ);
+        m.userData.bakedX = center + halfX * side;
+        m.position.x = m.userData.bakedX;
+        m.rotation.y = side * Math.atan2(centerNext - center, spacing);
       } else {
         // Hold baked X — rotation frozen at bake time, only updates on recycle
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
@@ -22473,6 +22487,8 @@ function _jlTickCorridor(dt, effectiveSpd) {
 // Helper — activate a canyon preset from the JL sequencer (pure obstacle, pauses spawner)
 let _canyonSavedDirLight = null;
 function _jlCanyonStart(mode) {
+  // Respect manual EXPERIMENTAL canyon (mode 5) — sequencer won't override it
+  if (_canyonManual && _canyonMode === 5) return;
   if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
   _canyonMode    = mode;
   _canyonExiting = false;
@@ -22487,6 +22503,8 @@ function _jlCanyonStart(mode) {
 }
 // Helper — activate canyon alongside obstacles (does NOT pause spawner)
 function _jlCanyonStartOpen(mode) {
+  // Respect manual EXPERIMENTAL canyon (mode 5) — sequencer won't override it
+  if (_canyonManual && _canyonMode === 5) return;
   if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
   _canyonMode    = mode;
   _canyonExiting = false;
@@ -22501,6 +22519,8 @@ function _jlCanyonStartOpen(mode) {
 }
 // Helper — tear down canyon from JL sequencer
 function _jlCanyonStop() {
+  // Respect manual EXPERIMENTAL canyon (mode 5) — sequencer won't tear it down
+  if (_canyonManual && _canyonMode === 5) return;
   if (_canyonActive && _canyonWalls) {
     // Scroll-out exit: let slabs drift off naturally instead of instant pop
     _canyonExiting = true;
