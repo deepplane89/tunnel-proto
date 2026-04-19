@@ -2028,13 +2028,20 @@ function updateGalaxyScroll(dt) {
   nebulaPosAttr.needsUpdate = true;
 
   // Warp streaks — Z-aligned, perspective camera creates radial look.
-  // Scale warp count with speed: 200 at BASE_SPEED, up to 1800 at peak
+  // Scale warp count with speed: 200 at BASE_SPEED, up to 1800 at peak.
+  // JL faked visual speed: pretend state.speed is higher to push count/accel up.
+  let _warpSpd = state.speed;
+  if (state._jetLightningMode && state.phase === 'playing') {
+    const rampT = Math.min(1, Math.max(0, (typeof _jlRampTime !== 'undefined' ? _jlRampTime : 0) / 2.5));
+    const targetMult = (_canyonActive || _canyonExiting) ? 1.55 : 1.40;
+    _warpSpd = state.speed * (1.0 + (targetMult - 1.0) * rampT);
+  }
   const _warpMinCount = 200, _warpMaxCount = 1800;
-  const _speedT = Math.min(1, Math.max(0, (state.speed - BASE_SPEED) / (BASE_SPEED * 1.1))); // 0…1 over speed range — maxes out at 2.1x (T4c ICE STORM cyan sun)
+  const _speedT = Math.min(1, Math.max(0, (_warpSpd - BASE_SPEED) / (BASE_SPEED * 1.1))); // 0…1 over speed range — maxes out at 2.1x (T4c ICE STORM cyan sun)
   const _targetWarpCount = Math.round(_warpMinCount + (_warpMaxCount - _warpMinCount) * _speedT);
   if (_targetWarpCount !== WARP_COUNT) _warpRebuild(_targetWarpCount);
   // Both points accelerate in Z; leading faster → streaks elongate with speed.
-  const accelMult = state.speed * _warpSpeed * 0.05;
+  const accelMult = _warpSpd * _warpSpeed * 0.05;
   const wp = _warpPosAttr.array;
   for (let i = 0; i < WARP_COUNT; i++) {
     _warpLeadVel[i]  += _WARP_LEAD_ACCEL  * accelMult * dt;
@@ -12699,6 +12706,9 @@ function startGame() {
   state.startedFromL1  = true;
   state.isDeathRun     = false;
   state._jetLightningMode = false;
+  // Clear JL sun warp — death-run tick will re-apply if applicable
+  if (sunMat && sunMat.uniforms) sunMat.uniforms.uIsL3Warp.value = 0;
+  if (sunCapMat && sunCapMat.uniforms) sunCapMat.uniforms.uIsL3Warp.value = 0;
   state.deathRunVibeIdx = 0;
   state.deathRunRestBeat       = 0;
   state.deathRunMechCooldown   = 0;
@@ -18347,11 +18357,27 @@ function animate() {
     accumulator -= FIXED_DT;
   }
 
+  // JL visual speed boost — JL caps state.speed at 54/62 u/s, which makes
+  // FOV/warp/water underperform. Feed a faked higher "visual speed" to
+  // perception-only systems without touching physics. Ramps in over 2.5s
+  // from launch so the handoff from liftoff feels snappy.
+  // Target fake speed: BASE*2.11 = 76 → matches T4c ICE STORM feel.
+  // Canyon segments get an extra +10% on top so they punch harder.
+  const _jlVisualSpeed = (() => {
+    if (!state._jetLightningMode || state.phase !== 'playing') return state.speed;
+    const rampT = Math.min(1, Math.max(0, (_jlRampTime || 0) / 2.5));
+    const base  = state.speed; // 54 open, 62 canyon
+    const targetMult = (_canyonActive || _canyonExiting) ? 1.55 : 1.40;
+    const mult = 1.0 + (targetMult - 1.0) * rampT;
+    return base * mult;
+  })();
+
   // FOV scales with speed — most effective speed perception trick.
   // Lerps toward base+boost during gameplay, back to base on death/title.
   // Skip during retry sweep (sweep controls FOV directly)
   if (!_retrySweepActive) {
-    const speedFrac = (state.phase === 'playing') ? Math.min(state.speed / 80, 1) : 0;
+    const _fovSpd = state._jetLightningMode ? _jlVisualSpeed : state.speed;
+    const speedFrac = (state.phase === 'playing') ? Math.min(_fovSpd / 80, 1) : 0;
     let targetFOV = _baseFOV + _fovSpeedBoost * speedFrac;
     // Death zoom-out: push FOV wider during explosion (only during dead phase)
     if (_expDeathZoomActive && state.phase === 'dead') targetFOV = _expDeathZoomTarget;
@@ -18370,11 +18396,30 @@ function animate() {
   mirrorMesh.material.uniforms.time.value += rawDt * 0.5;
   // Forward water flow — scroll normal map along Z proportional to speed
   if (state.phase === 'playing' && state.thrusterPower > 0 && !state.introActive) {
-    const _wSpd = state.invincibleSpeedActive ? state.speed * 1.8 : state.speed;
+    const _rawWSpd = state._jetLightningMode ? _jlVisualSpeed : state.speed;
+    const _wSpd = state.invincibleSpeedActive ? _rawWSpd * 1.8 : _rawWSpd;
     const _wSpdNorm = _wSpd / BASE_SPEED; // 1.0 at T1, 2.5 at T5c
     _waterFlowZ -= _wSpd * _wSpdNorm * rawDt * _waterFlowScale; // squared scaling
     _waterFlowZ %= 10000;
     mirrorMesh.material.uniforms.uFlowZ.value = _waterFlowZ;
+  }
+
+  // JL sun warp — Quilez domain warp on sun during Jet Lightning, except
+  // ice (shader 3) and gold (shader 4) which already have builtin warp.
+  // Skip during liftoff/intro so the launch can play clean.
+  if (state._jetLightningMode && state.phase === 'playing'
+      && !state.introActive && !state._introLiftActive
+      && sunMat && sunMat.uniforms) {
+    const _curShader = (typeof _currentSunShader !== 'undefined') ? _currentSunShader : 0;
+    const _builtin = (_curShader === 3 || _curShader === 4);
+    const _wantW = _builtin ? 0.0 : 1.0;
+    const _curW  = sunMat.uniforms.uIsL3Warp.value;
+    if (Math.abs(_curW - _wantW) > 0.01) {
+      sunMat.uniforms.uIsL3Warp.value += (_wantW - _curW) * Math.min(1, rawDt * 2);
+    } else {
+      sunMat.uniforms.uIsL3Warp.value = _wantW;
+    }
+    if (sunCapMat && sunCapMat.uniforms) sunCapMat.uniforms.uIsL3Warp.value = sunMat.uniforms.uIsL3Warp.value;
   }
   // Sun surface churn
   if (sunMat && sunMat.uniforms) sunMat.uniforms.uTime.value += rawDt;
