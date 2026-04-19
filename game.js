@@ -7716,7 +7716,11 @@ function _createCanyonWalls() {
       // Entrance: X frozen at FINAL resting Z (-150/-170/-190), not spawn Z (-500/-520/-540).
       // This way the gate visually sits where it would end up, flying at the ship as a stable shape.
       if (pivot.userData.isEntrance) {
-        const halfX    = T.halfXOverride || 34;
+        // Entrance-only pad: mouth is 10u wider each side than corridor proper.
+        // Only applied at INIT — recycled entrance slabs (line ~8030) snap back
+        // to halfXOverride so the corridor behind doesn't inherit extra width.
+        const ENTRANCE_PAD = 10;
+        const halfX    = (T.halfXOverride || 34) + ENTRANCE_PAD;
         // Find this entrance slab's index by its Z offset from ENTRANCE_SPAWN_Z=-500
         const entIdx   = Math.round((-500 - pivot.position.z) / SPACING); // 0,1,2
         const finalZ   = SAFE_Z - entIdx * SPACING;                       // -150,-170,-190
@@ -7854,7 +7858,13 @@ function _canyonXAtZ(worldZ) {
   const T = _canyonTuner;
   const base = state.corridorGapCenter || 0;
   if (T.sineIntensity <= 0) return base;
-  const phase = (worldZ / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
+  // Phase reference at entrance Z so sin(phase)=0 at the mouth — entrance walls
+  // are centered on corridorGapCenter (shipX), not displaced by ±sineAmp. C2 was
+  // killing ship at entrance because (worldZ/period)*2π gave sin≈-0.98 at z=-150,
+  // shifting the corridor -67u off ship center. Now entrance is flush, sine
+  // curves begin PAST the entrance naturally.
+  const ENTRANCE_REF_Z = -150;
+  const phase = ((worldZ - ENTRANCE_REF_Z) / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
   return base + T.sineAmp * T.sineIntensity * Math.sin(phase);
 }
 
