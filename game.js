@@ -17729,16 +17729,7 @@ window.addEventListener('keydown', (e) => {
     });
   }
 
-  function rebuildTex() {
-    if (!_canyonWalls) return;
-    _canyonWalls.gridTex.dispose();
-    const newTex = _makeCanyonGridTexture();
-    _canyonWalls.strips.forEach(m => {
-      m.material.emissiveMap = newTex;
-      m.material.needsUpdate = true;
-    });
-    _canyonWalls.gridTex = newTex;
-  }
+  // rebuildTex removed — referenced nonexistent gridTex / _makeCanyonGridTexture
 
   function hdr(txt) {
     const d = document.createElement('div');
@@ -17765,18 +17756,11 @@ window.addEventListener('keydown', (e) => {
       T[key] = parseFloat(sl.value);
       vl.textContent = sl.value;
       if (mode === 'geo') rebuildGeo();
-      else if (mode === 'tex') rebuildTex();
       else if (mode === 'live-cyan') {
         if (_canyonWalls && _canyonWalls.cyanMat) {
           _canyonWalls.cyanMat.emissiveIntensity = T.cyanEmi;
           _canyonWalls.cyanMat.roughness = T.cyanRgh;
           _canyonWalls.cyanMat.needsUpdate = true;
-        }
-      } else if (mode === 'live-holo') {
-        // Slab holo overlay removed — sliders are no-ops now (preserved so tuner UI doesn't crash)
-        if (false && _canyonWalls) {
-          // no-op
-          void T;
         }
       } else if (mode === 'dark-tex') {
         rebuildDarkTex();
@@ -17792,6 +17776,7 @@ window.addEventListener('keydown', (e) => {
         if (_canyonWalls && _canyonWalls.darkMat) {
           _canyonWalls.darkMat.roughness  = T.darkRgh;
           _canyonWalls.darkMat.clearcoat  = T.darkClearcoat;
+          _canyonWalls.darkMat.emissiveIntensity = T.darkEmi;
           _canyonWalls.darkMat.needsUpdate = true;
         }
       }
@@ -17801,31 +17786,16 @@ window.addEventListener('keydown', (e) => {
     panel.appendChild(row);
   }
 
-  function colorPicker(label, key, mode) {
-    const T = _canyonTuner;
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;margin:2px 0;gap:5px;';
-    const lbl = document.createElement('span');
-    lbl.style.cssText = 'flex:0 0 85px;font-size:10px;color:#aef;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-    lbl.textContent = label;
-    const inp = document.createElement('input');
-    inp.type = 'color'; inp.value = T[key];
-    inp.style.cssText = 'flex:1;height:22px;cursor:pointer;border:none;background:none;';
-    inp.addEventListener('input', () => {
-      T[key] = inp.value;
-      if (mode === 'tex') rebuildTex();
-      else if (mode === 'geo') rebuildGeo();
-    });
-    row.appendChild(lbl); row.appendChild(inp);
-    panel.appendChild(row);
-  }
-
-  function toggle(label, key) {
+  function toggle(label, key, mode) {
+    // mode: 'geo' = destroy+recreate pool, undefined/other = just flip flag
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;margin:4px 0;gap:8px;';
     const chk = document.createElement('input');
-    chk.type = 'checkbox'; chk.checked = _canyonTuner[key];
-    chk.addEventListener('change', () => { _canyonTuner[key] = chk.checked; });
+    chk.type = 'checkbox'; chk.checked = !!_canyonTuner[key];
+    chk.addEventListener('change', () => {
+      _canyonTuner[key] = chk.checked;
+      if (mode === 'geo') rebuildGeo();
+    });
     const lbl = document.createElement('label');
     lbl.style.cssText = 'font-size:10px;color:#aef;cursor:pointer;';
     lbl.textContent = label;
@@ -17867,23 +17837,24 @@ window.addEventListener('keydown', (e) => {
     hdr('— CYAN SLAB —');
     slider('Emissive',      'cyanEmi',      0,   2,  0.05, 'live-cyan');
     slider('Roughness',     'cyanRgh',      0,   1,  0.05, 'live-cyan');
-    slider('Holo opacity',  'holoOpacity',  0,   1,  0.05, 'live-holo');
-    slider('Grid size',     'holoGrid',     1,  20,  0.5,  'live-holo');
 
     hdr('— DARK SLAB —');
     slider('Crack count',   'darkCrkCount',   1, 15, 1,    'dark-tex');
     slider('Crack bright',  'darkCrkBright',  0,  2, 0.05, 'dark-tex');
     slider('Roughness',     'darkRgh',        0,  1, 0.02, 'live-dark-mat');
     slider('Clearcoat',     'darkClearcoat',  0,  1, 0.05, 'live-dark-mat');
+    slider('Emissive',      'darkEmi',        0,  3, 0.05, 'live-dark-mat');
 
     hdr('— LIGHTS —');
     slider('Intensity',     'lightIntensity', 0,  3, 0.05, 'live-lights');
 
     hdr('— CORRIDOR —');
-    slider('Wall spacing',   'halfXOverride',  1,  300,  1,  'live');
+    slider('Wall spacing',   'halfXOverride',  1,  300,  1,  'live-sine');
     slider('Entrance thick', 'entranceThick',  5, 2000,  5,  'geo');
     slider('Entrance slabs', 'entranceSlabs',  1,   20,  1,  'geo');
     slider('Spawn depth',    'spawnDepth',  -600, -100, 10,  'geo');
+    toggle('All cyan',       '_allCyan',  'geo');
+    toggle('All dark',       '_allDark',  'geo');
 
     hdr('— SINE CURVES —');
     slider('Intensity',      'sineIntensity',  0,    1, 0.01, 'live-sine');
@@ -17893,7 +17864,6 @@ window.addEventListener('keydown', (e) => {
 
     hdr('— LIVE —');
     slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
-    toggle('freeze wide',   'freezeWide');
 
     const btn = document.createElement('button');
     btn.textContent = 'REBUILD GEO';
@@ -17901,19 +17871,40 @@ window.addEventListener('keydown', (e) => {
     btn.onclick = rebuildGeo;
     panel.appendChild(btn);
 
+    const rbx = document.createElement('button');
+    rbx.textContent = 'REBAKE X';
+    rbx.style.cssText = 'margin-top:4px;width:100%;background:#1a0a2a;border:1px solid #c08cff;color:#c08cff;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+    rbx.onclick = rebakeAllX;
+    panel.appendChild(rbx);
+
+    const dmp = document.createElement('button');
+    dmp.textContent = 'DUMP TUNER JSON';
+    dmp.style.cssText = 'margin-top:4px;width:100%;background:#2a1a0a;border:1px solid #ffc060;color:#ffc060;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+    dmp.onclick = () => {
+      const snap = JSON.stringify(_canyonTuner, null, 2);
+      console.log('[TUNER DUMP]\n' + snap);
+      try { navigator.clipboard && navigator.clipboard.writeText(snap); } catch(e){}
+    };
+    panel.appendChild(dmp);
+
     hdr('— PRESETS —');
-    const PRESETS = [
-      { label: 'Canyon Corridor 1', mode: 1, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:true } },
-      { label: 'Canyon Corridor 2', mode: 2, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false, _allDark:true } },
-      { label: 'Regular Canyon',    mode: 3, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
-      { label: 'Straight Canyon',   mode: 4, vals: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:2000, entranceSlabs:3, spawnDepth:-400, _allCyan:false } },
-    ];
-    PRESETS.forEach(({ label, mode, vals }) => {
+    const PRESET_LABELS = {
+      1: 'Canyon Corridor 1',
+      2: 'Canyon Corridor 2',
+      3: 'Regular Canyon',
+      4: 'Straight Canyon',
+    };
+    [1,2,3,4].forEach((mode) => {
+      const vals = _CANYON_PRESETS[mode];
+      if (!vals) return;
       const pb = document.createElement('button');
-      pb.textContent = label;
+      pb.textContent = PRESET_LABELS[mode] || ('Preset '+mode);
       pb.style.cssText = 'margin-top:6px;width:100%;background:#0a1a0a;border:1px solid #00ff88;color:#00ff88;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
       pb.onclick = () => {
         _canyonMode = mode;
+        // Clear mutually-exclusive palette flags first so preset doesn't inherit stale state
+        _canyonTuner._allCyan = false;
+        _canyonTuner._allDark = false;
         Object.assign(_canyonTuner, vals);
         _canyonSinePhase = 0;
         if (_canyonActive) { _destroyCanyonWalls(); _createCanyonWalls(); }
