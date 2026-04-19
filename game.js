@@ -7352,6 +7352,17 @@ const _CANYON_PRESETS = {
   2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
   3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false },
   4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:2.6, _allCyan:false },
+  // Mode 5 = EXPERIMENTAL — test bed, B hotkey only, never triggered by sequencer.
+  // Has optional ramp fields: sineStartI/Z/FullZ for gradual sine-intensity along Z,
+  // halfXStart/Full/StartZ/FullZ for corridor width squeeze along Z.
+  // Undefined fields → flat behavior.
+  5: { slabH:55, slabW:20, slabThick:60,
+       sineIntensity:0.30, sineAmp:120, sinePeriod:330, sineSpeed:1,
+       sineStartI:0.0,   sineStartZ:-150, sineFullZ:-500,
+       halfXOverride:50,
+       halfXStart:60,    halfXFull:25, halfXStartZ:-150, halfXFullZ:-500,
+       entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.5,
+       _allCyan:false },
 };
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
@@ -7727,7 +7738,9 @@ function _createCanyonWalls() {
         // Only applied at INIT — recycled entrance slabs (line ~8030) snap back
         // to halfXOverride so the corridor behind doesn't inherit extra width.
         const ENTRANCE_PAD = 10;
-        const halfX    = (T.halfXOverride || 34) + ENTRANCE_PAD;
+        // Mode 5 entrance matches the near-end (start Z) squeeze value.
+        const _baseHalf = (_canyonMode === 5) ? _canyonHalfXAtZ(SAFE_Z) : (T.halfXOverride || 34);
+        const halfX    = _baseHalf + ENTRANCE_PAD;
         // Find this entrance slab's index by its Z offset from ENTRANCE_SPAWN_Z=-500
         const entIdx   = Math.round((-500 - pivot.position.z) / SPACING); // 0,1,2
         const finalZ   = SAFE_Z - entIdx * SPACING;                       // -150,-170,-190
@@ -7740,7 +7753,7 @@ function _createCanyonWalls() {
         const initZ      = pivot.position.z;
         const center     = _canyonXAtZ(initZ);
         const centerNext = _canyonXAtZ(initZ - SPACING);
-        const halfX      = _canyonPredictHalfX(0);
+        const halfX      = (_canyonMode === 5) ? _canyonHalfXAtZ(initZ) : _canyonPredictHalfX(0);
         // Init rotation: _canyonXAtZ is correct here — each slab is at a unique Z
         // so the stateless sine naturally gives the right angle per slab.
         // (predictCenter is wrong at init — it's near phase=0 so all deltas are equal)
@@ -7858,11 +7871,35 @@ function _destroyCanyonWalls() {
 // z=-500. Result: easy entry, stable walls, dramatic curves deeper.
 function _canyonIntensityAtZ(worldZ) {
   const T = _canyonTuner;
+  // Mode 5 EXPERIMENTAL: preset-driven ramp via sineStartI/sineStartZ/sineFullZ.
+  // Missing fields → flat sineIntensity. Can ramp up OR down (startI can be higher than target).
+  if (_canyonMode === 5) {
+    if (T.sineStartI === undefined) return T.sineIntensity;
+    const SZ = (T.sineStartZ !== undefined) ? T.sineStartZ : -150;
+    const FZ = (T.sineFullZ  !== undefined) ? T.sineFullZ  : -500;
+    const denom = (FZ - SZ) || 1;
+    const t = Math.min(1, Math.max(0, (worldZ - SZ) / denom));
+    return T.sineStartI + (T.sineIntensity - T.sineStartI) * t;
+  }
+  // C2 legacy hardcoded ramp (unchanged).
   if (_canyonMode !== 2) return T.sineIntensity;
   const START_Z = -150, FULL_Z = -500;
   const START_I = 0.15;
   const t = Math.min(1, Math.max(0, (worldZ - START_Z) / (FULL_Z - START_Z)));
   return START_I + (T.sineIntensity - START_I) * t;
+}
+
+// EXPERIMENTAL (mode 5) — halfX tapers along Z via preset fields.
+// Missing halfXStart/halfXFull → flat halfXOverride. 5u minimum floor prevents wall cross-over.
+function _canyonHalfXAtZ(worldZ) {
+  const T = _canyonTuner;
+  if (_canyonMode !== 5) return T.halfXOverride;
+  if (T.halfXStart === undefined || T.halfXFull === undefined) return T.halfXOverride;
+  const SZ = (T.halfXStartZ !== undefined) ? T.halfXStartZ : -150;
+  const FZ = (T.halfXFullZ  !== undefined) ? T.halfXFullZ  : -500;
+  const denom = (FZ - SZ) || 1;
+  const t = Math.min(1, Math.max(0, (worldZ - SZ) / denom));
+  return Math.max(5, T.halfXStart + (T.halfXFull - T.halfXStart) * t);
 }
 function _canyonPredictCenter(rowsAhead) {
   const T = _canyonTuner;
@@ -8057,9 +8094,9 @@ function _updateCanyonWalls(dt, speed) {
         const rowsAhead  = Math.max(0, Math.round((3.9 - slabZ) / spacing));
         const center     = _canyonPredictCenter(rowsAhead);
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
-        const halfX      = _canyonPredictHalfX(rowsAhead);
+        const halfX      = (_canyonMode === 5) ? _canyonHalfXAtZ(slabZ) : _canyonPredictHalfX(rowsAhead);
         if (m.userData.isEntrance) {
-          const eHalfX = _canyonTuner.halfXOverride || 34;
+          const eHalfX = (_canyonMode === 5) ? _canyonHalfXAtZ(slabZ) : (_canyonTuner.halfXOverride || 34);
           m.userData.bakedX = eHalfX * side;
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
@@ -17731,7 +17768,7 @@ window.addEventListener('keydown', (e) => {
         const rowsAhead  = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
         const center     = _canyonPredictCenter(rowsAhead);
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
-        const halfX      = _canyonPredictHalfX(rowsAhead);
+        const halfX      = (_canyonMode === 5) ? _canyonHalfXAtZ(m.position.z) : _canyonPredictHalfX(rowsAhead);
         m.userData.bakedX = center + halfX * side;
         m.position.x = m.userData.bakedX;
         m.rotation.y = side * Math.atan(centerNext - center);
@@ -17913,14 +17950,34 @@ window.addEventListener('keydown', (e) => {
     };
     panel.appendChild(dmp);
 
+    // EXPERIMENTAL section — only shows when mode 5 is active.
+    // Edits here call rebakeAllX so visible slabs update immediately.
+    if (_canyonMode === 5) {
+      hdr('— EXPERIMENTAL: SINE RAMP —');
+      slider('sineStartI',  'sineStartI',  0,    1, 0.01, 'live-sine');
+      slider('sineStartZ',  'sineStartZ', -500, -50, 10,  'live-sine');
+      slider('sineFullZ',   'sineFullZ',  -700,-150, 10,  'live-sine');
+      hdr('— EXPERIMENTAL: WIDTH SQUEEZE —');
+      slider('halfXStart',  'halfXStart',   5,  200, 1,   'live-sine');
+      slider('halfXFull',   'halfXFull',    5,  200, 1,   'live-sine');
+      slider('halfXStartZ', 'halfXStartZ', -500,-50, 10,  'live-sine');
+      slider('halfXFullZ',  'halfXFullZ',  -700,-150,10,  'live-sine');
+      const xbtn = document.createElement('button');
+      xbtn.textContent = 'REBAKE X (EXP)';
+      xbtn.style.cssText = 'margin-top:4px;width:100%;background:#2a1a2a;border:1px solid #ff80ff;color:#ff80ff;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+      xbtn.onclick = rebakeAllX;
+      panel.appendChild(xbtn);
+    }
+
     hdr('— PRESETS —');
     const PRESET_LABELS = {
       1: 'Canyon Corridor 1',
       2: 'Canyon Corridor 2',
       3: 'Regular Canyon',
       4: 'Straight Canyon',
+      5: 'EXPERIMENTAL (B)',
     };
-    [1,2,3,4].forEach((mode) => {
+    [1,2,3,4,5].forEach((mode) => {
       const vals = _CANYON_PRESETS[mode];
       if (!vals) return;
       const pb = document.createElement('button');
@@ -17958,6 +18015,47 @@ window.addEventListener('keydown', (e) => {
     panelVisible = !panelVisible;
     if (panelVisible) { buildPanel(); panel.style.display = 'block'; }
     else panel.style.display = 'none';
+  });
+
+  // B key — toggle EXPERIMENTAL canyon (mode 5) for testing
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'b' && e.key !== 'B') return;
+    if (state.phase !== 'playing') return;
+    // If experimental canyon is running, stop it
+    if (_canyonMode === 5 && (_canyonActive || _canyonWalls)) {
+      if (_canyonWalls) _destroyCanyonWalls();
+      _canyonActive = false;
+      _canyonExiting = false;
+      _canyonManual = false;
+      _jlCorridor.active = false;
+      if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+        dirLight.intensity = _canyonSavedDirLight;
+        _canyonSavedDirLight = null;
+      }
+      _canyonMode = 0;
+      if (panelVisible) buildPanel();
+      return;
+    }
+    // Otherwise spawn experimental canyon (tear down any other canyon first)
+    const vals = _CANYON_PRESETS[5];
+    if (!vals) return;
+    _canyonMode = 5;
+    _canyonTuner._allCyan = false;
+    _canyonTuner._allDark = false;
+    Object.assign(_canyonTuner, vals);
+    _canyonSinePhase = 0;
+    if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+    _canyonExiting = false;
+    _canyonActive = true;
+    _canyonManual = true;
+    _jlCorridor.active = false;
+    state.corridorGapCenter = state.shipX || 0;
+    if (typeof dirLight !== 'undefined' && dirLight) {
+      if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+      dirLight.intensity = 0;
+    }
+    _createCanyonWalls();
+    if (panelVisible) buildPanel();
   });
 })();
 
