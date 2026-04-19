@@ -7844,12 +7844,29 @@ function _destroyCanyonWalls() {
   }
 }
 
+// Z-based intensity ramp — C2 ONLY. Each slab bakes its X ONCE at its bake-time
+// Z using the intensity value for that Z. bakedX is then frozen and the slab
+// only scrolls in Z, so walls never drift laterally during their visible life.
+// First curve is gentle (I=0.15 at entrance), full dramatic swing kicks in by
+// z=-500. Result: easy entry, stable walls, dramatic curves deeper.
+function _canyonIntensityAtZ(worldZ) {
+  const T = _canyonTuner;
+  if (_canyonMode !== 2) return T.sineIntensity;
+  const START_Z = -150, FULL_Z = -500;
+  const START_I = 0.15;
+  const t = Math.min(1, Math.max(0, (worldZ - START_Z) / (FULL_Z - START_Z)));
+  return START_I + (T.sineIntensity - START_I) * t;
+}
 function _canyonPredictCenter(rowsAhead) {
   const T = _canyonTuner;
   const base = state.corridorGapCenter || 0;
   if (T.sineIntensity <= 0) return base;
   const phase = _canyonSinePhase + rowsAhead * (2 * Math.PI / T.sinePeriod) * T.sineSpeed;
-  return base + T.sineAmp * T.sineIntensity * Math.sin(phase);
+  // Convert rowsAhead back to worldZ for intensity lookup (row 0 = ship Z=3.9)
+  const SPACING = (_canyonWalls && _canyonWalls._spacing) || 20;
+  const approxZ = 3.9 - rowsAhead * SPACING;
+  const I = _canyonIntensityAtZ(approxZ);
+  return base + T.sineAmp * I * Math.sin(phase);
 }
 function _canyonPredictHalfX(rowsAhead) {
   return _canyonTuner.halfXOverride;
@@ -7858,14 +7875,12 @@ function _canyonXAtZ(worldZ) {
   const T = _canyonTuner;
   const base = state.corridorGapCenter || 0;
   if (T.sineIntensity <= 0) return base;
-  // Phase reference at entrance Z so sin(phase)=0 at the mouth — entrance walls
-  // are centered on corridorGapCenter (shipX), not displaced by ±sineAmp. C2 was
-  // killing ship at entrance because (worldZ/period)*2π gave sin≈-0.98 at z=-150,
-  // shifting the corridor -67u off ship center. Now entrance is flush, sine
-  // curves begin PAST the entrance naturally.
+  // Phase reference at entrance Z so sin(phase)=0 at the mouth.
   const ENTRANCE_REF_Z = -150;
   const phase = ((worldZ - ENTRANCE_REF_Z) / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
-  return base + T.sineAmp * T.sineIntensity * Math.sin(phase);
+  // Z-based intensity (C2 only) — gentler first curve, baked once per slab's Z.
+  const I = _canyonIntensityAtZ(worldZ);
+  return base + T.sineAmp * I * Math.sin(phase);
 }
 
 let _canyonDbgFrame = 0;
