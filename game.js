@@ -17877,6 +17877,22 @@ window.addEventListener('keydown', (e) => {
     rbx.onclick = rebakeAllX;
     panel.appendChild(rbx);
 
+    const stp = document.createElement('button');
+    stp.textContent = 'STOP CANYON';
+    stp.style.cssText = 'margin-top:4px;width:100%;background:#2a0a0a;border:1px solid #ff6060;color:#ff6060;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+    stp.onclick = () => {
+      if (_canyonWalls) _destroyCanyonWalls();
+      _canyonActive = false;
+      _canyonExiting = false;
+      _canyonManual = false;
+      _jlCorridor.active = false;
+      if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+        dirLight.intensity = _canyonSavedDirLight;
+        _canyonSavedDirLight = null;
+      }
+    };
+    panel.appendChild(stp);
+
     const dmp = document.createElement('button');
     dmp.textContent = 'DUMP TUNER JSON';
     dmp.style.cssText = 'margin-top:4px;width:100%;background:#2a1a0a;border:1px solid #ffc060;color:#ffc060;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
@@ -17907,7 +17923,18 @@ window.addEventListener('keydown', (e) => {
         _canyonTuner._allDark = false;
         Object.assign(_canyonTuner, vals);
         _canyonSinePhase = 0;
-        if (_canyonActive) { _destroyCanyonWalls(); _createCanyonWalls(); }
+        if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+        // Manual tuner spawn: bypass JL sequencer, no spawner pause
+        _canyonExiting = false;
+        _canyonActive = true;
+        _canyonManual = true;
+        _jlCorridor.active = false;
+        state.corridorGapCenter = state.shipX || 0;
+        if (typeof dirLight !== 'undefined' && dirLight) {
+          if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+          dirLight.intensity = 0;
+        }
+        _createCanyonWalls();
         buildPanel();
       };
       panel.appendChild(pb);
