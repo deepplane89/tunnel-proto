@@ -7347,27 +7347,40 @@ let _canyonActive = false;
 let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
-const _CANYON_PRESETS = {
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.0, _allCyan:true },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:2.6, _allCyan:false },
+// Presets are deeply frozen so runtime code cannot accidentally mutate them.
+// To change a preset, edit the literal here — NEVER assign to fields at runtime.
+// To apply a preset, call _applyCanyonPreset(preset) (defined just below).
+const _CANYON_PRESETS = Object.freeze({
+  1: Object.freeze({ slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.0, _allCyan:true }),
+  2: Object.freeze({ slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 }),
+  3: Object.freeze({ slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false }),
+  4: Object.freeze({ slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:2.6, _allCyan:false }),
   // Mode 5 = EXPERIMENTAL — test bed, B hotkey only, never triggered by sequencer.
   // Has optional ramp fields: sineStartI/Z/FullZ for gradual sine-intensity along Z,
   // halfXStart/Full/StartZ/FullZ for corridor width squeeze along Z.
   // Undefined fields → flat behavior.
-  5: { slabH:55, slabW:20, slabThick:60,
+  5: Object.freeze({ slabH:55, slabW:20, slabThick:60,
        sineIntensity:0.30, sineAmp:120, sinePeriod:330, sineSpeed:1,
        sineStartI:0.0,   sineStartZ:-150, sineFullZ:-500,
        halfXOverride:50,
        halfXStart:60,    halfXFull:25, halfXStartZ:-150, halfXFullZ:-500,
        entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.5,
-       _allCyan:false },
-};
-let _canyonSqueezeRow = 0;
-let _canyonSqueezeZ   = 0;
-let _canyonSineT         = 0;
-let _canyonSineRows      = 0;
+       _allCyan:false }),
+});
+// Orphan globals from reverted beat-stitcher / squeeze experiments removed. If a
+// future experimental mode needs per-run scratch state, add a fresh variable
+// with a clear comment explaining its owner — don't re-use these names blindly.
+
+// ONE source of truth for applying a preset to _canyonTuner.
+// Clears stale experimental fields (e.g. mode 5's sineStartI/halfXStart/etc.)
+// before assigning, so switching modes never inherits fields from a prior run.
+// Every canyon spawn path (B hotkey, _jlCanyonStart, _jlCanyonStartOpen, tuner
+// preset buttons, _CANYON_PRESETS sequencer activate) MUST call this — never
+// call Object.assign(_canyonTuner, ...) directly.
+function _applyCanyonPreset(preset) {
+  for (const k of Object.keys(_canyonTuner)) delete _canyonTuner[k];
+  Object.assign(_canyonTuner, preset);
+}
 let _canyonSineZ         = 0;
 let _canyonSinePhase     = 0; // canyon-own sine accumulator
 let _canyonExiting       = false; // true during scroll-out exit — slabs drift off, no recycle
@@ -8095,13 +8108,9 @@ function _updateCanyonWalls(dt, speed) {
         const center     = _canyonPredictCenter(rowsAhead);
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
         const halfX      = (_canyonMode === 5) ? _canyonHalfXAtZ(slabZ) : _canyonPredictHalfX(rowsAhead);
-        if (m.userData.isEntrance) {
-          const eHalfX = (_canyonMode === 5) ? _canyonHalfXAtZ(slabZ) : (_canyonTuner.halfXOverride || 34);
-          m.userData.bakedX = eHalfX * side;
-          m.position.x = m.userData.bakedX;
-          m.position.z = slabZ;
-          m.rotation.y = 0;
-        } else {
+        // Entrance slabs are hidden and returned-early above (see `if (m.userData.isEntrance && m.position.z > DESPAWN_Z + spacing)`).
+        // They never reach this recycle bake, so no isEntrance branch is needed here.
+        {
           m.userData.bakedX = center + halfX * side;
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
@@ -17985,10 +17994,7 @@ window.addEventListener('keydown', (e) => {
       pb.style.cssText = 'margin-top:6px;width:100%;background:#0a1a0a;border:1px solid #00ff88;color:#00ff88;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
       pb.onclick = () => {
         _canyonMode = mode;
-        // Clear mutually-exclusive palette flags first so preset doesn't inherit stale state
-        _canyonTuner._allCyan = false;
-        _canyonTuner._allDark = false;
-        Object.assign(_canyonTuner, vals);
+        _applyCanyonPreset(vals); // clears stale fields, applies fresh preset
         _canyonSinePhase = 0;
         if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
         // Manual tuner spawn: bypass JL sequencer, no spawner pause
@@ -18040,9 +18046,7 @@ window.addEventListener('keydown', (e) => {
     const vals = _CANYON_PRESETS[5];
     if (!vals) return;
     _canyonMode = 5;
-    _canyonTuner._allCyan = false;
-    _canyonTuner._allDark = false;
-    Object.assign(_canyonTuner, vals);
+    _applyCanyonPreset(vals); // clears stale fields, applies fresh preset
     _canyonSinePhase = 0;
     if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
     _canyonExiting = false;
@@ -22476,7 +22480,7 @@ function _jlCanyonStart(mode) {
   if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
   _canyonMode    = mode;
   _canyonExiting = false;
-  Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
+  _applyCanyonPreset(_CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
   _canyonActive      = true;
   _canyonManual      = false;
   _jlCorridor.active = true;
@@ -22490,7 +22494,7 @@ function _jlCanyonStartOpen(mode) {
   if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
   _canyonMode    = mode;
   _canyonExiting = false;
-  Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
+  _applyCanyonPreset(_CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
   _canyonActive      = true;
   _canyonManual      = false;
   _jlCorridor.active = false;
