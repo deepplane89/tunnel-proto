@@ -8117,6 +8117,19 @@ function _updateCanyonWalls(dt, speed) {
           }
         }
         m.visible = true;
+      } else if (_canyonMode === 5 && !m.userData.isEntrance) {
+        // Mode 5 live-rebake: recompute bakedX + rotation every frame against current Z.
+        // Required because halfX tapers along Z — a slab spawned deep with tight halfX
+        // would keep its tight bake as it scrolls into the wide zone, mismatching the
+        // intended wall shape. Rebaking per-frame lets the wall "morph" smoothly as it
+        // approaches the ship. Only mode 5 does this; C1-C4 keep stable-wall behavior.
+        const slabZ = m.position.z;
+        const center = _canyonXAtZ(slabZ);
+        const centerNext = _canyonXAtZ(slabZ - spacing);
+        const halfX  = _canyonHalfXAtZ(slabZ);
+        m.userData.bakedX = center + halfX * side;
+        m.position.x = m.userData.bakedX;
+        m.rotation.y = side * Math.atan2(centerNext - center, spacing);
       } else {
         // Hold baked X — rotation frozen at bake time, only updates on recycle
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
