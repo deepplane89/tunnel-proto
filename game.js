@@ -7353,76 +7353,18 @@ const _CANYON_PRESETS = {
   3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false },
   4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:2.6, _allCyan:false },
   // Mode 5 = EXPERIMENTAL — test bed, B hotkey only, never triggered by sequencer.
-  // Uses a beat-stitcher (see _CANYON_BEATS_M5) that mutates _canyonTuner over time,
-  // cycling through C1-like / C2-like / STRAIGHT / JACKKNIFE sections.
-  // Defaults below = first beat (C1-like gentle intro), so canyon is playable even if
-  // the stitcher is disabled or finishes.
+  // Has optional ramp fields: sineStartI/Z/FullZ for gradual sine-intensity along Z,
+  // halfXStart/Full/StartZ/FullZ for corridor width squeeze along Z.
+  // Undefined fields → flat behavior.
+  // Default: dynamic canyon — strong sine ramping in, tight x-wing exit.
   5: { slabH:55, slabW:20, slabThick:60,
-       sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1,
-       halfXOverride:34,
-       entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.4,
-       _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
+       sineIntensity:0.55, sineAmp:180, sinePeriod:220, sineSpeed:1.2,
+       sineStartI:0.15,  sineStartZ:-150, sineFullZ:-500,
+       halfXOverride:70,
+       halfXStart:70,    halfXFull:8,  halfXStartZ:-150, halfXFullZ:-500,
+       entranceThick:700, entranceSlabs:3, spawnDepth:-250, scrollSpeed:1.6,
+       _allCyan:false },
 };
-
-// ── MODE 5 BEAT STITCHER ────────────────────────────────────────────────
-// Each beat mutates _canyonTuner for N "rows" (slab-recycle pairs). Uses exact
-// C1/C2 values so shape matches proven modes. Ticked once per recycled row pair.
-const _CANYON_BEAT_TARGETS = {
-  C1:        { sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1,   halfXOverride:34 },
-  C2:        { sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1,   halfXOverride:34 },
-  STRAIGHT:  { sineIntensity:0,    sineAmp:0,   sinePeriod:330, sineSpeed:1,   halfXOverride:34 },
-  JACKKNIFE: { sineIntensity:0.55, sineAmp:40,  sinePeriod:180, sineSpeed:1.1, halfXOverride:5  },
-};
-// Beat sequence: alternating short bursts, straights as breathers, jackknife climax.
-// `turns` = half sine periods (one turn = peak-to-trough). `rows` = explicit rows.
-const _CANYON_BEATS_M5 = [
-  { kind:'C1',        turns:2 },   // gentle intro, 2 turns
-  { kind:'C2',        turns:1 },   // bigger swing, 1 turn
-  { kind:'C1',        turns:1 },
-  { kind:'STRAIGHT',  rows:12 },
-  { kind:'C2',        turns:2 },
-  { kind:'C1',        turns:1 },
-  { kind:'C2',        turns:1 },
-  { kind:'STRAIGHT',  rows:10 },
-  { kind:'C1',        turns:2 },
-  { kind:'JACKKNIFE', rows:25 },   // climax
-  { kind:'END' },
-];
-let _canyonBeatIdx      = -1;   // -1 = stitcher inactive
-let _canyonBeatRowsLeft = 0;
-const _SPACING_M5 = 20;
-function _canyonBeatRowsFor(beat) {
-  if (beat.rows  !== undefined) return beat.rows;
-  if (beat.turns !== undefined) {
-    const tgt = _CANYON_BEAT_TARGETS[beat.kind];
-    if (!tgt || tgt.sinePeriod <= 0) return 8;
-    // turn = half period worth of forward travel. rows = (turns * period/2) / spacing
-    return Math.max(1, Math.round((beat.turns * tgt.sinePeriod / 2) / _SPACING_M5));
-  }
-  return 8;
-}
-function _canyonApplyBeat(idx) {
-  if (idx < 0 || idx >= _CANYON_BEATS_M5.length) return;
-  const beat = _CANYON_BEATS_M5[idx];
-  if (beat.kind === 'END') return;
-  const tgt = _CANYON_BEAT_TARGETS[beat.kind];
-  if (!tgt) return;
-  Object.assign(_canyonTuner, tgt);
-  _canyonBeatRowsLeft = _canyonBeatRowsFor(beat);
-}
-// Called once per row-pair recycle (left+right). Advances beat, swaps tuner values,
-// and returns true when beat sequence finishes (→ caller should fire canyon stop).
-function _canyonTickBeat() {
-  if (_canyonMode !== 5 || _canyonBeatIdx < 0) return false;
-  _canyonBeatRowsLeft--;
-  if (_canyonBeatRowsLeft > 0) return false;
-  _canyonBeatIdx++;
-  if (_canyonBeatIdx >= _CANYON_BEATS_M5.length) { _canyonBeatIdx = -1; return true; }
-  const beat = _CANYON_BEATS_M5[_canyonBeatIdx];
-  if (beat.kind === 'END') { _canyonBeatIdx = -1; return true; }
-  _canyonApplyBeat(_canyonBeatIdx);
-  return false;
-}
 let _canyonSqueezeRow = 0;
 let _canyonSqueezeZ   = 0;
 let _canyonSineT         = 0;
@@ -8175,14 +8117,6 @@ function _updateCanyonWalls(dt, speed) {
           }
         }
         m.visible = true;
-        // Mode 5 beat stitcher: tick once per row (right-side recycle only, to avoid
-        // double-counting the paired left/right recycles). If beats finish, exit canyon.
-        if (_canyonMode === 5 && side === 1 && !m.userData.isEntrance) {
-          if (_canyonTickBeat()) {
-            _canyonExiting = true;
-            _canyonManual  = false;
-          }
-        }
       } else {
         // Hold baked X — rotation frozen at bake time, only updates on recycle
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
@@ -18111,9 +18045,6 @@ window.addEventListener('keydown', (e) => {
     _canyonTuner._allDark = false;
     Object.assign(_canyonTuner, vals);
     _canyonSinePhase = 0;
-    // Arm beat stitcher at beat 0 (C1 intro) — overrides preset defaults with exact C1 target.
-    _canyonBeatIdx = 0;
-    _canyonApplyBeat(0);
     if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
     _canyonExiting = false;
     _canyonActive = true;
