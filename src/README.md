@@ -12,8 +12,10 @@ the numeric prefixes).
    separators; missing a newline joins two lines mid-token.
 3. **All files share one scope.** A `const` in one file is visible in all
    later files. Do not wrap in `(() => { ... })()` unless intentional.
-4. **Ordering matters.** Prefixes (`00-`, `10-`, `20-`) control concat order.
-   Leave gaps so new files can slot in without renumbering.
+4. **Ordering matters — preserve original byte order.** Prefixes (`00-`, `10-`,
+   `20-`) control concat order. When extracting a new system, its prefix must
+   place it at its original position in game.js, or `verify.sh` will fail.
+   Leave gaps between prefixes so new files can slot in without renumbering.
 5. **Always run `./scripts/verify.sh` before committing.** It proves the
    rebuild is byte-identical to the previous game.js. Never commit a split
    that fails verify.
@@ -22,7 +24,9 @@ the numeric prefixes).
 
 - `00-imports.js` — three.js + addon imports, must come first
 - `10-leaderboard.js` — leaderboard API, submit/render, escapeHtml
-- `20-main.js` — everything else (to be split incrementally)
+- `20-main-early.js` — state, constants, levels, scene setup, explosions, sun, ship, thrusters, obstacles, walls, powerups, laser, fog (still being split)
+- `30-audio.js` — procedural Web Audio: SFX, music tracks, crossfades, magnet whir
+- `40-main-late.js` — grid, level transitions, spawn, funnel, input, shop, game states, sequencers, update/render loops (still being split)
 
 ## Workflow
 
