@@ -23,6 +23,7 @@ yarn-error.log
 
 # Build output
 dist/
+!dist/game.js
 build/
 
 # Stray junk from shell redirects (e.g. accidental `cmd > 61028`)
