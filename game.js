@@ -20998,11 +20998,11 @@ void main(){
   float lava = smoothstep(0.22, 0.55, crack) * smoothstep(0.18, 0.48, crack2);
   lava = clamp(lava, 0.0, 1.0);
 
-  // Base rock: deep void-purple basalt with cool shading (Void Purple palette)
-  vec3 rockColor = mix(vec3(0.05, 0.02, 0.08), vec3(0.14, 0.06, 0.20), nml * 0.5 + fbm(vPos*1.1)*0.3);
-  // Plasma cracks: glowing magenta/violet instead of lava orange
+  // Base rock: very dark basalt with slight roughness shading
+  vec3 rockColor = mix(vec3(0.06, 0.04, 0.04), vec3(0.18, 0.10, 0.06), nml * 0.5 + fbm(vPos*1.1)*0.3);
+  // Lava: glowing orange/red/yellow
   float pulse = 0.85 + 0.15 * sin(uTime * 3.0 + vPos.y * 4.0);
-  vec3 lavaColor = mix(vec3(0.85, 0.00, 1.00), vec3(0.55, 0.10, 0.90), crack * pulse);
+  vec3 lavaColor = mix(vec3(1.0, 0.18, 0.0), vec3(1.0, 0.72, 0.0), crack * pulse);
 
   vec3 col = mix(rockColor, lavaColor, lava);
   // Emissive hotspots where lava is strongest
@@ -21066,10 +21066,10 @@ float fbm(vec3 p){
 void main(){
   float f = fbm(vPos * 2.5 + vec3(0.0, uTime * 0.8, uTime * 0.3));
   f = f * 0.5 + 0.5;
-  // Void Purple ramp: core=pale lavender-white, mid=hot magenta, outer=deep violet
-  vec3 fireInner = vec3(0.95, 0.80, 1.00);
-  vec3 fireMid   = vec3(0.85, 0.15, 1.00);
-  vec3 fireOuter = vec3(0.25, 0.00, 0.45);
+  // Fire color ramp: core=white-yellow, mid=orange, outer=deep red
+  vec3 fireInner = vec3(1.0, 0.95, 0.5);
+  vec3 fireMid   = vec3(1.0, 0.38, 0.0);
+  vec3 fireOuter = vec3(0.6, 0.05, 0.0);
   vec3 col = mix(fireOuter, fireMid, f);
   col = mix(col, fireInner, smoothstep(0.55, 0.85, f));
 
@@ -21097,8 +21097,8 @@ void main(){
   // Pulse gets more frantic as progress → 1
   float pulse = 0.6 + 0.4 * sin(uTime * (4.0 + uProgress * 12.0));
   float alpha = (ring + inner) * pulse * (0.4 + uProgress * 0.6);
-  // Color: violet→hot magenta as impact nears (Void Purple palette)
-  vec3 col = mix(vec3(0.55, 0.15, 1.00), vec3(1.00, 0.05, 0.80), uProgress);
+  // Color: orange→red as impact nears
+  vec3 col = mix(vec3(1.0, 0.55, 0.0), vec3(1.0, 0.1, 0.0), uProgress);
   gl_FragColor = vec4(col, alpha);
 }`;
 
@@ -21180,7 +21180,7 @@ function _buildAsteroidInstance() {
         float d = length(gl_PointCoord - vec2(0.5));
         if(d > 0.5) discard;
         float a = (1.0 - d*2.0) * vAlpha;
-        gl_FragColor = vec4(0.85, 0.25 + vAlpha*0.25, 1.0, a);
+        gl_FragColor = vec4(1.0, 0.45 + vAlpha*0.3, 0.0, a);
       }`,
     transparent: true,
     blending: THREE.AdditiveBlending,
