@@ -5127,7 +5127,7 @@ const shipFireMeshes = []; // 'fire' and 'fire1' GLTF meshes (engine exhaust geo
 // _prebuiltSkins: populated inside gltfLoader.load callback; declared here so applySkin can access it
 let _prebuiltSkins = [];
 const gltfLoader = new GLTFLoader();
-gltfLoader.load('./default_ship.glb', (gltf) => {
+gltfLoader.load('./assets/ships/default_ship.glb', (gltf) => {
   const model = gltf.scene;
   // New ship GLB: Sketchfab export — root matrices handle Y->Z-up conversion.
   // Ship nose points toward +X in model space; rotate so it faces -Z (away from camera).
@@ -5667,7 +5667,7 @@ function _loadAltShip(glbFile, skinDef, callback) {
     return;
   }
   const loader = new GLTFLoader();
-  loader.load('./' + glbFile, (gltf) => {
+  loader.load('./assets/ships/' + glbFile, (gltf) => {
     const model = gltf.scene;
     // Apply config from skin definition
     _applyGlbConfig(skinDef && skinDef.glbConfig);
