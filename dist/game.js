@@ -18223,6 +18223,55 @@ window.addEventListener('keydown', (e) => {
     _createCanyonWalls();
     if (panelVisible) buildPanel();
   });
+
+  // K key — toggle L4-RECREATION canyon (bent-slab mode, experimental).
+  // Spawns Canyon Corridor 1 with _l4Recreation flag on — inner wall faces
+  // bend to trace L4 corridor sine math. Press K again to stop.
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'k' && e.key !== 'K') return;
+    if (state.phase !== 'playing') return;
+    // If L4-recreation canyon is running, stop it
+    if (_canyonTuner._l4Recreation && (_canyonActive || _canyonWalls)) {
+      if (_canyonWalls) _destroyCanyonWalls();
+      _canyonActive = false;
+      _canyonExiting = false;
+      _canyonManual = false;
+      _jlCorridor.active = false;
+      _canyonTuner._l4Recreation = false;
+      if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+        dirLight.intensity = _canyonSavedDirLight;
+        _canyonSavedDirLight = null;
+      }
+      _canyonMode = 0;
+      console.log('[L4-RECREATION] OFF');
+      if (panelVisible) buildPanel();
+      return;
+    }
+    // Otherwise spawn Canyon Corridor 1 + enable L4 recreation flag.
+    // Tear down any other canyon first.
+    const vals = _CANYON_PRESETS[1];
+    if (!vals) return;
+    _canyonMode = 1;
+    _canyonTuner._allCyan = false;
+    _canyonTuner._allDark = false;
+    Object.assign(_canyonTuner, vals);
+    // Flag ON AFTER preset apply (presets don't define it, so it stays off otherwise)
+    _canyonTuner._l4Recreation = true;
+    _canyonSinePhase = 0;
+    if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+    _canyonExiting = false;
+    _canyonActive = true;
+    _canyonManual = true;
+    _jlCorridor.active = false;
+    state.corridorGapCenter = state.shipX || 0;
+    if (typeof dirLight !== 'undefined' && dirLight) {
+      if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+      dirLight.intensity = 0;
+    }
+    _createCanyonWalls();
+    console.log('[L4-RECREATION] ON — flag=true, mode=1, rampCompress=' + _canyonTuner._l4RampCompress + ', ampScale=' + _canyonTuner._l4AmpScale);
+    if (panelVisible) buildPanel();
+  });
 })();
 
 function updateDebug() {
