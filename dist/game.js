@@ -7321,6 +7321,15 @@ const _canyonTuner = {
   sinePeriod:    25.0,  // rows per full cycle (larger = lazier curves)
   sineSpeed:     1.0,   // how fast phase advances per slab scroll tick
   _allCyan:      true,  // true = all slabs cyan, false = alternating cyan/dark
+  // === L4-RECREATION (experimental) ===
+  // When true: inner face of each slab is bent into a column-wise curve that
+  // traces L4's sine-corridor shape. Pinned at near edge to previous slab's
+  // far edge (anchor lock) so adjacent slabs meet without gap.
+  // Flip from console: window._canyonSet({_l4Recreation: true})
+  // No collision changes yet — ship passes through bent walls (Push 1 visual only).
+  _l4Recreation: false,
+  _l4RampCompress: 1.45, // compress L4's 386-row ramp into canyon's ~93-slab window
+  _l4AmpScale:     1.0,  // tune overall amp later
 };
 let _canyonWalls     = null;
 let _canyonTexCache  = null; // pre-warmed textures + materials to avoid first-spawn stutter
@@ -7506,6 +7515,154 @@ function _makeCanyonDarkTex(seed) {
   const tex = new THREE.CanvasTexture(cv);
   return tex;
 }
+
+// === L4-RECREATION math helpers ==========================================
+// Ported from src/40-main-late.js (L4 corridor constants). Returns the L4
+// centerline X at a given worldZ, evaluated as if the canyon was the L4
+// corridor. Pure function. No state. Call at bake time, never per-frame.
+//
+//  worldZ:    the world-Z position of the query point
+//  canyonElapsedSec: seconds since canyon corridor began (for time-based ramp)
+//                   if null, pure Z-based ramp (same shape at any time)
+//
+// Ramp compression: L4 runs 386 rows over 50s. Canyon segment is ~30s, and
+// runs at ~62 u/s with 20u slab spacing ≈ 93 slabs. We compress L4's AMP_RAMP
+// and PERIOD_RAMP by _l4RampCompress (default 1.45x) so the canyon hits L4's
+// mid-to-peak shape within its window.
+//
+// NOTE: this fn is Z-anchored — entrance-ref-Z is -150 (same as _canyonXAtZ),
+// so phase at Z=-150 = 0. That guarantees the corridor mouth is centered.
+const _L4_CONST = {
+  CORRIDOR_WIDE_X:  80, L4_NARROW_X:   6,  PEAK_NARROW:   4.5, KNIFE_NARROW: 3,
+  CLOSE_ROWS:       35, STRAIGHT:      10,
+  AMP_START:        14, AMP_MAX:       44, AMP_RAMP:    120,
+  PERIOD_START:    220, PERIOD_MIN:   160, PERIOD_RAMP: 260,
+  KNIFE_START:     370, KNIFE_END:    395,
+  ROW_GAP_Z:         7,
+};
+
+function _l4SineAtZ(worldZ) {
+  // Map worldZ to L4-row count. Entrance mouth is at Z=-150 (row 0 equivalent),
+  // deeper Z = further into L4 corridor. L4 row_gap = 7u in L4 world; at canyon
+  // scroll speed 62 u/s the canyon covers 7u faster than L4 does, so 1 canyon
+  // slab (20u) = 20/7 ≈ 2.86 L4-rows. Ramp compression scales this further.
+  const C = _L4_CONST;
+  const T = _canyonTuner;
+  const ENTRANCE_REF_Z = -150;
+  // L4 rows elapsed at this worldZ (deeper Z → more rows into corridor)
+  const rawRows   = Math.max(0, (ENTRANCE_REF_Z - worldZ) / C.ROW_GAP_Z);
+  // Compress: pretend we're further into L4 than we actually are
+  const rows      = rawRows * (T._l4RampCompress || 1.0);
+  // Center (sine) — mirrors L4 math exactly
+  let center = 0;
+  if (rows >= C.CLOSE_ROWS + C.STRAIGHT) {
+    const curveRows = rows - (C.CLOSE_ROWS + C.STRAIGHT);
+    const ampT   = Math.min(1, curveRows / C.AMP_RAMP);
+    const amp    = (C.AMP_START + (C.AMP_MAX - C.AMP_START) * ampT * ampT) * (T._l4AmpScale || 1.0);
+    const perT   = Math.min(1, curveRows / C.PERIOD_RAMP);
+    const period = C.PERIOD_START - (C.PERIOD_START - C.PERIOD_MIN) * perT * perT;
+    // Phase: sum of (2pi/period) over accumulated rows. Approximate via integral of period(r):
+    //   phase(rows) ≈ sum_{r=0}^{curveRows} 2pi/period(r). For small compression we
+    //   can accurately use the mean period — at peak, period ranges 220→160, mean ~190.
+    //   For tuning purposes here, use integral approx: phase = 2pi * rows / period_avg.
+    //   TODO after first preview: switch to exact numerical integration if visible drift.
+    const periodAvg = (C.PERIOD_START + period) / 2;
+    const phase     = (2 * Math.PI) * curveRows / periodAvg;
+    center = amp * Math.sin(phase);
+  }
+  return center;
+}
+
+// Bend a slab's inner-face vertex buffer to follow L4 sine. Called after the
+// flat-default geometry is already on the mesh. Overwrites the inner-face
+// triangle positions in-place. Other faces (back, bottom, top, caps) are left
+// flat — we only care about the inner visible corridor wall.
+//
+// Anchor-lock: the near-edge column (c=0) gets pinned to `anchorX` (which is
+// the previous slab's far-edge X). Remaining columns sample L4 sine at their
+// worldZ and apply the X delta relative to what the original flat slab had.
+//
+//  pivot:   the slab's pivot Group (has position.z = slabZ, children[0] = mesh)
+//  slabZ:   world Z of pivot
+//  side:    -1 for left, +1 for right
+//  anchorX: previous slab's far-edge world X (or null for first-in-chain)
+//
+// Returns: this slab's far-edge world X (for next slab's anchor).
+function _bakeSlabCurveForL4(pivot, slabZ, side, anchorX) {
+  const T = _canyonTuner;
+  if (!T._l4Recreation) return null;
+  const mesh = pivot.children && pivot.children[0];
+  if (!mesh || !mesh.geometry) return null;
+  const geo  = mesh.geometry;
+  const posAttr = geo.attributes.position;
+  if (!posAttr) return null;
+  const W    = T.slabW;
+  const COLS = T.cols;
+
+  // Each column's world-Z (pivot.z + local z). Inner-face verts have local Z
+  // in [0, W]. Column c is at local z = (c/COLS) * W. We sample L4 at each
+  // column boundary (0..COLS) — COLS+1 sample points.
+  const sampleCenters = new Array(COLS + 1);
+  for (let c = 0; c <= COLS; c++) {
+    const localZ = (c / COLS) * W;
+    const worldZ = slabZ + localZ;
+    sampleCenters[c] = _l4SineAtZ(worldZ);
+  }
+
+  // Anchor lock: if anchorX provided, shift all samples so sample[0] matches
+  // what the anchor implies. Ship-space: pivot.position.x is the foot X of
+  // this slab at c=0 when flat. anchorX is the previous slab's foot at c=COLS.
+  // Ideally sample[0]_worldFoot === anchorX. If _l4SineAtZ returns center X
+  // and flat baked pivot.x = center + halfX*side, then foot-X = pivot.x (the
+  // offset). So we want sample[0] adjustment so that pivotX_new + sample[0]*side == anchorX.
+  // Easier: store raw centers, let caller set pivot.x = sample[0]*base + halfX*side
+  // and pin remaining columns as deltas relative to sample[0].
+  //
+  // For Push 1 (visual-only): apply X deltas as local-space offsets to inner-face
+  // verts. Baseline: delta[c] = sampleCenters[c] - sampleCenters[0].
+  // Anchor-lock is implicit: at c=0 delta=0, so near-edge is untouched — it sits
+  // wherever pivot.x already put it (which should equal previous slab's far edge
+  // IF pivot.x uses L4 sine). We'll set pivot.x below.
+  const deltas = new Array(COLS + 1);
+  for (let c = 0; c <= COLS; c++) deltas[c] = sampleCenters[c] - sampleCenters[0];
+
+  // Apply deltas to inner-face triangles. Inner face vertices in position buffer:
+  // for r in 0..ROWS-1, c in 0..COLS-1, each quad = 2 triangles = 6 verts.
+  // Triangle pattern in _buildCanyonSlabGeo:
+  //   tri A: (r,c), (r+1,c), (r,c+1)      → cols: c, c, c+1
+  //   tri B: (r,c+1), (r+1,c), (r+1,c+1)  → cols: c+1, c, c+1
+  // That's 6 verts per quad, column pattern: [c, c, c+1, c+1, c, c+1]
+  // Inner face is the FIRST block in the position array — ROWS*COLS quads = 6*5=30 quads = 180 vertex-positions.
+  const ROWS = T.rows;
+  const innerVertCount = ROWS * COLS * 6;
+  const colPattern = [0, 0, 1, 1, 0, 1]; // column offset within quad, per-vertex
+  const arr = posAttr.array;
+  // Inner-face X values are in arr[0], arr[3], arr[6], ...
+  // (x, y, z) every 3 floats. For inner face only (first innerVertCount*3 floats).
+  //
+  // CRITICAL: deltas are in WORLD-X, but mesh has scale.x = side (for left wall,
+  // scale.x = -1 flips X). Applying delta to local-X on a mirrored mesh means
+  // the world effect is delta*side. We want world-X shift of `delta`, so local-X
+  // shift = delta*side.
+  let v = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      for (let k = 0; k < 6; k++) {
+        const cc = c + colPattern[k]; // 0..COLS
+        const worldDelta = deltas[cc];
+        const localDelta = worldDelta * side;
+        arr[v * 3] += localDelta;
+        v++;
+      }
+    }
+  }
+  posAttr.needsUpdate = true;
+  geo.computeVertexNormals();
+
+  // Return far-edge world X for next slab's anchor. Far edge sits at slabZ+W.
+  return sampleCenters[COLS];
+}
+// =========================================================================
 
 function _buildCanyonSlabGeo(seed, thickOverride) {
   // Thick rectangular block: flat back face, angular inner face, profile-shaped cross-section.
@@ -7751,16 +7908,20 @@ function _createCanyonWalls() {
         pivot.rotation.y = 0;
       } else {
         const initZ      = pivot.position.z;
-        const center     = _canyonXAtZ(initZ);
-        const centerNext = _canyonXAtZ(initZ - SPACING);
+        // L4-recreation: override center math with L4 sine. Keep rotation at 0
+        // (bending replaces rotation) and let the bake function bend inner face.
+        const useL4 = _canyonTuner._l4Recreation;
+        const center     = useL4 ? _l4SineAtZ(initZ)             : _canyonXAtZ(initZ);
+        const centerNext = useL4 ? _l4SineAtZ(initZ - SPACING)   : _canyonXAtZ(initZ - SPACING);
         const halfX      = (_canyonMode === 5) ? _canyonHalfXAtZ(initZ) : _canyonPredictHalfX(0);
         // Init rotation: _canyonXAtZ is correct here — each slab is at a unique Z
         // so the stateless sine naturally gives the right angle per slab.
         // (predictCenter is wrong at init — it's near phase=0 so all deltas are equal)
-        const angle = side * Math.atan2(centerNext - center, SPACING);
+        const angle = useL4 ? 0 : side * Math.atan2(centerNext - center, SPACING);
         pivot.userData.bakedX = center + halfX * side;
         pivot.position.x = pivot.userData.bakedX;
         pivot.rotation.y = angle;
+        if (useL4) _bakeSlabCurveForL4(pivot, initZ, side, null);
       }
     });
   });
@@ -8102,10 +8263,14 @@ function _updateCanyonWalls(dt, speed) {
           m.position.z = slabZ;
           m.rotation.y = 0;
         } else {
-          m.userData.bakedX = center + halfX * side;
+          // L4-recreation override: use L4 sine for centerline, bend inner face,
+          // keep rotation at 0 (bending replaces yaw).
+          const useL4      = _canyonTuner._l4Recreation;
+          const l4Center   = useL4 ? _l4SineAtZ(slabZ) : center;
+          m.userData.bakedX = l4Center + halfX * side;
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
-          m.rotation.y = side * Math.atan2(centerNext - center, spacing);
+          m.rotation.y = useL4 ? 0 : side * Math.atan2(centerNext - center, spacing);
           // Reassign cyan/dark material based on positional idx — otherwise recycling
           // scrambles the alternation pattern that was baked at makeSlab time.
           if (m.children[0]) {
@@ -8114,6 +8279,7 @@ function _updateCanyonWalls(dt, speed) {
             const wantMat = wantCyan ? _canyonWalls.cyanMat : _canyonWalls.darkMat;
             if (m.children[0].material !== wantMat) m.children[0].material = wantMat;
           }
+          if (useL4) _bakeSlabCurveForL4(m, slabZ, side, null);
         }
         m.visible = true;
       } else {
