@@ -5123,7 +5123,7 @@ window.addEventListener('keydown', (e) => {
     'position:fixed;top:10px;left:10px;width:calc(min(300px,90vw));max-height:90vh;overflow-y:auto',
     'background:rgba(0,10,20,0.95);border:1px solid #00eeff;color:#00eeff',
     'font-family:monospace;font-size:11px;padding:10px;z-index:9999',
-    'border-radius:4px;scrollbar-width:thin;'
+    'border-radius:4px;scrollbar-width:thin;display:none;'
   ].join(';');
   document.body.appendChild(panel);
 
