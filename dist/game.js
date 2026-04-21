@@ -7330,6 +7330,13 @@ const _canyonTuner = {
   _l4Recreation: false,
   _l4RampCompress: 1.45, // compress L4's 386-row ramp into canyon's ~93-slab window
   _l4AmpScale:     1.0,  // tune overall amp later
+  // L4-only overrides applied at K-hotkey spawn (not applied to C1 preset itself).
+  // _l4HalfX:  half-gap between walls in L4 mode. L4 uses L4_NARROW_X=6 (12u gap).
+  //            Default 8 leaves small buffer over L4 min to avoid wall clipping at peak amp.
+  // _l4SlabW:  Z-length per slab in L4 mode. Longer slabs = fewer recycles + more columns
+  //            across a wider Z span for smoother bend sampling. 40 = 2x default.
+  _l4HalfX:        8,
+  _l4SlabW:       40,
 };
 let _canyonWalls     = null;
 let _canyonTexCache  = null; // pre-warmed textures + materials to avoid first-spawn stutter
@@ -18280,6 +18287,10 @@ window.addEventListener('keydown', (e) => {
     Object.assign(_canyonTuner, vals);
     // Flag ON AFTER preset apply (presets don't define it, so it stays off otherwise)
     _canyonTuner._l4Recreation = true;
+    // L4 overrides — applied AFTER preset to override C1's halfXOverride=34 and slabW=20.
+    // These only take effect in L4-recreation K-mode; C1/C2/C3/C4 JL playback untouched.
+    _canyonTuner.halfXOverride = _canyonTuner._l4HalfX;
+    _canyonTuner.slabW         = _canyonTuner._l4SlabW;
     _canyonSinePhase = 0;
     _l4RowsElapsed = 0;
     if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();

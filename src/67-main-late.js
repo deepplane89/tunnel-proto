@@ -5469,6 +5469,10 @@ window.addEventListener('keydown', (e) => {
     Object.assign(_canyonTuner, vals);
     // Flag ON AFTER preset apply (presets don't define it, so it stays off otherwise)
     _canyonTuner._l4Recreation = true;
+    // L4 overrides — applied AFTER preset to override C1's halfXOverride=34 and slabW=20.
+    // These only take effect in L4-recreation K-mode; C1/C2/C3/C4 JL playback untouched.
+    _canyonTuner.halfXOverride = _canyonTuner._l4HalfX;
+    _canyonTuner.slabW         = _canyonTuner._l4SlabW;
     _canyonSinePhase = 0;
     _l4RowsElapsed = 0;
     if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
