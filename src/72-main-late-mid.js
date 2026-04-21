@@ -5672,7 +5672,7 @@ window._jlDebug = {
         }
       }
       activeObstacles.push(obs);
-      _sessionLogEvent('fatCone_spawn', { x: laneX, scaleXZ: FCT.scaleXZ });
+      if (window._sessionLogEvent) _sessionLogEvent('fatCone_spawn', { x: laneX, scaleXZ: FCT.scaleXZ });
     });
   }
 
@@ -5700,7 +5700,7 @@ window._jlDebug = {
       }
     }
     activeObstacles.push(obs);
-    _sessionLogEvent('fatCone_spawn', { x: laneX, scaleXZ: FCT.scaleXZ });
+    if (window._sessionLogEvent) _sessionLogEvent('fatCone_spawn', { x: laneX, scaleXZ: FCT.scaleXZ });
   }
 
   function _startFcLoop(btn) {
@@ -5744,7 +5744,7 @@ window._jlDebug = {
       const v = +inp.value;
       onChange(v);
       valEl.textContent = v.toFixed(2);
-      _sessionLogSlider('fatcone_' + label, v);
+      if (window._sessionLogSlider) _sessionLogSlider('fatcone_' + label, v);
     };
     row.appendChild(lbl); row.appendChild(inp); row.appendChild(valEl);
     return row;
