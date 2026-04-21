@@ -8008,7 +8008,7 @@ function _updateCanyonWalls(dt, speed) {
           if (m.children[0]) {
             const posIdx = Math.round(-slabZ / spacing);
             const wantCyan = T._allCyan ? true : T._allDark ? false : (posIdx % 2 === 0);
-            const wantMat = wantCyan ? cyanMat : darkMat;
+            const wantMat = wantCyan ? _canyonWalls.cyanMat : _canyonWalls.darkMat;
             if (m.children[0].material !== wantMat) m.children[0].material = wantMat;
           }
         }
