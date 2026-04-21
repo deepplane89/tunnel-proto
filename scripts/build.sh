@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# build.sh — Concatenate src/*.js into game.js.
+# build.sh — Concatenate src/*.js into dist/game.js.
 #
 # This is the "unity build" pattern: source lives as numbered files in src/,
-# but the shipped game.js is a single concatenated file with one shared scope,
-# byte-identical to what the browser loaded before the split.
+# but the shipped dist/game.js is a single concatenated file with one shared
+# scope, byte-identical to what the browser loaded before the split.
 #
 # The files are ordered alphabetically, so numeric prefixes (00-, 10-, 20-,
 # etc.) control concatenation order. Leave gaps between prefixes (00, 10, 20
 # rather than 00, 01, 02) so new files can slot in without renumbering.
 #
 # Usage:
-#   ./scripts/build.sh           # writes ./game.js
+#   ./scripts/build.sh           # writes ./dist/game.js
 #   ./scripts/build.sh -o out.js # writes ./out.js
 #
 # Exit 0 on success, nonzero on failure.
@@ -21,7 +21,8 @@ set -euo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 SRC_DIR="$REPO_ROOT/src"
-OUT_PATH="$REPO_ROOT/game.js"
+OUT_PATH="$REPO_ROOT/dist/game.js"
+mkdir -p "$(dirname "$OUT_PATH")"
 
 # --output / -o flag override
 while [[ $# -gt 0 ]]; do
