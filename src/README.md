@@ -29,9 +29,12 @@ the numeric prefixes).
 - `40-main-late.js` — grid, level transitions, spawn, funnel, level checking, powerup effects (still being split)
 - `45-daily-streak.js` — daily streak rewards UI + state
 - `50-shop.js` — shop UI, purchase flows, currency check, toggleLeaderboard
-- `60-main-late.js` — crash flash, input, reward wheel (still being split)
+- `60-main-late.js` — crash flash, input (keydown/keyup, touch, pause, returnToTitle)
+- `62-reward-wheel.js` — Signal Salvage reward wheel (currently quarantined / disabled in game)
+- `64-main-late.js` — game-over button handlers (death run, restart, exit)
 - `65-settings.js` — settings overlay: audio volumes, mutes, haptics toggle, replay tutorial, show tutorial
-- `67-main-late.js` — haptics, onboarding, game states, sequencers, tuners, update/render loops (still being split)
+- `66-haptics.js` — haptic feedback helpers (vibrate wrappers)
+- `67-main-late.js` — onboarding, game states, sequencers, tuners, update/render loops (still being split)
 
 ## Workflow
 
