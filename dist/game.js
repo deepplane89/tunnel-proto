@@ -17958,6 +17958,7 @@ window.addEventListener('keydown', (e) => {
     const T = _canyonTuner;
     const footOff = _canyonWalls._footOff || 0;
     const spacing = _canyonWalls._spacing;
+    const useL4 = T._l4Recreation;
     ['left','right'].forEach(k => {
       const side = k === 'left' ? -1 : 1;
       _canyonWalls[k].forEach(m => {
@@ -17965,9 +17966,19 @@ window.addEventListener('keydown', (e) => {
         const center     = _canyonPredictCenter(rowsAhead);
         const centerNext = _canyonPredictCenter(rowsAhead + 1);
         const halfX      = (_canyonMode === 5) ? _canyonHalfXAtZ(m.position.z) : _canyonPredictHalfX(rowsAhead);
-        m.userData.bakedX = center + halfX * side;
-        m.position.x = m.userData.bakedX;
-        m.rotation.y = side * Math.atan(centerNext - center);
+        if (useL4 && !m.userData.isEntrance) {
+          // L4-recreation path: center from L4 sine, no yaw (bending replaces it),
+          // and re-bake inner face so halfX/amp/compress slider tweaks take effect live.
+          const l4Center = _l4SineAtZ(m.position.z);
+          m.userData.bakedX = l4Center + halfX * side;
+          m.position.x = m.userData.bakedX;
+          m.rotation.y = 0;
+          _bakeSlabCurveForL4(m, m.position.z, side, null);
+        } else {
+          m.userData.bakedX = center + halfX * side;
+          m.position.x = m.userData.bakedX;
+          m.rotation.y = side * Math.atan(centerNext - center);
+        }
       });
     });
   }
@@ -18008,6 +18019,13 @@ window.addEventListener('keydown', (e) => {
       } else if (mode === 'dark-tex') {
         rebuildDarkTex();
       } else if (mode === 'live-sine') {
+        rebakeAllX();
+      } else if (mode === 'live-l4') {
+        // L4-recreation live tweak — re-runs pivot placement + inner-face bake
+        // on all currently-visible slabs so the slider move is instantly visible.
+        // _l4HalfX slider must mirror into halfXOverride (which is what the bake
+        // math actually reads via _canyonPredictHalfX) so changes take effect live.
+        if (key === '_l4HalfX') T.halfXOverride = T._l4HalfX;
         rebakeAllX();
       } else if (mode === 'live-lights') {
         if (_canyonWalls && _canyonWalls.canyonLight && _canyonWalls.canyonLight.lights) {
@@ -18090,6 +18108,19 @@ window.addEventListener('keydown', (e) => {
 
     hdr('— LIGHTS —');
     slider('Intensity',     'lightIntensity', 0,  3, 0.05, 'live-lights');
+
+    // L4 Recreation sliders — only show when K-mode (L4 flag) is active.
+    // These tune the bent-slab corridor live; changes re-bake visible slabs instantly.
+    if (_canyonTuner._l4Recreation) {
+      hdr('— L4 RECREATION —');
+      slider('L4 halfX',       '_l4HalfX',       1,   80, 0.5, 'live-l4');
+      slider('L4 amp scale',   '_l4AmpScale',    0,    2, 0.05, 'live-l4');
+      slider('L4 row compress','_l4RampCompress',0.1,  4, 0.05, 'live-l4');
+      // Slab length needs geo rebuild (slab mesh dimensions baked in).
+      slider('L4 slab length', '_l4SlabW',      10,  160,  5,   'geo');
+      // Raw halfXOverride override — live apply of _l4HalfX into the active tuner field
+      // so the existing wall-spacing pipeline (rebakeAllX) picks it up without a respawn.
+    }
 
     hdr('— CORRIDOR —');
     slider('Wall spacing',   'halfXOverride',  1,  300,  1,  'live-sine');
