@@ -7276,6 +7276,7 @@ let _canyonSineT         = 0;
 let _canyonSineRows      = 0;
 let _canyonSineZ         = 0;
 let _canyonSinePhase     = 0; // canyon-own sine accumulator
+let _l4RowsElapsed       = 0; // L4-recreation: rows of L4 corridor progression advanced since canyon start
 let _canyonExiting       = false; // true during scroll-out exit — slabs drift off, no recycle
 let _canyonWasCorridor   = false;
 let _canyonDiagFrame     = 0;     // frame counter for periodic diagnostic log
@@ -7449,7 +7450,10 @@ function _l4SineAtZ(worldZ) {
   // L4 rows elapsed at this worldZ (deeper Z → more rows into corridor)
   const rawRows   = Math.max(0, (ENTRANCE_REF_Z - worldZ) / C.ROW_GAP_Z);
   // Compress: pretend we're further into L4 than we actually are
-  const rows      = rawRows * (T._l4RampCompress || 1.0);
+  // Add _l4RowsElapsed: global accumulator advanced per-frame by scroll/ROW_GAP_Z × compress.
+  // This makes the whole corridor walk THROUGH L4's progression (approach → curve → peak → knife)
+  // over time, mirroring how _canyonSinePhase drives C1/C2 sine motion.
+  const rows      = rawRows * (T._l4RampCompress || 1.0) + _l4RowsElapsed;
   // Center (sine) — mirrors L4 math exactly
   let center = 0;
   if (rows >= C.CLOSE_ROWS + C.STRAIGHT) {
@@ -7537,6 +7541,17 @@ function _bakeSlabCurveForL4(pivot, slabZ, side, anchorX) {
   // Inner-face X values are in arr[0], arr[3], arr[6], ...
   // (x, y, z) every 3 floats. For inner face only (first innerVertCount*3 floats).
   //
+  // CRITICAL: recycle bakes run EVERY time a slab cycles to the back. Without caching
+  // the original flat X values, each bake accumulates deltas on top of the previous
+  // bake — slabs drift further from their intended shape on every recycle. Fix:
+  // cache the flat inner-face X array in userData on first bake, restore from it
+  // before applying the new delta set.
+  if (!mesh.userData._flatInnerX) {
+    const flat = new Float32Array(innerVertCount);
+    for (let i = 0; i < innerVertCount; i++) flat[i] = arr[i * 3];
+    mesh.userData._flatInnerX = flat;
+  }
+  const flatX = mesh.userData._flatInnerX;
   // CRITICAL: deltas are in WORLD-X, but mesh has scale.x = side (for left wall,
   // scale.x = -1 flips X). Applying delta to local-X on a mirrored mesh means
   // the world effect is delta*side. We want world-X shift of `delta`, so local-X
@@ -7548,7 +7563,8 @@ function _bakeSlabCurveForL4(pivot, slabZ, side, anchorX) {
         const cc = c + colPattern[k]; // 0..COLS
         const worldDelta = deltas[cc];
         const localDelta = worldDelta * side;
-        arr[v * 3] += localDelta;
+        // Restore flat baseline + apply current delta (replaces prior bake)
+        arr[v * 3] = flatX[v] + localDelta;
         v++;
       }
     }
@@ -7901,6 +7917,7 @@ function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
   console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonSinePhase = 0;
+  _l4RowsElapsed    = 0;
   _canyonExiting    = false;
   // strips are pivot Groups — remove group from scene, dispose child mesh geometry
   _canyonWalls.strips.forEach(pivot => {
@@ -8078,6 +8095,12 @@ function _updateCanyonWalls(dt, speed) {
   // the phase the recycle path will see on frame 1 of corridor motion.
   if (T.sineIntensity > 0 && _canyonWalls._corridorRevealed) {
     _canyonSinePhase += (scroll / T.sinePeriod) * (2 * Math.PI) * T.sineSpeed;
+  }
+  // L4-recreation: advance global L4-row accumulator so the corridor walks through
+  // L4's shape over time. Same gating as _canyonSinePhase — only after corridor reveal.
+  // scroll units (world Z per frame) / ROW_GAP_Z (7) = L4 rows per frame, × compress scalar.
+  if (T._l4Recreation && _canyonWalls._corridorRevealed) {
+    _l4RowsElapsed += (scroll / _L4_CONST.ROW_GAP_Z) * (T._l4RampCompress || 1.0);
   }
 
   // ── Corridor reveal: when nearest entrance slab reaches Z=-210 (front of corridor),

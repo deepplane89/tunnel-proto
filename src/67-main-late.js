@@ -5470,6 +5470,7 @@ window.addEventListener('keydown', (e) => {
     // Flag ON AFTER preset apply (presets don't define it, so it stays off otherwise)
     _canyonTuner._l4Recreation = true;
     _canyonSinePhase = 0;
+    _l4RowsElapsed = 0;
     if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
     _canyonExiting = false;
     _canyonActive = true;
