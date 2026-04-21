@@ -122,9 +122,9 @@ function _ensureCtxRunning() {
 }
 function _initSFXBuffers() {
   if (!audioCtx) return;
-  _loadSFXBuffer('nearmiss', './nearmiss.mp3');
-  _loadSFXBuffer('whoosh', './whoosh2.mp3');
-  _loadSFXBuffer('whoosh-release', './whoosh-release.mp3');
+  _loadSFXBuffer('nearmiss', './assets/audio/nearmiss.mp3');
+  _loadSFXBuffer('whoosh', './assets/audio/whoosh2.mp3');
+  _loadSFXBuffer('whoosh-release', './assets/audio/whoosh-release.mp3');
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
 const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release' };

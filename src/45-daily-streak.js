@@ -2,9 +2,9 @@
 //  DAILY STREAK REWARDS
 // ═══════════════════════════════════════════════════════
 // SVG icons for streak rewards — clean, game-quality
-const STREAK_SVG_COIN = '<img src="multi-coins-icon.png" style="width:22px;height:22px;object-fit:contain;">';
-const STREAK_SVG_FUEL = '<img src="fuelcell-icon-new.png" style="width:22px;height:22px;object-fit:contain;">';
-const STREAK_SVG_ROCKET = '<img src="rocket-icon.png" style="width:22px;height:22px;object-fit:contain;">';
+const STREAK_SVG_COIN = '<img src="assets/images/multi-coins-icon.png" style="width:22px;height:22px;object-fit:contain;">';
+const STREAK_SVG_FUEL = '<img src="assets/images/fuelcell-icon-new.png" style="width:22px;height:22px;object-fit:contain;">';
+const STREAK_SVG_ROCKET = '<img src="assets/images/rocket-icon.png" style="width:22px;height:22px;object-fit:contain;">';
 
 const STREAK_REWARDS = [
   { day: 1, coins: 25,  fuel: 0, heads: 0, svg: 'coin',    color: '#ffcc00' },

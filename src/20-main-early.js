@@ -584,7 +584,7 @@ function purchaseUpgrade(id) {
 
 const LADDER_POS_KEY = 'jetslide_ladder_pos';
 const FUELCELL_KEY = 'jetslide_fuelcells';
-const _FUEL_SVG = '<img src="fuelcell-icon-new.png" class="fuelcell-icon" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;">';
+const _FUEL_SVG = '<img src="assets/images/fuelcell-icon-new.png" class="fuelcell-icon" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;">';
 const LIFETIME_STATS_KEY = 'jetslide_lifetime';
 
 function loadLadderPos() { return parseInt(window._LS.getItem(LADDER_POS_KEY) || '0', 10); }
@@ -1116,7 +1116,7 @@ const scene  = new THREE.Scene();
 // ── Milky Way panorama sky — full-screen NDC quad above stars, below sun ──
 // Uses same NDC passthrough as star shader so it fills the screen independent of camera
 const _skyQuadGeo = new THREE.PlaneGeometry(2, 2);
-const _skyPanoTex = new THREE.TextureLoader().load('milkyway-pano.jpg');
+const _skyPanoTex = new THREE.TextureLoader().load('assets/images/milkyway-pano.jpg');
 _skyPanoTex.colorSpace = THREE.SRGBColorSpace;
 const _skyQuadMat = new THREE.ShaderMaterial({
   uniforms: {
@@ -2073,7 +2073,7 @@ scene.add(floorMesh);
 // Uses three/addons Water object: real mirror reflection + animated normal map
 // ripples + Fresnel + sun specular streak. Replaces the old manual render-target.
 
-const waterNormals = new THREE.TextureLoader().load('waternormals.jpg', tex => {
+const waterNormals = new THREE.TextureLoader().load('assets/images/waternormals.jpg', tex => {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
 });
 
@@ -5324,7 +5324,7 @@ function initTitleShipPreview(sourceModel) {
   spinGroup.add(tiltGroup);
   titleScene.add(spinGroup);
 
-  // Display pad is now an HTML image overlay (platform-pad.png)
+  // Display pad is now an HTML image overlay (assets/images/platform-pad.png)
 
   // ── STUDIO LIGHTING (title only) ── adjusted for perpendicular (nose-up) orientation
   // Key light — front-right, illuminates the side facing camera

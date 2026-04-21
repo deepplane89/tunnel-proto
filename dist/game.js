@@ -687,7 +687,7 @@ function purchaseUpgrade(id) {
 
 const LADDER_POS_KEY = 'jetslide_ladder_pos';
 const FUELCELL_KEY = 'jetslide_fuelcells';
-const _FUEL_SVG = '<img src="fuelcell-icon-new.png" class="fuelcell-icon" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;">';
+const _FUEL_SVG = '<img src="assets/images/fuelcell-icon-new.png" class="fuelcell-icon" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;">';
 const LIFETIME_STATS_KEY = 'jetslide_lifetime';
 
 function loadLadderPos() { return parseInt(window._LS.getItem(LADDER_POS_KEY) || '0', 10); }
@@ -1219,7 +1219,7 @@ const scene  = new THREE.Scene();
 // ── Milky Way panorama sky — full-screen NDC quad above stars, below sun ──
 // Uses same NDC passthrough as star shader so it fills the screen independent of camera
 const _skyQuadGeo = new THREE.PlaneGeometry(2, 2);
-const _skyPanoTex = new THREE.TextureLoader().load('milkyway-pano.jpg');
+const _skyPanoTex = new THREE.TextureLoader().load('assets/images/milkyway-pano.jpg');
 _skyPanoTex.colorSpace = THREE.SRGBColorSpace;
 const _skyQuadMat = new THREE.ShaderMaterial({
   uniforms: {
@@ -2176,7 +2176,7 @@ scene.add(floorMesh);
 // Uses three/addons Water object: real mirror reflection + animated normal map
 // ripples + Fresnel + sun specular streak. Replaces the old manual render-target.
 
-const waterNormals = new THREE.TextureLoader().load('waternormals.jpg', tex => {
+const waterNormals = new THREE.TextureLoader().load('assets/images/waternormals.jpg', tex => {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
 });
 
@@ -5427,7 +5427,7 @@ function initTitleShipPreview(sourceModel) {
   spinGroup.add(tiltGroup);
   titleScene.add(spinGroup);
 
-  // Display pad is now an HTML image overlay (platform-pad.png)
+  // Display pad is now an HTML image overlay (assets/images/platform-pad.png)
 
   // ── STUDIO LIGHTING (title only) ── adjusted for perpendicular (nose-up) orientation
   // Key light — front-right, illuminates the side facing camera
@@ -8735,9 +8735,9 @@ function _ensureCtxRunning() {
 }
 function _initSFXBuffers() {
   if (!audioCtx) return;
-  _loadSFXBuffer('nearmiss', './nearmiss.mp3');
-  _loadSFXBuffer('whoosh', './whoosh2.mp3');
-  _loadSFXBuffer('whoosh-release', './whoosh-release.mp3');
+  _loadSFXBuffer('nearmiss', './assets/audio/nearmiss.mp3');
+  _loadSFXBuffer('whoosh', './assets/audio/whoosh2.mp3');
+  _loadSFXBuffer('whoosh-release', './assets/audio/whoosh-release.mp3');
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
 const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release' };
@@ -10672,9 +10672,9 @@ function initSkinViewer() {
 //  DAILY STREAK REWARDS
 // ═══════════════════════════════════════════════════════
 // SVG icons for streak rewards — clean, game-quality
-const STREAK_SVG_COIN = '<img src="multi-coins-icon.png" style="width:22px;height:22px;object-fit:contain;">';
-const STREAK_SVG_FUEL = '<img src="fuelcell-icon-new.png" style="width:22px;height:22px;object-fit:contain;">';
-const STREAK_SVG_ROCKET = '<img src="rocket-icon.png" style="width:22px;height:22px;object-fit:contain;">';
+const STREAK_SVG_COIN = '<img src="assets/images/multi-coins-icon.png" style="width:22px;height:22px;object-fit:contain;">';
+const STREAK_SVG_FUEL = '<img src="assets/images/fuelcell-icon-new.png" style="width:22px;height:22px;object-fit:contain;">';
+const STREAK_SVG_ROCKET = '<img src="assets/images/rocket-icon.png" style="width:22px;height:22px;object-fit:contain;">';
 
 const STREAK_REWARDS = [
   { day: 1, coins: 25,  fuel: 0, heads: 0, svg: 'coin',    color: '#ffcc00' },
@@ -11063,8 +11063,8 @@ function openShopDetail(id) {
     tiersHTML += `<div class="shop-detail-tier${active ? ' active' : ''}${next ? ' next' : ''}" style="${active ? 'border-color:' + color : ''}">
       <span class="shop-detail-tier-num">T${i + 1}</span>
       <span class="shop-detail-tier-desc">${desc}</span>
-      ${isPowerup ? `<span class="shop-detail-tier-cost">${i === 0 ? 'FREE' : '<img src="single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ' + UPGRADE_COSTS[i]}</span>` :
-        `<span class="shop-detail-tier-cost">${'<img src="single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ' + up.costs[i]}</span>`}
+      ${isPowerup ? `<span class="shop-detail-tier-cost">${i === 0 ? 'FREE' : '<img src="assets/images/single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ' + UPGRADE_COSTS[i]}</span>` :
+        `<span class="shop-detail-tier-cost">${'<img src="assets/images/single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ' + up.costs[i]}</span>`}
     </div>`;
   }
 
@@ -11077,7 +11077,7 @@ function openShopDetail(id) {
     <div class="shop-detail-tiers">${tiersHTML}</div>
     ${maxed ? '<div class="shop-detail-maxed">FULLY UPGRADED</div>' :
       `<button class="btn-space btn-upgrade shop-upgrade-btn${canAfford ? '' : ' disabled'}" id="shop-buy-btn" style="--up-color:${color}">
-        UPGRADE <img src="single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ${cost}
+        UPGRADE <img src="assets/images/single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ${cost}
       </button>`}
   `;
 

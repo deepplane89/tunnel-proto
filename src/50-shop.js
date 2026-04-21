@@ -179,8 +179,8 @@ function openShopDetail(id) {
     tiersHTML += `<div class="shop-detail-tier${active ? ' active' : ''}${next ? ' next' : ''}" style="${active ? 'border-color:' + color : ''}">
       <span class="shop-detail-tier-num">T${i + 1}</span>
       <span class="shop-detail-tier-desc">${desc}</span>
-      ${isPowerup ? `<span class="shop-detail-tier-cost">${i === 0 ? 'FREE' : '<img src="single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ' + UPGRADE_COSTS[i]}</span>` :
-        `<span class="shop-detail-tier-cost">${'<img src="single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ' + up.costs[i]}</span>`}
+      ${isPowerup ? `<span class="shop-detail-tier-cost">${i === 0 ? 'FREE' : '<img src="assets/images/single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ' + UPGRADE_COSTS[i]}</span>` :
+        `<span class="shop-detail-tier-cost">${'<img src="assets/images/single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ' + up.costs[i]}</span>`}
     </div>`;
   }
 
@@ -193,7 +193,7 @@ function openShopDetail(id) {
     <div class="shop-detail-tiers">${tiersHTML}</div>
     ${maxed ? '<div class="shop-detail-maxed">FULLY UPGRADED</div>' :
       `<button class="btn-space btn-upgrade shop-upgrade-btn${canAfford ? '' : ' disabled'}" id="shop-buy-btn" style="--up-color:${color}">
-        UPGRADE <img src="single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ${cost}
+        UPGRADE <img src="assets/images/single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ${cost}
       </button>`}
   `;
 
