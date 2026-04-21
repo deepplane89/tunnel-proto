@@ -34,7 +34,11 @@ the numeric prefixes).
 - `64-main-late.js` — game-over button handlers (death run, restart, exit)
 - `65-settings.js` — settings overlay: audio volumes, mutes, haptics toggle, replay tutorial, show tutorial
 - `66-haptics.js` — haptic feedback helpers (vibrate wrappers)
-- `67-main-late.js` — onboarding, game states, sequencers, tuners, update/render loops (still being split)
+- `67-main-late.js` — onboarding, game states, sequencers, debug overlay, canyon tuner, FPS counter (still being split)
+- `70-perf-diag.js` — per-frame timing, freeze detection, p95/p99 rolling logs
+- `72-main-late-mid.js` — resize, testing hooks, visibility change, mobile title, skin/scene/angled/terrain/ship/asteroid tuners, flaming asteroid system (still being split)
+- `80-session-logger.js` — LOG/REC/EXPORT UI bar (dev tool for recording playthroughs)
+- `82-main-late-tail.js` — cache bust marker
 
 ## Workflow
 
