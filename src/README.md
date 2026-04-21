@@ -26,9 +26,12 @@ the numeric prefixes).
 - `10-leaderboard.js` — leaderboard API, submit/render, escapeHtml
 - `20-main-early.js` — state, constants, levels, scene setup, explosions, sun, ship, thrusters, obstacles, walls, powerups, laser, fog (still being split)
 - `30-audio.js` — procedural Web Audio: SFX, music tracks, crossfades, magnet whir
-- `40-main-late.js` — grid, level transitions, spawn, funnel, level checking, powerup effects, daily streak (still being split)
+- `40-main-late.js` — grid, level transitions, spawn, funnel, level checking, powerup effects (still being split)
+- `45-daily-streak.js` — daily streak rewards UI + state
 - `50-shop.js` — shop UI, purchase flows, currency check, toggleLeaderboard
-- `60-main-late.js` — crash flash, input, reward wheel, settings, haptics, game states, sequencers, tuners, update/render loops (still being split)
+- `60-main-late.js` — crash flash, input, reward wheel (still being split)
+- `65-settings.js` — settings overlay: audio volumes, mutes, haptics toggle, replay tutorial, show tutorial
+- `67-main-late.js` — haptics, onboarding, game states, sequencers, tuners, update/render loops (still being split)
 
 ## Workflow
 
