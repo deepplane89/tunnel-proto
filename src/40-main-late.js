@@ -369,6 +369,8 @@ function _startL3KnifeCanyon() {
   state.l3KnifeDone      = false;
   // Start snap oscillator at midpoint so first motion is gentle
   state.l3KnifeSnapT     = 0;
+  // Exit scroll-out trigger fires once when t reaches DURATION-EXIT_WINDOW.
+  state._l3KnifeExitStarted = false;
   // Entry-to-active ramp: player gets ~2s to register the canyon before
   // speed/handling/FOV punch in. 'pending' → 'ramping' → 'active'.
   state.l3KnifeRampPhase = 'pending';
@@ -455,17 +457,23 @@ const _L3_KNIFE_ENTRY_DELAY    = 2.0;
 const _L3_KNIFE_RAMP_DURATION  = 0.4;
 const _L3_KNIFE_TARGET_SPEED_MULT = 2.5;
 const _L3_KNIFE_TARGET_FOV_DELTA  = 15;  // added on top of saved FOV (e.g. 65 → 80)
+// Clean exit: in the last EXIT_WINDOW seconds of the canyon's life we stop
+// spawning new slabs and let the existing ones drift past the ship on Z.
+// Matches the JL sequencer's _jlCanyonStop pattern: _canyonActive=false +
+// _canyonExiting=true; the canyon tick in 20-main-early.js watches for
+// allGone and destroys the walls.
+const _L3_KNIFE_EXIT_WINDOW    = 4.0;
 
 // Tick called every frame from the main update loop.
-// Advances the 40s timer, oscillates snap 0.1 ↔ 1.5, and runs the entry ramp.
+// Advances the 40s timer, ramps snap 1.5 → 0.1 monotonically, runs the
+// entry ramp, and triggers a scroll-out exit in the final EXIT_WINDOW.
 function _updateL3KnifeCanyon(dt) {
   if (!state.l3KnifeCanyon) return;
   state.l3KnifeElapsed = (state.l3KnifeElapsed || 0) + dt;
-  // Snap oscillation: sine 0..1 mapped to 0.1..1.5, 4s full period (0.25 Hz)
-  state.l3KnifeSnapT = (state.l3KnifeSnapT || 0) + dt;
-  const w  = (state.l3KnifeSnapT * Math.PI * 2 / 4.0); // 4s period
-  const u  = 0.5 + 0.5 * Math.sin(w);                   // 0..1
-  const snap = 0.1 + (1.5 - 0.1) * u;
+  // Snap ramp: linear 1.5 → 0.1 across the canyon's full duration.
+  // Arches start punchy and flatten toward the end as we approach exit.
+  const tNorm = Math.min(1, state.l3KnifeElapsed / _L3_KNIFE_DURATION);
+  const snap  = 1.5 + (0.1 - 1.5) * tNorm;   // 1.5 → 0.1 linear
   _canyonTuner.snap = snap;
 
   // ── Entry ramp: pending → ramping → active ──────────────────────────────
@@ -497,6 +505,16 @@ function _updateL3KnifeCanyon(dt) {
       state.l3KnifeRampPhase = 'active';
       console.log('[L3-KNIFE] entry ramp complete — speed=' + state.speed.toFixed(1) + ' fov=' + (camera ? camera.fov.toFixed(1) : '?'));
     }
+  }
+
+  // ── Scroll-out exit in the last EXIT_WINDOW seconds ─────────────────────
+  // Stop spawning new slabs and flip the existing ones into drift mode so
+  // they pass the ship on Z for a clean hand-off to whatever comes next.
+  if (!state._l3KnifeExitStarted && state.l3KnifeElapsed >= _L3_KNIFE_DURATION - _L3_KNIFE_EXIT_WINDOW) {
+    state._l3KnifeExitStarted = true;
+    if (typeof _canyonActive !== 'undefined')  _canyonActive  = false;
+    if (typeof _canyonExiting !== 'undefined') _canyonExiting = true;
+    console.log('[L3-KNIFE] exit scroll-out start');
   }
 
   // Auto-end after duration. No currentLevelIdx guard — in DR mode
