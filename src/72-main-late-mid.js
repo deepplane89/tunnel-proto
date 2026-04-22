@@ -3093,16 +3093,17 @@ const _origUpdateShockwave = _updateShockwave;
     const now = performance.now();
     const dt = Math.min((now - _lastAstTime) * 0.001, 0.05);
     _lastAstTime = now;
-    // Run during tutorial gameplay OR when chaos mode is active
+    // Run during tutorial gameplay, chaos mode, JL mode, OR L3 knife canyon (main mode).
     if (state.phase === 'playing' && !state.introActive &&
-        (state._tutorialActive || _chaosMode || state._jetLightningMode)) {
+        (state._tutorialActive || _chaosMode || state._jetLightningMode || state.l3KnifeCanyon)) {
       // Corridor takes over — pause all JL obstacle spawning during breather
       // _canyonMode > 0 means slab canyon is active — never use old L3/L4 corridor ticker
       if (_jlCorridor.active && !_canyonActive && !_canyonMode) {
         _jlTickCorridor(dt, state.speed);
-      } else if (!_jlCorridor.active) {
+      } else if (!_jlCorridor.active && !state.l3KnifeCanyon) {
         // Run asteroid spawner when no pure corridor is active
         // (open canyon segments have _canyonActive=true but _jlCorridor.active=false — still spawn)
+        // Skip during L3 knife canyon — it's a pure visual corridor, no asteroids.
         _tickAsteroidSpawner(dt);
       }
     }

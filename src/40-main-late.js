@@ -1411,6 +1411,9 @@ function spawnObstacles() {
   // Check if a gauntlet should start
   maybeStartGauntlet();
 
+  // L3 knife canyon — block all obstacle spawns during the 40s knife experience.
+  if (state.l3KnifeCanyon) return;
+
   // L5: zipper rows are fired from the update loop — just block normal spawns while active
   if (state.currentLevelIdx === 4 && state.zipperActive) {
     framesSinceLastPowerup++;
