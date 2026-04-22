@@ -367,13 +367,10 @@ function _startL3KnifeCanyon() {
   state.l3KnifeCanyon    = true;
   state.l3KnifeElapsed   = 0;
   state.l3KnifeDone      = false;
-  // Start snap oscillator at midpoint so first motion is gentle
+  // Start snap oscillator at 0 — sine drives it through 0.1..1.5 over 4s period.
   state.l3KnifeSnapT     = 0;
   // Exit scroll-out trigger fires once when t reaches DURATION-EXIT_WINDOW.
   state._l3KnifeExitStarted = false;
-  // Snap locked at 1.5 for the full canyon — tried half-and-half rebuild
-  // at t=20s (e4d17ae), didn't work, reverted.
-  _canyonTuner.snap = 1.5;
   // Entry-to-active ramp: player gets ~2s to register the canyon before
   // speed/handling/FOV punch in. 'pending' → 'ramping' → 'active'.
   state.l3KnifeRampPhase = 'pending';
@@ -478,6 +475,14 @@ const _L3_KNIFE_EXIT_WINDOW    = 4.0;
 function _updateL3KnifeCanyon(dt) {
   if (!state.l3KnifeCanyon) return;
   state.l3KnifeElapsed = (state.l3KnifeElapsed || 0) + dt;
+  // Snap oscillation: sine 0..1 mapped to 0.1..1.5, 4s full period (0.25 Hz).
+  // Original pre-snap-change behavior. Note: SNAP is baked into slab geometry
+  // at _createCanyonWalls time (src/20-main-early.js:7601), so live writes
+  // here mainly take effect on freshly-recycled/spawned slabs.
+  state.l3KnifeSnapT = (state.l3KnifeSnapT || 0) + dt;
+  const w  = (state.l3KnifeSnapT * Math.PI * 2 / 4.0);
+  const u  = 0.5 + 0.5 * Math.sin(w);
+  _canyonTuner.snap = 0.1 + (1.5 - 0.1) * u;
 
   // ── Entry ramp: pending → ramping → active ──────────────────────────────
   // Wait ENTRY_DELAY seconds after canyon spawn, then ramp speed/FOV/physics

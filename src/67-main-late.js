@@ -2705,7 +2705,11 @@ function killPlayer() {
   }
 
   // Save corridor type so repair ship can restart it from scratch
-  state._deathCorridorType = state.l5CorridorActive ? 'l5' : state.l4CorridorActive ? 'l4' : state.corridorMode ? 'l3' : null;
+  state._deathCorridorType = state.l3KnifeCanyon ? 'l3-knife'
+                           : state.l5CorridorActive ? 'l5'
+                           : state.l4CorridorActive ? 'l4'
+                           : state.corridorMode ? 'l3'
+                           : null;
 
   state.phase = 'dead';
   // Tear down L3 knife canyon if death happened during it
@@ -3064,7 +3068,13 @@ function killPlayer() {
         _clearAllMechanics();
         state.deathRunRestBeat = 1.5; // brief clear before wave director picks next mechanic
         // Corridor death: restart that corridor from scratch
-        if (state._deathCorridorType === 'l3') {
+        if (state._deathCorridorType === 'l3-knife') {
+          // Full re-init: timer=0, ramp=pending, new saved speed/FOV baselines.
+          // Leave _seqCorridorStarted=true so DR sequencer keeps waiting on
+          // isActive() until the fresh 40s canyon finishes.
+          _startL3KnifeCanyon();
+          console.log('[L3-KNIFE] repaired — canyon restarted from scratch');
+        } else if (state._deathCorridorType === 'l3') {
           state.corridorMode = true; state.corridorSpawnZ = -7; state.corridorRowsDone = 0; state.corridorSineT = 0;
         } else if (state._deathCorridorType === 'l4') {
           state.l4CorridorActive = true; state.l4SpawnZ = -7; state.l4RowsDone = 0; state.l4SineT = 0;

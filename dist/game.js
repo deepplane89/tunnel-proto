@@ -9383,13 +9383,10 @@ function _startL3KnifeCanyon() {
   state.l3KnifeCanyon    = true;
   state.l3KnifeElapsed   = 0;
   state.l3KnifeDone      = false;
-  // Start snap oscillator at midpoint so first motion is gentle
+  // Start snap oscillator at 0 — sine drives it through 0.1..1.5 over 4s period.
   state.l3KnifeSnapT     = 0;
   // Exit scroll-out trigger fires once when t reaches DURATION-EXIT_WINDOW.
   state._l3KnifeExitStarted = false;
-  // Snap locked at 1.5 for the full canyon — tried half-and-half rebuild
-  // at t=20s (e4d17ae), didn't work, reverted.
-  _canyonTuner.snap = 1.5;
   // Entry-to-active ramp: player gets ~2s to register the canyon before
   // speed/handling/FOV punch in. 'pending' → 'ramping' → 'active'.
   state.l3KnifeRampPhase = 'pending';
@@ -9494,6 +9491,14 @@ const _L3_KNIFE_EXIT_WINDOW    = 4.0;
 function _updateL3KnifeCanyon(dt) {
   if (!state.l3KnifeCanyon) return;
   state.l3KnifeElapsed = (state.l3KnifeElapsed || 0) + dt;
+  // Snap oscillation: sine 0..1 mapped to 0.1..1.5, 4s full period (0.25 Hz).
+  // Original pre-snap-change behavior. Note: SNAP is baked into slab geometry
+  // at _createCanyonWalls time (src/20-main-early.js:7601), so live writes
+  // here mainly take effect on freshly-recycled/spawned slabs.
+  state.l3KnifeSnapT = (state.l3KnifeSnapT || 0) + dt;
+  const w  = (state.l3KnifeSnapT * Math.PI * 2 / 4.0);
+  const u  = 0.5 + 0.5 * Math.sin(w);
+  _canyonTuner.snap = 0.1 + (1.5 - 0.1) * u;
 
   // ── Entry ramp: pending → ramping → active ──────────────────────────────
   // Wait ENTRY_DELAY seconds after canyon spawn, then ramp speed/FOV/physics
@@ -15719,7 +15724,11 @@ function killPlayer() {
   }
 
   // Save corridor type so repair ship can restart it from scratch
-  state._deathCorridorType = state.l5CorridorActive ? 'l5' : state.l4CorridorActive ? 'l4' : state.corridorMode ? 'l3' : null;
+  state._deathCorridorType = state.l3KnifeCanyon ? 'l3-knife'
+                           : state.l5CorridorActive ? 'l5'
+                           : state.l4CorridorActive ? 'l4'
+                           : state.corridorMode ? 'l3'
+                           : null;
 
   state.phase = 'dead';
   // Tear down L3 knife canyon if death happened during it
@@ -16078,7 +16087,13 @@ function killPlayer() {
         _clearAllMechanics();
         state.deathRunRestBeat = 1.5; // brief clear before wave director picks next mechanic
         // Corridor death: restart that corridor from scratch
-        if (state._deathCorridorType === 'l3') {
+        if (state._deathCorridorType === 'l3-knife') {
+          // Full re-init: timer=0, ramp=pending, new saved speed/FOV baselines.
+          // Leave _seqCorridorStarted=true so DR sequencer keeps waiting on
+          // isActive() until the fresh 40s canyon finishes.
+          _startL3KnifeCanyon();
+          console.log('[L3-KNIFE] repaired — canyon restarted from scratch');
+        } else if (state._deathCorridorType === 'l3') {
           state.corridorMode = true; state.corridorSpawnZ = -7; state.corridorRowsDone = 0; state.corridorSineT = 0;
         } else if (state._deathCorridorType === 'l4') {
           state.l4CorridorActive = true; state.l4SpawnZ = -7; state.l4RowsDone = 0; state.l4SineT = 0;
