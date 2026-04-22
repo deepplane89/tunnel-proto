@@ -9373,11 +9373,11 @@ function maybeStartGauntlet() {
 // to false to restore it.
 // ============================================================================
 function _startL3KnifeCanyon() {
-  // Clear any existing obstacles so entry is clean
-  ;[...activeObstacles].forEach(returnObstacleToPool);
-  activeObstacles.length = 0;
-  [..._activeForcefields].forEach(returnForcefieldToPool);
-  _activeForcefields.length = 0;
+  // NOTE: do NOT wipe activeObstacles/forcefields here. The DR sequencer
+  // stops spawning cones before L3 trigger, so the last batch will z-scroll
+  // past the player naturally during the ~1s before canyon slabs reach play
+  // distance. Wiping caused cones to pop out of existence instead of
+  // scrolling past — bad visual transition.
 
   // State flags
   state.l3KnifeCanyon    = true;
