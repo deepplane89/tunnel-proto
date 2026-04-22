@@ -14108,18 +14108,31 @@ function _drSequencerTick(dt) {
     state._seqConeDensity = stage.density || 'normal';
   }
   else if (tp === 'cones_and_zips') {
-    state._seqSpawnMode = 'cones';
-    // Fire a zipper burst periodically
-    state._seqZipTimer = (state._seqZipTimer || 0) + dt;
-    if (state._seqZipTimer >= 8 && !state.zipperActive) {
-      state._seqZipTimer = 0;
-      state.zipperActive = true;
-      // Use ZIPPER_ROWS so the exit-ramp calculation in spawnZipperRow is correct
-      // (was 8-11, causing rowsDone to start mid-ramp and fire too fast)
-      state.zipperRowsLeft = ZIPPER_ROWS;
-      state.zipperSide = Math.random() < 0.5 ? 1 : -1;
-      state.zipperHoldCount = 0;
-      state.zipperSpawnTimer = -1.0;
+    // Pre-canyon quiet window: for the last 2s of T3A_ZIPS, stop spawning new
+    // cones/zippers so the final batch z-scrolls past the player before L3
+    // canyon triggers. Paired with the no-wipe fix in _startL3KnifeCanyon.
+    const _preCanyonQuiet = (stage.duration || 30) - state.seqStageElapsed <= 2.0;
+    if (_preCanyonQuiet) {
+      state._seqSpawnMode = 'none';
+      // Abort any in-flight zipper so its tail rows don't spawn into the canyon entry.
+      if (state.zipperActive) {
+        state.zipperActive = false;
+        state.zipperRowsLeft = 0;
+      }
+    } else {
+      state._seqSpawnMode = 'cones';
+      // Fire a zipper burst periodically
+      state._seqZipTimer = (state._seqZipTimer || 0) + dt;
+      if (state._seqZipTimer >= 8 && !state.zipperActive) {
+        state._seqZipTimer = 0;
+        state.zipperActive = true;
+        // Use ZIPPER_ROWS so the exit-ramp calculation in spawnZipperRow is correct
+        // (was 8-11, causing rowsDone to start mid-ramp and fire too fast)
+        state.zipperRowsLeft = ZIPPER_ROWS;
+        state.zipperSide = Math.random() < 0.5 ? 1 : -1;
+        state.zipperHoldCount = 0;
+        state.zipperSpawnTimer = -1.0;
+      }
     }
   }
   else if (tp === 'angled_walls') {
