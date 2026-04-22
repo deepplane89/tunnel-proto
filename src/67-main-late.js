@@ -1542,6 +1542,7 @@ const DR_MECHANIC_FAMILIES = {
     minBand: 3,
     activate(band, role) {
       console.log('[L3-ENTRY] knifeEnabled=' + _L3_KNIFE_ENABLED + ' knifeActive=' + !!state.l3KnifeCanyon + ' knifeDone=' + !!state.l3KnifeDone + ' corridorMode=' + !!state.corridorMode + ' isDR=' + !!state.isDeathRun + ' band=' + (band && band.label));
+      console.log('[L3-ENTRY-DIAG] activeObstacles=' + activeObstacles.length + ' activeForcefields=' + _activeForcefields.length + ' zipperActive=' + !!state.zipperActive + ' restBeat=' + (state.deathRunRestBeat||0).toFixed(2));
       // NEW: knife-canyon replacement for L3 cone corridor. Fires once per L3
       // entry; _stopL3KnifeCanyon sets l3KnifeDone=true after 40s so the DR
       // sequencer's isActive() returns false and advances to the next stage.

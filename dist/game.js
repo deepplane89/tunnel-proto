@@ -1193,7 +1193,13 @@ function renderLadder() {
 //  RENDERER, SCENE, CAMERA
 // ═══════════════════════════════════════════════════
 // ── PERFORMANCE MODE STATE ────────────────────────────────
-let perfMode = false;
+// Auto-enable perfMode on mobile devices. Caps pixel ratio at 1 (saves
+// 4-9x fill on retina screens) and halves bloom resolution. Users can
+// still manually toggle it off via the perf-toggle button.
+const _perfAutoMobile = /iPhone|iPad|iPod|Android|Mobi/i.test(navigator.userAgent) ||
+                        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let perfMode = _perfAutoMobile;
+if (_perfAutoMobile) console.log('[PERF] auto-enabled perfMode for mobile device');
 const perfToggleBtn = document.getElementById('perf-toggle');
 perfToggleBtn.addEventListener('click', (e) => {
   e.stopPropagation();
@@ -1208,7 +1214,10 @@ perfToggleBtn.addEventListener('click', (e) => {
 const canvas   = document.getElementById('game-canvas');
 const _mobAA = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_mobAA, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Pixel ratio cap: desktop min(DPR,2), mobile forced to 1 when perfMode is on
+// (auto-enabled on mobile above). Modern phones have DPR=3 which is 9x the
+// pixels of DPR=1 — biggest single mobile-perf win.
+renderer.setPixelRatio(perfMode ? 1 : Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
@@ -1560,10 +1569,12 @@ composer.addPass(_radialBlurPass);
 // ── PERFORMANCE MODE — defined here so bloom + renderer are in scope
 function applyPerfMode() {
   if (perfMode) {
+    // On mobile, cap DPR at 1 (huge fill-rate savings). On desktop, still
+    // allow DPR 1 since perfMode was opted into manually there.
     renderer.setPixelRatio(1);
     bloom.resolution.set(
-      Math.floor(window.innerWidth  * 0.5),
-      Math.floor(window.innerHeight * 0.5)
+      Math.floor(window.innerWidth  * 0.4),  // quarter-ish res bloom on perf
+      Math.floor(window.innerHeight * 0.4)
     );
   } else {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -1571,6 +1582,18 @@ function applyPerfMode() {
   }
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+}
+// Apply perfMode immediately if auto-enabled for mobile. Needs bloom +
+// composer to exist — both created earlier in this file. Wrap in try/catch
+// just in case this module ordering ever shifts.
+if (_perfAutoMobile) {
+  // applyPerfMode will be called below once we're past all deps. Flag so the
+  // perf-toggle button renders in the correct on-state.
+  if (perfToggleBtn) {
+    perfToggleBtn.classList.add('on');
+    perfToggleBtn.setAttribute('aria-pressed', 'true');
+  }
+  try { applyPerfMode(); } catch(e) { console.warn('[PERF] initial apply failed', e && e.message); }
 }
 // ───────────────────────────────────────────────
 
@@ -14560,6 +14583,7 @@ const DR_MECHANIC_FAMILIES = {
     minBand: 3,
     activate(band, role) {
       console.log('[L3-ENTRY] knifeEnabled=' + _L3_KNIFE_ENABLED + ' knifeActive=' + !!state.l3KnifeCanyon + ' knifeDone=' + !!state.l3KnifeDone + ' corridorMode=' + !!state.corridorMode + ' isDR=' + !!state.isDeathRun + ' band=' + (band && band.label));
+      console.log('[L3-ENTRY-DIAG] activeObstacles=' + activeObstacles.length + ' activeForcefields=' + _activeForcefields.length + ' zipperActive=' + !!state.zipperActive + ' restBeat=' + (state.deathRunRestBeat||0).toFixed(2));
       // NEW: knife-canyon replacement for L3 cone corridor. Fires once per L3
       // entry; _stopL3KnifeCanyon sets l3KnifeDone=true after 40s so the DR
       // sequencer's isActive() returns false and advances to the next stage.
