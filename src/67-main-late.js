@@ -2689,6 +2689,8 @@ function killPlayer() {
   state._deathCorridorType = state.l5CorridorActive ? 'l5' : state.l4CorridorActive ? 'l4' : state.corridorMode ? 'l3' : null;
 
   state.phase = 'dead';
+  // Tear down L3 knife canyon if death happened during it
+  if (state.l3KnifeCanyon) _stopL3KnifeCanyon();
   // Cancel retry/repair sweep if somehow active
   _retrySweepActive = false;
   _retryIsFromDead = false;
@@ -4371,7 +4373,13 @@ function update(dt) {
   }
 
   // ── Spawn
-  // L3 dense corridor: spawn wall rows every ~7 world units (ship-relative, cyan tinted)
+  // L3 KNIFE CANYON tick — runs the 40s timer + snap oscillator when active.
+  // Self-cleans when duration elapses or player leaves L3.
+  _updateL3KnifeCanyon(dt);
+
+  // L3 dense corridor (LEGACY cone path — gated off while _L3_KNIFE_ENABLED,
+  // because maybeStartGauntlet no longer sets state.corridorMode in that case):
+  // spawn wall rows every ~7 world units (ship-relative, cyan tinted)
   if (state.corridorMode && !state._jetLightningMode) {
     if (!state.isDeathRun) maybeStartGauntlet();
     if (state.corridorDelay > 0) {

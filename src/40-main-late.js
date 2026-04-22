@@ -310,11 +310,26 @@ const FUNNEL_TOTAL_ROWS    = FUNNEL_CLOSE_ROWS + FUNNEL_HOLD_ROWS + FUNNEL_OPEN_
 const FUNNEL_WIDE_X        = 24;  // world units — wall half-offset at fully open
 const FUNNEL_NARROW_X      = 5.5; // world units — wall half-offset at tightest
 
+// L3 KNIFE CANYON replacement — see bottom of file for helpers.
+// Flip _L3_KNIFE_ENABLED back to false to restore the original cone corridor.
+const _L3_KNIFE_ENABLED  = true;
+const _L3_KNIFE_DURATION = 40.0;    // seconds the knife canyon experience lasts
+
 function maybeStartGauntlet() {
   // Death Run: no corridors/gauntlets — random cones only
   if (state.isDeathRun) return;
-  // L3: always-on dense corridor — activate immediately and loop forever
+  // L3: knife-canyon (new) or dense cone corridor (old, preserved for revert).
   if (state.currentLevelIdx === 2) {
+    if (_L3_KNIFE_ENABLED) {
+      // NEW: knife-canyon corridor. Triggers once on L3 entry; auto-ends after
+      // _L3_KNIFE_DURATION seconds via _updateL3KnifeCanyon tick. Does NOT set
+      // state.corridorMode, so cone-spawn tick in 67-main-late.js stays off.
+      if (!state.l3KnifeCanyon && !state.l3KnifeDone) {
+        _startL3KnifeCanyon();
+      }
+      return;
+    }
+    // LEGACY PATH — original L3 dense cone corridor (kept intact for revert).
     if (!state.corridorMode) {
       state.corridorMode      = true;
       state.corridorSpawnZ    = -7;
@@ -338,6 +353,101 @@ function maybeStartGauntlet() {
     state.gauntletActive   = true;
     state.gauntletRowsLeft = FUNNEL_TOTAL_ROWS;
     state.gauntletCooldown = 0;
+  }
+}
+
+// ============================================================================
+// L3 KNIFE CANYON — replaces L3 cone corridor with the K-press knife-arches
+// canyon for _L3_KNIFE_DURATION seconds. Snap slider oscillates 0.1 ↔ 1.5
+// throughout. Old cone-corridor code preserved above — flip _L3_KNIFE_ENABLED
+// to false to restore it.
+// ============================================================================
+function _startL3KnifeCanyon() {
+  // Clear any existing obstacles so entry is clean
+  ;[...activeObstacles].forEach(returnObstacleToPool);
+  activeObstacles.length = 0;
+  [..._activeForcefields].forEach(returnForcefieldToPool);
+  _activeForcefields.length = 0;
+
+  // State flags
+  state.l3KnifeCanyon    = true;
+  state.l3KnifeElapsed   = 0;
+  state.l3KnifeDone      = false;
+  // Start snap oscillator at midpoint so first motion is gentle
+  state.l3KnifeSnapT     = 0;
+
+  // Spawn the L4-recreation canyon with the knife-arches preset. Mirrors the
+  // K-hotkey handler in 67-main-late.js:5470 but without the manual toggle.
+  const vals = _CANYON_PRESETS[1];
+  if (!vals) return;
+  _canyonMode = 1;
+  _canyonTuner._allCyan = false;
+  _canyonTuner._allDark = false;
+  Object.assign(_canyonTuner, vals);
+  _canyonTuner._l4Recreation = true;
+  // Full knife-arches preset — identical to K-hotkey
+  Object.assign(_canyonTuner, {
+    slabH: 55, slabThick: 60, cols: 5, rows: 6, disp: 2, snap: 1.5,
+    footX: 26, sweepX: 20, midX: 0, crestX: 0,
+    cyanEmi: 2, cyanRgh: 0.65,
+    darkCrkCount: 14, darkCrkBright: 1.95, darkRgh: 0.62,
+    darkClearcoat: 0.4, darkEmi: 0.9,
+    lightIntensity: 1.2,
+    entranceThick: 700, entranceSlabs: 3, spawnDepth: -250,
+    sineIntensity: 0.28, sineAmp: 120, sinePeriod: 330, sineSpeed: 1,
+    scrollSpeed: 1,
+    _l4HalfX: 21.5, _l4AmpScale: 1.0, _l4RampCompress: 1.45, _l4SlabW: 40,
+  });
+  _canyonTuner.halfXOverride = _canyonTuner._l4HalfX;
+  _canyonTuner.slabW         = _canyonTuner._l4SlabW;
+  _canyonSinePhase = 0;
+  _l4RowsElapsed = 0;
+  if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+  _canyonExiting = false;
+  _canyonActive  = true;
+  _canyonManual  = true;  // mark manual so JL sequencer doesn't fight us
+  _jlCorridor.active = false;
+  state.corridorGapCenter = state.shipX || 0;
+  if (typeof dirLight !== 'undefined' && dirLight) {
+    if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+    dirLight.intensity = 0;
+  }
+  _createCanyonWalls();
+  console.log('[L3-KNIFE] ON for ' + _L3_KNIFE_DURATION + 's');
+}
+
+function _stopL3KnifeCanyon() {
+  state.l3KnifeCanyon  = false;
+  state.l3KnifeDone    = true;  // one-shot per L3 entry; re-entering L3 re-arms via level transition reset
+  if (_canyonWalls) _destroyCanyonWalls();
+  _canyonActive  = false;
+  _canyonExiting = false;
+  _canyonManual  = false;
+  _jlCorridor.active = false;
+  _canyonTuner._l4Recreation = false;
+  if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+    dirLight.intensity = _canyonSavedDirLight;
+    _canyonSavedDirLight = null;
+  }
+  _canyonMode = 0;
+  console.log('[L3-KNIFE] OFF');
+}
+
+// Tick called every frame from the main update loop.
+// Advances the 40s timer and oscillates snap 0.1 ↔ 1.5 over a 4s period.
+function _updateL3KnifeCanyon(dt) {
+  if (!state.l3KnifeCanyon) return;
+  state.l3KnifeElapsed = (state.l3KnifeElapsed || 0) + dt;
+  // Snap oscillation: sine 0..1 mapped to 0.1..1.5, 4s full period (0.25 Hz)
+  state.l3KnifeSnapT = (state.l3KnifeSnapT || 0) + dt;
+  const w  = (state.l3KnifeSnapT * Math.PI * 2 / 4.0); // 4s period
+  const u  = 0.5 + 0.5 * Math.sin(w);                   // 0..1
+  const snap = 0.1 + (1.5 - 0.1) * u;
+  _canyonTuner.snap = snap;
+  // Safety: if player left L3 while knife active, clean up
+  if (state.currentLevelIdx !== 2) { _stopL3KnifeCanyon(); return; }
+  if (state.l3KnifeElapsed >= _L3_KNIFE_DURATION) {
+    _stopL3KnifeCanyon();
   }
 }
 
@@ -1583,13 +1693,18 @@ function checkLevelUp() {
   const lvlDef = LEVELS[newIdx];
   const continuousBoost = Math.min(state.score / 180, 0.6); // up to +60% extra, ramps faster
   // Freeze speed during corridors — prevents mid-corridor speed jumps
-  const inCorridor = state.corridorMode || state.l4CorridorActive || state.l5CorridorActive;
+  const inCorridor = state.corridorMode || state.l4CorridorActive || state.l5CorridorActive || state.l3KnifeCanyon;
   if (!inCorridor) state.speed = BASE_SPEED * (lvlDef.speedMult + continuousBoost);
 
   if (newIdx !== state.currentLevelIdx) {
     state.currentLevelIdx = newIdx;
     state.levelElapsed     = 0;   // reset time-in-level clock
     state.l4CorridorDone   = false; // allow L4 corridor to retrigger on new entry
+    // Arm the L3 knife canyon for the NEXT L3 entry. Cleared so it fires once
+    // per L3 visit. If the player just entered L3 (newIdx === 2), reset it.
+    if (newIdx === 2) state.l3KnifeDone = false;
+    // Leaving L3 mid-knife? tear it down so L4 can start clean.
+    if (newIdx !== 2 && state.l3KnifeCanyon) _stopL3KnifeCanyon();
     // L5: random cones first, then zippers
     if (newIdx === 4) {
       state.zipperActive      = false;
