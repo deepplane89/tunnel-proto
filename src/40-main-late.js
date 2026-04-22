@@ -320,23 +320,9 @@ function maybeStartGauntlet() {
   if (state.isDeathRun) return;
   // L3: knife-canyon (new) or dense cone corridor (old, preserved for revert).
   if (state.currentLevelIdx === 2) {
-    if (_L3_KNIFE_ENABLED) {
-      // NEW: knife-canyon corridor. Triggers once on L3 entry; auto-ends after
-      // _L3_KNIFE_DURATION seconds via _updateL3KnifeCanyon tick. Does NOT set
-      // state.corridorMode, so cone-spawn tick in 67-main-late.js stays off.
-      if (!state._l3EntryLogged) {
-        state._l3EntryLogged = true;
-        console.log('[L3-ENTRY] knifeEnabled=' + _L3_KNIFE_ENABLED + ' knifeActive=' + !!state.l3KnifeCanyon + ' knifeDone=' + !!state.l3KnifeDone + ' corridorMode=' + !!state.corridorMode + ' isDR=' + !!state.isDeathRun + ' JL=' + !!state._jetLightningMode);
-      }
-      if (!state.l3KnifeCanyon && !state.l3KnifeDone) {
-        try {
-          _startL3KnifeCanyon();
-        } catch (e) {
-          console.error('[L3-KNIFE] _startL3KnifeCanyon threw:', e);
-        }
-      }
-      return;
-    }
+    // L3 corridor (cone or knife-canyon) is driven by the DR sequencer in
+    // src/67-main-late.js (L3_CORRIDOR.activate). This branch is kept only
+    // as a no-op guard so non-DR reaches L3 don't fall through to gauntlet logic.
     // LEGACY PATH — original L3 dense cone corridor (kept intact for revert).
     if (!state.corridorMode) {
       state.corridorMode      = true;
@@ -452,8 +438,10 @@ function _updateL3KnifeCanyon(dt) {
   const u  = 0.5 + 0.5 * Math.sin(w);                   // 0..1
   const snap = 0.1 + (1.5 - 0.1) * u;
   _canyonTuner.snap = snap;
-  // Safety: if player left L3 while knife active, clean up
-  if (state.currentLevelIdx !== 2) { _stopL3KnifeCanyon(); return; }
+  // Auto-end after duration. No currentLevelIdx guard — in DR mode
+  // currentLevelIdx tracks the vibe shader (often 0 during T3B_L3BOSS),
+  // not the campaign level. Sequencer advance + retry/death both call
+  // _stopL3KnifeCanyon directly.
   if (state.l3KnifeElapsed >= _L3_KNIFE_DURATION) {
     _stopL3KnifeCanyon();
   }

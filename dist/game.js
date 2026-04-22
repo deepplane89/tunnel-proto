@@ -9336,23 +9336,9 @@ function maybeStartGauntlet() {
   if (state.isDeathRun) return;
   // L3: knife-canyon (new) or dense cone corridor (old, preserved for revert).
   if (state.currentLevelIdx === 2) {
-    if (_L3_KNIFE_ENABLED) {
-      // NEW: knife-canyon corridor. Triggers once on L3 entry; auto-ends after
-      // _L3_KNIFE_DURATION seconds via _updateL3KnifeCanyon tick. Does NOT set
-      // state.corridorMode, so cone-spawn tick in 67-main-late.js stays off.
-      if (!state._l3EntryLogged) {
-        state._l3EntryLogged = true;
-        console.log('[L3-ENTRY] knifeEnabled=' + _L3_KNIFE_ENABLED + ' knifeActive=' + !!state.l3KnifeCanyon + ' knifeDone=' + !!state.l3KnifeDone + ' corridorMode=' + !!state.corridorMode + ' isDR=' + !!state.isDeathRun + ' JL=' + !!state._jetLightningMode);
-      }
-      if (!state.l3KnifeCanyon && !state.l3KnifeDone) {
-        try {
-          _startL3KnifeCanyon();
-        } catch (e) {
-          console.error('[L3-KNIFE] _startL3KnifeCanyon threw:', e);
-        }
-      }
-      return;
-    }
+    // L3 corridor (cone or knife-canyon) is driven by the DR sequencer in
+    // src/67-main-late.js (L3_CORRIDOR.activate). This branch is kept only
+    // as a no-op guard so non-DR reaches L3 don't fall through to gauntlet logic.
     // LEGACY PATH — original L3 dense cone corridor (kept intact for revert).
     if (!state.corridorMode) {
       state.corridorMode      = true;
@@ -9468,8 +9454,10 @@ function _updateL3KnifeCanyon(dt) {
   const u  = 0.5 + 0.5 * Math.sin(w);                   // 0..1
   const snap = 0.1 + (1.5 - 0.1) * u;
   _canyonTuner.snap = snap;
-  // Safety: if player left L3 while knife active, clean up
-  if (state.currentLevelIdx !== 2) { _stopL3KnifeCanyon(); return; }
+  // Auto-end after duration. No currentLevelIdx guard — in DR mode
+  // currentLevelIdx tracks the vibe shader (often 0 during T3B_L3BOSS),
+  // not the campaign level. Sequencer advance + retry/death both call
+  // _stopL3KnifeCanyon directly.
   if (state.l3KnifeElapsed >= _L3_KNIFE_DURATION) {
     _stopL3KnifeCanyon();
   }
@@ -14444,6 +14432,21 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['build', 'peak'],
     minBand: 3,
     activate(band, role) {
+      console.log('[L3-ENTRY] knifeEnabled=' + _L3_KNIFE_ENABLED + ' knifeActive=' + !!state.l3KnifeCanyon + ' knifeDone=' + !!state.l3KnifeDone + ' corridorMode=' + !!state.corridorMode + ' isDR=' + !!state.isDeathRun + ' band=' + (band && band.label));
+      // NEW: knife-canyon replacement for L3 cone corridor. Fires once per L3
+      // entry; _stopL3KnifeCanyon sets l3KnifeDone=true after 40s so the DR
+      // sequencer's isActive() returns false and advances to the next stage.
+      // Flip _L3_KNIFE_ENABLED to false to restore the legacy cone corridor.
+      if (_L3_KNIFE_ENABLED) {
+        state.speed = BASE_SPEED * 2.0; // match corridor speed for canyon scroll
+        try {
+          _startL3KnifeCanyon();
+        } catch (e) {
+          console.error('[L3-KNIFE] _startL3KnifeCanyon threw:', e);
+        }
+        return;
+      }
+      // LEGACY PATH — original L3 dense cone corridor (kept intact for revert).
       // Full campaign L3 corridor: 761 rows (74s at 2.0x speed)
       const rows = 761;
       state.corridorMode      = true;
@@ -14455,7 +14458,9 @@ const DR_MECHANIC_FAMILIES = {
       state._drL3MaxRows      = rows;
       state.speed = BASE_SPEED * 2.0; // L3 corridor speed
     },
-    isActive() { return state.corridorMode; }
+    // DR sequencer polls this to decide when to advance. Knife canyon counts
+    // as active until _stopL3KnifeCanyon flips l3KnifeDone=true (after 40s).
+    isActive() { return state.corridorMode || (state.l3KnifeCanyon === true); }
   },
   L4_SINE_CORRIDOR: {
     roles: ['build', 'peak'],
