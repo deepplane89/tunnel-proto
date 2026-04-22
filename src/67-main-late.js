@@ -850,6 +850,45 @@ function startDeathRun() {
       // Opening bonus rings — right in front of ship, fly into them before cones
       _ringRemoveAll();
       _ringSpawnRow(0, true); // spawn close to ship for immediate action
+
+      // ── Pre-warm canyon textures + shaders so first knife-canyon spawn ──────
+      // at T3B_L3BOSS has no stutter. Mirrors the JL pattern in
+      // 72-main-late-mid.js:3697. Pays the ~10-30ms texture gen + shader
+      // compile cost here during liftoff (when frame budget is lax) instead
+      // of during gameplay at the moment the canyon appears.
+      if (!_canyonTexCache) {
+        try {
+          _canyonTexCache = {
+            cyanTex: _makeCanyonCyanTex(1),
+            darkTex: _makeCanyonDarkTex(2),
+          };
+          // Force GPU shader compile for the two MeshPhysicalMaterial variants
+          // used by the canyon slabs. Without this, the first real canyon spawn
+          // triggers ~100-300ms compile hitch on first-frame render.
+          const _warmScene = new THREE.Scene();
+          const _warmCam   = new THREE.PerspectiveCamera();
+          const _warmCyanMat = new THREE.MeshPhysicalMaterial({
+            color: 0x04d4f0, metalness: 0.0, roughness: 0.65, ior: 1.22,
+            reflectivity: 0.55, clearcoat: 0.65, clearcoatRoughness: 0.22,
+            emissive: 0x6ef2ff, emissiveMap: _canyonTexCache.cyanTex,
+            emissiveIntensity: 2, flatShading: true, side: THREE.DoubleSide,
+          });
+          const _warmDarkMat = new THREE.MeshPhysicalMaterial({
+            color: 0x080810, roughness: 0.62, metalness: 0.0,
+            clearcoat: 0.4, clearcoatRoughness: 0.08, reflectivity: 0.7,
+            emissive: 0xff00cc, emissiveMap: _canyonTexCache.darkTex,
+            emissiveIntensity: 0.9, side: THREE.DoubleSide,
+          });
+          const _warmGeo = new THREE.BoxGeometry(1,1,1);
+          _warmScene.add(new THREE.Mesh(_warmGeo, _warmCyanMat));
+          _warmScene.add(new THREE.Mesh(_warmGeo, _warmDarkMat));
+          renderer.compile(_warmScene, _warmCam);
+          _warmGeo.dispose(); _warmCyanMat.dispose(); _warmDarkMat.dispose();
+          console.log('[DR-PREWARM] canyon textures + shaders compiled');
+        } catch (err) {
+          console.warn('[DR-PREWARM] failed:', err && err.message);
+        }
+      }
       // Wave FSM handles all sequencing from here
     }
     function _launchKey(e) {
