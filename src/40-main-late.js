@@ -324,8 +324,16 @@ function maybeStartGauntlet() {
       // NEW: knife-canyon corridor. Triggers once on L3 entry; auto-ends after
       // _L3_KNIFE_DURATION seconds via _updateL3KnifeCanyon tick. Does NOT set
       // state.corridorMode, so cone-spawn tick in 67-main-late.js stays off.
+      if (!state._l3EntryLogged) {
+        state._l3EntryLogged = true;
+        console.log('[L3-ENTRY] knifeEnabled=' + _L3_KNIFE_ENABLED + ' knifeActive=' + !!state.l3KnifeCanyon + ' knifeDone=' + !!state.l3KnifeDone + ' corridorMode=' + !!state.corridorMode + ' isDR=' + !!state.isDeathRun + ' JL=' + !!state._jetLightningMode);
+      }
       if (!state.l3KnifeCanyon && !state.l3KnifeDone) {
-        _startL3KnifeCanyon();
+        try {
+          _startL3KnifeCanyon();
+        } catch (e) {
+          console.error('[L3-KNIFE] _startL3KnifeCanyon threw:', e);
+        }
       }
       return;
     }
@@ -1705,7 +1713,7 @@ function checkLevelUp() {
     state.l4CorridorDone   = false; // allow L4 corridor to retrigger on new entry
     // Arm the L3 knife canyon for the NEXT L3 entry. Cleared so it fires once
     // per L3 visit. If the player just entered L3 (newIdx === 2), reset it.
-    if (newIdx === 2) state.l3KnifeDone = false;
+    if (newIdx === 2) { state.l3KnifeDone = false; state._l3EntryLogged = false; }
     // Leaving L3 mid-knife? tear it down so L4 can start clean.
     if (newIdx !== 2 && state.l3KnifeCanyon) _stopL3KnifeCanyon();
     // L5: random cones first, then zippers
