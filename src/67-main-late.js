@@ -5514,6 +5514,12 @@ window.addEventListener('keydown', (e) => {
       darkCrkCount: 14, darkCrkBright: 1.95, darkRgh: 0.62,
       darkClearcoat: 0.4, darkEmi: 0.9,
       lightIntensity: 1.2,
+      // Corridor shape
+      entranceThick: 700, entranceSlabs: 3, spawnDepth: -250,
+      // Sine curves (non-L4 path — still set to user-confirmed values for consistency)
+      sineIntensity: 0.28, sineAmp: 120, sinePeriod: 330, sineSpeed: 1,
+      // Live
+      scrollSpeed: 1,
       // L4-specific (halfX 21.5 = narrow-ish gap; slabW 40 = long slabs)
       _l4HalfX: 21.5, _l4AmpScale: 1.0, _l4RampCompress: 1.45, _l4SlabW: 40,
     });
