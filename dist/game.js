@@ -9387,6 +9387,11 @@ function _startL3KnifeCanyon() {
   state.l3KnifeSnapT     = 0;
   // Exit scroll-out trigger fires once when t reaches DURATION-EXIT_WINDOW.
   state._l3KnifeExitStarted = false;
+  // Mid-canyon snap rebuild fires once at DURATION/2 to swap slab geometry
+  // from snap=1.5 (fine arches) to snap=0.1 (chunky 10-unit stepped arches).
+  state._l3KnifeSnapRebuilt = false;
+  // Lock snap HIGH for the first half of the canyon.
+  _canyonTuner.snap = 1.5;
   // Entry-to-active ramp: player gets ~2s to register the canyon before
   // speed/handling/FOV punch in. 'pending' → 'ramping' → 'active'.
   state.l3KnifeRampPhase = 'pending';
@@ -9451,8 +9456,13 @@ function _stopL3KnifeCanyon() {
   }
   _canyonMode = 0;
   // Restore speed/handling/FOV if they were overridden during the canyon.
+  // NOTE: state.l3KnifeCanyon was just flipped false above, so the very next
+  // _drSequencerTick will re-acquire speed control and drive state.speed to
+  // whatever the current DR stage wants (clobber gate at 67:960 no longer
+  // holds). Writing _l3SavedSpeed here is just the one-frame bridge.
   if (state._l3SavedSpeed     !== undefined) { state.speed = state._l3SavedSpeed; state._l3SavedSpeed = undefined; }
   if (state._l3SavedPhysLevel !== undefined) { _physLevelOverride = state._l3SavedPhysLevel; state._l3SavedPhysLevel = undefined; }
+  console.log('[L3-KNIFE] restored speed=' + state.speed.toFixed(1) + ' physOverride=' + _physLevelOverride);
   if (state._l3SavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
     camera.fov = state._l3SavedFOV;
     camera.updateProjectionMatrix();
@@ -9471,7 +9481,7 @@ function _stopL3KnifeCanyon() {
 // - TARGET_FOV: camera FOV at full ramp (wider = sense of speed).
 const _L3_KNIFE_ENTRY_DELAY    = 2.0;
 const _L3_KNIFE_RAMP_DURATION  = 0.4;
-const _L3_KNIFE_TARGET_SPEED_MULT = 2.5;
+const _L3_KNIFE_TARGET_SPEED_MULT = 2.2;
 const _L3_KNIFE_TARGET_FOV_DELTA  = 15;  // added on top of saved FOV (e.g. 65 → 80)
 // Clean exit: in the last EXIT_WINDOW seconds of the canyon's life we stop
 // spawning new slabs and let the existing ones drift past the ship on Z.
@@ -9486,11 +9496,25 @@ const _L3_KNIFE_EXIT_WINDOW    = 4.0;
 function _updateL3KnifeCanyon(dt) {
   if (!state.l3KnifeCanyon) return;
   state.l3KnifeElapsed = (state.l3KnifeElapsed || 0) + dt;
-  // Snap ramp: linear 1.5 → 0.1 across the canyon's full duration.
-  // Arches start punchy and flatten toward the end as we approach exit.
-  const tNorm = Math.min(1, state.l3KnifeElapsed / _L3_KNIFE_DURATION);
-  const snap  = 1.5 + (0.1 - 1.5) * tNorm;   // 1.5 → 0.1 linear
-  _canyonTuner.snap = snap;
+  // Snap tier swap at mid-canyon: first half at 1.5 (fine), second half at 0.1
+  // (chunky 10-unit grid). Requires a geometry rebuild since SNAP is baked
+  // into slab vertex quantization at _createCanyonWalls time. See the SNAP
+  // read at src/20-main-early.js:7601.
+  if (!state._l3KnifeSnapRebuilt && state.l3KnifeElapsed >= _L3_KNIFE_DURATION * 0.5) {
+    state._l3KnifeSnapRebuilt = true;
+    _canyonTuner.snap = 0.1;
+    // Rebuild canyon in place. Do NOT call _startL3KnifeCanyon — that would
+    // reset l3KnifeElapsed, l3KnifeRampPhase, saved speed/FOV, etc.
+    if (typeof _canyonWalls !== 'undefined' && _canyonWalls) {
+      _destroyCanyonWalls();
+      _canyonSinePhase = 0;
+      _l4RowsElapsed   = 0;
+      _canyonActive    = true;
+      _canyonExiting   = false;
+      _createCanyonWalls();
+      console.log('[L3-KNIFE] mid-canyon rebuild — snap 1.5 → 0.1');
+    }
+  }
 
   // ── Entry ramp: pending → ramping → active ──────────────────────────────
   // Wait ENTRY_DELAY seconds after canyon spawn, then ramp speed/FOV/physics
