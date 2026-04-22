@@ -5500,8 +5500,24 @@ window.addEventListener('keydown', (e) => {
     Object.assign(_canyonTuner, vals);
     // Flag ON AFTER preset apply (presets don't define it, so it stays off otherwise)
     _canyonTuner._l4Recreation = true;
-    // L4 overrides — applied AFTER preset to override C1's halfXOverride=34 and slabW=20.
-    // These only take effect in L4-recreation K-mode; C1/C2/C3/C4 JL playback untouched.
+    // L4 "KNIFE ARCHES" preset — user-confirmed settings from in-game tuning session.
+    // Produces overlapping jagged arches that form a tight tunnel with L4-style bend.
+    // Values below override C1 preset for L4 mode only; JL sequencer canyons untouched
+    // because _jlCanyonStart re-Object.assigns the preset dict on entry.
+    Object.assign(_canyonTuner, {
+      // Geometry
+      slabH: 55, slabThick: 60, cols: 5, rows: 6, disp: 2, snap: 1.5,
+      // Profile (X offsets per row)
+      footX: 26, sweepX: 20, midX: 0, crestX: 0,
+      // Materials
+      cyanEmi: 2, cyanRgh: 0.65,
+      darkCrkCount: 14, darkCrkBright: 1.95, darkRgh: 0.62,
+      darkClearcoat: 0.4, darkEmi: 0.9,
+      lightIntensity: 1.2,
+      // L4-specific (halfX 21.5 = narrow-ish gap; slabW 40 = long slabs)
+      _l4HalfX: 21.5, _l4AmpScale: 1.0, _l4RampCompress: 1.45, _l4SlabW: 40,
+    });
+    // Mirror L4 tuners into the live fields the bake pipeline reads
     _canyonTuner.halfXOverride = _canyonTuner._l4HalfX;
     _canyonTuner.slabW         = _canyonTuner._l4SlabW;
     _canyonSinePhase = 0;

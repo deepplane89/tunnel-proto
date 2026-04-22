@@ -18318,8 +18318,24 @@ window.addEventListener('keydown', (e) => {
     Object.assign(_canyonTuner, vals);
     // Flag ON AFTER preset apply (presets don't define it, so it stays off otherwise)
     _canyonTuner._l4Recreation = true;
-    // L4 overrides — applied AFTER preset to override C1's halfXOverride=34 and slabW=20.
-    // These only take effect in L4-recreation K-mode; C1/C2/C3/C4 JL playback untouched.
+    // L4 "KNIFE ARCHES" preset — user-confirmed settings from in-game tuning session.
+    // Produces overlapping jagged arches that form a tight tunnel with L4-style bend.
+    // Values below override C1 preset for L4 mode only; JL sequencer canyons untouched
+    // because _jlCanyonStart re-Object.assigns the preset dict on entry.
+    Object.assign(_canyonTuner, {
+      // Geometry
+      slabH: 55, slabThick: 60, cols: 5, rows: 6, disp: 2, snap: 1.5,
+      // Profile (X offsets per row)
+      footX: 26, sweepX: 20, midX: 0, crestX: 0,
+      // Materials
+      cyanEmi: 2, cyanRgh: 0.65,
+      darkCrkCount: 14, darkCrkBright: 1.95, darkRgh: 0.62,
+      darkClearcoat: 0.4, darkEmi: 0.9,
+      lightIntensity: 1.2,
+      // L4-specific (halfX 21.5 = narrow-ish gap; slabW 40 = long slabs)
+      _l4HalfX: 21.5, _l4AmpScale: 1.0, _l4RampCompress: 1.45, _l4SlabW: 40,
+    });
+    // Mirror L4 tuners into the live fields the bake pipeline reads
     _canyonTuner.halfXOverride = _canyonTuner._l4HalfX;
     _canyonTuner.slabW         = _canyonTuner._l4SlabW;
     _canyonSinePhase = 0;
@@ -22749,6 +22765,10 @@ function _jlTickCorridor(dt, effectiveSpd) {
 // Helper — activate a canyon preset from the JL sequencer (pure obstacle, pauses spawner)
 let _canyonSavedDirLight = null;
 function _jlCanyonStart(mode) {
+  // L4 recreation takes precedence — if user's L4 canyon is active, do NOT let
+  // JL sequencer start/replace its own canyon. Prevents the "canyon ends + new one
+  // spawns in distance" symptom when K-mode is used during JL playback.
+  if (_canyonTuner._l4Recreation) return;
   if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
   _canyonMode    = mode;
   _canyonExiting = false;
@@ -22763,6 +22783,8 @@ function _jlCanyonStart(mode) {
 }
 // Helper — activate canyon alongside obstacles (does NOT pause spawner)
 function _jlCanyonStartOpen(mode) {
+  // Same L4 guard as _jlCanyonStart
+  if (_canyonTuner._l4Recreation) return;
   if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
   _canyonMode    = mode;
   _canyonExiting = false;
@@ -22777,6 +22799,9 @@ function _jlCanyonStartOpen(mode) {
 }
 // Helper — tear down canyon from JL sequencer
 function _jlCanyonStop() {
+  // L4 guard: user's L4 canyon persists across all JL canyon track boundaries.
+  // Only K-press (67-main-late.js handler) can tear it down.
+  if (_canyonTuner._l4Recreation) return;
   if (_canyonActive && _canyonWalls) {
     // Scroll-out exit: let slabs drift off naturally instead of instant pop
     _canyonExiting = true;
