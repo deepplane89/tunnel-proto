@@ -369,6 +369,14 @@ function _startL3KnifeCanyon() {
   state.l3KnifeDone      = false;
   // Start snap oscillator at midpoint so first motion is gentle
   state.l3KnifeSnapT     = 0;
+  // Entry-to-active ramp: player gets ~2s to register the canyon before
+  // speed/handling/FOV punch in. 'pending' → 'ramping' → 'active'.
+  state.l3KnifeRampPhase = 'pending';
+  state.l3KnifeRampT     = 0;
+  // Save originals so _stopL3KnifeCanyon can restore them.
+  state._l3SavedSpeed      = state.speed;
+  state._l3SavedPhysLevel  = _physLevelOverride;
+  state._l3SavedFOV        = (typeof camera !== 'undefined' && camera) ? camera.fov : 65;
 
   // Spawn the L4-recreation canyon with the knife-arches preset. Mirrors the
   // K-hotkey handler in 67-main-late.js:5470 but without the manual toggle.
@@ -424,11 +432,32 @@ function _stopL3KnifeCanyon() {
     _canyonSavedDirLight = null;
   }
   _canyonMode = 0;
+  // Restore speed/handling/FOV if they were overridden during the canyon.
+  if (state._l3SavedSpeed     !== undefined) { state.speed = state._l3SavedSpeed; state._l3SavedSpeed = undefined; }
+  if (state._l3SavedPhysLevel !== undefined) { _physLevelOverride = state._l3SavedPhysLevel; state._l3SavedPhysLevel = undefined; }
+  if (state._l3SavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
+    camera.fov = state._l3SavedFOV;
+    camera.updateProjectionMatrix();
+    state._l3SavedFOV = undefined;
+  }
+  state.l3KnifeRampPhase = 'off';
+  state.l3KnifeRampT     = 0;
   console.log('[L3-KNIFE] OFF');
 }
 
+// Entry-to-active ramp tuning.
+// - ENTRY_DELAY: seconds from canyon spawn until speed/handling/FOV start
+//   ramping in. The player needs a beat to register the visuals first.
+// - RAMP_DURATION: seconds over which speed/FOV interpolate to target.
+// - TARGET_SPEED_MULT: BASE_SPEED * this during canyon (K-hotkey was 2.5x).
+// - TARGET_FOV: camera FOV at full ramp (wider = sense of speed).
+const _L3_KNIFE_ENTRY_DELAY    = 2.0;
+const _L3_KNIFE_RAMP_DURATION  = 0.4;
+const _L3_KNIFE_TARGET_SPEED_MULT = 2.5;
+const _L3_KNIFE_TARGET_FOV_DELTA  = 15;  // added on top of saved FOV (e.g. 65 → 80)
+
 // Tick called every frame from the main update loop.
-// Advances the 40s timer and oscillates snap 0.1 ↔ 1.5 over a 4s period.
+// Advances the 40s timer, oscillates snap 0.1 ↔ 1.5, and runs the entry ramp.
 function _updateL3KnifeCanyon(dt) {
   if (!state.l3KnifeCanyon) return;
   state.l3KnifeElapsed = (state.l3KnifeElapsed || 0) + dt;
@@ -438,6 +467,38 @@ function _updateL3KnifeCanyon(dt) {
   const u  = 0.5 + 0.5 * Math.sin(w);                   // 0..1
   const snap = 0.1 + (1.5 - 0.1) * u;
   _canyonTuner.snap = snap;
+
+  // ── Entry ramp: pending → ramping → active ──────────────────────────────
+  // Wait ENTRY_DELAY seconds after canyon spawn, then ramp speed/FOV/physics
+  // in over RAMP_DURATION seconds. Once ramped we stay at target until stop.
+  const phase = state.l3KnifeRampPhase || 'pending';
+  if (phase === 'pending' && state.l3KnifeElapsed >= _L3_KNIFE_ENTRY_DELAY) {
+    state.l3KnifeRampPhase = 'ramping';
+    state.l3KnifeRampT     = 0;
+    // Snap to crisp L5 handling immediately — physics doesn't lerp well.
+    _physLevelOverride = 4;
+    console.log('[L3-KNIFE] entry ramp start');
+  }
+  if (state.l3KnifeRampPhase === 'ramping') {
+    state.l3KnifeRampT = (state.l3KnifeRampT || 0) + dt;
+    const t = Math.min(1, state.l3KnifeRampT / _L3_KNIFE_RAMP_DURATION);
+    // Ease-out cubic so the push-in decelerates at the end.
+    const e = 1 - Math.pow(1 - t, 3);
+    const startSpeed  = state._l3SavedSpeed || (BASE_SPEED * 2.0);
+    const targetSpeed = BASE_SPEED * _L3_KNIFE_TARGET_SPEED_MULT;
+    state.speed = startSpeed + (targetSpeed - startSpeed) * e;
+    if (typeof camera !== 'undefined' && camera) {
+      const startFOV  = state._l3SavedFOV || camera.fov;
+      const targetFOV = startFOV + _L3_KNIFE_TARGET_FOV_DELTA;
+      camera.fov = startFOV + (targetFOV - startFOV) * e;
+      camera.updateProjectionMatrix();
+    }
+    if (t >= 1) {
+      state.l3KnifeRampPhase = 'active';
+      console.log('[L3-KNIFE] entry ramp complete — speed=' + state.speed.toFixed(1) + ' fov=' + (camera ? camera.fov.toFixed(1) : '?'));
+    }
+  }
+
   // Auto-end after duration. No currentLevelIdx guard — in DR mode
   // currentLevelIdx tracks the vibe shader (often 0 during T3B_L3BOSS),
   // not the campaign level. Sequencer advance + retry/death both call
