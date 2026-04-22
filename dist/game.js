@@ -18889,7 +18889,10 @@ const _perfDiag = (function() {
       const p95 = sorted[Math.floor(sorted.length*0.95)];
       const p99 = sorted[Math.floor(sorted.length*0.99)];
       const worst = sorted[sorted.length-1];
-      console.log('[PERF] '+sorted.length+' frames / 2s — p50='+p50.toFixed(1)+'ms p95='+p95.toFixed(1)+'ms p99='+p99.toFixed(1)+'ms worst='+worst.toFixed(1)+'ms');
+      // Draw-call / tri budget readout (golden rule: draws <100, tris <500k)
+      const dpr = (renderer && renderer.getPixelRatio) ? renderer.getPixelRatio().toFixed(2) : '?';
+      const canyonTag = (typeof _canyonActive !== 'undefined' && _canyonActive) ? ' CANYON' : '';
+      console.log('[PERF] '+sorted.length+' frames / 2s — p50='+p50.toFixed(1)+'ms p95='+p95.toFixed(1)+'ms p99='+p99.toFixed(1)+'ms worst='+worst.toFixed(1)+'ms — draws='+draws+' tris='+(tris/1000).toFixed(0)+'k dpr='+dpr+canyonTag);
       _rollingFrames.length = 0;
       _rollingStart = now;
     }
