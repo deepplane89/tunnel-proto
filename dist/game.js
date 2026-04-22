@@ -9469,15 +9469,12 @@ function _stopL3KnifeCanyon() {
 }
 
 // Entry-to-active ramp tuning.
-// - ENTRY_DELAY: seconds from canyon spawn until speed/handling/FOV start
-//   ramping in. The player needs a beat to register the visuals first.
-// - RAMP_DURATION: seconds over which speed/FOV interpolate to target.
-// - TARGET_SPEED_MULT: BASE_SPEED * this during canyon (K-hotkey was 2.5x).
-// - TARGET_FOV: camera FOV at full ramp (wider = sense of speed).
-const _L3_KNIFE_ENTRY_DELAY    = 2.0;
+// - RAMP_DURATION: seconds over which speed lerps to target after the
+//   ship enters the canyon (corridor revealed at Z=-210).
+// - TARGET_SPEED_MULT: BASE_SPEED * this during canyon. FOV follows
+//   automatically via the global speed-to-FOV lerp in perf-diag.js.
 const _L3_KNIFE_RAMP_DURATION  = 0.4;
 const _L3_KNIFE_TARGET_SPEED_MULT = 2.2;
-const _L3_KNIFE_TARGET_FOV_DELTA  = 15;  // added on top of saved FOV (e.g. 65 → 80)
 // Clean exit: in the last EXIT_WINDOW seconds of the canyon's life we stop
 // spawning new slabs and let the existing ones drift past the ship on Z.
 // Matches the JL sequencer's _jlCanyonStop pattern: _canyonActive=false +
