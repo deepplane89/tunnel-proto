@@ -9501,15 +9501,20 @@ function _updateL3KnifeCanyon(dt) {
   _canyonTuner.snap = 0.1 + (1.5 - 0.1) * u;
 
   // ── Entry ramp: pending → ramping → active ──────────────────────────────
-  // Wait ENTRY_DELAY seconds after canyon spawn, then ramp speed/FOV/physics
-  // in over RAMP_DURATION seconds. Once ramped we stay at target until stop.
+  // Ramp speed+physics in over RAMP_DURATION seconds once the ship enters
+  // the canyon (corridor revealed). Once ramped we stay at target until stop.
+  // FOV is handled by the global speed-to-FOV lerp (perf-diag.js).
   const phase = state.l3KnifeRampPhase || 'pending';
-  if (phase === 'pending' && state.l3KnifeElapsed >= _L3_KNIFE_ENTRY_DELAY) {
+  // Position-based trigger: fire when _canyonWalls._corridorRevealed flips
+  // true (entrance slab reached Z=-210 — ship at canyon mouth). This is
+  // the same reveal trigger used by the main canyon system.
+  const revealed = (typeof _canyonWalls !== 'undefined' && _canyonWalls && _canyonWalls._corridorRevealed);
+  if (phase === 'pending' && revealed) {
     state.l3KnifeRampPhase = 'ramping';
     state.l3KnifeRampT     = 0;
     // Snap to crisp L5 handling immediately — physics doesn't lerp well.
     _physLevelOverride = 4;
-    console.log('[L3-KNIFE] entry ramp start');
+    console.log('[L3-KNIFE] entry ramp start (ship at canyon mouth)');
   }
   if (state.l3KnifeRampPhase === 'ramping') {
     state.l3KnifeRampT = (state.l3KnifeRampT || 0) + dt;
@@ -9519,15 +9524,12 @@ function _updateL3KnifeCanyon(dt) {
     const startSpeed  = state._l3SavedSpeed || (BASE_SPEED * 2.0);
     const targetSpeed = BASE_SPEED * _L3_KNIFE_TARGET_SPEED_MULT;
     state.speed = startSpeed + (targetSpeed - startSpeed) * e;
-    if (typeof camera !== 'undefined' && camera) {
-      const startFOV  = state._l3SavedFOV || camera.fov;
-      const targetFOV = startFOV + _L3_KNIFE_TARGET_FOV_DELTA;
-      camera.fov = startFOV + (targetFOV - startFOV) * e;
-      camera.updateProjectionMatrix();
-    }
+    // FOV follows naturally via the global speed-to-FOV lerp in perf-diag.js
+    // (targetFOV = _baseFOV + _fovSpeedBoost * speed/80) — matching the rest
+    // of the game's speed-change pattern, so no manual FOV write needed here.
     if (t >= 1) {
       state.l3KnifeRampPhase = 'active';
-      console.log('[L3-KNIFE] entry ramp complete — speed=' + state.speed.toFixed(1) + ' fov=' + (camera ? camera.fov.toFixed(1) : '?'));
+      console.log('[L3-KNIFE] entry ramp complete — speed=' + state.speed.toFixed(1));
     }
   }
 
