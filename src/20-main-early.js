@@ -8293,31 +8293,80 @@ const _awTuner = {
 const _awTunerDefaults = Object.freeze({ ...(_awTuner) });
 let _awTunerPaused = false;
 
-// ── Angled-wall tuner: console access (desktop) + mobile panel ──
+// ── RANDOM angled-wall tuner (System 2: lane-based obstacles used by T4A) ──
+// Separate from _awTuner (grid generator). These drive the hardcoded values in
+// the _isWallBand branch of spawnObstacles (src/40-main-late.js).
+const _awRandTuner = {
+  wallW:     8,    // wall width (was hardcoded scale.x)
+  wallH:     4,    // wall height (was hardcoded scale.y)
+  angleMin:  25,   // min angle degrees (was hardcoded)
+  angleMax:  45,   // max angle degrees (was 25 + 20)
+  countMin:  6,    // walls per row min (was 6)
+  countMax:  8,    // walls per row max (was 6 + floor(random*3) = 6-8)
+  laneGap:   3,    // min lane separation (was 3)
+  fireRows:  6,    // how many rows FIRE spawns (so you can feel a batch)
+  fireRowGap: 40,  // Z spacing between FIRE rows
+};
+const _awRandDefaults = Object.freeze({ ..._awRandTuner });
+window._awRand = _awRandTuner; // expose for obstacle spawner to read
+
 window._awLog = function() {
-  const out = { '--- AW TUNER ---': '', ...(_awTuner), activeCount: _awActive.length };
-  console.log('[AW LOG]\n' + JSON.stringify(out, null, 2));
-  return out;
+  console.log('[AW-RAND LOG]\n' + JSON.stringify(_awRandTuner, null, 2));
+  return _awRandTuner;
 };
 window._awSet = function(vals) {
-  Object.assign(_awTuner, vals);
-  console.log('[AW SET] applied:', JSON.stringify(vals));
-  // Reflect into panel if open
+  Object.assign(_awRandTuner, vals);
+  console.log('[AW-RAND SET] applied:', JSON.stringify(vals));
   if (window._awPanelSync) window._awPanelSync();
-  return _awTuner;
+  return _awRandTuner;
 };
 window._awReset = function() {
-  Object.assign(_awTuner, _awTunerDefaults);
-  console.log('[AW RESET] back to defaults');
+  Object.assign(_awRandTuner, _awRandDefaults);
+  console.log('[AW-RAND RESET] back to defaults');
   if (window._awPanelSync) window._awPanelSync();
-  return _awTuner;
+  return _awRandTuner;
 };
-// Fire a one-shot batch of angled walls using current tuner values (for testing from anywhere).
+// Fire a one-shot batch of RANDOM angled walls (the actual T4A obstacle).
+// Directly spawns N rows at staggered Z so you can feel a batch + tune shape.
 window._awFire = function() {
-  state.angledWallsActive = true;
-  state.angledWallSpawnZ = -_awTuner.zSpacing;
-  state.angledWallRowsDone = 0;
-  console.log('[AW FIRE] spawning ' + _awTuner.rows + ' rows');
+  const T = _awRandTuner;
+  for (let r = 0; r < T.fireRows; r++) {
+    const count = T.countMin + Math.floor(Math.random() * (T.countMax - T.countMin + 1));
+    const rowZ = SPAWN_Z - r * T.fireRowGap;
+    // Pick lanes with guaranteed 2-lane gap + min separation
+    const laneCount = LANE_COUNT;
+    const lanes = Array.from({ length: laneCount }, (_, i) => i);
+    const shuffled = [...lanes].sort(() => Math.random() - 0.5);
+    const gapStart = Math.floor(Math.random() * (laneCount - 1));
+    const gapLanes = new Set([gapStart, gapStart + 1]);
+    const blocked = [];
+    for (const lane of shuffled) {
+      if (blocked.length >= count) break;
+      if (gapLanes.has(lane)) continue;
+      if (blocked.some(b => Math.abs(b - lane) < T.laneGap)) continue;
+      blocked.push(lane);
+    }
+    blocked.forEach(lane => {
+      const laneX = state.shipX + (lane - (laneCount - 1) / 2) * LANE_WIDTH;
+      const wall = _getPooledWall();
+      if (!wall) return;
+      const angleSign = Math.random() < 0.5 ? 1 : -1;
+      const angleDeg = T.angleMin + Math.random() * (T.angleMax - T.angleMin);
+      wall.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, rowZ);
+      wall.rotation.set(0, 0, 0);
+      const m = wall.userData._mesh;
+      const e = wall.userData._edges;
+      m.scale.set(T.wallW, T.wallH, 0.3);
+      e.scale.set(T.wallW, T.wallH, 0.3);
+      m.position.y = T.wallH / 2;
+      e.position.y = T.wallH / 2;
+      wall.rotation.y = angleSign * angleDeg * Math.PI / 180;
+      m.material.uniforms.uOpacity.value = 0;
+      e.material.opacity = 0;
+      _awActive.push(wall);
+    });
+  }
+  console.log('[AW-RAND FIRE] ' + T.fireRows + ' rows, ' + T.countMin + '-' + T.countMax + ' walls each');
 };
 
 // ── Mobile-friendly tuner panel (tap +/- to nudge each knob) ──
@@ -8328,18 +8377,17 @@ window._awPanel = function(on) {
   if (on === false) { if (panel) panel.remove(); window._awPanelSync = null; return; }
   if (panel) return; // already open
 
+  const T = _awRandTuner;
   const KNOBS = [
-    { k: 'xOffset',  step: 0.5, label: 'X offset (L/R from lane)' },
-    { k: 'spacingX', step: 1,   label: 'Spacing X (gap between copies)' },
-    { k: 'copiesX',  step: 1,   label: 'Copies X (how many per row)', int: true },
-    { k: 'spacingY', step: 0.5, label: 'Spacing Y (vertical gap)' },
-    { k: 'copiesY',  step: 1,   label: 'Copies Y (vertical stacks)', int: true },
-    { k: 'spacingZ', step: 0.5, label: 'Spacing Z (depth per row)' },
-    { k: 'copiesZ',  step: 1,   label: 'Copies Z (depth copies)', int: true },
-    { k: 'zSpacing', step: 5,   label: 'Z spacing (row-to-row)' },
-    { k: 'angle',    step: 2,   label: 'Angle (deg)' },
-    { k: 'wallW',    step: 1,   label: 'Wall width' },
-    { k: 'wallH',    step: 0.5, label: 'Wall height' },
+    { k: 'wallW',      step: 0.5, label: 'Wall width' },
+    { k: 'wallH',      step: 0.5, label: 'Wall height' },
+    { k: 'angleMin',   step: 2,   label: 'Angle min (deg)' },
+    { k: 'angleMax',   step: 2,   label: 'Angle max (deg)' },
+    { k: 'countMin',   step: 1,   label: 'Walls/row min', int: true },
+    { k: 'countMax',   step: 1,   label: 'Walls/row max', int: true },
+    { k: 'laneGap',    step: 1,   label: 'Min lane gap', int: true },
+    { k: 'fireRows',   step: 1,   label: 'FIRE rows', int: true },
+    { k: 'fireRowGap', step: 5,   label: 'FIRE row Z-gap' },
   ];
 
   panel = document.createElement('div');
@@ -8364,11 +8412,11 @@ window._awPanel = function(on) {
     val.style.cssText = 'width:52px;text-align:center;color:#0ff;font-weight:bold;';
     const plus = document.createElement('button');
     plus.textContent = '+'; plus.style.cssText = minus.style.cssText;
-    const refresh = () => { val.textContent = int ? String(_awTuner[k]) : (+_awTuner[k]).toFixed(1); };
+    const refresh = () => { val.textContent = int ? String(T[k]) : (+T[k]).toFixed(1); };
     refresh();
     rowEls[k] = refresh;
-    minus.onclick = () => { _awTuner[k] = int ? Math.max(1, _awTuner[k] - step) : _awTuner[k] - step; refresh(); };
-    plus.onclick  = () => { _awTuner[k] = _awTuner[k] + step; refresh(); };
+    minus.onclick = () => { T[k] = int ? Math.max(1, T[k] - step) : Math.max(0, T[k] - step); refresh(); };
+    plus.onclick  = () => { T[k] = T[k] + step; refresh(); };
     row.appendChild(lbl); row.appendChild(minus); row.appendChild(val); row.appendChild(plus);
     panel.appendChild(row);
   });

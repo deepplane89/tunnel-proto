@@ -1526,7 +1526,13 @@ function spawnObstacles() {
   if (state.isDeathRun && state._seqSpawnMode) {
     const _sm = state._seqSpawnMode;
     if (_sm === 'cones')     { /* default cones, no overrides */ }
-    else if (_sm === 'angled')    { _isWallBand = true; clampedCount = 6 + Math.floor(Math.random() * 3); }
+    else if (_sm === 'angled')    {
+      _isWallBand = true;
+      // Read count from _awRandTuner so tuner values drive in-game spawns too.
+      const _T = window._awRand;
+      if (_T) clampedCount = _T.countMin + Math.floor(Math.random() * (_T.countMax - _T.countMin + 1));
+      else    clampedCount = 6 + Math.floor(Math.random() * 3);
+    }
     else if (_sm === 'lethal')    { _isRingBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
     else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 2 + Math.floor(Math.random() * 2); } // original count restored
     else if (_sm === 'endless')   { _isMixBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
@@ -1556,7 +1562,7 @@ function spawnObstacles() {
     if (gapLanes.has(lane)) continue;
     // For rings/walls/mix: enforce minimum lane gap so they don't overlap
     if ((_isRingBand || _isMixBand) && blocked.some(b => Math.abs(b - lane) < 4)) continue;
-    if (_isWallBand && blocked.some(b => Math.abs(b - lane) < 3)) continue;
+    if (_isWallBand && blocked.some(b => Math.abs(b - lane) < (window._awRand ? window._awRand.laneGap : 3))) continue;
     if (_isFatConeBand && blocked.some(b => Math.abs(b - lane) < 8)) continue; // wider gap between fat cones
     blocked.push(lane);
   }
@@ -1642,16 +1648,22 @@ function spawnObstacles() {
     if (_isWallBand) {
       const wall = _getPooledWall();
       if (wall) {
+        const _T = window._awRand;
+        const wallW = _T ? _T.wallW : 8;
+        const wallH = _T ? _T.wallH : 4;
+        const angMin = _T ? _T.angleMin : 25;
+        const angMax = _T ? _T.angleMax : 45;
         const angleSign = Math.random() < 0.5 ? 1 : -1;
+        const angleDeg = angMin + Math.random() * (angMax - angMin);
         wall.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
         wall.rotation.set(0, 0, 0);
         const m = wall.userData._mesh;
         const e = wall.userData._edges;
-        m.scale.set(8, 4, 0.3);
-        e.scale.set(8, 4, 0.3);
-        m.position.y = 2;
-        e.position.y = 2;
-        wall.rotation.y = angleSign * (25 + Math.random() * 20) * Math.PI / 180;
+        m.scale.set(wallW, wallH, 0.3);
+        e.scale.set(wallW, wallH, 0.3);
+        m.position.y = wallH / 2;
+        e.position.y = wallH / 2;
+        wall.rotation.y = angleSign * angleDeg * Math.PI / 180;
         wall.userData._mesh.material.uniforms.uOpacity.value = 0;
         wall.userData._edges.material.opacity = 0;
         _awActive.push(wall);
