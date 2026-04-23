@@ -8497,12 +8497,14 @@ window._awPanel = function(on) {
   window._awPanelSync = () => { KNOBS.forEach(({k}) => rowEls[k] && rowEls[k]()); };
 };
 
-// Auto-open panel if URL contains ?aw=1 (mobile testing, no console needed)
+// Hotkey W: toggle AW tuner panel (not on title screen — W there toggles water)
 try {
-  if (/[?&]aw=1\b/.test(location.search)) {
-    // Defer so DOM is ready
-    setTimeout(() => window._awPanel(true), 500);
-  }
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'w' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (state.phase === 'title') return; // don't conflict with water toggle
+    const open = !!document.getElementById('aw-tuner-panel');
+    window._awPanel(open ? false : true);
+  });
 } catch(_) {}
 let _noSpawnMode = false; // admin: suppress all obstacle spawning
 const AW_POOL_SIZE = 300;
