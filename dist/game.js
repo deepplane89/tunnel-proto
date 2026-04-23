@@ -8395,6 +8395,115 @@ const _awTuner = {
 };
 const _awTunerDefaults = Object.freeze({ ...(_awTuner) });
 let _awTunerPaused = false;
+
+// ── Angled-wall tuner: console access (desktop) + mobile panel ──
+window._awLog = function() {
+  const out = { '--- AW TUNER ---': '', ...(_awTuner), activeCount: _awActive.length };
+  console.log('[AW LOG]\n' + JSON.stringify(out, null, 2));
+  return out;
+};
+window._awSet = function(vals) {
+  Object.assign(_awTuner, vals);
+  console.log('[AW SET] applied:', JSON.stringify(vals));
+  // Reflect into panel if open
+  if (window._awPanelSync) window._awPanelSync();
+  return _awTuner;
+};
+window._awReset = function() {
+  Object.assign(_awTuner, _awTunerDefaults);
+  console.log('[AW RESET] back to defaults');
+  if (window._awPanelSync) window._awPanelSync();
+  return _awTuner;
+};
+// Fire a one-shot batch of angled walls using current tuner values (for testing from anywhere).
+window._awFire = function() {
+  state.angledWallsActive = true;
+  state.angledWallSpawnZ = -_awTuner.zSpacing;
+  state.angledWallRowsDone = 0;
+  console.log('[AW FIRE] spawning ' + _awTuner.rows + ' rows');
+};
+
+// ── Mobile-friendly tuner panel (tap +/- to nudge each knob) ──
+// Toggle with window._awPanel(true/false). Off by default. Keys to nudge:
+// xOffset, spacingX, copiesX, spacingY, copiesY, spacingZ, copiesZ, angle, zSpacing, wallW, wallH.
+window._awPanel = function(on) {
+  let panel = document.getElementById('aw-tuner-panel');
+  if (on === false) { if (panel) panel.remove(); window._awPanelSync = null; return; }
+  if (panel) return; // already open
+
+  const KNOBS = [
+    { k: 'xOffset',  step: 0.5, label: 'X offset (L/R from lane)' },
+    { k: 'spacingX', step: 1,   label: 'Spacing X (gap between copies)' },
+    { k: 'copiesX',  step: 1,   label: 'Copies X (how many per row)', int: true },
+    { k: 'spacingY', step: 0.5, label: 'Spacing Y (vertical gap)' },
+    { k: 'copiesY',  step: 1,   label: 'Copies Y (vertical stacks)', int: true },
+    { k: 'spacingZ', step: 0.5, label: 'Spacing Z (depth per row)' },
+    { k: 'copiesZ',  step: 1,   label: 'Copies Z (depth copies)', int: true },
+    { k: 'zSpacing', step: 5,   label: 'Z spacing (row-to-row)' },
+    { k: 'angle',    step: 2,   label: 'Angle (deg)' },
+    { k: 'wallW',    step: 1,   label: 'Wall width' },
+    { k: 'wallH',    step: 0.5, label: 'Wall height' },
+  ];
+
+  panel = document.createElement('div');
+  panel.id = 'aw-tuner-panel';
+  panel.style.cssText = 'position:fixed;top:10px;right:10px;z-index:99999;background:rgba(0,10,25,0.92);color:#9cf;font:11px/1.3 monospace;padding:8px;border:1px solid #0af;border-radius:6px;max-width:260px;max-height:80vh;overflow-y:auto;user-select:none;-webkit-user-select:none;';
+
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'font-weight:bold;color:#0ff;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;';
+  hdr.innerHTML = '<span>AW TUNER</span><span id="aw-tp-close" style="cursor:pointer;color:#f66;padding:2px 6px;">✕</span>';
+  panel.appendChild(hdr);
+
+  const rowEls = {};
+  KNOBS.forEach(({ k, step, label, int }) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:4px;margin:3px 0;';
+    const lbl = document.createElement('div');
+    lbl.style.cssText = 'flex:1;font-size:10px;color:#8bc;';
+    lbl.textContent = label;
+    const minus = document.createElement('button');
+    minus.textContent = '−'; minus.style.cssText = 'width:26px;height:26px;background:#024;color:#9cf;border:1px solid #0af;border-radius:3px;font-size:14px;cursor:pointer;touch-action:manipulation;';
+    const val = document.createElement('div');
+    val.style.cssText = 'width:52px;text-align:center;color:#0ff;font-weight:bold;';
+    const plus = document.createElement('button');
+    plus.textContent = '+'; plus.style.cssText = minus.style.cssText;
+    const refresh = () => { val.textContent = int ? String(_awTuner[k]) : (+_awTuner[k]).toFixed(1); };
+    refresh();
+    rowEls[k] = refresh;
+    minus.onclick = () => { _awTuner[k] = int ? Math.max(1, _awTuner[k] - step) : _awTuner[k] - step; refresh(); };
+    plus.onclick  = () => { _awTuner[k] = _awTuner[k] + step; refresh(); };
+    row.appendChild(lbl); row.appendChild(minus); row.appendChild(val); row.appendChild(plus);
+    panel.appendChild(row);
+  });
+
+  // Action buttons
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:4px;margin-top:8px;';
+  const mkBtn = (txt, col, fn) => {
+    const b = document.createElement('button');
+    b.textContent = txt;
+    b.style.cssText = 'flex:1;padding:6px;background:#013;color:'+col+';border:1px solid '+col+';border-radius:3px;cursor:pointer;font-size:11px;touch-action:manipulation;';
+    b.onclick = fn;
+    return b;
+  };
+  actions.appendChild(mkBtn('FIRE',  '#0f0', () => window._awFire()));
+  actions.appendChild(mkBtn('LOG',   '#ff0', () => window._awLog()));
+  actions.appendChild(mkBtn('RESET', '#f66', () => window._awReset()));
+  panel.appendChild(actions);
+
+  document.body.appendChild(panel);
+  document.getElementById('aw-tp-close').onclick = () => window._awPanel(false);
+
+  window._awPanelSync = () => { KNOBS.forEach(({k}) => rowEls[k] && rowEls[k]()); };
+};
+
+// Auto-open panel if URL contains ?aw=1 (mobile testing, no console needed)
+try {
+  if (/[?&]aw=1\b/.test(location.search)) {
+    // Defer so DOM is ready
+    setTimeout(() => window._awPanel(true), 500);
+  }
+} catch(_) {}
 let _noSpawnMode = false; // admin: suppress all obstacle spawning
 const AW_POOL_SIZE = 300;
 const _awPool = [];
@@ -17042,6 +17151,35 @@ function update(dt) {
       }
 
     } else if (state._tutorialStep === 1.55) {
+      state._tutorialTimer = (state._tutorialTimer || 0) + dt;
+      if (state._tutorialTimer >= 2.5) {
+        const _sf = document.getElementById('tut-signal-flash');
+        if (_sf) { _sf.style.transition = 'none'; _sf.style.opacity = '0'; }
+        // Go into angled-wall beat (not end card yet).
+        state._tutorialStep = 1.6; state._tutorialTimer = 0;
+        state._tutAwTriggered = false;
+      }
+
+    } else if (state._tutorialStep === 1.6) {
+      // ── STEP 1.6: Angled walls practice ──
+      // One-shot: fire a batch of angled walls using current _awTuner settings.
+      // Reuses the main-mode spawn loop by flipping angledWallsActive.
+      _tutShowHint('DODGE THE ANGLED WALLS', _mob ? 'Weave side to side' : '← → to weave', '#00aaff');
+      if (!state._tutAwTriggered) {
+        state._tutAwTriggered = true;
+        state.angledWallsActive = true;
+        state.angledWallSpawnZ = -_awTuner.zSpacing;
+        state.angledWallRowsDone = 0;
+      }
+      // Advance once the wall batch has fully passed (main loop clears
+      // angledWallsActive when rows exhausted + no walls remain).
+      if (state._tutAwTriggered && !state.angledWallsActive && _awActive.length === 0) {
+        _tutChime(); _tutSignal();
+        _tutHideText();
+        state._tutorialStep = 1.65; state._tutorialTimer = 0;
+      }
+
+    } else if (state._tutorialStep === 1.65) {
       state._tutorialTimer = (state._tutorialTimer || 0) + dt;
       if (state._tutorialTimer >= 2.5) {
         const _sf = document.getElementById('tut-signal-flash');

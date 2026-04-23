@@ -4028,6 +4028,35 @@ function update(dt) {
       if (state._tutorialTimer >= 2.5) {
         const _sf = document.getElementById('tut-signal-flash');
         if (_sf) { _sf.style.transition = 'none'; _sf.style.opacity = '0'; }
+        // Go into angled-wall beat (not end card yet).
+        state._tutorialStep = 1.6; state._tutorialTimer = 0;
+        state._tutAwTriggered = false;
+      }
+
+    } else if (state._tutorialStep === 1.6) {
+      // ── STEP 1.6: Angled walls practice ──
+      // One-shot: fire a batch of angled walls using current _awTuner settings.
+      // Reuses the main-mode spawn loop by flipping angledWallsActive.
+      _tutShowHint('DODGE THE ANGLED WALLS', _mob ? 'Weave side to side' : '← → to weave', '#00aaff');
+      if (!state._tutAwTriggered) {
+        state._tutAwTriggered = true;
+        state.angledWallsActive = true;
+        state.angledWallSpawnZ = -_awTuner.zSpacing;
+        state.angledWallRowsDone = 0;
+      }
+      // Advance once the wall batch has fully passed (main loop clears
+      // angledWallsActive when rows exhausted + no walls remain).
+      if (state._tutAwTriggered && !state.angledWallsActive && _awActive.length === 0) {
+        _tutChime(); _tutSignal();
+        _tutHideText();
+        state._tutorialStep = 1.65; state._tutorialTimer = 0;
+      }
+
+    } else if (state._tutorialStep === 1.65) {
+      state._tutorialTimer = (state._tutorialTimer || 0) + dt;
+      if (state._tutorialTimer >= 2.5) {
+        const _sf = document.getElementById('tut-signal-flash');
+        if (_sf) { _sf.style.transition = 'none'; _sf.style.opacity = '0'; }
         state._tutorialStep = 2; state._tutorialTimer = 0;
       }
 
