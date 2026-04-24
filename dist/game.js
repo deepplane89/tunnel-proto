@@ -7364,10 +7364,14 @@ let _canyonManual = false; // true when triggered by V key — bypasses sequence
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:true },
+  // NOTE: _allCyan and _allDark MUST be explicit on every preset. _canyonTuner is
+  // updated via Object.assign, so an omitted key inherits the previous preset's
+  // value — e.g. mode 2 (_allDark:true) bleeding into mode 4 made the straight
+  // canyon render all-dark instead of alternating cyan/dark.
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:true,  _allDark:false },
   2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:2.6, _allCyan:false },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false, _allDark:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:2.6, _allCyan:false, _allDark:false },
   // Mode 5 = EXPERIMENTAL — test bed, B hotkey only, never triggered by sequencer.
   // Has optional ramp fields: sineStartI/Z/FullZ for gradual sine-intensity along Z,
   // halfXStart/Full/StartZ/FullZ for corridor width squeeze along Z.
