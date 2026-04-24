@@ -7261,10 +7261,10 @@ let _canyonManual = false; // true when triggered by V key — bypasses sequence
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
 const _CANYON_MODE_NAMES = ['OFF', 'Canyon Corridor 1', 'Canyon Corridor 2', 'Regular Canyon', 'Straight Canyon'];
 const _CANYON_PRESETS = {
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-500, scrollSpeed:1.0, _allCyan:true },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-500, scrollSpeed:1.0, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-500, scrollSpeed:1.0, _allCyan:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:1, spawnDepth:-500, scrollSpeed:2.6, _allCyan:false },
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:true },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:2.6, _allCyan:false },
   // Mode 5 = EXPERIMENTAL — test bed, B hotkey only, never triggered by sequencer.
   // Has optional ramp fields: sineStartI/Z/FullZ for gradual sine-intensity along Z,
   // halfXStart/Full/StartZ/FullZ for corridor width squeeze along Z.
@@ -7274,7 +7274,7 @@ const _CANYON_PRESETS = {
        sineStartI:0.0,   sineStartZ:-150, sineFullZ:-500,
        halfXOverride:50,
        halfXStart:60,    halfXFull:25, halfXStartZ:-150, halfXFullZ:-500,
-       entranceThick:700, entranceSlabs:1, spawnDepth:-500, scrollSpeed:1.5,
+       entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.5,
        _allCyan:false },
 };
 let _canyonSqueezeRow = 0;
@@ -8147,10 +8147,14 @@ function _updateCanyonWalls(dt, speed) {
 
       m.position.z += scroll;
 
-      // ── Distance fade-in: ramp emissive from 0 at spawnDepth to full by -150 ──
+      // ── Distance fade-in: keep slabs emissive-dark deep in fog, ramp up close ──
+      // Extended fade range so emissive stays 0 through the full fog zone.
+      // Emissive bypasses scene fog in Three.js; keeping emissive low until the
+      // slab is close lets exponential fog fully hide the silhouette during
+      // sine-wave curves where slabs would otherwise emerge visibly.
       if (m.children[0]) {
         const fadeStart = T.spawnDepth || -250;
-        const fadeEnd   = -150;
+        const fadeEnd   = -80;  // was -150; tighter fade-in keeps distant slabs fogged out
         const fadeT     = Math.min(1, Math.max(0, (m.position.z - fadeStart) / (fadeEnd - fadeStart)));
         const mat = m.children[0].material;
         if (mat.emissiveIntensity !== undefined) {
