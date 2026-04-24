@@ -8407,8 +8407,9 @@ const _awRandTuner = {
   countMin:  6,    // walls per row min (was 6)
   countMax:  8,    // walls per row max (was 6 + floor(random*3) = 6-8)
   laneGap:   3,    // min lane separation (was 3)
-  fireRows:  6,    // how many rows FIRE spawns (so you can feel a batch)
-  fireRowGap: 40,  // Z spacing between FIRE rows
+  fireRows:  70,   // how many rows FIRE spawns (70 = full T4A equivalent)
+  fireRowGap: 30,  // Z spacing between FIRE rows (matches live T4A _spawnZBase)
+  fireJitter: 5,   // ±Z jitter per row (matches live T4A jitter)
 };
 const _awRandDefaults = Object.freeze({ ..._awRandTuner });
 window._awRand = _awRandTuner; // expose for obstacle spawner to read
@@ -8430,12 +8431,12 @@ window._awReset = function() {
   return _awRandTuner;
 };
 // Fire a one-shot batch of RANDOM angled walls (the actual T4A obstacle).
-// Directly spawns N rows at staggered Z so you can feel a batch + tune shape.
+// Directly spawns N rows at staggered Z, matching live T4A cadence.
 window._awFire = function() {
   const T = _awRandTuner;
   for (let r = 0; r < T.fireRows; r++) {
     const count = T.countMin + Math.floor(Math.random() * (T.countMax - T.countMin + 1));
-    const rowZ = SPAWN_Z - r * T.fireRowGap;
+    const rowZ = SPAWN_Z - r * T.fireRowGap + (Math.random() - 0.5) * 2 * T.fireJitter;
     // Pick lanes with guaranteed 2-lane gap + min separation
     const laneCount = LANE_COUNT;
     const lanes = Array.from({ length: laneCount }, (_, i) => i);
@@ -8472,6 +8473,31 @@ window._awFire = function() {
   console.log('[AW-RAND FIRE] ' + T.fireRows + ' rows, ' + T.countMin + '-' + T.countMax + ' walls each');
 };
 
+// LOOP: fires a batch, when the last wall has passed, fires another.
+// Tap again to stop. Uses the same cadence as FIRE.
+let _awLoopTimer = null;
+window._awLoopActive = false;
+window._awLoop = function() {
+  if (window._awLoopActive) {
+    // stop
+    window._awLoopActive = false;
+    if (_awLoopTimer) { clearInterval(_awLoopTimer); _awLoopTimer = null; }
+    console.log('[AW-RAND LOOP] stopped');
+    if (window._awLoopBtnSync) window._awLoopBtnSync();
+    return;
+  }
+  window._awLoopActive = true;
+  console.log('[AW-RAND LOOP] started');
+  if (window._awLoopBtnSync) window._awLoopBtnSync();
+  // Fire first batch immediately.
+  window._awFire();
+  // Poll every 300ms: if no active walls remain, fire another batch.
+  _awLoopTimer = setInterval(() => {
+    if (!window._awLoopActive) return;
+    if (_awActive.length === 0) window._awFire();
+  }, 300);
+};
+
 // ── Mobile-friendly tuner panel (tap +/- to nudge each knob) ──
 // Toggle with window._awPanel(true/false). Off by default. Keys to nudge:
 // xOffset, spacingX, copiesX, spacingY, copiesY, spacingZ, copiesZ, angle, zSpacing, wallW, wallH.
@@ -8489,8 +8515,9 @@ window._awPanel = function(on) {
     { k: 'countMin',   step: 1,   label: 'Walls/row min', int: true },
     { k: 'countMax',   step: 1,   label: 'Walls/row max', int: true },
     { k: 'laneGap',    step: 1,   label: 'Min lane gap', int: true },
-    { k: 'fireRows',   step: 1,   label: 'FIRE rows', int: true },
+    { k: 'fireRows',   step: 5,   label: 'FIRE rows', int: true },
     { k: 'fireRowGap', step: 5,   label: 'FIRE row Z-gap' },
+    { k: 'fireJitter', step: 1,   label: 'FIRE Z jitter' },
   ];
 
   panel = document.createElement('div');
@@ -8535,8 +8562,14 @@ window._awPanel = function(on) {
     return b;
   };
   actions.appendChild(mkBtn('FIRE',  '#0f0', () => window._awFire()));
+  const loopBtn = mkBtn(window._awLoopActive ? 'STOP' : 'LOOP', '#0ff', () => window._awLoop());
+  actions.appendChild(loopBtn);
   actions.appendChild(mkBtn('LOG',   '#ff0', () => window._awLog()));
   actions.appendChild(mkBtn('RESET', '#f66', () => window._awReset()));
+  window._awLoopBtnSync = () => {
+    loopBtn.textContent = window._awLoopActive ? 'STOP' : 'LOOP';
+    loopBtn.style.background = window._awLoopActive ? '#032' : '#013';
+  };
   panel.appendChild(actions);
 
   document.body.appendChild(panel);
