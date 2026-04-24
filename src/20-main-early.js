@@ -7235,6 +7235,8 @@ const _canyonTuner = {
   _l4HalfX:        8,
   _l4SlabW:       40,
 };
+// Expose for window._exportScene() — mirrors live tuner state after B/V edits
+window._canyonTuner = _canyonTuner;
 let _canyonWalls     = null;
 let _canyonTexCache  = null; // pre-warmed textures + materials to avoid first-spawn stutter
 let _canyonFillLight = null;

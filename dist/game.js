@@ -7338,6 +7338,8 @@ const _canyonTuner = {
   _l4HalfX:        8,
   _l4SlabW:       40,
 };
+// Expose for window._exportScene() — mirrors live tuner state after B/V edits
+window._canyonTuner = _canyonTuner;
 let _canyonWalls     = null;
 let _canyonTexCache  = null; // pre-warmed textures + materials to avoid first-spawn stutter
 let _canyonFillLight = null;
@@ -22975,6 +22977,8 @@ const _origUpdateShockwave = _updateShockwave;
       else panel.style.display = 'none';
     }
   });
+  // Expose for window._exportScene() — mirrors live tuner state after Y edits
+  window._asteroidTuner = _asteroidTuner;
 })();
 
 
@@ -24725,4 +24729,66 @@ window._jlDebug = {
   });
 })();
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SCENE EXPORT — window._exportScene()
+//  Captures live tuner state (canyon + lightning + asteroid) plus runtime flags
+//  so a scene tweaked in V / L / Y tuners can be reproduced later.
+//  Copies JSON to clipboard + logs to console. Paste the blob to reconstruct.
+// ═══════════════════════════════════════════════════════════════════════════════
+(function _setupExportScene() {
+  // Deep-clone a plain object, silently dropping non-JSON values (functions,
+  // THREE refs, DOM nodes, etc). Ensures the clipboard blob is safe to paste.
+  function _safeClone(obj) {
+    if (!obj || typeof obj !== 'object') return {};
+    const out = {};
+    for (const k of Object.keys(obj)) {
+      const v = obj[k];
+      const t = typeof v;
+      if (v === null || t === 'number' || t === 'string' || t === 'boolean') {
+        out[k] = v;
+      } else if (Array.isArray(v)) {
+        // Only keep arrays of primitives — avoids THREE Vector3 etc
+        if (v.every(x => x === null || ['number','string','boolean'].includes(typeof x))) {
+          out[k] = v.slice();
+        }
+      }
+      // Drop objects/functions/undefined silently.
+    }
+    return out;
+  }
+
+  window._exportScene = function() {
+    const canyon = {
+      mode:   (typeof _canyonMode !== 'undefined') ? _canyonMode : null,
+      active: (typeof _canyonActive !== 'undefined') ? !!_canyonActive : false,
+      tuner:  _safeClone(window._canyonTuner),
+    };
+    const lightning = _safeClone(window._LT);
+    const asteroid  = _safeClone(window._asteroidTuner);
+
+    const snap = {
+      version: 1,
+      timestamp: new Date().toISOString(),
+      canyon, lightning, asteroid,
+    };
+    const json = JSON.stringify(snap, null, 2);
+
+    // Log (readable) + try to copy to clipboard.
+    console.log('=== SCENE EXPORT (copy everything between the fences) ===');
+    console.log(json);
+    console.log('=== END SCENE EXPORT ===');
+    let copied = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(json).then(
+          () => console.log('✓ scene JSON copied to clipboard'),
+          (err) => console.warn('clipboard copy failed:', err && err.message)
+        );
+        copied = true;
+      }
+    } catch (e) { /* ignore */ }
+    if (!copied) console.log('(clipboard unavailable — copy from log above)');
+    return snap;
+  };
+})();
 // cache bust 1776456958
