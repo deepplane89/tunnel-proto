@@ -8400,16 +8400,16 @@ let _awTunerPaused = false;
 // Separate from _awTuner (grid generator). These drive the hardcoded values in
 // the _isWallBand branch of spawnObstacles (src/40-main-late.js).
 const _awRandTuner = {
-  wallW:     8,    // wall width (was hardcoded scale.x)
-  wallH:     4,    // wall height (was hardcoded scale.y)
-  angleMin:  25,   // min angle degrees (was hardcoded)
-  angleMax:  45,   // max angle degrees (was 25 + 20)
-  countMin:  6,    // walls per row min (was 6)
-  countMax:  8,    // walls per row max (was 6 + floor(random*3) = 6-8)
-  laneGap:   3,    // min lane separation (was 3)
-  fireRows:  70,   // how many rows FIRE spawns (70 = full T4A equivalent)
-  fireRowGap: 30,  // Z spacing between FIRE rows (matches live T4A _spawnZBase)
-  fireJitter: 5,   // ±Z jitter per row (matches live T4A jitter)
+  wallW:     8,    // wall width
+  wallH:     4,    // wall height
+  angleMin:  25,   // min angle degrees
+  angleMax:  45,   // max angle degrees
+  countMin:  6,    // walls per row min
+  countMax:  8,    // walls per row max
+  laneGap:   4,    // min lane separation (tuned up from 3 to ease T4A)
+  fireRows:  70,   // FIRE rows (full T4A equivalent)
+  fireRowGap: 40,  // FIRE row Z-gap
+  fireJitter: 5,   // ±Z jitter per FIRE row
 };
 const _awRandDefaults = Object.freeze({ ..._awRandTuner });
 window._awRand = _awRandTuner; // expose for obstacle spawner to read
