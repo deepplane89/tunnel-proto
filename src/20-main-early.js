@@ -7744,7 +7744,12 @@ function _createCanyonWalls() {
 
   function makeSlab(side, seed, zPos, idx, thickOverride) {
     const isEntrance = (thickOverride !== undefined);
-    const isCyan = T._allCyan ? true : T._allDark ? false : (idx % 2 === 0);
+    // Parity must match the recycle path (line ~8213) which uses posIdx from Z,
+    // NOT the init-loop index `idx`. Otherwise a slab baked cyan at idx=4 lands
+    // at a Z whose posIdx is odd, gets flipped to dark on first recycle, and
+    // alternation drifts (looks like it 'goes all cyan' partway through).
+    const posIdx = Math.round(-zPos / SPACING);
+    const isCyan = T._allCyan ? true : T._allDark ? false : (posIdx % 2 === 0);
     const geo    = _buildCanyonSlabGeo(seed, thickOverride);
 
     // Pivot group — sits at the inner foot edge of the corridor.
