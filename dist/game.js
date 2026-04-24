@@ -23940,6 +23940,7 @@ window._jlDebug = {
   let _ltTimer    = 2.0;
   let _ltSweepX   = 0.5;
   let _ltSweepDir = 1;
+  let _ltSpawnCounter = 0;  // every 3rd auto-spawn uses leadFactor=1.0 (punisher)
   const _ltStaggerQ = [];
   const _ltActive   = [];   // active bolt instances
 
@@ -24009,7 +24010,7 @@ window._jlDebug = {
   // Everything spawns at a Z offset ahead of the ship.
   // Warning disc pulses for warningTime seconds, then bolt slams and lingers.
   // After the strike the bolt is a planted world-space column — ship flies past it.
-  function _spawnLightning(targetX, landZOverride, skipWarn, radiiOverride) {
+  function _spawnLightning(targetX, landZOverride, skipWarn, radiiOverride, leadOverride) {
     if (window._perfDiag) window._perfDiag.tag('lightning_spawn');
     const shipZ  = _shipZ();
     // landZOverride lets callers (e.g. lateral) spawn at a custom Z without touching _LT.spawnZ
@@ -24019,9 +24020,11 @@ window._jlDebug = {
     // When a caller passes landZOverride (lateral), they've already computed the
     // final world X. Re-applying _LT.leadFactor here would double-dip and pull
     // bolts back toward ship's predicted path — turning lateral bolts medial.
+    // leadOverride: per-bolt leadFactor (e.g. 1.0 for periodic punisher shots)
+    const _lead  = (leadOverride != null) ? leadOverride : _LT.leadFactor;
     const landX  = (landZOverride !== undefined)
       ? targetX
-      : targetX + velX * travelTime * _LT.leadFactor;
+      : targetX + velX * travelTime * _lead;
     // radiiOverride: { coreRadius, glowRadius } to override _LT defaults for this instance
     const _core  = (radiiOverride && radiiOverride.coreRadius != null) ? radiiOverride.coreRadius : _LT.coreRadius;
     const _glow  = (radiiOverride && radiiOverride.glowRadius != null) ? radiiOverride.glowRadius : _LT.glowRadius;
@@ -24205,20 +24208,14 @@ window._jlDebug = {
       _ltTimer -= dt;
       if (_ltTimer <= 0) {
         _ltTimer = _LT.frequency * (0.8 + Math.random()*0.4) * Math.max(0.15, 1.0 - _funFloorIntensity * 0.85);
-        // Always one bolt at a time, aimed at ship's current X — no salvo, no batching
+        // Always one bolt at a time, aimed at ship's current X — no salvo, no batching.
+        // Every 3rd bolt fires with leadFactor=1.0 (perfect lead) to punish held lateral.
+        _ltSpawnCounter++;
+        const punisher = (_ltSpawnCounter % 3 === 0) ? 1.0 : null;
         if (_LT.pattern === 'stagger') {
-          _spawnLightning(state.shipX || 0);
+          _spawnLightning(state.shipX || 0, undefined, false, null, punisher);
         } else {
-          _spawnLightning(_ltNextTargetX());
-        }
-        // Chaser (all patterns): if player holds lateral, fire a second bolt with
-        // over-lead (1.2) to catch/punish the held direction. Main bolt at 0.6
-        // lead lands behind a hold — chaser lands ahead, so neutral is the safe play.
-        const velX = (state && state.shipVelX) || 0;
-        if (Math.abs(velX) > 3) {
-          const travelTime = Math.abs(_LT.spawnZ) / Math.max(1, state.speed || 73);
-          const chaseX = (state.shipX || 0) + velX * travelTime * 1.2;
-          _spawnLightning(chaseX);
+          _spawnLightning(_ltNextTargetX(), undefined, false, null, punisher);
         }
       }
     }
