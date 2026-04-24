@@ -4802,16 +4802,17 @@ window._jlDebug = {
         // Always one bolt at a time, aimed at ship's current X — no salvo, no batching
         if (_LT.pattern === 'stagger') {
           _spawnLightning(state.shipX || 0);
-          // Chaser: if player holds lateral, fire a second bolt with full lead
-          // to catch the held direction (main bolt uses leadFactor=0.6 which lands behind a hold).
-          const velX = (state && state.shipVelX) || 0;
-          if (Math.abs(velX) > 3) {
-            const travelTime = Math.abs(_LT.spawnZ) / Math.max(1, state.speed || 73);
-            const chaseX = (state.shipX || 0) + velX * travelTime * 1.0;
-            _spawnLightning(chaseX);
-          }
         } else {
           _spawnLightning(_ltNextTargetX());
+        }
+        // Chaser (all patterns): if player holds lateral, fire a second bolt with
+        // over-lead (1.2) to catch/punish the held direction. Main bolt at 0.6
+        // lead lands behind a hold — chaser lands ahead, so neutral is the safe play.
+        const velX = (state && state.shipVelX) || 0;
+        if (Math.abs(velX) > 3) {
+          const travelTime = Math.abs(_LT.spawnZ) / Math.max(1, state.speed || 73);
+          const chaseX = (state.shipX || 0) + velX * travelTime * 1.2;
+          _spawnLightning(chaseX);
         }
       }
     }
