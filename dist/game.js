@@ -8331,6 +8331,11 @@ function _updateCanyonWalls(dt, speed) {
             const posIdx = Math.round(-slabZ / spacing);
             const wantCyan = T._allCyan ? true : T._allDark ? false : (posIdx % 2 === 0);
             const wantMat = wantCyan ? _canyonWalls.cyanMat : _canyonWalls.darkMat;
+            if (window._canyonMatDbg) {
+              const prev = m.children[0].material === _canyonWalls.cyanMat ? 'CYAN' : m.children[0].material === _canyonWalls.darkMat ? 'dark' : '?';
+              const now  = wantCyan ? 'CYAN' : 'dark';
+              console.log(`[RECYCLE] side=${side} slabZ=${slabZ.toFixed(1)} posIdx=${posIdx} allCyan=${T._allCyan} allDark=${T._allDark} → ${prev}→${now}`);
+            }
             if (m.children[0].material !== wantMat) m.children[0].material = wantMat;
           }
           if (useL4) _bakeSlabCurveForL4(m, slabZ, side, null);
