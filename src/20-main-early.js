@@ -7352,7 +7352,16 @@ window._canyonLog = function() {
     darkCrkCount: T.darkCrkCount,
     darkCrkBright:T.darkCrkBright,
     '--- SLAB POSITIONS ---': '',
-    rightSlabs: walls ? walls.right.map(m => ({ x: +m.position.x.toFixed(1), z: +m.position.z.toFixed(1), bakedX: m.userData.bakedX != null ? +m.userData.bakedX.toFixed(1) : null })).sort((a,b)=>a.z-b.z) : null,
+    // DIAG: flags driving material choice
+    _allCyan_flag: T._allCyan,
+    _allDark_flag: T._allDark,
+    _spacing:      walls ? walls._spacing : null,
+    rightSlabs: walls ? walls.right.map(m => {
+      const mat = m.children && m.children[0] ? m.children[0].material : null;
+      const isCy = mat === walls.cyanMat ? 'CYAN' : mat === walls.darkMat ? 'dark' : '?';
+      const pIdx = walls._spacing ? Math.round(-m.position.z / walls._spacing) : null;
+      return { x: +m.position.x.toFixed(1), z: +m.position.z.toFixed(1), bakedX: m.userData.bakedX != null ? +m.userData.bakedX.toFixed(1) : null, posIdx: pIdx, mat: isCy, ent: !!m.userData.isEntrance };
+    }).sort((a,b)=>a.z-b.z) : null,
   };
   console.log('[CANYON LOG]\n' + JSON.stringify(out, null, 2));
   return out;
