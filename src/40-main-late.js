@@ -389,9 +389,13 @@ function _startL3KnifeCanyon() {
   _canyonTuner._allDark = false;
   Object.assign(_canyonTuner, vals);
   _canyonTuner._l4Recreation = true;
+  // If a snap-lock was set by the caller (e.g. CD_CANYON L3_KNIFE_LOCKED variant),
+  // bake the locked value into the slab geometry instead of the default 1.5.
+  // _updateL3KnifeCanyon also skips its oscillator when this flag is set.
+  const _initialSnap = (typeof state._l3KnifeSnapLocked === 'number') ? state._l3KnifeSnapLocked : 1.5;
   // Full knife-arches preset — identical to K-hotkey
   Object.assign(_canyonTuner, {
-    slabH: 55, slabThick: 60, cols: 5, rows: 6, disp: 2, snap: 1.5,
+    slabH: 55, slabThick: 60, cols: 5, rows: 6, disp: 2, snap: _initialSnap,
     footX: 26, sweepX: 20, midX: 0, crestX: 0,
     cyanEmi: 2, cyanRgh: 0.65,
     darkCrkCount: 14, darkCrkBright: 1.95, darkRgh: 0.62,
@@ -449,6 +453,8 @@ function _stopL3KnifeCanyon() {
   }
   state.l3KnifeRampPhase = 'off';
   state.l3KnifeRampT     = 0;
+  // Clear snap-lock so future entries (no lock) don't inherit it.
+  state._l3KnifeSnapLocked = null;
   console.log('[L3-KNIFE] OFF');
 }
 
@@ -476,10 +482,15 @@ function _updateL3KnifeCanyon(dt) {
   // Original pre-snap-change behavior. Note: SNAP is baked into slab geometry
   // at _createCanyonWalls time (src/20-main-early.js:7601), so live writes
   // here mainly take effect on freshly-recycled/spawned slabs.
-  state.l3KnifeSnapT = (state.l3KnifeSnapT || 0) + dt;
-  const w  = (state.l3KnifeSnapT * Math.PI * 2 / 4.0);
-  const u  = 0.5 + 0.5 * Math.sin(w);
-  _canyonTuner.snap = 0.1 + (1.5 - 0.1) * u;
+  if (typeof state._l3KnifeSnapLocked === 'number') {
+    // Snap-locked variant (e.g. CD_CANYON): hold at the locked value, no oscillation.
+    _canyonTuner.snap = state._l3KnifeSnapLocked;
+  } else {
+    state.l3KnifeSnapT = (state.l3KnifeSnapT || 0) + dt;
+    const w  = (state.l3KnifeSnapT * Math.PI * 2 / 4.0);
+    const u  = 0.5 + 0.5 * Math.sin(w);
+    _canyonTuner.snap = 0.1 + (1.5 - 0.1) * u;
+  }
 
   // ── Entry ramp: pending → ramping → active ──────────────────────────────
   // Ramp speed+physics in over RAMP_DURATION seconds once the ship enters
