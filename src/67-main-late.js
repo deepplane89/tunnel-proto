@@ -935,42 +935,82 @@ let DR2_RUN_BANDS = _drGetRunBands();
 // ═══════════════════════════════════════════════════
 //  LEVEL SEQUENCER — replaces random wave director
 // ═══════════════════════════════════════════════════
+// ── DR_SEQUENCE rewrite (feat/dr-sequence-rewrite) ──
+// 11 obstacle stages, each followed by a canyon + 3s breather.
+// Music/warp behavior is now driven by per-stage fields (musicTrack, useL3Warp)
+// instead of stage-name string matches — see _drSeqAdvance() and Quilez warp.
+// Canyon slot labels A–K are placeholders pointing at existing canyon families
+// (PRE_T4A = HIGH_WALL_LIGHTNING, PRE_T4B = CC1_MILD_LIGHTNING) until each gets
+// its own designed family.
 const DR_SEQUENCE = [
-  // Tier 1: warm-up
-  { name: 'T1_WARMUP',      type: 'random_cones', duration: 30, speed: 1.0,  density: 'sparse', vibeIdx: 0, physTier: 0 },
-  // Tier 2: ramp-up
-  { name: 'T2_RAMPUP',      type: 'random_cones', duration: 30, speed: 1.2,  density: 'dense',  vibeIdx: 1, physTier: 0 },
-  // Tier 3a: cones + zip lines
-  { name: 'T3A_ZIPS',       type: 'cones_and_zips', duration: 30, speed: 1.35, vibeIdx: 1, physTier: 1 },
-  // Tier 3b: BOSS L3 corridor
-  { name: 'T3B_L3BOSS',     type: 'corridor', family: 'L3_CORRIDOR', speed: 2.0, vibeIdx: 2, physTier: 1 },
-  // Recovery
-  { name: 'RECOVERY_1',     type: 'rest', duration: 2, speed: 2.0, vibeIdx: 2, physTier: 1 },
-  // Tier 3c: PRE-T4A canyon — 40s mode-5 canyon corridor + RANDOM lightning loop.
-  // Inserted as a corridor stage between RECOVERY_1 and T4A_ANGLED. Uses the
-  // user's exported tuner values (slabH=190, halfXOverride=50, sine ramps).
-  { name: 'T3C_PRE_T4A_CANYON', type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 1 },
-  // Tier 4a: angled walls
-  { name: 'T4A_ANGLED',     type: 'angled_walls', duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2 },
-  // Tier 4a2: PRE-T4B canyon — 40s preset-1 canyon (all-cyan smooth sine) +
-  // chill RANDOM lightning loop (freq 2.0s). Bridges T4A_ANGLED into T4B_LETHAL.
-  { name: 'T4A2_PRE_T4B_CANYON', type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2 },
-  // Tier 4b: lethal rings + angled walls
-  { name: 'T4B_LETHAL',     type: 'lethal_rings', duration: 70, speed: 2.0, vibeIdx: 2, physTier: 2 },
-  // Tier 4c: BOSS L4 corridor
-  { name: 'T4C_L4BOSS',     type: 'corridor', family: 'L4_SINE_CORRIDOR', speed: 2.1, vibeIdx: 3, physTier: 2 },
-  // Recovery
-  { name: 'RECOVERY_2',     type: 'rest', duration: 5, speed: 2.1, vibeIdx: 3, physTier: 2 },  // 5s breathing room after L4 boss
-  // Tier 5a: random fat cones
-  { name: 'T5A_FATCONES',   type: 'fat_cones', duration: 30, speed: 2.1, vibeIdx: 3, physTier: 3 },
-  // Tier 5b: structured slalom then zip lines (sequential)
-  { name: 'T5B_SLALOM_ZIP', type: 'slalom_then_zips', duration: 30, speed: 2.1, vibeIdx: 3, physTier: 3 },
-  // Tier 5c: BOSS L5 corridor
-  { name: 'T5C_L5BOSS',     type: 'corridor', family: 'L5_SINE_CORRIDOR', duration: 60, speed: 2.5, vibeIdx: 4, physTier: 3 },
-  // Recovery
-  { name: 'RECOVERY_3',     type: 'rest', duration: 3, speed: 2.5, vibeIdx: 4, physTier: 3 },  // 3s breathing room after L5 boss
-  // Tier 6+: endless mix (falls back to random wave director)
-  { name: 'ENDLESS',        type: 'endless_mix', speed: 2.5, vibeIdx: 4, physTier: 3 },
+  // Stage 1 — random cones (ramp 5→9 cones over 30s)
+  { name: 'S1_CONES',         type: 'random_cones',  duration: 30, speed: 1.0,  density: 'ramp', vibeIdx: 0, physTier: 0 },
+  // Canyon A (placeholder = CC1 mild)
+  { name: 'CA_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 0, physTier: 0 },
+  { name: 'CA_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 1, physTier: 0 },
+
+  // Stage 2 — cones + zippers
+  { name: 'S2_CONES_ZIPS',    type: 'cones_and_zips', duration: 30, speed: 1.35, vibeIdx: 1, physTier: 1 },
+  // Canyon B (placeholder = CC1 mild)
+  { name: 'CB_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 1, physTier: 1 },
+  { name: 'CB_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 1 },
+
+  // Stage 3 — L3 cone corridor (40s @ 2.0x ≈ 415 rows)
+  { name: 'S3_L3_CORRIDOR',   type: 'l3_cone_corridor', duration: 40, speed: 2.0, vibeIdx: 2, physTier: 1, useL3Warp: true, musicTrack: 'l4' },
+  // Canyon C — L3 KNIFE (real)
+  { name: 'CC_L3_KNIFE',      type: 'corridor', family: 'L3_CORRIDOR', speed: 2.0, vibeIdx: 2, physTier: 1, useL3Warp: true },
+  { name: 'CC_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 2 },
+
+  // Stage 4 — angled walls (random)
+  { name: 'S4_WALLS_RAND',    type: 'angled_walls',  duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2 },
+  // Canyon D (placeholder = CC1 mild)
+  { name: 'CD_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2 },
+  { name: 'CD_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 2 },
+
+  // Stage 5 — angled walls (structured bursts)
+  { name: 'S5_WALLS_STRUCT',  type: 'structured_walls', duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2 },
+  // Canyon E (placeholder = HIGH WALL intense)
+  { name: 'CE_CANYON',        type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2 },
+  { name: 'CE_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 2 },
+
+  // Stage 6 — lethal rings (rings only, 30s)
+  { name: 'S6_RINGS',         type: 'lethal_rings',  duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2 },
+  // Canyon F — HIGH WALL LIGHTNING (real)
+  { name: 'CF_HIGH_WALL',     type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2 },
+  { name: 'CF_REST',          type: 'rest', duration: 3, speed: 2.1, vibeIdx: 3, physTier: 2, musicTrack: 'keepgoing' },
+
+  // Stage 7 — L4 sine corridor (full 518 rows, ~48s @ 2.1x)
+  { name: 'S7_L4_CORRIDOR',   type: 'corridor', family: 'L4_SINE_CORRIDOR', speed: 2.1, vibeIdx: 3, physTier: 2 },
+  // Canyon G (placeholder = HIGH WALL intense)
+  { name: 'CG_CANYON',        type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.1, vibeIdx: 3, physTier: 3 },
+  { name: 'CG_REST',          type: 'rest', duration: 3, speed: 2.1, vibeIdx: 3, physTier: 3 },
+
+  // Stage 8 — fat cones
+  { name: 'S8_FAT_CONES',     type: 'fat_cones',     duration: 30, speed: 2.1, vibeIdx: 3, physTier: 3 },
+  // Canyon H (placeholder = CC1 mild)
+  { name: 'CH_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.1, vibeIdx: 3, physTier: 3 },
+  { name: 'CH_REST',          type: 'rest', duration: 3, speed: 2.1, vibeIdx: 3, physTier: 3 },
+
+  // Stage 9 — slalom
+  { name: 'S9_SLALOM',        type: 'slalom_only',   duration: 30, speed: 2.1, vibeIdx: 3, physTier: 3 },
+  // Canyon I (placeholder = HIGH WALL intense)
+  { name: 'CI_CANYON',        type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.1, vibeIdx: 3, physTier: 3 },
+  { name: 'CI_REST',          type: 'rest', duration: 3, speed: 2.2, vibeIdx: 3, physTier: 3 },
+
+  // Stage 10 — zipper burst
+  { name: 'S10_ZIPPER',       type: 'zipper_only',   duration: 30, speed: 2.2, vibeIdx: 3, physTier: 3 },
+  // Canyon J — CC1 MILD (real)
+  { name: 'CJ_CC1_MILD',      type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.2, vibeIdx: 3, physTier: 3 },
+  { name: 'CJ_REST',          type: 'rest', duration: 3, speed: 2.5, vibeIdx: 4, physTier: 3 },
+
+  // Stage 11 — L5 sine corridor (full 420 rows, ~33s @ 2.5x)
+  { name: 'S11_L5_CORRIDOR',  type: 'corridor', family: 'L5_SINE_CORRIDOR', duration: 60, speed: 2.5, vibeIdx: 4, physTier: 3 },
+  // Canyon K (gate, placeholder = HIGH WALL intense)
+  { name: 'CK_GATE_CANYON',   type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.5, vibeIdx: 4, physTier: 3 },
+  { name: 'CK_REST',          type: 'rest', duration: 3, speed: 2.5, vibeIdx: 4, physTier: 3 },
+
+  // Endless mix
+  { name: 'ENDLESS',          type: 'endless_mix',   speed: 2.5, vibeIdx: 4, physTier: 3 },
 ];
 
 // ── Sequencer tick (called each frame during DR) ──
@@ -1010,7 +1050,7 @@ function _drSequencerTick(dt) {
   const _isEndlessStage = stage.type === 'endless_mix';
   const _currentSunShader = DEATH_RUN_VIBES[state.deathRunVibeIdx]?.sunShader ?? 0;
   const _sunHasBuiltinWarp = (_currentSunShader === 3 || _currentSunShader === 4); // ice and gold already warped
-  const _wantL3Warp = (stage.name === 'T3B_L3BOSS' || (_isEndlessStage && !_sunHasBuiltinWarp)) ? 1.0 : 0.0;
+  const _wantL3Warp = (stage.useL3Warp || (_isEndlessStage && !_sunHasBuiltinWarp)) ? 1.0 : 0.0;
   const _curL3Warp = sunMat.uniforms.uIsL3Warp.value;
   if (Math.abs(_curL3Warp - _wantL3Warp) > 0.01) {
     sunMat.uniforms.uIsL3Warp.value += (_wantL3Warp - _curL3Warp) * Math.min(1, dt * 2);
@@ -1091,10 +1131,78 @@ function _drSequencerTick(dt) {
   state.seqStageElapsed += dt;
 
   if (tp === 'random_cones') {
-    // Density control: sparse = wider gaps, fewer per spawn; dense = tighter
-    // The existing spawner uses obstaclesPerSpawn from the vibe — we override
+    // Density control: sparse | dense | normal | ramp.
+    // 'ramp' = linear interpolation 5→9 cones over the stage duration (set by
+    // spawnObstacles() reading state._seqRampT01). Used by S1_CONES.
     state._seqSpawnMode = 'cones';
-    state._seqConeDensity = stage.density || 'normal';
+    const _density = stage.density || 'normal';
+    state._seqConeDensity = _density;
+    if (_density === 'ramp') {
+      const _dur = stage.duration || 30;
+      state._seqRampT01 = Math.min(1, state.seqStageElapsed / _dur);
+    } else {
+      state._seqRampT01 = 0;
+    }
+  }
+  else if (tp === 'l3_cone_corridor') {
+    // Stage 3: legacy L3 dense cone corridor (the path normally hidden behind
+    // _L3_KNIFE_ENABLED). Drive it directly here with a row count tuned to
+    // duration×speed so the existing _drL3MaxRows guard still advances cleanly.
+    if (state.seqStageElapsed === 0 || (!state.corridorMode && state.corridorRowsDone === 0)) {
+      // 40s @ 2.0x ≈ 415 rows (current spacing)
+      const rows = 415;
+      state.corridorMode      = true;
+      state.corridorSpawnZ    = -7;
+      state.corridorRowsDone  = 0;
+      state.corridorGapCenter = 0;
+      state.corridorGapDir    = 1;
+      state.corridorDelay     = 1.5;
+      state._drL3MaxRows      = rows;
+    }
+    state._seqSpawnMode = 'none';
+    // Advance when corridor exhausts itself OR duration elapses
+    if (!state.corridorMode || state.seqStageElapsed >= (stage.duration || 40)) {
+      state.corridorMode = false;
+      _drSeqAdvance();
+      return;
+    }
+  }
+  else if (tp === 'structured_walls') {
+    // Stage 5: structured angled-wall bursts only. Burst every 3s, no rings.
+    state._seqSpawnMode = 'none';
+    state._seqStructuredTimer = (state._seqStructuredTimer || 0) + dt;
+    if (state._seqStructuredTimer >= 3 && !state.angledWallsActive) {
+      state._seqStructuredTimer = 0;
+      const fam = DR_MECHANIC_FAMILIES['ANGLED_WALL'];
+      fam.activate({ label: 'BAND3' }, 'build');
+    }
+  }
+  else if (tp === 'slalom_only') {
+    // Stage 9: continuous slalom. Re-arm after each slalom run completes.
+    state._seqSpawnMode = 'none';
+    if (!state.slalomActive) {
+      state.slalomActive = true;
+      state.slalomUsePhysicsCurve = true;
+      state._slalomGapWidth = 10;
+      state.slalomSpawnZ = 0;
+      state.slalomRowsDone = 0;
+      const _slalomSide = Math.random() < 0.5 ? 1 : -1;
+      _drCorridorState.gapX = _slalomSide * 18;
+      _drCorridorState.gapVelX = 0;
+      _drCorridorState.sweepTimer = 0;
+      state.slalomMaxRows = 16 + Math.floor(Math.random() * 3);
+    }
+  }
+  else if (tp === 'zipper_only') {
+    // Stage 10: continuous zipper bursts. Re-arm after each zipper run completes.
+    state._seqSpawnMode = 'none';
+    if (!state.zipperActive) {
+      state.zipperActive = true;
+      state.zipperRowsLeft = ZIPPER_ROWS;
+      state.zipperSide = Math.random() < 0.5 ? 1 : -1;
+      state.zipperHoldCount = 0;
+      state.zipperSpawnTimer = -1.0;
+    }
   }
   else if (tp === 'cones_and_zips') {
     // Pre-canyon quiet window: for the last 2s of T3A_ZIPS, stop spawning new
@@ -1134,38 +1242,9 @@ function _drSequencerTick(dt) {
     }
   }
   else if (tp === 'lethal_rings') {
-    // 0-15s:   random angled walls
-    // 15-17s:  breather
-    // 17-32s:  structured angled walls (burst mechanic)
-    // 32-34s:  breather
-    // 34-49s:  lethal rings
-    // 49-51s:  breather
-    // 51-66s:  lethal rings
-    // 66-70s:  breather (4s)
-    const t = state.seqStageElapsed;
-    if (t < 15) {
-      state._seqSpawnMode = 'angled';
-    } else if (t < 17) {
-      state._seqSpawnMode = 'none';
-    } else if (t < 32) {
-      state._seqSpawnMode = 'none'; // structured burst mechanic handles spawning
-      state._seqStructuredTimer = (state._seqStructuredTimer || 0) + dt;
-      if (state._seqStructuredTimer >= 3 && !state.angledWallsActive) {
-        state._seqStructuredTimer = 0;
-        const fam = DR_MECHANIC_FAMILIES['ANGLED_WALL'];
-        fam.activate({ label: 'BAND3' }, 'build');
-      }
-    } else if (t < 34) {
-      state._seqSpawnMode = 'none';
-    } else if (t < 49) {
-      state._seqSpawnMode = 'lethal';
-    } else if (t < 51) {
-      state._seqSpawnMode = 'none';
-    } else if (t < 66) {
-      state._seqSpawnMode = 'lethal';
-    } else {
-      state._seqSpawnMode = 'none'; // 4s final breather
-    }
+    // Rings-only the whole duration. The previous wall+ring multi-phase
+    // logic is handled by separate stages (S4 angled_walls, S5 structured_walls).
+    state._seqSpawnMode = 'lethal';
   }
   else if (tp === 'fat_cones') {
     state._seqSpawnMode = 'fat_cones';
@@ -1280,12 +1359,10 @@ function _drSeqAdvance() {
     // Set speed immediately
     const floor = state._drSpeedFloor || 0;
     state.speed = BASE_SPEED * Math.max(next.speed, floor);
-    // Music transitions
-    if (next.name === 'T3B_L3BOSS') {
-      musicFadeTo('l4', 4000); // l4music fades in at L3 corridor
-    }
-    if (next.name === 'RECOVERY_2') {
-      musicFadeTo('keepgoing', 2000); // keep-going after L4 corridor
+    // Music transitions — driven by per-stage musicTrack field
+    if (next.musicTrack) {
+      const _fadeMs = (next.musicTrack === 'l4') ? 4000 : 2000;
+      musicFadeTo(next.musicTrack, _fadeMs);
     }
   }
 }

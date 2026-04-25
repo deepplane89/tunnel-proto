@@ -32,12 +32,17 @@ window.playResumeSound = () => playResumeSound();
 window.playExitSound   = () => playExitSound();
 // Helper: which music track should be playing right now in-game?
 function currentGameTrack() {
-  // Death Run: title track early, l4 after speed tier 3 crossfade
+  // Death Run: track selection driven by per-stage musicTrack field.
+  // The latest musicTrack set by any stage at or before the current index wins.
   if (state.isDeathRun) {
-    // Use stage index to determine correct track
-    const _idx = state.seqStageIdx || 0;
-    if (_idx >= 8) return 'keepgoing'; // RECOVERY_2 is idx 8, everything after uses keepgoing
-    if (_idx >= 3) return 'l4';        // T3B_L3BOSS onwards uses l4
+    if (typeof DR_SEQUENCE !== 'undefined') {
+      const _idx = state.seqStageIdx || 0;
+      let _t = 'bg';
+      for (let i = 0; i <= _idx && i < DR_SEQUENCE.length; i++) {
+        if (DR_SEQUENCE[i].musicTrack) _t = DR_SEQUENCE[i].musicTrack;
+      }
+      return _t;
+    }
     return 'bg';
   }
   // Title only plays after the L5 corridor completes (ending/sail-out phase)
@@ -263,40 +268,47 @@ window.addEventListener('keydown', e => {
     }
   }
   if (state.phase === 'playing' && state.isDeathRun && _digit) {
-    // 1=T1_WARMUP  2=T2_RAMPUP  3=T3A_ZIPS  4=T3B_L3BOSS
-    // 5=T4A_ANGLED  6=T4B_LETHAL  7=T4C_L4BOSS  8=T5A_FATCONES
-    // Shift+1=T5B_SLALOM_ZIP  Shift+2=T5C_L5BOSS  Shift+3=ENDLESS
-    const stageMap = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 5, '6': 6, '7': 7, '8': 9 };
-    const _hotkeyJump = (idx) => {
+    // Per-stage hotkeys, by NAME (survives DR_SEQUENCE reordering)
+    // 1=S1_CONES  2=S2_CONES_ZIPS  3=S3_L3_CORRIDOR  4=S4_WALLS_RAND
+    // 5=S5_WALLS_STRUCT  6=S6_RINGS  7=S7_L4_CORRIDOR  8=S8_FAT_CONES
+    // 9=S9_SLALOM  0=S10_ZIPPER
+    // Shift+1=S11_L5_CORRIDOR  Shift+2=ENDLESS  Shift+3=CC_L3_KNIFE
+    const _digitNameMap = {
+      '1': 'S1_CONES', '2': 'S2_CONES_ZIPS', '3': 'S3_L3_CORRIDOR',
+      '4': 'S4_WALLS_RAND', '5': 'S5_WALLS_STRUCT', '6': 'S6_RINGS',
+      '7': 'S7_L4_CORRIDOR', '8': 'S8_FAT_CONES', '9': 'S9_SLALOM',
+      '0': 'S10_ZIPPER',
+    };
+    const _shiftDigitNameMap = {
+      '1': 'S11_L5_CORRIDOR', '2': 'ENDLESS', '3': 'CC_L3_KNIFE',
+    };
+    const _hotkeyJumpByName = (stageName) => {
+      const idx = DR_SEQUENCE.findIndex(s => s.name === stageName);
+      if (idx < 0) { console.warn('[SEQ-DEBUG] Stage not found: ' + stageName); return; }
       const s = DR_SEQUENCE[idx];
-      if (!s) return;
       clearAllCorridorFlags(); state.deathRunRestBeat = 0;
       state.seqStageIdx = idx; state.seqStageElapsed = 0;
       state._seqCorridorStarted = false; state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
       state._seqVibeApplied = -1; state._restBeepFired = false;
       state.speed = BASE_SPEED * s.speed;
-      // Fire music transitions for hotkey jumps too
-      if (s.name === 'T3B_L3BOSS') musicFadeTo('l4', 2000);
-      if (s.name === 'RECOVERY_2' || idx > 7) musicFadeTo('keepgoing', 2000);
+      // Fire music transition based on the most-recent musicTrack at or before this index
+      let _t = null;
+      for (let i = 0; i <= idx; i++) {
+        if (DR_SEQUENCE[i].musicTrack) _t = DR_SEQUENCE[i].musicTrack;
+      }
+      if (_t) {
+        const _fadeMs = (_t === 'l4') ? 2000 : 2000;
+        musicFadeTo(_t, _fadeMs);
+      }
       console.log('[SEQ-DEBUG] Jump to stage ' + idx + ': ' + s.name);
     };
-    if (e.shiftKey && _digit === '1') {
-      _hotkeyJump(10); // T5B_SLALOM_ZIP
-    } else if (e.shiftKey && _digit === '2') {
-      _hotkeyJump(11); // T5C_L5BOSS
-    } else if (e.shiftKey && _digit === '3') {
-      state.drPhase = 'RELEASE'; state.drPhaseTimer = 0; state.drPhaseDuration = 2;
-      _hotkeyJump(13); // ENDLESS
-    } else if (!e.shiftKey && stageMap[_digit] !== undefined) {
-      _hotkeyJump(stageMap[_digit]);
-    } else if (e.key === '9') {
-      // Toggle debug HUD overlay
-      _drDebugHudVisible = !_drDebugHudVisible;
-      const el = document.getElementById('dr-debug-hud');
-      if (el) el.style.display = _drDebugHudVisible ? 'block' : 'none';
-      console.log('[SEQ-DEBUG] Debug HUD ' + (_drDebugHudVisible ? 'ON' : 'OFF'));
-    } else if (_digit === '0') {
-      _hotkeyJump(11); // T5C_L5BOSS (gold sun)
+    if (e.shiftKey && _shiftDigitNameMap[_digit]) {
+      if (_shiftDigitNameMap[_digit] === 'ENDLESS') {
+        state.drPhase = 'RELEASE'; state.drPhaseTimer = 0; state.drPhaseDuration = 2;
+      }
+      _hotkeyJumpByName(_shiftDigitNameMap[_digit]);
+    } else if (!e.shiftKey && _digitNameMap[_digit]) {
+      _hotkeyJumpByName(_digitNameMap[_digit]);
     }
     return; // consume key in DR mode
   }

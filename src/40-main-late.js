@@ -1782,6 +1782,12 @@ function spawnObstacles() {
       obs = 5; maxObs = 7; gap = 1.0;
     } else if (_density === 'dense') {
       obs = 6; maxObs = 8; gap = 1.0;
+    } else if (_density === 'ramp') {
+      // Linear ramp 5→9 over the stage. _seqRampT01 set by sequencer tick.
+      const t = state._seqRampT01 || 0;
+      obs = Math.round(5 + 4 * t);
+      maxObs = obs + 2;
+      gap = 1.0;
     } else if (_density === 'normal') {
       // Sequencer 'normal' = moderate scatter, not the brutal endless-mode count
       // (old 'normal' fell into the 27-36 cone path — an impassable wall)
