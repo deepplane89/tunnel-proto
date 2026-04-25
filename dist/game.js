@@ -15266,7 +15266,7 @@ function _drEndlessTick(dt) {
       state.drWaveCount++;
       if (!state._tutorialActive && !state._jetLightningMode && _bonusRings.length === 0) _ringSpawnRow(0);
       // Cycle vibes through the full palette on each endless wave
-      const _totalVibes = DR_VIBES.length;
+      const _totalVibes = DEATH_RUN_VIBES.length;
       const _nextVibeIdx = ((state._endlessVibeIdx || 0) + 1) % _totalVibes;
       state._endlessVibeIdx = _nextVibeIdx;
       _applyVibeTransition(_nextVibeIdx, true);
