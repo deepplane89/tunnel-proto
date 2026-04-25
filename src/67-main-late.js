@@ -952,6 +952,9 @@ const DR_SEQUENCE = [
   { name: 'T3C_PRE_T4A_CANYON', type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 1 },
   // Tier 4a: angled walls
   { name: 'T4A_ANGLED',     type: 'angled_walls', duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2 },
+  // Tier 4a2: PRE-T4B canyon — 40s preset-1 canyon (all-cyan smooth sine) +
+  // chill RANDOM lightning loop (freq 2.0s). Bridges T4A_ANGLED into T4B_LETHAL.
+  { name: 'T4A2_PRE_T4B_CANYON', type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2 },
   // Tier 4b: lethal rings + angled walls
   { name: 'T4B_LETHAL',     type: 'lethal_rings', duration: 70, speed: 2.0, vibeIdx: 2, physTier: 2 },
   // Tier 4c: BOSS L4 corridor
@@ -1602,6 +1605,20 @@ const DR_MECHANIC_FAMILIES = {
       }
     },
     isActive() { return state.preT4ACanyon === true; }
+  },
+  PRE_T4B_CANYON: {
+    roles: ['build', 'peak'],
+    minBand: 3,
+    activate(band, role) {
+      console.log('[PRE-T4B-ENTRY] preT4BActive=' + !!state.preT4BCanyon + ' preT4BDone=' + !!state.preT4BDone);
+      state.speed = BASE_SPEED * 2.0;
+      try {
+        _startPreT4BCanyon();
+      } catch (e) {
+        console.error('[PRE-T4B] _startPreT4BCanyon threw:', e);
+      }
+    },
+    isActive() { return state.preT4BCanyon === true; }
   },
   L4_SINE_CORRIDOR: {
     roles: ['build', 'peak'],
@@ -2787,6 +2804,8 @@ function killPlayer() {
   if (state.l3KnifeCanyon) _stopL3KnifeCanyon();
   // Tear down pre-T4A canyon if death happened during it
   if (state.preT4ACanyon) _stopPreT4ACanyon();
+  // Tear down pre-T4B canyon if death happened during it
+  if (state.preT4BCanyon) _stopPreT4BCanyon();
   // Cancel retry/repair sweep if somehow active
   _retrySweepActive = false;
   _retryIsFromDead = false;
@@ -4479,6 +4498,7 @@ function update(dt) {
   // Self-cleans when duration elapses or player leaves L3.
   _updateL3KnifeCanyon(dt);
   _updatePreT4ACanyon(dt);
+  _updatePreT4BCanyon(dt);
 
   // L3 dense corridor (LEGACY cone path — gated off while _L3_KNIFE_ENABLED,
   // because maybeStartGauntlet no longer sets state.corridorMode in that case):

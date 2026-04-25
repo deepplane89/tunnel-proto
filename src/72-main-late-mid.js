@@ -5002,7 +5002,7 @@ window._jlDebug = {
     const dt  = Math.min((now - _ltLastTime)*0.001, 0.05);
     _ltLastTime = now;
     if (state.phase === 'playing' && !state.introActive &&
-        (state._tutorialActive || _chaosMode || state._jetLightningMode || state.preT4ACanyon)) {
+        (state._tutorialActive || _chaosMode || state._jetLightningMode || state.preT4ACanyon || state.preT4BCanyon)) {
       _updateLightning(dt);
     }
     _ltOrigRender(...args);

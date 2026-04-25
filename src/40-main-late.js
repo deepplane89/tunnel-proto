@@ -671,6 +671,121 @@ function _updatePreT4ACanyon(dt) {
   }
 }
 
+// ============================================================================
+// PRE-T4B CANYON (preset 1 + chill RANDOM lightning) — 40s canyon corridor
+// inserted between T4A_ANGLED and T4B_LETHAL. Pure visual canyon mode 1
+// (all-cyan smooth sine) with low-frequency lightning for atmosphere.
+// Triggered by DR sequencer family registry entry 'PRE_T4B_CANYON'.
+// ============================================================================
+const _PRE_T4B_DURATION    = 40.0;
+const _PRE_T4B_EXIT_WINDOW = 4.0;
+
+// Preset 1 visual values — mirrors V tuner preset 1 click. Kept verbatim
+// here so a future preset edit doesn't silently change this stage.
+const _PRE_T4B_CANYON_TUNER = {
+  slabH:55, slabW:20, slabThick:60,
+  sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1,
+  halfXOverride:34,
+  entranceThick:700, entranceSlabs:1, spawnDepth:-250,
+  scrollSpeed:1.0,
+  _allCyan:true, _allDark:false,
+};
+
+// Lightning settings — same RANDOM tuning as pre-T4A canyon but with chill
+// frequency (one bolt every ~2s instead of 0.3s).
+const _PRE_T4B_LT_TUNER = {
+  frequency: 2.0, leadFactor: 0.6, skyHeight: 55,
+  warningTime: 0.3, boltDuration: 0.5, lingerDuration: 4,
+  coreRadius: 0.45, glowRadius: 0.25,
+  segments: 10, jaggedness: 1.9,
+  hitboxScale: 1, warnRadius: 3.5,
+  shakeAmt: 0.18, shakeDuration: 0.35,
+  glowColor: 0x88c8ff, coreColor: 0xffffff,
+  flashColor: 0x99e8ff, warnColor: 0x44a0ff,
+  pattern: 'random', laneMin: -8, laneMax: 8,
+  sweepSpeed: 0.4, staggerGap: 0.6, salvoCount: 3, pinchSpread: 1,
+  count: 1, spawnZ: -83,
+};
+
+function _startPreT4BCanyon() {
+  state.preT4BCanyon       = true;
+  state.preT4BElapsed      = 0;
+  state.preT4BDone         = false;
+  state._preT4BExitStarted = false;
+  state._preT4BSavedSpeed     = state.speed;
+  state._preT4BSavedPhysLevel = _physLevelOverride;
+  state._preT4BSavedLT        = window._LT ? Object.assign({}, window._LT) : null;
+
+  _canyonMode = 1;
+  _canyonTuner._allCyan      = false; // cleared first; preset re-asserts true below
+  _canyonTuner._allDark      = false;
+  _canyonTuner._l4Recreation = false;
+  Object.assign(_canyonTuner, _PRE_T4B_CANYON_TUNER);
+  _canyonSinePhase = 0;
+  _l4RowsElapsed = 0;
+  if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+  _canyonExiting = false;
+  _canyonActive  = true;
+  _canyonManual  = true;
+  _jlCorridor.active = false;
+  state.corridorGapCenter = state.shipX || 0;
+  if (typeof dirLight !== 'undefined' && dirLight) {
+    if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+    dirLight.intensity = 0;
+  }
+  _createCanyonWalls();
+
+  if (window._LT) Object.assign(window._LT, _PRE_T4B_LT_TUNER);
+  if (typeof window._startLtPattern === 'function') {
+    const ok = window._startLtPattern('random');
+    if (!ok) console.warn('[PRE-T4B] failed to start RANDOM lightning pattern');
+  }
+
+  console.log('[PRE-T4B] ON for ' + _PRE_T4B_DURATION + 's (preset 1, lightning freq=2.0s)');
+}
+
+function _stopPreT4BCanyon() {
+  state.preT4BCanyon = false;
+  state.preT4BDone   = true;
+  if (_canyonWalls) _destroyCanyonWalls();
+  _canyonActive  = false;
+  _canyonExiting = false;
+  _canyonManual  = false;
+  _jlCorridor.active = false;
+  _canyonTuner._l4Recreation = false;
+  if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+    dirLight.intensity = _canyonSavedDirLight;
+    _canyonSavedDirLight = null;
+  }
+  _canyonMode = 0;
+  if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
+  if (typeof window._clearAllLightning === 'function') window._clearAllLightning();
+  if (state._preT4BSavedLT && window._LT) {
+    Object.assign(window._LT, state._preT4BSavedLT);
+    state._preT4BSavedLT = undefined;
+  }
+  if (state._preT4BSavedSpeed     !== undefined) { state.speed = state._preT4BSavedSpeed; state._preT4BSavedSpeed = undefined; }
+  if (state._preT4BSavedPhysLevel !== undefined) { _physLevelOverride = state._preT4BSavedPhysLevel; state._preT4BSavedPhysLevel = undefined; }
+  console.log('[PRE-T4B] OFF');
+}
+
+function _updatePreT4BCanyon(dt) {
+  if (!state.preT4BCanyon) return;
+  state.preT4BElapsed = (state.preT4BElapsed || 0) + dt;
+
+  if (!state._preT4BExitStarted && state.preT4BElapsed >= _PRE_T4B_DURATION - _PRE_T4B_EXIT_WINDOW) {
+    state._preT4BExitStarted = true;
+    if (typeof _canyonActive !== 'undefined')  _canyonActive  = false;
+    if (typeof _canyonExiting !== 'undefined') _canyonExiting = true;
+    if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
+    console.log('[PRE-T4B] exit scroll-out start');
+  }
+
+  if (state.preT4BElapsed >= _PRE_T4B_DURATION) {
+    _stopPreT4BCanyon();
+  }
+}
+
 function spawnGauntletRow() {
   const rowsDone = FUNNEL_TOTAL_ROWS - state.gauntletRowsLeft;
 
@@ -1635,6 +1750,8 @@ function spawnObstacles() {
   if (state.l3KnifeCanyon) return;
   // Pre-T4A canyon — same: pure visual+lightning corridor, no cones.
   if (state.preT4ACanyon) return;
+  // Pre-T4B canyon — preset 1 + chill lightning, no cones.
+  if (state.preT4BCanyon) return;
 
   // L5: zipper rows are fired from the update loop — just block normal spawns while active
   if (state.currentLevelIdx === 4 && state.zipperActive) {
