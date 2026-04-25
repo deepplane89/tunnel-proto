@@ -1147,26 +1147,44 @@ function _drSequencerTick(dt) {
     }
   }
   else if (tp === 'l3_cone_corridor') {
-    // Stage 3: legacy L3 dense cone corridor (the path normally hidden behind
-    // _L3_KNIFE_ENABLED). Drive it directly here with a row count tuned to
-    // duration×speed so the existing _drL3MaxRows guard still advances cleanly.
-    if (state.seqStageElapsed === 0 || (!state.corridorMode && state.corridorRowsDone === 0)) {
-      // 40s @ 2.0x ≈ 415 rows (current spacing)
-      const rows = 415;
-      state.corridorMode      = true;
-      state.corridorSpawnZ    = -7;
-      state.corridorRowsDone  = 0;
-      state.corridorGapCenter = 0;
-      state.corridorGapDir    = 1;
-      state.corridorDelay     = 1.5;
-      state._drL3MaxRows      = rows;
-    }
+    // Stage 3: L3 knife canyon (when _L3_KNIFE_ENABLED). Falls back to the
+    // legacy cone corridor if the knife flag is off. Both run ~40s.
     state._seqSpawnMode = 'none';
-    // Advance when corridor exhausts itself OR duration elapses
-    if (!state.corridorMode || state.seqStageElapsed >= (stage.duration || 40)) {
-      state.corridorMode = false;
-      _drSeqAdvance();
-      return;
+    if (_L3_KNIFE_ENABLED) {
+      // Fire knife canyon once on stage entry
+      if (!state.l3KnifeCanyon && !state.l3KnifeDone) {
+        state.speed = BASE_SPEED * (stage.speed || 2.0);
+        try { _startL3KnifeCanyon(); }
+        catch (e) { console.error('[L3-KNIFE] _startL3KnifeCanyon threw:', e); }
+      }
+      // Advance when knife canyon ends (l3KnifeDone) OR stage duration elapsed.
+      // _stopL3KnifeCanyon flips l3KnifeDone=true after _L3_KNIFE_DURATION (40s).
+      if (state.l3KnifeDone || state.seqStageElapsed >= (stage.duration || 40)) {
+        if (state.l3KnifeCanyon) _stopL3KnifeCanyon();
+        // Re-arm so a future S3 entry (e.g. hotkey jump) can fire again
+        state.l3KnifeDone = false;
+        state._l3EntryLogged = false;
+        _drSeqAdvance();
+        return;
+      }
+    } else {
+      // LEGACY PATH — cone corridor. Kept for the _L3_KNIFE_ENABLED=false revert.
+      if (state.seqStageElapsed === 0 || (!state.corridorMode && state.corridorRowsDone === 0)) {
+        // 40s @ 2.0x ≈ 415 rows (current spacing)
+        const rows = 415;
+        state.corridorMode      = true;
+        state.corridorSpawnZ    = -7;
+        state.corridorRowsDone  = 0;
+        state.corridorGapCenter = 0;
+        state.corridorGapDir    = 1;
+        state.corridorDelay     = 1.5;
+        state._drL3MaxRows      = rows;
+      }
+      if (!state.corridorMode || state.seqStageElapsed >= (stage.duration || 40)) {
+        state.corridorMode = false;
+        _drSeqAdvance();
+        return;
+      }
     }
   }
   else if (tp === 'structured_walls') {
