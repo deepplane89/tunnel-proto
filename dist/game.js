@@ -23994,6 +23994,15 @@ window._jlDebug = {
     _ltActive.length = 0;
   }
 
+  // Exposed for _exportScene() — captures pattern-button loop state, which
+  // fires bolts independently of _LT.enabled (the master toggle).
+  window._ltLoopState = function() {
+    return {
+      loopActive: !!_ltLoopActive,
+      activePattern: (_ltActiveBtn && _ltActiveBtn.textContent) ? _ltActiveBtn.textContent.trim() : null,
+    };
+  };
+
   // ── Target X from pattern ─────────────────────────────────────────────────
   function _ltNextTargetX() {
     const range = _LT.laneMax - _LT.laneMin;
@@ -24778,6 +24787,12 @@ window._jlDebug = {
       tuner:  _safeClone(window._canyonTuner),
     };
     const lightning = _safeClone(window._LT);
+    // Pattern-button loops fire bolts independently of _LT.enabled, so capture
+    // that state too. "Effective on" = master toggle OR a pattern loop running.
+    const ltLoop = (typeof window._ltLoopState === 'function') ? window._ltLoopState() : { loopActive:false, activePattern:null };
+    lightning.loopActive    = ltLoop.loopActive;
+    lightning.activePattern = ltLoop.activePattern;
+    lightning.effectiveOn   = !!(lightning.enabled || ltLoop.loopActive);
     const asteroid  = _safeClone(window._asteroidTuner);
 
     const snap = {
