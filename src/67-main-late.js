@@ -999,11 +999,11 @@ function _drSequencerTick(dt) {
   }
 
   // ── Set speed + lateral physics tier for this stage ──
-  // Skip speed adjust while L3 knife canyon is active — the canyon's entry
+  // Skip speed adjust while a canyon corridor is active — the canyon's entry
   // ramp owns state.speed during its 40s window and this tick would clobber it.
   const floor = state._drSpeedFloor || 0;
   const targetSpeed = BASE_SPEED * Math.max(stage.speed, floor);
-  if (!state.invincibleSpeedActive && !state.l3KnifeCanyon && Math.abs(state.speed - targetSpeed) > 0.5) state.speed = targetSpeed;
+  if (!state.invincibleSpeedActive && !state.l3KnifeCanyon && !state.preT4ACanyon && !state.preT4BCanyon && Math.abs(state.speed - targetSpeed) > 0.5) state.speed = targetSpeed;
   if (stage.physTier !== undefined) state.deathRunSpeedTier = stage.physTier;
 
   // ── Quilez domain warp: on for T3B boss and endless (except ice/gold suns which have built-in warp) ──

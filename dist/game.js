@@ -9777,8 +9777,10 @@ function _updateL3KnifeCanyon(dt) {
 // values + RANDOM lightning loop instead of knife-arches preset.
 // Triggered by DR sequencer family registry entry 'PRE_T4A_CANYON'.
 // ============================================================================
-const _PRE_T4A_DURATION    = 40.0;   // seconds
-const _PRE_T4A_EXIT_WINDOW = 4.0;    // last-N seconds = scroll-out, no new slabs
+const _PRE_T4A_DURATION         = 40.0;   // seconds
+const _PRE_T4A_EXIT_WINDOW      = 4.0;    // last-N seconds = scroll-out, no new slabs
+const _PRE_T4A_RAMP_DURATION    = 0.4;    // entry-ramp seconds (matches L3 knife)
+const _PRE_T4A_TARGET_SPEED_MULT = 2.2;   // BASE_SPEED * this during canyon
 
 // User's exported canyon tuner (mode 5) — captured 2026-04-24.
 // Overwriting current _canyonTuner with these values reproduces the visual
@@ -9823,9 +9825,15 @@ function _startPreT4ACanyon() {
   state.preT4AElapsed      = 0;
   state.preT4ADone         = false;
   state._preT4AExitStarted = false;
+  // Entry ramp state — mirrors L3 knife: pending → ramping → active.
+  // Pushes speed from 2.0× → 2.2× over 0.4s once corridor revealed, snaps
+  // physics to L5 immediately. FOV follows via global speed-to-FOV lerp.
+  state.preT4ARampPhase = 'pending';
+  state.preT4ARampT     = 0;
   // Save originals for restore
   state._preT4ASavedSpeed     = state.speed;
   state._preT4ASavedPhysLevel = _physLevelOverride;
+  state._preT4ASavedFOV       = (typeof camera !== 'undefined' && camera) ? camera.fov : 65;
   state._preT4ASavedLT        = window._LT ? Object.assign({}, window._LT) : null;
 
   // Apply canyon tuner (mode 5, NOT _l4Recreation — standard canyon).
@@ -9861,6 +9869,8 @@ function _startPreT4ACanyon() {
 function _stopPreT4ACanyon() {
   state.preT4ACanyon = false;
   state.preT4ADone   = true;
+  state.preT4ARampPhase = 'off';
+  state.preT4ARampT     = 0;
   if (_canyonWalls) _destroyCanyonWalls();
   _canyonActive  = false;
   _canyonExiting = false;
@@ -9883,12 +9893,41 @@ function _stopPreT4ACanyon() {
   // Restore speed/physics
   if (state._preT4ASavedSpeed     !== undefined) { state.speed = state._preT4ASavedSpeed; state._preT4ASavedSpeed = undefined; }
   if (state._preT4ASavedPhysLevel !== undefined) { _physLevelOverride = state._preT4ASavedPhysLevel; state._preT4ASavedPhysLevel = undefined; }
+  if (state._preT4ASavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
+    camera.fov = state._preT4ASavedFOV;
+    camera.updateProjectionMatrix();
+    state._preT4ASavedFOV = undefined;
+  }
   console.log('[PRE-T4A] OFF');
 }
 
 function _updatePreT4ACanyon(dt) {
   if (!state.preT4ACanyon) return;
   state.preT4AElapsed = (state.preT4AElapsed || 0) + dt;
+
+  // ── Entry ramp: pending → ramping → active ───────────────────────────────
+  // Fires when canyon entrance reaches Z=-210 (ship at canyon mouth).
+  // Speed lerps to 2.2×, physics snaps to L5, FOV follows via global lerp.
+  const _phase = state.preT4ARampPhase || 'pending';
+  const _revealed = (typeof _canyonWalls !== 'undefined' && _canyonWalls && _canyonWalls._corridorRevealed);
+  if (_phase === 'pending' && _revealed) {
+    state.preT4ARampPhase = 'ramping';
+    state.preT4ARampT     = 0;
+    _physLevelOverride    = 4;
+    console.log('[PRE-T4A] entry ramp start (ship at canyon mouth)');
+  }
+  if (state.preT4ARampPhase === 'ramping') {
+    state.preT4ARampT = (state.preT4ARampT || 0) + dt;
+    const t = Math.min(1, state.preT4ARampT / _PRE_T4A_RAMP_DURATION);
+    const e = 1 - Math.pow(1 - t, 3);
+    const startSpeed  = state._preT4ASavedSpeed || (BASE_SPEED * 2.0);
+    const targetSpeed = BASE_SPEED * _PRE_T4A_TARGET_SPEED_MULT;
+    state.speed = startSpeed + (targetSpeed - startSpeed) * e;
+    if (t >= 1) {
+      state.preT4ARampPhase = 'active';
+      console.log('[PRE-T4A] entry ramp complete — speed=' + state.speed.toFixed(1));
+    }
+  }
 
   // Scroll-out exit window: stop spawning new slabs and let existing drift past
   if (!state._preT4AExitStarted && state.preT4AElapsed >= _PRE_T4A_DURATION - _PRE_T4A_EXIT_WINDOW) {
@@ -9914,8 +9953,10 @@ function _updatePreT4ACanyon(dt) {
 // (all-cyan smooth sine) with low-frequency lightning for atmosphere.
 // Triggered by DR sequencer family registry entry 'PRE_T4B_CANYON'.
 // ============================================================================
-const _PRE_T4B_DURATION    = 40.0;
-const _PRE_T4B_EXIT_WINDOW = 4.0;
+const _PRE_T4B_DURATION         = 40.0;
+const _PRE_T4B_EXIT_WINDOW      = 4.0;
+const _PRE_T4B_RAMP_DURATION    = 0.4;
+const _PRE_T4B_TARGET_SPEED_MULT = 2.2;
 
 // Preset 1 visual values — mirrors V tuner preset 1 click. Kept verbatim
 // here so a future preset edit doesn't silently change this stage.
@@ -9949,8 +9990,11 @@ function _startPreT4BCanyon() {
   state.preT4BElapsed      = 0;
   state.preT4BDone         = false;
   state._preT4BExitStarted = false;
+  state.preT4BRampPhase    = 'pending';
+  state.preT4BRampT        = 0;
   state._preT4BSavedSpeed     = state.speed;
   state._preT4BSavedPhysLevel = _physLevelOverride;
+  state._preT4BSavedFOV       = (typeof camera !== 'undefined' && camera) ? camera.fov : 65;
   state._preT4BSavedLT        = window._LT ? Object.assign({}, window._LT) : null;
 
   _canyonMode = 1;
@@ -9984,6 +10028,8 @@ function _startPreT4BCanyon() {
 function _stopPreT4BCanyon() {
   state.preT4BCanyon = false;
   state.preT4BDone   = true;
+  state.preT4BRampPhase = 'off';
+  state.preT4BRampT     = 0;
   if (_canyonWalls) _destroyCanyonWalls();
   _canyonActive  = false;
   _canyonExiting = false;
@@ -10003,12 +10049,39 @@ function _stopPreT4BCanyon() {
   }
   if (state._preT4BSavedSpeed     !== undefined) { state.speed = state._preT4BSavedSpeed; state._preT4BSavedSpeed = undefined; }
   if (state._preT4BSavedPhysLevel !== undefined) { _physLevelOverride = state._preT4BSavedPhysLevel; state._preT4BSavedPhysLevel = undefined; }
+  if (state._preT4BSavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
+    camera.fov = state._preT4BSavedFOV;
+    camera.updateProjectionMatrix();
+    state._preT4BSavedFOV = undefined;
+  }
   console.log('[PRE-T4B] OFF');
 }
 
 function _updatePreT4BCanyon(dt) {
   if (!state.preT4BCanyon) return;
   state.preT4BElapsed = (state.preT4BElapsed || 0) + dt;
+
+  // ── Entry ramp: pending → ramping → active ───────────────────────────────
+  const _phaseB = state.preT4BRampPhase || 'pending';
+  const _revealedB = (typeof _canyonWalls !== 'undefined' && _canyonWalls && _canyonWalls._corridorRevealed);
+  if (_phaseB === 'pending' && _revealedB) {
+    state.preT4BRampPhase = 'ramping';
+    state.preT4BRampT     = 0;
+    _physLevelOverride    = 4;
+    console.log('[PRE-T4B] entry ramp start (ship at canyon mouth)');
+  }
+  if (state.preT4BRampPhase === 'ramping') {
+    state.preT4BRampT = (state.preT4BRampT || 0) + dt;
+    const t = Math.min(1, state.preT4BRampT / _PRE_T4B_RAMP_DURATION);
+    const e = 1 - Math.pow(1 - t, 3);
+    const startSpeed  = state._preT4BSavedSpeed || (BASE_SPEED * 2.0);
+    const targetSpeed = BASE_SPEED * _PRE_T4B_TARGET_SPEED_MULT;
+    state.speed = startSpeed + (targetSpeed - startSpeed) * e;
+    if (t >= 1) {
+      state.preT4BRampPhase = 'active';
+      console.log('[PRE-T4B] entry ramp complete — speed=' + state.speed.toFixed(1));
+    }
+  }
 
   if (!state._preT4BExitStarted && state.preT4BElapsed >= _PRE_T4B_DURATION - _PRE_T4B_EXIT_WINDOW) {
     state._preT4BExitStarted = true;
@@ -14507,11 +14580,11 @@ function _drSequencerTick(dt) {
   }
 
   // ── Set speed + lateral physics tier for this stage ──
-  // Skip speed adjust while L3 knife canyon is active — the canyon's entry
+  // Skip speed adjust while a canyon corridor is active — the canyon's entry
   // ramp owns state.speed during its 40s window and this tick would clobber it.
   const floor = state._drSpeedFloor || 0;
   const targetSpeed = BASE_SPEED * Math.max(stage.speed, floor);
-  if (!state.invincibleSpeedActive && !state.l3KnifeCanyon && Math.abs(state.speed - targetSpeed) > 0.5) state.speed = targetSpeed;
+  if (!state.invincibleSpeedActive && !state.l3KnifeCanyon && !state.preT4ACanyon && !state.preT4BCanyon && Math.abs(state.speed - targetSpeed) > 0.5) state.speed = targetSpeed;
   if (stage.physTier !== undefined) state.deathRunSpeedTier = stage.physTier;
 
   // ── Quilez domain warp: on for T3B boss and endless (except ice/gold suns which have built-in warp) ──
