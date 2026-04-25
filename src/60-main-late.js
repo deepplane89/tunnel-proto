@@ -315,7 +315,8 @@ window.addEventListener('keydown', e => {
     // 1=S1_CONES  2=S2_CONES_ZIPS  3=S3_L3_CORRIDOR  4=S4_WALLS_RAND
     // 5=S5_WALLS_STRUCT  6=S6_RINGS  7=S7_L4_CORRIDOR  8=S8_FAT_CONES
     // 9=S9_SLALOM  0=S10_ZIPPER
-    // Shift+1=S11_L5_CORRIDOR  Shift+2=ENDLESS  Shift+3=CC_L3_KNIFE
+    // Shift+1=S11_L5_CORRIDOR  Shift+2=ENDLESS
+    // (Shift+3 retired — plain '3' now jumps to S3 which fires the knife canyon directly)
     const _digitNameMap = {
       '1': 'S1_CONES', '2': 'S2_CONES_ZIPS', '3': 'S3_L3_CORRIDOR',
       '4': 'S4_WALLS_RAND', '5': 'S5_WALLS_STRUCT', '6': 'S6_RINGS',
@@ -323,7 +324,7 @@ window.addEventListener('keydown', e => {
       '0': 'S10_ZIPPER',
     };
     const _shiftDigitNameMap = {
-      '1': 'S11_L5_CORRIDOR', '2': 'ENDLESS', '3': 'CC_L3_KNIFE',
+      '1': 'S11_L5_CORRIDOR', '2': 'ENDLESS',
     };
     const _hotkeyJumpByName = (stageName) => {
       const idx = DR_SEQUENCE.findIndex(s => s.name === stageName);

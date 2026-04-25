@@ -12648,7 +12648,8 @@ window.addEventListener('keydown', e => {
     // 1=S1_CONES  2=S2_CONES_ZIPS  3=S3_L3_CORRIDOR  4=S4_WALLS_RAND
     // 5=S5_WALLS_STRUCT  6=S6_RINGS  7=S7_L4_CORRIDOR  8=S8_FAT_CONES
     // 9=S9_SLALOM  0=S10_ZIPPER
-    // Shift+1=S11_L5_CORRIDOR  Shift+2=ENDLESS  Shift+3=CC_L3_KNIFE
+    // Shift+1=S11_L5_CORRIDOR  Shift+2=ENDLESS
+    // (Shift+3 retired — plain '3' now jumps to S3 which fires the knife canyon directly)
     const _digitNameMap = {
       '1': 'S1_CONES', '2': 'S2_CONES_ZIPS', '3': 'S3_L3_CORRIDOR',
       '4': 'S4_WALLS_RAND', '5': 'S5_WALLS_STRUCT', '6': 'S6_RINGS',
@@ -12656,7 +12657,7 @@ window.addEventListener('keydown', e => {
       '0': 'S10_ZIPPER',
     };
     const _shiftDigitNameMap = {
-      '1': 'S11_L5_CORRIDOR', '2': 'ENDLESS', '3': 'CC_L3_KNIFE',
+      '1': 'S11_L5_CORRIDOR', '2': 'ENDLESS',
     };
     const _hotkeyJumpByName = (stageName) => {
       const idx = DR_SEQUENCE.findIndex(s => s.name === stageName);
@@ -14601,10 +14602,14 @@ const DR_SEQUENCE = [
   { name: 'CB_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 1, physTier: 1 },
   { name: 'CB_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 1 },
 
-  // Stage 3 — L3 cone corridor (40s @ 2.0x ≈ 415 rows)
+  // Stage 3 — L3 KNIFE CANYON (40s @ 2.0x). The S3_L3_CORRIDOR handler now
+  // fires _startL3KnifeCanyon() directly (formerly the legacy cone-corridor
+  // path; the cone-corridor code is preserved under the _L3_KNIFE_ENABLED=false
+  // branch). The previously-separate CC_L3_KNIFE/CC_REST stages were removed
+  // because they fired the knife canyon a SECOND time right after S3, causing
+  // duplicate slabs and a stuttery double-canyon.
   { name: 'S3_L3_CORRIDOR',   type: 'l3_cone_corridor', duration: 40, speed: 2.0, vibeIdx: 2, physTier: 1, useL3Warp: true, musicTrack: 'l4' },
-  // Canyon C — L3 KNIFE (real)
-  { name: 'CC_L3_KNIFE',      type: 'corridor', family: 'L3_CORRIDOR', speed: 2.0, vibeIdx: 2, physTier: 1, useL3Warp: true },
+  // Brief rest after the knife canyon before angled walls hit
   { name: 'CC_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 2 },
 
   // Stage 4 — angled walls (random)
