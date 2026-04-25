@@ -9634,7 +9634,7 @@ function _startL3KnifeCanyon() {
     darkCrkCount: 14, darkCrkBright: 1.95, darkRgh: 0.62,
     darkClearcoat: 0.4, darkEmi: 0.9,
     lightIntensity: 1.2,
-    entranceThick: 700, entranceSlabs: 3, spawnDepth: -250,
+    entranceThick: 700, entranceSlabs: 1, spawnDepth: -250,
     sineIntensity: 0.28, sineAmp: 120, sinePeriod: 330, sineSpeed: 1,
     scrollSpeed: 1,
     _l4HalfX: 21.5, _l4AmpScale: 1.0, _l4RampCompress: 1.45, _l4SlabW: 40,
