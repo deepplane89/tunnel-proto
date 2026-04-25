@@ -664,6 +664,8 @@ function startDeathRun() {
   state._seqVibeApplied    = -1;
   state._seqCorridorStarted = false;
   state._seqZipTimer       = 0;
+  state._seqZipBurstNum    = 0;
+  state._seqZipRestTimer   = 0;
   state._restBeepFired     = false;
   state._endlessVibeIdx    = 4;
   state.distance           = 0;
@@ -1218,18 +1220,28 @@ function _drSequencerTick(dt) {
       }
     } else {
       state._seqSpawnMode = 'cones';
-      // Fire a zipper burst periodically
-      state._seqZipTimer = (state._seqZipTimer || 0) + dt;
-      if (state._seqZipTimer >= 8 && !state.zipperActive) {
-        state._seqZipTimer = 0;
-        state.zipperActive = true;
-        // Use ZIPPER_ROWS so the exit-ramp calculation in spawnZipperRow is correct
-        // (was 8-11, causing rowsDone to start mid-ramp and fire too fast)
-        state.zipperRowsLeft = ZIPPER_ROWS;
-        state.zipperSide = Math.random() < 0.5 ? 1 : -1;
-        state.zipperHoldCount = 0;
-        state.zipperSpawnTimer = -1.0;
+      // Escalating burst rhythm: 1 zip → 2s rest → 2 zips → 2s rest → 3 zips → ...
+      // Burst N spawns N zipper rows (N = _seqZipBurstNum, starts at 1, increments
+      // after each burst completes). Fixed 2s rest between bursts.
+      // First burst (N=1) fires immediately at stage entry (no leading rest).
+      if (!state.zipperActive) {
+        const _firstBurst = (state._seqZipBurstNum || 0) === 0;
+        if (!_firstBurst) state._seqZipRestTimer = (state._seqZipRestTimer || 0) + dt;
+        if (_firstBurst || state._seqZipRestTimer >= 2.0) {
+          state._seqZipRestTimer = 0;
+          state._seqZipBurstNum = (state._seqZipBurstNum || 0) + 1;
+          const N = state._seqZipBurstNum;
+          state.zipperActive = true;
+          // Set rowsLeft = N so the burst auto-terminates after N rows
+          // (spawnZipperRow decrements; flips zipperActive=false at 0).
+          state.zipperRowsLeft   = N;
+          state.zipperSide       = Math.random() < 0.5 ? 1 : -1;
+          state.zipperHoldCount  = 0;
+          state.zipperSpawnTimer = -1.0;
+        }
       }
+      // While zipperActive is true, the row spawner (line ~4660) handles spawning;
+      // when rowsLeft hits 0 it flips zipperActive=false and we begin a new rest.
     }
   }
   else if (tp === 'angled_walls') {
@@ -1344,6 +1356,8 @@ function _drSeqAdvance() {
   state.seqStageElapsed = 0;
   state._seqCorridorStarted = false;
   state._seqZipTimer = 0;
+  state._seqZipBurstNum  = 0;  // S2 cones_and_zips burst counter (1, 2, 3, ...)
+  state._seqZipRestTimer = 0;  // S2 cones_and_zips rest countdown
   state._restBeepFired = false;
   state._seqAngledTimer = 0;
   state._seqSlalomFired = false;

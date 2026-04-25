@@ -209,6 +209,49 @@ function clearAllCorridorFlags() {
   state.postL3Gap          = 0;
 }
 
+// Full state-wipe used by hotkey jumps. clearAllCorridorFlags() handles the
+// active-flag set, but six categories of substate leak between hotkey jumps
+// and corrupt the sequencer/visuals. This helper wipes them all.
+function _drFullStateWipe() {
+  // 1) Zipper substate
+  state.zipperRowsLeft     = 0;
+  state.zipperCooldown     = 0;
+  state.zipperHoldCount    = 0;
+  state.zipperRunCount     = 0;
+  state.zipperSpawnTimer   = 0;
+  // 2) Stage timers / one-shot fired flags
+  state._seqZipTimer       = 0;
+  state._seqZipFired       = false;
+  state._seqSlalomFired    = false;
+  state._seqStructuredTimer = 0;
+  state._seqRampT01        = 0;
+  state._seqAngledTimer    = 0;
+  state._restBeepFired     = false;
+  // S2 burst-rhythm state (cones_and_zips)
+  state._seqZipBurstNum    = 0;
+  state._seqZipRestTimer   = 0;
+  // 3) Canyon flags — call stop helpers if currently active so they restore
+  //    speed/FOV/lighting before we wipe their flags.
+  if (state.l3KnifeCanyon && typeof _stopL3KnifeCanyon === 'function') _stopL3KnifeCanyon();
+  if (state.preT4ACanyon  && typeof _stopPreT4ACanyon  === 'function') _stopPreT4ACanyon();
+  if (state.preT4BCanyon  && typeof _stopPreT4BCanyon  === 'function') _stopPreT4BCanyon();
+  state.preT4ACanyon       = false;
+  state.preT4BCanyon       = false;
+  // 4) L3 entry/done state — re-arm L3 knife on next entry
+  state.l3KnifeDone        = false;
+  state._l3EntryLogged     = false;
+  // 5) Endless-mode rotation state (Shift+2 hotkey enters endless)
+  state._endlessActiveType    = '';
+  state._endlessBlockTimer    = 0;
+  state._endlessRotationIdx   = 0;
+  state._endlessCorridorCount = 0;
+  // 6) Corridor sub-state (gap drift, row counter)
+  state.corridorRowsDone   = 0;
+  state.corridorGapCenter  = 0;
+  state.corridorGapDir     = 1;
+  state.corridorSpawnZ     = -7;
+}
+
 window.addEventListener('keydown', e => {
   keys[e.key] = true;
   const isSpace = (e.key === ' ' || e.code === 'Space');
@@ -286,7 +329,9 @@ window.addEventListener('keydown', e => {
       const idx = DR_SEQUENCE.findIndex(s => s.name === stageName);
       if (idx < 0) { console.warn('[SEQ-DEBUG] Stage not found: ' + stageName); return; }
       const s = DR_SEQUENCE[idx];
-      clearAllCorridorFlags(); state.deathRunRestBeat = 0;
+      clearAllCorridorFlags();
+      _drFullStateWipe();
+      state.deathRunRestBeat = 0;
       state.seqStageIdx = idx; state.seqStageElapsed = 0;
       state._seqCorridorStarted = false; state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
       state._seqVibeApplied = -1; state._restBeepFired = false;
