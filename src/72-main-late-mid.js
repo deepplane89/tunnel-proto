@@ -4572,6 +4572,25 @@ window._jlDebug = {
     };
   };
 
+  // Pattern-loop registry — programmatic access to the L-panel pattern
+  // ticks. Used by deathrun pre-T4A canyon to fire RANDOM lightning without
+  // requiring the L panel to be open.
+  const _LT_PATTERN_REGISTRY = {};
+  function _registerLtPattern(name, tick) { _LT_PATTERN_REGISTRY[name] = tick; }
+  window._startLtPattern = function(name) {
+    const tick = _LT_PATTERN_REGISTRY[name];
+    if (!tick) { console.warn('[LT] unknown pattern:', name, 'available:', Object.keys(_LT_PATTERN_REGISTRY)); return false; }
+    _startLtLoop(null, '#6af', tick);
+    return true;
+  };
+  window._stopLtPattern = function() { _stopLtLoop(); };
+
+  // Pattern definitions — shared between L panel and programmatic dispatch.
+  // Forward-declared; populated below _ltSweepX/_ltSweepDir so closures can
+  // capture them. Panel build() and the registry both dereference at call
+  // time, so the late assignment is fine.
+  let _LT_PANEL_PATTERNS = [];
+
   // ── Target X from pattern ─────────────────────────────────────────────────
   function _ltNextTargetX() {
     const range = _LT.laneMax - _LT.laneMin;
@@ -4591,6 +4610,19 @@ window._jlDebug = {
       default:      return sx + (Math.random()-0.5)*3.0;
     }
   }
+
+  // Populate the shared pattern list now that all closures (_LT, _ltSweepX,
+  // _ltSweepDir, _ltNextTargetX, _spawnLightning) are in scope. Mirrors the
+  // L panel's old inline definition exactly.
+  _LT_PANEL_PATTERNS = [
+    {label:'↯ RANDOM (loop)', short:'random', color:'#6af', tick:()=>{ for(let c=0;c<Math.max(1,_LT.count);c++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(_ltNextTargetX()); },c*120); }},
+    {label:'►◄ SWEEP (loop)',  short:'sweep',  color:'#0df', tick:()=>{ const range=_LT.laneMax-_LT.laneMin,swOff=(_ltSweepX-0.5)*range; _ltSweepX+=_ltSweepDir*_LT.sweepSpeed*0.35; if(_ltSweepX>=1||_ltSweepX<=0){_ltSweepDir*=-1;_ltSweepX=Math.max(0,Math.min(1,_ltSweepX));} const n=Math.max(2,_LT.salvoCount); for(let i=0;i<n;i++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(state.shipX+swOff+(i/(n-1)-0.5)*range*0.5); },i*250); }},
+    {label:'▼ ▼▼ STAGGER (loop)', short:'stagger', color:'#ff0', tick:()=>{ if(state.phase==='playing') _spawnLightning(state.shipX); }},
+    {label:'▼▼▼ SALVO (loop)',   short:'salvo',   color:'#f80', tick:()=>{ const sx=state.shipX,n=Math.max(1,_LT.salvoCount),half=(_LT.laneMax-_LT.laneMin)*0.45; for(let si=0;si<n;si++) _spawnLightning(sx+(n===1?0:(si/(n-1)-0.5))*half*2); }},
+    {label:'▷◁ PINCH (loop)',     short:'pinch',   color:'#f0f', tick:()=>{ const sx=state.shipX,pairs=5,fh=(_LT.laneMax-_LT.laneMin)*0.5*_LT.pinchSpread; for(let pi=0;pi<pairs;pi++){ const hs=Math.max(0.3,fh*(1-pi/(pairs-1))),d=pi*300; (function(s,dl){const fn=()=>{ if(state.phase!=='playing')return; _spawnLightning(sx-s); _spawnLightning(sx+s); }; dl===0?fn():setTimeout(fn,dl);})(hs,d); } setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(sx); },pairs*300); }},
+  ];
+  // Register both by short name and full label so callers can use either.
+  _LT_PANEL_PATTERNS.forEach(p => { _registerLtPattern(p.short, p.tick); _registerLtPattern(p.label, p.tick); });
 
   // ── Build jagged TubeGeometry bolt ────────────────────────────────────────
   // Bolt geometry built at Z=0 local space — Group handles world Z position
@@ -4970,7 +5002,7 @@ window._jlDebug = {
     const dt  = Math.min((now - _ltLastTime)*0.001, 0.05);
     _ltLastTime = now;
     if (state.phase === 'playing' && !state.introActive &&
-        (state._tutorialActive || _chaosMode || state._jetLightningMode)) {
+        (state._tutorialActive || _chaosMode || state._jetLightningMode || state.preT4ACanyon)) {
       _updateLightning(dt);
     }
     _ltOrigRender(...args);
@@ -5020,13 +5052,7 @@ window._jlDebug = {
     panel.appendChild(mkS('shake amount',   _LT.shakeAmt,      0,  1,  0.01,v=>_LT.shakeAmt=v));
     panel.appendChild(mkS('shake duration', _LT.shakeDuration, 0,  1,  0.02,v=>_LT.shakeDuration=v));
     panel.appendChild(mkH('PATTERN LOOPS'));
-    const pats=[
-      {label:'↯ RANDOM (loop)', color:'#6af', tick:()=>{ for(let c=0;c<Math.max(1,_LT.count);c++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(_ltNextTargetX()); },c*120); }},
-      {label:'►◄ SWEEP (loop)', color:'#0df', tick:()=>{ const range=_LT.laneMax-_LT.laneMin,swOff=(_ltSweepX-0.5)*range; _ltSweepX+=_ltSweepDir*_LT.sweepSpeed*0.35; if(_ltSweepX>=1||_ltSweepX<=0){_ltSweepDir*=-1;_ltSweepX=Math.max(0,Math.min(1,_ltSweepX));} const n=Math.max(2,_LT.salvoCount); for(let i=0;i<n;i++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(state.shipX+swOff+(i/(n-1)-0.5)*range*0.5); },i*250); }},
-      {label:'▼ ▼▼ STAGGER (loop)', color:'#ff0', tick:()=>{ if(state.phase==='playing') _spawnLightning(state.shipX); }},
-      {label:'▼▼▼ SALVO (loop)', color:'#f80', tick:()=>{ const sx=state.shipX,n=Math.max(1,_LT.salvoCount),half=(_LT.laneMax-_LT.laneMin)*0.45; for(let si=0;si<n;si++) _spawnLightning(sx+(n===1?0:(si/(n-1)-0.5))*half*2); }},
-      {label:'▷◁ PINCH (loop)', color:'#f0f', tick:()=>{ const sx=state.shipX,pairs=5,fh=(_LT.laneMax-_LT.laneMin)*0.5*_LT.pinchSpread; for(let pi=0;pi<pairs;pi++){ const hs=Math.max(0.3,fh*(1-pi/(pairs-1))),d=pi*300; (function(s,dl){const fn=()=>{ if(state.phase!=='playing')return; _spawnLightning(sx-s); _spawnLightning(sx+s); }; dl===0?fn():setTimeout(fn,dl);})(hs,d); } setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(sx); },pairs*300); }},
-    ];
+    const pats = _LT_PANEL_PATTERNS;
     pats.forEach(({label,color,tick})=>{ const b=mkB(label,color,()=>_startLtLoop(b,color,tick)); panel.appendChild(b); });
     panel.appendChild(mkB('⏹ STOP LOOP','#888',_stopLtLoop));
     panel.appendChild(mkB('✕ CLEAR ALL','#f44',()=>{ _stopLtLoop(); _clearAllLightning(); }));

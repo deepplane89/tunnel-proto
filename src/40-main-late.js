@@ -533,6 +533,144 @@ function _updateL3KnifeCanyon(dt) {
   }
 }
 
+// ============================================================================
+// PRE-T4A CANYON — 40s canyon corridor inserted between RECOVERY_1 and T4A.
+// Mirrors the L3 knife canyon flow (start/stop/update + auto-end timer +
+// scroll-out exit) but uses canyon mode 5 with the user's exported tuner
+// values + RANDOM lightning loop instead of knife-arches preset.
+// Triggered by DR sequencer family registry entry 'PRE_T4A_CANYON'.
+// ============================================================================
+const _PRE_T4A_DURATION    = 40.0;   // seconds
+const _PRE_T4A_EXIT_WINDOW = 4.0;    // last-N seconds = scroll-out, no new slabs
+
+// User's exported canyon tuner (mode 5) — captured 2026-04-24.
+// Overwriting current _canyonTuner with these values reproduces the visual
+// scene the user tuned in the V panel.
+const _PRE_T4A_CANYON_TUNER = {
+  slabH: 190, slabW: 20, slabThick: 60,
+  cols: 5, rows: 6, disp: 4, snap: 0.7,
+  footX: 9, sweepX: 4, midX: 17, crestX: 20,
+  poolSize: 10, scrollSpeed: 1.5, snapRate: 6,
+  cyanEmi: 1.1, cyanRgh: 0.4,
+  holoOpacity: 0.5, holoGrid: 6,
+  darkCrkCount: 6, darkCrkBright: 1, darkRgh: 0.22,
+  darkClearcoat: 0.4, darkEmi: 0.9,
+  lightIntensity: 1,
+  halfXOverride: 50,
+  entranceThick: 700, entranceSlabs: 1, spawnDepth: -250,
+  sineIntensity: 0.3, sineAmp: 120, sinePeriod: 330, sineSpeed: 1,
+  _allCyan: false, _allDark: false,
+  _l4Recreation: false, _l4RampCompress: 1.45, _l4AmpScale: 1, _l4HalfX: 8, _l4SlabW: 40,
+  sineStartI: 0, sineStartZ: -150, sineFullZ: -500,
+  halfXStart: 60, halfXFull: 25, halfXStartZ: -150, halfXFullZ: -500,
+};
+
+// User's exported lightning settings (mode = RANDOM loop).
+const _PRE_T4A_LT_TUNER = {
+  frequency: 0.3, leadFactor: 0.6, skyHeight: 55,
+  warningTime: 0.3, boltDuration: 0.5, lingerDuration: 4,
+  coreRadius: 0.45, glowRadius: 0.25,
+  segments: 10, jaggedness: 1.9,
+  hitboxScale: 1, warnRadius: 3.5,
+  shakeAmt: 0.18, shakeDuration: 0.35,
+  glowColor: 0x88c8ff, coreColor: 0xffffff,
+  flashColor: 0x99e8ff, warnColor: 0x44a0ff,
+  pattern: 'random', laneMin: -8, laneMax: 8,
+  sweepSpeed: 0.4, staggerGap: 0.6, salvoCount: 3, pinchSpread: 1,
+  count: 1, spawnZ: -83,
+};
+
+function _startPreT4ACanyon() {
+  // State flags
+  state.preT4ACanyon       = true;
+  state.preT4AElapsed      = 0;
+  state.preT4ADone         = false;
+  state._preT4AExitStarted = false;
+  // Save originals for restore
+  state._preT4ASavedSpeed     = state.speed;
+  state._preT4ASavedPhysLevel = _physLevelOverride;
+  state._preT4ASavedLT        = window._LT ? Object.assign({}, window._LT) : null;
+
+  // Apply canyon tuner (mode 5, NOT _l4Recreation — standard canyon).
+  _canyonMode = 5;
+  _canyonTuner._allCyan      = false;
+  _canyonTuner._allDark      = false;
+  _canyonTuner._l4Recreation = false;
+  Object.assign(_canyonTuner, _PRE_T4A_CANYON_TUNER);
+  _canyonSinePhase = 0;
+  _l4RowsElapsed = 0;
+  if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+  _canyonExiting = false;
+  _canyonActive  = true;
+  _canyonManual  = true;
+  _jlCorridor.active = false;
+  state.corridorGapCenter = state.shipX || 0;
+  if (typeof dirLight !== 'undefined' && dirLight) {
+    if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+    dirLight.intensity = 0;
+  }
+  _createCanyonWalls();
+
+  // Apply lightning tuner + start RANDOM loop
+  if (window._LT) Object.assign(window._LT, _PRE_T4A_LT_TUNER);
+  if (typeof window._startLtPattern === 'function') {
+    const ok = window._startLtPattern('random');
+    if (!ok) console.warn('[PRE-T4A] failed to start RANDOM lightning pattern');
+  }
+
+  console.log('[PRE-T4A] ON for ' + _PRE_T4A_DURATION + 's');
+}
+
+function _stopPreT4ACanyon() {
+  state.preT4ACanyon = false;
+  state.preT4ADone   = true;
+  if (_canyonWalls) _destroyCanyonWalls();
+  _canyonActive  = false;
+  _canyonExiting = false;
+  _canyonManual  = false;
+  _jlCorridor.active = false;
+  _canyonTuner._l4Recreation = false;
+  if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+    dirLight.intensity = _canyonSavedDirLight;
+    _canyonSavedDirLight = null;
+  }
+  _canyonMode = 0;
+  // Stop lightning loop + clear active bolts so T4A starts clean
+  if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
+  if (typeof window._clearAllLightning === 'function') window._clearAllLightning();
+  // Restore lightning tuner to its prior state so other modes aren't affected
+  if (state._preT4ASavedLT && window._LT) {
+    Object.assign(window._LT, state._preT4ASavedLT);
+    state._preT4ASavedLT = undefined;
+  }
+  // Restore speed/physics
+  if (state._preT4ASavedSpeed     !== undefined) { state.speed = state._preT4ASavedSpeed; state._preT4ASavedSpeed = undefined; }
+  if (state._preT4ASavedPhysLevel !== undefined) { _physLevelOverride = state._preT4ASavedPhysLevel; state._preT4ASavedPhysLevel = undefined; }
+  console.log('[PRE-T4A] OFF');
+}
+
+function _updatePreT4ACanyon(dt) {
+  if (!state.preT4ACanyon) return;
+  state.preT4AElapsed = (state.preT4AElapsed || 0) + dt;
+
+  // Scroll-out exit window: stop spawning new slabs and let existing drift past
+  if (!state._preT4AExitStarted && state.preT4AElapsed >= _PRE_T4A_DURATION - _PRE_T4A_EXIT_WINDOW) {
+    state._preT4AExitStarted = true;
+    if (typeof _canyonActive !== 'undefined')  _canyonActive  = false;
+    if (typeof _canyonExiting !== 'undefined') _canyonExiting = true;
+    // Also stop firing new lightning bolts — existing bolts age out via
+    // _updateLightning while preT4ACanyon flag is still true.
+    if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
+    console.log('[PRE-T4A] exit scroll-out start');
+  }
+
+  // Auto-end after duration. DR sequencer's family.isActive() returns false
+  // once preT4ADone=true, advancing to T4A_ANGLED.
+  if (state.preT4AElapsed >= _PRE_T4A_DURATION) {
+    _stopPreT4ACanyon();
+  }
+}
+
 function spawnGauntletRow() {
   const rowsDone = FUNNEL_TOTAL_ROWS - state.gauntletRowsLeft;
 
@@ -1495,6 +1633,8 @@ function spawnObstacles() {
 
   // L3 knife canyon — block all obstacle spawns during the 40s knife experience.
   if (state.l3KnifeCanyon) return;
+  // Pre-T4A canyon — same: pure visual+lightning corridor, no cones.
+  if (state.preT4ACanyon) return;
 
   // L5: zipper rows are fired from the update loop — just block normal spawns while active
   if (state.currentLevelIdx === 4 && state.zipperActive) {

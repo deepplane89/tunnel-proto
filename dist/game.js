@@ -9770,6 +9770,144 @@ function _updateL3KnifeCanyon(dt) {
   }
 }
 
+// ============================================================================
+// PRE-T4A CANYON — 40s canyon corridor inserted between RECOVERY_1 and T4A.
+// Mirrors the L3 knife canyon flow (start/stop/update + auto-end timer +
+// scroll-out exit) but uses canyon mode 5 with the user's exported tuner
+// values + RANDOM lightning loop instead of knife-arches preset.
+// Triggered by DR sequencer family registry entry 'PRE_T4A_CANYON'.
+// ============================================================================
+const _PRE_T4A_DURATION    = 40.0;   // seconds
+const _PRE_T4A_EXIT_WINDOW = 4.0;    // last-N seconds = scroll-out, no new slabs
+
+// User's exported canyon tuner (mode 5) — captured 2026-04-24.
+// Overwriting current _canyonTuner with these values reproduces the visual
+// scene the user tuned in the V panel.
+const _PRE_T4A_CANYON_TUNER = {
+  slabH: 190, slabW: 20, slabThick: 60,
+  cols: 5, rows: 6, disp: 4, snap: 0.7,
+  footX: 9, sweepX: 4, midX: 17, crestX: 20,
+  poolSize: 10, scrollSpeed: 1.5, snapRate: 6,
+  cyanEmi: 1.1, cyanRgh: 0.4,
+  holoOpacity: 0.5, holoGrid: 6,
+  darkCrkCount: 6, darkCrkBright: 1, darkRgh: 0.22,
+  darkClearcoat: 0.4, darkEmi: 0.9,
+  lightIntensity: 1,
+  halfXOverride: 50,
+  entranceThick: 700, entranceSlabs: 1, spawnDepth: -250,
+  sineIntensity: 0.3, sineAmp: 120, sinePeriod: 330, sineSpeed: 1,
+  _allCyan: false, _allDark: false,
+  _l4Recreation: false, _l4RampCompress: 1.45, _l4AmpScale: 1, _l4HalfX: 8, _l4SlabW: 40,
+  sineStartI: 0, sineStartZ: -150, sineFullZ: -500,
+  halfXStart: 60, halfXFull: 25, halfXStartZ: -150, halfXFullZ: -500,
+};
+
+// User's exported lightning settings (mode = RANDOM loop).
+const _PRE_T4A_LT_TUNER = {
+  frequency: 0.3, leadFactor: 0.6, skyHeight: 55,
+  warningTime: 0.3, boltDuration: 0.5, lingerDuration: 4,
+  coreRadius: 0.45, glowRadius: 0.25,
+  segments: 10, jaggedness: 1.9,
+  hitboxScale: 1, warnRadius: 3.5,
+  shakeAmt: 0.18, shakeDuration: 0.35,
+  glowColor: 0x88c8ff, coreColor: 0xffffff,
+  flashColor: 0x99e8ff, warnColor: 0x44a0ff,
+  pattern: 'random', laneMin: -8, laneMax: 8,
+  sweepSpeed: 0.4, staggerGap: 0.6, salvoCount: 3, pinchSpread: 1,
+  count: 1, spawnZ: -83,
+};
+
+function _startPreT4ACanyon() {
+  // State flags
+  state.preT4ACanyon       = true;
+  state.preT4AElapsed      = 0;
+  state.preT4ADone         = false;
+  state._preT4AExitStarted = false;
+  // Save originals for restore
+  state._preT4ASavedSpeed     = state.speed;
+  state._preT4ASavedPhysLevel = _physLevelOverride;
+  state._preT4ASavedLT        = window._LT ? Object.assign({}, window._LT) : null;
+
+  // Apply canyon tuner (mode 5, NOT _l4Recreation — standard canyon).
+  _canyonMode = 5;
+  _canyonTuner._allCyan      = false;
+  _canyonTuner._allDark      = false;
+  _canyonTuner._l4Recreation = false;
+  Object.assign(_canyonTuner, _PRE_T4A_CANYON_TUNER);
+  _canyonSinePhase = 0;
+  _l4RowsElapsed = 0;
+  if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+  _canyonExiting = false;
+  _canyonActive  = true;
+  _canyonManual  = true;
+  _jlCorridor.active = false;
+  state.corridorGapCenter = state.shipX || 0;
+  if (typeof dirLight !== 'undefined' && dirLight) {
+    if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+    dirLight.intensity = 0;
+  }
+  _createCanyonWalls();
+
+  // Apply lightning tuner + start RANDOM loop
+  if (window._LT) Object.assign(window._LT, _PRE_T4A_LT_TUNER);
+  if (typeof window._startLtPattern === 'function') {
+    const ok = window._startLtPattern('random');
+    if (!ok) console.warn('[PRE-T4A] failed to start RANDOM lightning pattern');
+  }
+
+  console.log('[PRE-T4A] ON for ' + _PRE_T4A_DURATION + 's');
+}
+
+function _stopPreT4ACanyon() {
+  state.preT4ACanyon = false;
+  state.preT4ADone   = true;
+  if (_canyonWalls) _destroyCanyonWalls();
+  _canyonActive  = false;
+  _canyonExiting = false;
+  _canyonManual  = false;
+  _jlCorridor.active = false;
+  _canyonTuner._l4Recreation = false;
+  if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+    dirLight.intensity = _canyonSavedDirLight;
+    _canyonSavedDirLight = null;
+  }
+  _canyonMode = 0;
+  // Stop lightning loop + clear active bolts so T4A starts clean
+  if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
+  if (typeof window._clearAllLightning === 'function') window._clearAllLightning();
+  // Restore lightning tuner to its prior state so other modes aren't affected
+  if (state._preT4ASavedLT && window._LT) {
+    Object.assign(window._LT, state._preT4ASavedLT);
+    state._preT4ASavedLT = undefined;
+  }
+  // Restore speed/physics
+  if (state._preT4ASavedSpeed     !== undefined) { state.speed = state._preT4ASavedSpeed; state._preT4ASavedSpeed = undefined; }
+  if (state._preT4ASavedPhysLevel !== undefined) { _physLevelOverride = state._preT4ASavedPhysLevel; state._preT4ASavedPhysLevel = undefined; }
+  console.log('[PRE-T4A] OFF');
+}
+
+function _updatePreT4ACanyon(dt) {
+  if (!state.preT4ACanyon) return;
+  state.preT4AElapsed = (state.preT4AElapsed || 0) + dt;
+
+  // Scroll-out exit window: stop spawning new slabs and let existing drift past
+  if (!state._preT4AExitStarted && state.preT4AElapsed >= _PRE_T4A_DURATION - _PRE_T4A_EXIT_WINDOW) {
+    state._preT4AExitStarted = true;
+    if (typeof _canyonActive !== 'undefined')  _canyonActive  = false;
+    if (typeof _canyonExiting !== 'undefined') _canyonExiting = true;
+    // Also stop firing new lightning bolts — existing bolts age out via
+    // _updateLightning while preT4ACanyon flag is still true.
+    if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
+    console.log('[PRE-T4A] exit scroll-out start');
+  }
+
+  // Auto-end after duration. DR sequencer's family.isActive() returns false
+  // once preT4ADone=true, advancing to T4A_ANGLED.
+  if (state.preT4AElapsed >= _PRE_T4A_DURATION) {
+    _stopPreT4ACanyon();
+  }
+}
+
 function spawnGauntletRow() {
   const rowsDone = FUNNEL_TOTAL_ROWS - state.gauntletRowsLeft;
 
@@ -10732,6 +10870,8 @@ function spawnObstacles() {
 
   // L3 knife canyon — block all obstacle spawns during the 40s knife experience.
   if (state.l3KnifeCanyon) return;
+  // Pre-T4A canyon — same: pure visual+lightning corridor, no cones.
+  if (state.preT4ACanyon) return;
 
   // L5: zipper rows are fired from the update loop — just block normal spawns while active
   if (state.currentLevelIdx === 4 && state.zipperActive) {
@@ -14197,6 +14337,10 @@ const DR_SEQUENCE = [
   { name: 'T3B_L3BOSS',     type: 'corridor', family: 'L3_CORRIDOR', speed: 2.0, vibeIdx: 2, physTier: 1 },
   // Recovery
   { name: 'RECOVERY_1',     type: 'rest', duration: 2, speed: 2.0, vibeIdx: 2, physTier: 1 },
+  // Tier 3c: PRE-T4A canyon — 40s mode-5 canyon corridor + RANDOM lightning loop.
+  // Inserted as a corridor stage between RECOVERY_1 and T4A_ANGLED. Uses the
+  // user's exported tuner values (slabH=190, halfXOverride=50, sine ramps).
+  { name: 'T3C_PRE_T4A_CANYON', type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 1 },
   // Tier 4a: angled walls
   { name: 'T4A_ANGLED',     type: 'angled_walls', duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2 },
   // Tier 4b: lethal rings + angled walls
@@ -14835,6 +14979,20 @@ const DR_MECHANIC_FAMILIES = {
     // DR sequencer polls this to decide when to advance. Knife canyon counts
     // as active until _stopL3KnifeCanyon flips l3KnifeDone=true (after 40s).
     isActive() { return state.corridorMode || (state.l3KnifeCanyon === true); }
+  },
+  PRE_T4A_CANYON: {
+    roles: ['build', 'peak'],
+    minBand: 3,
+    activate(band, role) {
+      console.log('[PRE-T4A-ENTRY] preT4AActive=' + !!state.preT4ACanyon + ' preT4ADone=' + !!state.preT4ADone);
+      state.speed = BASE_SPEED * 2.0; // match L3 knife canyon speed for slab scroll
+      try {
+        _startPreT4ACanyon();
+      } catch (e) {
+        console.error('[PRE-T4A] _startPreT4ACanyon threw:', e);
+      }
+    },
+    isActive() { return state.preT4ACanyon === true; }
   },
   L4_SINE_CORRIDOR: {
     roles: ['build', 'peak'],
@@ -16018,6 +16176,8 @@ function killPlayer() {
   state.phase = 'dead';
   // Tear down L3 knife canyon if death happened during it
   if (state.l3KnifeCanyon) _stopL3KnifeCanyon();
+  // Tear down pre-T4A canyon if death happened during it
+  if (state.preT4ACanyon) _stopPreT4ACanyon();
   // Cancel retry/repair sweep if somehow active
   _retrySweepActive = false;
   _retryIsFromDead = false;
@@ -17709,6 +17869,7 @@ function update(dt) {
   // L3 KNIFE CANYON tick — runs the 40s timer + snap oscillator when active.
   // Self-cleans when duration elapses or player leaves L3.
   _updateL3KnifeCanyon(dt);
+  _updatePreT4ACanyon(dt);
 
   // L3 dense corridor (LEGACY cone path — gated off while _L3_KNIFE_ENABLED,
   // because maybeStartGauntlet no longer sets state.corridorMode in that case):
@@ -24003,6 +24164,25 @@ window._jlDebug = {
     };
   };
 
+  // Pattern-loop registry — programmatic access to the L-panel pattern
+  // ticks. Used by deathrun pre-T4A canyon to fire RANDOM lightning without
+  // requiring the L panel to be open.
+  const _LT_PATTERN_REGISTRY = {};
+  function _registerLtPattern(name, tick) { _LT_PATTERN_REGISTRY[name] = tick; }
+  window._startLtPattern = function(name) {
+    const tick = _LT_PATTERN_REGISTRY[name];
+    if (!tick) { console.warn('[LT] unknown pattern:', name, 'available:', Object.keys(_LT_PATTERN_REGISTRY)); return false; }
+    _startLtLoop(null, '#6af', tick);
+    return true;
+  };
+  window._stopLtPattern = function() { _stopLtLoop(); };
+
+  // Pattern definitions — shared between L panel and programmatic dispatch.
+  // Forward-declared; populated below _ltSweepX/_ltSweepDir so closures can
+  // capture them. Panel build() and the registry both dereference at call
+  // time, so the late assignment is fine.
+  let _LT_PANEL_PATTERNS = [];
+
   // ── Target X from pattern ─────────────────────────────────────────────────
   function _ltNextTargetX() {
     const range = _LT.laneMax - _LT.laneMin;
@@ -24022,6 +24202,19 @@ window._jlDebug = {
       default:      return sx + (Math.random()-0.5)*3.0;
     }
   }
+
+  // Populate the shared pattern list now that all closures (_LT, _ltSweepX,
+  // _ltSweepDir, _ltNextTargetX, _spawnLightning) are in scope. Mirrors the
+  // L panel's old inline definition exactly.
+  _LT_PANEL_PATTERNS = [
+    {label:'↯ RANDOM (loop)', short:'random', color:'#6af', tick:()=>{ for(let c=0;c<Math.max(1,_LT.count);c++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(_ltNextTargetX()); },c*120); }},
+    {label:'►◄ SWEEP (loop)',  short:'sweep',  color:'#0df', tick:()=>{ const range=_LT.laneMax-_LT.laneMin,swOff=(_ltSweepX-0.5)*range; _ltSweepX+=_ltSweepDir*_LT.sweepSpeed*0.35; if(_ltSweepX>=1||_ltSweepX<=0){_ltSweepDir*=-1;_ltSweepX=Math.max(0,Math.min(1,_ltSweepX));} const n=Math.max(2,_LT.salvoCount); for(let i=0;i<n;i++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(state.shipX+swOff+(i/(n-1)-0.5)*range*0.5); },i*250); }},
+    {label:'▼ ▼▼ STAGGER (loop)', short:'stagger', color:'#ff0', tick:()=>{ if(state.phase==='playing') _spawnLightning(state.shipX); }},
+    {label:'▼▼▼ SALVO (loop)',   short:'salvo',   color:'#f80', tick:()=>{ const sx=state.shipX,n=Math.max(1,_LT.salvoCount),half=(_LT.laneMax-_LT.laneMin)*0.45; for(let si=0;si<n;si++) _spawnLightning(sx+(n===1?0:(si/(n-1)-0.5))*half*2); }},
+    {label:'▷◁ PINCH (loop)',     short:'pinch',   color:'#f0f', tick:()=>{ const sx=state.shipX,pairs=5,fh=(_LT.laneMax-_LT.laneMin)*0.5*_LT.pinchSpread; for(let pi=0;pi<pairs;pi++){ const hs=Math.max(0.3,fh*(1-pi/(pairs-1))),d=pi*300; (function(s,dl){const fn=()=>{ if(state.phase!=='playing')return; _spawnLightning(sx-s); _spawnLightning(sx+s); }; dl===0?fn():setTimeout(fn,dl);})(hs,d); } setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(sx); },pairs*300); }},
+  ];
+  // Register both by short name and full label so callers can use either.
+  _LT_PANEL_PATTERNS.forEach(p => { _registerLtPattern(p.short, p.tick); _registerLtPattern(p.label, p.tick); });
 
   // ── Build jagged TubeGeometry bolt ────────────────────────────────────────
   // Bolt geometry built at Z=0 local space — Group handles world Z position
@@ -24401,7 +24594,7 @@ window._jlDebug = {
     const dt  = Math.min((now - _ltLastTime)*0.001, 0.05);
     _ltLastTime = now;
     if (state.phase === 'playing' && !state.introActive &&
-        (state._tutorialActive || _chaosMode || state._jetLightningMode)) {
+        (state._tutorialActive || _chaosMode || state._jetLightningMode || state.preT4ACanyon)) {
       _updateLightning(dt);
     }
     _ltOrigRender(...args);
@@ -24451,13 +24644,7 @@ window._jlDebug = {
     panel.appendChild(mkS('shake amount',   _LT.shakeAmt,      0,  1,  0.01,v=>_LT.shakeAmt=v));
     panel.appendChild(mkS('shake duration', _LT.shakeDuration, 0,  1,  0.02,v=>_LT.shakeDuration=v));
     panel.appendChild(mkH('PATTERN LOOPS'));
-    const pats=[
-      {label:'↯ RANDOM (loop)', color:'#6af', tick:()=>{ for(let c=0;c<Math.max(1,_LT.count);c++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(_ltNextTargetX()); },c*120); }},
-      {label:'►◄ SWEEP (loop)', color:'#0df', tick:()=>{ const range=_LT.laneMax-_LT.laneMin,swOff=(_ltSweepX-0.5)*range; _ltSweepX+=_ltSweepDir*_LT.sweepSpeed*0.35; if(_ltSweepX>=1||_ltSweepX<=0){_ltSweepDir*=-1;_ltSweepX=Math.max(0,Math.min(1,_ltSweepX));} const n=Math.max(2,_LT.salvoCount); for(let i=0;i<n;i++) setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(state.shipX+swOff+(i/(n-1)-0.5)*range*0.5); },i*250); }},
-      {label:'▼ ▼▼ STAGGER (loop)', color:'#ff0', tick:()=>{ if(state.phase==='playing') _spawnLightning(state.shipX); }},
-      {label:'▼▼▼ SALVO (loop)', color:'#f80', tick:()=>{ const sx=state.shipX,n=Math.max(1,_LT.salvoCount),half=(_LT.laneMax-_LT.laneMin)*0.45; for(let si=0;si<n;si++) _spawnLightning(sx+(n===1?0:(si/(n-1)-0.5))*half*2); }},
-      {label:'▷◁ PINCH (loop)', color:'#f0f', tick:()=>{ const sx=state.shipX,pairs=5,fh=(_LT.laneMax-_LT.laneMin)*0.5*_LT.pinchSpread; for(let pi=0;pi<pairs;pi++){ const hs=Math.max(0.3,fh*(1-pi/(pairs-1))),d=pi*300; (function(s,dl){const fn=()=>{ if(state.phase!=='playing')return; _spawnLightning(sx-s); _spawnLightning(sx+s); }; dl===0?fn():setTimeout(fn,dl);})(hs,d); } setTimeout(()=>{ if(state.phase==='playing') _spawnLightning(sx); },pairs*300); }},
-    ];
+    const pats = _LT_PANEL_PATTERNS;
     pats.forEach(({label,color,tick})=>{ const b=mkB(label,color,()=>_startLtLoop(b,color,tick)); panel.appendChild(b); });
     panel.appendChild(mkB('⏹ STOP LOOP','#888',_stopLtLoop));
     panel.appendChild(mkB('✕ CLEAR ALL','#f44',()=>{ _stopLtLoop(); _clearAllLightning(); }));

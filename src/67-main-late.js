@@ -946,6 +946,10 @@ const DR_SEQUENCE = [
   { name: 'T3B_L3BOSS',     type: 'corridor', family: 'L3_CORRIDOR', speed: 2.0, vibeIdx: 2, physTier: 1 },
   // Recovery
   { name: 'RECOVERY_1',     type: 'rest', duration: 2, speed: 2.0, vibeIdx: 2, physTier: 1 },
+  // Tier 3c: PRE-T4A canyon — 40s mode-5 canyon corridor + RANDOM lightning loop.
+  // Inserted as a corridor stage between RECOVERY_1 and T4A_ANGLED. Uses the
+  // user's exported tuner values (slabH=190, halfXOverride=50, sine ramps).
+  { name: 'T3C_PRE_T4A_CANYON', type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 1 },
   // Tier 4a: angled walls
   { name: 'T4A_ANGLED',     type: 'angled_walls', duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2 },
   // Tier 4b: lethal rings + angled walls
@@ -1584,6 +1588,20 @@ const DR_MECHANIC_FAMILIES = {
     // DR sequencer polls this to decide when to advance. Knife canyon counts
     // as active until _stopL3KnifeCanyon flips l3KnifeDone=true (after 40s).
     isActive() { return state.corridorMode || (state.l3KnifeCanyon === true); }
+  },
+  PRE_T4A_CANYON: {
+    roles: ['build', 'peak'],
+    minBand: 3,
+    activate(band, role) {
+      console.log('[PRE-T4A-ENTRY] preT4AActive=' + !!state.preT4ACanyon + ' preT4ADone=' + !!state.preT4ADone);
+      state.speed = BASE_SPEED * 2.0; // match L3 knife canyon speed for slab scroll
+      try {
+        _startPreT4ACanyon();
+      } catch (e) {
+        console.error('[PRE-T4A] _startPreT4ACanyon threw:', e);
+      }
+    },
+    isActive() { return state.preT4ACanyon === true; }
   },
   L4_SINE_CORRIDOR: {
     roles: ['build', 'peak'],
@@ -2767,6 +2785,8 @@ function killPlayer() {
   state.phase = 'dead';
   // Tear down L3 knife canyon if death happened during it
   if (state.l3KnifeCanyon) _stopL3KnifeCanyon();
+  // Tear down pre-T4A canyon if death happened during it
+  if (state.preT4ACanyon) _stopPreT4ACanyon();
   // Cancel retry/repair sweep if somehow active
   _retrySweepActive = false;
   _retryIsFromDead = false;
@@ -4458,6 +4478,7 @@ function update(dt) {
   // L3 KNIFE CANYON tick — runs the 40s timer + snap oscillator when active.
   // Self-cleans when duration elapses or player leaves L3.
   _updateL3KnifeCanyon(dt);
+  _updatePreT4ACanyon(dt);
 
   // L3 dense corridor (LEGACY cone path — gated off while _L3_KNIFE_ENABLED,
   // because maybeStartGauntlet no longer sets state.corridorMode in that case):
