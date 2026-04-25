@@ -14065,6 +14065,11 @@ const DEATH_RUN_VIBES = [
     obstaclesPerSpawn: 7, maxObstaclesPerSpawn: 9, gapFactor: 0.95, speedTier: 1,
   },
   {
+    // vibeIdx 2 — promoted from L1 sun (shader 0) to L4 sun (shader 3) so
+    // S3–S6 don't repeat the S1 sun. The L4 ICE-STORM shader has built-in
+    // Quilez warp; the explicit warpCol1/2/3 below are now unused (they only
+    // applied to the L3 crimson warp branch under shader 0/1/2). Kept in place
+    // in case the shader is ever reverted.
     name: 'ELECTRIC HORIZON',
     skyTop: new THREE.Color(0x000000), skyBot: new THREE.Color(0x050002),
     gridColor: new THREE.Color(0x00ffcc), sunColor: new THREE.Color(0xff6600),
@@ -14072,7 +14077,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x020001),
     floorLine: new THREE.Color(0x00ffaa),
     thrusterColor: new THREE.Color(0x00eeff),
-    sunShader: 0, tendrils: 'none',
+    sunShader: 3, tendrils: 'none',
     // Warp palette: dark=(1,1,1) mid=(0.05,0,0) bright=(0,0,0.08)
     warpCol1: [1.00, 1.00, 1.00],
     warpCol2: [0.05, 0.00, 0.00],
@@ -14080,6 +14085,8 @@ const DEATH_RUN_VIBES = [
     obstaclesPerSpawn: 8, maxObstaclesPerSpawn: 10, gapFactor: 0.9, speedTier: 2,
   },
   {
+    // vibeIdx 3 — promoted to L5 sun (sunShader 4) so it appears at S7–S10
+    // before the climax. Tendrils dropped (user wants reg L4/L5 sun, no aurora).
     name: 'ICE STORM',
     skyTop: new THREE.Color(0x000000), skyBot: new THREE.Color(0x000c18),
     gridColor: new THREE.Color(0x55ffff), sunColor: new THREE.Color(0xaaeeff),
@@ -14087,7 +14094,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x00080f),
     floorLine: new THREE.Color(0x44ccff),
     thrusterColor: new THREE.Color(0x88ddff),
-    sunShader: 3, tendrils: 'aurora',
+    sunShader: 4, tendrils: 'none',
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 3,
   },
   {
@@ -14157,7 +14164,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x000810),
     floorLine: new THREE.Color(0xccddff),
     thrusterColor: new THREE.Color(0xbbccee),
-    sunShader: 3, tendrils: 'aurora',
+    sunShader: 3, tendrils: 'none',
     obstaclesPerSpawn: 8, maxObstaclesPerSpawn: 10, gapFactor: 0.9, speedTier: 4,
   },
   {
@@ -14201,7 +14208,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x000408),
     floorLine: new THREE.Color(0xaaccff),
     thrusterColor: new THREE.Color(0xccddff),
-    sunShader: 3, tendrils: 'aurora',
+    sunShader: 3, tendrils: 'none',
     obstaclesPerSpawn: 10, maxObstaclesPerSpawn: 12, gapFactor: 0.85, speedTier: 4,
   },
   {
@@ -14245,7 +14252,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x000818),
     floorLine: new THREE.Color(0x0066cc),
     thrusterColor: new THREE.Color(0x4488dd),
-    sunShader: 3, tendrils: 'aurora',
+    sunShader: 3, tendrils: 'none',
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 4,
   },
   {
@@ -14697,11 +14704,19 @@ function _drSequencerTick(dt) {
   if (!state.invincibleSpeedActive && !state.l3KnifeCanyon && !state.preT4ACanyon && !state.preT4BCanyon && Math.abs(state.speed - targetSpeed) > 0.5) state.speed = targetSpeed;
   if (stage.physTier !== undefined) state.deathRunSpeedTier = stage.physTier;
 
-  // ── Quilez domain warp: on for T3B boss and endless (except ice/gold suns which have built-in warp) ──
+  // ── Quilez domain warp: on from S3 onward (the "warped era") and during endless,
+  //    EXCEPT for ice (shader 3) / gold (shader 4) suns which have built-in warp baked
+  //    into their shaders. This guarantees every post-S2 sun is warped, even if a
+  //    future vibe edit puts a non-warped sun shader (0/1/2) mid-sequence. ──
   const _isEndlessStage = stage.type === 'endless_mix';
   const _currentSunShader = DEATH_RUN_VIBES[state.deathRunVibeIdx]?.sunShader ?? 0;
   const _sunHasBuiltinWarp = (_currentSunShader === 3 || _currentSunShader === 4); // ice and gold already warped
-  const _wantL3Warp = (stage.useL3Warp || (_isEndlessStage && !_sunHasBuiltinWarp)) ? 1.0 : 0.0;
+  // "Warped era" begins at S3_L3_CORRIDOR. Cache the lookup to avoid scanning every tick.
+  if (state._drS3StageIdx === undefined) {
+    state._drS3StageIdx = DR_SEQUENCE.findIndex(s => s.name === 'S3_L3_CORRIDOR');
+  }
+  const _inWarpedEra = state._drS3StageIdx >= 0 && state.seqStageIdx >= state._drS3StageIdx;
+  const _wantL3Warp = (stage.useL3Warp || ((_isEndlessStage || _inWarpedEra) && !_sunHasBuiltinWarp)) ? 1.0 : 0.0;
   const _curL3Warp = sunMat.uniforms.uIsL3Warp.value;
   if (Math.abs(_curL3Warp - _wantL3Warp) > 0.01) {
     sunMat.uniforms.uIsL3Warp.value += (_wantL3Warp - _curL3Warp) * Math.min(1, dt * 2);
@@ -23564,7 +23579,7 @@ function startJetLightning() {
   _accelSnap      = 100;
   _maxVelBase     = 13;    // JL_v2 — tighter lateral cap, more intentional feel
   _maxVelSnap     = 23;
-  _bankMax        = 0.04;
+  _bankMax        = 0.06;
   _bankSmoothing  = 8;
 
   // ── Reset ramp timer + corridor/canyon state ──────────────────────────────
@@ -23634,7 +23649,7 @@ function startJetLightning() {
   _accelSnap      = 100;
   _maxVelBase     = 13;
   _maxVelSnap     = 23;
-  _bankMax        = 0.04;
+  _bankMax        = 0.06;
   _bankSmoothing  = 8;
 
   _asteroidTuner.enabled     = false;  // track system enables at startT:4

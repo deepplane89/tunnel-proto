@@ -3585,7 +3585,7 @@ function startJetLightning() {
   _accelSnap      = 100;
   _maxVelBase     = 13;    // JL_v2 — tighter lateral cap, more intentional feel
   _maxVelSnap     = 23;
-  _bankMax        = 0.04;
+  _bankMax        = 0.06;
   _bankSmoothing  = 8;
 
   // ── Reset ramp timer + corridor/canyon state ──────────────────────────────
@@ -3655,7 +3655,7 @@ function startJetLightning() {
   _accelSnap      = 100;
   _maxVelBase     = 13;
   _maxVelSnap     = 23;
-  _bankMax        = 0.04;
+  _bankMax        = 0.06;
   _bankSmoothing  = 8;
 
   _asteroidTuner.enabled     = false;  // track system enables at startT:4
