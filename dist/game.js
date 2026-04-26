@@ -14344,11 +14344,12 @@ function startDeathRun() {
   startGame();
   _skipL1Intro = false;
 
-  // Re-apply DR physics — startGame() falls into the else branch (not JL,
-  // not tutorial) and resets _bankMax to 0.03 (campaign default). DR/main
-  // mode wants the same 0.06 bank max as Jet Lightning so the ship banks
-  // hard enough through the high-speed lateral moves. Mirrors the JL
-  // re-apply block in startJetLightning().
+  // DR physics override — startGame() resets _bankMax to the campaign
+  // default (0.03) in its non-tutorial path. DR/main mode wants 0.06
+  // so the ship banks hard enough through the high-speed lateral moves.
+  // Re-applied here AFTER startGame() returns so the reset is overwritten
+  // before DR gameplay begins. (DR owns its own physics; do not couple to
+  // any other mode's setup.)
   _bankMax = 0.06;
 
   state.isDeathRun      = true;
