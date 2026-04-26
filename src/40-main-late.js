@@ -1223,7 +1223,7 @@ function spawnSlalomRow() {
 
   // Left wall: cones from -WALL_HALF to gapLeft (skip ~30% for random gaps)
   const coneScale = 4;
-  for (let x = -SLALOM_WALL_HALF; x < gapLeft - 1; x += 10) {
+  for (let x = -SLALOM_WALL_HALF; x < gapLeft - 1; x += 14) {
     if (Math.random() < 0.3) continue; // random gap
     const obs = getPooledObstacle(Math.floor(Math.random() * 3));
     if (obs) {
@@ -1238,7 +1238,7 @@ function spawnSlalomRow() {
   }
 
   // Right wall: cones from gapRight to +WALL_HALF (skip ~30% for random gaps)
-  for (let x = gapRight + 1; x <= SLALOM_WALL_HALF; x += 10) {
+  for (let x = gapRight + 1; x <= SLALOM_WALL_HALF; x += 14) {
     if (Math.random() < 0.3) continue; // random gap
     const obs = getPooledObstacle(Math.floor(Math.random() * 3));
     if (obs) {

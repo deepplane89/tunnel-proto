@@ -10484,7 +10484,7 @@ function spawnSlalomRow() {
 
   // Left wall: cones from -WALL_HALF to gapLeft (skip ~30% for random gaps)
   const coneScale = 4;
-  for (let x = -SLALOM_WALL_HALF; x < gapLeft - 1; x += 10) {
+  for (let x = -SLALOM_WALL_HALF; x < gapLeft - 1; x += 14) {
     if (Math.random() < 0.3) continue; // random gap
     const obs = getPooledObstacle(Math.floor(Math.random() * 3));
     if (obs) {
@@ -10499,7 +10499,7 @@ function spawnSlalomRow() {
   }
 
   // Right wall: cones from gapRight to +WALL_HALF (skip ~30% for random gaps)
-  for (let x = gapRight + 1; x <= SLALOM_WALL_HALF; x += 10) {
+  for (let x = gapRight + 1; x <= SLALOM_WALL_HALF; x += 14) {
     if (Math.random() < 0.3) continue; // random gap
     const obs = getPooledObstacle(Math.floor(Math.random() * 3));
     if (obs) {
@@ -14985,14 +14985,11 @@ function _drSequencerTick(dt) {
   }
   else if (tp === 'slalom_only') {
     // Stage 9: continuous slalom. Re-arm after each slalom run completes.
-    // Gap=13 (was 10): with cones scaled 4× the threadable space at 10 read as
-    // too unforgiving — ship is ~3 wide so a gap of 10 left only ~3 units of
-    // margin per side after accounting for fat-cone radius.
     state._seqSpawnMode = 'none';
     if (!state.slalomActive) {
       state.slalomActive = true;
       state.slalomUsePhysicsCurve = true;
-      state._slalomGapWidth = 13;
+      state._slalomGapWidth = 10;
       state.slalomSpawnZ = 0;
       state.slalomRowsDone = 0;
       const _slalomSide = Math.random() < 0.5 ? 1 : -1;
@@ -15082,7 +15079,7 @@ function _drSequencerTick(dt) {
         state._seqSlalomFired = true;
         state.slalomActive = true;
         state.slalomUsePhysicsCurve = true;
-        state._slalomGapWidth = 13; // eased: was 10, see slalom_only branch above
+        state._slalomGapWidth = 10;
         state.slalomSpawnZ = 0;
         state.slalomRowsDone = 0;
         // Force gap to start offset from ship so player must move immediately
@@ -15359,7 +15356,7 @@ function _drEndlessTick(dt) {
       } else if (nextType === 'slalom') {
         state.slalomActive = true;
         state.slalomUsePhysicsCurve = true;
-        state._slalomGapWidth = 12; // eased: was 9 — same +3 nudge as S9 stage
+        state._slalomGapWidth = 9;
         state.slalomSpawnZ = 0;
         state.slalomRowsDone = 0;
         state.slalomMaxRows = 16 + Math.floor(Math.random() * 4);
