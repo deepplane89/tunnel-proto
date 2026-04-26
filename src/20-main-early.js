@@ -7699,6 +7699,16 @@ function _createCanyonWalls() {
   console.warn('[CANYON] _createCanyonWalls called — manual:', _canyonManual, '| stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonDbgFrame = 0; _canyonDbgLastNearestRot = null; _canyonDbgStartTime = null;
   const T = _canyonTuner;
+  // Defensive clamp: canyons must never have more than 1 entry slab. Some
+  // legacy presets (e.g. the K-hotkey "knife arches" debug preset) write
+  // entranceSlabs:3, which produces a stack of thick slabs at the canyon
+  // mouth that visually blocks the entry. Cap it here at the source so no
+  // preset can ever request more than 1, regardless of which start path
+  // populated the tuner.
+  if (T.entranceSlabs > 1) {
+    console.warn('[CANYON] entranceSlabs ' + T.entranceSlabs + ' > 1, clamping to 1');
+    T.entranceSlabs = 1;
+  }
 
   // Two slab types: cyan (MeshPhysical + holo overlay) and dark (MeshStandard + veins)
   // Use pre-warmed cache if available (built at JL start to avoid first-spawn stutter)

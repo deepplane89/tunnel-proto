@@ -4410,6 +4410,18 @@ function _tickJetLightningRamp(dt) {
 })();
 
 // Reset JL state when game ends / restarts
+// ---------------------------------------------------------------------------
+// TODO(jl-removal): This startGame override lives in the JL file but ALSO
+// handles non-JL paths (tutorial physics + campaign/DR else-branch defaults).
+// If JL is ever deleted, this override needs to be SPLIT before deletion:
+//   - Keep the tutorial + campaign/DR branches (move them to a non-JL file,
+//     e.g. src/20-main-early.js or a new physics-init file).
+//   - Drop the _jetLightningMode early-return.
+// Otherwise deleting this file will silently break tutorial physics AND
+// reset DR's bank max behavior. DR currently re-applies _bankMax=0.06 in
+// startDeathRun() AFTER startGame() returns, but the campaign-default reset
+// here is what makes that re-apply necessary in the first place.
+// ---------------------------------------------------------------------------
 const _origStartGame_JL = startGame;
 startGame = function() {
   if (state._jetLightningMode) {

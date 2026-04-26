@@ -7802,6 +7802,16 @@ function _createCanyonWalls() {
   console.warn('[CANYON] _createCanyonWalls called — manual:', _canyonManual, '| stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonDbgFrame = 0; _canyonDbgLastNearestRot = null; _canyonDbgStartTime = null;
   const T = _canyonTuner;
+  // Defensive clamp: canyons must never have more than 1 entry slab. Some
+  // legacy presets (e.g. the K-hotkey "knife arches" debug preset) write
+  // entranceSlabs:3, which produces a stack of thick slabs at the canyon
+  // mouth that visually blocks the entry. Cap it here at the source so no
+  // preset can ever request more than 1, regardless of which start path
+  // populated the tuner.
+  if (T.entranceSlabs > 1) {
+    console.warn('[CANYON] entranceSlabs ' + T.entranceSlabs + ' > 1, clamping to 1');
+    T.entranceSlabs = 1;
+  }
 
   // Two slab types: cyan (MeshPhysical + holo overlay) and dark (MeshStandard + veins)
   // Use pre-warmed cache if available (built at JL start to avoid first-spawn stutter)
@@ -24503,6 +24513,18 @@ function _tickJetLightningRamp(dt) {
 })();
 
 // Reset JL state when game ends / restarts
+// ---------------------------------------------------------------------------
+// TODO(jl-removal): This startGame override lives in the JL file but ALSO
+// handles non-JL paths (tutorial physics + campaign/DR else-branch defaults).
+// If JL is ever deleted, this override needs to be SPLIT before deletion:
+//   - Keep the tutorial + campaign/DR branches (move them to a non-JL file,
+//     e.g. src/20-main-early.js or a new physics-init file).
+//   - Drop the _jetLightningMode early-return.
+// Otherwise deleting this file will silently break tutorial physics AND
+// reset DR's bank max behavior. DR currently re-applies _bankMax=0.06 in
+// startDeathRun() AFTER startGame() returns, but the campaign-default reset
+// here is what makes that re-apply necessary in the first place.
+// ---------------------------------------------------------------------------
 const _origStartGame_JL = startGame;
 startGame = function() {
   if (state._jetLightningMode) {
