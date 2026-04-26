@@ -9080,8 +9080,12 @@ function createPowerupMesh(typeIdx) {
     blinkFresnelOnly:   true,
     hologramOpacity:    0.70,
     side:               THREE.DoubleSide,
-    blendMode:          THREE.AdditiveBlending,
+    blendMode:          THREE.NormalBlending,
   });
+  // depthWrite=true so the cube occludes the sun/skybox behind it
+  // (HolographicMaterial constructor defaults to false). Combined with
+  // NormalBlending this kills the yellow sun bleed-through.
+  cubeMat.depthWrite = true;
   _registerHoloMaterial(cubeMat);
   const cubeGeo = new THREE.BoxGeometry(POWERUP_CUBE_SIZE, POWERUP_CUBE_SIZE, POWERUP_CUBE_SIZE);
   const cubeMesh = new THREE.Mesh(cubeGeo, cubeMat);
@@ -9099,8 +9103,9 @@ function createPowerupMesh(typeIdx) {
     blinkFresnelOnly:   true,
     hologramOpacity:    0.70,
     side:               THREE.DoubleSide,
-    blendMode:          THREE.AdditiveBlending,
+    blendMode:          THREE.NormalBlending,
   });
+  iconMat.depthWrite = true;
   _registerHoloMaterial(iconMat);
 
   let iconGeo;
