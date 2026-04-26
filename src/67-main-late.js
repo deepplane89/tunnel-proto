@@ -5324,8 +5324,8 @@ function update(dt) {
   for (let i = activePowerups.length - 1; i >= 0; i--) {
     const pu = activePowerups[i];
     pu.position.z += effectiveSpeed * dt;
-    pu.rotation.y += 1.8 * dt;
-    pu.rotation.x += 0.6 * dt;
+    pu.rotation.y += 0.5 * dt;  // slow cube rotation (was 1.8 — too frantic for hologram aesthetic)
+    pu.rotation.x += 0.2 * dt;
 
     // Magnet pull toward ship (powerups only at tier 5)
     if (state.magnetActive && state.magnetPullsPowerups) {
@@ -5339,9 +5339,8 @@ function update(dt) {
       }
     }
 
-    // Scale pulse
-    const s = 1.0 + Math.sin(state.frameCount * 0.12 + i) * 0.12;
-    pu.scale.setScalar(s);
+    // (Holo cube doesn't pulse — the shader's blink/scanline animation already
+    //  provides the visual motion. Scale stays at 1.)
 
     if (pu.position.z > DESPAWN_Z) {
       returnPowerupToPool(pu);

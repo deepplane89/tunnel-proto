@@ -114,7 +114,8 @@ class HolographicMaterial extends THREE.ShaderMaterial {
   }
 }
 
-// Track all instances so the main update loop can tick them in one place.
+// Track all instances so the main update loop can tick them in one place,
+// and the dev tuner can broadcast settings updates to every instance.
 const _holoMaterials = [];
 function _registerHoloMaterial(mat) {
   _holoMaterials.push(mat);
@@ -123,5 +124,13 @@ function _registerHoloMaterial(mat) {
 function _tickHoloMaterials(t) {
   for (let i = 0; i < _holoMaterials.length; i++) {
     _holoMaterials[i].setTime(t);
+  }
+}
+// Apply a uniform value to ALL registered holo materials. Used by the tuner.
+// The hologramColor is intentionally NOT broadcast — each powerup keeps its own tint.
+function _broadcastHoloUniform(name, value) {
+  for (let i = 0; i < _holoMaterials.length; i++) {
+    const u = _holoMaterials[i].uniforms[name];
+    if (u) u.value = value;
   }
 }

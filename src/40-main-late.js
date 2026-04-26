@@ -306,15 +306,15 @@ function getPooledPowerup(typeIdx) {
       const iconMesh = p.userData._iconMesh;
 
       // Cube material: just retint via hologramColor uniform. Geometry is always BoxGeometry.
+      // We DO NOT reset other uniforms here — the dev tuner may have changed them globally
+      // via _broadcastHoloUniform, and we want those to persist across spawns.
       if (cubeMesh && cubeMesh.material && cubeMesh.material.uniforms) {
         cubeMesh.material.uniforms.hologramColor.value.set(def.color);
-        cubeMesh.material.uniforms.hologramOpacity.value = 0.85;
       }
 
       // Icon material: retint, and swap geometry only if shape changed.
       if (iconMesh && iconMesh.material && iconMesh.material.uniforms) {
         iconMesh.material.uniforms.hologramColor.value.set(def.color);
-        iconMesh.material.uniforms.hologramOpacity.value = 1.0;
         const needShape = def.shape;
         if (p.userData.currentShape !== needShape) {
           iconMesh.geometry.dispose();

@@ -383,6 +383,21 @@ window.addEventListener('keydown', e => {
     if (e.key === 's' || e.key === 'S') applyPowerup(0); // shield
     if (e.key === 'i' || e.key === 'I') applyPowerup(2); // invincible
     if (e.key === 'm' || e.key === 'M') applyPowerup(3); // magnet
+
+    // Z/X/C/V — SPAWN a cube in front of the ship (so you can fly into it & test shatter).
+    // Shield=Z, Laser=X, Overdrive=C, Magnet=V. 30u ahead of ship at lane center.
+    const _spawnCubeAhead = (idx) => {
+      if (typeof getPooledPowerup !== 'function' || typeof activePowerups === 'undefined') return;
+      const pu = getPooledPowerup(idx);
+      if (!pu) return;
+      const z = (typeof shipGroup !== 'undefined' && shipGroup) ? shipGroup.position.z - 30 : -30;
+      pu.position.set(state.shipX || 0, 1.5, z);
+      activePowerups.push(pu);
+    };
+    if (e.key === 'z' || e.key === 'Z') _spawnCubeAhead(0); // shield cube
+    if (e.key === 'x' || e.key === 'X') _spawnCubeAhead(1); // laser cube
+    if (e.key === 'c' || e.key === 'C') _spawnCubeAhead(2); // overdrive cube
+    if (e.key === 'v' || e.key === 'V') _spawnCubeAhead(3); // magnet cube
   }
 
   // R = spawn bonus rings + tuner (DR only)

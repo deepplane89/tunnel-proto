@@ -8817,17 +8817,19 @@ function createPowerupMesh(typeIdx) {
   const def = POWERUP_TYPES[typeIdx];
   const group = new THREE.Group();
 
-  // ── Outer holo cube (drive-through frame, DoubleSide so backfaces show) ──
+  // ── Outer holo cube — EXACTLY matches Mancini's demo defaults (drive-through, DoubleSide) ──
+  // Live demo: https://threejs-vanilla-holographic-material.vercel.app/
+  // (Fresnel=0.7, Scanline=3.7, Brightness=1.6, Speed=0.18, Opacity=0.7)
   const cubeMat = new HolographicMaterial({
     hologramColor:      def.color,
-    fresnelAmount:      0.6,
-    fresnelOpacity:     1.0,
-    scanlineSize:       8.0,
-    hologramBrightness: 1.4,
-    signalSpeed:        0.7,
+    fresnelAmount:      0.70,
+    fresnelOpacity:     1.00,
+    scanlineSize:       3.70,
+    hologramBrightness: 1.60,
+    signalSpeed:        0.18,
     enableBlinking:     true,
     blinkFresnelOnly:   true,
-    hologramOpacity:    0.85,
+    hologramOpacity:    0.70,
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });
@@ -8836,17 +8838,17 @@ function createPowerupMesh(typeIdx) {
   const cubeMesh = new THREE.Mesh(cubeGeo, cubeMat);
   group.add(cubeMesh);
 
-  // ── Inner icon (uses per-type primitive shape, holo material) ──
+  // ── Inner icon (same Mancini defaults so it reads as same hologram) ──
   const iconMat = new HolographicMaterial({
     hologramColor:      def.color,
-    fresnelAmount:      0.45,
-    fresnelOpacity:     1.0,
-    scanlineSize:       6.0,
-    hologramBrightness: 1.6,
-    signalSpeed:        1.2,
+    fresnelAmount:      0.70,
+    fresnelOpacity:     1.00,
+    scanlineSize:       3.70,
+    hologramBrightness: 1.60,
+    signalSpeed:        0.18,
     enableBlinking:     true,
-    blinkFresnelOnly:   false,
-    hologramOpacity:    1.0,
+    blinkFresnelOnly:   true,
+    hologramOpacity:    0.70,
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });
@@ -8892,14 +8894,14 @@ function _createShatterFragment() {
   const geo = new THREE.PlaneGeometry(POWERUP_CUBE_SIZE, POWERUP_CUBE_SIZE);
   const mat = new HolographicMaterial({
     hologramColor:      '#00d5ff',  // overwritten on activate
-    fresnelAmount:      0.6,
-    fresnelOpacity:     1.0,
-    scanlineSize:       8.0,
-    hologramBrightness: 1.6,
-    signalSpeed:        1.4,
+    fresnelAmount:      0.70,
+    fresnelOpacity:     1.00,
+    scanlineSize:       3.70,
+    hologramBrightness: 1.60,
+    signalSpeed:        0.18,
     enableBlinking:     true,
-    blinkFresnelOnly:   false,
-    hologramOpacity:    0.9,
+    blinkFresnelOnly:   true,
+    hologramOpacity:    0.70,
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });
@@ -8918,14 +8920,14 @@ function _createShatterIcon() {
   const geo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
   const mat = new HolographicMaterial({
     hologramColor:      '#00d5ff',
-    fresnelAmount:      0.45,
-    fresnelOpacity:     1.0,
-    scanlineSize:       6.0,
-    hologramBrightness: 1.8,
-    signalSpeed:        1.5,
+    fresnelAmount:      0.70,
+    fresnelOpacity:     1.00,
+    scanlineSize:       3.70,
+    hologramBrightness: 1.60,
+    signalSpeed:        0.18,
     enableBlinking:     true,
-    blinkFresnelOnly:   false,
-    hologramOpacity:    1.0,
+    blinkFresnelOnly:   true,
+    hologramOpacity:    0.70,
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });

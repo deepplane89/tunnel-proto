@@ -720,9 +720,107 @@ function buildSkinTunerSliders() {
     container.appendChild(makeSlider('Glow Tightness', du.dGlowEdgeMin.value, 0.1, 0.49, 0.01, v => { du.dGlowEdgeMin.value = v; }, '#0ff'));
   }
 
-  // ═══════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════
+  //  HOLO POWERUPS — live tuner for the holographic cube material.
+  //  Mirrors the controls from Anderson Mancini's demo:
+  //    https://threejs-vanilla-holographic-material.vercel.app/
+  //  All sliders broadcast to every registered holo material instance
+  //  (cubes, icons, shatter fragments) via _broadcastHoloUniform.
+  //  Spawner buttons spawn one of each powerup type 30 units in front
+  //  of the ship for tweak/test without waiting for the wave director.
+  // ══════════════════════════════════════════════════
+  if (typeof _broadcastHoloUniform === 'function' && typeof _holoMaterials !== 'undefined') {
+    const holoHeader = document.createElement('div');
+    holoHeader.style.cssText = 'font-size:14px;font-weight:bold;color:#0df;margin:16px 0 8px;border-top:2px solid #0df;padding-top:8px;';
+    holoHeader.textContent = 'HOLO POWERUPS';
+    container.appendChild(holoHeader);
+
+    const subtitle = document.createElement('div');
+    subtitle.style.cssText = 'font-size:10px;color:#7af;margin:-4px 0 6px;';
+    subtitle.textContent = 'Mirrors threejs-vanilla-holographic-material demo';
+    container.appendChild(subtitle);
+
+    // Read initial values from any live material (they all start with the same defaults).
+    const sample = _holoMaterials[0];
+    const sv = (k, fallback) => (sample && sample.uniforms[k]) ? sample.uniforms[k].value : fallback;
+
+    container.appendChild(makeSlider('Fresnel Opacity',  sv('fresnelOpacity', 1.0),     0, 1,    0.01, v => _broadcastHoloUniform('fresnelOpacity', v),     '#0df'));
+    container.appendChild(makeSlider('Fresnel Amount',   sv('fresnelAmount', 0.7),      0, 1,    0.01, v => _broadcastHoloUniform('fresnelAmount', v),      '#0df'));
+    container.appendChild(makeSlider('Scanline Size',    sv('scanlineSize', 3.7),       1, 15,   0.1,  v => _broadcastHoloUniform('scanlineSize', v),       '#0df'));
+    container.appendChild(makeSlider('Brightness',       sv('hologramBrightness', 1.6), 0, 2,    0.01, v => _broadcastHoloUniform('hologramBrightness', v), '#0df'));
+    container.appendChild(makeSlider('Signal Speed',     sv('signalSpeed', 0.18),       0, 2,    0.01, v => _broadcastHoloUniform('signalSpeed', v),        '#0df'));
+    container.appendChild(makeSlider('Hologram Opacity', sv('hologramOpacity', 0.7),    0, 1,    0.01, v => _broadcastHoloUniform('hologramOpacity', v),    '#0df'));
+    container.appendChild(makeSlider('Cube Size',        (typeof POWERUP_CUBE_SIZE === 'number' ? POWERUP_CUBE_SIZE : 3.5), 1, 7, 0.1, v => {
+      // Rescale all powerup groups + shatter fragment planes by uniform scale.
+      // We don't rebuild geometry; a group-level scale is cheaper and still reads as bigger.
+      const ratio = v / 3.5;
+      if (typeof powerupPool !== 'undefined') {
+        for (const p of powerupPool) p.userData._sizeScale = ratio;
+      }
+      // Apply to active groups too.
+      if (typeof activePowerups !== 'undefined') {
+        for (const p of activePowerups) p.scale.setScalar(ratio);
+      }
+    }, '#0df'));
+
+    // ── Toggles ──
+    const toggleRow = document.createElement('div');
+    toggleRow.style.cssText = 'display:flex;gap:12px;margin:6px 0 8px;font-size:11px;';
+    function makeToggle(label, initial, onChange) {
+      const wrap = document.createElement('label');
+      wrap.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = !!initial;
+      cb.style.cssText = 'margin:0;cursor:pointer;accent-color:#0df;';
+      cb.addEventListener('change', () => onChange(cb.checked));
+      const txt = document.createElement('span'); txt.textContent = label;
+      wrap.appendChild(cb); wrap.appendChild(txt);
+      return wrap;
+    }
+    toggleRow.appendChild(makeToggle('Blinking',   sv('enableBlinking', true),   v => _broadcastHoloUniform('enableBlinking', v)));
+    toggleRow.appendChild(makeToggle('Blink Fresnel Only', sv('blinkFresnelOnly', true), v => _broadcastHoloUniform('blinkFresnelOnly', v)));
+    container.appendChild(toggleRow);
+
+    // ── Manual spawner buttons ──
+    const spawnerLabel = document.createElement('div');
+    spawnerLabel.style.cssText = 'font-size:11px;color:#0df;margin:8px 0 4px;font-weight:bold;';
+    spawnerLabel.textContent = 'Spawn powerup in front of ship:';
+    container.appendChild(spawnerLabel);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;';
+    const SPAWN_TYPES = [
+      { label: 'Shield',   idx: 0, color: '#00f0ff' },
+      { label: 'Laser',    idx: 1, color: '#ff5544' },
+      { label: 'Overdrive',idx: 2, color: '#ffcc00' },
+      { label: 'Magnet',   idx: 3, color: '#44ff88' },
+    ];
+    SPAWN_TYPES.forEach(t => {
+      const b = document.createElement('button');
+      b.textContent = t.label;
+      b.style.cssText = 'flex:1;padding:6px 8px;background:#222;border:1px solid ' + t.color + ';color:' + t.color + ';font-family:monospace;font-size:10px;cursor:pointer;border-radius:3px;';
+      b.addEventListener('click', () => {
+        if (typeof getPooledPowerup !== 'function' || typeof activePowerups === 'undefined') return;
+        const pu = getPooledPowerup(t.idx);
+        if (!pu) { console.warn('[holo tuner] powerup pool exhausted'); return; }
+        // Spawn 30u in front of the ship at lane center.
+        const z = (typeof shipGroup !== 'undefined' && shipGroup) ? shipGroup.position.z - 30 : -30;
+        pu.position.set(state.shipX || 0, 1.5, z);
+        activePowerups.push(pu);
+      });
+      btnRow.appendChild(b);
+    });
+    container.appendChild(btnRow);
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:10px;color:#578;margin-bottom:4px;';
+    hint.textContent = 'Hotkeys (in-game): Z=Shield  X=Laser  C=Overdrive  V=Magnet (spawn cube)';
+    container.appendChild(hint);
+  }
+
+  // ══════════════════════════════════════════════════
   //  SCENE LIGHTING CONTROLS
-  // ═══════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════
   const lightHeader = document.createElement('div');
   lightHeader.style.cssText = 'font-size:14px;font-weight:bold;color:#ff0;margin:16px 0 8px;border-top:2px solid #ff0;padding-top:8px;';
   lightHeader.textContent = 'SCENE LIGHTING';

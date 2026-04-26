@@ -217,7 +217,8 @@ class HolographicMaterial extends THREE.ShaderMaterial {
   }
 }
 
-// Track all instances so the main update loop can tick them in one place.
+// Track all instances so the main update loop can tick them in one place,
+// and the dev tuner can broadcast settings updates to every instance.
 const _holoMaterials = [];
 function _registerHoloMaterial(mat) {
   _holoMaterials.push(mat);
@@ -226,6 +227,14 @@ function _registerHoloMaterial(mat) {
 function _tickHoloMaterials(t) {
   for (let i = 0; i < _holoMaterials.length; i++) {
     _holoMaterials[i].setTime(t);
+  }
+}
+// Apply a uniform value to ALL registered holo materials. Used by the tuner.
+// The hologramColor is intentionally NOT broadcast — each powerup keeps its own tint.
+function _broadcastHoloUniform(name, value) {
+  for (let i = 0; i < _holoMaterials.length; i++) {
+    const u = _holoMaterials[i].uniforms[name];
+    if (u) u.value = value;
   }
 }
 
@@ -9047,17 +9056,19 @@ function createPowerupMesh(typeIdx) {
   const def = POWERUP_TYPES[typeIdx];
   const group = new THREE.Group();
 
-  // ── Outer holo cube (drive-through frame, DoubleSide so backfaces show) ──
+  // ── Outer holo cube — EXACTLY matches Mancini's demo defaults (drive-through, DoubleSide) ──
+  // Live demo: https://threejs-vanilla-holographic-material.vercel.app/
+  // (Fresnel=0.7, Scanline=3.7, Brightness=1.6, Speed=0.18, Opacity=0.7)
   const cubeMat = new HolographicMaterial({
     hologramColor:      def.color,
-    fresnelAmount:      0.6,
-    fresnelOpacity:     1.0,
-    scanlineSize:       8.0,
-    hologramBrightness: 1.4,
-    signalSpeed:        0.7,
+    fresnelAmount:      0.70,
+    fresnelOpacity:     1.00,
+    scanlineSize:       3.70,
+    hologramBrightness: 1.60,
+    signalSpeed:        0.18,
     enableBlinking:     true,
     blinkFresnelOnly:   true,
-    hologramOpacity:    0.85,
+    hologramOpacity:    0.70,
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });
@@ -9066,17 +9077,17 @@ function createPowerupMesh(typeIdx) {
   const cubeMesh = new THREE.Mesh(cubeGeo, cubeMat);
   group.add(cubeMesh);
 
-  // ── Inner icon (uses per-type primitive shape, holo material) ──
+  // ── Inner icon (same Mancini defaults so it reads as same hologram) ──
   const iconMat = new HolographicMaterial({
     hologramColor:      def.color,
-    fresnelAmount:      0.45,
-    fresnelOpacity:     1.0,
-    scanlineSize:       6.0,
-    hologramBrightness: 1.6,
-    signalSpeed:        1.2,
+    fresnelAmount:      0.70,
+    fresnelOpacity:     1.00,
+    scanlineSize:       3.70,
+    hologramBrightness: 1.60,
+    signalSpeed:        0.18,
     enableBlinking:     true,
-    blinkFresnelOnly:   false,
-    hologramOpacity:    1.0,
+    blinkFresnelOnly:   true,
+    hologramOpacity:    0.70,
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });
@@ -9122,14 +9133,14 @@ function _createShatterFragment() {
   const geo = new THREE.PlaneGeometry(POWERUP_CUBE_SIZE, POWERUP_CUBE_SIZE);
   const mat = new HolographicMaterial({
     hologramColor:      '#00d5ff',  // overwritten on activate
-    fresnelAmount:      0.6,
-    fresnelOpacity:     1.0,
-    scanlineSize:       8.0,
-    hologramBrightness: 1.6,
-    signalSpeed:        1.4,
+    fresnelAmount:      0.70,
+    fresnelOpacity:     1.00,
+    scanlineSize:       3.70,
+    hologramBrightness: 1.60,
+    signalSpeed:        0.18,
     enableBlinking:     true,
-    blinkFresnelOnly:   false,
-    hologramOpacity:    0.9,
+    blinkFresnelOnly:   true,
+    hologramOpacity:    0.70,
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });
@@ -9148,14 +9159,14 @@ function _createShatterIcon() {
   const geo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
   const mat = new HolographicMaterial({
     hologramColor:      '#00d5ff',
-    fresnelAmount:      0.45,
-    fresnelOpacity:     1.0,
-    scanlineSize:       6.0,
-    hologramBrightness: 1.8,
-    signalSpeed:        1.5,
+    fresnelAmount:      0.70,
+    fresnelOpacity:     1.00,
+    scanlineSize:       3.70,
+    hologramBrightness: 1.60,
+    signalSpeed:        0.18,
     enableBlinking:     true,
-    blinkFresnelOnly:   false,
-    hologramOpacity:    1.0,
+    blinkFresnelOnly:   true,
+    hologramOpacity:    0.70,
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });
@@ -9927,15 +9938,15 @@ function getPooledPowerup(typeIdx) {
       const iconMesh = p.userData._iconMesh;
 
       // Cube material: just retint via hologramColor uniform. Geometry is always BoxGeometry.
+      // We DO NOT reset other uniforms here — the dev tuner may have changed them globally
+      // via _broadcastHoloUniform, and we want those to persist across spawns.
       if (cubeMesh && cubeMesh.material && cubeMesh.material.uniforms) {
         cubeMesh.material.uniforms.hologramColor.value.set(def.color);
-        cubeMesh.material.uniforms.hologramOpacity.value = 0.85;
       }
 
       // Icon material: retint, and swap geometry only if shape changed.
       if (iconMesh && iconMesh.material && iconMesh.material.uniforms) {
         iconMesh.material.uniforms.hologramColor.value.set(def.color);
-        iconMesh.material.uniforms.hologramOpacity.value = 1.0;
         const needShape = def.shape;
         if (p.userData.currentShape !== needShape) {
           iconMesh.geometry.dispose();
@@ -13173,6 +13184,21 @@ window.addEventListener('keydown', e => {
     if (e.key === 's' || e.key === 'S') applyPowerup(0); // shield
     if (e.key === 'i' || e.key === 'I') applyPowerup(2); // invincible
     if (e.key === 'm' || e.key === 'M') applyPowerup(3); // magnet
+
+    // Z/X/C/V — SPAWN a cube in front of the ship (so you can fly into it & test shatter).
+    // Shield=Z, Laser=X, Overdrive=C, Magnet=V. 30u ahead of ship at lane center.
+    const _spawnCubeAhead = (idx) => {
+      if (typeof getPooledPowerup !== 'function' || typeof activePowerups === 'undefined') return;
+      const pu = getPooledPowerup(idx);
+      if (!pu) return;
+      const z = (typeof shipGroup !== 'undefined' && shipGroup) ? shipGroup.position.z - 30 : -30;
+      pu.position.set(state.shipX || 0, 1.5, z);
+      activePowerups.push(pu);
+    };
+    if (e.key === 'z' || e.key === 'Z') _spawnCubeAhead(0); // shield cube
+    if (e.key === 'x' || e.key === 'X') _spawnCubeAhead(1); // laser cube
+    if (e.key === 'c' || e.key === 'C') _spawnCubeAhead(2); // overdrive cube
+    if (e.key === 'v' || e.key === 'V') _spawnCubeAhead(3); // magnet cube
   }
 
   // R = spawn bonus rings + tuner (DR only)
@@ -19434,8 +19460,8 @@ function update(dt) {
   for (let i = activePowerups.length - 1; i >= 0; i--) {
     const pu = activePowerups[i];
     pu.position.z += effectiveSpeed * dt;
-    pu.rotation.y += 1.8 * dt;
-    pu.rotation.x += 0.6 * dt;
+    pu.rotation.y += 0.5 * dt;  // slow cube rotation (was 1.8 — too frantic for hologram aesthetic)
+    pu.rotation.x += 0.2 * dt;
 
     // Magnet pull toward ship (powerups only at tier 5)
     if (state.magnetActive && state.magnetPullsPowerups) {
@@ -19449,9 +19475,8 @@ function update(dt) {
       }
     }
 
-    // Scale pulse
-    const s = 1.0 + Math.sin(state.frameCount * 0.12 + i) * 0.12;
-    pu.scale.setScalar(s);
+    // (Holo cube doesn't pulse — the shader's blink/scanline animation already
+    //  provides the visual motion. Scale stays at 1.)
 
     if (pu.position.z > DESPAWN_Z) {
       returnPowerupToPool(pu);
@@ -21307,9 +21332,107 @@ function buildSkinTunerSliders() {
     container.appendChild(makeSlider('Glow Tightness', du.dGlowEdgeMin.value, 0.1, 0.49, 0.01, v => { du.dGlowEdgeMin.value = v; }, '#0ff'));
   }
 
-  // ═══════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════
+  //  HOLO POWERUPS — live tuner for the holographic cube material.
+  //  Mirrors the controls from Anderson Mancini's demo:
+  //    https://threejs-vanilla-holographic-material.vercel.app/
+  //  All sliders broadcast to every registered holo material instance
+  //  (cubes, icons, shatter fragments) via _broadcastHoloUniform.
+  //  Spawner buttons spawn one of each powerup type 30 units in front
+  //  of the ship for tweak/test without waiting for the wave director.
+  // ══════════════════════════════════════════════════
+  if (typeof _broadcastHoloUniform === 'function' && typeof _holoMaterials !== 'undefined') {
+    const holoHeader = document.createElement('div');
+    holoHeader.style.cssText = 'font-size:14px;font-weight:bold;color:#0df;margin:16px 0 8px;border-top:2px solid #0df;padding-top:8px;';
+    holoHeader.textContent = 'HOLO POWERUPS';
+    container.appendChild(holoHeader);
+
+    const subtitle = document.createElement('div');
+    subtitle.style.cssText = 'font-size:10px;color:#7af;margin:-4px 0 6px;';
+    subtitle.textContent = 'Mirrors threejs-vanilla-holographic-material demo';
+    container.appendChild(subtitle);
+
+    // Read initial values from any live material (they all start with the same defaults).
+    const sample = _holoMaterials[0];
+    const sv = (k, fallback) => (sample && sample.uniforms[k]) ? sample.uniforms[k].value : fallback;
+
+    container.appendChild(makeSlider('Fresnel Opacity',  sv('fresnelOpacity', 1.0),     0, 1,    0.01, v => _broadcastHoloUniform('fresnelOpacity', v),     '#0df'));
+    container.appendChild(makeSlider('Fresnel Amount',   sv('fresnelAmount', 0.7),      0, 1,    0.01, v => _broadcastHoloUniform('fresnelAmount', v),      '#0df'));
+    container.appendChild(makeSlider('Scanline Size',    sv('scanlineSize', 3.7),       1, 15,   0.1,  v => _broadcastHoloUniform('scanlineSize', v),       '#0df'));
+    container.appendChild(makeSlider('Brightness',       sv('hologramBrightness', 1.6), 0, 2,    0.01, v => _broadcastHoloUniform('hologramBrightness', v), '#0df'));
+    container.appendChild(makeSlider('Signal Speed',     sv('signalSpeed', 0.18),       0, 2,    0.01, v => _broadcastHoloUniform('signalSpeed', v),        '#0df'));
+    container.appendChild(makeSlider('Hologram Opacity', sv('hologramOpacity', 0.7),    0, 1,    0.01, v => _broadcastHoloUniform('hologramOpacity', v),    '#0df'));
+    container.appendChild(makeSlider('Cube Size',        (typeof POWERUP_CUBE_SIZE === 'number' ? POWERUP_CUBE_SIZE : 3.5), 1, 7, 0.1, v => {
+      // Rescale all powerup groups + shatter fragment planes by uniform scale.
+      // We don't rebuild geometry; a group-level scale is cheaper and still reads as bigger.
+      const ratio = v / 3.5;
+      if (typeof powerupPool !== 'undefined') {
+        for (const p of powerupPool) p.userData._sizeScale = ratio;
+      }
+      // Apply to active groups too.
+      if (typeof activePowerups !== 'undefined') {
+        for (const p of activePowerups) p.scale.setScalar(ratio);
+      }
+    }, '#0df'));
+
+    // ── Toggles ──
+    const toggleRow = document.createElement('div');
+    toggleRow.style.cssText = 'display:flex;gap:12px;margin:6px 0 8px;font-size:11px;';
+    function makeToggle(label, initial, onChange) {
+      const wrap = document.createElement('label');
+      wrap.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = !!initial;
+      cb.style.cssText = 'margin:0;cursor:pointer;accent-color:#0df;';
+      cb.addEventListener('change', () => onChange(cb.checked));
+      const txt = document.createElement('span'); txt.textContent = label;
+      wrap.appendChild(cb); wrap.appendChild(txt);
+      return wrap;
+    }
+    toggleRow.appendChild(makeToggle('Blinking',   sv('enableBlinking', true),   v => _broadcastHoloUniform('enableBlinking', v)));
+    toggleRow.appendChild(makeToggle('Blink Fresnel Only', sv('blinkFresnelOnly', true), v => _broadcastHoloUniform('blinkFresnelOnly', v)));
+    container.appendChild(toggleRow);
+
+    // ── Manual spawner buttons ──
+    const spawnerLabel = document.createElement('div');
+    spawnerLabel.style.cssText = 'font-size:11px;color:#0df;margin:8px 0 4px;font-weight:bold;';
+    spawnerLabel.textContent = 'Spawn powerup in front of ship:';
+    container.appendChild(spawnerLabel);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;';
+    const SPAWN_TYPES = [
+      { label: 'Shield',   idx: 0, color: '#00f0ff' },
+      { label: 'Laser',    idx: 1, color: '#ff5544' },
+      { label: 'Overdrive',idx: 2, color: '#ffcc00' },
+      { label: 'Magnet',   idx: 3, color: '#44ff88' },
+    ];
+    SPAWN_TYPES.forEach(t => {
+      const b = document.createElement('button');
+      b.textContent = t.label;
+      b.style.cssText = 'flex:1;padding:6px 8px;background:#222;border:1px solid ' + t.color + ';color:' + t.color + ';font-family:monospace;font-size:10px;cursor:pointer;border-radius:3px;';
+      b.addEventListener('click', () => {
+        if (typeof getPooledPowerup !== 'function' || typeof activePowerups === 'undefined') return;
+        const pu = getPooledPowerup(t.idx);
+        if (!pu) { console.warn('[holo tuner] powerup pool exhausted'); return; }
+        // Spawn 30u in front of the ship at lane center.
+        const z = (typeof shipGroup !== 'undefined' && shipGroup) ? shipGroup.position.z - 30 : -30;
+        pu.position.set(state.shipX || 0, 1.5, z);
+        activePowerups.push(pu);
+      });
+      btnRow.appendChild(b);
+    });
+    container.appendChild(btnRow);
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:10px;color:#578;margin-bottom:4px;';
+    hint.textContent = 'Hotkeys (in-game): Z=Shield  X=Laser  C=Overdrive  V=Magnet (spawn cube)';
+    container.appendChild(hint);
+  }
+
+  // ══════════════════════════════════════════════════
   //  SCENE LIGHTING CONTROLS
-  // ═══════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════
   const lightHeader = document.createElement('div');
   lightHeader.style.cssText = 'font-size:14px;font-weight:bold;color:#ff0;margin:16px 0 8px;border-top:2px solid #ff0;padding-top:8px;';
   lightHeader.textContent = 'SCENE LIGHTING';
