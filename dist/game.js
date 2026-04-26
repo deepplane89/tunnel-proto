@@ -13201,6 +13201,16 @@ window.addEventListener('keydown', e => {
     if (e.key === 'v' || e.key === 'V') _spawnCubeAhead(3); // magnet cube
   }
 
+  // T = toggle skin tuner (HOLO POWERUPS sliders live here). Works any phase, no admin gate.
+  if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return; // don't hijack typing
+    if (typeof window.toggleSkinTuner === 'function') {
+      window.toggleSkinTuner();
+      e.preventDefault();
+    }
+  }
+
   // R = spawn bonus rings + tuner (DR only)
   if ((e.key === 'r' || e.key === 'R') && !state._tutorialActive) {
     if (state.isDeathRun && state.phase === 'playing') {
