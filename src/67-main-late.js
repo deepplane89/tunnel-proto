@@ -1505,6 +1505,14 @@ function _drSeqAdvance() {
 // once the obstacle field that existed at advance time has fully passed.
 function _drApplyPendingSpeed() {
   if (state._pendingSpeed === undefined) return;
+  // Bail if any canyon owns speed right now — each canyon's entry ramp drives
+  // state.speed to its own target and clobbering it here breaks the entrance
+  // visual. _startL3KnifeCanyon already clears _pendingSpeed on entry but
+  // belt-and-suspenders for PRE_T4A/T4B which also own speed during entry ramp.
+  if (state.l3KnifeCanyon || state.preT4ACanyon || state.preT4BCanyon ||
+      state.l4CorridorActive || state.l5CorridorActive) {
+    return;
+  }
   const snap = state._pendingSpeedObstacles;
   let anyAlive = false;
   if (snap && snap.size > 0) {

@@ -413,6 +413,15 @@ function _startL3KnifeCanyon() {
 
   // State flags
   state.l3KnifeCanyon    = true;
+  // Cancel any deferred speed bump from the DR speed-gate — canyon owns
+  // speed for its full lifecycle (ramp on entry, restore on _stopL3KnifeCanyon).
+  // Without this, S2->S3 increase pending bump applies mid-canyon-ramp and
+  // clobbers the entrance visual (sudden FOV/speed jump as entrance slab
+  // approaches the ship). _drApplyPendingSpeed runs unconditionally at top
+  // of _drSequencerTick so it can fire even while canyon owns speed.
+  state._pendingSpeed = undefined;
+  state._pendingSpeedObstacles = null;
+  state._pendingSpeedDeadline = 0;
   state.l3KnifeElapsed   = 0;
   state.l3KnifeDone      = false;
   // Start snap oscillator at 0 — sine drives it through 0.1..1.5 over 4s period.
