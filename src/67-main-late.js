@@ -5987,7 +5987,7 @@ window.addEventListener('keydown', (e) => {
       darkClearcoat: 0.4, darkEmi: 0.9,
       lightIntensity: 1.2,
       // Corridor shape
-      entranceThick: 700, entranceSlabs: 3, spawnDepth: -500,
+      entranceThick: 700, entranceSlabs: 3, spawnDepth: -250,
       // Sine curves (non-L4 path — still set to user-confirmed values for consistency)
       sineIntensity: 0.28, sineAmp: 120, sinePeriod: 330, sineSpeed: 1,
       // Live
