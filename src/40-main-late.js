@@ -1882,8 +1882,13 @@ function spawnObstacles() {
   // Pre-T4B canyon — preset 1 + chill lightning, no cones.
   if (state.preT4BCanyon) return;
 
-  // L5: zipper rows are fired from the update loop — just block normal spawns while active
-  if (state.currentLevelIdx === 4 && state.zipperActive) {
+  // Zipper rows are fired from the update loop (spawnZipperRow) — block ALL
+  // normal/random cone spawns while a zipper is active so they don't pile into
+  // the zipper gate corridor. Applies to L5 native zipper AND DR sequencer
+  // bursts (S2 cones_and_zips, S9 slalom_then_zips, S10 zipper_only, endless).
+  // Was previously gated by currentLevelIdx===4, which let DR-mode zipper
+  // bursts spawn random cones on top of zipper rows.
+  if (state.zipperActive) {
     framesSinceLastPowerup++;
     return;
   }
