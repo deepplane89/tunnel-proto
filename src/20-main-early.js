@@ -7872,7 +7872,12 @@ function _createCanyonWalls() {
         // Find this entrance slab's index by its Z offset from ENTRANCE_SPAWN_Z=-500
         const entIdx   = Math.round((-500 - pivot.position.z) / SPACING); // 0,1,2
         const finalZ   = SAFE_Z - entIdx * SPACING;                       // -150,-170,-190
-        const center   = _canyonXAtZ(finalZ);
+        // L4-recreation canyons (e.g. L3 knife) use _l4SineAtZ for the regular
+        // slab center curve. The entrance MUST use the same curve or it lands
+        // ~9-10u off from the corridor opening (entrance built off _canyonXAtZ
+        // anchored to z=-170 produces non-zero sine at z=-150 while _l4SineAtZ
+        // is ~0 there). Match whichever curve the regulars are on.
+        const center   = _canyonTuner._l4Recreation ? _l4SineAtZ(finalZ) : _canyonXAtZ(finalZ);
         pivot.userData.bakedX    = center + halfX * side;
         pivot.userData.entFinalZ = finalZ; // for trigger check later
         pivot.position.x = pivot.userData.bakedX;
