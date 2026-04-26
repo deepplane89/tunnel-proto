@@ -2715,14 +2715,44 @@ function checkDeathRunSpeed() {
 
   // Defer speed change if mechanic is active
   const safeForSpeed = state.drPhase === 'RELEASE' || state.drPhase === 'RECOVERY';
+  // Obstacle gate: tier INCREASES wait until the screen is clear of hazards
+  // (cones / walls / forcefields). Decreases apply instantly. Mirrors the
+  // stage-advance gate (_drApplyPendingSpeed) so band crossings don't speed
+  // up the player mid-obstacle. 8s safety deadline prevents permanent stick.
+  const isIncrease = targetTier > state.deathRunSpeedTier;
+  let obstaclesOnScreen = false;
+  if (isIncrease) {
+    if (activeObstacles.length > 0) obstaclesOnScreen = true;
+    if (!obstaclesOnScreen && typeof _awPool !== 'undefined' && _awPool) {
+      for (let i = 0; i < _awPool.length; i++) {
+        if (_awPool[i].userData && _awPool[i].userData.active) { obstaclesOnScreen = true; break; }
+      }
+    }
+    if (!obstaclesOnScreen && typeof _activeForcefields !== 'undefined' && _activeForcefields && _activeForcefields.length > 0) {
+      obstaclesOnScreen = true;
+    }
+  }
+  // Track when a tier increase first becomes pending so we can force-apply
+  // after 8s if obstacles never clear (e.g. continuous-spawn stages).
   if (targetTier !== state.deathRunSpeedTier && !safeForSpeed) {
     state._pendingSpeedTier = targetTier;
+    if (state._pendingSpeedTierDeadline == null || state._pendingSpeedTierDeadline === 0) {
+      state._pendingSpeedTierDeadline = (state.elapsed || 0) + 8.0;
+    }
   }
-  if (safeForSpeed && state._pendingSpeedTier != null && state._pendingSpeedTier >= 0) {
+  // Also stamp deadline when tier is gated by obstacles (safeForSpeed path)
+  if (isIncrease && obstaclesOnScreen && (state._pendingSpeedTierDeadline == null || state._pendingSpeedTierDeadline === 0)) {
+    state._pendingSpeedTierDeadline = (state.elapsed || 0) + 8.0;
+  }
+  const deadlineHit = (state._pendingSpeedTierDeadline || 0) > 0 &&
+                      (state.elapsed || 0) >= state._pendingSpeedTierDeadline;
+  const obstacleGateOpen = !obstaclesOnScreen || deadlineHit || !isIncrease;
+  if (safeForSpeed && obstacleGateOpen && state._pendingSpeedTier != null && state._pendingSpeedTier >= 0) {
     const prevTier = state.deathRunSpeedTier;
     state.deathRunSpeedTier = state._pendingSpeedTier;
     state.speed = BASE_SPEED * Math.max(_lvlSpeedBonus, _floor, BAND_SPEED[Math.min(state.deathRunSpeedTier, BAND_SPEED.length - 1)]);
     state._pendingSpeedTier = -1;
+    state._pendingSpeedTierDeadline = 0;
     if (state.deathRunSpeedTier > prevTier && prevTier >= 0 && !state.introActive) {
       state._drSpeedBeepFired = false;
       hapticMedium();
@@ -2731,10 +2761,11 @@ function checkDeathRunSpeed() {
       if (roar && !state.muted) { roar.currentTime = 0; roar.volume = 0.22; roar.play().catch(() => {}); }
       state._thrusterFlare = 2.0;
     }
-  } else if (safeForSpeed && targetTier !== state.deathRunSpeedTier) {
+  } else if (safeForSpeed && obstacleGateOpen && targetTier !== state.deathRunSpeedTier) {
     const prevTier = state.deathRunSpeedTier;
     state.deathRunSpeedTier = targetTier;
     state.speed = BASE_SPEED * targetSpeedMult;
+    state._pendingSpeedTierDeadline = 0;
     if (state.deathRunSpeedTier > prevTier && prevTier >= 0 && !state.introActive) {
       state._drSpeedBeepFired = false;
       hapticMedium();
