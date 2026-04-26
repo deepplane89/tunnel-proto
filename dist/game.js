@@ -15628,17 +15628,30 @@ function _drSeqAdvance() {
     const targetSpeed = BASE_SPEED * Math.max(next.speed, floor);
     if (targetSpeed > state.speed + 0.5) {
       state._pendingSpeed = targetSpeed;
-      // Snapshot uuids of all in-flight obstacles. Speed bumps when this set
-      // empties (each cleared by _updateActiveObstacles when an obstacle is
-      // returned to its pool). Falls back to a safety timeout below.
+      // Snapshot uuids of EVERY in-flight hazard, not just activeObstacles.
+      // Walls live in _awPool (active marked via userData.active), forcefields
+      // in _activeForcefields. We were missing those before, which caused the
+      // gate to no-op for wall stages (S4/S5) and bump speed instantly.
       state._pendingSpeedObstacles = new Set();
       for (let i = 0; i < activeObstacles.length; i++) {
         state._pendingSpeedObstacles.add(activeObstacles[i].uuid);
       }
+      if (typeof _awPool !== 'undefined' && _awPool) {
+        for (let i = 0; i < _awPool.length; i++) {
+          if (_awPool[i].userData && _awPool[i].userData.active) {
+            state._pendingSpeedObstacles.add(_awPool[i].uuid);
+          }
+        }
+      }
+      if (typeof _activeForcefields !== 'undefined' && _activeForcefields) {
+        for (let i = 0; i < _activeForcefields.length; i++) {
+          state._pendingSpeedObstacles.add(_activeForcefields[i].uuid);
+        }
+      }
       // Safety: if for any reason the set never empties (e.g. obstacle removed
       // by a code path that doesn't notify the pending tracker), force-apply
-      // after 6s so speed never gets permanently stuck.
-      state._pendingSpeedDeadline = (state.elapsed || 0) + 6.0;
+      // after 8s so speed never gets permanently stuck.
+      state._pendingSpeedDeadline = (state.elapsed || 0) + 8.0;
     } else {
       state.speed = targetSpeed;
       state._pendingSpeed = undefined;
@@ -15659,10 +15672,17 @@ function _drApplyPendingSpeed() {
   const snap = state._pendingSpeedObstacles;
   let anyAlive = false;
   if (snap && snap.size > 0) {
-    // Refresh: prune uuids that are no longer in activeObstacles (passed/popped).
-    // Cheap because activeObstacles is rarely > ~30 items.
+    // Build alive-id set from every hazard pool we snapshotted from.
     const aliveIds = new Set();
     for (let i = 0; i < activeObstacles.length; i++) aliveIds.add(activeObstacles[i].uuid);
+    if (typeof _awPool !== 'undefined' && _awPool) {
+      for (let i = 0; i < _awPool.length; i++) {
+        if (_awPool[i].userData && _awPool[i].userData.active) aliveIds.add(_awPool[i].uuid);
+      }
+    }
+    if (typeof _activeForcefields !== 'undefined' && _activeForcefields) {
+      for (let i = 0; i < _activeForcefields.length; i++) aliveIds.add(_activeForcefields[i].uuid);
+    }
     for (const uid of snap) {
       if (aliveIds.has(uid)) { anyAlive = true; break; }
     }
