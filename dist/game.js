@@ -9921,30 +9921,41 @@ function getPooledPowerup(typeIdx) {
       p.userData.active  = true;
       p.userData.typeIdx = typeIdx;
       p.visible          = true;
+      p.scale.setScalar(1);
       const def      = POWERUP_TYPES[typeIdx];
-      const c        = new THREE.Color(def.color);
-      const bodyMesh = p.children[0];
-      const ringMesh = p.children[1];
-      // Swap geometry if shape changed (avoids wrong-shape artifacts)
-      if (bodyMesh) {
+      const cubeMesh = p.userData._cubeMesh;
+      const iconMesh = p.userData._iconMesh;
+
+      // Cube material: just retint via hologramColor uniform. Geometry is always BoxGeometry.
+      if (cubeMesh && cubeMesh.material && cubeMesh.material.uniforms) {
+        cubeMesh.material.uniforms.hologramColor.value.set(def.color);
+        cubeMesh.material.uniforms.hologramOpacity.value = 0.85;
+      }
+
+      // Icon material: retint, and swap geometry only if shape changed.
+      if (iconMesh && iconMesh.material && iconMesh.material.uniforms) {
+        iconMesh.material.uniforms.hologramColor.value.set(def.color);
+        iconMesh.material.uniforms.hologramOpacity.value = 1.0;
         const needShape = def.shape;
         if (p.userData.currentShape !== needShape) {
-          bodyMesh.geometry.dispose();
-          bodyMesh.geometry = makeGeoForShape(needShape);
+          iconMesh.geometry.dispose();
+          iconMesh.geometry = _makeIconGeoForShape(needShape);
           p.userData.currentShape = needShape;
         }
-        bodyMesh.material.color.copy(c);
-        bodyMesh.material.emissive.copy(c);
-        bodyMesh.material.needsUpdate = true;
-      }
-      if (ringMesh && ringMesh.material) {
-        ringMesh.material.color.copy(c);
-        ringMesh.material.needsUpdate = true;
       }
       return p;
     }
   }
   return null;
+}
+
+// Inner-icon geometry factory — sized for the holo cube interior.
+function _makeIconGeoForShape(shape) {
+  const S = (typeof POWERUP_ICON_SIZE === 'number') ? POWERUP_ICON_SIZE : 1.1;
+  if (shape === 'oct')   return new THREE.OctahedronGeometry(S);
+  if (shape === 'torus') return new THREE.TorusGeometry(S * 0.85, S * 0.30, 10, 20);
+  if (shape === 'ring')  return new THREE.TorusGeometry(S * 0.95, S * 0.18, 10, 28);
+  return new THREE.SphereGeometry(S * 0.9, 16, 16); // magnet / default
 }
 
 let framesSinceLastPowerup = 0;
