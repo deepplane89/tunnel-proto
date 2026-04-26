@@ -15208,6 +15208,10 @@ const DR_SEQUENCE = [
 
 // ── Sequencer tick (called each frame during DR) ──
 function _drSequencerTick(dt) {
+  // Process any pending speed bump first — may apply state.speed this frame
+  // if the in-flight obstacle field has fully passed the ship.
+  _drApplyPendingSpeed();
+
   const stage = DR_SEQUENCE[state.seqStageIdx];
   if (!stage) return;
 
@@ -15241,7 +15245,12 @@ function _drSequencerTick(dt) {
   // ramp owns state.speed during its 40s window and this tick would clobber it.
   const floor = state._drSpeedFloor || 0;
   const targetSpeed = BASE_SPEED * Math.max(stage.speed, floor);
-  if (!state.invincibleSpeedActive && !state.l3KnifeCanyon && !state.preT4ACanyon && !state.preT4BCanyon && Math.abs(state.speed - targetSpeed) > 0.5) state.speed = targetSpeed;
+  // Skip the per-tick stage-speed setter while a pending speed bump is
+  // queued — _drApplyPendingSpeed() owns state.speed until the in-flight
+  // obstacle field clears, so don't fight it here.
+  if (state._pendingSpeed === undefined &&
+      !state.invincibleSpeedActive && !state.l3KnifeCanyon && !state.preT4ACanyon && !state.preT4BCanyon &&
+      Math.abs(state.speed - targetSpeed) > 0.5) state.speed = targetSpeed;
   if (stage.physTier !== undefined) state.deathRunSpeedTier = stage.physTier;
 
   // ── Quilez domain warp: on from S3 onward (the "warped era") and during endless,
@@ -15604,14 +15613,64 @@ function _drSeqAdvance() {
   if (next) {
     console.log('[SEQ] Stage ' + state.seqStageIdx + ': ' + next.name);
     _drLogEvent('seq_advance', next.name + ' | speed=' + next.speed + 'x | physTier=' + next.physTier);
-    // Set speed immediately
+    // Speed handling:
+    //   • DECREASE or unchanged → apply immediately (slowdowns aren't jarring).
+    //   • INCREASE → defer until every obstacle in flight at this moment has
+    //     z-scrolled past the ship. This way you finish passing the current
+    //     field at the OLD speed, then the next field appears in the distance
+    //     already at the NEW speed. _drApplyPendingSpeed() (called per frame)
+    //     watches state._pendingSpeedObstacles and applies state._pendingSpeed
+    //     once that snapshot set is empty.
     const floor = state._drSpeedFloor || 0;
-    state.speed = BASE_SPEED * Math.max(next.speed, floor);
+    const targetSpeed = BASE_SPEED * Math.max(next.speed, floor);
+    if (targetSpeed > state.speed + 0.5) {
+      state._pendingSpeed = targetSpeed;
+      // Snapshot uuids of all in-flight obstacles. Speed bumps when this set
+      // empties (each cleared by _updateActiveObstacles when an obstacle is
+      // returned to its pool). Falls back to a safety timeout below.
+      state._pendingSpeedObstacles = new Set();
+      for (let i = 0; i < activeObstacles.length; i++) {
+        state._pendingSpeedObstacles.add(activeObstacles[i].uuid);
+      }
+      // Safety: if for any reason the set never empties (e.g. obstacle removed
+      // by a code path that doesn't notify the pending tracker), force-apply
+      // after 6s so speed never gets permanently stuck.
+      state._pendingSpeedDeadline = (state.elapsed || 0) + 6.0;
+    } else {
+      state.speed = targetSpeed;
+      state._pendingSpeed = undefined;
+      state._pendingSpeedObstacles = null;
+    }
     // Music transitions — driven by per-stage musicTrack field
     if (next.musicTrack) {
       const _fadeMs = (next.musicTrack === 'l4') ? 4000 : 2000;
       musicFadeTo(next.musicTrack, _fadeMs);
     }
+  }
+}
+
+// Called every frame from the main update. Applies a pending speed bump
+// once the obstacle field that existed at advance time has fully passed.
+function _drApplyPendingSpeed() {
+  if (state._pendingSpeed === undefined) return;
+  const snap = state._pendingSpeedObstacles;
+  let anyAlive = false;
+  if (snap && snap.size > 0) {
+    // Refresh: prune uuids that are no longer in activeObstacles (passed/popped).
+    // Cheap because activeObstacles is rarely > ~30 items.
+    const aliveIds = new Set();
+    for (let i = 0; i < activeObstacles.length; i++) aliveIds.add(activeObstacles[i].uuid);
+    for (const uid of snap) {
+      if (aliveIds.has(uid)) { anyAlive = true; break; }
+    }
+  }
+  // Safety deadline override
+  const deadlineHit = (state.elapsed || 0) >= (state._pendingSpeedDeadline || 0);
+  if (!anyAlive || deadlineHit) {
+    state.speed = state._pendingSpeed;
+    state._pendingSpeed = undefined;
+    state._pendingSpeedObstacles = null;
+    state._pendingSpeedDeadline = 0;
   }
 }
 
