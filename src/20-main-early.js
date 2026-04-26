@@ -7277,10 +7277,10 @@ const _CANYON_PRESETS = {
   // updated via Object.assign, so an omitted key inherits the previous preset's
   // value — e.g. mode 2 (_allDark:true) bleeding into mode 4 made the straight
   // canyon render all-dark instead of alternating cyan/dark.
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:true,  _allDark:false },
-  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
-  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false, _allDark:false },
-  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:2.6, _allCyan:false, _allDark:false },
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-500, scrollSpeed:1.0, _allCyan:true,  _allDark:false },
+  2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-500, scrollSpeed:1.0, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
+  3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-500, scrollSpeed:1.0, _allCyan:false, _allDark:false },
+  4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:1, spawnDepth:-500, scrollSpeed:2.6, _allCyan:false, _allDark:false },
   // Mode 5 = EXPERIMENTAL — test bed, B hotkey only, never triggered by sequencer.
   // Has optional ramp fields: sineStartI/Z/FullZ for gradual sine-intensity along Z,
   // halfXStart/Full/StartZ/FullZ for corridor width squeeze along Z.
@@ -7290,7 +7290,7 @@ const _CANYON_PRESETS = {
        sineStartI:0.0,   sineStartZ:-150, sineFullZ:-500,
        halfXOverride:50,
        halfXStart:60,    halfXFull:25, halfXStartZ:-150, halfXFullZ:-500,
-       entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.5,
+       entranceThick:700, entranceSlabs:1, spawnDepth:-500, scrollSpeed:1.5,
        _allCyan:false },
 };
 let _canyonSqueezeRow = 0;
@@ -7874,10 +7874,11 @@ function _createCanyonWalls() {
         const finalZ   = SAFE_Z - entIdx * SPACING;                       // -150,-170,-190
         // L4-recreation canyons (e.g. L3 knife) use _l4SineAtZ for the regular
         // slab center curve. The entrance MUST use the same curve or it lands
-        // ~9-10u off from the corridor opening (entrance built off _canyonXAtZ
-        // anchored to z=-170 produces non-zero sine at z=-150 while _l4SineAtZ
-        // is ~0 there). Match whichever curve the regulars are on.
-        const center   = _canyonTuner._l4Recreation ? _l4SineAtZ(finalZ) : _canyonXAtZ(finalZ);
+        // off from the corridor opening. _l4SineAtZ returns world-zero anchored
+        // sine — we add corridorGapCenter (player's X at canyon start) so the
+        // gate centers on the player like other canyons do via _canyonXAtZ.
+        const _base    = state.corridorGapCenter || 0;
+        const center   = _canyonTuner._l4Recreation ? (_base + _l4SineAtZ(finalZ)) : _canyonXAtZ(finalZ);
         pivot.userData.bakedX    = center + halfX * side;
         pivot.userData.entFinalZ = finalZ; // for trigger check later
         pivot.position.x = pivot.userData.bakedX;
@@ -7887,8 +7888,11 @@ function _createCanyonWalls() {
         // L4-recreation: override center math with L4 sine. Keep rotation at 0
         // (bending replaces rotation) and let the bake function bend inner face.
         const useL4 = _canyonTuner._l4Recreation;
-        const center     = useL4 ? _l4SineAtZ(initZ)             : _canyonXAtZ(initZ);
-        const centerNext = useL4 ? _l4SineAtZ(initZ - SPACING)   : _canyonXAtZ(initZ - SPACING);
+        // L4 sine is world-zero anchored; add corridorGapCenter so corridor
+        // centers on player just like _canyonXAtZ already does.
+        const _baseR     = state.corridorGapCenter || 0;
+        const center     = useL4 ? (_baseR + _l4SineAtZ(initZ))             : _canyonXAtZ(initZ);
+        const centerNext = useL4 ? (_baseR + _l4SineAtZ(initZ - SPACING))   : _canyonXAtZ(initZ - SPACING);
         const halfX      = (_canyonMode === 5) ? _canyonHalfXAtZ(initZ) : _canyonPredictHalfX(0);
         // Init rotation: _canyonXAtZ is correct here — each slab is at a unique Z
         // so the stateless sine naturally gives the right angle per slab.
@@ -8210,7 +8214,7 @@ function _updateCanyonWalls(dt, speed) {
       // sine-wave curves where slabs would otherwise emerge visibly.
       if (m.children[0]) {
         const fadeStart = T.spawnDepth || -250;
-        const fadeEnd   = -80;  // was -150; tighter fade-in keeps distant slabs fogged out
+        const fadeEnd   = -150;  // restored from -80; original working value
         const fadeT     = Math.min(1, Math.max(0, (m.position.z - fadeStart) / (fadeEnd - fadeStart)));
         const mat = m.children[0].material;
         if (mat.emissiveIntensity !== undefined) {
@@ -8253,7 +8257,10 @@ function _updateCanyonWalls(dt, speed) {
           // L4-recreation override: use L4 sine for centerline, bend inner face,
           // keep rotation at 0 (bending replaces yaw).
           const useL4      = _canyonTuner._l4Recreation;
-          const l4Center   = useL4 ? _l4SineAtZ(slabZ) : center;
+          // L4 sine world-zero anchored; add corridorGapCenter on recycle
+          // so newly-recycled slabs stay centered on player like init.
+          const _baseRC    = state.corridorGapCenter || 0;
+          const l4Center   = useL4 ? (_baseRC + _l4SineAtZ(slabZ)) : center;
           m.userData.bakedX = l4Center + halfX * side;
           m.position.x = m.userData.bakedX;
           m.position.z = slabZ;
