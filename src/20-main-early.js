@@ -8859,7 +8859,11 @@ function createPowerupMesh(typeIdx) {
     side:               THREE.DoubleSide,
     blendMode:          THREE.NormalBlending,
   });
-  iconMat.depthWrite = true;
+  // Icon sits INSIDE the cube. With cube using depthWrite=true, the cube's
+  // front face would z-reject the icon. Disable depthTest on the icon and
+  // bump renderOrder so it always draws on top of the cube's interior.
+  iconMat.depthTest = false;
+  iconMat.depthWrite = false;
   _registerHoloMaterial(iconMat);
 
   let iconGeo;
@@ -8868,6 +8872,7 @@ function createPowerupMesh(typeIdx) {
   else if (def.shape === 'ring')  iconGeo = new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.95, POWERUP_ICON_SIZE * 0.18, 10, 28);
   else                            iconGeo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
   const iconMesh = new THREE.Mesh(iconGeo, iconMat);
+  iconMesh.renderOrder = 1; // draw after cube so it shows through
   group.add(iconMesh);
 
   group.userData.typeIdx      = typeIdx;
