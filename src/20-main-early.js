@@ -8167,31 +8167,15 @@ function _updateCanyonWalls(dt, speed) {
   }
 
   // ── Corridor reveal: when nearest entrance slab reaches Z=-210 (front of corridor),
-  //    flip the global flag. Pre-flag: regulars stay frozen at init Z and become
-  //    visible PROGRESSIVELY as the entrance scrolls past their depth (player
-  //    never sees a regular pop in ahead of the entrance). Post-flag: every
-  //    regular is unhidden + the freeze releases so they scroll normally.
+  //    unhide all regular slabs. Before this, regular slabs are frozen in place + invisible.
+  //    After, they scroll/recycle normally. One-shot.
   if (!_canyonWalls._corridorRevealed && !_canyonExiting) {
-    // Find nearest (greatest z) entrance slab — this is the leading edge.
     let nearestEntZ = -Infinity;
     for (const m of _canyonWalls.left) {
       if (m.userData.isEntrance && m.visible && m.position.z > nearestEntZ) nearestEntZ = m.position.z;
     }
-    // Progressive per-slab reveal: unhide regulars that the entrance has
-    // reached or passed. Slabs deeper than the entrance stay hidden until
-    // the entrance reaches their depth. visibility-only — positions stay frozen.
-    if (nearestEntZ > -Infinity) {
-      for (const m of _canyonWalls.left) {
-        if (!m.userData.isEntrance && !m.visible && m.position.z <= nearestEntZ) m.visible = true;
-      }
-      for (const m of _canyonWalls.right) {
-        if (!m.userData.isEntrance && !m.visible && m.position.z <= nearestEntZ) m.visible = true;
-      }
-    }
     if (nearestEntZ >= -210) {
       _canyonWalls._corridorRevealed = true;
-      // Final sweep — anything not yet visible is now made visible (handles
-      // overflow regulars deeper than the entrance's reach).
       _canyonWalls.left.forEach(m => { if (!m.userData.isEntrance) m.visible = true; });
       _canyonWalls.right.forEach(m => { if (!m.userData.isEntrance) m.visible = true; });
       console.log('[CANYON] corridor revealed at entrance Z='+nearestEntZ.toFixed(1));
