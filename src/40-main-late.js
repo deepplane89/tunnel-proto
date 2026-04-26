@@ -695,6 +695,34 @@ function _startPreT4ACanyon() {
   }
 
   console.log('[PRE-T4A] ON for ' + _PRE_T4A_DURATION + 's');
+
+  // ── DIAGNOSTIC: dump everything that controls sine tightness ──
+  // Fires once on canyon start, then every 2s for 10s while inside.
+  // Easy copy/paste back to the agent.
+  (function _preT4ADiag() {
+    const T = _canyonTuner;
+    let n = 0;
+    const dump = () => {
+      const lines = [
+        '════════════ PRE_T4A DIAG (t='+(state.preT4AElapsed||0).toFixed(1)+'s) ════════════',
+        'mode='+_canyonMode+'  speed='+state.speed.toFixed(2)+'  rampPhase='+(state.preT4ARampPhase||'?'),
+        'sine: period='+T.sinePeriod+'  amp='+T.sineAmp+'  speed='+T.sineSpeed+'  intensity='+T.sineIntensity,
+        'sineRamp: startI='+T.sineStartI+'  startZ='+T.sineStartZ+'  fullZ='+T.sineFullZ,
+        'halfX: override='+T.halfXOverride+'  start='+T.halfXStart+'  full='+T.halfXFull,
+        'scrollSpeed='+T.scrollSpeed+'  spawnDepth='+T.spawnDepth+'  entranceSlabs='+T.entranceSlabs,
+        'phase='+_canyonSinePhase.toFixed(3)+'  corridorGapCenter='+(state.corridorGapCenter||0).toFixed(2),
+        'effectiveScroll(u/s)='+(state.speed*T.scrollSpeed).toFixed(1)+'  cyclesPerSec='+((state.speed*T.scrollSpeed)/T.sinePeriod).toFixed(3),
+        '════════════════════════════════════════════════',
+      ];
+      console.log(lines.join('\n'));
+      window._preT4ADiagLast = lines.join('\n');
+    };
+    dump();
+    const iv = setInterval(() => {
+      if (!state.preT4ACanyon || ++n >= 5) { clearInterval(iv); return; }
+      dump();
+    }, 2000);
+  })();
 }
 
 function _stopPreT4ACanyon() {
