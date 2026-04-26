@@ -9288,7 +9288,8 @@ function _playThunderRotating() {
   if (!audioCtx || state.muted) return;
   // Skip if previous clip is still playing (no overlap allowed).
   if (_thunderActiveSrc) return;
-  const baseVol = 0.55 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+  // Moderately quieter than synth boom so it sits as a longer-tail rumble layer.
+  const baseVol = 0.40 * (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (baseVol <= 0) return;
   const name = (_thunderNextIdx === 0) ? 'thunder1' : 'thunder2';
   const buf  = (typeof _sfxBuffers !== 'undefined') ? _sfxBuffers[name] : null;
@@ -9315,8 +9316,11 @@ function _playLightningStrike() {
   if (!audioCtx || state.muted) return;
   _ensureCtxRunning();
   // Layer real-thunder MP3 on top of synth boom (rotates 1↔2, never overlaps itself).
+  // While a thunder clip is playing, _playThunderRotating() returns silently,
+  // so mid-clip strikes get the synth boom only — the long clip plays out in full.
   _playThunderRotating();
-  const vol = 0.22 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+  // Synth boom — moderate bump from 0.22 so the every-strike layer has more body.
+  const vol = 0.32 * (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (vol <= 0) return;
   const now = audioCtx.currentTime;
 
