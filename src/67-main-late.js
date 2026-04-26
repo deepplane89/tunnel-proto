@@ -844,7 +844,7 @@ function startDeathRun() {
       if (roar && !state.muted) {
         _ensureCtxRunning();
         roar.currentTime = 0;
-        roar.volume = 0.08;
+        roar.volume = 0.22; // was 0.08 — user reported too quiet
         roar.play().catch(() => {});
       }
       beginThrusterSputter(); // sputtering ramp-up to full power
@@ -1100,10 +1100,14 @@ function _drSequencerTick(dt) {
         state.seqStageElapsed >= stage.duration - 1.5) {
       state._restBeepFired = true;
       if (!state.muted) {
-        playSFX(440, 0.08, 'square', 0.25);
-        setTimeout(() => playSFX(550, 0.08, 'square', 0.25), 200);
-        setTimeout(() => playSFX(660, 0.10, 'square', 0.3), 400);
-        // Thruster roar fires right as speed kicks in
+        // Klaxon countdown — 3 hits + roar locked to a 500ms grid (120 BPM).
+        // Beeps trigger when stage has 1500ms left; roar lands at +1500ms
+        // which is the exact moment _drSeqAdvance() bumps the speed tier.
+        // Sequence: beep0, beep500, beep1000, ROAR1500 (= speed change beat).
+        _playBuffer('klaxon', 0.18, 1.0, null);
+        setTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
+        setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
+        // Thruster roar fires right as speed kicks in (beat 4 of the countdown).
         setTimeout(() => {
           const _roar = document.getElementById('engine-roar');
           if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.25; _roar.play().catch(()=>{}); }
@@ -1363,9 +1367,11 @@ function _drSequencerTick(dt) {
         state.seqStageElapsed >= stage.duration - 1.5) {
       state._restBeepFired = true;
       if (!state.muted) {
-        playSFX(440, 0.08, 'square', 0.3);
-        setTimeout(() => playSFX(550, 0.08, 'square', 0.3), 200);
-        setTimeout(() => playSFX(660, 0.10, 'square', 0.35), 400);
+        // Klaxon countdown — 500ms grid (120 BPM), roar lands on the
+        // speed-change beat. Same cadence as the corridor handler above.
+        _playBuffer('klaxon', 0.18, 1.0, null);
+        setTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
+        setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         setTimeout(() => {
           const _roar = document.getElementById('engine-roar');
           if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.25; _roar.play().catch(()=>{}); }
@@ -2552,7 +2558,8 @@ function checkDeathRunSpeed() {
       state._drSpeedBeepFired = false;
       hapticMedium();
       const roar = document.getElementById('engine-roar');
-      if (roar && !state.muted) { roar.currentTime = 0; roar.volume = 0.06; roar.play().catch(() => {}); }
+      // Speed-tier-up roar burst — was 0.06, way too quiet. Bumped to 0.22.
+      if (roar && !state.muted) { roar.currentTime = 0; roar.volume = 0.22; roar.play().catch(() => {}); }
       state._thrusterFlare = 2.0;
     }
   } else if (safeForSpeed && targetTier !== state.deathRunSpeedTier) {
@@ -2563,7 +2570,8 @@ function checkDeathRunSpeed() {
       state._drSpeedBeepFired = false;
       hapticMedium();
       const roar = document.getElementById('engine-roar');
-      if (roar && !state.muted) { roar.currentTime = 0; roar.volume = 0.06; roar.play().catch(() => {}); }
+      // Speed-tier-up roar burst (alt branch) — matched to 0.22.
+      if (roar && !state.muted) { roar.currentTime = 0; roar.volume = 0.22; roar.play().catch(() => {}); }
       state._thrusterFlare = 2.0;
     }
   }

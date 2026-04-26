@@ -127,6 +127,7 @@ function _initSFXBuffers() {
   _loadSFXBuffer('whoosh-release', './assets/audio/whoosh-release.mp3');
   _loadSFXBuffer('thunder1', './assets/audio/thunder1.mp3');
   _loadSFXBuffer('thunder2', './assets/audio/thunder2.mp3');
+  _loadSFXBuffer('klaxon',   './assets/audio/klaxon.mp3');
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
 const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release' };
