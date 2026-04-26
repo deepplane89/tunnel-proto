@@ -9155,6 +9155,8 @@ function _initSFXBuffers() {
   _loadSFXBuffer('nearmiss', './assets/audio/nearmiss.mp3');
   _loadSFXBuffer('whoosh', './assets/audio/whoosh2.mp3');
   _loadSFXBuffer('whoosh-release', './assets/audio/whoosh-release.mp3');
+  _loadSFXBuffer('thunder1', './assets/audio/thunder1.mp3');
+  _loadSFXBuffer('thunder2', './assets/audio/thunder2.mp3');
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
 const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release' };
@@ -9275,10 +9277,45 @@ function playRetryWhoosh() {
   src.stop(now + dur);
 }
 
+// ── Rotating thunder MP3 layer ──
+// Plays thunder1.mp3 / thunder2.mp3 in alternation on each lightning strike.
+// If the previously-triggered clip is still playing, this strike is silent
+// (no overlap, no clipping). Once it ends, the NEXT strike plays the OTHER
+// clip, and so on.
+let _thunderActiveSrc = null;   // active AudioBufferSourceNode (or null when free)
+let _thunderNextIdx   = 0;       // 0 -> thunder1 next, 1 -> thunder2 next
+function _playThunderRotating() {
+  if (!audioCtx || state.muted) return;
+  // Skip if previous clip is still playing (no overlap allowed).
+  if (_thunderActiveSrc) return;
+  const baseVol = 0.55 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (baseVol <= 0) return;
+  const name = (_thunderNextIdx === 0) ? 'thunder1' : 'thunder2';
+  const buf  = (typeof _sfxBuffers !== 'undefined') ? _sfxBuffers[name] : null;
+  // Buffer not decoded yet — advance rotation anyway so we don't get stuck on idx 0.
+  if (!buf) { _thunderNextIdx = 1 - _thunderNextIdx; return; }
+  _ensureCtxRunning();
+  const src  = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const gain = audioCtx.createGain();
+  gain.gain.value = Math.min(1, baseVol);
+  src.connect(gain).connect(audioCtx.destination);
+  src.onended = () => {
+    if (_thunderActiveSrc === src) _thunderActiveSrc = null;
+  };
+  _thunderActiveSrc = src;
+  // Advance rotation NOW so even if onended is delayed, the next strike
+  // (after this clip ends) gets the other file.
+  _thunderNextIdx = 1 - _thunderNextIdx;
+  src.start();
+}
+
 // ── Lightning strike: buzzy arc + deep boom two-layer SFX ──
 function _playLightningStrike() {
   if (!audioCtx || state.muted) return;
   _ensureCtxRunning();
+  // Layer real-thunder MP3 on top of synth boom (rotates 1↔2, never overlaps itself).
+  _playThunderRotating();
   const vol = 0.22 * (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (vol <= 0) return;
   const now = audioCtx.currentTime;
