@@ -9066,8 +9066,11 @@ function createPowerupMesh(typeIdx) {
   // ── Outer holo cube — EXACTLY matches Mancini's demo defaults (drive-through, DoubleSide) ──
   // Live demo: https://threejs-vanilla-holographic-material.vercel.app/
   // (Fresnel=0.7, Scanline=3.7, Brightness=1.6, Speed=0.18, Opacity=0.7)
+  // NOTE: Cube hologramColor is HARDCODED to Mancini-cyan so all 4 powerup
+  // cubes look identical (clean cyan). Type is conveyed by the inner icon
+  // shape+color, not the cube tint. Keeps demo-accurate look on all keys.
   const cubeMat = new HolographicMaterial({
-    hologramColor:      def.color,
+    hologramColor:      '#00d5ff',
     fresnelAmount:      0.70,
     fresnelOpacity:     1.00,
     scanlineSize:       3.70,
@@ -9944,12 +9947,10 @@ function getPooledPowerup(typeIdx) {
       const cubeMesh = p.userData._cubeMesh;
       const iconMesh = p.userData._iconMesh;
 
-      // Cube material: just retint via hologramColor uniform. Geometry is always BoxGeometry.
+      // Cube material: hologramColor is locked to Mancini-cyan in createPowerupMesh
+      // and intentionally NOT retinted per type — the icon conveys type, not the cube.
       // We DO NOT reset other uniforms here — the dev tuner may have changed them globally
       // via _broadcastHoloUniform, and we want those to persist across spawns.
-      if (cubeMesh && cubeMesh.material && cubeMesh.material.uniforms) {
-        cubeMesh.material.uniforms.hologramColor.value.set(def.color);
-      }
 
       // Icon material: retint, and swap geometry only if shape changed.
       if (iconMesh && iconMesh.material && iconMesh.material.uniforms) {

@@ -305,12 +305,10 @@ function getPooledPowerup(typeIdx) {
       const cubeMesh = p.userData._cubeMesh;
       const iconMesh = p.userData._iconMesh;
 
-      // Cube material: just retint via hologramColor uniform. Geometry is always BoxGeometry.
+      // Cube material: hologramColor is locked to Mancini-cyan in createPowerupMesh
+      // and intentionally NOT retinted per type — the icon conveys type, not the cube.
       // We DO NOT reset other uniforms here — the dev tuner may have changed them globally
       // via _broadcastHoloUniform, and we want those to persist across spawns.
-      if (cubeMesh && cubeMesh.material && cubeMesh.material.uniforms) {
-        cubeMesh.material.uniforms.hologramColor.value.set(def.color);
-      }
 
       // Icon material: retint, and swap geometry only if shape changed.
       if (iconMesh && iconMesh.material && iconMesh.material.uniforms) {
