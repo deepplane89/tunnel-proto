@@ -807,7 +807,7 @@ function startDeathRun() {
       if (eng && !state.muted) {
         _ensureCtxRunning();
         eng.currentTime = 0;
-        eng.volume = 0.12;
+        eng.volume = 0.32;
         eng.play().catch(() => {});
       }
     }, 8500));
@@ -3010,7 +3010,7 @@ function showIntroText() {
     if (eng && !state.muted) {
       _ensureCtxRunning();
       eng.currentTime = 0;
-      eng.volume = 0.12;
+      eng.volume = 0.32;
       eng.play().catch(() => {});
     }
   }, 8500));
@@ -4556,7 +4556,7 @@ function update(dt) {
       shieldMat.uniforms.uReveal.value = 1.0;
       shieldWireMat.opacity = 0;
       shieldLight.intensity = 0;
-      const _shExpSfx = document.getElementById('shield-expire-sfx'); if (_shExpSfx) { _shExpSfx.currentTime = 0; _shExpSfx.play().catch(()=>{}); }
+      const _shExpSfx = document.getElementById('shield-expire-sfx'); if (_shExpSfx) { _shExpSfx.currentTime = 0; _shExpSfx.volume = 0.30; _shExpSfx.play().catch(()=>{}); }
     }
   }
   if (state.invincibleTimer > 0) {
