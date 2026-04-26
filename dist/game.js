@@ -185,6 +185,9 @@ class HolographicMaterial extends THREE.ShaderMaterial {
           finalColor = scanlineMix.rgb * blink + fresnelEffect;
         }
 
+        // Clamp under bloom threshold (1.0) so the post-process bloom pass
+        // doesn't pick up the cube and ACES-desaturate it to yellow/white.
+        finalColor = min(finalColor, vec3(0.95));
         gl_FragColor = vec4( finalColor, hologramOpacity );
       }
     `;
@@ -207,6 +210,10 @@ class HolographicMaterial extends THREE.ShaderMaterial {
     this.depthWrite  = false;
     this.blending    = parameters.blendMode !== undefined ? parameters.blendMode : THREE.AdditiveBlending;
     this.side        = parameters.side      !== undefined ? parameters.side      : THREE.FrontSide;
+    // Skip ACES tone mapping so saturated cyan stays cyan instead of
+    // desaturating toward yellow/white. Combined with shader clamp <1.0
+    // this also keeps the bloom pass from picking up the cube.
+    this.toneMapped  = false;
   }
 
   // Time tick — called per frame from the main update loop.
