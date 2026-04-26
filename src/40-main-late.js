@@ -1425,9 +1425,13 @@ function spawnL5CorridorRow() {
     halfX = halfX + (L5C_WIDE_X - halfX) * ease;
   }
 
-  // Sine-driven center — amplitude and period evolve progressively
+  // Sine-driven center — amplitude and period evolve progressively.
+  // Anchored on the ship's X at activation (see L5_SINE_CORRIDOR.activate which
+  // sets state._l5CenterAnchor) so the squeeze forms around the player instead
+  // of world origin. Sine sweep oscillates relative to this anchor.
+  const _l5Anchor = (typeof state._l5CenterAnchor === 'number') ? state._l5CenterAnchor : 0;
   state.l5SineT = (state.l5SineT || 0);
-  let center = 0;
+  let center = _l5Anchor;
   if (rowsDone >= L5C_CLOSE_ROWS + L5C_STRAIGHT_ROWS) {
     const curveRows = rowsDone - (L5C_CLOSE_ROWS + L5C_STRAIGHT_ROWS);
     const ampT   = Math.min(1, curveRows / L5C_AMP_RAMP);
@@ -1435,10 +1439,10 @@ function spawnL5CorridorRow() {
     const perT   = Math.min(1, curveRows / L5C_PERIOD_RAMP);
     const period = L5C_PERIOD_START - (L5C_PERIOD_START - L5C_PERIOD_MIN) * (perT * perT);
     state.l5SineT += (2 * Math.PI) / period;
-    center = amp * Math.sin(state.l5SineT);
+    center = _l5Anchor + amp * Math.sin(state.l5SineT);
   } else {
     state.l5SineT = 0;
-    center = 0;
+    center = _l5Anchor;
   }
   state.corridorGapCenter = center; // share for bend detection
 

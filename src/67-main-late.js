@@ -679,6 +679,7 @@ function startDeathRun() {
   state._seqVibeApplied    = -1;
   state._activeSunOverride = null; // per-stage sun-only override (e.g. S6_RINGS)
   state._l4CenterAnchor    = 0;    // ship X captured on L4 corridor activate
+  state._l5CenterAnchor    = 0;    // ship X captured on L5 corridor activate
   state._seqCorridorStarted = false;
   state._seqZipTimer       = 0;
   state._seqZipBurstNum    = 0;
@@ -1283,7 +1284,10 @@ function _drSequencerTick(dt) {
         state.zipperRowsLeft = 0;
       }
     } else {
-      state._seqSpawnMode = 'cones';
+      // No random cones during this stage — it's pure zipper bursts. The
+      // previous 'cones' mode let cones spawn in the inter-burst gaps and
+      // overlap visually with zipper rows still scrolling toward the ship.
+      state._seqSpawnMode = 'none';
       // Escalating burst rhythm: 1 zip → 2s rest → 2 zips → 2s rest → 3 zips → ...
       // Burst N spawns N zipper rows (N = _seqZipBurstNum, starts at 1, increments
       // after each burst completes). Fixed 2s rest between bursts.
@@ -1832,6 +1836,9 @@ const DR_MECHANIC_FAMILIES = {
       state.l5CorridorRowsDone  = 0;
       state.l5SineT             = 0;
       state._drL5MaxRows        = rows;
+      // Anchor corridor center on the ship's X at activation so the squeeze
+      // forms around the player instead of world origin (matches L4 behaviour).
+      state._l5CenterAnchor     = state.shipX || 0;
       state.speed = BASE_SPEED * 2.5; // L5 corridor speed
       state._drSpeedFloor = 2.5; // lock floor — speed never drops below this after L5
     },
@@ -4914,6 +4921,9 @@ function update(dt) {
         state.l5CorridorRowsDone  = 0;
         state.l5CorridorSpawnZ    = -7;
         state.l5SineT             = 0;
+        // Campaign: explicit anchor=0 (world origin) so spawnL5CorridorRow
+        // doesn't reuse a stale shipX-anchor from a prior DR L5 activation.
+        state._l5CenterAnchor     = 0;
       }
     } else if (state.l5PreZipperRandom > 0) {
       // Entry buffer: random cones before first zipper fires

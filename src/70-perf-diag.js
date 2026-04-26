@@ -406,6 +406,10 @@ function animate() {
   sunCapMesh.position.x   = _sunX;
   sunGlowSprite.position.x = _sunX;
   sunRimGlow.position.x   = _sunX;
+  // Tendril groups are anchored at the sun base — they must track shipX too
+  // or they visibly disconnect from the sun when the ship is laterally offset.
+  l5fGroup.position.x     = _sunX;
+  auroraGroup.position.x  = _sunX;
   const _camWP = camera.getWorldPosition(_sunBillboardV3);
   sunGlowSprite.lookAt(_camWP);
   sunCapMesh.lookAt(_camWP);

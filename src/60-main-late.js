@@ -257,6 +257,7 @@ function _drFullStateWipe() {
   //    desync from the still-painted sun-shader uniforms when a hotkey jump
   //    lands on a stage that shares the same vibeIdx and has no override.
   state._l4CenterAnchor    = 0;
+  state._l5CenterAnchor    = 0;
 }
 
 window.addEventListener('keydown', e => {
