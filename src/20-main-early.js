@@ -1338,8 +1338,11 @@ let camTargetX = 0;
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 
+// Bloom resolution: /2 desktop, /3 mobile. Bloom is a blur — lower res is
+// visually invisible but cuts ~50% of bloom's per-frame fragment work on phones.
+const _BLOOM_DIV = _mobAA ? 3 : 2;
 const bloom = new UnrealBloomPass(
-  new THREE.Vector2(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2)),
+  new THREE.Vector2(Math.floor(window.innerWidth / _BLOOM_DIV), Math.floor(window.innerHeight / _BLOOM_DIV)),
   0.35,  // strength — subtle, not overpowering
   0.25,  // radius — tight so glow hugs the source
   1.0    // threshold — only HDR emissives bloom (shield uses toneMapped:false)
@@ -1464,7 +1467,7 @@ function applyPerfMode() {
     );
   } else {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    bloom.resolution.set(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2));
+    bloom.resolution.set(Math.floor(window.innerWidth / _BLOOM_DIV), Math.floor(window.innerHeight / _BLOOM_DIV));
   }
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
@@ -2993,7 +2996,8 @@ function _killFlash() {
 //  EXPLOSION LAYER 3: SHIELD-STYLE HEX SHOCKWAVE DISC
 //  Flat disc on XZ, hex grid + noise dissolve ripping outward
 // ═══════════════════════════════════════════════════
-const _shockDiscGeo = new THREE.CircleGeometry(1.0, 64);
+// Shockwave disc: 32 segs is identical to 64 at this size (one-shot effect)
+const _shockDiscGeo = new THREE.CircleGeometry(1.0, _mobAA ? 32 : 48);
 _shockDiscGeo.rotateX(-Math.PI / 2); // lay flat on XZ plane
 const _shockDiscMat = new THREE.ShaderMaterial({
   uniforms: {
@@ -3492,7 +3496,10 @@ const SUN_Y   = -2;    // low — just peeking above the floor plane
 const SUN_R   = 112;   // big radius (doubled)
 
 // Core sphere — emissive solid disc look
-const sunGeo = new THREE.SphereGeometry(SUN_R * 0.95, 64, 64);
+// Sun: silhouette-only (always far). 32x32 is visually identical to 64x64
+// and saves ~6k tris. _mobAA is set on mobile UAs (line 1106).
+const _SUN_SEG = _mobAA ? 32 : 48;
+const sunGeo = new THREE.SphereGeometry(SUN_R * 0.95, _SUN_SEG, _SUN_SEG);
 const sunMat = new THREE.ShaderMaterial({
   uniforms: {
     uSunColor: { value: new THREE.Color(LEVELS[0].sunColor) },
@@ -3870,7 +3877,8 @@ scene.add(sunMesh);
 // Sun cap disc — opaque circle sitting just in front of the sun sphere (Z+4),
 // renderOrder=1 so it draws AFTER the tendrils (renderOrder=0) and paints over
 // any tendril roots that bleed onto the sun face. Color tracks sunColor.
-const sunCapGeo = new THREE.CircleGeometry(SUN_R * 0.95, 64);
+// Sun cap circle: 32 segs is indistinguishable from 64 at this size/distance
+const sunCapGeo = new THREE.CircleGeometry(SUN_R * 0.95, _mobAA ? 32 : 48);
 const sunCapMat = new THREE.ShaderMaterial({
   uniforms: {
     uSunColor: { value: new THREE.Color(LEVELS[0].sunColor) },
@@ -6604,7 +6612,9 @@ const _shieldHitPositions = Array.from({ length: 6 }, () => new THREE.Vector3(0,
 const _shieldHitTimes     = new Array(6).fill(-999);
 let _shieldHitIdx = 0;
 
-const shieldGeo = new THREE.SphereGeometry(2.4, 64, 64);
+// Shield bubble: shader is animated + translucent, faceting is invisible.
+// 32x32 saves ~6k tris while shield is up. Desktop keeps 48x48.
+const shieldGeo = new THREE.SphereGeometry(2.4, _mobAA ? 32 : 48, _mobAA ? 32 : 48);
 const shieldMat = new THREE.ShaderMaterial({
   uniforms: {
     uTime:                { value: 0 },
