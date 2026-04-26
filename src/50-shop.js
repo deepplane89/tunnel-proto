@@ -334,7 +334,7 @@ function applyPowerup(typeIdx) {
       shieldMesh.visible = false;
       shieldWire.visible = false;
       shieldLight.intensity = 0;
-      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.30; _shActSfx.play().catch(()=>{}); }
+      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
       break;
     }
     case 'laser': {

@@ -297,7 +297,7 @@ window.addEventListener('keydown', e => {
     state._introLiftActive = true;
     state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.7; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
   }
   // Escape now pauses (handled above) — no longer returns to title
   // Hold-to-spin roll — up/down keys spin ship on Z axis while held
@@ -588,7 +588,7 @@ window.addEventListener('keyup', e => {
         state._introLiftActive = true;
         state._introLiftTimer = 0;
         const _roar = document.getElementById('engine-roar');
-        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.7; _roar.play().catch(()=>{}); }
+        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
         return;
       }
       // Start game if on title/dead — mark this touch as game-starting (ignore swipes from it)

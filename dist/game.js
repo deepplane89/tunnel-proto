@@ -12775,7 +12775,7 @@ function applyPowerup(typeIdx) {
       shieldMesh.visible = false;
       shieldWire.visible = false;
       shieldLight.intensity = 0;
-      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.30; _shActSfx.play().catch(()=>{}); }
+      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
       break;
     }
     case 'laser': {
@@ -13222,7 +13222,7 @@ window.addEventListener('keydown', e => {
     state._introLiftActive = true;
     state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.7; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
   }
   // Escape now pauses (handled above) — no longer returns to title
   // Hold-to-spin roll — up/down keys spin ship on Z axis while held
@@ -13513,7 +13513,7 @@ window.addEventListener('keyup', e => {
         state._introLiftActive = true;
         state._introLiftTimer = 0;
         const _roar = document.getElementById('engine-roar');
-        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.7; _roar.play().catch(()=>{}); }
+        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
         return;
       }
       // Start game if on title/dead — mark this touch as game-starting (ignore swipes from it)
@@ -15077,7 +15077,7 @@ function startDeathRun() {
       if (eng && !state.muted) {
         _ensureCtxRunning();
         eng.currentTime = 0;
-        eng.volume = 0.32;
+        eng.volume = 0.55;
         eng.play().catch(() => {});
       }
     }, 8500));
@@ -15125,7 +15125,7 @@ function startDeathRun() {
       if (roar && !state.muted) {
         _ensureCtxRunning();
         roar.currentTime = 0;
-        roar.volume = 0.22; // was 0.08 — user reported too quiet
+        roar.volume = 0.16; // launch roar — was 0.22 too loud
         roar.play().catch(() => {});
       }
       beginThrusterSputter(); // sputtering ramp-up to full power
@@ -15415,7 +15415,7 @@ function _drSequencerTick(dt) {
         // Thruster roar fires right as speed kicks in (beat 4 of the countdown).
         setTimeout(() => {
           const _roar = document.getElementById('engine-roar');
-          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.25; _roar.play().catch(()=>{}); }
+          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
         }, 1500);
       }
     }
@@ -15682,7 +15682,7 @@ function _drSequencerTick(dt) {
         setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         setTimeout(() => {
           const _roar = document.getElementById('engine-roar');
-          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.25; _roar.play().catch(()=>{}); }
+          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
         }, 1500);
       }
     }
@@ -17280,7 +17280,7 @@ function showIntroText() {
     if (eng && !state.muted) {
       _ensureCtxRunning();
       eng.currentTime = 0;
-      eng.volume = 0.32;
+      eng.volume = 0.55;
       eng.play().catch(() => {});
     }
   }, 8500));
@@ -18826,7 +18826,7 @@ function update(dt) {
       shieldMat.uniforms.uReveal.value = 1.0;
       shieldWireMat.opacity = 0;
       shieldLight.intensity = 0;
-      const _shExpSfx = document.getElementById('shield-expire-sfx'); if (_shExpSfx) { _shExpSfx.currentTime = 0; _shExpSfx.volume = 0.30; _shExpSfx.play().catch(()=>{}); }
+      const _shExpSfx = document.getElementById('shield-expire-sfx'); if (_shExpSfx) { _shExpSfx.currentTime = 0; _shExpSfx.volume = 0.18; _shExpSfx.play().catch(()=>{}); }
     }
   }
   if (state.invincibleTimer > 0) {
