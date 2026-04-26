@@ -44,8 +44,25 @@
     }
   }
   </script>
+<style id="app-loader-style">
+  /* Inline so loader paints on first byte (before stylesheet decode) */
+  #app-loader{position:fixed;inset:0;z-index:99999;background:#050614;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;color:#00f0ff;transition:opacity .6s ease}
+  #app-loader.hide{opacity:0;pointer-events:none}
+  #app-loader-title{font-size:clamp(28px,6vw,52px);letter-spacing:6px;text-shadow:0 0 18px #00f0ff,0 0 36px rgba(0,240,255,.4);margin-bottom:32px;animation:al-pulse 2.4s ease-in-out infinite}
+  #app-loader-bar{width:min(60vw,360px);height:4px;background:rgba(0,240,255,.15);border-radius:2px;overflow:hidden;box-shadow:0 0 10px rgba(0,240,255,.3)}
+  #app-loader-fill{height:100%;width:0%;background:linear-gradient(90deg,#00f0ff,#ff2d78);transition:width .35s ease;box-shadow:0 0 12px #00f0ff}
+  #app-loader-status{margin-top:14px;font-size:11px;letter-spacing:3px;opacity:.55;text-transform:uppercase}
+  @keyframes al-pulse{0%,100%{opacity:.85}50%{opacity:1}}
+</style>
 </head>
 <body>
+
+<!-- ── BOOT LOADER (hidden once all critical assets ready) ─── -->
+<div id="app-loader" role="status" aria-label="Loading">
+  <div id="app-loader-title">JET HORIZON</div>
+  <div id="app-loader-bar"><div id="app-loader-fill"></div></div>
+  <div id="app-loader-status">BOOTING</div>
+</div>
 
 <!-- ── TITLE SCREEN ─────────────────────────────── -->
 <div id="title-screen" class="overlay">
@@ -525,6 +542,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1777243100"></script>
+<script type="module" src="./dist/game.js?v=1777249800"></script>
 </body>
 </html>

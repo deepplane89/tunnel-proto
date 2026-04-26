@@ -1116,8 +1116,22 @@ const scene  = new THREE.Scene();
 // ── Milky Way panorama sky — full-screen NDC quad above stars, below sun ──
 // Uses same NDC passthrough as star shader so it fills the screen independent of camera
 const _skyQuadGeo = new THREE.PlaneGeometry(2, 2);
-const _skyPanoTex = new THREE.TextureLoader().load('assets/images/milkyway-pano.jpg');
+const _skyPanoTex = new THREE.TextureLoader().load('assets/images/milkyway-pano.jpg', () => {
+  if (window.__loadGate) window.__loadGate.setStatus('SKYBOX', 30);
+});
 _skyPanoTex.colorSpace = THREE.SRGBColorSpace;
+// Mobile anisotropy clamp — GPU max can be wasteful (e.g. 16x). 4x is plenty for skybox.
+try { if (typeof _mobAA !== 'undefined' && _mobAA) _skyPanoTex.anisotropy = 4; } catch(e) {}
+// Track skybox load for boot gate
+if (window.__loadGate) {
+  window.__loadGate.add('skybox', new Promise(res => {
+    if (_skyPanoTex.image && _skyPanoTex.image.complete) return res();
+    const iv = setInterval(() => {
+      if (_skyPanoTex.image && _skyPanoTex.image.complete) { clearInterval(iv); res(); }
+    }, 50);
+    setTimeout(() => { clearInterval(iv); res(); }, 8000); // hard timeout safety
+  }));
+}
 const _skyQuadMat = new THREE.ShaderMaterial({
   uniforms: {
     uTex:        { value: _skyPanoTex },
@@ -2078,7 +2092,18 @@ scene.add(floorMesh);
 
 const waterNormals = new THREE.TextureLoader().load('assets/images/waternormals.jpg', tex => {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  if (_mobAA) tex.anisotropy = 4; // mobile aniso clamp — 4x is plenty for tiled normals
+  if (window.__loadGate) window.__loadGate.setStatus('WATER', 50);
 });
+if (window.__loadGate) {
+  window.__loadGate.add('waternormals', new Promise(res => {
+    if (waterNormals.image && waterNormals.image.complete) return res();
+    const iv = setInterval(() => {
+      if (waterNormals.image && waterNormals.image.complete) { clearInterval(iv); res(); }
+    }, 50);
+    setTimeout(() => { clearInterval(iv); res(); }, 8000);
+  }));
+}
 
 const waterGeo  = new THREE.PlaneGeometry(1400, 700, 4, 4);
 const mirrorMesh = new Water(waterGeo, {
@@ -5032,7 +5057,16 @@ const shipFireMeshes = []; // 'fire' and 'fire1' GLTF meshes (engine exhaust geo
 // _prebuiltSkins: populated inside gltfLoader.load callback; declared here so applySkin can access it
 let _prebuiltSkins = [];
 const gltfLoader = new GLTFLoader();
+// Track default ship load for boot gate
+let _shipLoadResolve = null;
+if (window.__loadGate) {
+  window.__loadGate.add('default_ship', new Promise(res => {
+    _shipLoadResolve = res;
+    setTimeout(() => res(), 12000); // hard timeout safety
+  }));
+}
 gltfLoader.load('./assets/ships/default_ship.glb', (gltf) => {
+  if (window.__loadGate) window.__loadGate.setStatus('SHIP', 70);
   const model = gltf.scene;
   // New ship GLB: Sketchfab export — root matrices handle Y->Z-up conversion.
   // Ship nose points toward +X in model space; rotate so it faces -Z (away from camera).
@@ -5292,6 +5326,9 @@ normal = _dbn;`;
 
   // ── TITLE SHIP PREVIEW: clone into separate titleScene ──────────────
   initTitleShipPreview(model);
+
+  // Boot gate: ship is the gating asset — resolve last
+  if (typeof _shipLoadResolve === 'function') _shipLoadResolve();
 });
 
 // ── TITLE 3D SHIP PREVIEW ────────────────────────────────────────────────
@@ -8730,7 +8767,8 @@ function createCoinMesh() {
   const group = new THREE.Group();
 
   // ── Main coin body: thick disc with bevelled edges ──
-  const bodyGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.14, 32);
+  // Coins fly past fast — 32 radial segs is overkill. Mobile gets 20 (silhouette indistinguishable).
+  const bodyGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.14, _mobAA ? 20 : 32);
   const bodyMat = new THREE.MeshStandardMaterial({
     color: 0xffd700,
     emissive: 0xffa500,
