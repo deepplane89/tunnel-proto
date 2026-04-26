@@ -10301,7 +10301,7 @@ const _PRE_T4A_CANYON_TUNER = {
   darkClearcoat: 0.4, darkEmi: 0.9,
   lightIntensity: 1,
   halfXOverride: 50,
-  entranceThick: 700, entranceSlabs: 1, spawnDepth: -500,
+  entranceThick: 700, entranceSlabs: 1, spawnDepth: -250,
   sineIntensity: 0.3, sineAmp: 120, sinePeriod: 330, sineSpeed: 1,
   _allCyan: false, _allDark: false,
   _l4Recreation: false, _l4RampCompress: 1.45, _l4AmpScale: 1, _l4HalfX: 8, _l4SlabW: 40,
