@@ -641,6 +641,13 @@ function startDeathRun() {
   startGame();
   _skipL1Intro = false;
 
+  // Re-apply DR physics — startGame() falls into the else branch (not JL,
+  // not tutorial) and resets _bankMax to 0.03 (campaign default). DR/main
+  // mode wants the same 0.06 bank max as Jet Lightning so the ship banks
+  // hard enough through the high-speed lateral moves. Mirrors the JL
+  // re-apply block in startJetLightning().
+  _bankMax = 0.06;
+
   state.isDeathRun      = true;
   state.startedFromL1   = false;
   state.deathRunVibeIdx = 0;
