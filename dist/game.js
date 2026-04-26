@@ -15153,7 +15153,10 @@ const DR_SEQUENCE = [
   { name: 'S4_WALLS_RAND',    type: 'angled_walls',  duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2 },
   // Canyon D — L3 knife canyon variant w/ snap LOCKED at 0.1 (no oscillation,
   // max-jagged the whole 40s). Distinct feel from CC's oscillating knife.
-  { name: 'CD_CANYON',        type: 'corridor', family: 'L3_KNIFE_LOCKED', speed: 2.0, vibeIdx: 2, physTier: 2 },
+  // CD_CANYON: was L3_KNIFE_LOCKED (snap=0.1) but the locked-snap entrance had
+  // alignment issues. Reverted to PRE_T4A_CANYON (working canyon family).
+  // L3_KNIFE_LOCKED family code is preserved below for future re-enable.
+  { name: 'CD_CANYON',        type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2 },
   { name: 'CD_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 2 },
 
   // Stage 5 — angled walls (structured bursts)
