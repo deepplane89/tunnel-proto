@@ -7599,7 +7599,7 @@ function _bakeSlabCurveForL4(pivot, slabZ, side, anchorX) {
 }
 // =========================================================================
 
-function _buildCanyonSlabGeo(seed, thickOverride) {
+function _buildCanyonSlabGeo(seed, thickOverride, snapOverride) {
   // Thick rectangular block: flat back face, angular inner face, profile-shaped cross-section.
   // Inner face verts get independent X jitter + quantized snap → flat crystalline facets.
   // Non-indexed triangle soup → computeVertexNormals gives true flat normals per face.
@@ -7613,7 +7613,12 @@ function _buildCanyonSlabGeo(seed, thickOverride) {
   const COLS  = T.cols;
   const ROWS  = T.rows;
   const DISP  = T.disp;
-  const SNAP  = T.snap;
+  // snapOverride lets a caller (e.g. entrance bake on the snap-locked L3 knife
+  // variant where T.snap=0.1) build a single slab with a different snap value.
+  // Without this, T.snap=0.1 would round every inner-face row X to multiples of
+  // 10, collapsing the 7-row profile into ~3 visible horizontal cliff bands —
+  // very obvious on the 700-thick entrance slab. Regular slabs still use T.snap.
+  const SNAP  = (snapOverride !== undefined) ? snapOverride : T.snap;
 
   function profileX(v) {
     if(v < 0.15) return T.footX  + v/0.15*(T.sweepX - T.footX);
@@ -7771,7 +7776,13 @@ function _createCanyonWalls() {
     // alternation drifts (looks like it 'goes all cyan' partway through).
     const posIdx = Math.round(-zPos / SPACING);
     const isCyan = T._allCyan ? true : T._allDark ? false : (posIdx % 2 === 0);
-    const geo    = _buildCanyonSlabGeo(seed, thickOverride);
+    // Entrance gate on the snap-locked L3 knife variant (T.snap=0.1) gets a
+    // higher snap floor — otherwise the 700-thick entrance face quantizes into
+    // 3 stair-step bands and reads as off-center. Regular slabs keep T.snap so
+    // the locked-jagged corridor look is preserved. Threshold 0.5: anything
+    // tighter than 0.5 collapses the profile too aggressively for entrance.
+    const _entSnap   = (isEntrance && T.snap < 0.5) ? 1.5 : undefined;
+    const geo        = _buildCanyonSlabGeo(seed, thickOverride, _entSnap);
 
     // Pivot group — sits at the inner foot edge of the corridor.
     // Rotating the group around Y pivots the slab face inward/outward correctly.
