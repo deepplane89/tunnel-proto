@@ -677,6 +677,8 @@ function startDeathRun() {
   state.seqStageIdx        = 0;
   state.seqStageElapsed    = 0;
   state._seqVibeApplied    = -1;
+  state._activeSunOverride = null; // per-stage sun-only override (e.g. S6_RINGS)
+  state._l4CenterAnchor    = 0;    // ship X captured on L4 corridor activate
   state._seqCorridorStarted = false;
   state._seqZipTimer       = 0;
   state._seqZipBurstNum    = 0;
@@ -996,7 +998,11 @@ const DR_SEQUENCE = [
   { name: 'CE_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 2 },
 
   // Stage 6 — lethal rings (rings only, 30s)
-  { name: 'S6_RINGS',         type: 'lethal_rings',  duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2 },
+  // sunOverride: 2 — lethal rings get the original L3-corridor sun look
+  // (sunShader 2 / orange L3 sun) instead of vibeIdx 2's promoted L4 ICE sun.
+  // The override is sun-only and applied/reverted via _applyDrSunOverride()
+  // on stage entry so other stages sharing vibeIdx 2 are unaffected.
+  { name: 'S6_RINGS',         type: 'lethal_rings',  duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2, sunOverride: 2 },
   // Canyon F — HIGH WALL LIGHTNING (real)
   { name: 'CF_HIGH_WALL',     type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2 },
   { name: 'CF_REST',          type: 'rest', duration: 3, speed: 2.1, vibeIdx: 3, physTier: 2, musicTrack: 'keepgoing' },
@@ -1058,6 +1064,11 @@ function _drSequencerTick(dt) {
       }
       state.deathRunRestBeat = 0;
     }
+    // Sun-only override (e.g. S6_RINGS uses sunShader 2 while vibeIdx stays 2).
+    // Compares desired override on this stage vs the last applied override and
+    // crossfades if they differ, then again on stage exit when the next stage
+    // has no override (or a different one).
+    _applyDrSunOverride(stage.sunOverride);
   }
 
   // ── Set speed + lateral physics tier for this stage ──
@@ -1073,7 +1084,10 @@ function _drSequencerTick(dt) {
   //    into their shaders. This guarantees every post-S2 sun is warped, even if a
   //    future vibe edit puts a non-warped sun shader (0/1/2) mid-sequence. ──
   const _isEndlessStage = stage.type === 'endless_mix';
-  const _currentSunShader = DEATH_RUN_VIBES[state.deathRunVibeIdx]?.sunShader ?? 0;
+  // Honor active sun override when computing the displayed shader — e.g. S6_RINGS
+  // overrides shader 3 (ICE, builtin warp) with shader 2 (L3, needs uIsL3Warp).
+  const _baseSunShader   = DEATH_RUN_VIBES[state.deathRunVibeIdx]?.sunShader ?? 0;
+  const _currentSunShader = (typeof state._activeSunOverride === 'number') ? state._activeSunOverride : _baseSunShader;
   const _sunHasBuiltinWarp = (_currentSunShader === 3 || _currentSunShader === 4); // ice and gold already warped
   // "Warped era" begins at S3_L3_CORRIDOR. Cache the lookup to avoid scanning every tick.
   if (state._drS3StageIdx === undefined) {
@@ -1799,6 +1813,10 @@ const DR_MECHANIC_FAMILIES = {
       state.l4SineT          = 0;
       state.l4Delay          = 1.5;
       state._drL4MaxRows     = rows;
+      // Anchor corridor center on the ship's X at activation so the squeeze
+      // forms around the player instead of world origin. Sine sweep then
+      // oscillates relative to this anchor (see spawnL4CorridorRow).
+      state._l4CenterAnchor  = state.shipX || 0;
       state.speed = BASE_SPEED * 2.1; // L4 corridor speed
     },
     isActive() { return state.l4CorridorActive; }
@@ -2397,6 +2415,52 @@ function applyDeathRunVibeTransition(fromVibe, toVibe) {
   _drTransTo     = toVibe;
   _drTransT      = 0;
   _drTransActive = true;
+}
+
+// Sun colors paired with each shader index, used when a stage applies a
+// sun-only override (e.g. S6_RINGS → L3 sun while vibeIdx 2's shader is L4 ICE).
+// These match the original LEVELS[] sun palette so the override looks like the
+// canonical level sun for that shader.
+const _DR_SUN_OVERRIDE_COLORS = {
+  0: new THREE.Color(0xff9500), // L1 — orange retro sun
+  1: new THREE.Color(0xcc44ff), // L2 — ultraviolet purple
+  2: new THREE.Color(0xff6600), // L3 — corridor orange (pre-129d92d S3 sun)
+  3: new THREE.Color(0xaaeeff), // L4 — ice blue
+  4: new THREE.Color(0xffaa33), // L5 — gold
+};
+
+// Apply a sun-only override on top of the active vibe. Crossfades sun color
+// and sun-shader uniforms only — sky, grid, fog, bloom, thruster, etc. all stay
+// on the underlying vibe (we synthesize from/to vibe copies that share every
+// non-sun field, so updateDeathRunTransition's lerps for those fields are
+// no-ops).
+//
+// targetShader: number (0–4) to activate that override, or undefined/null to
+// revert to the underlying vibe's sun.
+function _applyDrSunOverride(targetShader) {
+  const want = (typeof targetShader === 'number') ? targetShader : null;
+  const cur  = (typeof state._activeSunOverride === 'number') ? state._activeSunOverride : null;
+  if (want === cur) return;
+
+  const baseVibe = DEATH_RUN_VIBES[state.deathRunVibeIdx];
+  if (!baseVibe) return;
+
+  // Build the "from" sun (current displayed sun) and "to" sun (next displayed sun).
+  // "from" reflects what's on screen right now — either the base vibe sun, or
+  // the previously active override.
+  const fromShader = (cur != null) ? cur : baseVibe.sunShader;
+  const fromColor  = (cur != null && _DR_SUN_OVERRIDE_COLORS[cur]) ? _DR_SUN_OVERRIDE_COLORS[cur] : baseVibe.sunColor;
+  const toShader   = (want != null) ? want : baseVibe.sunShader;
+  const toColor    = (want != null && _DR_SUN_OVERRIDE_COLORS[want]) ? _DR_SUN_OVERRIDE_COLORS[want] : baseVibe.sunColor;
+
+  // Synthesize from/to vibes that match baseVibe on every non-sun field. The
+  // updateDeathRunTransition lerps for sky/fog/grid/floor/thruster/galaxy are
+  // identity (same color on both ends) so only sun visuals change.
+  const fromVibe = Object.assign({}, baseVibe, { sunShader: fromShader, sunColor: fromColor });
+  const toVibe   = Object.assign({}, baseVibe, { sunShader: toShader,   sunColor: toColor   });
+
+  state._activeSunOverride = want; // null when reverting
+  applyDeathRunVibeTransition(fromVibe, toVibe);
 }
 
 function updateDeathRunTransition(dt) {
@@ -4714,6 +4778,9 @@ function update(dt) {
         state.l4SineT          = 0;
         state.l4StartElapsed   = state.levelElapsed;
         state.l4Delay          = 2.0;
+        // Campaign: explicit anchor=0 (world origin) so spawnL4CorridorRow
+        // doesn't reuse a stale shipX-anchor from a prior DR L4 activation.
+        state._l4CenterAnchor  = 0;
 
       }
     } else {

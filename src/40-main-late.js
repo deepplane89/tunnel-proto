@@ -1513,9 +1513,12 @@ function spawnL4CorridorRow() {
     halfX = halfX + (CORRIDOR_WIDE_X - halfX) * exitT;
   }
 
-  // Sine curves
+  // Sine curves — anchored on the ship's X at activation (see
+  // L4_SINE_CORRIDOR.activate which sets state._l4CenterAnchor). The straight
+  // squeeze section sits at the anchor; the sine sweep oscillates relative to it.
+  const _l4Anchor = (typeof state._l4CenterAnchor === 'number') ? state._l4CenterAnchor : 0;
   state.l4SineT = (state.l4SineT || 0);
-  let center = 0;
+  let center = _l4Anchor;
   if (rowsDone >= L4_CORRIDOR_CLOSE_ROWS + L4_CORRIDOR_STRAIGHT) {
     const curveRows = rowsDone - (L4_CORRIDOR_CLOSE_ROWS + L4_CORRIDOR_STRAIGHT);
     const ampT  = Math.min(1, curveRows / L4_CORRIDOR_AMP_RAMP);
@@ -1523,10 +1526,10 @@ function spawnL4CorridorRow() {
     const perT  = Math.min(1, curveRows / L4_CORRIDOR_PERIOD_RAMP);
     const period = L4_CORRIDOR_PERIOD_START - (L4_CORRIDOR_PERIOD_START - L4_CORRIDOR_PERIOD_MIN) * (perT * perT);
     state.l4SineT += (2 * Math.PI) / period;
-    center = amp * Math.sin(state.l4SineT);
+    center = _l4Anchor + amp * Math.sin(state.l4SineT);
   } else {
     state.l4SineT = 0;
-    center = 0;
+    center = _l4Anchor;
   }
   state.corridorGapCenter = center; // share for bend detection
 

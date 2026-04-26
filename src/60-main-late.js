@@ -250,6 +250,13 @@ function _drFullStateWipe() {
   state.corridorGapCenter  = 0;
   state.corridorGapDir     = 1;
   state.corridorSpawnZ     = -7;
+  // 7) L4 corridor center anchor — cleared so the next L4 activation captures
+  //    a fresh ship X. _activeSunOverride is intentionally NOT cleared here:
+  //    the running stage-entry vibe / override transitions already restore the
+  //    correct sun on the next stage entry. Forcing it to null here would
+  //    desync from the still-painted sun-shader uniforms when a hotkey jump
+  //    lands on a stage that shares the same vibeIdx and has no override.
+  state._l4CenterAnchor    = 0;
 }
 
 window.addEventListener('keydown', e => {
