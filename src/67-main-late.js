@@ -3628,6 +3628,8 @@ function update(dt) {
   // Gyroscope input — mobile only, no-op on desktop
 
   state.elapsed += dt;  // real-time accumulator for smooth animations
+  _tickHoloMaterials(state.elapsed);  // animate holographic powerup cubes & shatter fragments
+  _updatePowerupShatter();  // tick active shatter effects
   _drUpdateDebugHud();
   state.levelElapsed = (state.levelElapsed || 0) + dt;  // time spent in current level
 
@@ -5347,11 +5349,15 @@ function update(dt) {
       continue;
     }
 
-    // Collect
+    // Collect — cube is now 3.5u so collision radius widened to 2.5u to feel like
+    // "drove through it" rather than "grazed the edge".
     const dxP = Math.abs(pu.position.x - state.shipX);
     const dzP = Math.abs(pu.position.z - shipGroup.position.z);
-    if (dxP < 2.0 && dzP < 2.0) {
+    if (dxP < 2.5 && dzP < 2.5) {
       applyPowerup(pu.userData.typeIdx);
+      // Spawn shatter at the cube's current position, with a live ship-tracking target.
+      // Icon zips to the ship's nose (slightly forward of pivot) and absorbs in ~350ms.
+      _spawnPowerupShatter(pu, () => new THREE.Vector3(state.shipX, shipGroup.position.y, shipGroup.position.z));
       returnPowerupToPool(pu);
       activePowerups.splice(i, 1);
     }

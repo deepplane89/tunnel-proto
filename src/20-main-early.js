@@ -8807,41 +8807,274 @@ function returnCoinToPool(c) {
 const powerupPool = [];
 const activePowerups = [];
 
+// Holo-cube powerup — 3.5u drive-through hologram cube with icon inside.
+// Uses HolographicMaterial (Anderson Mancini, MIT) tinted to powerup color.
+// On pickup, the cube shatters into 6 face fragments + the icon zips to ship.
+const POWERUP_CUBE_SIZE = 3.5;
+const POWERUP_ICON_SIZE = 1.1;  // inner icon ~1/3 of cube
+
 function createPowerupMesh(typeIdx) {
   const def = POWERUP_TYPES[typeIdx];
   const group = new THREE.Group();
 
-  const mat = new THREE.MeshStandardMaterial({
-    color: def.color, emissive: def.color, emissiveIntensity: 1.2,
-    metalness: 0.1, roughness: 0.1, transparent: true, opacity: 0.9,
+  // ── Outer holo cube (drive-through frame, DoubleSide so backfaces show) ──
+  const cubeMat = new HolographicMaterial({
+    hologramColor:      def.color,
+    fresnelAmount:      0.6,
+    fresnelOpacity:     1.0,
+    scanlineSize:       8.0,
+    hologramBrightness: 1.4,
+    signalSpeed:        0.7,
+    enableBlinking:     true,
+    blinkFresnelOnly:   true,
+    hologramOpacity:    0.85,
+    side:               THREE.DoubleSide,
+    blendMode:          THREE.AdditiveBlending,
   });
+  _registerHoloMaterial(cubeMat);
+  const cubeGeo = new THREE.BoxGeometry(POWERUP_CUBE_SIZE, POWERUP_CUBE_SIZE, POWERUP_CUBE_SIZE);
+  const cubeMesh = new THREE.Mesh(cubeGeo, cubeMat);
+  group.add(cubeMesh);
 
-  let geo;
-  if (def.shape === 'oct')    geo = new THREE.OctahedronGeometry(0.8);
-  else if (def.shape === 'torus')  geo = new THREE.TorusGeometry(0.7, 0.25, 8, 16);
-  else if (def.shape === 'star')   geo = new THREE.OctahedronGeometry(0.8);
-  else if (def.shape === 'ring')   geo = new THREE.TorusGeometry(0.8, 0.15, 8, 24);
-  else                             geo = new THREE.SphereGeometry(0.7, 12, 12);
+  // ── Inner icon (uses per-type primitive shape, holo material) ──
+  const iconMat = new HolographicMaterial({
+    hologramColor:      def.color,
+    fresnelAmount:      0.45,
+    fresnelOpacity:     1.0,
+    scanlineSize:       6.0,
+    hologramBrightness: 1.6,
+    signalSpeed:        1.2,
+    enableBlinking:     true,
+    blinkFresnelOnly:   false,
+    hologramOpacity:    1.0,
+    side:               THREE.DoubleSide,
+    blendMode:          THREE.AdditiveBlending,
+  });
+  _registerHoloMaterial(iconMat);
 
-  const mesh = new THREE.Mesh(geo, mat);
-  group.add(mesh);
+  let iconGeo;
+  if (def.shape === 'oct')        iconGeo = new THREE.OctahedronGeometry(POWERUP_ICON_SIZE);
+  else if (def.shape === 'torus') iconGeo = new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.85, POWERUP_ICON_SIZE * 0.30, 10, 20);
+  else if (def.shape === 'ring')  iconGeo = new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.95, POWERUP_ICON_SIZE * 0.18, 10, 28);
+  else                            iconGeo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
+  const iconMesh = new THREE.Mesh(iconGeo, iconMat);
+  group.add(iconMesh);
 
-  // Glow ring around powerup
-  const ringGeo = new THREE.TorusGeometry(1.1, 0.06, 6, 24);
-  const ringMat = new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.5 });
-  group.add(new THREE.Mesh(ringGeo, ringMat));
-
-  group.userData.typeIdx       = typeIdx;
-  group.userData.active         = false;
-  group.userData.currentShape   = def.shape;  // track current geometry shape
-  group.visible                 = false;
-  group.position.set(0, -9999, 0);  // park off-screen on creation
+  group.userData.typeIdx      = typeIdx;
+  group.userData.active       = false;
+  group.userData.currentShape = def.shape;
+  group.userData._cubeMesh    = cubeMesh;  // for shatter detach
+  group.userData._iconMesh    = iconMesh;  // for icon-to-ship
+  group.visible               = false;
+  group.position.set(0, -9999, 0);
   scene.add(group);
   return group;
 }
 
 for (let i = 0; i < POWERUP_POOL_SIZE; i++) {
   powerupPool.push(createPowerupMesh(i % POWERUP_TYPES.length));
+}
+
+// ═══════════════════════════════════════════════════
+//  POWERUP SHATTER SYSTEM
+//  On pickup, the cube splits into 6 face fragments that tumble outward
+//  and fade out, while the icon zips straight to the ship.
+//  ~350ms total absorb time.
+// ═══════════════════════════════════════════════════
+const POWERUP_SHATTER_DURATION = 0.35;       // seconds
+const POWERUP_SHATTER_FRAGMENT_POOL_SIZE = 60; // 10 powerups * 6 faces, plenty of headroom
+const _powerupShatterFragmentPool = [];
+const _powerupShatterIconPool = [];
+const _activeShatterEffects = [];  // each: {fragments[6], icon, startT, endT, shipTargetFn}
+
+function _createShatterFragment() {
+  // PlaneGeometry oriented per-face. We'll set the orientation when activated.
+  const geo = new THREE.PlaneGeometry(POWERUP_CUBE_SIZE, POWERUP_CUBE_SIZE);
+  const mat = new HolographicMaterial({
+    hologramColor:      '#00d5ff',  // overwritten on activate
+    fresnelAmount:      0.6,
+    fresnelOpacity:     1.0,
+    scanlineSize:       8.0,
+    hologramBrightness: 1.6,
+    signalSpeed:        1.4,
+    enableBlinking:     true,
+    blinkFresnelOnly:   false,
+    hologramOpacity:    0.9,
+    side:               THREE.DoubleSide,
+    blendMode:          THREE.AdditiveBlending,
+  });
+  _registerHoloMaterial(mat);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.visible = false;
+  mesh.userData._mat = mat;
+  mesh.userData._active = false;
+  scene.add(mesh);
+  return mesh;
+}
+
+function _createShatterIcon() {
+  // Simple sphere placeholder; actual geometry is swapped on activate to match icon shape.
+  // We keep one mat per pool slot to avoid material churn.
+  const geo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
+  const mat = new HolographicMaterial({
+    hologramColor:      '#00d5ff',
+    fresnelAmount:      0.45,
+    fresnelOpacity:     1.0,
+    scanlineSize:       6.0,
+    hologramBrightness: 1.8,
+    signalSpeed:        1.5,
+    enableBlinking:     true,
+    blinkFresnelOnly:   false,
+    hologramOpacity:    1.0,
+    side:               THREE.DoubleSide,
+    blendMode:          THREE.AdditiveBlending,
+  });
+  _registerHoloMaterial(mat);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.visible = false;
+  mesh.userData._mat = mat;
+  mesh.userData._active = false;
+  scene.add(mesh);
+  return mesh;
+}
+
+for (let i = 0; i < POWERUP_SHATTER_FRAGMENT_POOL_SIZE; i++) {
+  _powerupShatterFragmentPool.push(_createShatterFragment());
+}
+for (let i = 0; i < POWERUP_POOL_SIZE; i++) {
+  _powerupShatterIconPool.push(_createShatterIcon());
+}
+
+function _getShatterFragment() {
+  for (const f of _powerupShatterFragmentPool) {
+    if (!f.userData._active) { f.userData._active = true; return f; }
+  }
+  return null;  // pool exhausted, skip silently
+}
+function _getShatterIcon() {
+  for (const f of _powerupShatterIconPool) {
+    if (!f.userData._active) { f.userData._active = true; return f; }
+  }
+  return null;
+}
+
+// Cube-face local transforms: 6 faces, each at (±half) along one axis with normal pointing out.
+// [posX,posY,posZ, rotX,rotY,rotZ]
+const _CUBE_FACES = (() => {
+  const h = POWERUP_CUBE_SIZE * 0.5;
+  const PI = Math.PI;
+  return [
+    [ 0,  0,  h,   0,    0,    0],   // +Z front
+    [ 0,  0, -h,   0,    PI,   0],   // -Z back
+    [ h,  0,  0,   0,    PI/2, 0],   // +X right
+    [-h,  0,  0,   0,   -PI/2, 0],   // -X left
+    [ 0,  h,  0,  -PI/2, 0,    0],   // +Y top
+    [ 0, -h,  0,   PI/2, 0,    0],   // -Y bottom
+  ];
+})();
+
+// Spawn shatter at a powerup's current world position.
+// shipTargetFn: () => THREE.Vector3 returning current ship world pos (live-updates each frame).
+function _spawnPowerupShatter(pu, shipTargetFn) {
+  const def = POWERUP_TYPES[pu.userData.typeIdx];
+  const colorHex = def.color;
+  const origin = pu.position.clone();
+  const startT = state.elapsed;
+  const endT = startT + POWERUP_SHATTER_DURATION;
+
+  // 6 face fragments — explode outward along face normals + spin.
+  const fragments = [];
+  for (let f = 0; f < 6; f++) {
+    const frag = _getShatterFragment();
+    if (!frag) break;
+    const [px, py, pz, rx, ry, rz] = _CUBE_FACES[f];
+    frag.position.set(origin.x + px, origin.y + py, origin.z + pz);
+    frag.rotation.set(rx, ry, rz);
+    frag.scale.setScalar(1);
+    frag.userData._mat.uniforms.hologramColor.value.setHex(colorHex);
+    frag.userData._mat.uniforms.hologramOpacity.value = 0.9;
+    // Outward velocity along face normal (in world space, derived from local offset since cube is axis-aligned).
+    const len = Math.sqrt(px*px + py*py + pz*pz) || 1;
+    frag.userData._vx = (px / len) * 14;  // ~5u over 0.35s
+    frag.userData._vy = (py / len) * 14;
+    frag.userData._vz = (pz / len) * 14;
+    // Random tumble (rad/s)
+    frag.userData._spinX = (Math.random() - 0.5) * 12;
+    frag.userData._spinY = (Math.random() - 0.5) * 12;
+    frag.userData._spinZ = (Math.random() - 0.5) * 12;
+    frag.visible = true;
+    fragments.push(frag);
+  }
+
+  // Icon — zip toward ship.
+  const icon = _getShatterIcon();
+  if (icon) {
+    // Replace geometry to match this powerup's icon shape.
+    const oldGeo = icon.geometry;
+    let iconGeo;
+    if (def.shape === 'oct')        iconGeo = new THREE.OctahedronGeometry(POWERUP_ICON_SIZE);
+    else if (def.shape === 'torus') iconGeo = new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.85, POWERUP_ICON_SIZE * 0.30, 10, 20);
+    else if (def.shape === 'ring')  iconGeo = new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.95, POWERUP_ICON_SIZE * 0.18, 10, 28);
+    else                            iconGeo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
+    icon.geometry = iconGeo;
+    if (oldGeo) oldGeo.dispose();
+    icon.position.copy(origin);
+    icon.scale.setScalar(1);
+    icon.userData._mat.uniforms.hologramColor.value.setHex(colorHex);
+    icon.userData._mat.uniforms.hologramOpacity.value = 1.0;
+    icon.visible = true;
+  }
+
+  _activeShatterEffects.push({ fragments, icon, origin, startT, endT, shipTargetFn });
+}
+
+// Per-frame tick. Called from main update loop.
+function _updatePowerupShatter() {
+  if (_activeShatterEffects.length === 0) return;
+  const now = state.elapsed;
+  for (let i = _activeShatterEffects.length - 1; i >= 0; i--) {
+    const fx = _activeShatterEffects[i];
+    const u = Math.min(1, (now - fx.startT) / POWERUP_SHATTER_DURATION);
+    const dt = 1 / 60;  // approximate; shatter is short and visual-only
+    // Fragments: drift outward, spin, fade.
+    for (const frag of fx.fragments) {
+      frag.position.x += frag.userData._vx * dt;
+      frag.position.y += frag.userData._vy * dt;
+      frag.position.z += frag.userData._vz * dt;
+      frag.rotation.x += frag.userData._spinX * dt;
+      frag.rotation.y += frag.userData._spinY * dt;
+      frag.rotation.z += frag.userData._spinZ * dt;
+      const fade = 1 - u;
+      frag.userData._mat.uniforms.hologramOpacity.value = 0.9 * fade;
+      frag.scale.setScalar(1 - u * 0.6);
+    }
+    // Icon: ease toward live ship position.
+    if (fx.icon && fx.shipTargetFn) {
+      const target = fx.shipTargetFn();
+      // smootherstep ease for a snappy lock-in feel
+      const e = u * u * (3 - 2 * u);
+      fx.icon.position.x = fx.origin.x + (target.x - fx.origin.x) * e;
+      fx.icon.position.y = fx.origin.y + (target.y - fx.origin.y) * e;
+      fx.icon.position.z = fx.origin.z + (target.z - fx.origin.z) * e;
+      fx.icon.rotation.x += 8 * dt;
+      fx.icon.rotation.y += 6 * dt;
+      const fade = 1 - u * u;  // icon stays bright longer
+      fx.icon.userData._mat.uniforms.hologramOpacity.value = fade;
+      fx.icon.scale.setScalar(1 - u * 0.5);
+    }
+    // End — return all to pool.
+    if (now >= fx.endT) {
+      for (const frag of fx.fragments) {
+        frag.visible = false;
+        frag.userData._active = false;
+      }
+      if (fx.icon) {
+        fx.icon.visible = false;
+        fx.icon.userData._active = false;
+      }
+      _activeShatterEffects.splice(i, 1);
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════
