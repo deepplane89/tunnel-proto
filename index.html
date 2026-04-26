@@ -107,7 +107,11 @@
 
     <!-- Mode buttons -->
     <div class="title-mode-buttons">
-      <button id="jet-lightning-btn" class="btn-mode btn-jetlightning">JET LIGHTNING</button>
+      <!-- JET LIGHTNING mode hidden from menu (soft-removed). Code paths,
+           asteroid + lightning pools, and the click listener remain wired so
+           ?canyon=1 dev shortcut and dev tooling still work. To re-enable in
+           the menu, just remove style="display:none". -->
+      <button id="jet-lightning-btn" class="btn-mode btn-jetlightning" style="display:none">JET LIGHTNING</button>
       <button id="death-run-btn" class="btn-mode btn-deathrun">TAP TO PLAY</button>
       <button id="wormhole-btn" class="btn-mode btn-wormhole" style="display:none;">WORMHOLE</button>
 
