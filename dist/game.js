@@ -15111,12 +15111,12 @@ function startDeathRun() {
   _skipL1Intro = false;
 
   // DR physics override — startGame() resets _bankMax to the campaign
-  // default (0.03) in its non-tutorial path. DR/main mode wants 0.06
-  // so the ship banks hard enough through the high-speed lateral moves.
+  // default (0.03) in its non-tutorial path. DR/main mode uses 0.04
+  // (tuned 2026-04-27 down from 0.06) for a calmer bank read.
   // Re-applied here AFTER startGame() returns so the reset is overwritten
   // before DR gameplay begins. (DR owns its own physics; do not couple to
   // any other mode's setup.)
-  _bankMax = 0.06;
+  _bankMax = 0.04;
 
   state.isDeathRun      = true;
   state.startedFromL1   = false;
@@ -24923,7 +24923,7 @@ function startJetLightning() {
   _accelSnap      = 100;
   _maxVelBase     = 13;    // JL_v2 — tighter lateral cap, more intentional feel
   _maxVelSnap     = 23;
-  _bankMax        = 0.06;
+  _bankMax        = 0.04;  // tuned 2026-04-27 down from 0.06
   _bankSmoothing  = 8;
 
   // ── Reset ramp timer + corridor/canyon state ──────────────────────────────
@@ -24993,7 +24993,7 @@ function startJetLightning() {
   _accelSnap      = 100;
   _maxVelBase     = 13;
   _maxVelSnap     = 23;
-  _bankMax        = 0.06;
+  _bankMax        = 0.04;  // tuned 2026-04-27 down from 0.06
   _bankSmoothing  = 8;
 
   _asteroidTuner.enabled     = false;  // track system enables at startT:4
