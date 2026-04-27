@@ -13024,8 +13024,11 @@ function togglePause() {
     if (_engP && !_engP.paused) _engP.pause();
     if (_roarP && !_roarP.paused) _roarP.pause();
     stopEngineBaseline();
+    if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
     const _argonP = document.getElementById('argon-ambient-sfx');
-    if (_argonP && !_argonP.paused) _argonP.pause();
+    if (_argonP && !_argonP.paused) { try { _argonP.pause(); _argonP.currentTime = 0; _argonP.volume = 0; } catch (_) {} }
+    state._argonSteering = false;
+    state._argonOpen = 0;
     _stopMagnetWhir();
     const _invP = document.getElementById('invincible-loop-sfx');
     if (_invP && !_invP.paused) _invP.pause();
@@ -13038,9 +13041,7 @@ function togglePause() {
     resumeGameTrackInPlace(currentGameTrack());
     // Resume baseline whir on unpause (smooth fade-in)
     startEngineBaseline(0.5);
-    // Resume argon sidechain ambient on unpause
-    const _argonU = document.getElementById('argon-ambient-sfx');
-    if (_argonU && !state.muted) { _argonU.play().catch(()=>{}); }
+    // Argon is edge-triggered — will fire on next steer input, nothing to resume
     // Resume invincible loop if active
     const _invU = document.getElementById('invincible-loop-sfx');
     if (_invU && state.invincibleTimer > 0 && !state.muted) { _invU.play().catch(()=>{}); }
@@ -13122,8 +13123,10 @@ function returnToTitle() {
   if (_engR) { _engR.pause(); _engR.currentTime = 0; }
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
   stopEngineBaseline({ reset: true });
+  if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   const _argonR = document.getElementById('argon-ambient-sfx');
-  if (_argonR) { _argonR.pause(); _argonR.currentTime = 0; }
+  if (_argonR) { try { _argonR.pause(); _argonR.currentTime = 0; _argonR.volume = 0; } catch (_) {} }
+  state._argonSteering = false;
   state._argonOpen = 0;
   _stopMagnetWhir();
   const _invR = document.getElementById('invincible-loop-sfx');
@@ -13276,9 +13279,7 @@ window.addEventListener('keydown', e => {
     if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
-    const _argon = document.getElementById('argon-ambient-sfx');
-    if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
-    state._argonOpen = 0;
+    state._argonSteering = false;
   }
   // Escape now pauses (handled above) — no longer returns to title
   // Hold-to-spin roll — up/down keys spin ship on Z axis while held
@@ -13572,9 +13573,7 @@ window.addEventListener('keyup', e => {
         if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
         playThrusterImpact(0.7);
         startEngineBaseline(0.5);
-        const _argon = document.getElementById('argon-ambient-sfx');
-        if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
-        state._argonOpen = 0;
+        state._argonSteering = false;
         return;
       }
       // Start game if on title/dead — mark this touch as game-starting (ignore swipes from it)
@@ -15202,10 +15201,8 @@ function startDeathRun() {
       }
       // Continuous baseline whir during gameplay (looped, smooth fade-in)
       startEngineBaseline(0.5);
-      // Argon sidechain ambient — silent baseline, opens up with lateral ship movement
-      const _argon = document.getElementById('argon-ambient-sfx');
-      if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
-      state._argonOpen = 0;
+      // Argon: triggered on steering edge (no continuous loop) — reset state
+      state._argonSteering = false;
       beginThrusterSputter(); // sputtering ramp-up to full power
       // Trigger lift immediately on launch — ship rises from 0.38 as thrusters fire
       state._introLiftActive = true;
@@ -17345,9 +17342,7 @@ function showIntroText() {
     if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
-    const _argon = document.getElementById('argon-ambient-sfx');
-    if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
-    state._argonOpen = 0;
+    state._argonSteering = false;
   }, { passive: false });
 
   // Line A fades in at 3s (3.5s duration → done ~6.5s)
@@ -17563,8 +17558,8 @@ function killPlayer() {
   if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
   stopEngineBaseline({ reset: true });
   const _argonD = document.getElementById('argon-ambient-sfx');
-  if (_argonD && !_argonD.paused) { _argonD.pause(); _argonD.currentTime = 0; }
-  state._argonOpen = 0;
+  if (_argonD && !_argonD.paused) { try { _argonD.pause(); _argonD.currentTime = 0; _argonD.volume = 0; } catch (_) {} }
+  state._argonSteering = false;
   _stopMagnetWhir();
   const _invD = document.getElementById('invincible-loop-sfx');
   if (_invD && !_invD.paused) { _invD.pause(); _invD.currentTime = 0; _invD.loop = false; }
@@ -18130,20 +18125,56 @@ function update(dt) {
   state.shipVelX = Math.max(-tiltMaxVel, Math.min(tiltMaxVel, state.shipVelX));
   state.shipX   += state.shipVelX * dt;
 
-  // ── Argon sidechain modulation: lateral ship velocity opens up ambient layer ──
-  // Silent baseline (vol 0.03) → fast movement opens to vol 0.5, rate 0.95→1.05.
-  // Attack 8/s (snaps open with input), release 2.5/s (smooth tail when slowing).
+  // ── Argon edge-trigger + intensity modulation ──
+  // Fires from clip start when player begins steering. While held, volume
+  // tracks |shipVelX| / MAX_VEL so harder swerves hit louder. On release:
+  // ~80ms fast fade then pause (almost-hard cut, no long tail).
   if (state.phase === 'playing' && !_introBlock) {
+    const _isSteering = !!(steerLeft || steerRight);
+    const _wasSteering = !!state._argonSteering;
     const _argonEl = document.getElementById('argon-ambient-sfx');
-    if (_argonEl && !state.muted && !_argonEl.paused) {
-      const _velNorm = Math.min(1, Math.abs(state.shipVelX) / Math.max(1, MAX_VEL));
-      const _prev = state._argonOpen || 0;
-      const _rate = _velNorm > _prev ? 8.0 : 2.5;
-      const _open = _prev + (_velNorm - _prev) * Math.min(1, _rate * dt);
-      state._argonOpen = _open;
-      _argonEl.volume = 0.03 + _open * 0.47;
-      _argonEl.playbackRate = 0.95 + _open * 0.10;
+    if (_argonEl && !state.muted) {
+      if (_isSteering && !_wasSteering) {
+        // Rising edge: trigger from start, initial volume scales with current velocity
+        const _v0 = Math.min(1, Math.abs(state.shipVelX) / Math.max(1, MAX_VEL));
+        try {
+          _argonEl.currentTime = 0;
+          _argonEl.volume = 0.20 + _v0 * 0.40; // 0.20 floor on press, up to 0.60 mid-swerve
+          _argonEl.playbackRate = 1.0;
+          _argonEl.play().catch(()=>{});
+        } catch (_) {}
+        state._argonOpen = _v0;
+      } else if (_isSteering && _wasSteering) {
+        // Held: smoothly track velocity intensity (attack 10/s, release 5/s)
+        const _vNow = Math.min(1, Math.abs(state.shipVelX) / Math.max(1, MAX_VEL));
+        const _prev = state._argonOpen || 0;
+        const _rate = _vNow > _prev ? 10.0 : 5.0;
+        const _open = _prev + (_vNow - _prev) * Math.min(1, _rate * dt);
+        state._argonOpen = _open;
+        try {
+          _argonEl.volume = 0.20 + _open * 0.40;
+          _argonEl.playbackRate = 0.97 + _open * 0.08;
+        } catch (_) {}
+      } else if (!_isSteering && _wasSteering) {
+        // Falling edge: kick off ~80ms hard cut
+        if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+        const _start = _argonEl.volume || 0;
+        let _step = 0;
+        const _steps = 5; // 5 × 16ms = 80ms
+        state._argonCutIv = setInterval(() => {
+          _step++;
+          const _t = _step / _steps;
+          try { _argonEl.volume = Math.max(0, _start * (1 - _t)); } catch (_) {}
+          if (_step >= _steps) {
+            clearInterval(state._argonCutIv);
+            state._argonCutIv = null;
+            try { _argonEl.pause(); _argonEl.currentTime = 0; _argonEl.volume = 0; } catch (_) {}
+          }
+        }, 16);
+        state._argonOpen = 0;
+      }
     }
+    if (_isSteering !== _wasSteering) state._argonSteering = _isSteering;
   }
 
 
@@ -18174,11 +18205,9 @@ function update(dt) {
       const _rsWarp = document.getElementById('retry-warp-sfx');
       if (_rsWarp) { try { _rsWarp.pause(); _rsWarp.currentTime = 0; } catch(_) {} }
       playThrusterImpact(0.7);
-      // Restart baseline whir + argon sidechain on retry arrival
+      // Restart baseline whir on retry arrival — argon is edge-triggered, no preroll
       startEngineBaseline(0.5);
-      const _rsArgon = document.getElementById('argon-ambient-sfx');
-      if (_rsArgon && !state.muted) { _rsArgon.currentTime = 0; _rsArgon.volume = 0.03; _rsArgon.playbackRate = 0.95; _rsArgon.play().catch(()=>{}); }
-      state._argonOpen = 0;
+      state._argonSteering = false;
     }
     if (_retrySweepT >= 1) {
       _retrySweepActive = false;

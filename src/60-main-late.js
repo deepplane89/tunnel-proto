@@ -69,8 +69,11 @@ function togglePause() {
     if (_engP && !_engP.paused) _engP.pause();
     if (_roarP && !_roarP.paused) _roarP.pause();
     stopEngineBaseline();
+    if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
     const _argonP = document.getElementById('argon-ambient-sfx');
-    if (_argonP && !_argonP.paused) _argonP.pause();
+    if (_argonP && !_argonP.paused) { try { _argonP.pause(); _argonP.currentTime = 0; _argonP.volume = 0; } catch (_) {} }
+    state._argonSteering = false;
+    state._argonOpen = 0;
     _stopMagnetWhir();
     const _invP = document.getElementById('invincible-loop-sfx');
     if (_invP && !_invP.paused) _invP.pause();
@@ -83,9 +86,7 @@ function togglePause() {
     resumeGameTrackInPlace(currentGameTrack());
     // Resume baseline whir on unpause (smooth fade-in)
     startEngineBaseline(0.5);
-    // Resume argon sidechain ambient on unpause
-    const _argonU = document.getElementById('argon-ambient-sfx');
-    if (_argonU && !state.muted) { _argonU.play().catch(()=>{}); }
+    // Argon is edge-triggered — will fire on next steer input, nothing to resume
     // Resume invincible loop if active
     const _invU = document.getElementById('invincible-loop-sfx');
     if (_invU && state.invincibleTimer > 0 && !state.muted) { _invU.play().catch(()=>{}); }
@@ -167,8 +168,10 @@ function returnToTitle() {
   if (_engR) { _engR.pause(); _engR.currentTime = 0; }
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
   stopEngineBaseline({ reset: true });
+  if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   const _argonR = document.getElementById('argon-ambient-sfx');
-  if (_argonR) { _argonR.pause(); _argonR.currentTime = 0; }
+  if (_argonR) { try { _argonR.pause(); _argonR.currentTime = 0; _argonR.volume = 0; } catch (_) {} }
+  state._argonSteering = false;
   state._argonOpen = 0;
   _stopMagnetWhir();
   const _invR = document.getElementById('invincible-loop-sfx');
@@ -321,9 +324,7 @@ window.addEventListener('keydown', e => {
     if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
-    const _argon = document.getElementById('argon-ambient-sfx');
-    if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
-    state._argonOpen = 0;
+    state._argonSteering = false;
   }
   // Escape now pauses (handled above) — no longer returns to title
   // Hold-to-spin roll — up/down keys spin ship on Z axis while held
@@ -617,9 +618,7 @@ window.addEventListener('keyup', e => {
         if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
         playThrusterImpact(0.7);
         startEngineBaseline(0.5);
-        const _argon = document.getElementById('argon-ambient-sfx');
-        if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
-        state._argonOpen = 0;
+        state._argonSteering = false;
         return;
       }
       // Start game if on title/dead — mark this touch as game-starting (ignore swipes from it)
