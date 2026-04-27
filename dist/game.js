@@ -9738,6 +9738,52 @@ function playThrusterImpact(vol) {
   }
 }
 
+// ── Smooth fade helpers for engine-baseline (HTMLAudioElement has no AudioParam) ──
+// Avoids the abrupt pop-on / pop-off that comes from setting .volume directly.
+let _baselineFadeIv = null;
+function _baselineCancelFade() {
+  if (_baselineFadeIv) { clearInterval(_baselineFadeIv); _baselineFadeIv = null; }
+}
+function startEngineBaseline(target) {
+  if (state.muted) return;
+  const el = document.getElementById('engine-baseline');
+  if (!el) return;
+  _baselineCancelFade();
+  const tgt = (target == null) ? 0.5 : target;
+  // If already playing near target, just keep going
+  if (!el.paused && Math.abs(el.volume - tgt) < 0.02) { el.volume = tgt; return; }
+  if (el.paused) { try { el.currentTime = 0; el.volume = 0; el.play().catch(()=>{}); } catch (_) {} }
+  // 240ms ramp-in, 16ms tick → 15 steps
+  const start = el.volume || 0;
+  let step = 0;
+  const steps = 15;
+  _baselineFadeIv = setInterval(() => {
+    step++;
+    const t = step / steps;
+    el.volume = Math.max(0, Math.min(1, start + (tgt - start) * t));
+    if (step >= steps) { _baselineCancelFade(); el.volume = tgt; }
+  }, 16);
+}
+function stopEngineBaseline(opts) {
+  const el = document.getElementById('engine-baseline');
+  if (!el) return;
+  _baselineCancelFade();
+  if (el.paused) { if (opts && opts.reset) { try { el.currentTime = 0; } catch (_) {} } return; }
+  // 350ms ramp-out, 16ms tick → 22 steps
+  const start = el.volume || 0;
+  let step = 0;
+  const steps = 22;
+  _baselineFadeIv = setInterval(() => {
+    step++;
+    const t = step / steps;
+    el.volume = Math.max(0, start * (1 - t));
+    if (step >= steps) {
+      _baselineCancelFade();
+      try { el.pause(); if (opts && opts.reset) el.currentTime = 0; el.volume = 0; } catch (_) {}
+    }
+  }, 16);
+}
+
 
 // ── Retry sweep whoosh: filtered noise with rising frequency sweep ──
 function playRetryWhoosh() {
@@ -13014,10 +13060,9 @@ function togglePause() {
     // Pause engine SFX
     const _engP = document.getElementById('engine-start');
     const _roarP = document.getElementById('engine-roar');
-    const _baseP = document.getElementById('engine-baseline');
     if (_engP && !_engP.paused) _engP.pause();
     if (_roarP && !_roarP.paused) _roarP.pause();
-    if (_baseP && !_baseP.paused) _baseP.pause();
+    stopEngineBaseline();
     const _argonP = document.getElementById('argon-ambient-sfx');
     if (_argonP && !_argonP.paused) _argonP.pause();
     _stopMagnetWhir();
@@ -13030,9 +13075,8 @@ function togglePause() {
     state.phase = 'playing';
     setPauseOverlay(false);
     resumeGameTrackInPlace(currentGameTrack());
-    // Resume baseline whir on unpause
-    const _baseU = document.getElementById('engine-baseline');
-    if (_baseU && !state.muted) { _baseU.play().catch(()=>{}); }
+    // Resume baseline whir on unpause (smooth fade-in)
+    startEngineBaseline(0.5);
     // Resume argon sidechain ambient on unpause
     const _argonU = document.getElementById('argon-ambient-sfx');
     if (_argonU && !state.muted) { _argonU.play().catch(()=>{}); }
@@ -13114,10 +13158,9 @@ function returnToTitle() {
   // Stop engine SFX
   const _engR = document.getElementById('engine-start');
   const _roarR = document.getElementById('engine-roar');
-  const _baseR = document.getElementById('engine-baseline');
   if (_engR) { _engR.pause(); _engR.currentTime = 0; }
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
-  if (_baseR) { _baseR.pause(); _baseR.currentTime = 0; }
+  stopEngineBaseline({ reset: true });
   const _argonR = document.getElementById('argon-ambient-sfx');
   if (_argonR) { _argonR.pause(); _argonR.currentTime = 0; }
   state._argonOpen = 0;
@@ -13271,8 +13314,7 @@ window.addEventListener('keydown', e => {
     const _roar = document.getElementById('engine-roar');
     if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
     playThrusterImpact(0.7);
-    const _baseline = document.getElementById('engine-baseline');
-    if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
+    startEngineBaseline(0.5);
     const _argon = document.getElementById('argon-ambient-sfx');
     if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
     state._argonOpen = 0;
@@ -13568,8 +13610,7 @@ window.addEventListener('keyup', e => {
         const _roar = document.getElementById('engine-roar');
         if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
         playThrusterImpact(0.7);
-        const _baseline = document.getElementById('engine-baseline');
-        if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
+        startEngineBaseline(0.5);
         const _argon = document.getElementById('argon-ambient-sfx');
         if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
         state._argonOpen = 0;
@@ -15198,9 +15239,8 @@ function startDeathRun() {
         }
         playThrusterImpact(0.7);
       }
-      // Continuous baseline whir during gameplay (looped)
-      const _baseline = document.getElementById('engine-baseline');
-      if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
+      // Continuous baseline whir during gameplay (looped, smooth fade-in)
+      startEngineBaseline(0.5);
       // Argon sidechain ambient — silent baseline, opens up with lateral ship movement
       const _argon = document.getElementById('argon-ambient-sfx');
       if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
@@ -15491,10 +15531,8 @@ function _drSequencerTick(dt) {
         setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         // Speed-up burst fires right as speed kicks in (beat 4 of the countdown).
         // Use retry-warp sound for the speed-up surge.
-        setTimeout(() => {
-          const _warp = document.getElementById('retry-warp-sfx');
-          if (_warp && !state.muted) { _warp.currentTime = 0; _warp.volume = 0.6; _warp.play().catch(()=>{}); }
-        }, 1500);
+        // Speed-up surge — plasma-punch on its own (no warp, no roar).
+        setTimeout(() => { playThrusterImpact(0.7); }, 1500);
       }
     }
     if (state.seqStageElapsed >= stage.duration) {
@@ -15758,10 +15796,8 @@ function _drSequencerTick(dt) {
         _playBuffer('klaxon', 0.18, 1.0, null);
         setTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
         setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
-        setTimeout(() => {
-          const _warp = document.getElementById('retry-warp-sfx');
-          if (_warp && !state.muted) { _warp.currentTime = 0; _warp.volume = 0.6; _warp.play().catch(()=>{}); }
-        }, 1500);
+        // Speed-up surge — plasma-punch on its own (no warp, no roar).
+        setTimeout(() => { playThrusterImpact(0.7); }, 1500);
       }
     }
   }
@@ -17074,9 +17110,8 @@ function checkDeathRunSpeed() {
     if (state.deathRunSpeedTier > prevTier && prevTier >= 0 && !state.introActive) {
       state._drSpeedBeepFired = false;
       hapticMedium();
-      const _warp = document.getElementById('retry-warp-sfx');
-      // Speed-tier-up surge burst — swapped from engine-roar to retry-warp on its own.
-      if (_warp && !state.muted) { _warp.currentTime = 0; _warp.volume = 0.6; _warp.play().catch(() => {}); }
+      // Speed-tier-up surge burst — plasma-punch on its own.
+      playThrusterImpact(0.7);
       state._thrusterFlare = 2.0;
     }
   } else if (safeForSpeed && targetTier !== state.deathRunSpeedTier) {
@@ -17086,9 +17121,8 @@ function checkDeathRunSpeed() {
     if (state.deathRunSpeedTier > prevTier && prevTier >= 0 && !state.introActive) {
       state._drSpeedBeepFired = false;
       hapticMedium();
-      const _warp = document.getElementById('retry-warp-sfx');
-      // Speed-tier-up surge burst (alt branch) — retry-warp on its own.
-      if (_warp && !state.muted) { _warp.currentTime = 0; _warp.volume = 0.6; _warp.play().catch(() => {}); }
+      // Speed-tier-up surge burst (alt branch) — plasma-punch on its own.
+      playThrusterImpact(0.7);
       state._thrusterFlare = 2.0;
     }
   }
@@ -17349,8 +17383,7 @@ function showIntroText() {
     const _roar = document.getElementById('engine-roar');
     if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
     playThrusterImpact(0.7);
-    const _baseline = document.getElementById('engine-baseline');
-    if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
+    startEngineBaseline(0.5);
     const _argon = document.getElementById('argon-ambient-sfx');
     if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
     state._argonOpen = 0;
@@ -17567,8 +17600,7 @@ function killPlayer() {
   const _roarD = document.getElementById('engine-roar');
   if (_engD && !_engD.paused) { _engD.pause(); _engD.currentTime = 0; }
   if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
-  const _baseD = document.getElementById('engine-baseline');
-  if (_baseD && !_baseD.paused) { _baseD.pause(); _baseD.currentTime = 0; }
+  stopEngineBaseline({ reset: true });
   const _argonD = document.getElementById('argon-ambient-sfx');
   if (_argonD && !_argonD.paused) { _argonD.pause(); _argonD.currentTime = 0; }
   state._argonOpen = 0;
@@ -18182,8 +18214,7 @@ function update(dt) {
       if (_rsWarp) { try { _rsWarp.pause(); _rsWarp.currentTime = 0; } catch(_) {} }
       playThrusterImpact(0.7);
       // Restart baseline whir + argon sidechain on retry arrival
-      const _rsBase = document.getElementById('engine-baseline');
-      if (_rsBase && !state.muted) { _rsBase.currentTime = 0; _rsBase.volume = 0.5; _rsBase.play().catch(()=>{}); }
+      startEngineBaseline(0.5);
       const _rsArgon = document.getElementById('argon-ambient-sfx');
       if (_rsArgon && !state.muted) { _rsArgon.currentTime = 0; _rsArgon.volume = 0.03; _rsArgon.playbackRate = 0.95; _rsArgon.play().catch(()=>{}); }
       state._argonOpen = 0;

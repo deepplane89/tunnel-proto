@@ -66,10 +66,9 @@ function togglePause() {
     // Pause engine SFX
     const _engP = document.getElementById('engine-start');
     const _roarP = document.getElementById('engine-roar');
-    const _baseP = document.getElementById('engine-baseline');
     if (_engP && !_engP.paused) _engP.pause();
     if (_roarP && !_roarP.paused) _roarP.pause();
-    if (_baseP && !_baseP.paused) _baseP.pause();
+    stopEngineBaseline();
     const _argonP = document.getElementById('argon-ambient-sfx');
     if (_argonP && !_argonP.paused) _argonP.pause();
     _stopMagnetWhir();
@@ -82,9 +81,8 @@ function togglePause() {
     state.phase = 'playing';
     setPauseOverlay(false);
     resumeGameTrackInPlace(currentGameTrack());
-    // Resume baseline whir on unpause
-    const _baseU = document.getElementById('engine-baseline');
-    if (_baseU && !state.muted) { _baseU.play().catch(()=>{}); }
+    // Resume baseline whir on unpause (smooth fade-in)
+    startEngineBaseline(0.5);
     // Resume argon sidechain ambient on unpause
     const _argonU = document.getElementById('argon-ambient-sfx');
     if (_argonU && !state.muted) { _argonU.play().catch(()=>{}); }
@@ -166,10 +164,9 @@ function returnToTitle() {
   // Stop engine SFX
   const _engR = document.getElementById('engine-start');
   const _roarR = document.getElementById('engine-roar');
-  const _baseR = document.getElementById('engine-baseline');
   if (_engR) { _engR.pause(); _engR.currentTime = 0; }
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
-  if (_baseR) { _baseR.pause(); _baseR.currentTime = 0; }
+  stopEngineBaseline({ reset: true });
   const _argonR = document.getElementById('argon-ambient-sfx');
   if (_argonR) { _argonR.pause(); _argonR.currentTime = 0; }
   state._argonOpen = 0;
@@ -323,8 +320,7 @@ window.addEventListener('keydown', e => {
     const _roar = document.getElementById('engine-roar');
     if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
     playThrusterImpact(0.7);
-    const _baseline = document.getElementById('engine-baseline');
-    if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
+    startEngineBaseline(0.5);
     const _argon = document.getElementById('argon-ambient-sfx');
     if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
     state._argonOpen = 0;
@@ -620,8 +616,7 @@ window.addEventListener('keyup', e => {
         const _roar = document.getElementById('engine-roar');
         if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
         playThrusterImpact(0.7);
-        const _baseline = document.getElementById('engine-baseline');
-        if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
+        startEngineBaseline(0.5);
         const _argon = document.getElementById('argon-ambient-sfx');
         if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
         state._argonOpen = 0;
