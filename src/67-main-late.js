@@ -1156,10 +1156,11 @@ function _drSequencerTick(dt) {
         _playBuffer('klaxon', 0.18, 1.0, null);
         setTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
         setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
-        // Thruster roar fires right as speed kicks in (beat 4 of the countdown).
+        // Speed-up burst fires right as speed kicks in (beat 4 of the countdown).
+        // Use retry-warp sound for the speed-up surge.
         setTimeout(() => {
-          const _roar = document.getElementById('engine-roar');
-          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
+          const _warp = document.getElementById('retry-warp-sfx');
+          if (_warp && !state.muted) { _warp.currentTime = 0; _warp.volume = 0.6; _warp.play().catch(()=>{}); }
         }, 1500);
       }
     }
@@ -1425,8 +1426,8 @@ function _drSequencerTick(dt) {
         setTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
         setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         setTimeout(() => {
-          const _roar = document.getElementById('engine-roar');
-          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
+          const _warp = document.getElementById('retry-warp-sfx');
+          if (_warp && !state.muted) { _warp.currentTime = 0; _warp.volume = 0.6; _warp.play().catch(()=>{}); }
         }, 1500);
       }
     }
@@ -2740,9 +2741,9 @@ function checkDeathRunSpeed() {
     if (state.deathRunSpeedTier > prevTier && prevTier >= 0 && !state.introActive) {
       state._drSpeedBeepFired = false;
       hapticMedium();
-      const roar = document.getElementById('engine-roar');
-      // Speed-tier-up roar burst — was 0.06, way too quiet. Bumped to 0.22.
-      if (roar && !state.muted) { roar.currentTime = 0; roar.volume = 0.6; roar.play().catch(() => {}); }
+      const _warp = document.getElementById('retry-warp-sfx');
+      // Speed-tier-up surge burst — swapped from engine-roar to retry-warp on its own.
+      if (_warp && !state.muted) { _warp.currentTime = 0; _warp.volume = 0.6; _warp.play().catch(() => {}); }
       state._thrusterFlare = 2.0;
     }
   } else if (safeForSpeed && targetTier !== state.deathRunSpeedTier) {
@@ -2752,9 +2753,9 @@ function checkDeathRunSpeed() {
     if (state.deathRunSpeedTier > prevTier && prevTier >= 0 && !state.introActive) {
       state._drSpeedBeepFired = false;
       hapticMedium();
-      const roar = document.getElementById('engine-roar');
-      // Speed-tier-up roar burst (alt branch) — matched to 0.22.
-      if (roar && !state.muted) { roar.currentTime = 0; roar.volume = 0.6; roar.play().catch(() => {}); }
+      const _warp = document.getElementById('retry-warp-sfx');
+      // Speed-tier-up surge burst (alt branch) — retry-warp on its own.
+      if (_warp && !state.muted) { _warp.currentTime = 0; _warp.volume = 0.6; _warp.play().catch(() => {}); }
       state._thrusterFlare = 2.0;
     }
   }
