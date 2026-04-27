@@ -133,6 +133,29 @@ function _initSFXBuffers() {
   _loadSFXBuffer('powerup-burst',   './assets/audio/powerup-burst.mp3');
   _loadSFXBuffer('retry-tech',      './assets/audio/retry-tech.mp3');
   _loadSFXBuffer('retry-warp',      './assets/audio/retry-warp.mp3');
+  // Argon ambient: looped via dedicated _playArgonLoop (volume modulated each frame)
+  _loadSFXBuffer('argon-ambient',   './assets/audio/argon-ambient.mp3');
+}
+
+// ── Argon looping handle (Web Audio path) ──
+// iOS Safari ignores HTMLAudioElement.volume entirely — GainNode is the only
+// way to actually modulate volume on mobile. So argon runs as a looping
+// BufferSource feeding a GainNode that the per-frame steering code updates.
+function _playArgonLoop(initialVol) {
+  if (!audioCtx || state.muted) return null;
+  _ensureCtxRunning();
+  const buf = _sfxBuffers['argon-ambient'];
+  if (!buf) return null; // not decoded yet — caller falls back to element
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+  src.playbackRate.value = 1.0;
+  const gain = audioCtx.createGain();
+  gain.gain.value = Math.min(1, Math.max(0, initialVol || 0));
+  src.connect(gain).connect(audioCtx.destination);
+  src.start();
+  src._jhGain = gain;
+  return src;
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
 const _sfxFallbackIds = {

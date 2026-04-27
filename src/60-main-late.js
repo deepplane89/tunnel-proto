@@ -70,6 +70,8 @@ function togglePause() {
     if (_roarP && !_roarP.paused) _roarP.pause();
     stopEngineBaseline();
     if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+    if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
+    state._argonPath = null;
     const _argonP = document.getElementById('argon-ambient-sfx');
     if (_argonP && !_argonP.paused) { try { _argonP.pause(); _argonP.currentTime = 0; _argonP.volume = 0; } catch (_) {} }
     state._argonSteering = false;
@@ -169,6 +171,8 @@ function returnToTitle() {
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
   stopEngineBaseline({ reset: true });
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+  if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
+  state._argonPath = null;
   const _argonR = document.getElementById('argon-ambient-sfx');
   if (_argonR) { try { _argonR.pause(); _argonR.currentTime = 0; _argonR.volume = 0; } catch (_) {} }
   state._argonSteering = false;

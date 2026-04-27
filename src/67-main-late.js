@@ -3242,6 +3242,8 @@ function killPlayer() {
   if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
   stopEngineBaseline({ reset: true });
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+  if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
+  state._argonPath = null;
   const _argonD = document.getElementById('argon-ambient-sfx');
   if (_argonD && !_argonD.paused) { try { _argonD.pause(); _argonD.currentTime = 0; _argonD.volume = 0; } catch (_) {} }
   state._argonSteering = false;
@@ -3814,21 +3816,45 @@ function update(dt) {
   // ── Argon edge-trigger + intensity modulation ──
   // Fires from clip start when player begins steering. While held, volume
   // tracks |shipVelX| / MAX_VEL so harder swerves hit louder. On release:
-  // ~80ms fast fade then pause (almost-hard cut, no long tail).
+  // ~80ms fast fade then stop (almost-hard cut, no long tail).
+  //
+  // Prefers Web Audio path (looping BufferSource + GainNode) because iOS
+  // Safari ignores HTMLAudioElement.volume entirely — GainNode actually
+  // modulates. Falls back to <audio> element if buffer hasn't decoded yet.
   if (state.phase === 'playing' && !_introBlock) {
     const _isSteering = !!(steerLeft || steerRight);
     const _wasSteering = !!state._argonSteering;
     const _argonEl = document.getElementById('argon-ambient-sfx');
-    if (_argonEl && !state.muted) {
+    if (!state.muted) {
+      const _volFor = (open) => 0.12 + open * 0.28; // 0.12 floor → 0.40 mid-swerve
       if (_isSteering && !_wasSteering) {
         // Rising edge: trigger from start, initial volume scales with current velocity
         const _v0 = Math.min(1, Math.abs(state.shipVelX) / Math.max(1, MAX_VEL));
-        try {
-          _argonEl.currentTime = 0;
-          _argonEl.volume = 0.12 + _v0 * 0.28; // 0.12 floor on press, up to 0.40 mid-swerve
-          _argonEl.playbackRate = 1.0;
-          _argonEl.play().catch(()=>{});
-        } catch (_) {}
+        const _vol = _volFor(_v0);
+        // Cancel any in-flight fade-out from a previous release
+        if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+        // Stop any prior buffer source still hanging around
+        if (state._argonSrc) {
+          try { state._argonSrc.stop(); } catch (_) {}
+          state._argonSrc = null;
+        }
+        // Try Web Audio path first
+        const _src = (typeof _playArgonLoop === 'function') ? _playArgonLoop(_vol) : null;
+        if (_src) {
+          state._argonSrc = _src;
+          state._argonPath = 'wa';
+          // Make sure element isn't also playing
+          if (_argonEl) { try { _argonEl.pause(); _argonEl.currentTime = 0; } catch (_) {} }
+        } else if (_argonEl) {
+          // Fallback: element path (e.g. buffer not decoded yet)
+          try {
+            _argonEl.currentTime = 0;
+            _argonEl.volume = _vol;
+            _argonEl.playbackRate = 1.0;
+            _argonEl.play().catch(()=>{});
+          } catch (_) {}
+          state._argonPath = 'el';
+        }
         state._argonOpen = _v0;
       } else if (_isSteering && _wasSteering) {
         // Held: smoothly track velocity intensity (attack 10/s, release 5/s)
@@ -3837,26 +3863,50 @@ function update(dt) {
         const _rate = _vNow > _prev ? 10.0 : 5.0;
         const _open = _prev + (_vNow - _prev) * Math.min(1, _rate * dt);
         state._argonOpen = _open;
-        try {
-          _argonEl.volume = 0.12 + _open * 0.28;
-          _argonEl.playbackRate = 0.97 + _open * 0.08;
-        } catch (_) {}
+        const _vol = _volFor(_open);
+        const _rateMul = 0.97 + _open * 0.08;
+        if (state._argonPath === 'wa' && state._argonSrc && state._argonSrc._jhGain) {
+          try {
+            state._argonSrc._jhGain.gain.value = _vol;
+            state._argonSrc.playbackRate.value = _rateMul;
+          } catch (_) {}
+        } else if (_argonEl) {
+          try { _argonEl.volume = _vol; _argonEl.playbackRate = _rateMul; } catch (_) {}
+        }
       } else if (!_isSteering && _wasSteering) {
-        // Falling edge: kick off ~80ms hard cut
+        // Falling edge: ~80ms fast fade then stop
         if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
-        const _start = _argonEl.volume || 0;
-        let _step = 0;
-        const _steps = 5; // 5 × 16ms = 80ms
-        state._argonCutIv = setInterval(() => {
-          _step++;
-          const _t = _step / _steps;
-          try { _argonEl.volume = Math.max(0, _start * (1 - _t)); } catch (_) {}
-          if (_step >= _steps) {
-            clearInterval(state._argonCutIv);
-            state._argonCutIv = null;
-            try { _argonEl.pause(); _argonEl.currentTime = 0; _argonEl.volume = 0; } catch (_) {}
-          }
-        }, 16);
+        if (state._argonPath === 'wa' && state._argonSrc && state._argonSrc._jhGain && audioCtx) {
+          // Web Audio: linearRampToValueAtTime then stop
+          const _src = state._argonSrc;
+          const _g = _src._jhGain;
+          const _now = audioCtx.currentTime;
+          try {
+            _g.gain.cancelScheduledValues(_now);
+            _g.gain.setValueAtTime(_g.gain.value, _now);
+            _g.gain.linearRampToValueAtTime(0, _now + 0.08);
+          } catch (_) {}
+          // Clear our reference immediately so a new rising edge spawns fresh
+          state._argonSrc = null;
+          state._argonPath = null;
+          setTimeout(() => { try { _src.stop(); } catch (_) {} }, 100);
+        } else if (_argonEl) {
+          // Element path: setInterval fade
+          const _start = _argonEl.volume || 0;
+          let _step = 0;
+          const _steps = 5; // 5 × 16ms = 80ms
+          state._argonCutIv = setInterval(() => {
+            _step++;
+            const _t = _step / _steps;
+            try { _argonEl.volume = Math.max(0, _start * (1 - _t)); } catch (_) {}
+            if (_step >= _steps) {
+              clearInterval(state._argonCutIv);
+              state._argonCutIv = null;
+              try { _argonEl.pause(); _argonEl.currentTime = 0; _argonEl.volume = 0; } catch (_) {}
+            }
+          }, 16);
+          state._argonPath = null;
+        }
         state._argonOpen = 0;
       }
     }
