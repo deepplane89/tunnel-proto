@@ -4353,3 +4353,77 @@ html, body {
   #title-ship-canvas { width: 120px; height: 100px; }
   .ship-showcase { min-height: 70px; }
 }
+
+/* ════════════════════════════════════════════════════════
+   MOBILE UI PERF / SMOOTHNESS PASS (2026-04-27)
+   Added late so these rules win over earlier declarations.
+   ════════════════════════════════════════════════════════ */
+
+/* ── Pause infinite animations inside hidden parents ──
+   When an overlay is hidden, infinite CSS animations on its
+   descendants keep running, churning composite layers and
+   keeping the GPU warm for nothing. Pause them. */
+.hidden,
+.hidden * {
+  animation-play-state: paused !important;
+}
+
+/* ── Mobile: kill backdrop-filter blur ──
+   backdrop-filter is the single most expensive CSS property
+   on mobile. With 26 instances across overlays, opening one
+   can cause a 100-200ms hitch on mid-range Android. Replace
+   the blur with a slightly darker solid-ish background.
+   Visual diff is barely noticeable; perf gain is substantial. */
+@media (hover: none) and (pointer: coarse) {
+  .overlay,
+  .settings-overlay,
+  .pause-overlay,
+  .onboarding-overlay,
+  .lb-overlay,
+  .streak-overlay,
+  #shop-overlay,
+  #missions-overlay,
+  #reward-wheel-overlay,
+  #gameover-screen {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  /* Any other element using backdrop-filter (banners, popups, etc) */
+  .a2hs-banner,
+  .level-banner,
+  .hs-banner,
+  [class*="-popup"],
+  [class*="-panel"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* ── HUD readability: tabular nums ──
+   Score, multiplier, distance, coins all tick frequently.
+   Without tabular-nums, each digit is a different width and
+   the container reflows on every tick → choppy feel + paint
+   thrash. tabular-nums = monospace digit widths inside a
+   proportional font. */
+.hud-value,
+.hud-coin-val,
+#hud-score,
+#hud-coins,
+#hud-multiplier,
+#go-coins-total {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ── will-change for animated HUD/banner elements ──
+   Promotes to its own composite layer so the browser doesn't
+   repaint the parent on every tick/animation frame. */
+#hud-score,
+#hud-multiplier,
+#hud-coins,
+#level-banner,
+#headstart-overlay,
+#retry-fade,
+.hs-banner {
+  will-change: transform, opacity;
+}
