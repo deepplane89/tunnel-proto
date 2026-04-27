@@ -6193,12 +6193,16 @@ function _rebuildLocalNozzles() {
 const PARTICLE_COUNT = 160;  // per engine pod (reduced — flame quads handle core visual)
 const thrusterSystems = [];
 
-// Engine nozzle world-space offsets
-// Side pods (Mesh4/5): local x=±1.52, y=-0.233(bottom), z=1.488(back) × scale 0.30
-// World: x=±0.456, y=0.28-0.07=0.21, z=4.5+1.488*0.30=4.946
+// Engine nozzle world-space offsets — derived from default_ship.glb geometry (2026-04-27)
+// Anchor analysis:
+//   - Hull rear face exits at world Z ≈ 5.08 (model Z=+1.92 × scale 0.30 + shipGroup.z 4.5)
+//   - Engine bay (nozzle-material meshes) spans model X=[-0.46, +0.46]; mid-pod ≈ ±0.45 × 0.30 + ... → ±0.45 world
+//   - Flame anchor in GLB sits at model y=-0.27, exit y ≈ 0.05 world
+// Picked z=5.10 (just outside hull rear face), y=0.05, x=±0.45 as principled starting point;
+// retune via T-tuner sliders if needed.
 const NOZZLE_OFFSETS = [
-  new THREE.Vector3(-0.50, 0.12, 5.20),  // left pod back-bottom
-  new THREE.Vector3( 0.50, 0.12, 5.20),  // right pod back-bottom
+  new THREE.Vector3(-0.45, 0.05, 5.10),  // left pod back-bottom
+  new THREE.Vector3( 0.45, 0.05, 5.10),  // right pod back-bottom
 ];
 // Mini thruster nozzles — inboard hull lights
 const MINI_NOZZLE_OFFSETS = [
