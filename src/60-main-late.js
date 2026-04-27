@@ -865,10 +865,3 @@ function playTitleTap() {
   if (sfx) { sfx.currentTime = 0; sfx.volume = 0.7; sfx.playbackRate = 0.85 + Math.random() * 0.5; sfx.play().catch(() => {}); }
 }
 
- playTitleTap() {
-  if (state.muted) return;
-  _ensureCtxRunning();
-  const sfx = document.getElementById('exit-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.7; sfx.playbackRate = 0.85 + Math.random() * 0.5; sfx.play().catch(() => {}); }
-}
-
