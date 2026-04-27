@@ -1247,7 +1247,8 @@ function _drSequencerTick(dt) {
       // Advance when knife canyon ends (l3KnifeDone) OR stage duration elapsed.
       // _stopL3KnifeCanyon flips l3KnifeDone=true after _L3_KNIFE_DURATION (40s).
       if (state.l3KnifeDone || state.seqStageElapsed >= (stage.duration || 40)) {
-        if (state.l3KnifeCanyon) _stopL3KnifeCanyon();
+        // Natural sequencer advance — graceful exit so slabs scroll past ship.
+        if (state.l3KnifeCanyon) _stopL3KnifeCanyon({ immediate: false });
         // Re-arm so a future S3 entry (e.g. hotkey jump) can fire again
         state.l3KnifeDone = false;
         state._l3EntryLogged = false;

@@ -10293,12 +10293,25 @@ function _startL3KnifeCanyon() {
   console.log('[L3-KNIFE] ON for ' + _L3_KNIFE_DURATION + 's');
 }
 
-function _stopL3KnifeCanyon() {
+// opts.immediate (default true): tear down walls right now. Pass false on the
+// natural 40s timeout so slabs keep scrolling past the ship instead of
+// vanishing — the canyon ticker auto-destroys via the allGone watchdog once
+// they've drifted off. Hard resets (death/retry/level-skip) keep immediate=true
+// because the camera is no longer on the corridor.
+function _stopL3KnifeCanyon(opts) {
+  const immediate = !(opts && opts.immediate === false);
   state.l3KnifeCanyon  = false;
   state.l3KnifeDone    = true;  // one-shot per L3 entry; re-entering L3 re-arms via level transition reset
-  if (_canyonWalls) _destroyCanyonWalls();
-  _canyonActive  = false;
-  _canyonExiting = false;
+  if (immediate) {
+    if (_canyonWalls) _destroyCanyonWalls();
+    _canyonActive  = false;
+    _canyonExiting = false;
+  } else {
+    // Graceful exit — keep walls alive, let them drift past the ship.
+    // The canyon ticker (20-main-early.js) destroys walls when allGone.
+    _canyonActive  = false;
+    _canyonExiting = true;
+  }
   _canyonManual  = false;
   _jlCorridor.active = false;
   _canyonTuner._l4Recreation = false;
@@ -10409,7 +10422,8 @@ function _updateL3KnifeCanyon(dt) {
   // not the campaign level. Sequencer advance + retry/death both call
   // _stopL3KnifeCanyon directly.
   if (state.l3KnifeElapsed >= _L3_KNIFE_DURATION) {
-    _stopL3KnifeCanyon();
+    // Natural end — graceful exit so slabs keep scrolling past ship.
+    _stopL3KnifeCanyon({ immediate: false });
   }
 }
 
@@ -15647,7 +15661,8 @@ function _drSequencerTick(dt) {
       // Advance when knife canyon ends (l3KnifeDone) OR stage duration elapsed.
       // _stopL3KnifeCanyon flips l3KnifeDone=true after _L3_KNIFE_DURATION (40s).
       if (state.l3KnifeDone || state.seqStageElapsed >= (stage.duration || 40)) {
-        if (state.l3KnifeCanyon) _stopL3KnifeCanyon();
+        // Natural sequencer advance — graceful exit so slabs scroll past ship.
+        if (state.l3KnifeCanyon) _stopL3KnifeCanyon({ immediate: false });
         // Re-arm so a future S3 entry (e.g. hotkey jump) can fire again
         state.l3KnifeDone = false;
         state._l3EntryLogged = false;
