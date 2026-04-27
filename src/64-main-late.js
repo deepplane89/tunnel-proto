@@ -9,7 +9,14 @@ _tapBind(document.getElementById('death-run-btn'), () => {
   if (_ewEng) { _ewEng.load(); }
   if (_ewRoar) { _ewRoar.load(); }
   playStartSound();
-  startDeathRun();
+  // Orientation gate: if user picked landscape but is in portrait (or vice versa),
+  // show "rotate device" overlay and start once they comply. Native lock is
+  // attempted once oriented correctly (works on Android, no-op on iOS).
+  if (typeof window.__orientationGate === 'function') {
+    window.__orientationGate().then(() => { startDeathRun(); });
+  } else {
+    startDeathRun();
+  }
 });
 _tapBind(document.getElementById('restart-btn'), () => {
   if (!_gameOverTapReady) return; // cooldown guard
