@@ -13222,7 +13222,7 @@ window.addEventListener('keydown', e => {
     state._introLiftActive = true;
     state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.7; _roar.play().catch(()=>{}); }
   }
   // Escape now pauses (handled above) — no longer returns to title
   // Hold-to-spin roll — up/down keys spin ship on Z axis while held
@@ -15131,7 +15131,7 @@ function startDeathRun() {
       if (roar && !state.muted) {
         _ensureCtxRunning();
         roar.currentTime = 0;
-        roar.volume = 0.4; // launch roar — audible thruster on prologue-skip
+        roar.volume = 0.7; // launch roar — matches last night's perceived volume
         roar.play().catch(() => {});
       }
       beginThrusterSputter(); // sputtering ramp-up to full power

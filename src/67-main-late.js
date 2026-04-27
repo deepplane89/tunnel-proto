@@ -861,7 +861,7 @@ function startDeathRun() {
       if (roar && !state.muted) {
         _ensureCtxRunning();
         roar.currentTime = 0;
-        roar.volume = 0.4; // launch roar — audible thruster on prologue-skip
+        roar.volume = 0.7; // launch roar — matches last night's perceived volume
         roar.play().catch(() => {});
       }
       beginThrusterSputter(); // sputtering ramp-up to full power
