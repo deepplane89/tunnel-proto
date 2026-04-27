@@ -873,7 +873,7 @@ function startDeathRun() {
       startEngineBaseline(0.5);
       // Argon sidechain ambient — silent baseline, opens up with lateral ship movement
       const _argon = document.getElementById('argon-ambient-sfx');
-      if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
+      if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
       state._argonOpen = 0;
       beginThrusterSputter(); // sputtering ramp-up to full power
       // Trigger lift immediately on launch — ship rises from 0.38 as thrusters fire
@@ -3015,7 +3015,7 @@ function showIntroText() {
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
     const _argon = document.getElementById('argon-ambient-sfx');
-    if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
+    if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
     state._argonOpen = 0;
   }, { passive: false });
 
@@ -3810,7 +3810,8 @@ function update(dt) {
       const _rate = _velNorm > _prev ? 8.0 : 2.5;
       const _open = _prev + (_velNorm - _prev) * Math.min(1, _rate * dt);
       state._argonOpen = _open;
-      _argonEl.volume = 0.03 + _open * 0.47;
+      // Truly silent at rest — only audible when player steers (sidechain feel)
+      _argonEl.volume = _open * 0.55;
       _argonEl.playbackRate = 0.95 + _open * 0.10;
     }
   }
@@ -3846,7 +3847,7 @@ function update(dt) {
       // Restart baseline whir + argon sidechain on retry arrival
       startEngineBaseline(0.5);
       const _rsArgon = document.getElementById('argon-ambient-sfx');
-      if (_rsArgon && !state.muted) { _rsArgon.currentTime = 0; _rsArgon.volume = 0.03; _rsArgon.playbackRate = 0.95; _rsArgon.play().catch(()=>{}); }
+      if (_rsArgon && !state.muted) { _rsArgon.currentTime = 0; _rsArgon.volume = 0; _rsArgon.playbackRate = 0.95; _rsArgon.play().catch(()=>{}); }
       state._argonOpen = 0;
     }
     if (_retrySweepT >= 1) {

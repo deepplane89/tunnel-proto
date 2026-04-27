@@ -322,7 +322,7 @@ window.addEventListener('keydown', e => {
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
     const _argon = document.getElementById('argon-ambient-sfx');
-    if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
+    if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
     state._argonOpen = 0;
   }
   // Escape now pauses (handled above) — no longer returns to title
@@ -618,7 +618,7 @@ window.addEventListener('keyup', e => {
         playThrusterImpact(0.7);
         startEngineBaseline(0.5);
         const _argon = document.getElementById('argon-ambient-sfx');
-        if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
+        if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
         state._argonOpen = 0;
         return;
       }
