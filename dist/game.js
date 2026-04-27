@@ -22459,6 +22459,26 @@ function buildSkinTunerSliders() {
       window._miniBloomScale = v;
     }, '#f60'));
 
+    // NOZZLE POSITIONS (left/right thruster placement)
+    const _nozUpd = () => { try { _rebuildLocalNozzles(); } catch(_) {} };
+    panel.appendChild(makeHeader('NOZZLES (L/R)'));
+    if (typeof NOZZLE_OFFSETS !== 'undefined' && NOZZLE_OFFSETS[0]) {
+      panel.appendChild(makeSlider('noz L x', NOZZLE_OFFSETS[0].x, -2, 2, 0.01, v => { NOZZLE_OFFSETS[0].x = v; _nozUpd(); }, '#f80'));
+      panel.appendChild(makeSlider('noz L y', NOZZLE_OFFSETS[0].y, -1, 1, 0.01, v => { NOZZLE_OFFSETS[0].y = v; _nozUpd(); }, '#f80'));
+      panel.appendChild(makeSlider('noz L z', NOZZLE_OFFSETS[0].z, -2, 7, 0.01, v => { NOZZLE_OFFSETS[0].z = v; _nozUpd(); }, '#f80'));
+      panel.appendChild(makeSlider('noz R x', NOZZLE_OFFSETS[1].x, -2, 2, 0.01, v => { NOZZLE_OFFSETS[1].x = v; _nozUpd(); }, '#f80'));
+      panel.appendChild(makeSlider('noz R y', NOZZLE_OFFSETS[1].y, -1, 1, 0.01, v => { NOZZLE_OFFSETS[1].y = v; _nozUpd(); }, '#f80'));
+      panel.appendChild(makeSlider('noz R z', NOZZLE_OFFSETS[1].z, -2, 7, 0.01, v => { NOZZLE_OFFSETS[1].z = v; _nozUpd(); }, '#f80'));
+    }
+    if (typeof MINI_NOZZLE_OFFSETS !== 'undefined' && MINI_NOZZLE_OFFSETS[0]) {
+      panel.appendChild(makeSlider('mini L x', MINI_NOZZLE_OFFSETS[0].x, -2, 2, 0.01, v => { MINI_NOZZLE_OFFSETS[0].x = v; _nozUpd(); }, '#fa0'));
+      panel.appendChild(makeSlider('mini L y', MINI_NOZZLE_OFFSETS[0].y, -1, 1, 0.01, v => { MINI_NOZZLE_OFFSETS[0].y = v; _nozUpd(); }, '#fa0'));
+      panel.appendChild(makeSlider('mini L z', MINI_NOZZLE_OFFSETS[0].z, -2, 7, 0.01, v => { MINI_NOZZLE_OFFSETS[0].z = v; _nozUpd(); }, '#fa0'));
+      panel.appendChild(makeSlider('mini R x', MINI_NOZZLE_OFFSETS[1].x, -2, 2, 0.01, v => { MINI_NOZZLE_OFFSETS[1].x = v; _nozUpd(); }, '#fa0'));
+      panel.appendChild(makeSlider('mini R y', MINI_NOZZLE_OFFSETS[1].y, -1, 1, 0.01, v => { MINI_NOZZLE_OFFSETS[1].y = v; _nozUpd(); }, '#fa0'));
+      panel.appendChild(makeSlider('mini R z', MINI_NOZZLE_OFFSETS[1].z, -2, 7, 0.01, v => { MINI_NOZZLE_OFFSETS[1].z = v; _nozUpd(); }, '#fa0'));
+    }
+
     // CONE THRUSTER (subsection of THRUSTERS)
     panel.appendChild(makeHeader('CONE THRUSTER'));
     const _coneTogBtn = document.createElement('button');
