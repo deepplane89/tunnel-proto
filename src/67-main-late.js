@@ -872,6 +872,10 @@ function startDeathRun() {
       // Continuous baseline whir during gameplay (looped)
       const _baseline = document.getElementById('engine-baseline');
       if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
+      // Argon sidechain ambient — silent baseline, opens up with lateral ship movement
+      const _argon = document.getElementById('argon-ambient-sfx');
+      if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
+      state._argonOpen = 0;
       beginThrusterSputter(); // sputtering ramp-up to full power
       // Trigger lift immediately on launch — ship rises from 0.38 as thrusters fire
       state._introLiftActive = true;
@@ -3018,6 +3022,9 @@ function showIntroText() {
     playThrusterImpact(0.7);
     const _baseline = document.getElementById('engine-baseline');
     if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
+    const _argon = document.getElementById('argon-ambient-sfx');
+    if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
+    state._argonOpen = 0;
   }, { passive: false });
 
   // Line A fades in at 3s (3.5s duration → done ~6.5s)
@@ -3233,6 +3240,9 @@ function killPlayer() {
   if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
   const _baseD = document.getElementById('engine-baseline');
   if (_baseD && !_baseD.paused) { _baseD.pause(); _baseD.currentTime = 0; }
+  const _argonD = document.getElementById('argon-ambient-sfx');
+  if (_argonD && !_argonD.paused) { _argonD.pause(); _argonD.currentTime = 0; }
+  state._argonOpen = 0;
   _stopMagnetWhir();
   const _invD = document.getElementById('invincible-loop-sfx');
   if (_invD && !_invD.paused) { _invD.pause(); _invD.currentTime = 0; _invD.loop = false; }
@@ -3798,6 +3808,22 @@ function update(dt) {
   state.shipVelX = Math.max(-tiltMaxVel, Math.min(tiltMaxVel, state.shipVelX));
   state.shipX   += state.shipVelX * dt;
 
+  // ── Argon sidechain modulation: lateral ship velocity opens up ambient layer ──
+  // Silent baseline (vol 0.03) → fast movement opens to vol 0.5, rate 0.95→1.05.
+  // Attack 8/s (snaps open with input), release 2.5/s (smooth tail when slowing).
+  if (state.phase === 'playing' && !_introBlock) {
+    const _argonEl = document.getElementById('argon-ambient-sfx');
+    if (_argonEl && !state.muted && !_argonEl.paused) {
+      const _velNorm = Math.min(1, Math.abs(state.shipVelX) / Math.max(1, MAX_VEL));
+      const _prev = state._argonOpen || 0;
+      const _rate = _velNorm > _prev ? 8.0 : 2.5;
+      const _open = _prev + (_velNorm - _prev) * Math.min(1, _rate * dt);
+      state._argonOpen = _open;
+      _argonEl.volume = 0.03 + _open * 0.47;
+      _argonEl.playbackRate = 0.95 + _open * 0.10;
+    }
+  }
+
 
   // Camera pivot follows ship X
   camTargetX = state.shipX;
@@ -3826,6 +3852,12 @@ function update(dt) {
       const _rsWarp = document.getElementById('retry-warp-sfx');
       if (_rsWarp) { try { _rsWarp.pause(); _rsWarp.currentTime = 0; } catch(_) {} }
       playThrusterImpact(0.7);
+      // Restart baseline whir + argon sidechain on retry arrival
+      const _rsBase = document.getElementById('engine-baseline');
+      if (_rsBase && !state.muted) { _rsBase.currentTime = 0; _rsBase.volume = 0.5; _rsBase.play().catch(()=>{}); }
+      const _rsArgon = document.getElementById('argon-ambient-sfx');
+      if (_rsArgon && !state.muted) { _rsArgon.currentTime = 0; _rsArgon.volume = 0.03; _rsArgon.playbackRate = 0.95; _rsArgon.play().catch(()=>{}); }
+      state._argonOpen = 0;
     }
     if (_retrySweepT >= 1) {
       _retrySweepActive = false;

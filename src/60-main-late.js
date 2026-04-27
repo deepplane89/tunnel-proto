@@ -70,6 +70,8 @@ function togglePause() {
     if (_engP && !_engP.paused) _engP.pause();
     if (_roarP && !_roarP.paused) _roarP.pause();
     if (_baseP && !_baseP.paused) _baseP.pause();
+    const _argonP = document.getElementById('argon-ambient-sfx');
+    if (_argonP && !_argonP.paused) _argonP.pause();
     _stopMagnetWhir();
     const _invP = document.getElementById('invincible-loop-sfx');
     if (_invP && !_invP.paused) _invP.pause();
@@ -83,6 +85,9 @@ function togglePause() {
     // Resume baseline whir on unpause
     const _baseU = document.getElementById('engine-baseline');
     if (_baseU && !state.muted) { _baseU.play().catch(()=>{}); }
+    // Resume argon sidechain ambient on unpause
+    const _argonU = document.getElementById('argon-ambient-sfx');
+    if (_argonU && !state.muted) { _argonU.play().catch(()=>{}); }
     // Resume invincible loop if active
     const _invU = document.getElementById('invincible-loop-sfx');
     if (_invU && state.invincibleTimer > 0 && !state.muted) { _invU.play().catch(()=>{}); }
@@ -165,6 +170,9 @@ function returnToTitle() {
   if (_engR) { _engR.pause(); _engR.currentTime = 0; }
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
   if (_baseR) { _baseR.pause(); _baseR.currentTime = 0; }
+  const _argonR = document.getElementById('argon-ambient-sfx');
+  if (_argonR) { _argonR.pause(); _argonR.currentTime = 0; }
+  state._argonOpen = 0;
   _stopMagnetWhir();
   const _invR = document.getElementById('invincible-loop-sfx');
   if (_invR) { _invR.pause(); _invR.currentTime = 0; _invR.loop = false; }
@@ -317,6 +325,9 @@ window.addEventListener('keydown', e => {
     playThrusterImpact(0.7);
     const _baseline = document.getElementById('engine-baseline');
     if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
+    const _argon = document.getElementById('argon-ambient-sfx');
+    if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
+    state._argonOpen = 0;
   }
   // Escape now pauses (handled above) — no longer returns to title
   // Hold-to-spin roll — up/down keys spin ship on Z axis while held
@@ -611,6 +622,9 @@ window.addEventListener('keyup', e => {
         playThrusterImpact(0.7);
         const _baseline = document.getElementById('engine-baseline');
         if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
+        const _argon = document.getElementById('argon-ambient-sfx');
+        if (_argon && !state.muted) { _argon.currentTime = 0; _argon.volume = 0.03; _argon.playbackRate = 0.95; _argon.play().catch(()=>{}); }
+        state._argonOpen = 0;
         return;
       }
       // Start game if on title/dead — mark this touch as game-starting (ignore swipes from it)
