@@ -1389,6 +1389,8 @@ _tapBind(perfToggleBtn, (e) => {
 
 const canvas   = document.getElementById('game-canvas');
 const _mobAA = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1);
+// Expose for cross-file mobile gating (perf-diag, etc.)
+window._isMobile = _mobAA;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_mobAA, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1779,7 +1781,7 @@ const vignetteShader = {
     tDiffuse: { value: null },
     offset:   { value: 0.55 },
     darkness: { value: 0.5 },     // lighter vignette
-    aberration: { value: 0.0015 }, // subtle aberration
+    aberration: { value: _mobAA ? 0.0 : 0.0015 }, // subtle aberration; off on mobile (saves 2 tex samples per fragment per frame)
   },
   vertexShader: `
     varying vec2 vUv;
@@ -1795,11 +1797,18 @@ const vignetteShader = {
       vec2 uv = vUv;
       vec2 center = uv - 0.5;
       float dist = length(center);
-      // Chromatic aberration
-      float r = texture2D(tDiffuse, uv + center * aberration).r;
-      float g = texture2D(tDiffuse, uv).g;
-      float b = texture2D(tDiffuse, uv - center * aberration).b;
-      vec3 col = vec3(r, g, b);
+      vec3 col;
+      // Skip the 3-tap split when aberration is at baseline — saves 2 texture
+      // samples per fragment per frame on mobile. Boost FX (>= 0.0005) keeps
+      // the full RGB split.
+      if (aberration < 0.0005) {
+        col = texture2D(tDiffuse, uv).rgb;
+      } else {
+        float r = texture2D(tDiffuse, uv + center * aberration).r;
+        float g = texture2D(tDiffuse, uv).g;
+        float b = texture2D(tDiffuse, uv - center * aberration).b;
+        col = vec3(r, g, b);
+      }
       // Vignette
       col *= 1.0 - smoothstep(offset, offset + 0.4, dist) * darkness;
       gl_FragColor = vec4(col, 1.0);
@@ -17386,12 +17395,16 @@ function activateHeadStart(mega) {
   const scoreStart = state.score;
   const scoreTarget = targetScore + 5; // slightly past threshold
   const rampStart = performance.now();
+  // Track in _introTimers so death/cleanup path can stop it (see line ~2790).
   const _hsRamp = setInterval(() => {
     const t = Math.min(1, (performance.now() - rampStart) / warpDuration);
     const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     state.score = Math.floor(scoreStart + (scoreTarget - scoreStart) * ease);
     if (t >= 1) {
       clearInterval(_hsRamp);
+      // Self-clear handled above; tracked in _introTimers as a safety net
+      // in case the player dies mid-ramp (death path clears all _introTimers).
+      const _idx = _introTimers.indexOf(_hsRamp); if (_idx >= 0) _introTimers.splice(_idx, 1);
       if (state.isDeathRun) {
         // DR: jump sequencer directly — normal=T3A (idx 2, key 3), mega=T3B_L3BOSS (idx 3, key 4)
         const _targetStageIdx = mega ? 3 : 2;
@@ -17411,6 +17424,7 @@ function activateHeadStart(mega) {
       }
     }
   }, 16);
+  _introTimers.push(_hsRamp);
 
   // Flash banner
   const bannerText = mega ? 'MEGA START' : 'HEAD START';
@@ -19153,8 +19167,11 @@ function update(dt) {
       const _invG = document.getElementById('invincible-loop-sfx');
       if (_invG) { try { _invG.currentTime = 20.0; } catch(_) {} }
     }
-    // RGB chromatic aberration: full split during speed, ramp down during grace
-    const BASE_ABERRATION = 0.0015;
+    // RGB chromatic aberration: full split during speed, ramp down during grace.
+    // On mobile, baseline is 0 so the shader skips the 3-tap split during normal play
+    // (saves 2 texture samples per fragment per frame). Boost still hits MAX during invincibility.
+    const _isMobAB = (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+    const BASE_ABERRATION = _isMobAB ? 0.0 : 0.0015;
     const MAX_ABERRATION = 0.04;
     if (state.invincibleSpeedActive) {
       vignettePass.uniforms.aberration.value = MAX_ABERRATION;
@@ -21124,7 +21141,10 @@ function animate() {
   _updateFaceExplosion(rawDt);
   // ── Update localized heat haze pass (low poly only) ──
   {
-    _thrusterHazePass.enabled = window._coneThrustersEnabled && state.phase === 'playing' && state.thrusterPower > 0.01;
+    // Disable thruster haze entirely on mobile — fullscreen post-processing pass
+    // that runs every frame thrusters fire (= most of the game). Subtle visual,
+    // measurable cost. Saves ~0.5-1ms/frame on mid-range Android.
+    _thrusterHazePass.enabled = !window._isMobile && window._coneThrustersEnabled && state.phase === 'playing' && state.thrusterPower > 0.01;
     if (_thrusterHazePass.enabled) {
       const _hzProj = new THREE.Vector3();
       let _hazeValid = true;

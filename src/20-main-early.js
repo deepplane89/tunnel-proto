@@ -1127,6 +1127,8 @@ _tapBind(perfToggleBtn, (e) => {
 
 const canvas   = document.getElementById('game-canvas');
 const _mobAA = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1);
+// Expose for cross-file mobile gating (perf-diag, etc.)
+window._isMobile = _mobAA;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_mobAA, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1517,7 +1519,7 @@ const vignetteShader = {
     tDiffuse: { value: null },
     offset:   { value: 0.55 },
     darkness: { value: 0.5 },     // lighter vignette
-    aberration: { value: 0.0015 }, // subtle aberration
+    aberration: { value: _mobAA ? 0.0 : 0.0015 }, // subtle aberration; off on mobile (saves 2 tex samples per fragment per frame)
   },
   vertexShader: `
     varying vec2 vUv;
@@ -1533,11 +1535,18 @@ const vignetteShader = {
       vec2 uv = vUv;
       vec2 center = uv - 0.5;
       float dist = length(center);
-      // Chromatic aberration
-      float r = texture2D(tDiffuse, uv + center * aberration).r;
-      float g = texture2D(tDiffuse, uv).g;
-      float b = texture2D(tDiffuse, uv - center * aberration).b;
-      vec3 col = vec3(r, g, b);
+      vec3 col;
+      // Skip the 3-tap split when aberration is at baseline — saves 2 texture
+      // samples per fragment per frame on mobile. Boost FX (>= 0.0005) keeps
+      // the full RGB split.
+      if (aberration < 0.0005) {
+        col = texture2D(tDiffuse, uv).rgb;
+      } else {
+        float r = texture2D(tDiffuse, uv + center * aberration).r;
+        float g = texture2D(tDiffuse, uv).g;
+        float b = texture2D(tDiffuse, uv - center * aberration).b;
+        col = vec3(r, g, b);
+      }
       // Vignette
       col *= 1.0 - smoothstep(offset, offset + 0.4, dist) * darkness;
       gl_FragColor = vec4(col, 1.0);

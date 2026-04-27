@@ -2947,12 +2947,16 @@ function activateHeadStart(mega) {
   const scoreStart = state.score;
   const scoreTarget = targetScore + 5; // slightly past threshold
   const rampStart = performance.now();
+  // Track in _introTimers so death/cleanup path can stop it (see line ~2790).
   const _hsRamp = setInterval(() => {
     const t = Math.min(1, (performance.now() - rampStart) / warpDuration);
     const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     state.score = Math.floor(scoreStart + (scoreTarget - scoreStart) * ease);
     if (t >= 1) {
       clearInterval(_hsRamp);
+      // Self-clear handled above; tracked in _introTimers as a safety net
+      // in case the player dies mid-ramp (death path clears all _introTimers).
+      const _idx = _introTimers.indexOf(_hsRamp); if (_idx >= 0) _introTimers.splice(_idx, 1);
       if (state.isDeathRun) {
         // DR: jump sequencer directly — normal=T3A (idx 2, key 3), mega=T3B_L3BOSS (idx 3, key 4)
         const _targetStageIdx = mega ? 3 : 2;
@@ -2972,6 +2976,7 @@ function activateHeadStart(mega) {
       }
     }
   }, 16);
+  _introTimers.push(_hsRamp);
 
   // Flash banner
   const bannerText = mega ? 'MEGA START' : 'HEAD START';
@@ -4714,8 +4719,11 @@ function update(dt) {
       const _invG = document.getElementById('invincible-loop-sfx');
       if (_invG) { try { _invG.currentTime = 20.0; } catch(_) {} }
     }
-    // RGB chromatic aberration: full split during speed, ramp down during grace
-    const BASE_ABERRATION = 0.0015;
+    // RGB chromatic aberration: full split during speed, ramp down during grace.
+    // On mobile, baseline is 0 so the shader skips the 3-tap split during normal play
+    // (saves 2 texture samples per fragment per frame). Boost still hits MAX during invincibility.
+    const _isMobAB = (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+    const BASE_ABERRATION = _isMobAB ? 0.0 : 0.0015;
     const MAX_ABERRATION = 0.04;
     if (state.invincibleSpeedActive) {
       vignettePass.uniforms.aberration.value = MAX_ABERRATION;

@@ -436,7 +436,10 @@ function animate() {
   _updateFaceExplosion(rawDt);
   // ── Update localized heat haze pass (low poly only) ──
   {
-    _thrusterHazePass.enabled = window._coneThrustersEnabled && state.phase === 'playing' && state.thrusterPower > 0.01;
+    // Disable thruster haze entirely on mobile — fullscreen post-processing pass
+    // that runs every frame thrusters fire (= most of the game). Subtle visual,
+    // measurable cost. Saves ~0.5-1ms/frame on mid-range Android.
+    _thrusterHazePass.enabled = !window._isMobile && window._coneThrustersEnabled && state.phase === 'playing' && state.thrusterPower > 0.01;
     if (_thrusterHazePass.enabled) {
       const _hzProj = new THREE.Vector3();
       let _hazeValid = true;
