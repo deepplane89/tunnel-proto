@@ -9891,8 +9891,8 @@ function _playLightningStrike() {
   // While a thunder clip is playing, _playThunderRotating() returns silently,
   // so mid-clip strikes get the synth boom only — the long clip plays out in full.
   _playThunderRotating();
-  // Synth boom — raided down a notch from 0.32 so it doesn't overpower the thunder mp3.
-  const vol = 0.22 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+  // Synth boom — raided up from 0.32 -> 0.42 for more punch under the thunder mp3.
+  const vol = 0.42 * (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (vol <= 0) return;
   const now = audioCtx.currentTime;
 
