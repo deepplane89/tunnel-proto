@@ -17,51 +17,12 @@ function playThrusterImpact(vol) {
   }
 }
 
-// ── Smooth fade helpers for engine-baseline (HTMLAudioElement has no AudioParam) ──
-// Avoids the abrupt pop-on / pop-off that comes from setting .volume directly.
-let _baselineFadeIv = null;
-function _baselineCancelFade() {
-  if (_baselineFadeIv) { clearInterval(_baselineFadeIv); _baselineFadeIv = null; }
-}
-function startEngineBaseline(target) {
-  if (state.muted) return;
-  const el = document.getElementById('engine-baseline');
-  if (!el) return;
-  _baselineCancelFade();
-  const tgt = (target == null) ? 0.5 : target;
-  // If already playing near target, just keep going
-  if (!el.paused && Math.abs(el.volume - tgt) < 0.02) { el.volume = tgt; return; }
-  if (el.paused) { try { el.currentTime = 0; el.volume = 0; el.play().catch(()=>{}); } catch (_) {} }
-  // 240ms ramp-in, 16ms tick → 15 steps
-  const start = el.volume || 0;
-  let step = 0;
-  const steps = 15;
-  _baselineFadeIv = setInterval(() => {
-    step++;
-    const t = step / steps;
-    el.volume = Math.max(0, Math.min(1, start + (tgt - start) * t));
-    if (step >= steps) { _baselineCancelFade(); el.volume = tgt; }
-  }, 16);
-}
-function stopEngineBaseline(opts) {
-  const el = document.getElementById('engine-baseline');
-  if (!el) return;
-  _baselineCancelFade();
-  if (el.paused) { if (opts && opts.reset) { try { el.currentTime = 0; } catch (_) {} } return; }
-  // 350ms ramp-out, 16ms tick → 22 steps
-  const start = el.volume || 0;
-  let step = 0;
-  const steps = 22;
-  _baselineFadeIv = setInterval(() => {
-    step++;
-    const t = step / steps;
-    el.volume = Math.max(0, start * (1 - t));
-    if (step >= steps) {
-      _baselineCancelFade();
-      try { el.pause(); if (opts && opts.reset) el.currentTime = 0; el.volume = 0; } catch (_) {}
-    }
-  }, 16);
-}
+// ── engine-baseline removed: continuous whir was unwanted. ──
+// Helpers kept as no-ops so existing callsites compile. Argon sidechain
+// ambient is now the only continuous layer (and it's silent unless the
+// player steers).
+function startEngineBaseline(_target) { /* no-op */ }
+function stopEngineBaseline(_opts) { /* no-op */ }
 
 
 // ── Retry sweep whoosh: filtered noise with rising frequency sweep ──
