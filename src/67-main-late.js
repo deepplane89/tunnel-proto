@@ -74,10 +74,11 @@ function _triggerRetryWithSweep() {
     // Retry SFX: tech-device one-shot (504ms) plays at sweep start.
     const _retrySfx = document.getElementById('retry-tech-sfx');
     if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
-    // Layered warp: 1.3s clip lasts the whole sweep. Peak at 1.04s into clip
-    // lands at thruster fire (sweep T=0.8 → 1040ms in). Source peak = 1.9s.
-    const _retryWarp = document.getElementById('retry-warp-sfx');
-    if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.55; _retryWarp.play().catch(()=>{}); }
+    // Layered warp: plays AFTER retry-tech (504ms) finishes — no overlap.
+    setTimeout(() => {
+      const _retryWarp = document.getElementById('retry-warp-sfx');
+      if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.55; _retryWarp.play().catch(()=>{}); }
+    }, 504);
     // Fade from black
     fadeEl.style.opacity = '0';
   }, 180); // wait for fade-to-black to complete
