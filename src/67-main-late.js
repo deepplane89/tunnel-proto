@@ -3813,16 +3813,8 @@ function update(dt) {
     // Trigger quiet thruster ignition as camera arrives at ship
     if (_retrySweepT >= 0.8 && !_retrySweepThrusterFired) {
       _retrySweepThrusterFired = true;
-      // Stop retry-warp the moment the thruster ignites
-      const _rsWarp = document.getElementById('retry-warp-sfx');
-      if (_rsWarp) { try { _rsWarp.pause(); _rsWarp.currentTime = 0; } catch(_) {} }
-      const _rsEng = document.getElementById('engine-roar');
-      if (_rsEng && !state.muted) {
-        _ensureCtxRunning();
-        _rsEng.currentTime = 0;
-        _rsEng.volume = 0.6 * (typeof sfxMult === 'function' ? sfxMult() : 1);
-        _rsEng.play().catch(() => {});
-      }
+      // Retry: skip engine-roar, let warp keep ringing, plasma-punch on ignition
+      _ensureCtxRunning();
       playThrusterImpact(0.7);
     }
     if (_retrySweepT >= 1) {
