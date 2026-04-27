@@ -3139,10 +3139,6 @@ function killPlayer() {
     shieldWireMat.opacity = 0;
     addCrashFlash(0x00f0ff);
     const _shHitSfx2 = document.getElementById('shield-hit-sfx'); if (_shHitSfx2) { _shHitSfx2.currentTime = 0; _shHitSfx2.play().catch(()=>{}); }
-    // Stop shield argon loop on break
-    const _shLoopB = document.getElementById('shield-loop-sfx');
-    if (_shLoopB) { try { _shLoopB.pause(); _shLoopB.currentTime = 0; _shLoopB.loop = false; } catch(_) {} }
-    state._shieldExpireWarned = false;
     return;
   }
 
@@ -3240,8 +3236,6 @@ function killPlayer() {
   _stopMagnetWhir();
   const _invD = document.getElementById('invincible-loop-sfx');
   if (_invD && !_invD.paused) { _invD.pause(); _invD.currentTime = 0; _invD.loop = false; }
-  const _shLoopD = document.getElementById('shield-loop-sfx');
-  if (_shLoopD && !_shLoopD.paused) { _shLoopD.pause(); _shLoopD.currentTime = 0; _shLoopD.loop = false; }
   playCrash();
   // addCrashFlash(); // disabled to isolate face explosion
 
@@ -4578,12 +4572,6 @@ function update(dt) {
   // Shield duration timer (tier 2+)
   if (state.shieldActive && state.shieldDuration > 0 && state.invincibleTimer <= 0) {
     state.shieldTimer -= dt;
-    // About-to-expire: seek shield loop to the 11s mark (one-time)
-    if (state.shieldTimer <= 1.5 && state.shieldTimer > 0 && !state._shieldExpireWarned) {
-      state._shieldExpireWarned = true;
-      const _shLoopW = document.getElementById('shield-loop-sfx');
-      if (_shLoopW) { try { _shLoopW.currentTime = 11.0; } catch(_) {} }
-    }
     if (state.shieldTimer <= 0) {
       state.shieldActive = false;
       state._prevShieldHP = 0;
@@ -4592,10 +4580,6 @@ function update(dt) {
       shieldWireMat.opacity = 0;
       shieldLight.intensity = 0;
       const _shExpSfx = document.getElementById('shield-expire-sfx'); if (_shExpSfx) { _shExpSfx.currentTime = 0; _shExpSfx.volume = 0.18; _shExpSfx.play().catch(()=>{}); }
-      // Stop shield loop
-      const _shLoopE = document.getElementById('shield-loop-sfx');
-      if (_shLoopE) { try { _shLoopE.pause(); _shLoopE.currentTime = 0; _shLoopE.loop = false; } catch(_) {} }
-      state._shieldExpireWarned = false;
     }
   }
   if (state.invincibleTimer > 0) {
