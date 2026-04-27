@@ -13276,7 +13276,7 @@ window.addEventListener('keydown', e => {
     state._introLiftActive = true;
     state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
     state._argonSteering = false;
@@ -13570,7 +13570,7 @@ window.addEventListener('keyup', e => {
         state._introLiftActive = true;
         state._introLiftTimer = 0;
         const _roar = document.getElementById('engine-roar');
-        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
+        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
         playThrusterImpact(0.7);
         startEngineBaseline(0.5);
         state._argonSteering = false;
@@ -15194,7 +15194,7 @@ function startDeathRun() {
         if (roar && !state.muted) {
           _ensureCtxRunning();
           roar.currentTime = 0;
-          roar.volume = 0.6; // launch roar — last night's value
+          roar.volume = 0.4; // launch roar — last night's value
           roar.play().catch(() => {});
         }
         playThrusterImpact(0.7);
@@ -17339,7 +17339,7 @@ function showIntroText() {
     state._introLiftActive = true;
     state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
     state._argonSteering = false;
@@ -17557,9 +17557,11 @@ function killPlayer() {
   if (_engD && !_engD.paused) { _engD.pause(); _engD.currentTime = 0; }
   if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
   stopEngineBaseline({ reset: true });
+  if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   const _argonD = document.getElementById('argon-ambient-sfx');
   if (_argonD && !_argonD.paused) { try { _argonD.pause(); _argonD.currentTime = 0; _argonD.volume = 0; } catch (_) {} }
   state._argonSteering = false;
+  state._argonOpen = 0;
   _stopMagnetWhir();
   const _invD = document.getElementById('invincible-loop-sfx');
   if (_invD && !_invD.paused) { _invD.pause(); _invD.currentTime = 0; _invD.loop = false; }

@@ -864,7 +864,7 @@ function startDeathRun() {
         if (roar && !state.muted) {
           _ensureCtxRunning();
           roar.currentTime = 0;
-          roar.volume = 0.6; // launch roar — last night's value
+          roar.volume = 0.4; // launch roar — last night's value
           roar.play().catch(() => {});
         }
         playThrusterImpact(0.7);
@@ -3009,7 +3009,7 @@ function showIntroText() {
     state._introLiftActive = true;
     state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
     state._argonSteering = false;
@@ -3811,7 +3811,7 @@ function update(dt) {
         const _v0 = Math.min(1, Math.abs(state.shipVelX) / Math.max(1, MAX_VEL));
         try {
           _argonEl.currentTime = 0;
-          _argonEl.volume = 0.20 + _v0 * 0.40; // 0.20 floor on press, up to 0.60 mid-swerve
+          _argonEl.volume = 0.12 + _v0 * 0.28; // 0.12 floor on press, up to 0.40 mid-swerve
           _argonEl.playbackRate = 1.0;
           _argonEl.play().catch(()=>{});
         } catch (_) {}
@@ -3824,7 +3824,7 @@ function update(dt) {
         const _open = _prev + (_vNow - _prev) * Math.min(1, _rate * dt);
         state._argonOpen = _open;
         try {
-          _argonEl.volume = 0.20 + _open * 0.40;
+          _argonEl.volume = 0.12 + _open * 0.28;
           _argonEl.playbackRate = 0.97 + _open * 0.08;
         } catch (_) {}
       } else if (!_isSteering && _wasSteering) {
