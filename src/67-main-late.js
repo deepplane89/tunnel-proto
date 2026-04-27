@@ -76,7 +76,7 @@ function _triggerRetryWithSweep() {
     if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
     setTimeout(() => {
       const _retryWarp = document.getElementById('retry-warp-sfx');
-      if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.55; _retryWarp.play().catch(()=>{}); }
+      if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
     }, 300);
     // Fade from black
     fadeEl.style.opacity = '0';
@@ -861,9 +861,10 @@ function startDeathRun() {
       if (roar && !state.muted) {
         _ensureCtxRunning();
         roar.currentTime = 0;
-        roar.volume = 0.4; // launch roar — last night's value
+        roar.volume = 0.6; // launch roar — last night's value
         roar.play().catch(() => {});
       }
+      playThrusterImpact(0.7);
       // Continuous baseline whir during gameplay (looped)
       const _baseline = document.getElementById('engine-baseline');
       if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
@@ -1154,7 +1155,7 @@ function _drSequencerTick(dt) {
         // Thruster roar fires right as speed kicks in (beat 4 of the countdown).
         setTimeout(() => {
           const _roar = document.getElementById('engine-roar');
-          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
+          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
         }, 1500);
       }
     }
@@ -1421,7 +1422,7 @@ function _drSequencerTick(dt) {
         setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         setTimeout(() => {
           const _roar = document.getElementById('engine-roar');
-          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
+          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
         }, 1500);
       }
     }
@@ -2737,7 +2738,7 @@ function checkDeathRunSpeed() {
       hapticMedium();
       const roar = document.getElementById('engine-roar');
       // Speed-tier-up roar burst — was 0.06, way too quiet. Bumped to 0.22.
-      if (roar && !state.muted) { roar.currentTime = 0; roar.volume = 0.4; roar.play().catch(() => {}); }
+      if (roar && !state.muted) { roar.currentTime = 0; roar.volume = 0.6; roar.play().catch(() => {}); }
       state._thrusterFlare = 2.0;
     }
   } else if (safeForSpeed && targetTier !== state.deathRunSpeedTier) {
@@ -2749,7 +2750,7 @@ function checkDeathRunSpeed() {
       hapticMedium();
       const roar = document.getElementById('engine-roar');
       // Speed-tier-up roar burst (alt branch) — matched to 0.22.
-      if (roar && !state.muted) { roar.currentTime = 0; roar.volume = 0.4; roar.play().catch(() => {}); }
+      if (roar && !state.muted) { roar.currentTime = 0; roar.volume = 0.6; roar.play().catch(() => {}); }
       state._thrusterFlare = 2.0;
     }
   }
@@ -3008,7 +3009,8 @@ function showIntroText() {
     state._introLiftActive = true;
     state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.6; _roar.play().catch(()=>{}); }
+    playThrusterImpact(0.7);
     const _baseline = document.getElementById('engine-baseline');
     if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
   }, { passive: false });
@@ -3818,9 +3820,10 @@ function update(dt) {
       if (_rsEng && !state.muted) {
         _ensureCtxRunning();
         _rsEng.currentTime = 0;
-        _rsEng.volume = 0.4 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+        _rsEng.volume = 0.6 * (typeof sfxMult === 'function' ? sfxMult() : 1);
         _rsEng.play().catch(() => {});
       }
+      playThrusterImpact(0.7);
     }
     if (_retrySweepT >= 1) {
       _retrySweepActive = false;

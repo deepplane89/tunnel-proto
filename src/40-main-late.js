@@ -4,6 +4,19 @@
   if (sfx) { sfx.currentTime = 0; sfx.volume = 0.25; sfx.play().catch(() => {}); }
 }
 
+// Plasma-punch impact layered alongside engine-roar ignition.
+function playThrusterImpact(vol) {
+  if (state.muted) return;
+  const _ti = document.getElementById('thruster-impact-sfx');
+  if (_ti) {
+    try {
+      _ti.currentTime = 0;
+      _ti.volume = (vol == null ? 0.7 : vol);
+      _ti.play().catch(() => {});
+    } catch (_) {}
+  }
+}
+
 
 // ── Retry sweep whoosh: filtered noise with rising frequency sweep ──
 function playRetryWhoosh() {
