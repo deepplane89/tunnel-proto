@@ -14,11 +14,7 @@ document.getElementById('death-run-btn').addEventListener('click', () => {
 document.getElementById('restart-btn').addEventListener('click', () => {
   if (!_gameOverTapReady) return; // cooldown guard
   initAudio();
-  // Layered warp SFX: play at click (t=0). Trimmed so peak transient at
-  // 1.22s into clip lands at thruster fire (click + 180ms fade + 0.8*1.3s sweep = 1220ms).
-  const _retryWarp = document.getElementById('retry-warp-sfx');
-  if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.55; _retryWarp.play().catch(()=>{}); }
-  // No playStartSound — _triggerRetryWithSweep plays its own retry-tech SFX
+  // No playStartSound — _triggerRetryWithSweep plays its own retry-tech + retry-warp SFX
   _triggerRetryWithSweep();
 });
 document.getElementById('gameover-exit-btn').addEventListener('click', () => {

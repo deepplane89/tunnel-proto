@@ -14080,11 +14080,7 @@ document.getElementById('death-run-btn').addEventListener('click', () => {
 document.getElementById('restart-btn').addEventListener('click', () => {
   if (!_gameOverTapReady) return; // cooldown guard
   initAudio();
-  // Layered warp SFX: play at click (t=0). Trimmed so peak transient at
-  // 1.22s into clip lands at thruster fire (click + 180ms fade + 0.8*1.3s sweep = 1220ms).
-  const _retryWarp = document.getElementById('retry-warp-sfx');
-  if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.55; _retryWarp.play().catch(()=>{}); }
-  // No playStartSound — _triggerRetryWithSweep plays its own retry-tech SFX
+  // No playStartSound — _triggerRetryWithSweep plays its own retry-tech + retry-warp SFX
   _triggerRetryWithSweep();
 });
 document.getElementById('gameover-exit-btn').addEventListener('click', () => {
@@ -14348,6 +14344,10 @@ function _triggerRetryWithSweep() {
     // Retry SFX: tech-device one-shot (replaces synth whoosh)
     const _retrySfx = document.getElementById('retry-tech-sfx');
     if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
+    // Layered warp: peak transient at 1.04s into clip lands at thruster fire
+    // (sweep start + 0.8 * 1.3s = 1040ms).
+    const _retryWarp = document.getElementById('retry-warp-sfx');
+    if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.55; _retryWarp.play().catch(()=>{}); }
     // Fade from black
     fadeEl.style.opacity = '0';
   }, 180); // wait for fade-to-black to complete

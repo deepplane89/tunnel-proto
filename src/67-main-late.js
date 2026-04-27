@@ -74,6 +74,10 @@ function _triggerRetryWithSweep() {
     // Retry SFX: tech-device one-shot (replaces synth whoosh)
     const _retrySfx = document.getElementById('retry-tech-sfx');
     if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
+    // Layered warp: peak transient at 1.04s into clip lands at thruster fire
+    // (sweep start + 0.8 * 1.3s = 1040ms).
+    const _retryWarp = document.getElementById('retry-warp-sfx');
+    if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.55; _retryWarp.play().catch(()=>{}); }
     // Fade from black
     fadeEl.style.opacity = '0';
   }, 180); // wait for fade-to-black to complete
