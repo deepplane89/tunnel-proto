@@ -1384,6 +1384,66 @@ const bloom = new UnrealBloomPass(
 );
 composer.addPass(bloom);
 
+// ── LOCALIZED HEAT HAZE (thruster exhaust distortion) — opt-in per skin via window._coneThrustersEnabled ──
+const _thrusterHazeShader = {
+  uniforms: {
+    tDiffuse:   { value: null },
+    uNozzleL:   { value: new THREE.Vector2(0.5, 0.5) },
+    uNozzleR:   { value: new THREE.Vector2(0.5, 0.5) },
+    uTime:      { value: 0.0 },
+    uIntensity: { value: 0.0 },   // 0 = off, ~0.6-1.0 = visible
+    uRadius:    { value: 0.02 },
+    uHazeDir:   { value: 0.6 },
+    uAspect:    { value: 1.0 },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform vec2 uNozzleL;
+    uniform vec2 uNozzleR;
+    uniform float uTime;
+    uniform float uIntensity;
+    uniform float uRadius;
+    uniform float uHazeDir;
+    uniform float uAspect;
+    varying vec2 vUv;
+
+    float hazeField(vec2 uv, vec2 nozzle) {
+      vec2 d = uv - nozzle;
+      d.x *= uAspect;
+      // Offset haze in the direction set by slider
+      d.y += uHazeDir * uRadius * 0.8;
+      d.y *= 0.7;
+      float dist = length(d);
+      return smoothstep(uRadius, uRadius * 0.2, dist);
+    }
+
+    void main() {
+      if (uIntensity < 0.001) {
+        gl_FragColor = texture2D(tDiffuse, vUv);
+        return;
+      }
+      float haze = max(hazeField(vUv, uNozzleL), hazeField(vUv, uNozzleR));
+      float strength = haze * uIntensity;
+      // Animated sine distortion — two frequencies for richness
+      vec2 offset = vec2(
+        sin(vUv.y * 40.0 + uTime * 4.0) * 0.004 + sin(vUv.y * 80.0 + uTime * 7.0) * 0.002,
+        cos(vUv.x * 35.0 + uTime * 3.5) * 0.003 + cos(vUv.x * 70.0 + uTime * 6.0) * 0.0015
+      ) * strength;
+      gl_FragColor = texture2D(tDiffuse, vUv + offset);
+    }
+  `,
+};
+const _thrusterHazePass = new ShaderPass(_thrusterHazeShader);
+_thrusterHazePass.enabled = false;  // enabled per-frame only when _coneThrustersEnabled
+composer.addPass(_thrusterHazePass);
+
 // ── RADIAL BLUR (speed streaks) — only active during wormhole
 const RadialBlurShader = {
   uniforms: {
@@ -6139,6 +6199,154 @@ const flameMeshes = NOZZLE_OFFSETS.map(() => {
   return mesh;
 });
 
+// ── Thruster exhaust CONE meshes (neon ramp + noise dissolve) ──
+// Opt-in per skin: set window._coneThrustersEnabled = true in applySkin to enable.
+window._coneThrustersEnabled = false; // default off; flip per skin
+// Tunable globals for the cone shader — exposed via sliders
+window._coneThruster = {
+  length:       3.4,
+  radius:       0.14,
+  rotX:         1.42,
+  rotY:         1.72,
+  rotZ:         0.05,
+  offX:         0,
+  offY:         0,
+  offZ:         0,
+  neonPower:    1.5,
+  noiseSpeed:   0.8,
+  noiseStrength:0.13,
+  fresnelPower: 6.0,
+  opacity:      1.0,
+};
+
+const _coneVertSrc = /* glsl */`
+  varying float vHeight;  // 0 = nozzle base, 1 = tip
+  varying vec3 vNormal;
+  varying vec3 vViewDir;
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    vNormal = normalize(normalMatrix * normal);
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    vViewDir = -mvPos.xyz;
+    // Unit geometry: base at y=0, tip at y=1 (after translate)
+    vHeight = clamp(position.y, 0.0, 1.0);
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+const _coneFragSrc = /* glsl */`
+  precision mediump float;
+  uniform float uTime;
+  uniform vec3  uColor;
+  uniform float uNeonPower;
+  uniform float uNoiseSpeed;
+  uniform float uNoiseStrength;
+  uniform float uFresnelPower;
+  uniform float uOpacity;
+  varying float vHeight;
+  varying vec3 vNormal;
+  varying vec3 vViewDir;
+  varying vec2 vUv;
+
+  // Hash-based simplex noise
+  vec2 hash(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+  }
+  float noise(vec2 p) {
+    const float K1 = 0.366025404;
+    const float K2 = 0.211324865;
+    vec2 i = floor(p + (p.x + p.y) * K1);
+    vec2 a = p - i + (i.x + i.y) * K2;
+    float m = step(a.y, a.x);
+    vec2 o = vec2(m, 1.0 - m);
+    vec2 b = a - o + K2;
+    vec2 c = a - 1.0 + 2.0 * K2;
+    vec3 h = max(0.5 - vec3(dot(a,a), dot(b,b), dot(c,c)), 0.0);
+    h = h * h * h * h;
+    vec3 n = h * vec3(dot(a, hash(i)), dot(b, hash(i + o)), dot(c, hash(i + 1.0)));
+    return dot(n, vec3(70.0));
+  }
+  float fbm(vec2 p) {
+    float f = 0.0;
+    f += 0.5000 * noise(p); p *= 2.02;
+    f += 0.2500 * noise(p); p *= 2.03;
+    f += 0.1250 * noise(p);
+    return f / 0.875;
+  }
+
+  // Neon color ramp — hot white core → saturated color → dark
+  vec3 neonRamp(float value, vec3 color) {
+    float ramp = clamp(value, 0.0, 1.0);
+    vec3 out_color = vec3(0.0);
+    ramp = ramp * ramp;
+    out_color += pow(color, vec3(4.0)) * ramp;
+    ramp = ramp * ramp;
+    out_color += color * ramp;
+    ramp = ramp * ramp;
+    out_color += vec3(1.0) * ramp;
+    return out_color;
+  }
+
+  void main() {
+    // Gradient: 1.0 at nozzle base, 0.0 at tip
+    float grad = 1.0 - vHeight;
+
+    // Animated noise dissolve
+    vec2 noiseUV = vec2(vUv.x * 3.0, vUv.y * 0.6 - uTime * uNoiseSpeed);
+    float n = fbm(noiseUV) * uNoiseStrength;
+    grad = clamp(grad + n, 0.0, 1.0);
+
+    // Neon color ramp
+    vec3 col = neonRamp(pow(grad, uNeonPower), uColor);
+
+    // Fresnel edge softening
+    float fresnel = 1.0 - clamp(dot(normalize(vNormal), normalize(vViewDir)), 0.0, 1.0);
+    float edgeFade = 1.0 - pow(fresnel, uFresnelPower);
+
+    // Final alpha: gradient * edge fade * master opacity
+    float alpha = grad * edgeFade * uOpacity;
+
+    // Fade tip to zero
+    alpha *= smoothstep(0.0, 0.08, grad);
+
+    gl_FragColor = vec4(col, alpha);
+  }
+`;
+
+const _thrusterCones = NOZZLE_OFFSETS.map(() => {
+  const _ct = window._coneThruster;
+  // Unit cone: radius=1, height=1 — scaled at runtime via cone.scale
+  const geo = new THREE.ConeGeometry(1, 1, 16, 1, true);
+  // Shift so base sits at local origin, tip extends in +Y
+  geo.translate(0, 0.5, 0);
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: _coneVertSrc,
+    fragmentShader: _coneFragSrc,
+    uniforms: {
+      uTime:          { value: 0 },
+      uColor:         { value: new THREE.Color(0x44aaff) },
+      uNeonPower:     { value: _ct.neonPower },
+      uNoiseSpeed:    { value: _ct.noiseSpeed },
+      uNoiseStrength: { value: _ct.noiseStrength },
+      uFresnelPower:  { value: _ct.fresnelPower },
+      uOpacity:       { value: _ct.opacity },
+    },
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  mesh.visible = false;  // shown only when _coneThrustersEnabled
+  mesh.renderOrder = 9;
+  scene.add(mesh);
+  return mesh;
+});
+
 // Thruster FX excluded from water reflection via onBeforeRender patch on mirrorMesh (see Water section).
 
 // Per-level thruster colors — each level gets a unique exhaust hue
@@ -6243,7 +6451,9 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
   shipGroup.updateMatrixWorld(true);
 
   thrusterSystems.forEach((sys, idx) => {
-    sys.points.visible = playing && tp > 0.01 && window._thrusterVisible !== false;
+    // Hide entire particle system when cone thrusters are taking over (debug-only toggle)
+    const _oldOff = window._hideOldThrusters && window._coneThrustersEnabled;
+    sys.points.visible = !_oldOff && playing && tp > 0.01 && window._thrusterVisible !== false;
     const nw = nozzleWorld(_localNozzles[idx]);
     const wx = nw.x;
     const wy = nw.y;
@@ -6334,7 +6544,7 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
 
     // ── Bloom sprite for this nozzle ──
     const bloom = nozzleBloomSprites[idx];
-    if (playing && tp > 0.01 && window._thrusterVisible !== false) {
+    if (!_oldOff && playing && tp > 0.01 && window._thrusterVisible !== false) {
       bloom.visible = true;
       bloom.position.set(wx, wy, wz);
       // Sprites auto-billboard — just set size + color
@@ -6353,6 +6563,27 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
 
     // Flame shader quads disabled — rigid quad can't bend with particle trail
     flameMeshes[idx].visible = false;
+
+    // ── Thruster cone mesh ──
+    const cone = _thrusterCones[idx];
+    if (window._coneThrustersEnabled && tp > 0.01 && window._thrusterVisible !== false) {
+      cone.visible = true;
+      const ct = window._coneThruster;
+      cone.position.set(wx + ct.offX, wy + ct.offY, wz + ct.offZ);
+      cone.rotation.set(ct.rotX, ct.rotY, ct.rotZ);
+      cone.scale.set(ct.radius, ct.length * tp, ct.radius);
+      // Update shader uniforms from live slider values
+      const u = cone.material.uniforms;
+      u.uTime.value = performance.now() * 0.001;
+      u.uColor.value.copy(thrusterColor);
+      u.uNeonPower.value = ct.neonPower;
+      u.uNoiseSpeed.value = ct.noiseSpeed;
+      u.uNoiseStrength.value = ct.noiseStrength;
+      u.uFresnelPower.value = ct.fresnelPower;
+      u.uOpacity.value = ct.opacity * tp;
+    } else {
+      cone.visible = false;
+    }
   });
 
   // ── Mini thrusters ──

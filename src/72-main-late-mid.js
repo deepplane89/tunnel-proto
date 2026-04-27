@@ -2214,6 +2214,67 @@ function buildSkinTunerSliders() {
       window._miniBloomScale = v;
     }));
 
+    // ── Cone Thruster ──
+    const hdrCone = document.createElement('div');
+    hdrCone.style.cssText = 'color:#ff6600;margin:8px 0 4px;font-weight:bold;';
+    hdrCone.textContent = '— CONE THRUSTER —';
+    panel.appendChild(hdrCone);
+
+    // Cone on/off toggle
+    const coneTogBtn = document.createElement('button');
+    coneTogBtn.textContent = window._coneThrustersEnabled ? 'Cone Thrusters: ON' : 'Cone Thrusters: OFF';
+    coneTogBtn.style.cssText = 'background:' + (window._coneThrustersEnabled ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._coneThrustersEnabled ? '#0f0' : '#f00') + ';padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 4px 4px 0;';
+    coneTogBtn.addEventListener('click', () => {
+      window._coneThrustersEnabled = !window._coneThrustersEnabled;
+      coneTogBtn.textContent = window._coneThrustersEnabled ? 'Cone Thrusters: ON' : 'Cone Thrusters: OFF';
+      coneTogBtn.style.background = window._coneThrustersEnabled ? '#040' : '#400';
+      coneTogBtn.style.borderColor = window._coneThrustersEnabled ? '#0f0' : '#f00';
+    });
+    panel.appendChild(coneTogBtn);
+
+    const ct = window._coneThruster;
+    const hideOldBtn = document.createElement('button');
+    hideOldBtn.textContent = 'Toggle Old Thrusters';
+    hideOldBtn.style.cssText = 'background:#333;color:#ff6600;border:1px solid #ff6600;padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 0;';
+    hideOldBtn.addEventListener('click', () => {
+      window._hideOldThrusters = !window._hideOldThrusters;
+      hideOldBtn.textContent = window._hideOldThrusters ? 'Old Thrusters: OFF' : 'Old Thrusters: ON';
+    });
+    panel.appendChild(hideOldBtn);
+    panel.appendChild(makeSlider('Cone Length', ct.length, 0.5, 8, 0.1, v => { ct.length = v; }));
+    panel.appendChild(makeSlider('Cone Radius', ct.radius, 0.02, 1, 0.01, v => { ct.radius = v; }));
+    panel.appendChild(makeSlider('Cone Rot X', ct.rotX, -3.15, 3.15, 0.01, v => { ct.rotX = v; }));
+    panel.appendChild(makeSlider('Cone Rot Y', ct.rotY, -3.15, 3.15, 0.01, v => { ct.rotY = v; }));
+    panel.appendChild(makeSlider('Cone Rot Z', ct.rotZ, -3.15, 3.15, 0.01, v => { ct.rotZ = v; }));
+    panel.appendChild(makeSlider('Cone Off X', ct.offX, -2, 2, 0.01, v => { ct.offX = v; }));
+    panel.appendChild(makeSlider('Cone Off Y', ct.offY, -2, 2, 0.01, v => { ct.offY = v; }));
+    panel.appendChild(makeSlider('Cone Off Z', ct.offZ, -2, 2, 0.01, v => { ct.offZ = v; }));
+    panel.appendChild(makeSlider('Neon Power', ct.neonPower, 0.5, 6, 0.1, v => { ct.neonPower = v; }));
+    panel.appendChild(makeSlider('Noise Speed', ct.noiseSpeed, 0, 5, 0.1, v => { ct.noiseSpeed = v; }));
+    panel.appendChild(makeSlider('Noise Strength', ct.noiseStrength, 0, 1, 0.01, v => { ct.noiseStrength = v; }));
+    panel.appendChild(makeSlider('Fresnel Power', ct.fresnelPower, 0.5, 6, 0.1, v => { ct.fresnelPower = v; }));
+    panel.appendChild(makeSlider('Cone Opacity', ct.opacity, 0, 1, 0.01, v => { ct.opacity = v; }));
+
+    // ── Heat Haze ──
+    const hdrHaze = document.createElement('div');
+    hdrHaze.style.cssText = 'color:#00ccff;margin:8px 0 4px;font-weight:bold;';
+    hdrHaze.textContent = '— HEAT HAZE —';
+    panel.appendChild(hdrHaze);
+
+    if (typeof _thrusterHazePass !== 'undefined' && _thrusterHazePass && _thrusterHazePass.uniforms) {
+    panel.appendChild(makeSlider('Haze Intensity', _thrusterHazePass.uniforms.uIntensity.value || 0.7, 0, 2, 0.05, v => {
+      window._hazeBaseIntensity = v;
+    }));
+    panel.appendChild(makeSlider('Haze Radius', _thrusterHazePass.uniforms.uRadius.value, 0.02, 0.4, 0.01, v => {
+      _thrusterHazePass.uniforms.uRadius.value = v;
+    }));
+    panel.appendChild(makeSlider('Haze Direction', _thrusterHazePass.uniforms.uHazeDir.value, -3, 3, 0.1, v => {
+      _thrusterHazePass.uniforms.uHazeDir.value = v;
+    }));
+    } else {
+      panel.appendChild(document.createTextNode('(Haze pass not initialized — start a run first)'));
+    }
+
     // ── Material ──
     const hdr5 = document.createElement('div');
     hdr5.style.cssText = 'color:#ff88ff;margin:8px 0 4px;font-weight:bold;';
