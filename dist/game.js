@@ -22459,6 +22459,43 @@ function buildSkinTunerSliders() {
       window._miniBloomScale = v;
     }, '#f60'));
 
+    // CONE THRUSTER (subsection of THRUSTERS)
+    panel.appendChild(makeHeader('CONE THRUSTER'));
+    const _coneTogBtn = document.createElement('button');
+    _coneTogBtn.textContent = window._coneThrustersEnabled ? 'cone thrusters: ON' : 'cone thrusters: OFF';
+    _coneTogBtn.style.cssText = 'background:' + (window._coneThrustersEnabled ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._coneThrustersEnabled ? '#0f0' : '#f00') + ';padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 4px 4px 0;display:block;';
+    _coneTogBtn.addEventListener('click', () => {
+      window._coneThrustersEnabled = !window._coneThrustersEnabled;
+      _coneTogBtn.textContent = window._coneThrustersEnabled ? 'cone thrusters: ON' : 'cone thrusters: OFF';
+      _coneTogBtn.style.background = window._coneThrustersEnabled ? '#040' : '#400';
+      _coneTogBtn.style.borderColor = window._coneThrustersEnabled ? '#0f0' : '#f00';
+    });
+    panel.appendChild(_coneTogBtn);
+    const _coneOldBtn = document.createElement('button');
+    _coneOldBtn.textContent = window._hideOldThrusters ? 'old thrusters: OFF' : 'old thrusters: ON';
+    _coneOldBtn.style.cssText = 'background:#333;color:#ff6600;border:1px solid #ff6600;padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 0;display:block;';
+    _coneOldBtn.addEventListener('click', () => {
+      window._hideOldThrusters = !window._hideOldThrusters;
+      _coneOldBtn.textContent = window._hideOldThrusters ? 'old thrusters: OFF' : 'old thrusters: ON';
+    });
+    panel.appendChild(_coneOldBtn);
+    if (window._coneThruster) {
+      const _ct = window._coneThruster;
+      panel.appendChild(makeSlider('cone length', _ct.length, 0.5, 8, 0.1, v => { _ct.length = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone radius', _ct.radius, 0.02, 1, 0.01, v => { _ct.radius = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone rotX', _ct.rotX, -3.15, 3.15, 0.01, v => { _ct.rotX = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone rotY', _ct.rotY, -3.15, 3.15, 0.01, v => { _ct.rotY = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone rotZ', _ct.rotZ, -3.15, 3.15, 0.01, v => { _ct.rotZ = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone offX', _ct.offX, -2, 2, 0.01, v => { _ct.offX = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone offY', _ct.offY, -2, 2, 0.01, v => { _ct.offY = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone offZ', _ct.offZ, -2, 2, 0.01, v => { _ct.offZ = v; }, '#f60'));
+      panel.appendChild(makeSlider('neon power', _ct.neonPower, 0.5, 6, 0.1, v => { _ct.neonPower = v; }, '#f60'));
+      panel.appendChild(makeSlider('noise speed', _ct.noiseSpeed, 0, 5, 0.1, v => { _ct.noiseSpeed = v; }, '#f60'));
+      panel.appendChild(makeSlider('noise strength', _ct.noiseStrength, 0, 1, 0.01, v => { _ct.noiseStrength = v; }, '#f60'));
+      panel.appendChild(makeSlider('fresnel power', _ct.fresnelPower, 0.5, 6, 0.1, v => { _ct.fresnelPower = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone opacity', _ct.opacity, 0, 1, 0.01, v => { _ct.opacity = v; }, '#f60'));
+    }
+
     // HOVER BOB
     panel.appendChild(makeHeader('HOVER BOB'));
     panel.appendChild(makeSlider('ship Y', _hoverBaseY, -1.0, 3.0, 0.01, v => { _hoverBaseY = v; shipGroup.position.y = v; }, '#0ff'));
