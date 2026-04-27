@@ -434,33 +434,6 @@ function animate() {
   _updateShockwave(rawDt);
   _updateSparks(rawDt);
   _updateFaceExplosion(rawDt);
-  // ── Update localized heat haze pass (low poly only) ──
-  {
-    // Disable thruster haze entirely on mobile — fullscreen post-processing pass
-    // that runs every frame thrusters fire (= most of the game). Subtle visual,
-    // measurable cost. Saves ~0.5-1ms/frame on mid-range Android.
-    _thrusterHazePass.enabled = !window._isMobile && window._coneThrustersEnabled && state.phase === 'playing' && state.thrusterPower > 0.01;
-    if (_thrusterHazePass.enabled) {
-      const _hzProj = new THREE.Vector3();
-      let _hazeValid = true;
-      // Project left nozzle to screen UV
-      const nwL = nozzleWorld(_localNozzles[0]);
-      _hzProj.set(nwL.x, nwL.y, nwL.z).project(camera);
-      if (_hzProj.z > 1 || _hzProj.z < -1) _hazeValid = false;
-      _thrusterHazePass.uniforms.uNozzleL.value.set(_hzProj.x * 0.5 + 0.5, _hzProj.y * 0.5 + 0.5);
-      // Project right nozzle to screen UV
-      const nwR = nozzleWorld(_localNozzles[1]);
-      _hzProj.set(nwR.x, nwR.y, nwR.z).project(camera);
-      if (_hzProj.z > 1 || _hzProj.z < -1) _hazeValid = false;
-      _thrusterHazePass.uniforms.uNozzleR.value.set(_hzProj.x * 0.5 + 0.5, _hzProj.y * 0.5 + 0.5);
-      _thrusterHazePass.uniforms.uTime.value = performance.now() * 0.001;
-      // Kill haze if nozzles aren't on screen
-      _thrusterHazePass.uniforms.uIntensity.value = _hazeValid
-        ? (window._hazeBaseIntensity != null ? window._hazeBaseIntensity : 0.10) * state.thrusterPower
-        : 0.0;
-      _thrusterHazePass.uniforms.uAspect.value = window.innerWidth / window.innerHeight;
-    }
-  }
   _perfDiag.markRenderStart();
   composer.render();
   _perfDiag.markRenderEnd();
