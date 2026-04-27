@@ -3007,11 +3007,8 @@ function showIntroText() {
     beginThrusterSputter();
     state._introLiftActive = true;
     state._introLiftTimer = 0;
-    // Play short thruster + roar — clearIntroTimers() killed the queued 8.5s engine-start
-    const _eng = document.getElementById('engine-start');
-    if (_eng && !state.muted) { _eng.currentTime = 0; _eng.volume = 0.55; _eng.play().catch(()=>{}); }
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
   }, { passive: false });
 
   // Line A fades in at 3s (3.5s duration → done ~6.5s)

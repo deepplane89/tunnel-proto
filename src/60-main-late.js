@@ -296,11 +296,8 @@ window.addEventListener('keydown', e => {
     // Trigger lift so ship rises from 0.38 to cruise height
     state._introLiftActive = true;
     state._introLiftTimer = 0;
-    // Play short thruster sound — clearIntroTimers() killed the queued 8.5s engine-start
-    const _eng = document.getElementById('engine-start');
-    if (_eng && !state.muted) { _eng.currentTime = 0; _eng.volume = 0.55; _eng.play().catch(()=>{}); }
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
   }
   // Escape now pauses (handled above) — no longer returns to title
   // Hold-to-spin roll — up/down keys spin ship on Z axis while held
@@ -862,6 +859,13 @@ function playExitSound() {
   if (sfx) { sfx.currentTime = 0; sfx.volume = 0.9; sfx.playbackRate = 1.0; sfx.play().catch(() => {}); }
 }
 function playTitleTap() {
+  if (state.muted) return;
+  _ensureCtxRunning();
+  const sfx = document.getElementById('exit-sound');
+  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.7; sfx.playbackRate = 0.85 + Math.random() * 0.5; sfx.play().catch(() => {}); }
+}
+
+ playTitleTap() {
   if (state.muted) return;
   _ensureCtxRunning();
   const sfx = document.getElementById('exit-sound');
