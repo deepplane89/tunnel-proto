@@ -12991,8 +12991,10 @@ function togglePause() {
     // Pause engine SFX
     const _engP = document.getElementById('engine-start');
     const _roarP = document.getElementById('engine-roar');
+    const _baseP = document.getElementById('engine-baseline');
     if (_engP && !_engP.paused) _engP.pause();
     if (_roarP && !_roarP.paused) _roarP.pause();
+    if (_baseP && !_baseP.paused) _baseP.pause();
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
     if (state._tutorialActive) _tutHideText();
@@ -13000,6 +13002,9 @@ function togglePause() {
     state.phase = 'playing';
     setPauseOverlay(false);
     resumeGameTrackInPlace(currentGameTrack());
+    // Resume baseline whir on unpause
+    const _baseU = document.getElementById('engine-baseline');
+    if (_baseU && !state.muted) { _baseU.play().catch(()=>{}); }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
   }
 }
@@ -13075,8 +13080,10 @@ function returnToTitle() {
   // Stop engine SFX
   const _engR = document.getElementById('engine-start');
   const _roarR = document.getElementById('engine-roar');
+  const _baseR = document.getElementById('engine-baseline');
   if (_engR) { _engR.pause(); _engR.currentTime = 0; }
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
+  if (_baseR) { _baseR.pause(); _baseR.currentTime = 0; }
   if (titleMusic) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
   updateTitleCoins();
   updateTitleFuelCells();
@@ -13222,7 +13229,9 @@ window.addEventListener('keydown', e => {
     state._introLiftActive = true;
     state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.7; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.22; _roar.play().catch(()=>{}); }
+    const _baseline = document.getElementById('engine-baseline');
+    if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
   }
   // Escape now pauses (handled above) — no longer returns to title
   // Hold-to-spin roll — up/down keys spin ship on Z axis while held
@@ -13513,7 +13522,9 @@ window.addEventListener('keyup', e => {
         state._introLiftActive = true;
         state._introLiftTimer = 0;
         const _roar = document.getElementById('engine-roar');
-        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
+        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.22; _roar.play().catch(()=>{}); }
+        const _baseline = document.getElementById('engine-baseline');
+        if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
         return;
       }
       // Start game if on title/dead — mark this touch as game-starting (ignore swipes from it)
@@ -15131,9 +15142,12 @@ function startDeathRun() {
       if (roar && !state.muted) {
         _ensureCtxRunning();
         roar.currentTime = 0;
-        roar.volume = 0.7; // launch roar — matches last night's perceived volume
+        roar.volume = 0.22; // launch roar — last night's value
         roar.play().catch(() => {});
       }
+      // Continuous baseline whir during gameplay (looped)
+      const _baseline = document.getElementById('engine-baseline');
+      if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
       beginThrusterSputter(); // sputtering ramp-up to full power
       // Trigger lift immediately on launch — ship rises from 0.38 as thrusters fire
       state._introLiftActive = true;
@@ -15421,7 +15435,7 @@ function _drSequencerTick(dt) {
         // Thruster roar fires right as speed kicks in (beat 4 of the countdown).
         setTimeout(() => {
           const _roar = document.getElementById('engine-roar');
-          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
+          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.25; _roar.play().catch(()=>{}); }
         }, 1500);
       }
     }
@@ -15688,7 +15702,7 @@ function _drSequencerTick(dt) {
         setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         setTimeout(() => {
           const _roar = document.getElementById('engine-roar');
-          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
+          if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.25; _roar.play().catch(()=>{}); }
         }, 1500);
       }
     }
@@ -17275,7 +17289,9 @@ function showIntroText() {
     state._introLiftActive = true;
     state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.22; _roar.play().catch(()=>{}); }
+    const _baseline = document.getElementById('engine-baseline');
+    if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
   }, { passive: false });
 
   // Line A fades in at 3s (3.5s duration → done ~6.5s)
@@ -17489,6 +17505,8 @@ function killPlayer() {
   const _roarD = document.getElementById('engine-roar');
   if (_engD && !_engD.paused) { _engD.pause(); _engD.currentTime = 0; }
   if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
+  const _baseD = document.getElementById('engine-baseline');
+  if (_baseD && !_baseD.paused) { _baseD.pause(); _baseD.currentTime = 0; }
   playCrash();
   // addCrashFlash(); // disabled to isolate face explosion
 

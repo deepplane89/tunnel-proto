@@ -66,8 +66,10 @@ function togglePause() {
     // Pause engine SFX
     const _engP = document.getElementById('engine-start');
     const _roarP = document.getElementById('engine-roar');
+    const _baseP = document.getElementById('engine-baseline');
     if (_engP && !_engP.paused) _engP.pause();
     if (_roarP && !_roarP.paused) _roarP.pause();
+    if (_baseP && !_baseP.paused) _baseP.pause();
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
     if (state._tutorialActive) _tutHideText();
@@ -75,6 +77,9 @@ function togglePause() {
     state.phase = 'playing';
     setPauseOverlay(false);
     resumeGameTrackInPlace(currentGameTrack());
+    // Resume baseline whir on unpause
+    const _baseU = document.getElementById('engine-baseline');
+    if (_baseU && !state.muted) { _baseU.play().catch(()=>{}); }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
   }
 }
@@ -150,8 +155,10 @@ function returnToTitle() {
   // Stop engine SFX
   const _engR = document.getElementById('engine-start');
   const _roarR = document.getElementById('engine-roar');
+  const _baseR = document.getElementById('engine-baseline');
   if (_engR) { _engR.pause(); _engR.currentTime = 0; }
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
+  if (_baseR) { _baseR.pause(); _baseR.currentTime = 0; }
   if (titleMusic) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
   updateTitleCoins();
   updateTitleFuelCells();
@@ -297,7 +304,9 @@ window.addEventListener('keydown', e => {
     state._introLiftActive = true;
     state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.7; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.22; _roar.play().catch(()=>{}); }
+    const _baseline = document.getElementById('engine-baseline');
+    if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
   }
   // Escape now pauses (handled above) — no longer returns to title
   // Hold-to-spin roll — up/down keys spin ship on Z axis while held
@@ -588,7 +597,9 @@ window.addEventListener('keyup', e => {
         state._introLiftActive = true;
         state._introLiftTimer = 0;
         const _roar = document.getElementById('engine-roar');
-        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.16; _roar.play().catch(()=>{}); }
+        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.22; _roar.play().catch(()=>{}); }
+        const _baseline = document.getElementById('engine-baseline');
+        if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
         return;
       }
       // Start game if on title/dead — mark this touch as game-starting (ignore swipes from it)
