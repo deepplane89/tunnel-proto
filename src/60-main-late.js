@@ -73,6 +73,8 @@ function togglePause() {
     _stopMagnetWhir();
     const _invP = document.getElementById('invincible-loop-sfx');
     if (_invP && !_invP.paused) _invP.pause();
+    const _shLoopP = document.getElementById('shield-loop-sfx');
+    if (_shLoopP && !_shLoopP.paused) _shLoopP.pause();
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
     if (state._tutorialActive) _tutHideText();
@@ -86,6 +88,9 @@ function togglePause() {
     // Resume invincible loop if active
     const _invU = document.getElementById('invincible-loop-sfx');
     if (_invU && state.invincibleTimer > 0 && !state.muted) { _invU.play().catch(()=>{}); }
+    // Resume shield argon loop if active
+    const _shLoopU = document.getElementById('shield-loop-sfx');
+    if (_shLoopU && state.shieldActive && !state.muted) { _shLoopU.play().catch(()=>{}); }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
   }
 }
@@ -168,6 +173,8 @@ function returnToTitle() {
   _stopMagnetWhir();
   const _invR = document.getElementById('invincible-loop-sfx');
   if (_invR) { _invR.pause(); _invR.currentTime = 0; _invR.loop = false; }
+  const _shLoopR = document.getElementById('shield-loop-sfx');
+  if (_shLoopR) { _shLoopR.pause(); _shLoopR.currentTime = 0; _shLoopR.loop = false; }
   if (titleMusic) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
   updateTitleCoins();
   updateTitleFuelCells();

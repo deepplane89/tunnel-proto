@@ -335,6 +335,12 @@ function applyPowerup(typeIdx) {
       shieldWire.visible = false;
       shieldLight.intensity = 0;
       const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
+      // Argon-scanner shield loop layered under existing shield SFX.
+      const _shLoop = document.getElementById('shield-loop-sfx');
+      if (_shLoop && !state.muted) {
+        try { _shLoop.currentTime = 0; _shLoop.loop = true; _shLoop.volume = 0.28; _shLoop.play().catch(()=>{}); } catch(_) {}
+      }
+      state._shieldExpireWarned = false;
       break;
     }
     case 'laser': {
