@@ -9884,13 +9884,15 @@ function _playThunderRotating() {
 // ── Lightning strike: buzzy arc + deep boom two-layer SFX ──
 function _playLightningStrike() {
   if (!audioCtx || state.muted) return;
+  // Hard gate: only fire during active gameplay, never during intro/lift/menus/etc.
+  if (state.phase !== 'playing' || state.introActive || state._introLiftActive) return;
   _ensureCtxRunning();
   // Layer real-thunder MP3 on top of synth boom (rotates 1↔2, never overlaps itself).
   // While a thunder clip is playing, _playThunderRotating() returns silently,
   // so mid-clip strikes get the synth boom only — the long clip plays out in full.
   _playThunderRotating();
-  // Synth boom — moderate bump from 0.22 so the every-strike layer has more body.
-  const vol = 0.32 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+  // Synth boom — raided down a notch from 0.32 so it doesn't overpower the thunder mp3.
+  const vol = 0.22 * (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (vol <= 0) return;
   const now = audioCtx.currentTime;
 
@@ -13384,8 +13386,7 @@ window.addEventListener('keydown', e => {
     // Trigger lift so ship rises from 0.38 to cruise height
     state._introLiftActive = true;
     state._introLiftTimer = 0;
-    const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
+    // engine-roar replaced with plasma-punch only (per user request 2026-04-27)
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
     state._argonSteering = false;
@@ -13678,8 +13679,7 @@ window.addEventListener('keyup', e => {
         beginThrusterSputter();
         state._introLiftActive = true;
         state._introLiftTimer = 0;
-        const _roar = document.getElementById('engine-roar');
-        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
+        // engine-roar replaced with plasma-punch only (per user request 2026-04-27)
         playThrusterImpact(0.7);
         startEngineBaseline(0.5);
         state._argonSteering = false;
@@ -15313,11 +15313,13 @@ function startDeathRun() {
       // On retry: skip engine-roar, plasma-punch fires from sweep-arrival instead
       killThrusterSputter();
       if (!_retryIsFromDead) {
-        const roar = document.getElementById('engine-roar');
-        if (roar && !state.muted) {
+        // engine-roar replaced with plasma-punch only (per user request 2026-04-27)
+        // Keep the no-op block for parse-stability; plasma-punch fires below.
+        const roar = null;
+        if (false) {
           _ensureCtxRunning();
           roar.currentTime = 0;
-          roar.volume = 0.4; // launch roar — last night's value
+          roar.volume = 0.4;
           roar.play().catch(() => {});
         }
         playThrusterImpact(0.7);
@@ -17462,8 +17464,7 @@ function showIntroText() {
     beginThrusterSputter();
     state._introLiftActive = true;
     state._introLiftTimer = 0;
-    const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
+    // engine-roar replaced with plasma-punch only (per user request 2026-04-27)
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
     state._argonSteering = false;

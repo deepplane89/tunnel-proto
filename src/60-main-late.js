@@ -324,8 +324,7 @@ window.addEventListener('keydown', e => {
     // Trigger lift so ship rises from 0.38 to cruise height
     state._introLiftActive = true;
     state._introLiftTimer = 0;
-    const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
+    // engine-roar replaced with plasma-punch only (per user request 2026-04-27)
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
     state._argonSteering = false;
@@ -618,8 +617,7 @@ window.addEventListener('keyup', e => {
         beginThrusterSputter();
         state._introLiftActive = true;
         state._introLiftTimer = 0;
-        const _roar = document.getElementById('engine-roar');
-        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
+        // engine-roar replaced with plasma-punch only (per user request 2026-04-27)
         playThrusterImpact(0.7);
         startEngineBaseline(0.5);
         state._argonSteering = false;

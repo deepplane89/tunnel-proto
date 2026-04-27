@@ -874,11 +874,13 @@ function startDeathRun() {
       // On retry: skip engine-roar, plasma-punch fires from sweep-arrival instead
       killThrusterSputter();
       if (!_retryIsFromDead) {
-        const roar = document.getElementById('engine-roar');
-        if (roar && !state.muted) {
+        // engine-roar replaced with plasma-punch only (per user request 2026-04-27)
+        // Keep the no-op block for parse-stability; plasma-punch fires below.
+        const roar = null;
+        if (false) {
           _ensureCtxRunning();
           roar.currentTime = 0;
-          roar.volume = 0.4; // launch roar — last night's value
+          roar.volume = 0.4;
           roar.play().catch(() => {});
         }
         playThrusterImpact(0.7);
@@ -3023,8 +3025,7 @@ function showIntroText() {
     beginThrusterSputter();
     state._introLiftActive = true;
     state._introLiftTimer = 0;
-    const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
+    // engine-roar replaced with plasma-punch only (per user request 2026-04-27)
     playThrusterImpact(0.7);
     startEngineBaseline(0.5);
     state._argonSteering = false;
