@@ -14341,7 +14341,9 @@ function _triggerRetryWithSweep() {
     // Start the sweep
     _retrySweepActive = true;
     _retrySweepT = 0;
-    playRetryWhoosh();
+    // Retry SFX: tech-device one-shot (replaces synth whoosh)
+    const _retrySfx = document.getElementById('retry-tech-sfx');
+    if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
     // Fade from black
     fadeEl.style.opacity = '0';
   }, 180); // wait for fade-to-black to complete
