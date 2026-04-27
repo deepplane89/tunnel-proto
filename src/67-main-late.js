@@ -77,7 +77,7 @@ function _triggerRetryWithSweep() {
     setTimeout(() => {
       const _retryWarp = document.getElementById('retry-warp-sfx');
       if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.55; _retryWarp.play().catch(()=>{}); }
-    }, 504);
+    }, 300);
     // Fade from black
     fadeEl.style.opacity = '0';
   }, 180); // wait for fade-to-black to complete
