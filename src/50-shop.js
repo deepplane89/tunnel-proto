@@ -90,7 +90,7 @@ function switchShopTab(tab) {
 // Tab click handlers
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.shop-tab').forEach(tab => {
-    tab.addEventListener('click', () => switchShopTab(tab.dataset.tab));
+    _tapBind(tab, () => switchShopTab(tab.dataset.tab));
   });
 
 });
@@ -133,7 +133,7 @@ function renderPowerupCards() {
       ${justUnlocked ? '<div class="shop-new-badge">NEW</div>' : ''}
     `;
     if (!locked && !maxed) {
-      card.addEventListener('click', () => {
+      _tapBind(card, () => {
         // Clear NEW flag when they tap a newly unlocked card
         if (justUnlocked) window._LS.removeItem('jetslide_shop_new');
         updateNotificationDots();
@@ -200,7 +200,7 @@ function openShopDetail(id) {
   if (!maxed) {
     const buyBtn = document.getElementById('shop-buy-btn');
     if (buyBtn) {
-      buyBtn.addEventListener('click', () => {
+      _tapBind(buyBtn, () => {
         if (purchaseUpgrade(id)) {
           // Animate purchase
           buyBtn.classList.add('shop-purchase-anim');

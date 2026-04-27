@@ -53,6 +53,8 @@
   #app-loader-fill{height:100%;width:0%;background:linear-gradient(90deg,#00f0ff,#ff2d78);transition:width .35s ease;box-shadow:0 0 12px #00f0ff}
   #app-loader-status{margin-top:14px;font-size:11px;letter-spacing:3px;opacity:.55;text-transform:uppercase}
   @keyframes al-pulse{0%,100%{opacity:.85}50%{opacity:1}}
+  /* Mobile tap latency: skip 300ms double-tap delay on all interactive UI */
+  button, a, [role="button"], .btn, .menu-btn, .hud-btn, input[type="button"], input[type="submit"]{touch-action:manipulation}
 </style>
 </head>
 <body>
@@ -548,6 +550,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1777303100"></script>
+<script type="module" src="./dist/game.js?v=1777303200"></script>
 </body>
 </html>

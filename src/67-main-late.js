@@ -28,6 +28,7 @@ let _gameStarting = false; // reentry lock — prevents double-fire from simulta
 
 // ── Retry with cinematic camera sweep (from game over) ──
 let _retryPending = false; // guard against double-tap during fade
+let _retryWarpSrc = null;  // active retry-warp BufferSource (or null when fallback / inactive)
 function _triggerRetryWithSweep() {
   if (_retrySweepActive || _retryPending) return; // debounce
   _retryPending = true;
@@ -73,11 +74,24 @@ function _triggerRetryWithSweep() {
     _retrySweepT = 0;
     _retrySweepThrusterFired = false;
     // Retry SFX: tech-device one-shot (504ms) at sweep start, warp AFTER it finishes.
-    const _retrySfx = document.getElementById('retry-tech-sfx');
-    if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
+    // Mobile-tight: route both through pre-decoded buffers when available.
+    if (typeof _playBuffer === 'function' && !state.muted) {
+      _playBuffer('retry-tech', 0.55, 1.0, null);
+    } else {
+      const _retrySfx = document.getElementById('retry-tech-sfx');
+      if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
+    }
     setTimeout(() => {
-      const _retryWarp = document.getElementById('retry-warp-sfx');
-      if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
+      if (state.muted) return;
+      // Stop any prior warp source (multi-retry safety)
+      if (_retryWarpSrc) { try { _retryWarpSrc.stop(); } catch(_) {} _retryWarpSrc = null; }
+      if (typeof _playBuffer === 'function') {
+        const _src = _playBuffer('retry-warp', 0.85, 1.0, null);
+        if (_src && typeof _src.stop === 'function') _retryWarpSrc = _src;
+      } else {
+        const _retryWarp = document.getElementById('retry-warp-sfx');
+        if (_retryWarp) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
+      }
     }, 300);
     // Fade from black
     fadeEl.style.opacity = '0';
@@ -1597,7 +1611,7 @@ function _tutShowHint(title, sub, color) {
     exitBtn.id = 'tutorial-exit-btn';
     exitBtn.textContent = 'EXIT TUTORIAL';
     exitBtn.style.cssText = 'position:fixed;top:16px;right:16px;z-index:9100;background:rgba(0,0,0,0.6);color:#fff;border:1px solid rgba(255,255,255,0.4);padding:7px 18px;font-family:monospace;font-size:12px;cursor:pointer;letter-spacing:2px';
-    exitBtn.addEventListener('click', () => {
+    _tapBind(exitBtn, () => {
       window._LS.setItem('jh_tutorial_done', '1');
       _tutDestroyOverlay();
       state._tutorialActive = false;
@@ -3481,7 +3495,7 @@ function killPlayer() {
     const newBtn = _saveMeBtn.cloneNode(true);
     _saveMeBtn.parentNode.replaceChild(newBtn, _saveMeBtn);
     newBtn.disabled = !canAfford;
-    newBtn.addEventListener('click', () => {
+    _tapBind(newBtn, () => {
       if (!_gameOverTapReady) return; // cooldown guard
       if (_retryPending) return; // already fading
       if (loadFuelCells() < saveMeFuelCost) return;
@@ -3672,7 +3686,7 @@ function killPlayer() {
         _showSaved();
       };
 
-      _newConfirm.addEventListener('click', _doSubmit);
+      _tapBind(_newConfirm, _doSubmit);
       _newInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); _doSubmit(); }
       });
@@ -3874,6 +3888,8 @@ function update(dt) {
       _retrySweepThrusterFired = true;
       // Retry: stop warp, skip engine-roar, plasma-punch IS the ship-movement sound
       _ensureCtxRunning();
+      // Stop the buffer-source warp if it's playing, otherwise pause the <audio> fallback.
+      if (_retryWarpSrc) { try { _retryWarpSrc.stop(); } catch(_) {} _retryWarpSrc = null; }
       const _rsWarp = document.getElementById('retry-warp-sfx');
       if (_rsWarp) { try { _rsWarp.pause(); _rsWarp.currentTime = 0; } catch(_) {} }
       playThrusterImpact(0.7);
@@ -6170,7 +6186,7 @@ const _fpsEl = document.getElementById('fps-overlay');
 (function setupFpsToggle() {
   const btn = document.getElementById('fps-toggle');
   if (!btn) return;
-  btn.addEventListener('click', () => {
+  _tapBind(btn, () => {
     _fpsOn = !_fpsOn;
     btn.setAttribute('aria-pressed', _fpsOn);
     btn.classList.toggle('on', _fpsOn);

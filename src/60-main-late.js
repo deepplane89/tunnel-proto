@@ -729,7 +729,7 @@ window.addEventListener('keyup', e => {
       if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
       _skinTapTimer = setTimeout(() => { _skinTapCount = 0; }, 500);
     }, { passive: true });
-    skinLabel.addEventListener('click', () => {
+    _tapBind(skinLabel, () => {
       _skinTapCount++;
       if (_skinTapTimer) clearTimeout(_skinTapTimer);
       if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
@@ -753,7 +753,7 @@ window.addEventListener('keyup', e => {
   setTimeout(() => { banner.classList.remove('hidden'); }, 2000);
 
   // Tap anywhere on the banner to dismiss
-  banner.addEventListener('click', () => {
+  _tapBind(banner, () => {
     banner.classList.add('hidden');
   });
   banner.addEventListener('touchend', (e) => {
@@ -798,7 +798,7 @@ window.addEventListener('keyup', e => {
 // Start title music on very first user interaction with the page
 function initTitleAudio() {
   if (audioCtx) { _ensureCtxRunning(); return; }  // already initialized
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
   _ensureCtxRunning();
   engineGain = audioCtx.createGain();
   engineGain.gain.value = 0.0;
@@ -833,7 +833,7 @@ function initTitleAudio() {
       // Autoplay blocked — unlock audio on first interaction (no visible overlay)
       const unlock = () => {
         if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
           engineGain = audioCtx.createGain();
           engineGain.gain.value = 0.0;
           engineGain.connect(audioCtx.destination);

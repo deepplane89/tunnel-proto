@@ -69,7 +69,7 @@ function renderStreakCircles() {
       el.classList.add('claimed');
     } else if (dayNum === ss.day && !ss.claimed) {
       el.classList.add('today');
-      el.addEventListener('click', () => claimStreakReward(el, ss.day));
+      _tapBind(el, () => claimStreakReward(el, ss.day));
       el.addEventListener('touchstart', (e) => { e.preventDefault(); claimStreakReward(el, ss.day); }, { passive: false });
     } else {
       el.classList.add('future');
@@ -193,7 +193,7 @@ function closeStreak() {
   playTitleTap();
   document.getElementById('streak-overlay').classList.add('hidden');
 }
-document.getElementById('streak-close-btn').addEventListener('click', closeStreak);
+_tapBind(document.getElementById('streak-close-btn'), closeStreak);
 document.getElementById('streak-overlay').addEventListener('click', function(e) {
   if (e.target === this) closeStreak();
 });

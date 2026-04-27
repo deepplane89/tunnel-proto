@@ -1,6 +1,6 @@
 
 // ── BUTTON HANDLERS ──
-document.getElementById('death-run-btn').addEventListener('click', () => {
+_tapBind(document.getElementById('death-run-btn'), () => {
   initAudio();
   // Pre-warm engine sounds on user gesture (mobile requires this)
   // Just load them — don't play, to avoid any audible glitch
@@ -11,13 +11,13 @@ document.getElementById('death-run-btn').addEventListener('click', () => {
   playStartSound();
   startDeathRun();
 });
-document.getElementById('restart-btn').addEventListener('click', () => {
+_tapBind(document.getElementById('restart-btn'), () => {
   if (!_gameOverTapReady) return; // cooldown guard
   initAudio();
   // No playStartSound — _triggerRetryWithSweep plays its own retry-tech + retry-warp SFX
   _triggerRetryWithSweep();
 });
-document.getElementById('gameover-exit-btn').addEventListener('click', () => {
+_tapBind(document.getElementById('gameover-exit-btn'), () => {
   if (!_gameOverTapReady) return; // cooldown guard
   playExitSound();
   // [WHEEL DISABLED] reward wheel quarantined — skip straight to title

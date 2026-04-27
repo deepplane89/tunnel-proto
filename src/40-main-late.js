@@ -5,15 +5,16 @@
 }
 
 // Plasma-punch impact layered alongside engine-roar ignition.
+// Mobile-tight: routes through pre-decoded AudioBuffer (zero-latency) when available,
+// falls back to <audio> element if buffer hasn't decoded yet.
 function playThrusterImpact(vol) {
   if (state.muted) return;
+  const v = (vol == null ? 0.7 : vol);
+  if (typeof _playBuffer === 'function') { _playBuffer('thruster-impact', v, 1.0, null); return; }
+  // Hard fallback if _playBuffer isn't available for any reason
   const _ti = document.getElementById('thruster-impact-sfx');
   if (_ti) {
-    try {
-      _ti.currentTime = 0;
-      _ti.volume = (vol == null ? 0.7 : vol);
-      _ti.play().catch(() => {});
-    } catch (_) {}
+    try { _ti.currentTime = 0; _ti.volume = v; _ti.play().catch(() => {}); } catch (_) {}
   }
 }
 
@@ -157,10 +158,12 @@ function playPickup(typeIdx) {
   const freqs = [880, 1100, 660, 990, 770, 660];
   playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.45);
   setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.35), 80);
-  // Quiet electron-burst layer on power-up smash.
-  const _pb = document.getElementById('powerup-burst-sfx');
-  if (_pb) {
-    try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {}
+  // Quiet electron-burst layer on power-up smash (zero-latency buffer playback).
+  if (typeof _playBuffer === 'function') {
+    _playBuffer('powerup-burst', 0.18, 1.0, null);
+  } else {
+    const _pb = document.getElementById('powerup-burst-sfx');
+    if (_pb) { try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {} }
   }
 }
 
@@ -2442,11 +2445,11 @@ function initSkinViewer() {
   if (!window._skinViewerInited) {
     window._skinViewerInited = true;
 
-    document.getElementById('skin-prev').addEventListener('click', e => {
+    _tapBind(document.getElementById('skin-prev'), e => {
       e.stopPropagation();
       { let _ni = (skinViewerIdx - 1 + SHIP_SKINS.length) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni - 1 + SHIP_SKINS.length) % SHIP_SKINS.length; navigateToSkin(_ni); }
     });
-    document.getElementById('skin-next').addEventListener('click', e => {
+    _tapBind(document.getElementById('skin-next'), e => {
       e.stopPropagation();
       { let _ni = (skinViewerIdx + 1) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni + 1) % SHIP_SKINS.length; navigateToSkin(_ni); }
     });
@@ -2469,7 +2472,7 @@ function initSkinViewer() {
     // Admin mode: 3 rapid taps on the skin label (only when no handling upgrade pending)
     let adminTapCount = 0;
     let adminTapTimer = null;
-    document.getElementById('skin-viewer-label').addEventListener('click', (e) => {
+    _tapBind(document.getElementById('skin-viewer-label'), (e) => {
       // If handling upgrade pending, claim it
       const pendingHandling = getPendingHandlingUpgrade();
       if (pendingHandling) {

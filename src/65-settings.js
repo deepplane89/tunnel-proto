@@ -60,15 +60,15 @@ function closeSettings() {
 // Wire up settings UI
 (function initSettings() {
   const gearBtn = document.getElementById('settings-btn');
-  if (gearBtn) gearBtn.addEventListener('click', () => { initAudio(); openSettings(); });
+  if (gearBtn) _tapBind(gearBtn, () => { initAudio(); openSettings(); });
 
   const pauseSettingsBtn = document.getElementById('pause-settings-btn');
-  if (pauseSettingsBtn) pauseSettingsBtn.addEventListener('click', () => { openSettings(); });
+  if (pauseSettingsBtn) _tapBind(pauseSettingsBtn, () => { openSettings(); });
 
-  document.getElementById('settings-close').addEventListener('click', closeSettings);
+  _tapBind(document.getElementById('settings-close'), closeSettings);
 
   // Replay tutorial button
-  document.getElementById('replay-tutorial-btn').addEventListener('click', () => {
+  _tapBind(document.getElementById('replay-tutorial-btn'), () => {
     window._LS.removeItem('jh_tutorial_done');
     closeSettings();
     // Apply JL_v1 physics as tutorial baseline
@@ -89,7 +89,7 @@ function closeSettings() {
   });
 
   // Jet Lightning mode button
-  document.getElementById('jet-lightning-btn').addEventListener('click', () => {
+  _tapBind(document.getElementById('jet-lightning-btn'), () => {
     playStartSound();
     state._jetLightningMode = true;
     startJetLightning();
@@ -130,7 +130,7 @@ function closeSettings() {
   });
 
   // Music mute toggle
-  document.getElementById('mute-music').addEventListener('click', () => {
+  _tapBind(document.getElementById('mute-music'), () => {
     _settings.musicMuted = !_settings.musicMuted;
     document.getElementById('mute-music').classList.toggle('muted', _settings.musicMuted);
     document.getElementById('mute-music').textContent = _settings.musicMuted ? '🔇' : '♪';
@@ -139,7 +139,7 @@ function closeSettings() {
   });
 
   // SFX mute toggle
-  document.getElementById('mute-sfx').addEventListener('click', () => {
+  _tapBind(document.getElementById('mute-sfx'), () => {
     _settings.sfxMuted = !_settings.sfxMuted;
     document.getElementById('mute-sfx').classList.toggle('muted', _settings.sfxMuted);
     document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '♪';
@@ -147,7 +147,7 @@ function closeSettings() {
   });
 
   // Haptics toggle
-  document.getElementById('haptic-toggle').addEventListener('click', () => {
+  _tapBind(document.getElementById('haptic-toggle'), () => {
     _settings.hapticsOn = !_settings.hapticsOn;
     const btn = document.getElementById('haptic-toggle');
     btn.textContent = _settings.hapticsOn ? 'ON' : 'OFF';
@@ -157,12 +157,12 @@ function closeSettings() {
   });
 
   // "How to Play" button in settings
-  document.getElementById('show-tutorial-btn').addEventListener('click', () => {
+  _tapBind(document.getElementById('show-tutorial-btn'), () => {
     closeSettings();
     const ov = document.getElementById('onboarding-overlay');
     if (ov) {
       ov.classList.remove('hidden');
-      document.getElementById('onboarding-dismiss').addEventListener('click', () => {
+      _tapBind(document.getElementById('onboarding-dismiss'), () => {
         ov.classList.add('hidden');
       }, { once: true });
     }

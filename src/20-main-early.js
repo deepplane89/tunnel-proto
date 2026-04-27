@@ -1,4 +1,27 @@
 
+// ── Mobile-tight tap binding ──
+// Binds to pointerdown for instant response (no 300ms click delay on mobile).
+// Suppresses the synthetic click that follows so handlers don't double-fire,
+// and falls back to click on the rare browser without pointer events.
+function _tapBind(el, fn, opts) {
+  if (!el) return;
+  const passive = !(opts && opts.preventDefault);
+  let _firedAt = 0;
+  const handler = (e) => {
+    _firedAt = performance.now();
+    if (opts && opts.preventDefault) { try { e.preventDefault(); } catch (_) {} }
+    fn(e);
+  };
+  if ('onpointerdown' in window) {
+    el.addEventListener('pointerdown', handler, { passive });
+    // Suppress the synthetic click (within 500ms of pointerdown)
+    el.addEventListener('click', (e) => {
+      if (performance.now() - _firedAt < 500) { try { e.preventDefault(); e.stopPropagation(); } catch (_) {} }
+    });
+  } else {
+    el.addEventListener('click', handler);
+  }
+}
 
 let shipModelLoaded = false;
 
@@ -1073,7 +1096,7 @@ function renderLadder() {
 
   // Attach click handlers to claimable rewards
   container.querySelectorAll('.ladder-rung.reward.claimable').forEach(el => {
-    el.addEventListener('click', (e) => {
+    _tapBind(el, (e) => {
       const idx = parseInt(el.dataset.rung, 10);
       claimReward(idx, e);
     });
@@ -1092,8 +1115,8 @@ function renderLadder() {
 // ── PERFORMANCE MODE STATE ────────────────────────────────
 let perfMode = false;
 const perfToggleBtn = document.getElementById('perf-toggle');
-perfToggleBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
+_tapBind(perfToggleBtn, (e) => {
+  try { e.stopPropagation(); } catch (_) {}
   perfMode = !perfMode;
   perfToggleBtn.classList.toggle('on', perfMode);
   perfToggleBtn.setAttribute('aria-pressed', perfMode);
@@ -1213,7 +1236,7 @@ function _mountTitleCanvas() {
   titleCamera.aspect = w / h;
   titleCamera.updateProjectionMatrix();
   _titleCanvas.style.cursor = 'pointer';
-  _titleCanvas.addEventListener('click', () => { if (typeof openShop === 'function') openShop(); });
+  _tapBind(_titleCanvas, () => { if (typeof openShop === 'function') openShop(); });
   showcase.appendChild(_titleCanvas);
 }
 if (document.readyState === 'loading') {

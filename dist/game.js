@@ -261,6 +261,29 @@ function _broadcastHoloUniform(name, value) {
   }
 }
 
+// ── Mobile-tight tap binding ──
+// Binds to pointerdown for instant response (no 300ms click delay on mobile).
+// Suppresses the synthetic click that follows so handlers don't double-fire,
+// and falls back to click on the rare browser without pointer events.
+function _tapBind(el, fn, opts) {
+  if (!el) return;
+  const passive = !(opts && opts.preventDefault);
+  let _firedAt = 0;
+  const handler = (e) => {
+    _firedAt = performance.now();
+    if (opts && opts.preventDefault) { try { e.preventDefault(); } catch (_) {} }
+    fn(e);
+  };
+  if ('onpointerdown' in window) {
+    el.addEventListener('pointerdown', handler, { passive });
+    // Suppress the synthetic click (within 500ms of pointerdown)
+    el.addEventListener('click', (e) => {
+      if (performance.now() - _firedAt < 500) { try { e.preventDefault(); e.stopPropagation(); } catch (_) {} }
+    });
+  } else {
+    el.addEventListener('click', handler);
+  }
+}
 
 let shipModelLoaded = false;
 
@@ -1335,7 +1358,7 @@ function renderLadder() {
 
   // Attach click handlers to claimable rewards
   container.querySelectorAll('.ladder-rung.reward.claimable').forEach(el => {
-    el.addEventListener('click', (e) => {
+    _tapBind(el, (e) => {
       const idx = parseInt(el.dataset.rung, 10);
       claimReward(idx, e);
     });
@@ -1354,8 +1377,8 @@ function renderLadder() {
 // ── PERFORMANCE MODE STATE ────────────────────────────────
 let perfMode = false;
 const perfToggleBtn = document.getElementById('perf-toggle');
-perfToggleBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
+_tapBind(perfToggleBtn, (e) => {
+  try { e.stopPropagation(); } catch (_) {}
   perfMode = !perfMode;
   perfToggleBtn.classList.toggle('on', perfMode);
   perfToggleBtn.setAttribute('aria-pressed', perfMode);
@@ -1475,7 +1498,7 @@ function _mountTitleCanvas() {
   titleCamera.aspect = w / h;
   titleCamera.updateProjectionMatrix();
   _titleCanvas.style.cursor = 'pointer';
-  _titleCanvas.addEventListener('click', () => { if (typeof openShop === 'function') openShop(); });
+  _tapBind(_titleCanvas, () => { if (typeof openShop === 'function') openShop(); });
   showcase.appendChild(_titleCanvas);
 }
 if (document.readyState === 'loading') {
@@ -9544,7 +9567,7 @@ function initAudio() {
     _initTrackGains();
     return;
   }
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
   _ensureCtxRunning();
 
   // Engine hum removed — keep gain node at 0 so SFX chain still works
@@ -9639,10 +9662,25 @@ function _initSFXBuffers() {
   _loadSFXBuffer('thunder1', './assets/audio/thunder1.mp3');
   _loadSFXBuffer('thunder2', './assets/audio/thunder2.mp3');
   _loadSFXBuffer('klaxon',   './assets/audio/klaxon.mp3');
+  // Mobile-tight tap response: pre-decode short impact SFX into AudioBuffers
+  _loadSFXBuffer('thruster-impact', './assets/audio/thruster-impact.mp3');
+  _loadSFXBuffer('powerup-burst',   './assets/audio/powerup-burst.mp3');
+  _loadSFXBuffer('retry-tech',      './assets/audio/retry-tech.mp3');
+  _loadSFXBuffer('retry-warp',      './assets/audio/retry-warp.mp3');
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release' };
-// Play a pre-decoded buffer with gain + optional pan + playbackRate
+const _sfxFallbackIds = {
+  'nearmiss': 'nearmiss-sfx',
+  'whoosh': 'whoosh1',
+  'whoosh-release': 'whoosh-release',
+  'thruster-impact': 'thruster-impact-sfx',
+  'powerup-burst':   'powerup-burst-sfx',
+  'retry-tech':      'retry-tech-sfx',
+  'retry-warp':      'retry-warp-sfx'
+};
+// Play a pre-decoded buffer with gain + optional pan + playbackRate.
+// Returns the BufferSource handle when buffer path is used (caller can .stop()),
+// otherwise returns null/undefined when falling back to <audio>.
 function _playBuffer(name, volume, rate, panVal) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (!audioCtx || state.muted || volume <= 0) return;
@@ -9663,7 +9701,9 @@ function _playBuffer(name, volume, rate, panVal) {
       gain.connect(audioCtx.destination);
     }
     src.start();
-    return;
+    // Expose gain on the source so callers can fade if they want
+    src._jhGain = gain;
+    return src;
   }
   // Fallback: cloneNode from <audio> element (slower but works if buffer not ready)
   const elId = _sfxFallbackIds[name];
@@ -9726,15 +9766,16 @@ function playCrash() {
 }
 
 // Plasma-punch impact layered alongside engine-roar ignition.
+// Mobile-tight: routes through pre-decoded AudioBuffer (zero-latency) when available,
+// falls back to <audio> element if buffer hasn't decoded yet.
 function playThrusterImpact(vol) {
   if (state.muted) return;
+  const v = (vol == null ? 0.7 : vol);
+  if (typeof _playBuffer === 'function') { _playBuffer('thruster-impact', v, 1.0, null); return; }
+  // Hard fallback if _playBuffer isn't available for any reason
   const _ti = document.getElementById('thruster-impact-sfx');
   if (_ti) {
-    try {
-      _ti.currentTime = 0;
-      _ti.volume = (vol == null ? 0.7 : vol);
-      _ti.play().catch(() => {});
-    } catch (_) {}
+    try { _ti.currentTime = 0; _ti.volume = v; _ti.play().catch(() => {}); } catch (_) {}
   }
 }
 
@@ -9878,10 +9919,12 @@ function playPickup(typeIdx) {
   const freqs = [880, 1100, 660, 990, 770, 660];
   playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.45);
   setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.35), 80);
-  // Quiet electron-burst layer on power-up smash.
-  const _pb = document.getElementById('powerup-burst-sfx');
-  if (_pb) {
-    try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {}
+  // Quiet electron-burst layer on power-up smash (zero-latency buffer playback).
+  if (typeof _playBuffer === 'function') {
+    _playBuffer('powerup-burst', 0.18, 1.0, null);
+  } else {
+    const _pb = document.getElementById('powerup-burst-sfx');
+    if (_pb) { try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {} }
   }
 }
 
@@ -12163,11 +12206,11 @@ function initSkinViewer() {
   if (!window._skinViewerInited) {
     window._skinViewerInited = true;
 
-    document.getElementById('skin-prev').addEventListener('click', e => {
+    _tapBind(document.getElementById('skin-prev'), e => {
       e.stopPropagation();
       { let _ni = (skinViewerIdx - 1 + SHIP_SKINS.length) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni - 1 + SHIP_SKINS.length) % SHIP_SKINS.length; navigateToSkin(_ni); }
     });
-    document.getElementById('skin-next').addEventListener('click', e => {
+    _tapBind(document.getElementById('skin-next'), e => {
       e.stopPropagation();
       { let _ni = (skinViewerIdx + 1) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni + 1) % SHIP_SKINS.length; navigateToSkin(_ni); }
     });
@@ -12190,7 +12233,7 @@ function initSkinViewer() {
     // Admin mode: 3 rapid taps on the skin label (only when no handling upgrade pending)
     let adminTapCount = 0;
     let adminTapTimer = null;
-    document.getElementById('skin-viewer-label').addEventListener('click', (e) => {
+    _tapBind(document.getElementById('skin-viewer-label'), (e) => {
       // If handling upgrade pending, claim it
       const pendingHandling = getPendingHandlingUpgrade();
       if (pendingHandling) {
@@ -12321,7 +12364,7 @@ function renderStreakCircles() {
       el.classList.add('claimed');
     } else if (dayNum === ss.day && !ss.claimed) {
       el.classList.add('today');
-      el.addEventListener('click', () => claimStreakReward(el, ss.day));
+      _tapBind(el, () => claimStreakReward(el, ss.day));
       el.addEventListener('touchstart', (e) => { e.preventDefault(); claimStreakReward(el, ss.day); }, { passive: false });
     } else {
       el.classList.add('future');
@@ -12445,7 +12488,7 @@ function closeStreak() {
   playTitleTap();
   document.getElementById('streak-overlay').classList.add('hidden');
 }
-document.getElementById('streak-close-btn').addEventListener('click', closeStreak);
+_tapBind(document.getElementById('streak-close-btn'), closeStreak);
 document.getElementById('streak-overlay').addEventListener('click', function(e) {
   if (e.target === this) closeStreak();
 });
@@ -12556,7 +12599,7 @@ function switchShopTab(tab) {
 // Tab click handlers
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.shop-tab').forEach(tab => {
-    tab.addEventListener('click', () => switchShopTab(tab.dataset.tab));
+    _tapBind(tab, () => switchShopTab(tab.dataset.tab));
   });
 
 });
@@ -12599,7 +12642,7 @@ function renderPowerupCards() {
       ${justUnlocked ? '<div class="shop-new-badge">NEW</div>' : ''}
     `;
     if (!locked && !maxed) {
-      card.addEventListener('click', () => {
+      _tapBind(card, () => {
         // Clear NEW flag when they tap a newly unlocked card
         if (justUnlocked) window._LS.removeItem('jetslide_shop_new');
         updateNotificationDots();
@@ -12666,7 +12709,7 @@ function openShopDetail(id) {
   if (!maxed) {
     const buyBtn = document.getElementById('shop-buy-btn');
     if (buyBtn) {
-      buyBtn.addEventListener('click', () => {
+      _tapBind(buyBtn, () => {
         if (purchaseUpgrade(id)) {
           // Animate purchase
           buyBtn.classList.add('shop-purchase-anim');
@@ -13684,7 +13727,7 @@ window.addEventListener('keyup', e => {
       if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
       _skinTapTimer = setTimeout(() => { _skinTapCount = 0; }, 500);
     }, { passive: true });
-    skinLabel.addEventListener('click', () => {
+    _tapBind(skinLabel, () => {
       _skinTapCount++;
       if (_skinTapTimer) clearTimeout(_skinTapTimer);
       if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
@@ -13708,7 +13751,7 @@ window.addEventListener('keyup', e => {
   setTimeout(() => { banner.classList.remove('hidden'); }, 2000);
 
   // Tap anywhere on the banner to dismiss
-  banner.addEventListener('click', () => {
+  _tapBind(banner, () => {
     banner.classList.add('hidden');
   });
   banner.addEventListener('touchend', (e) => {
@@ -13753,7 +13796,7 @@ window.addEventListener('keyup', e => {
 // Start title music on very first user interaction with the page
 function initTitleAudio() {
   if (audioCtx) { _ensureCtxRunning(); return; }  // already initialized
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
   _ensureCtxRunning();
   engineGain = audioCtx.createGain();
   engineGain.gain.value = 0.0;
@@ -13788,7 +13831,7 @@ function initTitleAudio() {
       // Autoplay blocked — unlock audio on first interaction (no visible overlay)
       const unlock = () => {
         if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
           engineGain = audioCtx.createGain();
           engineGain.gain.value = 0.0;
           engineGain.connect(audioCtx.destination);
@@ -14126,7 +14169,7 @@ function showRewardWheel(segIdx, callback) {
 }
 
 // ── BUTTON HANDLERS ──
-document.getElementById('death-run-btn').addEventListener('click', () => {
+_tapBind(document.getElementById('death-run-btn'), () => {
   initAudio();
   // Pre-warm engine sounds on user gesture (mobile requires this)
   // Just load them — don't play, to avoid any audible glitch
@@ -14137,13 +14180,13 @@ document.getElementById('death-run-btn').addEventListener('click', () => {
   playStartSound();
   startDeathRun();
 });
-document.getElementById('restart-btn').addEventListener('click', () => {
+_tapBind(document.getElementById('restart-btn'), () => {
   if (!_gameOverTapReady) return; // cooldown guard
   initAudio();
   // No playStartSound — _triggerRetryWithSweep plays its own retry-tech + retry-warp SFX
   _triggerRetryWithSweep();
 });
-document.getElementById('gameover-exit-btn').addEventListener('click', () => {
+_tapBind(document.getElementById('gameover-exit-btn'), () => {
   if (!_gameOverTapReady) return; // cooldown guard
   playExitSound();
   // [WHEEL DISABLED] reward wheel quarantined — skip straight to title
@@ -14211,15 +14254,15 @@ function closeSettings() {
 // Wire up settings UI
 (function initSettings() {
   const gearBtn = document.getElementById('settings-btn');
-  if (gearBtn) gearBtn.addEventListener('click', () => { initAudio(); openSettings(); });
+  if (gearBtn) _tapBind(gearBtn, () => { initAudio(); openSettings(); });
 
   const pauseSettingsBtn = document.getElementById('pause-settings-btn');
-  if (pauseSettingsBtn) pauseSettingsBtn.addEventListener('click', () => { openSettings(); });
+  if (pauseSettingsBtn) _tapBind(pauseSettingsBtn, () => { openSettings(); });
 
-  document.getElementById('settings-close').addEventListener('click', closeSettings);
+  _tapBind(document.getElementById('settings-close'), closeSettings);
 
   // Replay tutorial button
-  document.getElementById('replay-tutorial-btn').addEventListener('click', () => {
+  _tapBind(document.getElementById('replay-tutorial-btn'), () => {
     window._LS.removeItem('jh_tutorial_done');
     closeSettings();
     // Apply JL_v1 physics as tutorial baseline
@@ -14240,7 +14283,7 @@ function closeSettings() {
   });
 
   // Jet Lightning mode button
-  document.getElementById('jet-lightning-btn').addEventListener('click', () => {
+  _tapBind(document.getElementById('jet-lightning-btn'), () => {
     playStartSound();
     state._jetLightningMode = true;
     startJetLightning();
@@ -14281,7 +14324,7 @@ function closeSettings() {
   });
 
   // Music mute toggle
-  document.getElementById('mute-music').addEventListener('click', () => {
+  _tapBind(document.getElementById('mute-music'), () => {
     _settings.musicMuted = !_settings.musicMuted;
     document.getElementById('mute-music').classList.toggle('muted', _settings.musicMuted);
     document.getElementById('mute-music').textContent = _settings.musicMuted ? '🔇' : '♪';
@@ -14290,7 +14333,7 @@ function closeSettings() {
   });
 
   // SFX mute toggle
-  document.getElementById('mute-sfx').addEventListener('click', () => {
+  _tapBind(document.getElementById('mute-sfx'), () => {
     _settings.sfxMuted = !_settings.sfxMuted;
     document.getElementById('mute-sfx').classList.toggle('muted', _settings.sfxMuted);
     document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '♪';
@@ -14298,7 +14341,7 @@ function closeSettings() {
   });
 
   // Haptics toggle
-  document.getElementById('haptic-toggle').addEventListener('click', () => {
+  _tapBind(document.getElementById('haptic-toggle'), () => {
     _settings.hapticsOn = !_settings.hapticsOn;
     const btn = document.getElementById('haptic-toggle');
     btn.textContent = _settings.hapticsOn ? 'ON' : 'OFF';
@@ -14308,12 +14351,12 @@ function closeSettings() {
   });
 
   // "How to Play" button in settings
-  document.getElementById('show-tutorial-btn').addEventListener('click', () => {
+  _tapBind(document.getElementById('show-tutorial-btn'), () => {
     closeSettings();
     const ov = document.getElementById('onboarding-overlay');
     if (ov) {
       ov.classList.remove('hidden');
-      document.getElementById('onboarding-dismiss').addEventListener('click', () => {
+      _tapBind(document.getElementById('onboarding-dismiss'), () => {
         ov.classList.add('hidden');
       }, { once: true });
     }
@@ -14358,6 +14401,7 @@ let _gameStarting = false; // reentry lock — prevents double-fire from simulta
 
 // ── Retry with cinematic camera sweep (from game over) ──
 let _retryPending = false; // guard against double-tap during fade
+let _retryWarpSrc = null;  // active retry-warp BufferSource (or null when fallback / inactive)
 function _triggerRetryWithSweep() {
   if (_retrySweepActive || _retryPending) return; // debounce
   _retryPending = true;
@@ -14403,11 +14447,24 @@ function _triggerRetryWithSweep() {
     _retrySweepT = 0;
     _retrySweepThrusterFired = false;
     // Retry SFX: tech-device one-shot (504ms) at sweep start, warp AFTER it finishes.
-    const _retrySfx = document.getElementById('retry-tech-sfx');
-    if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
+    // Mobile-tight: route both through pre-decoded buffers when available.
+    if (typeof _playBuffer === 'function' && !state.muted) {
+      _playBuffer('retry-tech', 0.55, 1.0, null);
+    } else {
+      const _retrySfx = document.getElementById('retry-tech-sfx');
+      if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
+    }
     setTimeout(() => {
-      const _retryWarp = document.getElementById('retry-warp-sfx');
-      if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
+      if (state.muted) return;
+      // Stop any prior warp source (multi-retry safety)
+      if (_retryWarpSrc) { try { _retryWarpSrc.stop(); } catch(_) {} _retryWarpSrc = null; }
+      if (typeof _playBuffer === 'function') {
+        const _src = _playBuffer('retry-warp', 0.85, 1.0, null);
+        if (_src && typeof _src.stop === 'function') _retryWarpSrc = _src;
+      } else {
+        const _retryWarp = document.getElementById('retry-warp-sfx');
+        if (_retryWarp) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
+      }
     }, 300);
     // Fade from black
     fadeEl.style.opacity = '0';
@@ -15927,7 +15984,7 @@ function _tutShowHint(title, sub, color) {
     exitBtn.id = 'tutorial-exit-btn';
     exitBtn.textContent = 'EXIT TUTORIAL';
     exitBtn.style.cssText = 'position:fixed;top:16px;right:16px;z-index:9100;background:rgba(0,0,0,0.6);color:#fff;border:1px solid rgba(255,255,255,0.4);padding:7px 18px;font-family:monospace;font-size:12px;cursor:pointer;letter-spacing:2px';
-    exitBtn.addEventListener('click', () => {
+    _tapBind(exitBtn, () => {
       window._LS.setItem('jh_tutorial_done', '1');
       _tutDestroyOverlay();
       state._tutorialActive = false;
@@ -17811,7 +17868,7 @@ function killPlayer() {
     const newBtn = _saveMeBtn.cloneNode(true);
     _saveMeBtn.parentNode.replaceChild(newBtn, _saveMeBtn);
     newBtn.disabled = !canAfford;
-    newBtn.addEventListener('click', () => {
+    _tapBind(newBtn, () => {
       if (!_gameOverTapReady) return; // cooldown guard
       if (_retryPending) return; // already fading
       if (loadFuelCells() < saveMeFuelCost) return;
@@ -18002,7 +18059,7 @@ function killPlayer() {
         _showSaved();
       };
 
-      _newConfirm.addEventListener('click', _doSubmit);
+      _tapBind(_newConfirm, _doSubmit);
       _newInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); _doSubmit(); }
       });
@@ -18141,7 +18198,7 @@ function update(dt) {
         const _v0 = Math.min(1, Math.abs(state.shipVelX) / Math.max(1, MAX_VEL));
         try {
           _argonEl.currentTime = 0;
-          _argonEl.volume = 0.20 + _v0 * 0.40; // 0.20 floor on press, up to 0.60 mid-swerve
+          _argonEl.volume = 0.12 + _v0 * 0.28; // 0.12 floor on press, up to 0.40 mid-swerve
           _argonEl.playbackRate = 1.0;
           _argonEl.play().catch(()=>{});
         } catch (_) {}
@@ -18154,7 +18211,7 @@ function update(dt) {
         const _open = _prev + (_vNow - _prev) * Math.min(1, _rate * dt);
         state._argonOpen = _open;
         try {
-          _argonEl.volume = 0.20 + _open * 0.40;
+          _argonEl.volume = 0.12 + _open * 0.28;
           _argonEl.playbackRate = 0.97 + _open * 0.08;
         } catch (_) {}
       } else if (!_isSteering && _wasSteering) {
@@ -18204,6 +18261,8 @@ function update(dt) {
       _retrySweepThrusterFired = true;
       // Retry: stop warp, skip engine-roar, plasma-punch IS the ship-movement sound
       _ensureCtxRunning();
+      // Stop the buffer-source warp if it's playing, otherwise pause the <audio> fallback.
+      if (_retryWarpSrc) { try { _retryWarpSrc.stop(); } catch(_) {} _retryWarpSrc = null; }
       const _rsWarp = document.getElementById('retry-warp-sfx');
       if (_rsWarp) { try { _rsWarp.pause(); _rsWarp.currentTime = 0; } catch(_) {} }
       playThrusterImpact(0.7);
@@ -20500,7 +20559,7 @@ const _fpsEl = document.getElementById('fps-overlay');
 (function setupFpsToggle() {
   const btn = document.getElementById('fps-toggle');
   if (!btn) return;
-  btn.addEventListener('click', () => {
+  _tapBind(btn, () => {
     _fpsOn = !_fpsOn;
     btn.setAttribute('aria-pressed', _fpsOn);
     btn.classList.toggle('on', _fpsOn);
