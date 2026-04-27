@@ -549,6 +549,15 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1777304500"></script>
+<!-- Rotate-to-landscape prompt (mobile portrait only — pure CSS, no JS) -->
+<div id="rotate-prompt" aria-hidden="true">
+  <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="18" y="6" width="28" height="52" rx="4"/>
+    <line x1="28" y1="54" x2="36" y2="54"/>
+  </svg>
+  <div>Rotate device to landscape</div>
+</div>
+
+<script type="module" src="./dist/game.js?v=1777304600"></script>
 </body>
 </html>
