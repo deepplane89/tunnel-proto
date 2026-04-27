@@ -71,6 +71,7 @@ function _triggerRetryWithSweep() {
     // Start the sweep
     _retrySweepActive = true;
     _retrySweepT = 0;
+    _retrySweepThrusterFired = false;
     // Retry SFX: tech-device one-shot (504ms) at sweep start, warp AFTER it finishes.
     const _retrySfx = document.getElementById('retry-tech-sfx');
     if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
@@ -856,15 +857,18 @@ function startDeathRun() {
       state.elapsed = 0; // reset so wave director Band 1 starts fresh from launch
 
       // Engine roar only on launch (engine-start already killed by clearIntroTimers)
+      // On retry: skip engine-roar, plasma-punch fires from sweep-arrival instead
       killThrusterSputter();
-      const roar = document.getElementById('engine-roar');
-      if (roar && !state.muted) {
-        _ensureCtxRunning();
-        roar.currentTime = 0;
-        roar.volume = 0.6; // launch roar — last night's value
-        roar.play().catch(() => {});
+      if (!_retryIsFromDead) {
+        const roar = document.getElementById('engine-roar');
+        if (roar && !state.muted) {
+          _ensureCtxRunning();
+          roar.currentTime = 0;
+          roar.volume = 0.6; // launch roar — last night's value
+          roar.play().catch(() => {});
+        }
+        playThrusterImpact(0.7);
       }
-      playThrusterImpact(0.7);
       // Continuous baseline whir during gameplay (looped)
       const _baseline = document.getElementById('engine-baseline');
       if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
@@ -3814,8 +3818,10 @@ function update(dt) {
     // Trigger quiet thruster ignition as camera arrives at ship
     if (_retrySweepT >= 0.8 && !_retrySweepThrusterFired) {
       _retrySweepThrusterFired = true;
-      // Retry: skip engine-roar, let warp keep ringing, plasma-punch on ignition
+      // Retry: stop warp, skip engine-roar, plasma-punch IS the ship-movement sound
       _ensureCtxRunning();
+      const _rsWarp = document.getElementById('retry-warp-sfx');
+      if (_rsWarp) { try { _rsWarp.pause(); _rsWarp.currentTime = 0; } catch(_) {} }
       playThrusterImpact(0.7);
     }
     if (_retrySweepT >= 1) {
