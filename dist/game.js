@@ -12871,6 +12871,11 @@ function applyPowerup(typeIdx) {
       shieldMat.uniforms.uReveal.value = 1.0;
       shieldWireMat.opacity = 0;
       shieldLight.intensity = 0;
+      // Force-field loop: starts at 0 during speed phase
+      const _invSfx = document.getElementById('invincible-loop-sfx');
+      if (_invSfx && !state.muted) {
+        try { _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45; _invSfx.play().catch(()=>{}); } catch(_) {}
+      }
       break;
     }
 
@@ -13014,6 +13019,8 @@ function togglePause() {
     if (_roarP && !_roarP.paused) _roarP.pause();
     if (_baseP && !_baseP.paused) _baseP.pause();
     _stopMagnetWhir();
+    const _invP = document.getElementById('invincible-loop-sfx');
+    if (_invP && !_invP.paused) _invP.pause();
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
     if (state._tutorialActive) _tutHideText();
@@ -13024,6 +13031,9 @@ function togglePause() {
     // Resume baseline whir on unpause
     const _baseU = document.getElementById('engine-baseline');
     if (_baseU && !state.muted) { _baseU.play().catch(()=>{}); }
+    // Resume invincible loop if active
+    const _invU = document.getElementById('invincible-loop-sfx');
+    if (_invU && state.invincibleTimer > 0 && !state.muted) { _invU.play().catch(()=>{}); }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
   }
 }
@@ -13104,6 +13114,8 @@ function returnToTitle() {
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
   if (_baseR) { _baseR.pause(); _baseR.currentTime = 0; }
   _stopMagnetWhir();
+  const _invR = document.getElementById('invincible-loop-sfx');
+  if (_invR) { _invR.pause(); _invR.currentTime = 0; _invR.loop = false; }
   if (titleMusic) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
   updateTitleCoins();
   updateTitleFuelCells();
@@ -17536,6 +17548,8 @@ function killPlayer() {
   const _baseD = document.getElementById('engine-baseline');
   if (_baseD && !_baseD.paused) { _baseD.pause(); _baseD.currentTime = 0; }
   _stopMagnetWhir();
+  const _invD = document.getElementById('invincible-loop-sfx');
+  if (_invD && !_invD.paused) { _invD.pause(); _invD.currentTime = 0; _invD.loop = false; }
   playCrash();
   // addCrashFlash(); // disabled to isolate face explosion
 
@@ -18888,6 +18902,9 @@ function update(dt) {
     // Kill speed boost but keep invincibility for grace period
     if (state.invincibleTimer <= GRACE_PERIOD && state.invincibleSpeedActive) {
       state.invincibleSpeedActive = false;
+      // Skip force-field loop to the 20s mark for grace-period segment
+      const _invG = document.getElementById('invincible-loop-sfx');
+      if (_invG) { try { _invG.currentTime = 20.0; } catch(_) {} }
     }
     // RGB chromatic aberration: full split during speed, ramp down during grace
     const BASE_ABERRATION = 0.0015;
@@ -18907,6 +18924,9 @@ function update(dt) {
       shieldMat.uniforms.uReveal.value = 1.0;
       shieldWireMat.opacity = 0;
       shieldLight.intensity = 0;
+      // Stop force-field loop
+      const _invE = document.getElementById('invincible-loop-sfx');
+      if (_invE) { try { _invE.pause(); _invE.currentTime = 0; _invE.loop = false; } catch(_) {} }
     }
     // Near-miss red flash (skip if invincible rainbow is active)
     if (state.nearMissFlash > 0 && !state.invincibleSpeedActive && shipHullMats.length) {

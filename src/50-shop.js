@@ -412,6 +412,11 @@ function applyPowerup(typeIdx) {
       shieldMat.uniforms.uReveal.value = 1.0;
       shieldWireMat.opacity = 0;
       shieldLight.intensity = 0;
+      // Force-field loop: starts at 0 during speed phase
+      const _invSfx = document.getElementById('invincible-loop-sfx');
+      if (_invSfx && !state.muted) {
+        try { _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45; _invSfx.play().catch(()=>{}); } catch(_) {}
+      }
       break;
     }
 

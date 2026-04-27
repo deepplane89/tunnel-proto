@@ -71,6 +71,8 @@ function togglePause() {
     if (_roarP && !_roarP.paused) _roarP.pause();
     if (_baseP && !_baseP.paused) _baseP.pause();
     _stopMagnetWhir();
+    const _invP = document.getElementById('invincible-loop-sfx');
+    if (_invP && !_invP.paused) _invP.pause();
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
     if (state._tutorialActive) _tutHideText();
@@ -81,6 +83,9 @@ function togglePause() {
     // Resume baseline whir on unpause
     const _baseU = document.getElementById('engine-baseline');
     if (_baseU && !state.muted) { _baseU.play().catch(()=>{}); }
+    // Resume invincible loop if active
+    const _invU = document.getElementById('invincible-loop-sfx');
+    if (_invU && state.invincibleTimer > 0 && !state.muted) { _invU.play().catch(()=>{}); }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
   }
 }
@@ -161,6 +166,8 @@ function returnToTitle() {
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
   if (_baseR) { _baseR.pause(); _baseR.currentTime = 0; }
   _stopMagnetWhir();
+  const _invR = document.getElementById('invincible-loop-sfx');
+  if (_invR) { _invR.pause(); _invR.currentTime = 0; _invR.loop = false; }
   if (titleMusic) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
   updateTitleCoins();
   updateTitleFuelCells();

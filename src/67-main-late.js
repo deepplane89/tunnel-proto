@@ -3233,6 +3233,8 @@ function killPlayer() {
   const _baseD = document.getElementById('engine-baseline');
   if (_baseD && !_baseD.paused) { _baseD.pause(); _baseD.currentTime = 0; }
   _stopMagnetWhir();
+  const _invD = document.getElementById('invincible-loop-sfx');
+  if (_invD && !_invD.paused) { _invD.pause(); _invD.currentTime = 0; _invD.loop = false; }
   playCrash();
   // addCrashFlash(); // disabled to isolate face explosion
 
@@ -4585,6 +4587,9 @@ function update(dt) {
     // Kill speed boost but keep invincibility for grace period
     if (state.invincibleTimer <= GRACE_PERIOD && state.invincibleSpeedActive) {
       state.invincibleSpeedActive = false;
+      // Skip force-field loop to the 20s mark for grace-period segment
+      const _invG = document.getElementById('invincible-loop-sfx');
+      if (_invG) { try { _invG.currentTime = 20.0; } catch(_) {} }
     }
     // RGB chromatic aberration: full split during speed, ramp down during grace
     const BASE_ABERRATION = 0.0015;
@@ -4604,6 +4609,9 @@ function update(dt) {
       shieldMat.uniforms.uReveal.value = 1.0;
       shieldWireMat.opacity = 0;
       shieldLight.intensity = 0;
+      // Stop force-field loop
+      const _invE = document.getElementById('invincible-loop-sfx');
+      if (_invE) { try { _invE.pause(); _invE.currentTime = 0; _invE.loop = false; } catch(_) {} }
     }
     // Near-miss red flash (skip if invincible rainbow is active)
     if (state.nearMissFlash > 0 && !state.invincibleSpeedActive && shipHullMats.length) {
