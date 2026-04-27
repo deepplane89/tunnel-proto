@@ -5931,17 +5931,17 @@ function _rebuildLocalNozzles() {
 const PARTICLE_COUNT = 160;  // per engine pod (reduced — flame quads handle core visual)
 const thrusterSystems = [];
 
-// Engine nozzle world-space offsets (user-tuned 2026-04-27 desktop session)
-// Confirmed to bank correctly with shipGroup.rotation.z (lane-change roll +
-// up/down perpendicular roll) via nozzleWorld() applying shipGroup.matrixWorld.
+// Engine nozzle world-space offsets
+// Side pods (Mesh4/5): local x=±1.52, y=-0.233(bottom), z=1.488(back) × scale 0.30
+// World: x=±0.456, y=0.28-0.07=0.21, z=4.5+1.488*0.30=4.946
 const NOZZLE_OFFSETS = [
-  new THREE.Vector3(-0.60, -0.37, 4.65),  // left pod back-bottom
-  new THREE.Vector3( 0.60, -0.37, 4.65),  // right pod back-bottom
+  new THREE.Vector3(-0.50, 0.12, 5.20),  // left pod back-bottom
+  new THREE.Vector3( 0.50, 0.12, 5.20),  // right pod back-bottom
 ];
-// Mini thruster nozzles — inboard hull lights (user-tuned 2026-04-27)
+// Mini thruster nozzles — inboard hull lights
 const MINI_NOZZLE_OFFSETS = [
-  new THREE.Vector3(-0.15, 0.06, 5.10),  // left inner hull
-  new THREE.Vector3( 0.16, 0.06, 5.10),  // right inner hull
+  new THREE.Vector3(-0.22, 0.08, 5.10),  // left inner hull
+  new THREE.Vector3( 0.22, 0.08, 5.10),  // right inner hull
 ];
 
 // Ship-local nozzle offsets for localToWorld (subtract ship default pos 0, 0.28, 4.5 then divide by scale 0.30)
@@ -5977,7 +5977,7 @@ function createThrusterSystem() {
   geo.setAttribute('size',     new THREE.BufferAttribute(sizes,     1));
 
   const mat = new THREE.PointsMaterial({
-    size: 0.10,                    // user-tuned 2026-04-27 (was 0.18)
+    size: 0.18,
     vertexColors: true,
     transparent: true,
     opacity: 1.0,
@@ -6394,9 +6394,8 @@ window._thrusterSpreadX = 1.0;   // lateral spread multiplier (wider)
 window._thrusterSpreadY = 1.0;   // vertical spread multiplier (flatter < 1, taller > 1)
 window._thrusterLength  = 1.0;   // exhaust length multiplier
 window._thrusterVisible = true;  // master on/off
-window._nozzleBloomScale = window._nozzleBloomScale || 0.39;       // user-tuned 2026-04-27
+window._nozzleBloomScale = window._nozzleBloomScale || 1.0;
 window._nozzleBloomOpacity = window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34;
-window._miniBloomScale = window._miniBloomScale || 0.15;           // user-tuned 2026-04-27
 let _jumpLandingBounce = 0.3;    // how much bounce on landing
 let _jumpLandingBounceT = 0;
 let _camYFollow = 0.35;          // 0 = camera stays fixed, 1 = fully tracks ship Y
