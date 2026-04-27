@@ -9,14 +9,14 @@ _tapBind(document.getElementById('death-run-btn'), () => {
   if (_ewEng) { _ewEng.load(); }
   if (_ewRoar) { _ewRoar.load(); }
   playStartSound();
-  // Orientation gate: if user picked landscape but is in portrait (or vice versa),
-  // show "rotate device" overlay and start once they comply. Native lock is
-  // attempted once oriented correctly (works on Android, no-op on iOS).
-  if (typeof window.__orientationGate === 'function') {
-    window.__orientationGate().then(() => { startDeathRun(); });
-  } else {
-    startDeathRun();
+  // Fire native orientation lock + show prompt if needed (mobile only),
+  // BUT start the game synchronously — do NOT await. iOS Safari requires
+  // audio/game start to happen inside the user-gesture call stack; awaiting
+  // a promise yields the event loop and breaks audio unlock.
+  if (typeof window.__orientationLockNow === 'function') {
+    try { window.__orientationLockNow(); } catch (_) {}
   }
+  startDeathRun();
 });
 _tapBind(document.getElementById('restart-btn'), () => {
   if (!_gameOverTapReady) return; // cooldown guard

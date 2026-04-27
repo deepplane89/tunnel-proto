@@ -79,7 +79,6 @@
 
   // ── Orientation lock state ──
   let _lockedOrientation = null;     // 'landscape' | 'portrait' | null
-  let _gateResolve = null;           // callback fired when gate is satisfied
 
   // Try the native API first; resolve true if locked, false if rejected/unsupported.
   async function _tryNativeLock(orientation) {
@@ -98,36 +97,34 @@
     }
   }
 
-  // Public: gate PLAY behind orientation. Returns a Promise that resolves once
-  // the device matches the chosen orientation and the lock has been engaged.
-  // Call site: invoke before starting game (intro lift / startDeathRun).
-  window.__orientationGate = function gate() {
-    return new Promise((resolve) => {
-      const chosen = getPref();
-      _lockedOrientation = chosen;
+  // Public: lock orientation NOW (synchronous, fire-and-forget). Called from
+  // PLAY tap. Game starts synchronously alongside this; it does not block.
+  // The watcher takes over enforcement after this point.
+  window.__orientationLockNow = function lockNow() {
+    // Desktop: no orientation concept.
+    if (!_isMobileLike) return;
 
-      const proceed = async () => {
-        // Try native lock once oriented correctly. If it works, great. If not
-        // (iOS), we'll keep watching orientation changes and re-show the prompt.
-        await _tryNativeLock(chosen);
-        _hidePrompt();
-        _gateResolve = null;
-        resolve();
-      };
+    const chosen = getPref();
+    _lockedOrientation = chosen;
 
-      if (physicalOrientation() === chosen) {
-        proceed();
-      } else {
-        _gateResolve = proceed;
-        _showPrompt(chosen);
-      }
-    });
+    // Fire native lock without awaiting — promise rejection is harmless,
+    // we just won't have hardware enforcement (iOS path).
+    try {
+      const p = _tryNativeLock(chosen);
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (_) {}
+
+    // If physical doesn't match the chosen orientation, show the rotate prompt.
+    // The watcher will hide it once they rotate (and pause/show again if they
+    // drift back off mid-game).
+    if (physicalOrientation() !== chosen) {
+      _showPrompt(chosen);
+    }
   };
 
   // Release the lock — call from returnToTitle().
   window.__orientationRelease = function release() {
     _lockedOrientation = null;
-    _gateResolve = null;
     _hidePrompt();
     _tryNativeUnlock();
   };
@@ -137,33 +134,16 @@
     if (!_lockedOrientation) return;
     const current = physicalOrientation();
 
-    // Pre-game: still gating PLAY
-    if (_gateResolve) {
-      if (current === _lockedOrientation) {
-        const fn = _gateResolve;
-        _gateResolve = null;
-        fn();
-      }
-      return;
-    }
-
-    // In-game: enforce
-    const phase = (typeof state !== 'undefined' && state) ? state.phase : null;
-    const introNow = (typeof state !== 'undefined' && state) &&
-      (state.introActive || state._introLiftActive);
-    const inPlay = phase === 'playing' || phase === 'paused' || phase === 'gameover' || introNow;
-
-    if (!inPlay) return;
-
     if (current !== _lockedOrientation) {
-      // Drifted off — pause game and show rotate prompt.
+      // Drifted off — pause if in active gameplay, and show prompt.
+      const phase = (typeof state !== 'undefined' && state) ? state.phase : null;
       if (phase === 'playing' && typeof togglePause === 'function') {
         try { togglePause(); } catch (_) {}
       }
       _showPrompt(_lockedOrientation);
     } else {
-      // Back on the locked orientation — hide the prompt, but DO NOT resume.
-      // User explicitly resumes via the pause overlay.
+      // Back on the locked orientation — hide the prompt. Game stays paused;
+      // user resumes manually via the existing pause overlay.
       _hidePrompt();
     }
   }
