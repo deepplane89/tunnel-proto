@@ -2198,23 +2198,7 @@ function buildSkinTunerSliders() {
       window._thrusterLength = v;
     }));
 
-    // ── Bloom / Glow ──
-    const hdr4 = document.createElement('div');
-    hdr4.style.cssText = 'color:#ff88ff;margin:8px 0 4px;font-weight:bold;';
-    hdr4.textContent = '— BLOOM / GLOW —';
-    panel.appendChild(hdr4);
-
-    panel.appendChild(makeSlider('Bloom Size', window._nozzleBloomScale || 1.0, 0, 5, 0.1, v => {
-      window._nozzleBloomScale = v;
-    }));
-    panel.appendChild(makeSlider('Bloom Opacity', window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34, 0, 1, 0.01, v => {
-      window._nozzleBloomOpacity = v;
-    }));
-    panel.appendChild(makeSlider('Mini Bloom Size', window._miniBloomScale || 1.0, 0, 5, 0.1, v => {
-      window._miniBloomScale = v;
-    }));
-
-    // ── Cone Thruster ──
+    // ── Cone Thruster (moved up into THRUSTERS section for visibility) ──
     const hdrCone = document.createElement('div');
     hdrCone.style.cssText = 'color:#ff6600;margin:8px 0 4px;font-weight:bold;';
     hdrCone.textContent = '— CONE THRUSTER —';
@@ -2241,19 +2225,23 @@ function buildSkinTunerSliders() {
       hideOldBtn.textContent = window._hideOldThrusters ? 'Old Thrusters: OFF' : 'Old Thrusters: ON';
     });
     panel.appendChild(hideOldBtn);
-    panel.appendChild(makeSlider('Cone Length', ct.length, 0.5, 8, 0.1, v => { ct.length = v; }));
-    panel.appendChild(makeSlider('Cone Radius', ct.radius, 0.02, 1, 0.01, v => { ct.radius = v; }));
-    panel.appendChild(makeSlider('Cone Rot X', ct.rotX, -3.15, 3.15, 0.01, v => { ct.rotX = v; }));
-    panel.appendChild(makeSlider('Cone Rot Y', ct.rotY, -3.15, 3.15, 0.01, v => { ct.rotY = v; }));
-    panel.appendChild(makeSlider('Cone Rot Z', ct.rotZ, -3.15, 3.15, 0.01, v => { ct.rotZ = v; }));
-    panel.appendChild(makeSlider('Cone Off X', ct.offX, -2, 2, 0.01, v => { ct.offX = v; }));
-    panel.appendChild(makeSlider('Cone Off Y', ct.offY, -2, 2, 0.01, v => { ct.offY = v; }));
-    panel.appendChild(makeSlider('Cone Off Z', ct.offZ, -2, 2, 0.01, v => { ct.offZ = v; }));
-    panel.appendChild(makeSlider('Neon Power', ct.neonPower, 0.5, 6, 0.1, v => { ct.neonPower = v; }));
-    panel.appendChild(makeSlider('Noise Speed', ct.noiseSpeed, 0, 5, 0.1, v => { ct.noiseSpeed = v; }));
-    panel.appendChild(makeSlider('Noise Strength', ct.noiseStrength, 0, 1, 0.01, v => { ct.noiseStrength = v; }));
-    panel.appendChild(makeSlider('Fresnel Power', ct.fresnelPower, 0.5, 6, 0.1, v => { ct.fresnelPower = v; }));
-    panel.appendChild(makeSlider('Cone Opacity', ct.opacity, 0, 1, 0.01, v => { ct.opacity = v; }));
+    if (ct) {
+      panel.appendChild(makeSlider('Cone Length', ct.length, 0.5, 8, 0.1, v => { ct.length = v; }));
+      panel.appendChild(makeSlider('Cone Radius', ct.radius, 0.02, 1, 0.01, v => { ct.radius = v; }));
+      panel.appendChild(makeSlider('Cone Rot X', ct.rotX, -3.15, 3.15, 0.01, v => { ct.rotX = v; }));
+      panel.appendChild(makeSlider('Cone Rot Y', ct.rotY, -3.15, 3.15, 0.01, v => { ct.rotY = v; }));
+      panel.appendChild(makeSlider('Cone Rot Z', ct.rotZ, -3.15, 3.15, 0.01, v => { ct.rotZ = v; }));
+      panel.appendChild(makeSlider('Cone Off X', ct.offX, -2, 2, 0.01, v => { ct.offX = v; }));
+      panel.appendChild(makeSlider('Cone Off Y', ct.offY, -2, 2, 0.01, v => { ct.offY = v; }));
+      panel.appendChild(makeSlider('Cone Off Z', ct.offZ, -2, 2, 0.01, v => { ct.offZ = v; }));
+      panel.appendChild(makeSlider('Neon Power', ct.neonPower, 0.5, 6, 0.1, v => { ct.neonPower = v; }));
+      panel.appendChild(makeSlider('Noise Speed', ct.noiseSpeed, 0, 5, 0.1, v => { ct.noiseSpeed = v; }));
+      panel.appendChild(makeSlider('Noise Strength', ct.noiseStrength, 0, 1, 0.01, v => { ct.noiseStrength = v; }));
+      panel.appendChild(makeSlider('Fresnel Power', ct.fresnelPower, 0.5, 6, 0.1, v => { ct.fresnelPower = v; }));
+      panel.appendChild(makeSlider('Cone Opacity', ct.opacity, 0, 1, 0.01, v => { ct.opacity = v; }));
+    } else {
+      panel.appendChild(document.createTextNode('(window._coneThruster not initialized)'));
+    }
 
     // ── Heat Haze ──
     const hdrHaze = document.createElement('div');
@@ -2274,6 +2262,22 @@ function buildSkinTunerSliders() {
     } else {
       panel.appendChild(document.createTextNode('(Haze pass not initialized — start a run first)'));
     }
+
+    // ── Bloom / Glow ──
+    const hdr4 = document.createElement('div');
+    hdr4.style.cssText = 'color:#ff88ff;margin:8px 0 4px;font-weight:bold;';
+    hdr4.textContent = '— BLOOM / GLOW —';
+    panel.appendChild(hdr4);
+
+    panel.appendChild(makeSlider('Bloom Size', window._nozzleBloomScale || 1.0, 0, 5, 0.1, v => {
+      window._nozzleBloomScale = v;
+    }));
+    panel.appendChild(makeSlider('Bloom Opacity', window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34, 0, 1, 0.01, v => {
+      window._nozzleBloomOpacity = v;
+    }));
+    panel.appendChild(makeSlider('Mini Bloom Size', window._miniBloomScale || 1.0, 0, 5, 0.1, v => {
+      window._miniBloomScale = v;
+    }));
 
     // ── Material ──
     const hdr5 = document.createElement('div');
