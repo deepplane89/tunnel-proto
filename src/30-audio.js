@@ -118,7 +118,11 @@ function _loadSFXBuffer(name, url) {
     .catch(() => {});
 }
 function _ensureCtxRunning() {
-  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  // Both 'suspended' (Chrome/standard) and 'interrupted' (iOS Safari after phone
+  // call / Bluetooth route change) need explicit resume.
+  if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
+    audioCtx.resume().catch(() => {});
+  }
 }
 function _initSFXBuffers() {
   if (!audioCtx) return;

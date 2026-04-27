@@ -107,7 +107,10 @@ document.addEventListener('visibilitychange', () => {
     }
   } else {
     // Tab/app regained focus — resume AudioContext so sounds work again
-    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    // 'interrupted' is iOS-specific (phone call, Bluetooth route change)
+    if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
+      audioCtx.resume().catch(() => {});
+    }
     // Restore audio for the current screen
     if (!state.muted) {
       if (state.phase === 'title' || state.phase === 'dead' || state.phase === 'paused') {

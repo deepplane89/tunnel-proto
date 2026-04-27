@@ -9652,7 +9652,11 @@ function _loadSFXBuffer(name, url) {
     .catch(() => {});
 }
 function _ensureCtxRunning() {
-  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  // Both 'suspended' (Chrome/standard) and 'interrupted' (iOS Safari after phone
+  // call / Bluetooth route change) need explicit resume.
+  if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
+    audioCtx.resume().catch(() => {});
+  }
 }
 function _initSFXBuffers() {
   if (!audioCtx) return;
@@ -10551,14 +10555,24 @@ function _startPreT4ACanyon() {
   })();
 }
 
-function _stopPreT4ACanyon() {
+// opts.immediate (default true): tear down walls now. Pass false on natural
+// timeout so slabs keep scrolling past ship — ticker auto-destroys via the
+// allGone watchdog. Hard resets (death/retry/returnToTitle) keep immediate=true.
+function _stopPreT4ACanyon(opts) {
+  const immediate = !(opts && opts.immediate === false);
   state.preT4ACanyon = false;
   state.preT4ADone   = true;
   state.preT4ARampPhase = 'off';
   state.preT4ARampT     = 0;
-  if (_canyonWalls) _destroyCanyonWalls();
-  _canyonActive  = false;
-  _canyonExiting = false;
+  if (immediate) {
+    if (_canyonWalls) _destroyCanyonWalls();
+    _canyonActive  = false;
+    _canyonExiting = false;
+  } else {
+    // Graceful exit — keep walls alive, let them drift past the ship.
+    _canyonActive  = false;
+    _canyonExiting = true;
+  }
   _canyonManual  = false;
   _jlCorridor.active = false;
   _canyonTuner._l4Recreation = false;
@@ -10628,7 +10642,8 @@ function _updatePreT4ACanyon(dt) {
   // Auto-end after duration. DR sequencer's family.isActive() returns false
   // once preT4ADone=true, advancing to T4A_ANGLED.
   if (state.preT4AElapsed >= _PRE_T4A_DURATION) {
-    _stopPreT4ACanyon();
+    // Natural end — graceful exit so slabs scroll past ship.
+    _stopPreT4ACanyon({ immediate: false });
   }
 }
 
@@ -10710,14 +10725,23 @@ function _startPreT4BCanyon() {
   console.log('[PRE-T4B] ON for ' + _PRE_T4B_DURATION + 's (preset 1, lightning freq=2.0s)');
 }
 
-function _stopPreT4BCanyon() {
+// opts.immediate (default true): tear down walls now. Pass false on natural
+// timeout so slabs keep scrolling past ship — ticker auto-destroys via the
+// allGone watchdog. Hard resets (death/retry/returnToTitle) keep immediate=true.
+function _stopPreT4BCanyon(opts) {
+  const immediate = !(opts && opts.immediate === false);
   state.preT4BCanyon = false;
   state.preT4BDone   = true;
   state.preT4BRampPhase = 'off';
   state.preT4BRampT     = 0;
-  if (_canyonWalls) _destroyCanyonWalls();
-  _canyonActive  = false;
-  _canyonExiting = false;
+  if (immediate) {
+    if (_canyonWalls) _destroyCanyonWalls();
+    _canyonActive  = false;
+    _canyonExiting = false;
+  } else {
+    _canyonActive  = false;
+    _canyonExiting = true;
+  }
   _canyonManual  = false;
   _jlCorridor.active = false;
   _canyonTuner._l4Recreation = false;
@@ -10777,7 +10801,8 @@ function _updatePreT4BCanyon(dt) {
   }
 
   if (state.preT4BElapsed >= _PRE_T4B_DURATION) {
-    _stopPreT4BCanyon();
+    // Natural end — graceful exit so slabs scroll past ship.
+    _stopPreT4BCanyon({ immediate: false });
   }
 }
 
@@ -21237,7 +21262,10 @@ document.addEventListener('visibilitychange', () => {
     }
   } else {
     // Tab/app regained focus — resume AudioContext so sounds work again
-    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    // 'interrupted' is iOS-specific (phone call, Bluetooth route change)
+    if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
+      audioCtx.resume().catch(() => {});
+    }
     // Restore audio for the current screen
     if (!state.muted) {
       if (state.phase === 'title' || state.phase === 'dead' || state.phase === 'paused') {
