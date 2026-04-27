@@ -13169,10 +13169,6 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
-  // Release orientation lock: user is back at title and free to rotate again.
-  if (typeof window.__orientationRelease === 'function') {
-    try { window.__orientationRelease(); } catch (_) {}
-  }
   shipGroup.visible = true;
   _killExplosion();
   // ── Hard camera reset: prevent stale death/retry camera leaking into title ──
@@ -14257,24 +14253,7 @@ _tapBind(document.getElementById('death-run-btn'), () => {
   if (_ewEng) { _ewEng.load(); }
   if (_ewRoar) { _ewRoar.load(); }
   playStartSound();
-  // Orientation gate (fire-and-forget, no await):
-  //   - If chosen orientation matches physical: returns true — we start now.
-  //   - If mismatch: shows the rotate prompt, returns false. We register
-  //     startDeathRun() as a deferred-start callback; the orientation
-  //     watcher fires it once the user rotates correctly.
-  // This avoids any Promise/await between user gesture and startDeathRun()
-  // on the matching path (iOS audio unlock requires that).
-  if (typeof window.__orientationLockNow === 'function') {
-    let _matched = true;
-    try { _matched = window.__orientationLockNow(); } catch (_) { _matched = true; }
-    if (_matched !== false) {
-      startDeathRun();
-    } else {
-      window.__pendingGameStart = () => { startDeathRun(); };
-    }
-  } else {
-    startDeathRun();
-  }
+  startDeathRun();
 });
 _tapBind(document.getElementById('restart-btn'), () => {
   if (!_gameOverTapReady) return; // cooldown guard
@@ -20724,181 +20703,6 @@ const _fpsEl = document.getElementById('fps-overlay');
   });
 })();
 
-// ═══════════════════════════════════════════════════════════════
-//  ORIENTATION LOCK (2026-04-27)
-//  - Title-screen toggle (LANDSCAPE default | PORTRAIT) persists in localStorage
-//  - On PLAY tap: try screen.orientation.lock(chosen) [Android]; if it rejects
-//    or isn't supported [iOS Safari], fall back to a "rotate device" overlay
-//    that gates PLAY until the user physically rotates.
-//  - During gameplay (incl. intro lift, paused, gameover): if physical
-//    orientation drifts off the locked one, pause + show the same overlay.
-//  - Lock is released only on returnToTitle().
-// ═══════════════════════════════════════════════════════════════
-(() => {
-  'use strict';
-
-  const LS_KEY = 'jh_orientationPref';
-
-  const _isMobileLike = (
-    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-  );
-  const _isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-  // Read/write preference
-  function getPref() {
-    try {
-      const v = localStorage.getItem(LS_KEY);
-      return (v === 'portrait' || v === 'landscape') ? v : 'landscape';
-    } catch (_) { return 'landscape'; }
-  }
-  function setPref(v) {
-    try { localStorage.setItem(LS_KEY, v); } catch (_) {}
-  }
-
-  // Detect physical orientation
-  function physicalOrientation() {
-    return (window.innerWidth > window.innerHeight) ? 'landscape' : 'portrait';
-  }
-
-  // ── Toggle UI wiring ──
-  const _segLandscape = document.getElementById('orient-landscape');
-  const _segPortrait  = document.getElementById('orient-portrait');
-  const _toggleEl     = document.getElementById('orientation-toggle');
-
-  function _renderToggle() {
-    const pref = getPref();
-    if (_segLandscape) {
-      _segLandscape.classList.toggle('orient-seg-active', pref === 'landscape');
-      _segLandscape.setAttribute('aria-checked', pref === 'landscape' ? 'true' : 'false');
-    }
-    if (_segPortrait) {
-      _segPortrait.classList.toggle('orient-seg-active', pref === 'portrait');
-      _segPortrait.setAttribute('aria-checked', pref === 'portrait' ? 'true' : 'false');
-    }
-  }
-  _renderToggle();
-
-  if (_segLandscape && typeof _tapBind === 'function') {
-    _tapBind(_segLandscape, () => { setPref('landscape'); _renderToggle(); });
-  }
-  if (_segPortrait && typeof _tapBind === 'function') {
-    _tapBind(_segPortrait, () => { setPref('portrait'); _renderToggle(); });
-  }
-
-  // ── Rotate prompt overlay ──
-  const _promptEl = document.getElementById('rotate-prompt');
-  const _promptSub = document.getElementById('rotate-prompt-sub');
-
-  function _showPrompt(targetOrientation) {
-    if (!_promptEl) return;
-    if (_promptSub) _promptSub.textContent = 'to play in ' + targetOrientation;
-    _promptEl.classList.remove('hidden');
-    _promptEl.setAttribute('aria-hidden', 'false');
-  }
-  function _hidePrompt() {
-    if (!_promptEl) return;
-    _promptEl.classList.add('hidden');
-    _promptEl.setAttribute('aria-hidden', 'true');
-  }
-
-  // ── Orientation lock state ──
-  let _lockedOrientation = null;     // 'landscape' | 'portrait' | null
-
-  // Try the native API first; resolve true if locked, false if rejected/unsupported.
-  async function _tryNativeLock(orientation) {
-    if (!screen.orientation || typeof screen.orientation.lock !== 'function') return false;
-    try {
-      // Prefer the broad type (allows both rotations of the same orientation).
-      await screen.orientation.lock(orientation === 'landscape' ? 'landscape' : 'portrait');
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-  function _tryNativeUnlock() {
-    if (screen.orientation && typeof screen.orientation.unlock === 'function') {
-      try { screen.orientation.unlock(); } catch (_) {}
-    }
-  }
-
-  // Public: lock orientation NOW (synchronous, fire-and-forget).
-  // Returns:
-  //   true  — physical already matches chosen; caller can start game now.
-  //   false — mismatch; rotate prompt is shown; caller should defer game
-  //           start by setting window.__pendingGameStart = () => {...}.
-  //           The watcher will fire that callback when the user rotates.
-  window.__orientationLockNow = function lockNow() {
-    // Desktop: no orientation concept — caller starts game immediately.
-    if (!_isMobileLike) return true;
-
-    const chosen = getPref();
-    _lockedOrientation = chosen;
-
-    // Fire native lock without awaiting — promise rejection is harmless,
-    // we just won't have hardware enforcement (iOS path).
-    try {
-      const p = _tryNativeLock(chosen);
-      if (p && typeof p.catch === 'function') p.catch(() => {});
-    } catch (_) {}
-
-    if (physicalOrientation() === chosen) {
-      return true;
-    }
-
-    // Mismatch — show prompt, caller defers start.
-    _showPrompt(chosen);
-    return false;
-  };
-
-  // Release the lock — call from returnToTitle().
-  window.__orientationRelease = function release() {
-    _lockedOrientation = null;
-    window.__pendingGameStart = null;
-    _hidePrompt();
-    _tryNativeUnlock();
-  };
-
-  // ── Live orientation watcher ──
-  function _onOrientationChange() {
-    if (!_lockedOrientation) return;
-    const current = physicalOrientation();
-
-    if (current !== _lockedOrientation) {
-      // Drifted off — pause if in active gameplay, and show prompt.
-      const phase = (typeof state !== 'undefined' && state) ? state.phase : null;
-      if (phase === 'playing' && typeof togglePause === 'function') {
-        try { togglePause(); } catch (_) {}
-      }
-      _showPrompt(_lockedOrientation);
-    } else {
-      // Back on the locked orientation — hide the prompt.
-      _hidePrompt();
-      // If we deferred a game start (PLAY tap with mismatched orientation),
-      // fire it now. User just physically rotated, which is a user-adjacent
-      // context — audio unlock should still hold from the original PLAY tap
-      // since playStartSound() already ran in that gesture.
-      if (typeof window.__pendingGameStart === 'function') {
-        const fn = window.__pendingGameStart;
-        window.__pendingGameStart = null;
-        try { fn(); } catch (_) {}
-      }
-      // Otherwise game stays paused; user resumes manually via pause overlay.
-    }
-  }
-
-  window.addEventListener('resize', _onOrientationChange, { passive: true });
-  window.addEventListener('orientationchange', _onOrientationChange, { passive: true });
-  if (screen.orientation && typeof screen.orientation.addEventListener === 'function') {
-    screen.orientation.addEventListener('change', _onOrientationChange);
-  }
-
-  // Hide toggle on non-mobile (extra safety; CSS also hides it via media query)
-  if (!_isMobileLike && _toggleEl) {
-    _toggleEl.style.display = 'none';
-  }
-})();
 // ═══════════════════════════════════════════════════════════════════════════
 //  PERF DIAGNOSTIC — per-frame timing + event tags + first-render detection
 //  Purpose: pinpoint source of freeze (shader compile vs geo upload vs GC vs

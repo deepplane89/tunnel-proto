@@ -98,10 +98,6 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
-  // Release orientation lock: user is back at title and free to rotate again.
-  if (typeof window.__orientationRelease === 'function') {
-    try { window.__orientationRelease(); } catch (_) {}
-  }
   shipGroup.visible = true;
   _killExplosion();
   // ── Hard camera reset: prevent stale death/retry camera leaking into title ──

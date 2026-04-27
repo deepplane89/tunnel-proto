@@ -123,12 +123,6 @@
       <div id="skin-viewer-action" class="skin-viewer-action"></div>
     </div>
 
-    <!-- Orientation preference (LANDSCAPE default | PORTRAIT) -->
-    <div id="orientation-toggle" class="orientation-toggle" role="radiogroup" aria-label="Game orientation">
-      <button type="button" id="orient-landscape" class="orient-seg orient-seg-active" data-orient="landscape" role="radio" aria-checked="true">LANDSCAPE</button>
-      <button type="button" id="orient-portrait" class="orient-seg" data-orient="portrait" role="radio" aria-checked="false">PORTRAIT</button>
-    </div>
-
     <!-- Mode buttons -->
     <div class="title-mode-buttons">
       <!-- JET LIGHTNING mode hidden from menu (soft-removed). Code paths,
@@ -555,22 +549,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<!-- Rotate-device prompt: shown when chosen orientation doesn't match physical (iOS). -->
-<div id="rotate-prompt" class="rotate-prompt hidden" aria-hidden="true">
-  <div class="rotate-prompt-inner">
-    <svg class="rotate-prompt-icon" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="40" y="18" width="40" height="72" rx="6" ry="6" fill="none" stroke="currentColor" stroke-width="3"/>
-      <line x1="54" y1="82" x2="66" y2="82" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-      <path d="M 18 54 A 42 42 0 0 1 60 12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-      <polyline points="18,42 18,54 30,54" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M 102 66 A 42 42 0 0 1 60 108" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-      <polyline points="102,78 102,66 90,66" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    <div class="rotate-prompt-text" id="rotate-prompt-text">ROTATE DEVICE</div>
-    <div class="rotate-prompt-sub" id="rotate-prompt-sub">to play in landscape</div>
-  </div>
-</div>
-
-<script type="module" src="./dist/game.js?v=1777304400"></script>
+<script type="module" src="./dist/game.js?v=1777304500"></script>
 </body>
 </html>
