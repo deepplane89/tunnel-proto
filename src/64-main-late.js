@@ -9,14 +9,24 @@ _tapBind(document.getElementById('death-run-btn'), () => {
   if (_ewEng) { _ewEng.load(); }
   if (_ewRoar) { _ewRoar.load(); }
   playStartSound();
-  // Fire native orientation lock + show prompt if needed (mobile only),
-  // BUT start the game synchronously — do NOT await. iOS Safari requires
-  // audio/game start to happen inside the user-gesture call stack; awaiting
-  // a promise yields the event loop and breaks audio unlock.
+  // Orientation gate (fire-and-forget, no await):
+  //   - If chosen orientation matches physical: returns true — we start now.
+  //   - If mismatch: shows the rotate prompt, returns false. We register
+  //     startDeathRun() as a deferred-start callback; the orientation
+  //     watcher fires it once the user rotates correctly.
+  // This avoids any Promise/await between user gesture and startDeathRun()
+  // on the matching path (iOS audio unlock requires that).
   if (typeof window.__orientationLockNow === 'function') {
-    try { window.__orientationLockNow(); } catch (_) {}
+    let _matched = true;
+    try { _matched = window.__orientationLockNow(); } catch (_) { _matched = true; }
+    if (_matched !== false) {
+      startDeathRun();
+    } else {
+      window.__pendingGameStart = () => { startDeathRun(); };
+    }
+  } else {
+    startDeathRun();
   }
-  startDeathRun();
 });
 _tapBind(document.getElementById('restart-btn'), () => {
   if (!_gameOverTapReady) return; // cooldown guard

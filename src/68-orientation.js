@@ -97,12 +97,15 @@
     }
   }
 
-  // Public: lock orientation NOW (synchronous, fire-and-forget). Called from
-  // PLAY tap. Game starts synchronously alongside this; it does not block.
-  // The watcher takes over enforcement after this point.
+  // Public: lock orientation NOW (synchronous, fire-and-forget).
+  // Returns:
+  //   true  — physical already matches chosen; caller can start game now.
+  //   false — mismatch; rotate prompt is shown; caller should defer game
+  //           start by setting window.__pendingGameStart = () => {...}.
+  //           The watcher will fire that callback when the user rotates.
   window.__orientationLockNow = function lockNow() {
-    // Desktop: no orientation concept.
-    if (!_isMobileLike) return;
+    // Desktop: no orientation concept — caller starts game immediately.
+    if (!_isMobileLike) return true;
 
     const chosen = getPref();
     _lockedOrientation = chosen;
@@ -114,17 +117,19 @@
       if (p && typeof p.catch === 'function') p.catch(() => {});
     } catch (_) {}
 
-    // If physical doesn't match the chosen orientation, show the rotate prompt.
-    // The watcher will hide it once they rotate (and pause/show again if they
-    // drift back off mid-game).
-    if (physicalOrientation() !== chosen) {
-      _showPrompt(chosen);
+    if (physicalOrientation() === chosen) {
+      return true;
     }
+
+    // Mismatch — show prompt, caller defers start.
+    _showPrompt(chosen);
+    return false;
   };
 
   // Release the lock — call from returnToTitle().
   window.__orientationRelease = function release() {
     _lockedOrientation = null;
+    window.__pendingGameStart = null;
     _hidePrompt();
     _tryNativeUnlock();
   };
@@ -142,9 +147,18 @@
       }
       _showPrompt(_lockedOrientation);
     } else {
-      // Back on the locked orientation — hide the prompt. Game stays paused;
-      // user resumes manually via the existing pause overlay.
+      // Back on the locked orientation — hide the prompt.
       _hidePrompt();
+      // If we deferred a game start (PLAY tap with mismatched orientation),
+      // fire it now. User just physically rotated, which is a user-adjacent
+      // context — audio unlock should still hold from the original PLAY tap
+      // since playStartSound() already ran in that gesture.
+      if (typeof window.__pendingGameStart === 'function') {
+        const fn = window.__pendingGameStart;
+        window.__pendingGameStart = null;
+        try { fn(); } catch (_) {}
+      }
+      // Otherwise game stays paused; user resumes manually via pause overlay.
     }
   }
 

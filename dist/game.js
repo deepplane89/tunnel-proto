@@ -14257,14 +14257,24 @@ _tapBind(document.getElementById('death-run-btn'), () => {
   if (_ewEng) { _ewEng.load(); }
   if (_ewRoar) { _ewRoar.load(); }
   playStartSound();
-  // Fire native orientation lock + show prompt if needed (mobile only),
-  // BUT start the game synchronously — do NOT await. iOS Safari requires
-  // audio/game start to happen inside the user-gesture call stack; awaiting
-  // a promise yields the event loop and breaks audio unlock.
+  // Orientation gate (fire-and-forget, no await):
+  //   - If chosen orientation matches physical: returns true — we start now.
+  //   - If mismatch: shows the rotate prompt, returns false. We register
+  //     startDeathRun() as a deferred-start callback; the orientation
+  //     watcher fires it once the user rotates correctly.
+  // This avoids any Promise/await between user gesture and startDeathRun()
+  // on the matching path (iOS audio unlock requires that).
   if (typeof window.__orientationLockNow === 'function') {
-    try { window.__orientationLockNow(); } catch (_) {}
+    let _matched = true;
+    try { _matched = window.__orientationLockNow(); } catch (_) { _matched = true; }
+    if (_matched !== false) {
+      startDeathRun();
+    } else {
+      window.__pendingGameStart = () => { startDeathRun(); };
+    }
+  } else {
+    startDeathRun();
   }
-  startDeathRun();
 });
 _tapBind(document.getElementById('restart-btn'), () => {
   if (!_gameOverTapReady) return; // cooldown guard
@@ -20813,12 +20823,15 @@ const _fpsEl = document.getElementById('fps-overlay');
     }
   }
 
-  // Public: lock orientation NOW (synchronous, fire-and-forget). Called from
-  // PLAY tap. Game starts synchronously alongside this; it does not block.
-  // The watcher takes over enforcement after this point.
+  // Public: lock orientation NOW (synchronous, fire-and-forget).
+  // Returns:
+  //   true  — physical already matches chosen; caller can start game now.
+  //   false — mismatch; rotate prompt is shown; caller should defer game
+  //           start by setting window.__pendingGameStart = () => {...}.
+  //           The watcher will fire that callback when the user rotates.
   window.__orientationLockNow = function lockNow() {
-    // Desktop: no orientation concept.
-    if (!_isMobileLike) return;
+    // Desktop: no orientation concept — caller starts game immediately.
+    if (!_isMobileLike) return true;
 
     const chosen = getPref();
     _lockedOrientation = chosen;
@@ -20830,17 +20843,19 @@ const _fpsEl = document.getElementById('fps-overlay');
       if (p && typeof p.catch === 'function') p.catch(() => {});
     } catch (_) {}
 
-    // If physical doesn't match the chosen orientation, show the rotate prompt.
-    // The watcher will hide it once they rotate (and pause/show again if they
-    // drift back off mid-game).
-    if (physicalOrientation() !== chosen) {
-      _showPrompt(chosen);
+    if (physicalOrientation() === chosen) {
+      return true;
     }
+
+    // Mismatch — show prompt, caller defers start.
+    _showPrompt(chosen);
+    return false;
   };
 
   // Release the lock — call from returnToTitle().
   window.__orientationRelease = function release() {
     _lockedOrientation = null;
+    window.__pendingGameStart = null;
     _hidePrompt();
     _tryNativeUnlock();
   };
@@ -20858,9 +20873,18 @@ const _fpsEl = document.getElementById('fps-overlay');
       }
       _showPrompt(_lockedOrientation);
     } else {
-      // Back on the locked orientation — hide the prompt. Game stays paused;
-      // user resumes manually via the existing pause overlay.
+      // Back on the locked orientation — hide the prompt.
       _hidePrompt();
+      // If we deferred a game start (PLAY tap with mismatched orientation),
+      // fire it now. User just physically rotated, which is a user-adjacent
+      // context — audio unlock should still hold from the original PLAY tap
+      // since playStartSound() already ran in that gesture.
+      if (typeof window.__pendingGameStart === 'function') {
+        const fn = window.__pendingGameStart;
+        window.__pendingGameStart = null;
+        try { fn(); } catch (_) {}
+      }
+      // Otherwise game stays paused; user resumes manually via pause overlay.
     }
   }
 
