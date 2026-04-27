@@ -70,6 +70,7 @@ function togglePause() {
     if (_engP && !_engP.paused) _engP.pause();
     if (_roarP && !_roarP.paused) _roarP.pause();
     if (_baseP && !_baseP.paused) _baseP.pause();
+    _stopMagnetWhir();
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
     if (state._tutorialActive) _tutHideText();
@@ -159,6 +160,7 @@ function returnToTitle() {
   if (_engR) { _engR.pause(); _engR.currentTime = 0; }
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
   if (_baseR) { _baseR.pause(); _baseR.currentTime = 0; }
+  _stopMagnetWhir();
   if (titleMusic) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
   updateTitleCoins();
   updateTitleFuelCells();

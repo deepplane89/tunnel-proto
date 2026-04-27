@@ -3228,6 +3228,7 @@ function killPlayer() {
   if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
   const _baseD = document.getElementById('engine-baseline');
   if (_baseD && !_baseD.paused) { _baseD.pause(); _baseD.currentTime = 0; }
+  _stopMagnetWhir();
   playCrash();
   // addCrashFlash(); // disabled to isolate face explosion
 
