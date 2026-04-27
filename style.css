@@ -1346,12 +1346,7 @@ html, body {
   100% { transform: rotate(0deg); }
 }
 
-/* Portrait on touch devices: show rotate prompt overlay (pure CSS, no JS gate) */
-@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
-  #rotate-prompt {
-    display: flex;
-  }
-}
+/* Portrait: game still works, no forced lock */
 
 /* On mobile landscape — touch zones are side strips */
 @media (max-height: 500px) and (orientation: landscape) {
