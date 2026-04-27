@@ -14080,7 +14080,7 @@ document.getElementById('death-run-btn').addEventListener('click', () => {
 document.getElementById('restart-btn').addEventListener('click', () => {
   if (!_gameOverTapReady) return; // cooldown guard
   initAudio();
-  playStartSound();
+  // No playStartSound — _triggerRetryWithSweep plays its own retry-tech SFX
   _triggerRetryWithSweep();
 });
 document.getElementById('gameover-exit-btn').addEventListener('click', () => {
