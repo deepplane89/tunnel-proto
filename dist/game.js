@@ -14352,10 +14352,9 @@ function _triggerRetryWithSweep() {
     // Start the sweep
     _retrySweepActive = true;
     _retrySweepT = 0;
-    // Retry SFX: tech-device one-shot (504ms) plays at sweep start.
+    // Retry SFX: tech-device one-shot (504ms) at sweep start, warp AFTER it finishes.
     const _retrySfx = document.getElementById('retry-tech-sfx');
     if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
-    // Layered warp: plays AFTER retry-tech (504ms) finishes — no overlap.
     setTimeout(() => {
       const _retryWarp = document.getElementById('retry-warp-sfx');
       if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.55; _retryWarp.play().catch(()=>{}); }
@@ -18677,7 +18676,1723 @@ function update(dt) {
         state._tutorialStep = 1.55; state._tutorialTimer = 0;
       } else if (!_zipRowPresent && (state._tutorialZipSuccesses || 0) < 1) {
         // Spawn next row only if not yet succeeded
-        st// ═══════════════════════════════════════════════════════════════════════════
+        state._tutorialZipPassed = false;
+        state._tutorialZipRowSpawned = true;
+        for (let zi = -LANE_COUNT; zi <= LANE_COUNT; zi++) {
+          const obs = getPooledObstacle(Math.floor(Math.random() * 3));
+          if (!obs) continue;
+          obs.position.set(zi * LANE_WIDTH, 0, SPAWN_Z);
+          obs.userData.velX = 0;
+          obs.userData.isCorridor = false;
+          obs.userData._tutZip = true;
+          tintObsColor(obs, 0xffcc00);
+          activeObstacles.push(obs);
+        }
+      }
+
+    } else if (state._tutorialStep === 1.55) {
+      state._tutorialTimer = (state._tutorialTimer || 0) + dt;
+      if (state._tutorialTimer >= 2.5) {
+        const _sf = document.getElementById('tut-signal-flash');
+        if (_sf) { _sf.style.transition = 'none'; _sf.style.opacity = '0'; }
+        state._tutorialStep = 2; state._tutorialTimer = 0;
+      }
+
+    } else if (state._tutorialStep === 2) {
+      // ── END CARD ──
+      _tutShowInstructionBox(
+        'CHASE THE HORIZON',
+        'Collect coins, fuel cells, and level up your ship<br>to push further toward the horizon each run',
+        '#ff9500',
+        () => {
+          window._LS.setItem('jh_tutorial_done', '1');
+          _tutDestroyOverlay();
+          // Play droplet sound on exit
+          const _drp = document.getElementById('droplet-sfx');
+          if (_drp && !state.muted) { _drp.currentTime = 0; _drp.volume = 0.8; _drp.play().catch(()=>{}); }
+          returnToTitle();
+        }
+      );
+    }
+    if (!_chaosMode && !state._jetLightningMode) _noSpawnMode = true; // suppress normal spawner during tutorial (chaos/JL override this)
+  }
+
+  // ── T5 scanning beam: fan-ray destruction (runs before obstacle loop)
+  if (state.laserActive && (state.laserTier || 1) >= 5 && activeObstacles.length > 0) {
+    const _rayOrigin = new THREE.Vector3(state.shipX + _lBeamXOff, _lBeamY, shipGroup.position.z);
+    const _angle = state._laserScanAngle || 0;
+    const _prevAngle = state._laserScanPrevAngle !== undefined ? state._laserScanPrevAngle : _angle;
+    // Fan: sweep from prev angle to current angle in 5 steps — catches any cone the beam crossed
+    const _steps = 6;
+    const _destroyed = new Set();
+    for (let _fi = 0; _fi <= _steps; _fi++) {
+      const _fa = _prevAngle + (_angle - _prevAngle) * (_fi / _steps);
+      const _rayDir = new THREE.Vector3(Math.sin(_fa), 0, -Math.cos(_fa));
+      for (let _si = activeObstacles.length - 1; _si >= 0; _si--) {
+        if (_destroyed.has(_si)) continue;
+        const _sobs = activeObstacles[_si];
+        if (_sobs.userData.isCorridor) continue;
+        const _op = new THREE.Vector3().copy(_sobs.position).sub(_rayOrigin);
+        const _along = _op.dot(_rayDir);
+        if (_along < 0) continue; // behind pivot
+        // Hit radius scales with distance: wider at range, tighter up close
+        const _hitR = Math.max(2.5, Math.min(4.5, 2.5 + _along * 0.02));
+        const _closest = new THREE.Vector3().copy(_rayOrigin).addScaledVector(_rayDir, _along);
+        if (_closest.distanceTo(_sobs.position) < _hitR) {
+          _destroyed.add(_si);
+        }
+      }
+    }
+    // Destroy in reverse order so splice indices stay valid
+    const _toDestroy = [..._destroyed].sort((a,b) => b - a);
+    for (const _si of _toDestroy) {
+      const _sobs = activeObstacles[_si];
+      spawnConeShards(_sobs.position.x, _sobs.position.y, _sobs.position.z, currentLevelDef.gridColor);
+      returnObstacleToPool(_sobs);
+      activeObstacles.splice(_si, 1);
+      playSFX(220, 0.15, 'sawtooth', 0.2);
+    }
+    state._laserScanPrevAngle = _angle;
+  }
+
+  // ── Power-up timers
+  if (state.laserActive) {
+    state.laserTimer -= dt;
+    const _tier = state.laserTier || 1;
+    const lc = state.laserColor || 0xff3300;
+    const pulse = 0.8 + Math.sin(state.frameCount * 1.2) * 0.15;
+
+    if (_tier <= 3) {
+      // T1-T3: bolt machine gun
+      laserPivot.visible = false;
+      state.laserBoltTimer = (state.laserBoltTimer || 0) + dt;
+      const interval = 1.0 / (state.laserFireRate || _lbFireRate);
+      while (state.laserBoltTimer >= interval) {
+        state.laserBoltTimer -= interval;
+        const lanes = state._laserBoltLanes || _lbLanes;
+        const half  = (lanes - 1) / 2;
+        for (let li = 0; li < lanes; li++) spawnLaserBolt(li - half);
+      }
+    } else if (_tier === 4) {
+      // T4: static unibeam — pivot at ship nose, no rotation
+      laserPivot.visible = true;
+      laserMesh.visible = true;
+      laserGlowMesh.visible = true;
+      laserMat.color.set(0xffffff);
+      laserGlowMat.color.setHex(lc);
+      laserMat.opacity = pulse;
+      laserGlowMat.opacity = pulse * 0.25;
+      laserPivot.position.set(state.shipX + _lBeamXOff, _lBeamY, shipGroup.position.z);
+      laserPivot.rotation.y = 0;
+    } else {
+      // T5: scanning unibeam — pivot sits at ship nose, beam sweeps left-right
+      laserPivot.visible = true;
+      laserMesh.visible = true;
+      laserGlowMesh.visible = true;
+      laserMat.color.set(0xffffff);
+      laserGlowMat.color.setHex(lc);
+      laserMat.opacity = pulse;
+      laserGlowMat.opacity = pulse * 0.3;
+      const _scanMax   = Math.PI / 4;  // ±45°
+      const _scanSpeed = 1.2;
+      state._laserScanAngle = (state._laserScanAngle || 0) + state._laserScanDir * _scanSpeed * dt;
+      if (state._laserScanAngle >= _scanMax)  { state._laserScanAngle = _scanMax;  state._laserScanDir = -1; }
+      if (state._laserScanAngle <= -_scanMax) { state._laserScanAngle = -_scanMax; state._laserScanDir =  1; }
+      // Pivot is at ship nose — rotating it swings the far end of the beam
+      laserPivot.position.set(state.shipX + _lBeamXOff, _lBeamY, shipGroup.position.z);
+      laserPivot.rotation.y = state._laserScanAngle;
+    }
+
+    if (state.laserTimer <= 0) {
+      state.laserActive = false;
+      laserMat.opacity = 0;
+      laserGlowMat.opacity = 0;
+      laserPivot.visible = false;
+    }
+  }
+
+  // Update laser bolts
+  for (let bi = laserBolts.length - 1; bi >= 0; bi--) {
+    const bolt = laserBolts[bi];
+    if (!bolt.visible) continue;
+    bolt.position.x = state.shipX + (bolt.userData._side || 0);
+    bolt.position.z += bolt.userData.vel * dt;
+    bolt.userData.life -= dt;
+    if (bolt.userData.life <= 0 || bolt.position.z < -200) {
+      bolt.visible = false;
+      continue;
+    }
+    // Check collision with obstacles
+    for (let oi = activeObstacles.length - 1; oi >= 0; oi--) {
+      const obs = activeObstacles[oi];
+      if (obs.userData.isCorridor) continue;
+      const dx = Math.abs(bolt.position.x - obs.position.x);
+      const dz = Math.abs(bolt.position.z - obs.position.z);
+      if (dx < 1.5 && dz < 2) {
+        spawnConeShards(obs.position.x, obs.position.y, obs.position.z, currentLevelDef.gridColor);
+        returnObstacleToPool(obs);
+        activeObstacles.splice(oi, 1);
+        bolt.visible = false;
+        playSFX(220, 0.15, 'sawtooth', 0.2);
+        break;
+      }
+    }
+  }
+  if (state.multiplierTimer > 0) {
+    state.multiplierTimer -= dt;
+    if (state.multiplierTimer <= 0) { state.multiplier = 1; updateMultiplierHUD(); }
+  }
+  // Shield duration timer (tier 2+)
+  if (state.shieldActive && state.shieldDuration > 0 && state.invincibleTimer <= 0) {
+    state.shieldTimer -= dt;
+    if (state.shieldTimer <= 0) {
+      state.shieldActive = false;
+      state._prevShieldHP = 0;
+      shieldMesh.visible = false;
+      shieldMat.uniforms.uReveal.value = 1.0;
+      shieldWireMat.opacity = 0;
+      shieldLight.intensity = 0;
+      const _shExpSfx = document.getElementById('shield-expire-sfx'); if (_shExpSfx) { _shExpSfx.currentTime = 0; _shExpSfx.volume = 0.18; _shExpSfx.play().catch(()=>{}); }
+    }
+  }
+  if (state.invincibleTimer > 0) {
+    state.invincibleTimer -= dt;
+    const GRACE_PERIOD = state.invincibleGrace || 2.0;
+    // Kill speed boost but keep invincibility for grace period
+    if (state.invincibleTimer <= GRACE_PERIOD && state.invincibleSpeedActive) {
+      state.invincibleSpeedActive = false;
+    }
+    // RGB chromatic aberration: full split during speed, ramp down during grace
+    const BASE_ABERRATION = 0.0015;
+    const MAX_ABERRATION = 0.04;
+    if (state.invincibleSpeedActive) {
+      vignettePass.uniforms.aberration.value = MAX_ABERRATION;
+    } else {
+      // Grace period: lerp from current toward base
+      const t = Math.max(0, state.invincibleTimer / GRACE_PERIOD);
+      vignettePass.uniforms.aberration.value = BASE_ABERRATION + (MAX_ABERRATION - BASE_ABERRATION) * t;
+    }
+    if (state.invincibleTimer <= 0) {
+      state.shieldActive = false;
+      state.invincibleSpeedActive = false;
+      vignettePass.uniforms.aberration.value = BASE_ABERRATION;
+      shieldMesh.visible = false; shieldWire.visible = false;
+      shieldMat.uniforms.uReveal.value = 1.0;
+      shieldWireMat.opacity = 0;
+      shieldLight.intensity = 0;
+    }
+    // Near-miss red flash (skip if invincible rainbow is active)
+    if (state.nearMissFlash > 0 && !state.invincibleSpeedActive && shipHullMats.length) {
+      const f = state.nearMissFlash;
+      const red = new THREE.Color(1.0, 0.15, 0.05);
+      for (let i = 0; i < shipHullMats.length; i++) {
+        shipHullMats[i].emissive.copy(red);
+        shipHullMats[i].emissiveIntensity = f * 2.5;
+      }
+      state.nearMissFlash = Math.max(0, state.nearMissFlash - dt * 3.0); // ~0.33s decay
+    }
+    // Gold-rainbow hull cycle while invincible (gold/amber/warm hues only)
+    if (state.invincibleSpeedActive && shipHullMats.length) {
+      // Full MarioKart rainbow — full HSL rotation at 2 Hz
+      const hue     = (state.elapsed * 2.0) % 1.0;
+      const c       = new THREE.Color().setHSL(hue, 1.0, 0.55);
+      const emissHue = (hue + 0.08) % 1.0;
+      const eC      = new THREE.Color().setHSL(emissHue, 1.0, 0.5);
+      const eiPulse = 1.4 + Math.sin(state.elapsed * 6 * Math.PI * 2) * 0.6;
+      for (let i = 0; i < shipHullMats.length; i++) {
+        shipHullMats[i].color.copy(c);
+        shipHullMats[i].emissive.copy(eC);
+        shipHullMats[i].emissiveIntensity = eiPulse;
+      }
+      const eHue2 = (hue + 0.5) % 1.0;
+      const eC2   = new THREE.Color().setHSL(eHue2, 1.0, 0.6);
+      for (let i = 0; i < shipEdgeLines.length; i++) {
+        shipEdgeLines[i].color.copy(eC2);
+        shipEdgeLines[i].emissive.copy(eC2);
+        shipEdgeLines[i].emissiveIntensity = 3.0;
+      }
+    }
+    // Grace period: speed boost ended but still invincible — slow white flash
+    if (!state.invincibleSpeedActive && state.shieldActive && state.invincibleTimer > 0 && shipHullMats.length) {
+      const flash = 0.5 + 0.5 * Math.sin(state.elapsed * 3 * Math.PI * 2); // ~1.5 Hz pulse
+      const c = new THREE.Color(1, 1, 1);
+      for (let i = 0; i < shipHullMats.length; i++) {
+        shipHullMats[i].color.copy(c);
+        shipHullMats[i].emissive.copy(c);
+        shipHullMats[i].emissiveIntensity = flash * 1.5;
+      }
+    }
+  }
+  if (shipHullMats.length && shipHullMats[0].emissiveIntensity > 0) {
+    // Fade back to white when turbo ends
+    for (let i = 0; i < shipHullMats.length; i++) {
+      shipHullMats[i].color.lerp(new THREE.Color(0xffffff), 0.08);
+      shipHullMats[i].emissive.lerp(new THREE.Color(0x000000), 0.08);
+      shipHullMats[i].emissiveIntensity = Math.max(0, shipHullMats[i].emissiveIntensity - 0.02);
+    }
+    // Restore edge lines to current level color
+    const _lvlColor = LEVELS[state.currentLevelIdx].gridColor;
+    for (let i = 0; i < shipEdgeLines.length; i++) {
+      shipEdgeLines[i].color.lerp(_lvlColor, 0.08);
+      if (shipEdgeLines[i].emissive) shipEdgeLines[i].emissive.lerp(_lvlColor, 0.08);
+    }
+  }
+  if (state.magnetActive) {
+    state.magnetTimer -= dt;
+    if (state.magnetTimer <= 0) {
+      state.magnetActive = false;
+      _stopMagnetWhir();
+      magnetRing.visible = false; magnetRing2.visible = false;
+      magnetRingMat.opacity = 0;
+      magnetRing2.material.opacity = 0;
+      magnetLight.intensity = 0;
+    } else {
+      // Two orthogonal rings orbit around the ship at different angles
+      const mt = state.elapsed;
+      magnetRing.rotation.x  = mt * 1.8;
+      magnetRing.rotation.y  = mt * 0.9;
+      magnetRing2.rotation.x = mt * 1.8 + Math.PI * 0.5;
+      magnetRing2.rotation.z = mt * 1.2;
+      const mPulse = 0.55 + Math.sin(mt * 8) * 0.2;
+      magnetRingMat.opacity          = mPulse;
+      magnetRing2.material.opacity   = mPulse * 0.7;
+      magnetLight.intensity = 1.8 + Math.sin(mt * 6) * 0.8;
+    }
+  } else {
+    magnetRingMat.opacity = 0;
+    magnetRing2.material.opacity = 0;
+    magnetLight.intensity = 0;
+  }
+  updatePowerupTray();
+
+  // ── Grid scroll
+  scrollGrid(dt * effectiveSpeed / state.speed);
+
+  // ── Death Run level sequencer ──
+  // Always tick the sequencer — REST stages manage deathRunRestBeat internally
+  // to suppress the spawner. Gating the sequencer on restBeat caused REST stages
+  // to run ~31x longer than intended (seqStageElapsed only advanced 1 frame per 0.5s).
+  if (state.isDeathRun && !state.introActive && !state._tutorialActive && !state._jetLightningMode) {
+    if (state.deathRunRestBeat > 0) state.deathRunRestBeat -= dt;
+    _drSequencerTick(dt);
+  }
+  // ── Legacy wave director (disabled — replaced by sequencer) ──
+  if (false && state.isDeathRun && !state.introActive) {
+    if (false) {
+      // Current run band (with forced band override for dynamic-duration tiers)
+      const _drElapsed = state.elapsed || 0;
+      let _drBandIdx = DR2_RUN_BANDS.length - 1;
+      let _drBand = DR2_RUN_BANDS[_drBandIdx];
+      if (state._drForcedBand != null && state._drForcedBand >= 0) {
+        _drBandIdx = state._drForcedBand;
+        _drBand = DR2_RUN_BANDS[_drBandIdx];
+      } else {
+        for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) {
+          if (_drElapsed < DR2_RUN_BANDS[bi].maxTime) { _drBand = DR2_RUN_BANDS[bi]; _drBandIdx = bi; break; }
+        }
+      }
+      // Band 4 (idx 3): auto-start CORRIDOR_ARC on entry
+      if (_drBandIdx === 3 && !state._drBand4Started) {
+        state._drBand4Started = true;
+        clearAllCorridorFlags(); state.deathRunRestBeat = 1.0;
+        const fam = DR_MECHANIC_FAMILIES['CORRIDOR_ARC'];
+        state.drPhase = 'BUILD'; state.drPhaseTimer = 0; state.drPhaseDuration = 0;
+        fam.activate(_drBand, 'build');
+      }
+      // Band 4→5: when corridor arc finishes, advance to Band 5
+      if (_drBandIdx === 3 && state._drBand4Started && !state._arcActive &&
+          !state.corridorMode && !state.l4CorridorActive && !state.l5CorridorActive) {
+        state._drForcedBand = 4; // Band 5
+        state._drBand5StartTime = state.elapsed;
+        state.drPhase = 'RELEASE'; state.drPhaseTimer = 0;
+        const _relDur = DR2_PHASE_DURATIONS.RELEASE;
+        state.drPhaseDuration = _relDur.min + Math.random() * (_relDur.max - _relDur.min);
+      }
+      // Band 5→6: after 30s in Band 5, advance to Band 6
+      if (state._drForcedBand === 4 && state._drBand5StartTime &&
+          state.elapsed - state._drBand5StartTime >= 30) {
+        state._drForcedBand = 5; // Band 6
+      }
+
+      // Is ANY structured mechanic currently active?
+      // Advance arc stages (must run before mechActive check)
+      _drAdvanceArc();
+      const _drMechActive = state.slalomActive ||
+                            state.zipperActive || state.angledWallsActive ||
+                            state.drCustomPatternActive || state.corridorMode ||
+                            state.l4CorridorActive || state.l5CorridorActive ||
+                            state._arcActive;
+
+      const phase = state.drPhase;
+
+      if (phase === 'RELEASE' || phase === 'RECOVERY') {
+        state.drPhaseTimer += dt;
+        if (state.drPhaseTimer >= state.drPhaseDuration) {
+          if (phase === 'RELEASE') {
+            // Band 1: pure random cones only — loop RELEASE until Band 2
+            if (_drBand.label === 'BAND1') {
+              state.drPhaseTimer = 0;
+              const _relDur = DR2_PHASE_DURATIONS.RELEASE;
+              state.drPhaseDuration = _relDur.min + Math.random() * (_relDur.max - _relDur.min);
+
+            } else {
+              // Brief clear beat before structured mechanic starts
+              const familyKey = _drPickMechanic('build', _drBandIdx);
+              if (!familyKey) {
+                // No eligible mechanics — loop RELEASE
+                state.drPhaseTimer = 0;
+                const _relDur2 = DR2_PHASE_DURATIONS.RELEASE;
+                state.drPhaseDuration = _relDur2.min + Math.random() * (_relDur2.max - _relDur2.min);
+              } else {
+                state.deathRunRestBeat = 1.0 + Math.random() * 0.5;
+                const family = DR_MECHANIC_FAMILIES[familyKey];
+                state.drPhase = 'BUILD';
+                state.drPhaseTimer = 0;
+                state.drPhaseDuration = 0;
+                family.activate(_drBand, 'build');
+                _dr2DebugLog();
+              }
+            }
+          } else {
+            // RECOVERY -> RELEASE
+            state.drPhase = 'RELEASE';
+            state.drPhaseTimer = 0;
+            const _relDur = DR2_PHASE_DURATIONS.RELEASE;
+            state.drPhaseDuration = _relDur.min + Math.random() * (_relDur.max - _relDur.min);
+            state.drWaveCount++;
+            // 40% chance to spawn bonus rings at start of new RELEASE
+            if (!state._tutorialActive && !state._jetLightningMode && Math.random() < 0.6 && _bonusRings.length === 0) { _ringSpawnRow(0); console.log('[DR] Bonus rings spawned (RELEASE), count=' + _bonusRings.length); }
+            _dr2DebugLog();
+          }
+        }
+      } else if (phase === 'BUILD') {
+        if (!_drMechActive) {
+          // BUILD mechanic finished. PEAK or RECOVERY?
+          const doPeak = Math.random() < _drBand.peakChance;
+          if (doPeak) {
+            const familyKey = _drPickMechanic('peak', _drBandIdx);
+            if (!familyKey) {
+              // No eligible peak mechanics — skip to RECOVERY
+              state.drPhase = 'RECOVERY';
+              state.drPhaseTimer = 0;
+              const _recDur2 = DR2_PHASE_DURATIONS.RECOVERY;
+              state.drPhaseDuration = _recDur2.min + Math.random() * (_recDur2.max - _recDur2.min);
+            } else {
+              state.deathRunRestBeat = 1.0 + Math.random() * 0.5;
+              const family = DR_MECHANIC_FAMILIES[familyKey];
+              state.drPhase = 'PEAK';
+              state.drPhaseTimer = 0;
+              state.drPhaseDuration = 0;
+              family.activate(_drBand, 'peak');
+            }
+          } else {
+            state.drPhase = 'RECOVERY';
+            state.drPhaseTimer = 0;
+            const _recDur = DR2_PHASE_DURATIONS.RECOVERY;
+            state.drPhaseDuration = _recDur.min + Math.random() * (_recDur.max - _recDur.min);
+            state.deathRunRestBeat = 0.8 + Math.random() * 0.4;
+
+          }
+          _dr2DebugLog();
+        }
+      } else if (phase === 'PEAK') {
+        if (!_drMechActive) {
+          // PEAK mechanic done → SUSTAIN (brief high-intensity cones before recovery)
+          state.drPhase = 'SUSTAIN';
+          state.drPhaseTimer = 0;
+          const _susDur = DR2_PHASE_DURATIONS.SUSTAIN;
+          state.drPhaseDuration = _susDur.min + Math.random() * (_susDur.max - _susDur.min);
+          _dr2DebugLog();
+        }
+      } else if (phase === 'SUSTAIN') {
+        // Fast random cones, no rest beat — intensity holds before dropping
+        state.drPhaseTimer += dt;
+        if (state.drPhaseTimer >= state.drPhaseDuration) {
+          state.drPhase = 'RECOVERY';
+          state.drPhaseTimer = 0;
+          const _recDur = DR2_PHASE_DURATIONS.RECOVERY;
+          state.drPhaseDuration = _recDur.min + Math.random() * (_recDur.max - _recDur.min);
+          state.deathRunRestBeat = 1.0 + Math.random() * 0.5;
+          // Always spawn bonus rings after surviving peak — reward
+          if (!state._tutorialActive && !state._jetLightningMode && _bonusRings.length === 0) { _ringSpawnRow(0); console.log('[DR] Bonus rings spawned (post-PEAK), count=' + _bonusRings.length); }
+          _dr2DebugLog();
+        }
+      }
+    }
+  }
+
+  // ── Spawn
+  // L3 KNIFE CANYON tick — runs the 40s timer + snap oscillator when active.
+  // Self-cleans when duration elapses or player leaves L3.
+  _updateL3KnifeCanyon(dt);
+  _updatePreT4ACanyon(dt);
+  _updatePreT4BCanyon(dt);
+
+  // L3 dense corridor (LEGACY cone path — gated off while _L3_KNIFE_ENABLED,
+  // because maybeStartGauntlet no longer sets state.corridorMode in that case):
+  // spawn wall rows every ~7 world units (ship-relative, cyan tinted)
+  if (state.corridorMode && !state._jetLightningMode) {
+    if (!state.isDeathRun) maybeStartGauntlet();
+    if (state.corridorDelay > 0) {
+      state.corridorDelay -= dt;
+    } else {
+      state.corridorSpawnZ += effectiveSpeed * dt;
+      if (state.corridorSpawnZ >= 0) {
+        state.corridorSpawnZ = -7 + (Math.random() - 0.5) * 2;
+        spawnCorridorRow();
+        // DR: row-limited — wave director controls duration
+        if (state.isDeathRun && state.corridorRowsDone >= (state._drL3MaxRows || 999)) {
+          state.corridorMode = false;
+        }
+      }
+    }
+  }
+
+  // L4 sine corridor (death run: row-limited, no auto-trigger)
+  if (state.isDeathRun && state.l4CorridorActive) {
+    if (state.l4Delay > 0) {
+      state.l4Delay -= dt;
+    } else {
+      state.l4SpawnZ += effectiveSpeed * dt;
+      if (state.l4SpawnZ >= 0) {
+        state.l4SpawnZ = -7 + (Math.random() - 0.5) * 2;
+        spawnL4CorridorRow(); // increments l4RowsDone internally
+        if (state.l4RowsDone % 50 === 0) console.log('[L4-DEBUG] row ' + state.l4RowsDone + '/' + (state._drL4MaxRows || 999));
+        if (state.l4RowsDone >= (state._drL4MaxRows || 999)) {
+          console.log('[L4-DEBUG] ENDED at row ' + state.l4RowsDone);
+          state.l4CorridorActive = false;
+        }
+      }
+    }
+  } else if (state.currentLevelIdx === 3 && !state.l4CorridorDone && !state.isDeathRun && !state._jetLightningMode) {
+    if (!state.l4CorridorActive) {
+      if (state.levelElapsed >= L4_CORRIDOR_TRIGGER_S) {
+        state.l4CorridorActive = true;
+        state.l4SpawnZ         = -7;
+        state.l4RowsDone       = 0;
+        state.l4SineT          = 0;
+        state.l4StartElapsed   = state.levelElapsed;
+        state.l4Delay          = 2.0;
+        // Campaign: explicit anchor=0 (world origin) so spawnL4CorridorRow
+        // doesn't reuse a stale shipX-anchor from a prior DR L4 activation.
+        state._l4CenterAnchor  = 0;
+
+      }
+    } else {
+      // Check if duration expired
+      if (state.levelElapsed - state.l4StartElapsed >= L4_CORRIDOR_DURATION_S) {
+        state.l4CorridorActive = false;
+        state.l4CorridorDone   = true;
+      } else {
+        if (state.l4Delay > 0) {
+          state.l4Delay -= dt;
+        } else {
+          state.l4SpawnZ += effectiveSpeed * dt;
+          if (state.l4SpawnZ >= 0) {
+            state.l4SpawnZ = -7 + (Math.random() - 0.5) * 2;
+            spawnL4CorridorRow();
+          }
+        }
+      }
+    }
+  }
+
+  // L5 zipper: fully time-based, managed here so cooldown ticks regardless of normal spawn path
+  if (state.isDeathRun && (state.l5CorridorActive || state.zipperActive)) {
+    // Death run: only run active spawners
+    if (state.l5CorridorActive) {
+      state.l5CorridorSpawnZ += effectiveSpeed * dt;
+      if (state.l5CorridorSpawnZ >= 0) {
+        state.l5CorridorSpawnZ = -7 + (Math.random() - 0.5) * 2;
+        spawnL5CorridorRow(); // increments l5CorridorRowsDone internally
+        if (state.l5CorridorRowsDone >= (state._drL5MaxRows || L5C_TOTAL_ROWS)) {
+          state.l5CorridorActive = false;
+          // DR: wave director handles transition (no ending sequence)
+        }
+      }
+    } else if (state.zipperActive) {
+      state.zipperSpawnTimer -= dt;
+      if (state.zipperSpawnTimer <= 0) {
+        const rowsDone = Math.max(0, ZIPPER_ROWS - state.zipperRowsLeft);
+        const ramp = Math.min(rowsDone / (ZIPPER_ROWS - 1), 1.0);
+        state.zipperSpawnTimer = 1.5 - ramp * 0.65;
+        spawnZipperRow();
+      }
+    }
+  }
+
+  // Slalom minefield spawner (death run only)
+  if (state.isDeathRun && state.slalomActive) {
+    state.slalomSpawnZ += effectiveSpeed * dt;
+    if (state.slalomSpawnZ >= 0) {
+      state.slalomSpawnZ = -SLALOM_Z_SPACING;
+      spawnSlalomRow();
+      if (state.slalomRowsDone >= state.slalomMaxRows) {
+        state.slalomActive = false;
+        // Wave director handles rest/transition in its phase tick
+      }
+    }
+  }
+
+
+  // Custom pattern spawner (death run only)
+  if (state.isDeathRun && state.drCustomPatternActive && !state.introActive) {
+    state.drCustomPatternSpawnZ += effectiveSpeed * dt;
+    if (state.drCustomPatternSpawnZ >= 0) {
+      state.drCustomPatternSpawnZ = -7;
+      spawnCustomPatternRow();
+    }
+  }
+
+  if (state.currentLevelIdx === 4 && !state.isDeathRun && !state.isDeathRun2) {
+    if (state.l5EndingActive) {
+      // Ending: just sail — no cones, dots stay on, gentle deceleration
+      state.l5EndingTimer += dt;
+      const slowTarget = BASE_SPEED * 0.9;
+      state.speed = Math.max(slowTarget, state.speed - dt * 8);
+      // After 3s of sailing, fade in JET HORIZON title card cinematic-style
+      if (!state.l5TitleShown && state.l5EndingTimer >= 3.0) {
+        state.l5TitleShown = true;
+        const _ov = document.getElementById('intro-overlay');
+        if (_ov) {
+          _ov.innerHTML = '';
+          _ov.style.display = 'flex';
+          const _tc = document.createElement('div');
+          _tc.className = 'intro-title line-c';
+          _tc.textContent = 'JET HORIZON';
+          _ov.appendChild(_tc);
+          // Use a longer animation for the ending — fade in slowly, stay, never fade out
+          _tc.style.animation = 'none';
+          _tc.style.opacity   = '0';
+          _tc.style.transition = 'opacity 3s ease-in-out';
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            _tc.style.opacity = '1';
+          }));
+        }
+      }
+    } else if (state.l5CorridorActive) {
+      // L5 final challenge: random-walk corridor
+      state.l5CorridorSpawnZ += effectiveSpeed * dt;
+      if (state.l5CorridorSpawnZ >= 0) {
+        state.l5CorridorSpawnZ = -7 + (Math.random() - 0.5) * 2;
+        if (state.l5CorridorRowsDone >= L5C_TOTAL_ROWS) {
+          // Corridor complete — brief random cone burst before sail-out
+          state.l5CorridorActive       = false;
+          state.l5CorridorDone         = true;
+          if (!state.isDeathRun) {
+            state.l5RandomAfterCorridor  = 5.0;  // 5s of random cones then ending
+            // Fire title music now — 3s into this post-corridor phase
+            const _tDelay = setTimeout(() => {
+              if (titleMusic) titleMusic.currentTime = 0;
+              musicFadeTo('title', 6000);
+            }, 3000);
+            _musicTimers.push(_tDelay);
+          }
+        } else {
+          spawnL5CorridorRow();
+        }
+      }
+    } else if (state.l5RandomAfterCorridor > 0) {
+      // Post-corridor: random cones for a few seconds before sail-out
+      state.l5RandomAfterCorridor -= dt;
+      if (state.l5RandomAfterCorridor <= 0) {
+        if (!state.isDeathRun) {
+          state.l5EndingActive = true;
+          saveLevelBeaten(4); // L5 beaten
+        }
+      }
+    } else if (state.l5RandomAfterZipper > 0) {
+      // Post-2nd-zipper: a few more random cones, then trigger corridor
+      state.l5RandomAfterZipper -= dt;
+      if (state.l5RandomAfterZipper <= 0 && !state.l5CorridorDone) {
+        state.l5CorridorActive    = true;
+        state.l5CorridorRowsDone  = 0;
+        state.l5CorridorSpawnZ    = -7;
+        state.l5SineT             = 0;
+        // Campaign: explicit anchor=0 (world origin) so spawnL5CorridorRow
+        // doesn't reuse a stale shipX-anchor from a prior DR L5 activation.
+        state._l5CenterAnchor     = 0;
+      }
+    } else if (state.l5PreZipperRandom > 0) {
+      // Entry buffer: random cones before first zipper fires
+      state.l5PreZipperRandom -= dt;
+      if (state.l5PreZipperRandom <= 0) {
+        state.zipperCooldown = 0; // release the zipper immediately
+      }
+    } else if (state.zipperActive) {
+      state.zipperSpawnTimer -= dt;
+      if (state.zipperSpawnTimer <= 0) {
+        // Ramp interval: starts at 1.5s, tightens to 0.85s by row 13
+        const rowsDone = ZIPPER_ROWS - state.zipperRowsLeft;
+        const ramp = Math.min(rowsDone / (ZIPPER_ROWS - 1), 1.0);
+        state.zipperSpawnTimer = 1.5 - ramp * 0.65;
+        spawnZipperRow();
+      }
+    } else {
+      // Cooldown ticks in real time so it always counts down correctly
+      if (state.zipperCooldown > 0) {
+        state.zipperCooldown -= dt;
+      } else {
+        state.zipperActive    = true;
+        state.zipperRowsLeft  = ZIPPER_ROWS;
+        state.zipperSide      = Math.random() < 0.5 ? 1 : -1;
+        state.zipperHoldCount = 0;
+        state.zipperSpawnTimer = -1.0;  // 1s grace before first row
+      }
+    }
+  }
+
+  // Normal nextSpawnZ-based spawner — suppressed during active zipper, L5 ending, intro, or death run rest beat
+  if (!state._tutorialActive && !state._jetLightningMode && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
+    state.nextSpawnZ += effectiveSpeed * dt;
+    if (state.nextSpawnZ >= 0) {
+      // Tighter Z spacing for rings (easier to pass through, need more density)
+      let _spawnBand = 0;
+      if (state.isDeathRun) {
+        if (state._drForcedBand != null && state._drForcedBand >= 0) { _spawnBand = state._drForcedBand; }
+        else { for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _spawnBand = bi; break; } _spawnBand = bi; } }
+      }
+      const _isFatConeMode = state._seqSpawnMode === 'fat_cones';
+      const _spawnZBase = _isFatConeMode ? -22 : (_spawnBand === 1) ? -30 : (_spawnBand === 2 || _spawnBand >= 5) ? -22 : (state.isDeathRun ? -30 : -50);
+      state.nextSpawnZ = _spawnZBase + (Math.random() - 0.5) * 10;
+      state.frameCount++;
+      const l4PreClear = (!state.isDeathRun && state.currentLevelIdx === 3 && !state.l4CorridorDone &&
+                          state.levelElapsed >= L4_CORRIDOR_TRIGGER_S - 4);
+
+      if (!state.corridorMode && !state.l4CorridorActive && !l4PreClear && state.corridorDelay <= 0 && !state.slalomActive && !state.drCustomPatternActive && !_noSpawnMode) spawnObstacles();
+    }
+  }
+
+
+  // ── Move bonus rings
+  for (let i = _bonusRings.length - 1; i >= 0; i--) {
+    const br = _bonusRings[i];
+    br.mesh.position.z += effectiveSpeed * dt;
+    // Ring collision: check against actual octagon line segments
+    const _rZ = Math.abs(br.mesh.position.z - shipGroup.position.z);
+    if (_rZ < 2.0) {
+      const shipX = state.shipX;
+      const shipY = shipGroup.position.y;
+      const ringCX = br.mesh.position.x;
+
+      if (br.mesh.userData.isGauntletRing) {
+        // Gauntlet: use _rgDesign values, not _ringTuner
+        const R = _rgDesign.radius;
+        const SIDES = _rgDesign.sides;
+        const ringCY = _rgDesign.y;
+        const halfLW = 1.5 / 2; // world units linewidth / 2
+        const shipHalf = 1.2;
+        let hit = false;
+        for (let s = 0; s < SIDES && !hit; s++) {
+          const a0 = (s / SIDES) * Math.PI * 2;
+          const a1 = ((s + 1) / SIDES) * Math.PI * 2;
+          const x0 = ringCX + Math.cos(a0) * R;
+          const y0 = ringCY + Math.sin(a0) * R;
+          const x1 = ringCX + Math.cos(a1) * R;
+          const y1 = ringCY + Math.sin(a1) * R;
+          // Point-to-segment distance
+          const dx = x1 - x0, dy = y1 - y0;
+          const len2 = dx * dx + dy * dy;
+          let t = len2 > 0 ? ((shipX - x0) * dx + (shipY - y0) * dy) / len2 : 0;
+          t = Math.max(0, Math.min(1, t));
+          const closestX = x0 + t * dx;
+          const closestY = y0 + t * dy;
+          const dist = Math.sqrt((shipX - closestX) ** 2 + (shipY - closestY) ** 2);
+          if (dist < shipHalf + halfLW) hit = true;
+        }
+        if (hit) { killPlayer(); return; }
+      } else if (!br.collected) {
+        const R = _ringTuner.radius;
+        const ringCX2 = br.mesh.position.x;
+        const _rDx = Math.abs(ringCX2 - shipX);
+        if (_rDx < R * 0.8) {
+          br.collected = true;
+          br.mesh.material.opacity = 0.08;
+          _ringSpawnRipple(br.mesh.position.clone(), br.mesh.material.color.getHex());
+          const fc = parseInt(window._LS.getItem('jetslide_fuelcells') || '0', 10);
+          window._LS.setItem('jetslide_fuelcells', String(fc + 1));
+          const _fcHud = document.getElementById('hud-fuelcells');
+          if (_fcHud) _fcHud.textContent = fc + 1;
+          playSFX(880, 0.2, 'sine', 0.15);
+          // Fuel cell particle fly from ship position
+          _spawnFuelFly(shipGroup.position);
+        }
+      }
+    }
+    // Despawn when past camera
+    if (br.mesh.position.z > 20) {
+      scene.remove(br.mesh); br.mesh.geometry.dispose(); br.mesh.material.dispose();
+      _bonusRings.splice(i, 1);
+    }
+  }
+  if (_bonusRings.length === 0 && state._ringsActive) state._ringsActive = false;
+  _ringTickRipples(dt);
+
+  // ── Move obstacles
+  for (let i = activeObstacles.length - 1; i >= 0; i--) {
+    const obs = activeObstacles[i];
+    obs.position.z += effectiveSpeed * dt;
+
+    // Smooth fade-in from horizon: invisible at spawn, fully opaque by z=-80
+    const FADE_START_Z = SPAWN_Z;       // -160: totally transparent at birth
+    const FADE_END_Z   = -110;          // fully opaque from here onward
+    const fadeT = Math.max(0, Math.min(1, (obs.position.z - FADE_START_Z) / (FADE_END_Z - FADE_START_Z)));
+    const fullyOpaque = fadeT >= 1.0;
+    const _mc = obs.userData._meshes;
+    for (let mi = 0; mi < _mc.length; mi++) {
+      const child = _mc[mi];
+      const baseOp = child.material.userData.baseOpacity ?? 1.0;
+      if (child.material.uniforms && child.material.uniforms.uOpacity) {
+        child.material.uniforms.uOpacity.value = fadeT * baseOp;
+        // Once fully opaque, switch to solid for depth buffer (blocks corona)
+        if (fullyOpaque && child.material.transparent) {
+          child.material.transparent = false;
+          child.material.depthWrite = true;
+          child.material.needsUpdate = true;
+        } else if (!fullyOpaque && !child.material.transparent) {
+          child.material.transparent = true;
+          child.material.depthWrite = false;
+          child.material.needsUpdate = true;
+        }
+      } else {
+        const wantTransparent = !fullyOpaque;
+        if (child.material.transparent !== wantTransparent) {
+          child.material.transparent = wantTransparent;
+          child.material.needsUpdate = true;
+        }
+        child.material.opacity = fullyOpaque ? 1.0 : fadeT * baseOp;
+      }
+    }
+
+    if (obs.position.z > DESPAWN_Z) {
+      returnObstacleToPool(obs);
+      activeObstacles.splice(i, 1);
+      continue;
+    }
+
+    // ── Laser destroys obstacles (corridor/zipper cones are immune)
+    if (state.laserActive && !obs.userData.isCorridor) {
+      const _lt = state.laserTier || 1;
+      let _laserHit = false;
+      const oz = obs.position.z;
+      const ox = obs.position.x;
+      if (oz < 8 && oz > SPAWN_Z) {
+        if (_lt <= 3) {
+          // Bolt laser: narrow corridor around ship center
+          _laserHit = Math.abs(ox - state.shipX) < 1.2;
+        } else if (_lt === 4) {
+          // T4 static unibeam: narrow corridor straight ahead
+          _laserHit = Math.abs(ox - state.shipX) < 1.5;
+        } else {
+          // T5 scanning beam: handled separately via raycaster below — skip here
+        }
+      }
+      if (_laserHit) {
+        spawnConeShards(ox, obs.position.y, oz, currentLevelDef.gridColor);
+        returnObstacleToPool(obs);
+        activeObstacles.splice(i, 1);
+        playSFX(220, 0.15, 'sawtooth', 0.2);
+        continue;
+      }
+    }
+
+    // ── Collision with ship
+    if (obs.userData.isEcho) continue; // echo cones are visual only — no collision
+    // Rotation-aware hitbox: wings (±2.1) point sideways when flat, up/down when rolled 90°
+    // Roll angle from shipGroup.rotation.z — at 0 = flat (full wing width), at ±PI/2 = vertical (fuselage only)
+    const roll = shipGroup.rotation.z || 0;
+    const absRoll = Math.abs(roll);
+    const rollFrac = Math.min(absRoll / (Math.PI / 2), 1); // 0=flat, 1=fully vertical
+    const WING_HALF  = 1.5;  // reduced — ring is visual only, not part of hitbox
+    const BODY_HALF  = 0.8;  // wider rolled hitbox so threading gaps is harder
+    const colDistX = WING_HALF * (1 - rollFrac) + BODY_HALF * rollFrac;
+    const colDistZ = 1.5;    // wider Z so fast head-on hits register
+    // Scale hitbox for fat/slalom cones — fat cones get a more forgiving hitbox
+    const cScale = obs.userData.slalomScaled ? (obs.scale.x || 1) : 1;
+    const cMult = obs.userData.isFatCone ? 0.9 : 1.2; // fat cones: hitbox matches cone visual at ship flight height (Y=1.71, ~4.33 unit radius)
+    const dxC = Math.abs(obs.position.x - state.shipX);
+    const dzC = Math.abs(obs.position.z - shipGroup.position.z);
+    if (dxC < (colDistX + (cScale - 1) * cMult) && dzC < (colDistZ + (cScale - 1) * 0.4)) {
+      returnObstacleToPool(obs);
+      activeObstacles.splice(i, 1);
+      if (_godMode) {
+        const _shHitSfx = document.getElementById('shield-hit-sfx');
+        if (_shHitSfx) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
+        addCrashFlash(0xff4400);
+      } else {
+        killPlayer();
+      }
+      return;
+    }
+
+    // ── Near-miss detection (must survive the kill check above)
+    if (!state.l5EndingActive && !obs.userData.nearMissScored && dxC < (colDistX + 0.6) && dzC < 2.0 && dxC > colDistX) {
+      // Cooldown: max 1 near-miss SFX per 0.5s to prevent audio spam
+      const now = performance.now();
+      if (!state._lastNearMissTime) state._lastNearMissTime = 0;
+      const canPlaySFX = (now - state._lastNearMissTime) > 500;
+
+      const lvlMult = [1, 1.5, 2, 3, 4][state.currentLevelIdx] || 1;
+      if (state.corridorMode || state.l4CorridorActive || state.l5CorridorActive) {
+        // Inside corridor: only award on bends
+        if (state.nearMissBendAllowed) {
+          state.playerScore += 25 * lvlMult;
+          state.nearMissBendAllowed = false;
+          obs.userData.nearMissScored = true;
+          state.nearMissFlash = 1.0; hapticTap();
+          if (canPlaySFX) { playNearMissSFX(); state._lastNearMissTime = now; }
+        }
+      } else {
+        // Outside corridor: one per cone, but cooldown on SFX
+        state.playerScore += 25 * lvlMult;
+        obs.userData.nearMissScored = true;
+        state.nearMissFlash = 1.0; hapticTap();
+        if (canPlaySFX) { playNearMissSFX(); state._lastNearMissTime = now; }
+      }
+    }
+  }
+
+  // ── Angled walls: spawn + move + collide
+  if (state.angledWallsActive && !_awTunerPaused) {
+    state.angledWallSpawnZ += effectiveSpeed * dt;
+    if (state.angledWallSpawnZ >= 0 && state.angledWallRowsDone < _awTuner.rows) {
+      state.angledWallSpawnZ = -_awTuner.zSpacing;
+      spawnAngledWallRow();
+    }
+    // End angled walls phase when all rows spawned AND all walls passed
+    if (state.angledWallRowsDone >= _awTuner.rows && _awActive.length === 0) {
+      state.angledWallsActive = false;
+    }
+  }
+  for (let i = _awActive.length - 1; i >= 0; i--) {
+    const w = _awActive[i];
+    if (!_awTunerPaused) w.position.z += effectiveSpeed * dt;
+    // Fade-in (skip when paused — walls are placed manually with full opacity)
+    if (!_awTunerPaused) {
+      const awFadeT = Math.max(0, Math.min(1, (w.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
+      const awEchoMul = w.userData.echoOpacity ?? 1.0;
+      w.userData._mesh.material.uniforms.uOpacity.value = awFadeT * _awTuner.opacity * awEchoMul;
+      w.userData._edges.material.opacity = awFadeT * _awTuner.opacity * 0.9 * awEchoMul;
+    }
+    // Laser destroys walls
+    if (state.laserActive) {
+      const ldx = Math.abs(w.position.x - state.shipX);
+      if (ldx < 5 && w.position.z < 8 && w.position.z > SPAWN_Z) {
+        _returnWallToPool(w);
+        _awActive.splice(i, 1);
+        playSFX(180, 0.15, 'sawtooth', 0.25);
+        continue;
+      }
+    }
+    // Despawn
+    if (w.position.z > DESPAWN_Z + 10) {
+      _returnWallToPool(w);
+      _awActive.splice(i, 1);
+      continue;
+    }
+    // Collision: full 3-axis rotated AABB check (uses wall's actual mesh scale)
+    if (!state.invincibleSpeedActive && !state.introActive) {
+      const ms = w.userData._mesh.scale;
+      const halfW = ms.x / 2;
+      const halfH = ms.y / 2;
+      const halfT = ms.z / 2;
+      // Ship world position
+      const sx = state.shipX;
+      const sy = shipGroup.position.y;
+      const sz = shipGroup.position.z;
+      // Wall mesh center in world space (mesh is offset by halfH in local Y)
+      w.updateMatrixWorld(true);
+      const wm = w.userData._mesh;
+      wm.updateMatrixWorld(true);
+      const wc = new THREE.Vector3();
+      wm.getWorldPosition(wc);
+      // Delta in world space
+      const dx = sx - wc.x;
+      const dy = sy - wc.y;
+      const dz = sz - wc.z;
+      // Extract wall's world rotation axes from its matrixWorld
+      const e = wm.matrixWorld.elements;
+      // Column vectors (normalized — scale is baked into half-extents)
+      const ax0x = e[0], ax0y = e[1], ax0z = e[2];
+      const ax1x = e[4], ax1y = e[5], ax1z = e[6];
+      const ax2x = e[8], ax2y = e[9], ax2z = e[10];
+      const len0 = Math.sqrt(ax0x*ax0x + ax0y*ax0y + ax0z*ax0z) || 1;
+      const len1 = Math.sqrt(ax1x*ax1x + ax1y*ax1y + ax1z*ax1z) || 1;
+      const len2 = Math.sqrt(ax2x*ax2x + ax2y*ax2y + ax2z*ax2z) || 1;
+      // Project delta onto wall's local axes
+      const localX = (dx * ax0x + dy * ax0y + dz * ax0z) / len0;
+      const localY = (dx * ax1x + dy * ax1y + dz * ax1z) / len1;
+      const localZ = (dx * ax2x + dy * ax2y + dz * ax2z) / len2;
+      const shipHalfX = 0.3;
+      const shipHalfZ = 0.3;
+      const shipHalfY = 0.3;
+      if (Math.abs(localX) < (halfW + shipHalfX) &&
+          Math.abs(localY) < (halfH + shipHalfY) &&
+          Math.abs(localZ) < (halfT + shipHalfZ)) {
+        killPlayer();
+        return;
+      }
+    }
+  }
+
+  // ── Lethal rings: move, fade, collide, despawn
+  for (let i = _lethalRingActive.length - 1; i >= 0; i--) {
+    const lr = _lethalRingActive[i];
+    lr.position.z += effectiveSpeed * dt;
+    const fadeT = Math.max(0, Math.min(1, (lr.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
+    lr.userData._ringMesh.material.uniforms.uOpacity.value = fadeT * 0.92;
+    // Laser destroys lethal rings
+    if (state.laserActive) {
+      let _ringHit = false;
+      const _lt2 = state.laserTier || 1;
+      if (_lt2 >= 5 && state._laserScanAngle !== undefined) {
+        // T5: use same raycaster math
+        const _rp = new THREE.Vector3().copy(lr.position).sub(new THREE.Vector3(state.shipX + _lBeamXOff, _lBeamY, shipGroup.position.z));
+        const _rd = new THREE.Vector3(Math.sin(state._laserScanAngle), 0, -Math.cos(state._laserScanAngle));
+        const _al = _rp.dot(_rd);
+        if (_al > 0) {
+          const _cl = new THREE.Vector3(state.shipX + _lBeamXOff, _lBeamY, shipGroup.position.z).addScaledVector(_rd, _al);
+          _ringHit = _cl.distanceTo(lr.position) < 5.0;
+        }
+      } else {
+        const ldx = Math.abs(lr.position.x - state.shipX);
+        _ringHit = ldx < 6 && lr.position.z < 8 && lr.position.z > SPAWN_Z;
+      }
+      if (_ringHit) {
+        lr.userData.active = false;
+        lr.visible = false;
+        lr.position.set(0, -9999, 0);
+        _lethalRingActive.splice(i, 1);
+        playSFX(200, 0.15, 'sawtooth', 0.2);
+        continue;
+      }
+    }
+    if (lr.position.z > DESPAWN_Z + 5) {
+      lr.userData.active = false;
+      lr.visible = false;
+      lr.position.set(0, -9999, 0);
+      _lethalRingActive.splice(i, 1);
+      continue;
+    }
+    if (!state.invincibleSpeedActive && !state.introActive) {
+      // Hitbox = distance to octagon tube path (matches mesh exactly)
+      const sx = state.shipX - lr.position.x;
+      const sy = shipGroup.position.y - (lr.position.y + _LR_Y);
+      const sz = shipGroup.position.z - lr.position.z;
+      // Check distance to each octagon edge segment
+      const hitR = _LR_TUBE; // exact tube radius — tight to mesh
+      for (let seg = 0; seg < _LR_SIDES; seg++) {
+        const a0 = (seg / _LR_SIDES) * Math.PI * 2;
+        const a1 = ((seg + 1) / _LR_SIDES) * Math.PI * 2;
+        const ax = Math.cos(a0) * _LR_R, ay = Math.sin(a0) * _LR_R;
+        const bx = Math.cos(a1) * _LR_R, by = Math.sin(a1) * _LR_R;
+        // Closest point on segment A→B to ship (in ring's XY plane)
+        const ex = bx - ax, ey = by - ay;
+        const t = Math.max(0, Math.min(1, ((sx - ax) * ex + (sy - ay) * ey) / (ex * ex + ey * ey)));
+        const cx = ax + t * ex, cy = ay + t * ey;
+        const dx = sx - cx, dy2 = sy - cy;
+        const dist = Math.sqrt(dx * dx + dy2 * dy2 + sz * sz);
+        if (dist < hitR) {
+          if (_godMode) {
+            // God mode: shield-hit flash + sound, no death
+            _triggerCrashFlash();
+            playSFX(220, 0.18, 'sawtooth', 0.15);
+            return;
+          }
+          killPlayer();
+          return;
+        }
+      }
+    }
+  }
+
+  // ── Move power-ups
+  for (let i = activePowerups.length - 1; i >= 0; i--) {
+    const pu = activePowerups[i];
+    pu.position.z += effectiveSpeed * dt;
+    pu.rotation.y += 0.5 * dt;  // slow cube rotation (was 1.8 — too frantic for hologram aesthetic)
+    pu.rotation.x += 0.2 * dt;
+
+    // Magnet pull toward ship (powerups only at tier 5)
+    if (state.magnetActive && state.magnetPullsPowerups) {
+      const dx = state.shipX - pu.position.x;
+      const dz = shipGroup.position.z - pu.position.z;
+      const dist = Math.sqrt(dx*dx + dz*dz);
+      if (dist < state.magnetRadius) {
+        const pull = 40 * dt; // pull speed — strong enough to reel in distant powerups
+        pu.position.x += (dx / dist) * pull;
+        pu.position.z += (dz / dist) * pull;
+      }
+    }
+
+    // (Holo cube doesn't pulse — the shader's blink/scanline animation already
+    //  provides the visual motion. Scale stays at 1.)
+
+    if (pu.position.z > DESPAWN_Z) {
+      returnPowerupToPool(pu);
+      activePowerups.splice(i, 1);
+      continue;
+    }
+
+    // Collect — cube is now 3.5u so collision radius widened to 2.5u to feel like
+    // "drove through it" rather than "grazed the edge".
+    const dxP = Math.abs(pu.position.x - state.shipX);
+    const dzP = Math.abs(pu.position.z - shipGroup.position.z);
+    if (dxP < 2.5 && dzP < 2.5) {
+      applyPowerup(pu.userData.typeIdx);
+      // Spawn shatter at the cube's current position, with a live ship-tracking target.
+      // Icon zips to the ship's nose (slightly forward of pivot) and absorbs in ~350ms.
+      _spawnPowerupShatter(pu, () => new THREE.Vector3(state.shipX, shipGroup.position.y, shipGroup.position.z));
+      returnPowerupToPool(pu);
+      activePowerups.splice(i, 1);
+    }
+  }
+
+
+  // ── Move coins
+  for (let ci = activeCoins.length - 1; ci >= 0; ci--) {
+    const coin = activeCoins[ci];
+    coin.position.z += effectiveSpeed * dt;
+    // Spin the coin face-on (tumble in world-Y which is coin's local Z after the x-rotation)
+    coin.rotation.z = state.elapsed * 2.8 + (coin.userData.spinPhase || 0);
+    // Gentle bob
+    coin.position.y = 1.2 + Math.sin(state.elapsed * 2.2 + (coin.userData.spinPhase || 0)) * 0.12;
+
+    // Magnet pull — wider radius for coins than power-ups
+    if (state.magnetActive) {
+      const dx = coin.position.x - state.shipX;
+      const dz = coin.position.z - shipGroup.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < (state.magnetRadius || 18)) {
+        coin.position.x -= dx * 5 * dt;
+        coin.position.z -= dz * 3 * dt;
+      }
+    }
+
+    // Despawn if past camera
+    if (coin.position.z > DESPAWN_Z + 2) {
+      returnCoinToPool(coin);
+      activeCoins.splice(ci, 1);
+      continue;
+    }
+
+    // Collect
+    const dcx = Math.abs(coin.position.x - state.shipX);
+    const dcz = Math.abs(coin.position.z - shipGroup.position.z);
+    if (dcx < 1.6 && dcz < 1.6) {
+      collectCoin(coin, coin.position.clone());
+      returnCoinToPool(coin);
+      activeCoins.splice(ci, 1);
+    }
+  }
+
+  // ── Move forcefields
+  for (let fi = _activeForcefields.length - 1; fi >= 0; fi--) {
+    const ff = _activeForcefields[fi];
+    ff.position.z += effectiveSpeed * dt;
+    if (ff.position.z > DESPAWN_Z) {
+      returnForcefieldToPool(ff);
+      _activeForcefields.splice(fi, 1);
+      continue;
+    }
+    // Collision: flat plane spanning the gap, height ~4 units
+    const halfW = (ff.userData.gapWidth || SLALOM_SPACING) * 0.5;
+    const dx = Math.abs(ff.position.x - state.shipX);
+    const dz = Math.abs(ff.position.z - shipGroup.position.z);
+    if (dx < halfW && dz < 1.5 && !state.invincibleSpeedActive && !state.shieldActive) {
+      killPlayer();
+      return;
+    }
+  }
+
+  // ── Shield — flow shader drives everything via uReveal + uTime
+  if (state.shieldActive && !state.invincibleSpeedActive) {
+    shieldMat.uniforms.uTime.value += dt;
+    shieldWire.visible = false;
+    shieldMesh.visible = true;
+    if (state.shieldBuildT != null && state.shieldBuildT < 1) {
+      state.shieldBuildT = Math.min(1, state.shieldBuildT + dt / 0.8);
+      const ease = state.shieldBuildT * (2 - state.shieldBuildT);
+      shieldMat.uniforms.uReveal.value = 1.0 - ease;
+      shieldLight.intensity = ease * 1.5;
+    } else {
+      shieldMat.uniforms.uReveal.value = 0.0;
+      shieldLight.intensity = 1.2 + Math.sin(state.frameCount * 0.15) * 0.4;
+    }
+  } else if (!state.shieldActive && state._shieldBreakT != null && state._shieldBreakT < 1) {
+    // Death ripple: keep mesh alive, dissolve out over 0.6s
+    shieldMat.uniforms.uTime.value += dt;
+    state._shieldBreakT = Math.min(1, state._shieldBreakT + dt / 0.6);
+    const breakEase = state._shieldBreakT * state._shieldBreakT;
+    shieldMesh.visible = true;
+    shieldWire.visible = false;
+    shieldMat.uniforms.uReveal.value = breakEase;
+    shieldLight.intensity = (1.0 - breakEase) * 1.5;
+    if (state._shieldBreakT >= 1) {
+      shieldMesh.visible = false;
+      state._shieldBreakT = null;
+      shieldLight.intensity = 0;
+    }
+  } else if (!state.shieldActive) {
+    shieldMesh.visible = false;
+    shieldWire.visible = false;
+    shieldMesh.scale.setScalar(1);
+  }
+
+  // ── Sun slow rotation
+  // galaxy scroll handled in updateGalaxyScroll above
+
+  // ── Post-L3-corridor gap: 3s no cone gen before L4 random cones start
+  if (state.postL3Gap > 0 && !state.corridorMode && state.currentLevelIdx === 3) {
+    state.postL3Gap -= dt;
+    // Block normal spawner by keeping corridorDelay positive
+    state.corridorDelay = Math.max(state.corridorDelay, 0.01);
+    if (state.postL3Gap <= 0) state.corridorDelay = 0;
+  }
+
+  // ── DR Portal gate update ──
+
+
+  // ── Auto-spawn portal gate in DR mode after 10 seconds (POC trigger) ──
+  // QUARANTINED: wormhole sequence disabled for both DR and campaign while sequencer is in development
+  // if (state.isDeathRun && !_drPortalActive && !state.wormholeActive && state.elapsed > 10 && !state.introActive) {
+  //   drPortalSpawn();
+  // }
+
+  updateTransition(dt);
+  updateDeathRunTransition(dt);
+}
+
+// ═══════════════════════════════════════════════════
+//  DEBUG OVERLAY
+// ═══════════════════════════════════════════════════
+let dbgFrames = 0, dbgLast = performance.now(), dbgFps = 0;
+let dbgVisible = false;
+const dbgEl = document.getElementById('debug-overlay');
+
+// Toggle debug overlay with 'D' key (desktop only)
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'd' || e.key === 'D') {
+    dbgVisible = !dbgVisible;
+    dbgEl.classList.toggle('visible', dbgVisible);
+  }
+  // V — toggle canyon on/off
+  // V key is handled by the canyon tuner panel listener below
+});
+
+// ═══════════════════════════════════════════════════
+//  CANYON TUNER PANEL  (shown/hidden with V key alongside canyon toggle)
+// ═══════════════════════════════════════════════════
+(function _setupCanyonTunerPanel() {
+  const S = (css) => Object.assign(document.createElement('div'), { style: css });
+  const panel = document.createElement('div');
+  panel.id = 'canyon-tuner';
+  panel.style.cssText = [
+    'position:fixed;top:10px;left:10px;width:calc(min(300px,90vw));max-height:90vh;overflow-y:auto',
+    'background:rgba(0,10,20,0.95);border:1px solid #00eeff;color:#00eeff',
+    'font-family:monospace;font-size:11px;padding:10px;z-index:9999',
+    'border-radius:4px;scrollbar-width:thin;display:none;'
+  ].join(';');
+  document.body.appendChild(panel);
+
+  let panelVisible = false;
+
+  function rebuildGeo() {
+    if (!_canyonActive) return;
+    _destroyCanyonWalls();
+    _createCanyonWalls();
+  }
+
+  function rebakeAllX() {
+    if (!_canyonWalls) return;
+    const T = _canyonTuner;
+    const footOff = _canyonWalls._footOff || 0;
+    const spacing = _canyonWalls._spacing;
+    const useL4 = T._l4Recreation;
+    ['left','right'].forEach(k => {
+      const side = k === 'left' ? -1 : 1;
+      _canyonWalls[k].forEach(m => {
+        const rowsAhead  = Math.max(0, Math.round((3.9 - m.position.z) / spacing));
+        const center     = _canyonPredictCenter(rowsAhead);
+        const centerNext = _canyonPredictCenter(rowsAhead + 1);
+        const halfX      = (_canyonMode === 5) ? _canyonHalfXAtZ(m.position.z) : _canyonPredictHalfX(rowsAhead);
+        if (useL4 && !m.userData.isEntrance) {
+          // L4-recreation path: center from L4 sine, no yaw (bending replaces it),
+          // and re-bake inner face so halfX/amp/compress slider tweaks take effect live.
+          const l4Center = _l4SineAtZ(m.position.z);
+          m.userData.bakedX = l4Center + halfX * side;
+          m.position.x = m.userData.bakedX;
+          m.rotation.y = 0;
+          _bakeSlabCurveForL4(m, m.position.z, side, null);
+        } else {
+          m.userData.bakedX = center + halfX * side;
+          m.position.x = m.userData.bakedX;
+          m.rotation.y = side * Math.atan(centerNext - center);
+        }
+      });
+    });
+  }
+
+  // rebuildTex removed — referenced nonexistent gridTex / _makeCanyonGridTexture
+
+  function hdr(txt) {
+    const d = document.createElement('div');
+    d.style.cssText = 'color:#ff0;font-size:10px;margin:8px 0 3px;letter-spacing:1px;';
+    d.textContent = txt;
+    panel.appendChild(d);
+  }
+
+  function slider(label, key, min, max, step, mode) {
+    // mode: 'geo' = rebuild geometry, 'tex' = rebuild texture, 'live' = instant
+    const T = _canyonTuner;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;margin:2px 0;gap:5px;';
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'flex:0 0 85px;font-size:10px;color:#aef;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    lbl.textContent = label;
+    const sl = document.createElement('input');
+    sl.type = 'range'; sl.min = min; sl.max = max; sl.step = step; sl.value = T[key];
+    sl.style.cssText = 'flex:1;accent-color:#00eeff;cursor:pointer;';
+    const vl = document.createElement('span');
+    vl.style.cssText = 'flex:0 0 42px;text-align:right;font-size:11px;font-weight:bold;color:#fff;';
+    vl.textContent = T[key];
+    sl.addEventListener('input', () => {
+      T[key] = parseFloat(sl.value);
+      vl.textContent = sl.value;
+      if (mode === 'geo') rebuildGeo();
+      else if (mode === 'live-cyan') {
+        if (_canyonWalls && _canyonWalls.cyanMat) {
+          _canyonWalls.cyanMat.emissiveIntensity = T.cyanEmi;
+          _canyonWalls.cyanMat.roughness = T.cyanRgh;
+          _canyonWalls.cyanMat.needsUpdate = true;
+        }
+      } else if (mode === 'dark-tex') {
+        rebuildDarkTex();
+      } else if (mode === 'live-sine') {
+        rebakeAllX();
+      } else if (mode === 'live-l4') {
+        // L4-recreation live tweak — re-runs pivot placement + inner-face bake
+        // on all currently-visible slabs so the slider move is instantly visible.
+        // _l4HalfX slider must mirror into halfXOverride (which is what the bake
+        // math actually reads via _canyonPredictHalfX) so changes take effect live.
+        if (key === '_l4HalfX') T.halfXOverride = T._l4HalfX;
+        rebakeAllX();
+      } else if (mode === 'live-lights') {
+        if (_canyonWalls && _canyonWalls.canyonLight && _canyonWalls.canyonLight.lights) {
+          _canyonWalls.canyonLight.lights.forEach((l, i) => {
+            l.intensity = _CANYON_LIGHT_DEFS[i].intensity * T.lightIntensity;
+          });
+        }
+      } else if (mode === 'live-dark-mat') {
+        if (_canyonWalls && _canyonWalls.darkMat) {
+          _canyonWalls.darkMat.roughness  = T.darkRgh;
+          _canyonWalls.darkMat.clearcoat  = T.darkClearcoat;
+          _canyonWalls.darkMat.emissiveIntensity = T.darkEmi;
+          _canyonWalls.darkMat.needsUpdate = true;
+        }
+      }
+      // 'live' — nothing extra needed, update loop reads T directly
+    });
+    row.appendChild(lbl); row.appendChild(sl); row.appendChild(vl);
+    panel.appendChild(row);
+  }
+
+  function toggle(label, key, mode) {
+    // mode: 'geo' = destroy+recreate pool, undefined/other = just flip flag
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;margin:4px 0;gap:8px;';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox'; chk.checked = !!_canyonTuner[key];
+    chk.addEventListener('change', () => {
+      _canyonTuner[key] = chk.checked;
+      if (mode === 'geo') rebuildGeo();
+    });
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'font-size:10px;color:#aef;cursor:pointer;';
+    lbl.textContent = label;
+    row.appendChild(chk); row.appendChild(lbl);
+    panel.appendChild(row);
+  }
+
+  function rebuildDarkTex() {
+    if (!_canyonWalls) return;
+    const newTex = _makeCanyonDarkTex(2);
+    _canyonWalls.darkMat.emissiveMap = newTex;
+    _canyonWalls.darkMat.needsUpdate = true;
+    if (_canyonWalls.darkTex) _canyonWalls.darkTex.dispose();
+    _canyonWalls.darkTex = newTex;
+  }
+
+  function buildPanel() {
+    panel.innerHTML = '';
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:12px;font-weight:bold;color:#fff;border-bottom:1px solid #00eeff;padding-bottom:5px;margin-bottom:4px;';
+    title.textContent = 'CANYON TUNER  [V to close]';
+    panel.appendChild(title);
+
+    hdr('— GEOMETRY —');
+    slider('Height',        'slabH',        5, 260,  5,    'geo');
+    slider('Slab length',   'slabW',       10, 200,  5,    'geo');
+    slider('Thickness',     'slabThick',    5, 120,  1,    'geo');
+    slider('Cols',          'cols',         2,  14,  1,    'geo');
+    slider('Rows',          'rows',         2,  14,  1,    'geo');
+    slider('Displacement',  'disp',         0,  20,  0.5,  'geo');
+    slider('Snap',          'snap',       0.1,   3,  0.1,  'geo');
+
+    hdr('— PROFILE —');
+    slider('Foot X',        'footX',      -30,  40,  0.5,  'geo');
+    slider('Sweep X',       'sweepX',       0,  20,  0.5,  'geo');
+    slider('Mid X',         'midX',         0,  30,  0.5,  'geo');
+    slider('Crest X',       'crestX',       0,  35,  0.5,  'geo');
+
+    hdr('— CYAN SLAB —');
+    slider('Emissive',      'cyanEmi',      0,   2,  0.05, 'live-cyan');
+    slider('Roughness',     'cyanRgh',      0,   1,  0.05, 'live-cyan');
+
+    hdr('— DARK SLAB —');
+    slider('Crack count',   'darkCrkCount',   1, 15, 1,    'dark-tex');
+    slider('Crack bright',  'darkCrkBright',  0,  2, 0.05, 'dark-tex');
+    slider('Roughness',     'darkRgh',        0,  1, 0.02, 'live-dark-mat');
+    slider('Clearcoat',     'darkClearcoat',  0,  1, 0.05, 'live-dark-mat');
+    slider('Emissive',      'darkEmi',        0,  3, 0.05, 'live-dark-mat');
+
+    hdr('— LIGHTS —');
+    slider('Intensity',     'lightIntensity', 0,  3, 0.05, 'live-lights');
+
+    // L4 Recreation sliders — only show when K-mode (L4 flag) is active.
+    // These tune the bent-slab corridor live; changes re-bake visible slabs instantly.
+    if (_canyonTuner._l4Recreation) {
+      hdr('— L4 RECREATION —');
+      slider('L4 halfX',       '_l4HalfX',       1,   80, 0.5, 'live-l4');
+      slider('L4 amp scale',   '_l4AmpScale',    0,    2, 0.05, 'live-l4');
+      slider('L4 row compress','_l4RampCompress',0.1,  4, 0.05, 'live-l4');
+      // Slab length needs geo rebuild (slab mesh dimensions baked in).
+      slider('L4 slab length', '_l4SlabW',      10,  160,  5,   'geo');
+      // Raw halfXOverride override — live apply of _l4HalfX into the active tuner field
+      // so the existing wall-spacing pipeline (rebakeAllX) picks it up without a respawn.
+    }
+
+    hdr('— CORRIDOR —');
+    slider('Wall spacing',   'halfXOverride',  1,  300,  1,  'live-sine');
+    slider('Entrance thick', 'entranceThick',  5, 2000,  5,  'geo');
+    slider('Entrance slabs', 'entranceSlabs',  1,   20,  1,  'geo');
+    slider('Spawn depth',    'spawnDepth',  -600, -100, 10,  'geo');
+    toggle('All cyan',       '_allCyan',  'geo');
+    toggle('All dark',       '_allDark',  'geo');
+
+    hdr('— SINE CURVES —');
+    slider('Intensity',      'sineIntensity',  0,    1, 0.01, 'live-sine');
+    slider('Amplitude',      'sineAmp',        1,  400, 1,   'live-sine');
+    slider('Period (rows)',   'sinePeriod',    20,  600, 5,   'live-sine');
+    slider('Speed',          'sineSpeed',    0.1,    5, 0.1, 'live-sine');
+
+    hdr('— LIVE —');
+    slider('scrollSpeed',   'scrollSpeed',  0, 3,   0.1,  'live');
+
+    const btn = document.createElement('button');
+    btn.textContent = 'REBUILD GEO';
+    btn.style.cssText = 'margin-top:10px;width:100%;background:#001a2a;border:1px solid #00eeff;color:#00eeff;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+    btn.onclick = rebuildGeo;
+    panel.appendChild(btn);
+
+    const rbx = document.createElement('button');
+    rbx.textContent = 'REBAKE X';
+    rbx.style.cssText = 'margin-top:4px;width:100%;background:#1a0a2a;border:1px solid #c08cff;color:#c08cff;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+    rbx.onclick = rebakeAllX;
+    panel.appendChild(rbx);
+
+    const stp = document.createElement('button');
+    stp.textContent = 'STOP CANYON';
+    stp.style.cssText = 'margin-top:4px;width:100%;background:#2a0a0a;border:1px solid #ff6060;color:#ff6060;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+    stp.onclick = () => {
+      if (_canyonWalls) _destroyCanyonWalls();
+      _canyonActive = false;
+      _canyonExiting = false;
+      _canyonManual = false;
+      _jlCorridor.active = false;
+      if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+        dirLight.intensity = _canyonSavedDirLight;
+        _canyonSavedDirLight = null;
+      }
+    };
+    panel.appendChild(stp);
+
+    const dmp = document.createElement('button');
+    dmp.textContent = 'DUMP TUNER JSON';
+    dmp.style.cssText = 'margin-top:4px;width:100%;background:#2a1a0a;border:1px solid #ffc060;color:#ffc060;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+    dmp.onclick = () => {
+      const snap = JSON.stringify(_canyonTuner, null, 2);
+      console.log('[TUNER DUMP]\n' + snap);
+      try { navigator.clipboard && navigator.clipboard.writeText(snap); } catch(e){}
+    };
+    panel.appendChild(dmp);
+
+    // EXPERIMENTAL section — only shows when mode 5 is active.
+    // Edits here call rebakeAllX so visible slabs update immediately.
+    if (_canyonMode === 5) {
+      hdr('— EXPERIMENTAL: SINE RAMP —');
+      slider('sineStartI',  'sineStartI',  0,    1, 0.01, 'live-sine');
+      slider('sineStartZ',  'sineStartZ', -500, -50, 10,  'live-sine');
+      slider('sineFullZ',   'sineFullZ',  -700,-150, 10,  'live-sine');
+      hdr('— EXPERIMENTAL: WIDTH SQUEEZE —');
+      slider('halfXStart',  'halfXStart',   5,  200, 1,   'live-sine');
+      slider('halfXFull',   'halfXFull',    5,  200, 1,   'live-sine');
+      slider('halfXStartZ', 'halfXStartZ', -500,-50, 10,  'live-sine');
+      slider('halfXFullZ',  'halfXFullZ',  -700,-150,10,  'live-sine');
+      const xbtn = document.createElement('button');
+      xbtn.textContent = 'REBAKE X (EXP)';
+      xbtn.style.cssText = 'margin-top:4px;width:100%;background:#2a1a2a;border:1px solid #ff80ff;color:#ff80ff;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+      xbtn.onclick = rebakeAllX;
+      panel.appendChild(xbtn);
+    }
+
+    hdr('— PRESETS —');
+    const PRESET_LABELS = {
+      1: 'Canyon Corridor 1',
+      2: 'Canyon Corridor 2',
+      3: 'Regular Canyon',
+      4: 'Straight Canyon',
+      5: 'EXPERIMENTAL (B)',
+    };
+    [1,2,3,4,5].forEach((mode) => {
+      const vals = _CANYON_PRESETS[mode];
+      if (!vals) return;
+      const pb = document.createElement('button');
+      pb.textContent = PRESET_LABELS[mode] || ('Preset '+mode);
+      pb.style.cssText = 'margin-top:6px;width:100%;background:#0a1a0a;border:1px solid #00ff88;color:#00ff88;padding:5px;cursor:pointer;font-family:monospace;font-size:11px;border-radius:2px;';
+      pb.onclick = () => {
+        _canyonMode = mode;
+        // Clear mutually-exclusive palette flags first so preset doesn't inherit stale state
+        _canyonTuner._allCyan = false;
+        _canyonTuner._allDark = false;
+        Object.assign(_canyonTuner, vals);
+        _canyonSinePhase = 0;
+        if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+        // Manual tuner spawn: bypass JL sequencer, no spawner pause
+        _canyonExiting = false;
+        _canyonActive = true;
+        _canyonManual = true;
+        _jlCorridor.active = false;
+        state.corridorGapCenter = state.shipX || 0;
+        if (typeof dirLight !== 'undefined' && dirLight) {
+          if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+          dirLight.intensity = 0;
+        }
+        _createCanyonWalls();
+        buildPanel();
+      };
+      panel.appendChild(pb);
+    });
+  }
+
+  // V key — toggle tuner panel independently of canyon state
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'v' && e.key !== 'V') return;
+    if (state.phase !== 'playing') return;
+    panelVisible = !panelVisible;
+    if (panelVisible) { buildPanel(); panel.style.display = 'block'; }
+    else panel.style.display = 'none';
+  });
+
+  // B key — toggle EXPERIMENTAL canyon (mode 5) for testing
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'b' && e.key !== 'B') return;
+    if (state.phase !== 'playing') return;
+    // If experimental canyon is running, stop it
+    if (_canyonMode === 5 && (_canyonActive || _canyonWalls)) {
+      if (_canyonWalls) _destroyCanyonWalls();
+      _canyonActive = false;
+      _canyonExiting = false;
+      _canyonManual = false;
+      _jlCorridor.active = false;
+      if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+        dirLight.intensity = _canyonSavedDirLight;
+        _canyonSavedDirLight = null;
+      }
+      _canyonMode = 0;
+      if (panelVisible) buildPanel();
+      return;
+    }
+    // Otherwise spawn experimental canyon (tear down any other canyon first)
+    const vals = _CANYON_PRESETS[5];
+    if (!vals) return;
+    _canyonMode = 5;
+    _canyonTuner._allCyan = false;
+    _canyonTuner._allDark = false;
+    Object.assign(_canyonTuner, vals);
+    _canyonSinePhase = 0;
+    if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+    _canyonExiting = false;
+    _canyonActive = true;
+    _canyonManual = true;
+    _jlCorridor.active = false;
+    state.corridorGapCenter = state.shipX || 0;
+    if (typeof dirLight !== 'undefined' && dirLight) {
+      if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+      dirLight.intensity = 0;
+    }
+    _createCanyonWalls();
+    if (panelVisible) buildPanel();
+  });
+
+  // K key — toggle L4-RECREATION canyon (bent-slab mode, experimental).
+  // Spawns Canyon Corridor 1 with _l4Recreation flag on — inner wall faces
+  // bend to trace L4 corridor sine math. Press K again to stop.
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'k' && e.key !== 'K') return;
+    if (state.phase !== 'playing') return;
+    // If L4-recreation canyon is running, stop it
+    if (_canyonTuner._l4Recreation && (_canyonActive || _canyonWalls)) {
+      if (_canyonWalls) _destroyCanyonWalls();
+      _canyonActive = false;
+      _canyonExiting = false;
+      _canyonManual = false;
+      _jlCorridor.active = false;
+      _canyonTuner._l4Recreation = false;
+      if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+        dirLight.intensity = _canyonSavedDirLight;
+        _canyonSavedDirLight = null;
+      }
+      _canyonMode = 0;
+      console.log('[L4-RECREATION] OFF');
+      if (panelVisible) buildPanel();
+      return;
+    }
+    // Otherwise spawn Canyon Corridor 1 + enable L4 recreation flag.
+    // Tear down any other canyon first.
+    const vals = _CANYON_PRESETS[1];
+    if (!vals) return;
+    _canyonMode = 1;
+    _canyonTuner._allCyan = false;
+    _canyonTuner._allDark = false;
+    Object.assign(_canyonTuner, vals);
+    // Flag ON AFTER preset apply (presets don't define it, so it stays off otherwise)
+    _canyonTuner._l4Recreation = true;
+    // L4 "KNIFE ARCHES" preset — user-confirmed settings from in-game tuning session.
+    // Produces overlapping jagged arches that form a tight tunnel with L4-style bend.
+    // Values below override C1 preset for L4 mode only; JL sequencer canyons untouched
+    // because _jlCanyonStart re-Object.assigns the preset dict on entry.
+    Object.assign(_canyonTuner, {
+      // Geometry
+      slabH: 55, slabThick: 60, cols: 5, rows: 6, disp: 2, snap: 1.5,
+      // Profile (X offsets per row)
+      footX: 26, sweepX: 20, midX: 0, crestX: 0,
+      // Materials
+      cyanEmi: 2, cyanRgh: 0.65,
+      darkCrkCount: 14, darkCrkBright: 1.95, darkRgh: 0.62,
+      darkClearcoat: 0.4, darkEmi: 0.9,
+      lightIntensity: 1.2,
+      // Corridor shape
+      entranceThick: 700, entranceSlabs: 3, spawnDepth: -250,
+      // Sine curves (non-L4 path — still set to user-confirmed values for consistency)
+      sineIntensity: 0.28, sineAmp: 120, sinePeriod: 330, sineSpeed: 1,
+      // Live
+      scrollSpeed: 1,
+      // L4-specific (halfX 21.5 = narrow-ish gap; slabW 40 = long slabs)
+      _l4HalfX: 21.5, _l4AmpScale: 1.0, _l4RampCompress: 1.45, _l4SlabW: 40,
+    });
+    // Mirror L4 tuners into the live fields the bake pipeline reads
+    _canyonTuner.halfXOverride = _canyonTuner._l4HalfX;
+    _canyonTuner.slabW         = _canyonTuner._l4SlabW;
+    _canyonSinePhase = 0;
+    _l4RowsElapsed = 0;
+    if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+    _canyonExiting = false;
+    _canyonActive = true;
+    _canyonManual = true;
+    _jlCorridor.active = false;
+    state.corridorGapCenter = state.shipX || 0;
+    if (typeof dirLight !== 'undefined' && dirLight) {
+      if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+      dirLight.intensity = 0;
+    }
+    _createCanyonWalls();
+    console.log('[L4-RECREATION] ON — flag=true, mode=1, rampCompress=' + _canyonTuner._l4RampCompress + ', ampScale=' + _canyonTuner._l4AmpScale);
+    if (panelVisible) buildPanel();
+  });
+})();
+
+function updateDebug() {
+  if (!dbgVisible) return;
+  dbgFrames++;
+  const now = performance.now();
+  if (now - dbgLast >= 1000) {
+    dbgFps = Math.round(dbgFrames * 1000 / (now - dbgLast));
+    dbgFrames = 0;
+    dbgLast = now;
+    const info = renderer.info;
+    dbgEl.textContent = [
+      `FPS:${dbgFps}  Phase:${state.phase}`,
+      `Draw:${info.render.calls}  Tri:${info.render.triangles}`,
+      `Obs:${activeObstacles.length}  PU:${activePowerups.length}`,
+      `Score:${state.score}  Lvl:${state.currentLevelIdx + 1}  Spd:${state.speed.toFixed(1)}`,
+    ].join('\n');
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER LOOP
+// ═══════════════════════════════════════════════════
+// ─── DEBUG HITBOX HELPERS ────────────────────────────────────────────────────
+const _dbgShipBox = (() => {
+  const geo = new THREE.BoxGeometry(2.2, 2.2, 2.2);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true, depthTest: false });
+  const m = new THREE.Mesh(geo, mat);
+  m.renderOrder = 999;
+  m.visible = false;
+  scene.add(m);
+  return m;
+})();
+
+const _dbgObsPool = [];
+function _getDbgObsBox() {
+  for (const b of _dbgObsPool) if (!b.visible) return b;
+  const geo = new THREE.BoxGeometry(2.2, 2.2, 2.2);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff2222, wireframe: true, depthTest: false });
+  const m = new THREE.Mesh(geo, mat);
+  m.renderOrder = 998;
+  scene.add(m);
+  _dbgObsPool.push(m);
+  return m;
+}
+
+function updateDebugHitboxes() {
+  // Hide all obs boxes first
+  for (const b of _dbgObsPool) b.visible = false;
+
+  if (!debugHitboxes || state.phase !== 'playing') {
+    _dbgShipBox.visible = false;
+    return;
+  }
+
+  // Ship box — colDist=1.55 so full span is 3.1 on X and Z
+  _dbgShipBox.visible = true;
+  _dbgShipBox.position.set(shipGroup.position.x, shipGroup.position.y, shipGroup.position.z);
+
+  // Obstacle boxes
+  for (const obs of activeObstacles) {
+    const b = _getDbgObsBox();
+    b.visible = true;
+    b.position.copy(obs.position);
+  }
+}
+
+// ── FPS counter (admin-only) ──
+let _fpsOn = false, _fpsFrames = 0, _fpsLastTime = performance.now(), _lastDC = 0;
+const _fpsEl = document.getElementById('fps-overlay');
+(function setupFpsToggle() {
+  const btn = document.getElementById('fps-toggle');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    _fpsOn = !_fpsOn;
+    btn.setAttribute('aria-pressed', _fpsOn);
+    btn.classList.toggle('on', _fpsOn);
+    if (_fpsEl) _fpsEl.classList.toggle('hidden', !_fpsOn);
+    _fpsFrames = 0; _fpsLastTime = performance.now();
+  });
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  PERF DIAGNOSTIC — per-frame timing + event tags + first-render detection
 //  Purpose: pinpoint source of freeze (shader compile vs geo upload vs GC vs
 //  draw-call spike vs JS stall). Pure additive — no behavior changes.

@@ -71,10 +71,9 @@ function _triggerRetryWithSweep() {
     // Start the sweep
     _retrySweepActive = true;
     _retrySweepT = 0;
-    // Retry SFX: tech-device one-shot (504ms) plays at sweep start.
+    // Retry SFX: tech-device one-shot (504ms) at sweep start, warp AFTER it finishes.
     const _retrySfx = document.getElementById('retry-tech-sfx');
     if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
-    // Layered warp: plays AFTER retry-tech (504ms) finishes — no overlap.
     setTimeout(() => {
       const _retryWarp = document.getElementById('retry-warp-sfx');
       if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.55; _retryWarp.play().catch(()=>{}); }
