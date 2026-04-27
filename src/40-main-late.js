@@ -150,6 +150,11 @@ function playPickup(typeIdx) {
   const freqs = [880, 1100, 660, 990, 770, 660];
   playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.45);
   setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.35), 80);
+  // Quiet electron-burst layer on power-up smash.
+  const _pb = document.getElementById('powerup-burst-sfx');
+  if (_pb) {
+    try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {}
+  }
 }
 
 // ═══════════════════════════════════════════════════
