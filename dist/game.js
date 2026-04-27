@@ -547,9 +547,12 @@ const SHIP_SKINS = [
   { name: 'CIPHER',        price: 1400, description: 'Voronoi hull plating' },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
     glbConfig: { posX:0, posY:-0.590, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
-      nozzleL:[-0.560,-0.050,4.960], nozzleR:[0.530,-0.060,4.900],
+      // MK II hull is identical to default RUNNER in Z-extent (rear face exit at world Z≈5.08)
+      // and engine bay width — derived from spaceship_01.glb geometry (2026-04-27).
+      // posY -0.590 vs default -0.500 → y-offset = -0.027 world (0.09 × 0.30 shipGroup scale).
+      nozzleL:[-0.450, 0.023, 5.100], nozzleR:[0.450, 0.023, 5.100],
       miniL:[-0.150,0.060,5.100], miniR:[0.160,0.060,5.100], thrusterScale:1.0,
-      portraitNozzleL:[-0.520,-0.020,5.020], portraitNozzleR:[0.570,-0.130,4.860],
+      portraitNozzleL:[-0.450,0.023,5.100], portraitNozzleR:[0.450,0.023,5.100],
       portraitMiniL:[-0.140,0.070,5.100], portraitMiniR:[0.160,0.070,5.100],
       matchDefault: true },
     laserConfig: { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 } },
