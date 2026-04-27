@@ -304,7 +304,7 @@ window.addEventListener('keydown', e => {
     state._introLiftActive = true;
     state._introLiftTimer = 0;
     const _roar = document.getElementById('engine-roar');
-    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.22; _roar.play().catch(()=>{}); }
+    if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
     const _baseline = document.getElementById('engine-baseline');
     if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
   }
@@ -597,7 +597,7 @@ window.addEventListener('keyup', e => {
         state._introLiftActive = true;
         state._introLiftTimer = 0;
         const _roar = document.getElementById('engine-roar');
-        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.22; _roar.play().catch(()=>{}); }
+        if (_roar && !state.muted) { _roar.currentTime = 0; _roar.volume = 0.4; _roar.play().catch(()=>{}); }
         const _baseline = document.getElementById('engine-baseline');
         if (_baseline && !state.muted) { _baseline.currentTime = 0; _baseline.volume = 0.5; _baseline.play().catch(()=>{}); }
         return;
