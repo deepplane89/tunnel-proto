@@ -4520,13 +4520,4 @@ html, body {
   letter-spacing: 2px;
   color: rgba(180, 220, 255, 0.75);
 }
-.rotate-prompt-hint {
-  font-size: 10px;
-  letter-spacing: 1.5px;
-  color: rgba(255, 200, 120, 0.85);
-  margin-top: 14px;
-  max-width: 280px;
-  line-height: 1.5;
-  display: none;
-}
-.rotate-prompt.show-hint .rotate-prompt-hint { display: block; }
+

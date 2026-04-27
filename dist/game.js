@@ -20728,7 +20728,6 @@ const _fpsEl = document.getElementById('fps-overlay');
   'use strict';
 
   const LS_KEY = 'jh_orientationPref';
-  const HINT_DELAY_MS = 5000;
 
   const _isMobileLike = (
     /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
@@ -20781,32 +20780,22 @@ const _fpsEl = document.getElementById('fps-overlay');
   // ── Rotate prompt overlay ──
   const _promptEl = document.getElementById('rotate-prompt');
   const _promptSub = document.getElementById('rotate-prompt-sub');
-  let _promptHintTimer = 0;
 
   function _showPrompt(targetOrientation) {
     if (!_promptEl) return;
     if (_promptSub) _promptSub.textContent = 'to play in ' + targetOrientation;
     _promptEl.classList.remove('hidden');
     _promptEl.setAttribute('aria-hidden', 'false');
-    // After HINT_DELAY_MS, surface the rotation-lock hint (iOS edge case)
-    clearTimeout(_promptHintTimer);
-    _promptEl.classList.remove('show-hint');
-    _promptHintTimer = setTimeout(() => {
-      _promptEl.classList.add('show-hint');
-    }, HINT_DELAY_MS);
   }
   function _hidePrompt() {
     if (!_promptEl) return;
     _promptEl.classList.add('hidden');
     _promptEl.setAttribute('aria-hidden', 'true');
-    _promptEl.classList.remove('show-hint');
-    clearTimeout(_promptHintTimer);
   }
 
   // ── Orientation lock state ──
   let _lockedOrientation = null;     // 'landscape' | 'portrait' | null
   let _gateResolve = null;           // callback fired when gate is satisfied
-  let _wasPausedByGate = false;      // true if mid-game pause was triggered by us
 
   // Try the native API first; resolve true if locked, false if rejected/unsupported.
   async function _tryNativeLock(orientation) {
@@ -20854,7 +20843,6 @@ const _fpsEl = document.getElementById('fps-overlay');
   // Release the lock — call from returnToTitle().
   window.__orientationRelease = function release() {
     _lockedOrientation = null;
-    _wasPausedByGate = false;
     _gateResolve = null;
     _hidePrompt();
     _tryNativeUnlock();
@@ -20884,19 +20872,15 @@ const _fpsEl = document.getElementById('fps-overlay');
     if (!inPlay) return;
 
     if (current !== _lockedOrientation) {
-      // Drifted off — pause and show prompt
+      // Drifted off — pause game and show rotate prompt.
       if (phase === 'playing' && typeof togglePause === 'function') {
-        try { togglePause(); _wasPausedByGate = true; } catch (_) {}
+        try { togglePause(); } catch (_) {}
       }
       _showPrompt(_lockedOrientation);
     } else {
-      // Back on — hide prompt and resume if we paused
+      // Back on the locked orientation — hide the prompt, but DO NOT resume.
+      // User explicitly resumes via the pause overlay.
       _hidePrompt();
-      if (_wasPausedByGate && (typeof state !== 'undefined' && state.phase === 'paused') &&
-          typeof togglePause === 'function') {
-        try { togglePause(); } catch (_) {}
-      }
-      _wasPausedByGate = false;
     }
   }
 
