@@ -12100,6 +12100,12 @@ function spawnObstacles() {
 //  LEVEL CHECKING
 // ═══════════════════════════════════════════════════
 function checkLevelUp() {
+  // Tutorial: freeze level progression entirely. Score still accumulates but
+  // currentLevelIdx must not auto-advance, otherwise campaign L4 cone-sine
+  // corridor (and L5 zipper/corridor) bleed into tutorial when score crosses
+  // their thresholds. Tutorial scripts that explicitly set currentLevelIdx
+  // are unaffected — this only blocks the score-driven auto-advance.
+  if (state._tutorialActive) return;
   // Death Run: cycle vibes instead of normal level progression
   if (state.isDeathRun) {
     // Sequencer handles vibes + speed until endless mode
