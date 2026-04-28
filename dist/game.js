@@ -17189,12 +17189,10 @@ function checkDeathRunSpeed() {
   // Don't override speed during corridor arc (arc sets its own per-stage speed)
   if (state._arcActive && state._arcQueue && state._arcQueue[state._arcStage] && state._arcQueue[state._arcStage].speed) return;
 
-  // Player level starting speed bonus
-  const _plvl = loadPlayerLevel();
-  const _lvlSpeedBonus = _plvl >= 15 ? 1.5 : _plvl >= 10 ? 1.4 : _plvl >= 5 ? 1.2 : 1.0;
-
-  // Speed synced to bands (tiers) — minimum is level bonus
+  // Speed synced to bands (tiers).
   // T1-2: base, T3: 1.2x, T4: 1.35x (corridors), T5: 1.5x, T6: 1.85x (max)
+  // The _drSpeedFloor ratchet (set when L5 corridor fires) raises the effective
+  // floor mid-run — see Math.max calls below.
   const BAND_SPEED = [1.0, 1.0, 1.2, 1.35, 1.5, 1.85]; // idx 0-5 = Band 1-6
 
   // Get current band index (respects forced band override)
@@ -17207,7 +17205,7 @@ function checkDeathRunSpeed() {
     }
   }
   const _floor = state._drSpeedFloor || 0;
-  const targetSpeedMult = Math.max(_lvlSpeedBonus, _floor, BAND_SPEED[Math.min(_curBand, BAND_SPEED.length - 1)]);
+  const targetSpeedMult = Math.max(_floor, BAND_SPEED[Math.min(_curBand, BAND_SPEED.length - 1)]);
   const targetTier = _curBand;
 
   // Defer speed change if mechanic is active
@@ -17218,7 +17216,7 @@ function checkDeathRunSpeed() {
   if (safeForSpeed && state._pendingSpeedTier != null && state._pendingSpeedTier >= 0) {
     const prevTier = state.deathRunSpeedTier;
     state.deathRunSpeedTier = state._pendingSpeedTier;
-    state.speed = BASE_SPEED * Math.max(_lvlSpeedBonus, _floor, BAND_SPEED[Math.min(state.deathRunSpeedTier, BAND_SPEED.length - 1)]);
+    state.speed = BASE_SPEED * Math.max(_floor, BAND_SPEED[Math.min(state.deathRunSpeedTier, BAND_SPEED.length - 1)]);
     state._pendingSpeedTier = -1;
     if (state.deathRunSpeedTier > prevTier && prevTier >= 0 && !state.introActive) {
       state._drSpeedBeepFired = false;
