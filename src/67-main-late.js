@@ -3968,16 +3968,14 @@ function update(dt) {
                      keys['ArrowRight'] || keys['d'] || keys['D'] ||
                      touch.left || touch.right;
 
-  // ── Camera roll: tilt screen when steering (like original Jet Slalom)
-  // camera.rotation is in LOCAL space of pivot; lookAt was already set at init.
-  // We only change rotation.z (roll) — x/y stay from the initial lookAt.
-  // Driven from _bankVelX (same source as ship-roll) so the horizon tracks
-  // the ship's bank exactly. Lerp speed mirrors the ship's bank smoothing
-  // (steering vs return) so they unwind together.
-  const _maxVelNow = _maxVelBase + _snap * _maxVelSnap;
-  const targetCamRoll = -(_bankVelX / Math.max(1, _maxVelNow)) * _camRollAmt;
-  const _camLerpSpeed = isSteering ? _camRollSmooth : _camRollReturnSmooth;
-  cameraRoll = THREE.MathUtils.lerp(cameraRoll, targetCamRoll, Math.min(1, _camLerpSpeed * dt));
+  // ── Camera roll: horizon mirrors ship roll exactly.
+  // Drive cameraRoll from shipGroup.rotation.z (the actual rendered ship angle)
+  // multiplied by _camRollAmt. This guarantees horizon and jet are locked:
+  //   bank max = 0  → ship doesn't roll → camera doesn't roll
+  //   bank max > 0  → horizon tilts proportionally to the ship's actual angle
+  // No separate lerp — the ship-roll lerp (bank smooth / bank return smooth)
+  // already smooths the source, and the camera just shadows it.
+  cameraRoll = shipGroup.rotation.z * _camRollAmt;
   camera.rotation.z = cameraRoll;
 
   // Cancel wobble instantly when player starts steering again
