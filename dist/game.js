@@ -6737,7 +6737,8 @@ let _bankReturnSmoothing = 8;    // bank lerp speed when NOT steering — contro
 let _bankReturnRate = 12;        // how fast _bankVelX (the roll TARGET) decays back to 0 when not steering; bigger = target zeroes faster
 let _camRollAmt = 0.4;           // camera-roll multiplier — horizon mirrors shipGroup.rotation.z * this; ship-roll lerp already handles smoothing
 let _horizonDeadzone = 0.4;      // 0..1 — fraction of |bank|/_bankMax before horizon engages (Race-the-Sun feel: ship banks alone, then world joins). 0 = continuous coupling.
-let _horizonCurve = 1.5;         // exponent applied to bank ratio above the deadzone. 1.0=linear, 2.0=ease-in (committed turns), 0.5=ease-out.
+let _horizonCurve = 1.5;         // (no-op since smoothstep refactor) retained as tuner field; reserved for future smoothstep↔linear blend.
+let _horizonCatchUpRate = 6;     // per-second lerp rate for cameraRoll → target. Higher = horizon catches up to ship faster. 6 → ~90% in ~380ms at 60fps. Decouples horizon-tilt time-rate from ship-bank time-rate so the deadzone clear doesn't materialize the target tilt in one frame.
 let _bankVelX = 0;               // smoothed velocity used for banking (decoupled from drift physics)
 let _wobbleMaxAmp = 0.05;        // max wobble amplitude (baked)
 let _wobbleDamping = 10;         // how fast wobble fades (baked)
@@ -18452,39 +18453,42 @@ function update(dt) {
                      keys['ArrowRight'] || keys['d'] || keys['D'] ||
                      touch.left || touch.right;
 
-  // ── Camera roll: horizon follows ship bank with deadzone + smoothstep.
-  // Race-the-Sun model: small banks leave the horizon flat (no nausea on micro-
-  // corrections); past _horizonDeadzone the world starts tilting via smoothstep
-  // (3t²−2t³): zero slope at deadzone exit (no jerk-in) AND zero slope at full
-  // bank (no jerk-out). Earlier pow(t, _horizonCurve) version was math-smooth at
-  // the deadzone boundary but accelerated into full tilt, which read as a snap
-  // because _bankNorm itself moves fast in time. Smoothstep flattens the top.
-  // At full bank (|rot.z| === _bankMax) the horizon hits shipGroup.rotation.z *
-  // _camRollAmt, matching the old linear coupling at the rail (so _camRollAmt's
-  // perceptual meaning at the high end is preserved).
-  // _horizonCurve is retained as a tuner field but is a no-op now — kept so the
-  // tuner panel and preset records don't break. May be repurposed later as a
-  // smoothstep ↔ linear blend.
+  // ── Camera roll: horizon follows ship bank with deadzone + smoothstep + temporal lerp.
+  //
+  // Three layers, in order:
+  //   1. _bankNorm = |ship roll| / _steerBankRadMax (normalized [0,1])
+  //   2. _horizT = curved response (deadzone + smoothstep) → the *target* horizon ratio
+  //   3. cameraRoll lerps toward target at _horizonCatchUpRate per second
+  //
+  // Why the lerp matters: without it, the deadzone-skipped portion of the response
+  // materializes the moment _bankNorm crosses the deadzone. Even with smoothstep
+  // making the curve C¹-smooth at the boundary, the camera target jumps from 0 to
+  // ~0.5 in one frame (because _bankNorm is already high by the time the deadzone
+  // clears). The temporal lerp decouples horizon-tilt time-rate from ship-bank
+  // time-rate — deadzone clear means "horizon STARTS catching up", not "horizon
+  // is now where it would have been."
+  //
+  // _horizonCurve is retained as a tuner field but is a no-op now — reserved for
+  // future smoothstep ↔ linear blend.
   //   _horizonDeadzone = 0  → smoothstep across full range (Wipeout-ish)
   //   _horizonDeadzone > 0  → deadzone + smoothstep above it (Race-the-Sun)
+  let _cameraRollTarget = 0;
   if (_steerBankRadMax > 0) {
     const _bankAbs = Math.abs(shipGroup.rotation.z);
     let _bankNorm = _bankAbs / _steerBankRadMax;
     if (_bankNorm > 1) _bankNorm = 1;
     let _horizT = 0;
     if (_horizonDeadzone <= 0) {
-      // No deadzone: smoothstep across the entire bank range.
       _horizT = _bankNorm * _bankNorm * (3 - 2 * _bankNorm);
     } else if (_bankNorm > _horizonDeadzone) {
-      // Active region: remap [deadzone, 1] → [0, 1] then smoothstep.
       const _t = (_bankNorm - _horizonDeadzone) / (1 - _horizonDeadzone);
       _horizT = _t * _t * (3 - 2 * _t);
     }
     const _bankSign = shipGroup.rotation.z < 0 ? -1 : 1;
-    cameraRoll = _bankSign * _horizT * _steerBankRadMax * _camRollAmt;
-  } else {
-    cameraRoll = 0;
+    _cameraRollTarget = _bankSign * _horizT * _steerBankRadMax * _camRollAmt;
   }
+  // Temporal lerp toward target at bounded rate. dt-correct — same feel at any framerate.
+  cameraRoll += (_cameraRollTarget - cameraRoll) * Math.min(1, _horizonCatchUpRate * dt);
   camera.rotation.z = cameraRoll;
 
   // Cancel wobble instantly when player starts steering again
