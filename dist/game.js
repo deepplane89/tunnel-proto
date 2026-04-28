@@ -5614,7 +5614,33 @@ normal = _dbn;`;
   shipGroup.add(shipUnderlightWarm);
 
   shipModelLoaded = true;
-  // Re-apply selected skin now that model + materials are ready
+
+  // ── PRELOAD ALT-GLB SHIPS BEHIND THE LOAD GATE ────────────────────────
+  // Without this, alt-GLB ships (e.g. RUNNER MK II) only start loading when
+  // applySkin() runs for them — which can be after the loading screen has
+  // already faded out, leaving the user staring at a black silhouette while
+  // shaders compile lazily on the first rendered frame at gameplay-start.
+  // Register every alt-GLB ship as a gate promise so the loader bar genuinely
+  // waits for them. _loadAltShip is cached: when applySkin later asks for the
+  // same glbFile it hits the cached path and is instant.
+  if (window.__loadGate) {
+    SHIP_SKINS.forEach((skinDef, idx) => {
+      if (!skinDef || !skinDef.glbFile) return;
+      window.__loadGate.add('alt_ship_' + idx, new Promise(res => {
+        // Hard timeout so a missing/broken alt GLB never blocks boot.
+        const _to = setTimeout(() => res(), 12000);
+        try {
+          _loadAltShip(skinDef.glbFile, skinDef, () => {
+            clearTimeout(_to);
+            res();
+          });
+        } catch (e) { clearTimeout(_to); res(); }
+      }));
+    });
+  }
+
+  // Re-apply selected skin now that model + materials are ready. For alt-GLB
+  // skins this hits the cache populated by the preload above (instant).
   applySkin(loadSkinData().selected);
 
   // ── TITLE SHIP PREVIEW: clone into separate titleScene ──────────────
@@ -6083,6 +6109,15 @@ function _loadAltShip(glbFile, skinDef, callback) {
     _altShipMixer = mixer;
     _altShipClips = clips;
     _altShipCurrentFile = glbFile;
+    // Prewarm: compile this alt ship's shaders NOW (model is in scene graph
+    // but invisible) so the materials don't compile lazily on first render at
+    // gameplay-start — lazy compilation showed up as a black silhouette frame
+    // for MK Runner on cold loads.
+    try {
+      if (typeof renderer !== 'undefined' && renderer && typeof scene !== 'undefined') {
+        renderer.compile(scene, camera);
+      }
+    } catch (e) { /* non-fatal */ }
     console.log('[ALT SHIP] Loaded:', glbFile);
     if (callback) callback();
   }, undefined, (err) => {
