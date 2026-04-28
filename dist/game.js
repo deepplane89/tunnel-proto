@@ -18508,24 +18508,6 @@ function update(dt) {
   }
   const wobbleOffset = Math.sin(state.wobblePhase) * state.wobbleAmp * state.wobbleDir;
 
-  // ── DIAG: JUICE wobble trace (throttled to ~4Hz). Remove after diagnosis. ──
-  if (window._wobbleDiag !== false) {
-    state._wbgDiagT = (state._wbgDiagT || 0) + dt;
-    if (state._wbgDiagT > 0.25) {
-      state._wbgDiagT = 0;
-      console.log('[JUICE]',
-        '_wobbleMaxAmp=', _wobbleMaxAmp.toFixed(4),
-        '| state.wobbleAmp=', state.wobbleAmp.toFixed(4),
-        '| wobbleOffset=', wobbleOffset.toFixed(4),
-        '| ship.rot.z(pre-lerp)=', shipGroup.rotation.z.toFixed(4),
-        '| isSteering=', isSteering ? 1 : 0,
-        '| bankNorm=', _steerBankRadMax > 0 ? (Math.abs(shipGroup.rotation.z)/_steerBankRadMax).toFixed(3) : '0',
-        '| shipVelX=', state.shipVelX.toFixed(2),
-        '| isDR=', state.isDeathRun ? 1 : 0,
-        '| lvlIdx=', state.currentLevelIdx);
-    }
-  }
-
   // Bank the ship — track velocity while steering, decay to flat on release.
   if (isSteering) {
     // If steering opposes current bank, zero it so we never dip the wrong way
@@ -22423,13 +22405,19 @@ function buildSkinTunerSliders() {
     // Scales wobble, overshoot, and micro-turbulence together. Absolute mapping
     // (not multiplicative) because some baselines are zero.
     function _applyJuice(m) {
-      _wobbleMaxAmp = _macroLerp3(m, 0.0,  0.05, 0.15);
-      _overshootAmt = _macroLerp3(m, 0.0,  0.0,  0.5);
-      _turbulence   = _macroLerp3(m, 0.0,  0.0,  0.15);
+      _wobbleMaxAmp  = _macroLerp3(m, 0.0,  0.05, 0.15);
+      // Damping inverts with JUICE — high JUICE = low damping = wobble rings
+      // longer. At 20 the wobble dies in ~150ms (surgical); at 4 it rings
+      // for ~750ms (alive). 10 = baked legacy feel.
+      _wobbleDamping = _macroLerp3(m, 20,   10,   4);
+      _overshootAmt  = _macroLerp3(m, 0.0,  0.0,  0.5);
+      _turbulence    = _macroLerp3(m, 0.0,  0.0,  0.15);
       // Hard-clamp to fine-slider ranges.
-      if (_wobbleMaxAmp > 0.5) _wobbleMaxAmp = 0.5;
-      if (_overshootAmt > 1.0) _overshootAmt = 1.0;
-      if (_turbulence   > 0.5) _turbulence   = 0.5;
+      if (_wobbleMaxAmp  > 0.5) _wobbleMaxAmp  = 0.5;
+      if (_wobbleDamping < 1)   _wobbleDamping = 1;
+      if (_wobbleDamping > 30)  _wobbleDamping = 30;
+      if (_overshootAmt  > 1.0) _overshootAmt  = 1.0;
+      if (_turbulence    > 0.5) _turbulence    = 0.5;
     }
 
     // Apply on initial build so live values reflect current macro state.
