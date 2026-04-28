@@ -3983,28 +3983,9 @@ function update(dt) {
   cameraRoll = shipGroup.rotation.z * _camRollAmt;
   camera.rotation.z = cameraRoll;
 
-  // Cancel any leftover release-wobble when the player STARTS steering again
-  // (transition-only — the held-turn micro-wobble below would be killed every
-  // frame if we cancelled on the steady-state isSteering signal).
-  if (!state.wasSteering && isSteering && state.wobbleAmp > 0) state.wobbleAmp = 0;
-
-
-  // Held-turn micro-wobble — a faint shimmy while the ship is committed to a
-  // bank, scaled by JUICE via _wobbleMaxAmp. Gives the ship some life mid-turn
-  // (the release wobble below is the headline event — this is the undertone).
-  // Gated on bank magnitude so straights stay perfectly calm.
-  if (isSteering && _wobbleMaxAmp > 0.001) {
-    const bankNorm = Math.min(1, Math.abs(shipGroup.rotation.z) / Math.max(0.05, _steerBankRadMax));
-    if (bankNorm > 0.3) {
-      const microAmp = _wobbleMaxAmp * 0.15 * ((bankNorm - 0.3) / 0.7);
-      if (state.wobbleAmp < microAmp) {
-        state.wobbleAmp = microAmp;
-        state.wobbleDir = Math.sign(shipGroup.rotation.z) || 1;
-        // Keep phase ticking so we get a true sine shimmy, not a static offset.
-        // (wobbleAmp decay path below also advances phase, but only once amp > 0.001.)
-      }
-    }
-  }
+  // Cancel wobble instantly when player starts steering again. Wobble is a
+  // RELEASE-ONLY effect — if you start steering again mid-decay, it stops.
+  if (isSteering && state.wobbleAmp > 0) state.wobbleAmp = 0;
 
   // Wobble kicks in at L2+ in campaign, or always in DR (uses deathRunSpeedTier instead of currentLevelIdx)
   if (state.wasSteering && !isSteering && (state.isDeathRun || state.currentLevelIdx >= 1) && Math.abs(state.shipVelX) > 4) {
