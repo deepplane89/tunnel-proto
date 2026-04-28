@@ -5488,37 +5488,50 @@ function applySkin(skinIndex) {
   activeSkinIdx = skinIndex;
 
   // ── Alt GLB ship handling ──
+  // Alt-GLB skins (e.g. RUNNER MK II) take a different path for the MODEL
+  // (load GLB + show alt mesh), but they STILL need the per-skin lighting block
+  // below to run — otherwise lights inherit whatever the last hard-coded skin
+  // (e.g. Black Mamba sunLight=0, Cipher rim=0) left them at, which causes the
+  // ship to render deep black on next entry. Fall through to the lighting
+  // block; alt-GLB skins land in the default `else` which restores Runner
+  // lighting values.
   const skinDef = SHIP_SKINS[skinIndex];
-  if (skinDef && skinDef.glbFile) {
+  const _isAltGlb = !!(skinDef && skinDef.glbFile);
+  if (_isAltGlb) {
     _loadAltShip(skinDef.glbFile, skinDef, () => { _showAltShip(); });
-    return;
   } else {
     _hideAltShip();
   }
 
-  if (skinIndex >= _prebuiltSkins.length) skinIndex = 0;
-  const skinMap = _prebuiltSkins[skinIndex];
-  shipHullMats.length = 0;
-  shipEdgeLines.length = 0;
+  // Material work below operates on the DEFAULT _shipModel — only run it for
+  // hard-coded (non-GLB) skins. Alt-GLB skins handle their own materials inside
+  // _loadAltShip / _showAltShip.
+  if (!_isAltGlb) {
+    if (skinIndex >= _prebuiltSkins.length) skinIndex = 0;
+    const skinMap = _prebuiltSkins[skinIndex];
+    shipHullMats.length = 0;
+    shipEdgeLines.length = 0;
 
-  window._shipModel.traverse(child => {
-    if (!child.isMesh) return;
-    const name = child.userData._origMatName;
-    if (name === 'fire' || name === 'fire1') return;
+    window._shipModel.traverse(child => {
+      if (!child.isMesh) return;
+      const name = child.userData._origMatName;
+      if (name === 'fire' || name === 'fire1') return;
 
-    const mat = skinMap.get(child.uuid);
-    if (mat) child.material = mat;
+      const mat = skinMap.get(child.uuid);
+      if (mat) child.material = mat;
 
-    // Rebuild hull/edge refs
-    if (name === 'rocket_base' || (name !== 'white' && name !== 'gray' && name !== 'nozzle' && name !== 'rocket_light' && name !== 'fire' && name !== 'fire1')) {
-      shipHullMats.push(child.material);
-    }
-    if (name === 'rocket_light' || name === 'white') {
-      shipEdgeLines.push(child.material);
-    }
-  });
+      // Rebuild hull/edge refs
+      if (name === 'rocket_base' || (name !== 'white' && name !== 'gray' && name !== 'nozzle' && name !== 'rocket_light' && name !== 'fire' && name !== 'fire1')) {
+        shipHullMats.push(child.material);
+      }
+      if (name === 'rocket_light' || name === 'white') {
+        shipEdgeLines.push(child.material);
+      }
+    });
+  }
 
-  // Per-skin lighting overrides (0=Runner, 1=Ghost, 2=Black Mamba, 3=Cipher)
+  // Per-skin lighting overrides (0=Runner, 1=Ghost, 2=Black Mamba, 3=Cipher,
+  // 4=RUNNER MK II falls into default `else` for Runner lighting)
   if (skinIndex === 2) {
     // Black Mamba: custom dramatic lighting
     dirLight.intensity = 2.37; dirLight.position.set(0.20, -16.70, -19.20);
