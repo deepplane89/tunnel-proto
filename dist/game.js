@@ -8402,6 +8402,10 @@ function _canyonXAtZ(worldZ) {
   return base + T.sineAmp * I * Math.sin(phase);
 }
 
+// Set DEBUG_CANYON=true to re-enable per-2s canyon diagnostics (CANYON SNAP,
+// COVERAGE, NEAREST, NEAR LEFT/RIGHT). Off in production to avoid GC-jank from
+// per-frame string allocs while a canyon is active.
+const DEBUG_CANYON = false;
 let _canyonDbgFrame = 0;
 let _canyonDbgLastNearestRot = null;
 let _canyonDbgStartTime = null;
@@ -8430,25 +8434,13 @@ function _debugCanyonNearShip() {
   });
 }
 
-function _recycleSlabDebug(m, k, slabZ, spacing, side) {
-  const centerOld  = _canyonXAtZ(slabZ);
-  const centerNext = _canyonXAtZ(slabZ + spacing);
-  const dx = centerNext - centerOld;
-  const yawStatic  = Math.atan2(dx, spacing) * 180 / Math.PI;
-  const rowsAhead  = Math.round((3.9 - slabZ) / spacing);
-  const rotCenter  = _canyonPredictCenter(rowsAhead);
-  const rotNext    = _canyonPredictCenter(rowsAhead + 1);
-  const yawPhase   = Math.atan2(rotNext - rotCenter, spacing) * 180 / Math.PI;
-  console.log(`[RECYCLE ${k.toUpperCase()}] slabZ=${slabZ.toFixed(1)} yawStatic=${yawStatic.toFixed(1)} yawPhase=${yawPhase.toFixed(1)} rowsAhead=${rowsAhead} side=${side}`);
-}
-
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || (!_canyonActive && !_canyonExiting)) return;
   _canyonDbgFrame++;
   if (_canyonDbgStartTime === null) _canyonDbgStartTime = performance.now();
   const _canyonElapsed = ((performance.now() - _canyonDbgStartTime) / 1000).toFixed(1);
 
-  if (_canyonDbgFrame % 120 === 0) {
+  if (DEBUG_CANYON && _canyonDbgFrame % 120 === 0) {
     const spacing2 = _canyonWalls._spacing;
     // Global snapshot
     console.log(`[CANYON SNAP] t=${_canyonElapsed}s frame=${_canyonDbgFrame} phase=${_canyonSinePhase.toFixed(3)} pool=${_canyonWalls.left.length}`);
@@ -21150,6 +21142,10 @@ function animate() {
   _perfDiag.frameEnd();
 }
 
+// Set DEBUG_LAT=true to re-enable lateral-spawn diagnostic logs (LAT_DIAG,
+// LAT_FIRE, LT_LAT_DIAG, LT_LAT_FIRE). Off in production.
+const DEBUG_LAT = false;
+
 // ═══════════════════════════════════════════════════
 //  RESIZE
 // ═══════════════════════════════════════════════════
@@ -24289,7 +24285,7 @@ function _tickAsteroidSpawner(dt) {
     window._latTickCounter = (window._latTickCounter || 0) + 1;
     if (window._latTickCounter >= 180) {
       window._latTickCounter = 0;
-      console.log('[LAT_DIAG] tick jl=1 le='+(T.lateralEnabled?1:0)
+      if (DEBUG_LAT) console.log('[LAT_DIAG] tick jl=1 le='+(T.lateralEnabled?1:0)
         +' rT='+_jlRampTime.toFixed(1)
         +' corridor='+(_jlCorridor && _jlCorridor.active?1:0)
         +' obs='+(window._jlActiveObstacleType||'-')
@@ -24309,8 +24305,7 @@ function _tickAsteroidSpawner(dt) {
       const offset = T.lateralMinOff + Math.random() * (T.lateralMaxOff - T.lateralMinOff);
       const sx = (state && state.shipX) || 0;
       const spawnX = sx + side * offset;
-      // DIAG: always log lateral fires
-      console.log('[LAT_FIRE] obs='+(window._jlActiveObstacleType||'ast')
+      if (DEBUG_LAT) console.log('[LAT_FIRE] obs='+(window._jlActiveObstacleType||'ast')
         +' rT='+_jlRampTime.toFixed(1)+' side='+side+' x='+spawnX.toFixed(1));
       if (window._perfDiag) window._perfDiag.tag('lateral_ast');
       _spawnAsteroid(spawnX);
@@ -26109,7 +26104,7 @@ window._jlDebug = {
       window._ltLatTickCounter = (window._ltLatTickCounter || 0) + 1;
       if (window._ltLatTickCounter >= 180) {
         window._ltLatTickCounter = 0;
-        console.log('[LT_LAT_DIAG] en='+(_LT_LATERAL.enabled?1:0)
+        if (DEBUG_LAT) console.log('[LT_LAT_DIAG] en='+(_LT_LATERAL.enabled?1:0)
           +' jl='+(state._jetLightningMode?1:0)
           +' rT='+(typeof _jlRampTime!=='undefined'?_jlRampTime.toFixed(1):'?')
           +' obs='+(window._jlActiveObstacleType||'-')
@@ -26153,7 +26148,7 @@ window._jlDebug = {
     const predictedX = sx + velX * travelTime * _LT_LATERAL.leadFactor;
     const spawnX    = predictedX + side * offset;
     const landZ     = (_shipZ ? _shipZ() : 3.9) + _LT_LATERAL.spawnZ;
-    console.log('[LT_LAT_FIRE] sx='+sx.toFixed(1)+' velX='+velX.toFixed(2)
+    if (DEBUG_LAT) console.log('[LT_LAT_FIRE] sx='+sx.toFixed(1)+' velX='+velX.toFixed(2)
       +' predX='+predictedX.toFixed(1)+' side='+side+' off='+offset.toFixed(1)
       +' spawnX='+spawnX.toFixed(1)+' landZ='+landZ.toFixed(1));
     if (window._perfDiag) window._perfDiag.tag('lateral_lt');
