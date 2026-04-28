@@ -6465,14 +6465,16 @@ let _pitchForwardMax = 0.15;     // radians — nose dip on speed increase
 let _pitchBackMax = 0.08;        // radians — nose up on deceleration
 let _pitchSmoothing = 5;         // higher = snappier
 let _pitchSmooth = 0;
-let _yawMax = 0.06;              // radians — nose turn into steering direction
-let _yawSmoothing = 4;           // higher = snappier yaw response
+let _yawMax = 0.01;              // radians — nose turn into steering direction
+let _yawSmoothing = 12;          // higher = snappier yaw response
 let _yawSmooth = 0;
 let _bankMax = 0.03;             // bank multiplier (baked from tuner)
 let _bankSmoothing = 8;          // bank lerp speed while steering — into-the-bank response
 let _bankReturnSmoothing = 8;    // bank lerp speed when NOT steering — controls how snappy the return-to-flat lerp is (decoupled from going-into-bank feel)
 let _bankReturnRate = 12;        // how fast _bankVelX (the roll TARGET) decays back to 0 when not steering; bigger = target zeroes faster
 let _camRollAmt = 0.4;           // camera-roll multiplier — horizon mirrors shipGroup.rotation.z * this; ship-roll lerp already handles smoothing
+let _horizonDeadzone = 0.4;      // 0..1 — fraction of |bank|/_bankMax before horizon engages (Race-the-Sun feel: ship banks alone, then world joins). 0 = continuous coupling.
+let _horizonCurve = 1.5;         // exponent applied to bank ratio above the deadzone. 1.0=linear, 2.0=ease-in (committed turns), 0.5=ease-out.
 let _bankVelX = 0;               // smoothed velocity used for banking (decoupled from drift physics)
 let _wobbleMaxAmp = 0.05;        // max wobble amplitude (baked)
 let _wobbleDamping = 10;         // how fast wobble fades (baked)

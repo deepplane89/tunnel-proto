@@ -3968,14 +3968,31 @@ function update(dt) {
                      keys['ArrowRight'] || keys['d'] || keys['D'] ||
                      touch.left || touch.right;
 
-  // ── Camera roll: horizon mirrors ship roll exactly.
-  // Drive cameraRoll from shipGroup.rotation.z (the actual rendered ship angle)
-  // multiplied by _camRollAmt. This guarantees horizon and jet are locked:
-  //   bank max = 0  → ship doesn't roll → camera doesn't roll
-  //   bank max > 0  → horizon tilts proportionally to the ship's actual angle
-  // No separate lerp — the ship-roll lerp (bank smooth / bank return smooth)
-  // already smooths the source, and the camera just shadows it.
-  cameraRoll = shipGroup.rotation.z * _camRollAmt;
+  // ── Camera roll: horizon follows ship bank with deadzone + curve.
+  // Race-the-Sun model: small banks leave the horizon flat (no nausea on micro-
+  // corrections); past _horizonDeadzone the world starts tilting and ramps via
+  // _horizonCurve (exponent: 1.0=linear, >1=ease-in/committed, <1=ease-out).
+  // At full bank (|rot.z| === _bankMax) the horizon hits shipGroup.rotation.z * _camRollAmt,
+  // matching the old linear coupling at the rail (so _camRollAmt's perceptual
+  // meaning at the high end is preserved).
+  //   _horizonDeadzone = 0  → linear coupling (Wipeout)
+  //   _horizonDeadzone > 0  → deadzone+curve (Race-the-Sun)
+  if (_bankMax > 0) {
+    const _bankAbs = Math.abs(shipGroup.rotation.z);
+    let _bankNorm = _bankAbs / _bankMax;
+    if (_bankNorm > 1) _bankNorm = 1;
+    let _horizT = 0;
+    if (_horizonDeadzone <= 0) {
+      _horizT = _bankNorm;
+    } else if (_bankNorm > _horizonDeadzone) {
+      _horizT = (_bankNorm - _horizonDeadzone) / (1 - _horizonDeadzone);
+      if (_horizonCurve !== 1) _horizT = Math.pow(_horizT, _horizonCurve);
+    }
+    const _bankSign = shipGroup.rotation.z < 0 ? -1 : 1;
+    cameraRoll = _bankSign * _horizT * _bankMax * _camRollAmt;
+  } else {
+    cameraRoll = 0;
+  }
   camera.rotation.z = cameraRoll;
 
   // Cancel wobble instantly when player starts steering again

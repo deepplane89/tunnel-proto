@@ -6727,14 +6727,16 @@ let _pitchForwardMax = 0.15;     // radians — nose dip on speed increase
 let _pitchBackMax = 0.08;        // radians — nose up on deceleration
 let _pitchSmoothing = 5;         // higher = snappier
 let _pitchSmooth = 0;
-let _yawMax = 0.06;              // radians — nose turn into steering direction
-let _yawSmoothing = 4;           // higher = snappier yaw response
+let _yawMax = 0.01;              // radians — nose turn into steering direction
+let _yawSmoothing = 12;          // higher = snappier yaw response
 let _yawSmooth = 0;
 let _bankMax = 0.03;             // bank multiplier (baked from tuner)
 let _bankSmoothing = 8;          // bank lerp speed while steering — into-the-bank response
 let _bankReturnSmoothing = 8;    // bank lerp speed when NOT steering — controls how snappy the return-to-flat lerp is (decoupled from going-into-bank feel)
 let _bankReturnRate = 12;        // how fast _bankVelX (the roll TARGET) decays back to 0 when not steering; bigger = target zeroes faster
 let _camRollAmt = 0.4;           // camera-roll multiplier — horizon mirrors shipGroup.rotation.z * this; ship-roll lerp already handles smoothing
+let _horizonDeadzone = 0.4;      // 0..1 — fraction of |bank|/_bankMax before horizon engages (Race-the-Sun feel: ship banks alone, then world joins). 0 = continuous coupling.
+let _horizonCurve = 1.5;         // exponent applied to bank ratio above the deadzone. 1.0=linear, 2.0=ease-in (committed turns), 0.5=ease-out.
 let _bankVelX = 0;               // smoothed velocity used for banking (decoupled from drift physics)
 let _wobbleMaxAmp = 0.05;        // max wobble amplitude (baked)
 let _wobbleDamping = 10;         // how fast wobble fades (baked)
@@ -18448,14 +18450,31 @@ function update(dt) {
                      keys['ArrowRight'] || keys['d'] || keys['D'] ||
                      touch.left || touch.right;
 
-  // ── Camera roll: horizon mirrors ship roll exactly.
-  // Drive cameraRoll from shipGroup.rotation.z (the actual rendered ship angle)
-  // multiplied by _camRollAmt. This guarantees horizon and jet are locked:
-  //   bank max = 0  → ship doesn't roll → camera doesn't roll
-  //   bank max > 0  → horizon tilts proportionally to the ship's actual angle
-  // No separate lerp — the ship-roll lerp (bank smooth / bank return smooth)
-  // already smooths the source, and the camera just shadows it.
-  cameraRoll = shipGroup.rotation.z * _camRollAmt;
+  // ── Camera roll: horizon follows ship bank with deadzone + curve.
+  // Race-the-Sun model: small banks leave the horizon flat (no nausea on micro-
+  // corrections); past _horizonDeadzone the world starts tilting and ramps via
+  // _horizonCurve (exponent: 1.0=linear, >1=ease-in/committed, <1=ease-out).
+  // At full bank (|rot.z| === _bankMax) the horizon hits shipGroup.rotation.z * _camRollAmt,
+  // matching the old linear coupling at the rail (so _camRollAmt's perceptual
+  // meaning at the high end is preserved).
+  //   _horizonDeadzone = 0  → linear coupling (Wipeout)
+  //   _horizonDeadzone > 0  → deadzone+curve (Race-the-Sun)
+  if (_bankMax > 0) {
+    const _bankAbs = Math.abs(shipGroup.rotation.z);
+    let _bankNorm = _bankAbs / _bankMax;
+    if (_bankNorm > 1) _bankNorm = 1;
+    let _horizT = 0;
+    if (_horizonDeadzone <= 0) {
+      _horizT = _bankNorm;
+    } else if (_bankNorm > _horizonDeadzone) {
+      _horizT = (_bankNorm - _horizonDeadzone) / (1 - _horizonDeadzone);
+      if (_horizonCurve !== 1) _horizT = Math.pow(_horizT, _horizonCurve);
+    }
+    const _bankSign = shipGroup.rotation.z < 0 ? -1 : 1;
+    cameraRoll = _bankSign * _horizT * _bankMax * _camRollAmt;
+  } else {
+    cameraRoll = 0;
+  }
   camera.rotation.z = cameraRoll;
 
   // Cancel wobble instantly when player starts steering again
@@ -22264,16 +22283,22 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeHeader('FEEL (MACRO)', '#0fa'));
 
     // Per-macro state lives on window so it survives panel rebuilds.
-    if (window._feelMacro == null) window._feelMacro = { resp: 0.5, settle: 0.5, world: 0.5 };
+    // Migration: old shape had {resp, settle, world}; new shape adds bank/horizon/juice.
+    if (window._feelMacro == null) window._feelMacro = { resp: 0.5, settle: 0.5, bank: 0.5, horizon: 0.5, juice: 0.5 };
+    if (window._feelMacro.bank    == null) window._feelMacro.bank    = 0.5;
+    if (window._feelMacro.horizon == null) window._feelMacro.horizon = (window._feelMacro.world != null ? window._feelMacro.world : 0.5);
+    if (window._feelMacro.juice   == null) window._feelMacro.juice   = 0.5;
     const _fm = window._feelMacro;
 
     // Description text
     const _macroDesc = document.createElement('div');
     _macroDesc.style.cssText = 'color:#0fa;font-size:10px;margin:2px 0 6px 0;font-family:monospace;line-height:1.4;opacity:0.85;';
     _macroDesc.innerHTML =
-      '<b>RESPONSIVENESS</b>: how fast ship reacts to input (floaty↔twitchy)<br>' +
+      '<b>RESPONSIVENESS</b>: input→motion latency (floaty↔twitchy)<br>' +
       '<b>SETTLE</b>: how fast motion stops after release (long glide↔parks on dime)<br>' +
-      '<b>WORLD COUPLING</b>: how much world tilts/yaws/pitches with ship (Star Fox↔immersive)';
+      '<b>BANK INTENSITY</b>: how hard the ship rolls into a turn<br>' +
+      '<b>HORIZON COUPLING</b>: rigid → committed-turn (Race-the-Sun) → continuous (Wipeout)<br>' +
+      '<b>JUICE</b>: organic feedback — wobble, overshoot, micro-drift (surgical↔alive)';
     panel.appendChild(_macroDesc);
 
     // Helper: linear scale around baseline. macro=0.5 -> 1.0x baseline.
@@ -22283,16 +22308,23 @@ function buildSkinTunerSliders() {
       if (macro <= 0.5) return lowMul + (1.0 - lowMul) * (macro / 0.5);
       return 1.0 + (highMul - 1.0) * ((macro - 0.5) / 0.5);
     }
+    // Helper: smooth interp across three control points (low, mid, high).
+    // macro=0→0.5 lerps low→mid; 0.5→1.0 lerps mid→high.
+    function _macroLerp3(macro, low, mid, high) {
+      if (macro <= 0.5) return low + (mid - low) * (macro / 0.5);
+      return mid + (high - mid) * ((macro - 0.5) / 0.5);
+    }
 
     // RESPONSIVENESS — input→motion latency. Higher = snappier.
     // Affects accel curves AND smoothing rates (higher smoothing = faster lerp).
+    // Yaw smoothing baseline is 12 (matches new global default).
     function _applyResponsiveness(m) {
       const k = _macroScale(m, 0.4, 1.6); // 0.0 → 0.4x, 0.5 → 1.0x, 1.0 → 1.6x
       _accelBase     = 22 * k;
       _accelSnap     = 52 * k;
       _bankSmoothing = 8  * k;
       _pitchSmoothing= 5  * k;
-      _yawSmoothing  = 4  * k;
+      _yawSmoothing  = 12 * k;
     }
 
     // SETTLE — how long motion lingers after input release.
@@ -22306,27 +22338,46 @@ function buildSkinTunerSliders() {
       _overshootDamp       = 6    * k;
     }
 
-    // WORLD COUPLING — how strongly the visual world reacts with the ship.
-    // Higher = horizon tilts more, ship visually rolls/yaws/pitches harder.
-    // Lower = ship rolls but world stays fixed (Star Fox feel).
-    function _applyWorldCoupling(m) {
-      const k = _macroScale(m, 0.2, 1.6); // 0.0 → 0.2x, 0.5 → 1.0x, 1.0 → 1.6x
-      _camRollAmt      = 0.4  * k;
-      _bankMax         = 0.04 * k;
-      _yawMax          = 0.06 * k;
-      _pitchForwardMax = 0.15 * k;
-      _pitchBackMax    = 0.08 * k;
-      // Hard-clamp to slider ranges so the fine sliders below never read
-      // an out-of-range value (they'd visually pin to the rail).
-      if (_camRollAmt > 1.0)  _camRollAmt  = 1.0;
-      if (_bankMax    > 0.06) _bankMax     = 0.06;
-      if (_yawMax     > 0.2)  _yawMax      = 0.2;
+    // BANK INTENSITY — how hard the ship rolls into a turn.
+    // Scales _bankMax only. Yaw/pitch tilts are deliberately subtle and stay
+    // on their fine sliders (yaw baseline is now 0.01, very gentle).
+    function _applyBankIntensity(m) {
+      const k = _macroScale(m, 0.4, 1.6); // 0.0 → 0.4x, 0.5 → 1.0x, 1.0 → 1.6x
+      _bankMax = 0.04 * k;
+      if (_bankMax > 0.06) _bankMax = 0.06; // hard-clamp to fine-slider range
+    }
+
+    // HORIZON COUPLING — how the world reacts to the ship's bank.
+    // Three control points along the perceptual axis:
+    //   m=0.0 → rigid horizon (Star Fox SNES): _camRollAmt=0
+    //   m=0.5 → committed-turn (Race-the-Sun):  _camRollAmt=0.4, deadzone=0.4, curve=1.5
+    //   m=1.0 → continuous-coupled (Wipeout):    _camRollAmt=0.64, deadzone=0,  curve=1.0
+    function _applyHorizonCoupling(m) {
+      _camRollAmt      = _macroLerp3(m, 0.0,  0.4, 0.64);
+      _horizonDeadzone = _macroLerp3(m, 0.6,  0.4, 0.0);
+      _horizonCurve    = _macroLerp3(m, 2.0,  1.5, 1.0);
+      if (_camRollAmt > 1.0) _camRollAmt = 1.0; // hard-clamp to fine-slider range
+    }
+
+    // JUICE — organic feedback layer. Surgical (0) ↔ alive (1).
+    // Scales wobble, overshoot, and micro-turbulence together. Absolute mapping
+    // (not multiplicative) because some baselines are zero.
+    function _applyJuice(m) {
+      _wobbleMaxAmp = _macroLerp3(m, 0.0,  0.05, 0.15);
+      _overshootAmt = _macroLerp3(m, 0.0,  0.0,  0.5);
+      _turbulence   = _macroLerp3(m, 0.0,  0.0,  0.15);
+      // Hard-clamp to fine-slider ranges.
+      if (_wobbleMaxAmp > 0.5) _wobbleMaxAmp = 0.5;
+      if (_overshootAmt > 1.0) _overshootAmt = 1.0;
+      if (_turbulence   > 0.5) _turbulence   = 0.5;
     }
 
     // Apply on initial build so live values reflect current macro state.
     _applyResponsiveness(_fm.resp);
     _applySettle(_fm.settle);
-    _applyWorldCoupling(_fm.world);
+    _applyBankIntensity(_fm.bank);
+    _applyHorizonCoupling(_fm.horizon);
+    _applyJuice(_fm.juice);
 
     panel.appendChild(makeSlider('RESPONSIVENESS', _fm.resp, 0, 1, 0.02, v => {
       _fm.resp = v; _applyResponsiveness(v);
@@ -22334,17 +22385,23 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('SETTLE', _fm.settle, 0, 1, 0.02, v => {
       _fm.settle = v; _applySettle(v);
     }, '#0fa'));
-    panel.appendChild(makeSlider('WORLD COUPLING', _fm.world, 0, 1, 0.02, v => {
-      _fm.world = v; _applyWorldCoupling(v);
+    panel.appendChild(makeSlider('BANK INTENSITY', _fm.bank, 0, 1, 0.02, v => {
+      _fm.bank = v; _applyBankIntensity(v);
+    }, '#0fa'));
+    panel.appendChild(makeSlider('HORIZON COUPLING', _fm.horizon, 0, 1, 0.02, v => {
+      _fm.horizon = v; _applyHorizonCoupling(v);
+    }, '#0fa'));
+    panel.appendChild(makeSlider('JUICE', _fm.juice, 0, 1, 0.02, v => {
+      _fm.juice = v; _applyJuice(v);
     }, '#0fa'));
 
-    // RESET MACROS button — snap all three back to 0.5 (neutral baseline).
+    // RESET MACROS button — snap all five back to 0.5 (neutral baseline).
     const _macroResetBtn = document.createElement('button');
-    _macroResetBtn.textContent = '↺ RESET MACROS → NEUTRAL (0.5)';
+    _macroResetBtn.textContent = '⇺ RESET MACROS → NEUTRAL (0.5)';
     _macroResetBtn.style.cssText = 'background:none;border:1px solid #0fa;color:#0fa;padding:3px 8px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:6px 0 4px;width:100%;text-align:left;';
     _macroResetBtn.onclick = () => {
-      _fm.resp = 0.5; _fm.settle = 0.5; _fm.world = 0.5;
-      _applyResponsiveness(0.5); _applySettle(0.5); _applyWorldCoupling(0.5);
+      _fm.resp = 0.5; _fm.settle = 0.5; _fm.bank = 0.5; _fm.horizon = 0.5; _fm.juice = 0.5;
+      _applyResponsiveness(0.5); _applySettle(0.5); _applyBankIntensity(0.5); _applyHorizonCoupling(0.5); _applyJuice(0.5);
       build(); // rebuild panel so all sliders (macro AND fine) reflect new values
       panel.style.display = 'block';
     };
