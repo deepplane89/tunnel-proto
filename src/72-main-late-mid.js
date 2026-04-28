@@ -1067,10 +1067,11 @@ function buildSkinTunerSliders() {
 
     // Per-macro state lives on window so it survives panel rebuilds.
     // Migration: old shape had {resp, settle, world}; new shape adds bank/horizon/juice.
-    if (window._feelMacro == null) window._feelMacro = { resp: 0.5, settle: 0.5, bank: 0.5, horizon: 0.5, juice: 0.5 };
+    if (window._feelMacro == null) window._feelMacro = { resp: 0.5, latSpd: 0.5, settle: 0.5, bank: 0.5, horizon: 0.5, juice: 0.5 };
     if (window._feelMacro.bank    == null) window._feelMacro.bank    = 0.5;
     if (window._feelMacro.horizon == null) window._feelMacro.horizon = (window._feelMacro.world != null ? window._feelMacro.world : 0.5);
     if (window._feelMacro.juice   == null) window._feelMacro.juice   = 0.5;
+    if (window._feelMacro.latSpd  == null) window._feelMacro.latSpd  = 0.5;
     const _fm = window._feelMacro;
 
     // Description text
@@ -1105,15 +1106,32 @@ function buildSkinTunerSliders() {
     }
 
     // RESPONSIVENESS — input→motion latency. Higher = snappier.
-    // Affects accel curves AND smoothing rates (higher smoothing = faster lerp).
-    // Yaw smoothing baseline is 12 (matches new global default).
+    // Drives lateral ACCELERATION (how immediately the ship reacts to input)
+    // plus the smoothing rates for bank/pitch/yaw lerps. Per Swink (Game Feel),
+    // accel and max-speed are perceptually distinct dimensions — max-speed is
+    // its own LATERAL SPEED macro below. Baselines match in-game gameplay
+    // values (DR/JL/tutorial/campaign all set _accelBase=60, _accelSnap=100),
+    // so m=0.5 (k=1.0) leaves gameplay accel unchanged.
     function _applyResponsiveness(m) {
       const k = _macroScale(m, 0.4, 1.6); // 0.0 → 0.4x, 0.5 → 1.0x, 1.0 → 1.6x
-      _accelBase     = 22 * k;
-      _accelSnap     = 52 * k;
-      _bankSmoothing = 8  * k;
-      _pitchSmoothing= 5  * k;
-      _yawSmoothing  = 12 * k;
+      _accelBase     = 60  * k;
+      _accelSnap     = 100 * k;
+      _bankSmoothing = 8   * k;
+      _pitchSmoothing= 5   * k;
+      _yawSmoothing  = 12  * k;
+    }
+
+    // LATERAL SPEED — how far across the canyon the ship can slide.
+    // Scales _maxVelBase / _maxVelSnap (lateral velocity ceiling).
+    // m=0.5 (k=1.0) matches in-game baseline (13/23). m=1.0 (k=1.6)
+    // gives Wipeout-tier reach (20.8/36.8). m=0 (k=0.4) is mushy/glide.
+    // Separated from RESPONSIVENESS per Swink: high accel + low max-vel
+    // feels twitchy-but-precise (Star Fox), high accel + high max-vel
+    // feels committed-slide (Wipeout) — same RESP, totally different ship.
+    function _applyLateralSpeed(m) {
+      const k = _macroScale(m, 0.4, 1.6);
+      _maxVelBase = 13 * k;
+      _maxVelSnap = 23 * k;
     }
 
     // SETTLE — how long motion lingers after input release.
@@ -1170,6 +1188,7 @@ function buildSkinTunerSliders() {
 
     // Apply on initial build so live values reflect current macro state.
     _applyResponsiveness(_fm.resp);
+    _applyLateralSpeed(_fm.latSpd);
     _applySettle(_fm.settle);
     _applyBankIntensity(_fm.bank);
     _applyHorizonCoupling(_fm.horizon);
@@ -1193,21 +1212,26 @@ function buildSkinTunerSliders() {
     //              horizon (NOT continuous — too much on a phone), moderate inertia.
     //   JET     — Jet Horizon house style: ~30° bank, RtS deadzone horizon (committed
     //              turns), snappy-but-not-twitchy, light juice. The neutral default.
+    // Each preset also pins _handlingDriftOverride so JUICE has a chance to land
+    // regardless of player level. drift=0 → no wobble (RAIL); drift=0.8 → loose (WIPEOUT).
+    // Manual slider edits + reset clear the override (back to player-level driven).
     const _PRESETS = {
-      GLIDE:   { resp: 0.40, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35 },
-      RAIL:    { resp: 0.70, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05 },
-      WIPEOUT: { resp: 0.50, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40 },
-      JET:     { resp: 0.65, settle: 0.60, bank: 0.50, horizon: 0.50, juice: 0.30 },
+      GLIDE:   { resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.6 },
+      RAIL:    { resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.0 },
+      WIPEOUT: { resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.8 },
+      JET:     { resp: 0.65, latSpd: 0.55, settle: 0.60, bank: 0.50, horizon: 0.50, juice: 0.30, drift: 0.5 },
     };
     if (window._feelMacro._presetName === undefined) window._feelMacro._presetName = null;
     function _applyPreset(name) {
       const p = _PRESETS[name];
       if (!p) return;
-      _fm.resp = p.resp; _fm.settle = p.settle; _fm.bank = p.bank;
+      _fm.resp = p.resp; _fm.latSpd = p.latSpd; _fm.settle = p.settle; _fm.bank = p.bank;
       _fm.horizon = p.horizon; _fm.juice = p.juice;
       _fm._presetName = name;
-      _applyResponsiveness(p.resp); _applySettle(p.settle);
+      _applyResponsiveness(p.resp); _applyLateralSpeed(p.latSpd); _applySettle(p.settle);
       _applyBankIntensity(p.bank); _applyHorizonCoupling(p.horizon); _applyJuice(p.juice);
+      // Pin handling-drift so preset is source of truth for ship feel.
+      _handlingDriftOverride = p.drift;
       build(); panel.style.display = 'block';
     }
     const _presetRow = document.createElement('div');
@@ -1235,20 +1259,26 @@ function buildSkinTunerSliders() {
     });
     panel.appendChild(_presetRow);
 
+    // Manual slider edit drops out of preset mode AND releases the drift override
+    // (back to player-level handling tier).
+    function _exitPresetMode() { _fm._presetName = null; _handlingDriftOverride = -1; }
     panel.appendChild(makeSlider('RESPONSIVENESS', _fm.resp, 0, 1, 0.02, v => {
-      _fm.resp = v; _fm._presetName = null; _applyResponsiveness(v);
+      _fm.resp = v; _exitPresetMode(); _applyResponsiveness(v);
+    }, '#0fa'));
+    panel.appendChild(makeSlider('LATERAL SPEED', _fm.latSpd, 0, 1, 0.02, v => {
+      _fm.latSpd = v; _exitPresetMode(); _applyLateralSpeed(v);
     }, '#0fa'));
     panel.appendChild(makeSlider('SETTLE', _fm.settle, 0, 1, 0.02, v => {
-      _fm.settle = v; _fm._presetName = null; _applySettle(v);
+      _fm.settle = v; _exitPresetMode(); _applySettle(v);
     }, '#0fa'));
     panel.appendChild(makeSlider('BANK INTENSITY', _fm.bank, 0, 1, 0.02, v => {
-      _fm.bank = v; _fm._presetName = null; _applyBankIntensity(v);
+      _fm.bank = v; _exitPresetMode(); _applyBankIntensity(v);
     }, '#0fa'));
     panel.appendChild(makeSlider('HORIZON COUPLING', _fm.horizon, 0, 1, 0.02, v => {
-      _fm.horizon = v; _fm._presetName = null; _applyHorizonCoupling(v);
+      _fm.horizon = v; _exitPresetMode(); _applyHorizonCoupling(v);
     }, '#0fa'));
     panel.appendChild(makeSlider('JUICE', _fm.juice, 0, 1, 0.02, v => {
-      _fm.juice = v; _fm._presetName = null; _applyJuice(v);
+      _fm.juice = v; _exitPresetMode(); _applyJuice(v);
     }, '#0fa'));
 
     // RESET MACROS button — snap all five back to 0.5 (neutral baseline).
@@ -1256,9 +1286,10 @@ function buildSkinTunerSliders() {
     _macroResetBtn.textContent = '⇺ RESET MACROS → NEUTRAL (0.5)';
     _macroResetBtn.style.cssText = 'background:none;border:1px solid #0fa;color:#0fa;padding:3px 8px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:6px 0 4px;width:100%;text-align:left;';
     _macroResetBtn.onclick = () => {
-      _fm.resp = 0.5; _fm.settle = 0.5; _fm.bank = 0.5; _fm.horizon = 0.5; _fm.juice = 0.5;
+      _fm.resp = 0.5; _fm.latSpd = 0.5; _fm.settle = 0.5; _fm.bank = 0.5; _fm.horizon = 0.5; _fm.juice = 0.5;
       _fm._presetName = null;
-      _applyResponsiveness(0.5); _applySettle(0.5); _applyBankIntensity(0.5); _applyHorizonCoupling(0.5); _applyJuice(0.5);
+      _handlingDriftOverride = -1; // release pin → player-level drift returns
+      _applyResponsiveness(0.5); _applyLateralSpeed(0.5); _applySettle(0.5); _applyBankIntensity(0.5); _applyHorizonCoupling(0.5); _applyJuice(0.5);
       build(); // rebuild panel so all sliders (macro AND fine) reflect new values
       panel.style.display = 'block';
     };
