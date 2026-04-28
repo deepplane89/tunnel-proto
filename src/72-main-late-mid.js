@@ -1162,20 +1162,70 @@ function buildSkinTunerSliders() {
     _applyHorizonCoupling(_fm.horizon);
     _applyJuice(_fm.juice);
 
+    // ── PRESETS row ──────────────────────────────────────────────────
+    // Four hand-tuned macro snapshots covering perceptually distinct flavors.
+    // Each preset sets all 5 macros + refreshes the panel so all sliders
+    // (macro AND fine) reflect the new live values.
+    //   GLIDE   — low-g arcade flight (No Man's Sky / RtS default)
+    //   RAIL    — surgical shmup, rigid horizon (Star Fox SNES)
+    //   WIPEOUT — heavy futuristic racer, dramatic coupling (Wipeout HD)
+    //   JET     — Jet Horizon house style (RtS deadzone, balanced)
+    const _PRESETS = {
+      GLIDE:   { resp: 0.35, settle: 0.30, bank: 0.65, horizon: 0.65, juice: 0.65 },
+      RAIL:    { resp: 0.85, settle: 0.85, bank: 0.45, horizon: 0.20, juice: 0.10 },
+      WIPEOUT: { resp: 0.55, settle: 0.40, bank: 1.00, horizon: 1.00, juice: 0.75 },
+      JET:     { resp: 0.65, settle: 0.55, bank: 0.55, horizon: 0.50, juice: 0.50 },
+    };
+    if (window._feelMacro._presetName === undefined) window._feelMacro._presetName = null;
+    function _applyPreset(name) {
+      const p = _PRESETS[name];
+      if (!p) return;
+      _fm.resp = p.resp; _fm.settle = p.settle; _fm.bank = p.bank;
+      _fm.horizon = p.horizon; _fm.juice = p.juice;
+      _fm._presetName = name;
+      _applyResponsiveness(p.resp); _applySettle(p.settle);
+      _applyBankIntensity(p.bank); _applyHorizonCoupling(p.horizon); _applyJuice(p.juice);
+      build(); panel.style.display = 'block';
+    }
+    const _presetRow = document.createElement('div');
+    _presetRow.style.cssText = 'display:flex;gap:4px;margin:4px 0 8px 0;';
+    const _presetMeta = [
+      ['GLIDE',   '#7bf', 'low-g arcade flight'],
+      ['RAIL',    '#ff7', 'surgical shmup, rigid horizon'],
+      ['WIPEOUT', '#f7a', 'heavy racer, dramatic coupling'],
+      ['JET',     '#0fa', 'Jet Horizon house style'],
+    ];
+    _presetMeta.forEach(([name, color, tip]) => {
+      const btn = document.createElement('button');
+      btn.textContent = name;
+      btn.title = tip;
+      const isActive = (_fm._presetName === name);
+      btn.style.cssText =
+        'flex:1;background:' + (isActive ? color + '33' : 'none') +
+        ';border:1px solid ' + color +
+        ';color:' + color +
+        ';padding:4px 6px;cursor:pointer;font-family:monospace;font-size:10px;' +
+        'border-radius:2px;font-weight:' + (isActive ? 'bold' : 'normal') + ';' +
+        'box-shadow:' + (isActive ? '0 0 6px ' + color + '88' : 'none') + ';';
+      btn.onclick = () => _applyPreset(name);
+      _presetRow.appendChild(btn);
+    });
+    panel.appendChild(_presetRow);
+
     panel.appendChild(makeSlider('RESPONSIVENESS', _fm.resp, 0, 1, 0.02, v => {
-      _fm.resp = v; _applyResponsiveness(v);
+      _fm.resp = v; _fm._presetName = null; _applyResponsiveness(v);
     }, '#0fa'));
     panel.appendChild(makeSlider('SETTLE', _fm.settle, 0, 1, 0.02, v => {
-      _fm.settle = v; _applySettle(v);
+      _fm.settle = v; _fm._presetName = null; _applySettle(v);
     }, '#0fa'));
     panel.appendChild(makeSlider('BANK INTENSITY', _fm.bank, 0, 1, 0.02, v => {
-      _fm.bank = v; _applyBankIntensity(v);
+      _fm.bank = v; _fm._presetName = null; _applyBankIntensity(v);
     }, '#0fa'));
     panel.appendChild(makeSlider('HORIZON COUPLING', _fm.horizon, 0, 1, 0.02, v => {
-      _fm.horizon = v; _applyHorizonCoupling(v);
+      _fm.horizon = v; _fm._presetName = null; _applyHorizonCoupling(v);
     }, '#0fa'));
     panel.appendChild(makeSlider('JUICE', _fm.juice, 0, 1, 0.02, v => {
-      _fm.juice = v; _applyJuice(v);
+      _fm.juice = v; _fm._presetName = null; _applyJuice(v);
     }, '#0fa'));
 
     // RESET MACROS button — snap all five back to 0.5 (neutral baseline).
@@ -1184,6 +1234,7 @@ function buildSkinTunerSliders() {
     _macroResetBtn.style.cssText = 'background:none;border:1px solid #0fa;color:#0fa;padding:3px 8px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:6px 0 4px;width:100%;text-align:left;';
     _macroResetBtn.onclick = () => {
       _fm.resp = 0.5; _fm.settle = 0.5; _fm.bank = 0.5; _fm.horizon = 0.5; _fm.juice = 0.5;
+      _fm._presetName = null;
       _applyResponsiveness(0.5); _applySettle(0.5); _applyBankIntensity(0.5); _applyHorizonCoupling(0.5); _applyJuice(0.5);
       build(); // rebuild panel so all sliders (macro AND fine) reflect new values
       panel.style.display = 'block';
