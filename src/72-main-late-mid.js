@@ -1439,6 +1439,7 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeHeader('BANK'));
     panel.appendChild(makeSlider('bank max', _bankMax, 0, 0.06, 0.001, v => _bankMax = v, '#0af'));
     panel.appendChild(makeSlider('bank smooth', _bankSmoothing, 1, 16, 0.5, v => _bankSmoothing = v, '#0af'));
+    panel.appendChild(makeSlider('bank return smooth', _bankReturnSmoothing, 1, 30, 0.5, v => _bankReturnSmoothing = v, '#0af'));
     panel.appendChild(makeSlider('horizon return', _bankReturnRate, 1, 30, 0.5, v => _bankReturnRate = v, '#0af'));
 
     // WOBBLE

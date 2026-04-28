@@ -4037,7 +4037,9 @@ function update(dt) {
   } else {
     const _rollTarget = targetRoll + wobbleOffset + _shipRotZOffset;
     const _crossingZero = (shipGroup.rotation.z > 0.01 && _rollTarget < -0.01) || (shipGroup.rotation.z < -0.01 && _rollTarget > 0.01);
-    const _lerpSpeed = _crossingZero ? _bankSmoothing * 3 : _bankSmoothing;
+    // Use _bankSmoothing while steering, _bankReturnSmoothing when releasing — decoupled into/out of bank.
+    const _baseSmooth = isSteering ? _bankSmoothing : _bankReturnSmoothing;
+    const _lerpSpeed = _crossingZero ? _baseSmooth * 3 : _baseSmooth;
     shipGroup.rotation.z = THREE.MathUtils.lerp(shipGroup.rotation.z, _rollTarget, Math.min(1, _lerpSpeed * dt));
   }
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──
