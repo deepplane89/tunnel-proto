@@ -650,11 +650,12 @@ function startDeathRun() {
 
   // DR physics override — startGame() resets _bankMax to the campaign
   // default (0.03) in its non-tutorial path. DR/main mode uses 0.04
-  // (tuned 2026-04-27 down from 0.06) for a calmer bank read.
+  // (LEGACY — _bankMax is no longer the bank cap; _steerBankRadMax is).
   // Re-applied here AFTER startGame() returns so the reset is overwritten
   // before DR gameplay begins. (DR owns its own physics; do not couple to
   // any other mode's setup.)
   _bankMax = 0.04;
+  _steerBankRadMax = 0.52;  // ~30° — JET preset default for main mode (DR)
 
   state.isDeathRun      = true;
   state.startedFromL1   = false;
@@ -3977,9 +3978,9 @@ function update(dt) {
   // meaning at the high end is preserved).
   //   _horizonDeadzone = 0  → linear coupling (Wipeout)
   //   _horizonDeadzone > 0  → deadzone+curve (Race-the-Sun)
-  if (_bankMax > 0) {
+  if (_steerBankRadMax > 0) {
     const _bankAbs = Math.abs(shipGroup.rotation.z);
-    let _bankNorm = _bankAbs / _bankMax;
+    let _bankNorm = _bankAbs / _steerBankRadMax;
     if (_bankNorm > 1) _bankNorm = 1;
     let _horizT = 0;
     if (_horizonDeadzone <= 0) {
@@ -3989,7 +3990,7 @@ function update(dt) {
       if (_horizonCurve !== 1) _horizT = Math.pow(_horizT, _horizonCurve);
     }
     const _bankSign = shipGroup.rotation.z < 0 ? -1 : 1;
-    cameraRoll = _bankSign * _horizT * _bankMax * _camRollAmt;
+    cameraRoll = _bankSign * _horizT * _steerBankRadMax * _camRollAmt;
   } else {
     cameraRoll = 0;
   }
@@ -4051,9 +4052,15 @@ function update(dt) {
   state._overshootPos += state._overshootVel * dt;
   state._overshootVel -= state._overshootPos * 40 * dt; // spring constant
   state._overshootVel *= Math.max(0, 1 - _overshootDamp * dt); // damping
-  const targetRoll = -_bankVelX * _bankMax + state._overshootPos;
+  // Bank target: normalized lateral velocity × hard angular cap.
+  // OLD bug: targetRoll = _bankVelX * _bankMax produced bank in *radians-per-velocity-unit*,
+  // so high-tier MAX_VEL (~22) × _bankMax (0.064) hit ~80°, way past the steering metaphor.
+  // NEW: normalize _bankVelX to [-1,1] against tiltMaxVel, then multiply by the angular cap.
+  // _steerBankRadMax (~0.52 rad / 30°) is a HARD radian limit, independent of speed tier.
+  const _velNorm = tiltMaxVel > 0 ? Math.max(-1, Math.min(1, _bankVelX / tiltMaxVel)) : 0;
+  const targetRoll = -_velNorm * _steerBankRadMax + state._overshootPos;
   if (state.rollAngle !== 0 || state.rollHeld) {
-    // Roll is active — drive rotation.z directly from rollAngle
+    // Roll is active — drive rotation.z directly from rollAngle (knife-edge / barrel roll, separate axis)
     shipGroup.rotation.z = state.rollAngle;
   } else {
     const _rollTarget = targetRoll + wobbleOffset + _shipRotZOffset;
@@ -4062,6 +4069,11 @@ function update(dt) {
     const _baseSmooth = isSteering ? _bankSmoothing : _bankReturnSmoothing;
     const _lerpSpeed = _crossingZero ? _baseSmooth * 3 : _baseSmooth;
     shipGroup.rotation.z = THREE.MathUtils.lerp(shipGroup.rotation.z, _rollTarget, Math.min(1, _lerpSpeed * dt));
+    // Hard-clamp the result so wobble + overshoot can't sneak past the cap.
+    // 1.15× headroom for transient overshoot kick. Only applied outside roll mode.
+    const _rollClamp = _steerBankRadMax * 1.15;
+    if (shipGroup.rotation.z >  _rollClamp) shipGroup.rotation.z =  _rollClamp;
+    if (shipGroup.rotation.z < -_rollClamp) shipGroup.rotation.z = -_rollClamp;
   }
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──
   const speedDelta = (state.speed - _prevSpeed) / dt;

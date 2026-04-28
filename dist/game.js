@@ -6730,7 +6730,8 @@ let _pitchSmooth = 0;
 let _yawMax = 0.01;              // radians — nose turn into steering direction
 let _yawSmoothing = 12;          // higher = snappier yaw response
 let _yawSmooth = 0;
-let _bankMax = 0.03;             // bank multiplier (baked from tuner)
+let _bankMax = 0.03;             // LEGACY — retained for compat with old tuner code/state. New steering bank uses _steerBankRadMax (a hard angular cap in radians).
+let _steerBankRadMax = 0.52;     // ~30° — hard angular cap for held-steering bank. Industry standard: aviation "bank angle warning" at 35°; modern Wipeout/F-Zero ~30–40°; Star Fox ~25°. Past ~45° breaks the mental model (brain reads it as a barrel roll, not a turn). The roll/knife-edge feature (state.rollAngle, capped ±π/2) is a separate axis.
 let _bankSmoothing = 8;          // bank lerp speed while steering — into-the-bank response
 let _bankReturnSmoothing = 8;    // bank lerp speed when NOT steering — controls how snappy the return-to-flat lerp is (decoupled from going-into-bank feel)
 let _bankReturnRate = 12;        // how fast _bankVelX (the roll TARGET) decays back to 0 when not steering; bigger = target zeroes faster
@@ -15132,11 +15133,12 @@ function startDeathRun() {
 
   // DR physics override — startGame() resets _bankMax to the campaign
   // default (0.03) in its non-tutorial path. DR/main mode uses 0.04
-  // (tuned 2026-04-27 down from 0.06) for a calmer bank read.
+  // (LEGACY — _bankMax is no longer the bank cap; _steerBankRadMax is).
   // Re-applied here AFTER startGame() returns so the reset is overwritten
   // before DR gameplay begins. (DR owns its own physics; do not couple to
   // any other mode's setup.)
   _bankMax = 0.04;
+  _steerBankRadMax = 0.52;  // ~30° — JET preset default for main mode (DR)
 
   state.isDeathRun      = true;
   state.startedFromL1   = false;
@@ -18459,9 +18461,9 @@ function update(dt) {
   // meaning at the high end is preserved).
   //   _horizonDeadzone = 0  → linear coupling (Wipeout)
   //   _horizonDeadzone > 0  → deadzone+curve (Race-the-Sun)
-  if (_bankMax > 0) {
+  if (_steerBankRadMax > 0) {
     const _bankAbs = Math.abs(shipGroup.rotation.z);
-    let _bankNorm = _bankAbs / _bankMax;
+    let _bankNorm = _bankAbs / _steerBankRadMax;
     if (_bankNorm > 1) _bankNorm = 1;
     let _horizT = 0;
     if (_horizonDeadzone <= 0) {
@@ -18471,7 +18473,7 @@ function update(dt) {
       if (_horizonCurve !== 1) _horizT = Math.pow(_horizT, _horizonCurve);
     }
     const _bankSign = shipGroup.rotation.z < 0 ? -1 : 1;
-    cameraRoll = _bankSign * _horizT * _bankMax * _camRollAmt;
+    cameraRoll = _bankSign * _horizT * _steerBankRadMax * _camRollAmt;
   } else {
     cameraRoll = 0;
   }
@@ -18533,9 +18535,15 @@ function update(dt) {
   state._overshootPos += state._overshootVel * dt;
   state._overshootVel -= state._overshootPos * 40 * dt; // spring constant
   state._overshootVel *= Math.max(0, 1 - _overshootDamp * dt); // damping
-  const targetRoll = -_bankVelX * _bankMax + state._overshootPos;
+  // Bank target: normalized lateral velocity × hard angular cap.
+  // OLD bug: targetRoll = _bankVelX * _bankMax produced bank in *radians-per-velocity-unit*,
+  // so high-tier MAX_VEL (~22) × _bankMax (0.064) hit ~80°, way past the steering metaphor.
+  // NEW: normalize _bankVelX to [-1,1] against tiltMaxVel, then multiply by the angular cap.
+  // _steerBankRadMax (~0.52 rad / 30°) is a HARD radian limit, independent of speed tier.
+  const _velNorm = tiltMaxVel > 0 ? Math.max(-1, Math.min(1, _bankVelX / tiltMaxVel)) : 0;
+  const targetRoll = -_velNorm * _steerBankRadMax + state._overshootPos;
   if (state.rollAngle !== 0 || state.rollHeld) {
-    // Roll is active — drive rotation.z directly from rollAngle
+    // Roll is active — drive rotation.z directly from rollAngle (knife-edge / barrel roll, separate axis)
     shipGroup.rotation.z = state.rollAngle;
   } else {
     const _rollTarget = targetRoll + wobbleOffset + _shipRotZOffset;
@@ -18544,6 +18552,11 @@ function update(dt) {
     const _baseSmooth = isSteering ? _bankSmoothing : _bankReturnSmoothing;
     const _lerpSpeed = _crossingZero ? _baseSmooth * 3 : _baseSmooth;
     shipGroup.rotation.z = THREE.MathUtils.lerp(shipGroup.rotation.z, _rollTarget, Math.min(1, _lerpSpeed * dt));
+    // Hard-clamp the result so wobble + overshoot can't sneak past the cap.
+    // 1.15× headroom for transient overshoot kick. Only applied outside roll mode.
+    const _rollClamp = _steerBankRadMax * 1.15;
+    if (shipGroup.rotation.z >  _rollClamp) shipGroup.rotation.z =  _rollClamp;
+    if (shipGroup.rotation.z < -_rollClamp) shipGroup.rotation.z = -_rollClamp;
   }
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──
   const speedDelta = (state.speed - _prevSpeed) / dt;
@@ -22301,6 +22314,12 @@ function buildSkinTunerSliders() {
       '<b>JUICE</b>: organic feedback — wobble, overshoot, micro-drift (surgical↔alive)';
     panel.appendChild(_macroDesc);
 
+    // Mobile-tuning hint — reminds why preset values look conservative on RESP/HORIZON/JUICE.
+    const _mobileHint = document.createElement('div');
+    _mobileHint.style.cssText = 'color:#888;font-size:9px;margin:0 0 6px 0;font-family:monospace;line-height:1.3;font-style:italic;';
+    _mobileHint.textContent = 'Presets tuned for mobile touch: digital input, ~50ms lag, close-screen vestibular sensitivity.';
+    panel.appendChild(_mobileHint);
+
     // Helper: linear scale around baseline. macro=0.5 -> 1.0x baseline.
     // macro=0.0 -> lowMul, macro=1.0 -> highMul.
     function _macroScale(macro, lowMul, highMul) {
@@ -22339,12 +22358,19 @@ function buildSkinTunerSliders() {
     }
 
     // BANK INTENSITY — how hard the ship rolls into a turn.
-    // Scales _bankMax only. Yaw/pitch tilts are deliberately subtle and stay
-    // on their fine sliders (yaw baseline is now 0.01, very gentle).
+    // Scales _steerBankRadMax (hard radian cap on held-steering bank).
+    // Three control points span the industry-standard range:
+    //   m=0.0 → 0.35 rad (~20°)  Race-the-Sun / subtle
+    //   m=0.5 → 0.52 rad (~30°)  Jet Horizon house style / Wipeout HD baseline
+    //   m=1.0 → 0.79 rad (~45°)  HARD UPPER LIMIT — past this the brain reads it
+    //                              as a barrel roll, not a steering turn (per Star Fox/
+    //                              Wipeout reference research). The knife-edge mode
+    //                              (state.rollAngle, capped ±π/2) is a separate axis.
     function _applyBankIntensity(m) {
-      const k = _macroScale(m, 0.4, 1.6); // 0.0 → 0.4x, 0.5 → 1.0x, 1.0 → 1.6x
-      _bankMax = 0.04 * k;
-      if (_bankMax > 0.06) _bankMax = 0.06; // hard-clamp to fine-slider range
+      _steerBankRadMax = _macroLerp3(m, 0.35, 0.52, 0.79);
+      // Belt-and-suspenders cap.
+      if (_steerBankRadMax > 0.79) _steerBankRadMax = 0.79;
+      if (_steerBankRadMax < 0.05) _steerBankRadMax = 0.05;
     }
 
     // HORIZON COUPLING — how the world reacts to the ship's bank.
@@ -22383,15 +22409,25 @@ function buildSkinTunerSliders() {
     // Four hand-tuned macro snapshots covering perceptually distinct flavors.
     // Each preset sets all 5 macros + refreshes the panel so all sliders
     // (macro AND fine) reflect the new live values.
-    //   GLIDE   — low-g arcade flight (No Man's Sky / RtS default)
-    //   RAIL    — surgical shmup, rigid horizon (Star Fox SNES)
-    //   WIPEOUT — heavy futuristic racer, dramatic coupling (Wipeout HD)
-    //   JET     — Jet Horizon house style (RtS deadzone, balanced)
+    // Values are research-backed against actual game references AND mobile-tuned.
+    // Mobile constraints driving the tuning:
+    //   1. Touch is digital (full-on/full-off), so analog-strength assumptions fail.
+    //   2. Touch input lag is ~50ms minimum — RESPONSIVENESS above ~0.7 is wasted.
+    //   3. Long sustained presses dominate — SETTLE feel matters more than RESP.
+    //   4. Close-screen vestibular sensitivity — high HORIZON coupling is nauseating.
+    //   5. No analog micro-corrections — JUICE/wobble is perceptually amplified.
+    //
+    //   GLIDE   — Race-the-Sun feel: ~22° bank, long deceleration, modest horizon.
+    //   RAIL    — Star Fox SNES feel: ~25° bank, rigid horizon, no juice (surgical).
+    //   WIPEOUT — Modern Wipeout feel: ~36° bank (mobile-trimmed from 38°), RtS-deadzone
+    //              horizon (NOT continuous — too much on a phone), moderate inertia.
+    //   JET     — Jet Horizon house style: ~30° bank, RtS deadzone horizon (committed
+    //              turns), snappy-but-not-twitchy, light juice. The neutral default.
     const _PRESETS = {
-      GLIDE:   { resp: 0.35, settle: 0.30, bank: 0.65, horizon: 0.65, juice: 0.65 },
-      RAIL:    { resp: 0.85, settle: 0.85, bank: 0.45, horizon: 0.20, juice: 0.10 },
-      WIPEOUT: { resp: 0.55, settle: 0.40, bank: 1.00, horizon: 1.00, juice: 0.75 },
-      JET:     { resp: 0.65, settle: 0.55, bank: 0.55, horizon: 0.50, juice: 0.50 },
+      GLIDE:   { resp: 0.40, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35 },
+      RAIL:    { resp: 0.70, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05 },
+      WIPEOUT: { resp: 0.50, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40 },
+      JET:     { resp: 0.65, settle: 0.60, bank: 0.50, horizon: 0.50, juice: 0.30 },
     };
     if (window._feelMacro._presetName === undefined) window._feelMacro._presetName = null;
     function _applyPreset(name) {
@@ -25156,7 +25192,8 @@ function startJetLightning() {
   _accelSnap      = 100;
   _maxVelBase     = 13;    // JL_v2 — tighter lateral cap, more intentional feel
   _maxVelSnap     = 23;
-  _bankMax        = 0.04;  // tuned 2026-04-27 down from 0.06
+  _bankMax        = 0.04;  // LEGACY — retained for any code reading the old global; new bank uses _steerBankRadMax
+  _steerBankRadMax = 0.52;  // ~30° hard cap (JET preset default)
   _bankSmoothing  = 8;
 
   // ── Reset ramp timer + corridor/canyon state ──────────────────────────────
@@ -25226,7 +25263,8 @@ function startJetLightning() {
   _accelSnap      = 100;
   _maxVelBase     = 13;
   _maxVelSnap     = 23;
-  _bankMax        = 0.04;  // tuned 2026-04-27 down from 0.06
+  _bankMax        = 0.04;  // LEGACY — retained for any code reading the old global; new bank uses _steerBankRadMax
+  _steerBankRadMax = 0.52;  // ~30° hard cap (JET preset default)
   _bankSmoothing  = 8;
 
   _asteroidTuner.enabled     = false;  // track system enables at startT:4
@@ -26005,6 +26043,7 @@ startGame = function() {
     _maxVelBase    = _tp.maxVelBase;
     _maxVelSnap    = _tp.maxVelSnap;
     _bankMax       = _tp.bankMax;
+    _steerBankRadMax = 0.52;  // ~30° — JET preset default for tutorial
     _bankSmoothing = _tp.bankSmoothing;
     _decelBasePct  = _tp.decelBasePct;
     _decelFullPct  = _tp.decelFullPct;
@@ -26015,6 +26054,7 @@ startGame = function() {
     _maxVelBase    = 9;
     _maxVelSnap    = 13;
     _bankMax       = 0.03;
+    _steerBankRadMax = 0.52;  // ~30° — JET preset default for campaign
   }
   _origStartGame_JL.apply(this, arguments);
   // After startGame resets speed to BASE_SPEED, bump tutorial to L4

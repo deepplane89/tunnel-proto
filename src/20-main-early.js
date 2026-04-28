@@ -6468,7 +6468,8 @@ let _pitchSmooth = 0;
 let _yawMax = 0.01;              // radians — nose turn into steering direction
 let _yawSmoothing = 12;          // higher = snappier yaw response
 let _yawSmooth = 0;
-let _bankMax = 0.03;             // bank multiplier (baked from tuner)
+let _bankMax = 0.03;             // LEGACY — retained for compat with old tuner code/state. New steering bank uses _steerBankRadMax (a hard angular cap in radians).
+let _steerBankRadMax = 0.52;     // ~30° — hard angular cap for held-steering bank. Industry standard: aviation "bank angle warning" at 35°; modern Wipeout/F-Zero ~30–40°; Star Fox ~25°. Past ~45° breaks the mental model (brain reads it as a barrel roll, not a turn). The roll/knife-edge feature (state.rollAngle, capped ±π/2) is a separate axis.
 let _bankSmoothing = 8;          // bank lerp speed while steering — into-the-bank response
 let _bankReturnSmoothing = 8;    // bank lerp speed when NOT steering — controls how snappy the return-to-flat lerp is (decoupled from going-into-bank feel)
 let _bankReturnRate = 12;        // how fast _bankVelX (the roll TARGET) decays back to 0 when not steering; bigger = target zeroes faster
