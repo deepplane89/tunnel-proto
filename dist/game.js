@@ -18466,20 +18466,42 @@ function update(dt) {
   cameraRoll = shipGroup.rotation.z * _camRollAmt;
   camera.rotation.z = cameraRoll;
 
-  // Cancel wobble instantly when player starts steering again
-  if (isSteering && state.wobbleAmp > 0) state.wobbleAmp = 0;
+  // Cancel any leftover release-wobble when the player STARTS steering again
+  // (transition-only — the held-turn micro-wobble below would be killed every
+  // frame if we cancelled on the steady-state isSteering signal).
+  if (!state.wasSteering && isSteering && state.wobbleAmp > 0) state.wobbleAmp = 0;
 
+
+  // Held-turn micro-wobble — a faint shimmy while the ship is committed to a
+  // bank, scaled by JUICE via _wobbleMaxAmp. Gives the ship some life mid-turn
+  // (the release wobble below is the headline event — this is the undertone).
+  // Gated on bank magnitude so straights stay perfectly calm.
+  if (isSteering && _wobbleMaxAmp > 0.001) {
+    const bankNorm = Math.min(1, Math.abs(shipGroup.rotation.z) / Math.max(0.05, _steerBankRadMax));
+    if (bankNorm > 0.3) {
+      const microAmp = _wobbleMaxAmp * 0.15 * ((bankNorm - 0.3) / 0.7);
+      if (state.wobbleAmp < microAmp) {
+        state.wobbleAmp = microAmp;
+        state.wobbleDir = Math.sign(shipGroup.rotation.z) || 1;
+        // Keep phase ticking so we get a true sine shimmy, not a static offset.
+        // (wobbleAmp decay path below also advances phase, but only once amp > 0.001.)
+      }
+    }
+  }
 
   // Wobble kicks in at L2+ in campaign, or always in DR (uses deathRunSpeedTier instead of currentLevelIdx)
   if (state.wasSteering && !isSteering && (state.isDeathRun || state.currentLevelIdx >= 1) && Math.abs(state.shipVelX) > 4) {
     // velRatio: 0 at threshold (4), 1 at absolute max (18) — fixed scale so it works at all levels
     const velRatio = (Math.abs(state.shipVelX) - 4) / 14;
     const clamped  = Math.max(0, Math.min(1, velRatio));
-    const _driftMult = getHandlingDrift() * 2.5; // stock drift=1.0 → 2.5x wobble, full control drift=0 → 0 (no wobble)
-    // Speed also amplifies wobble at low handling — faster = wilder at low tier
+    // JUICE is now decoupled from getHandlingDrift() — _wobbleMaxAmp is a pure
+    // amplitude knob. Drift coupling can be re-introduced later as a per-preset
+    // or global multiplier on _wobbleMaxAmp without touching this site.
+    // Curve is linear in `clamped` (was clamped²) so the slider's contribution
+    // is honest at moderate speeds, not vanishingly small.
     const _speedRatio = Math.min(1, (state.speed - BASE_SPEED) / (BASE_SPEED * 1.5));
     const _speedWobble = 1.0 + _speedRatio * _wobbleSpeedMult * getHandlingDrift();
-    state.wobbleAmp   = (0.02 + clamped * clamped * _wobbleMaxAmp) * _driftMult * _speedWobble;
+    state.wobbleAmp   = (0.02 + clamped * _wobbleMaxAmp) * _speedWobble;
     // Trigger roll overshoot — ship banks past target then bounces back
     state._overshootVel = (state._overshootVel || 0) + Math.sign(state.shipVelX) * _overshootAmt * clamped * getHandlingDrift();
     state.wobbleDir   = Math.sign(state.shipVelX);
