@@ -8329,9 +8329,12 @@ function _destroyCanyonWalls() {
     _canyonWalls.canyonLight.lights.forEach(l => { l.intensity = 0; });
   }
   _canyonWalls = null;
+  // Same rule as canyonLight above: don't remove from scene (would trigger
+  // light-hash change → recompile wave → intermittent "ship light didn't turn
+  // on" + 90ms freezes after canyon exit). Zero intensity to disable.
   if (_canyonFillLight) {
-    if (_canyonFillLight.lights) _canyonFillLight.lights.forEach(l => scene.remove(l));
-    else scene.remove(_canyonFillLight);
+    if (_canyonFillLight.lights) _canyonFillLight.lights.forEach(l => { l.intensity = 0; });
+    else _canyonFillLight.intensity = 0;
     _canyonFillLight = null;
   }
 }
