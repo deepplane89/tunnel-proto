@@ -18448,22 +18448,6 @@ function update(dt) {
                      keys['ArrowRight'] || keys['d'] || keys['D'] ||
                      touch.left || touch.right;
 
-  // ── Camera roll: horizon = ship bank × _camRollAmt. Direct linear coupling.
-  //
-  // Earlier versions added a deadzone + smoothstep curve + temporal lerp to recreate
-  // a "ship banks first, then world tilts" feel. None of it worked: the deadzone
-  // produced a perceptual off→on state change (the curve was math-smooth but the
-  // _bankNorm climb was fast in time), and the temporal lerp introduced its own
-  // disconnect between ship and horizon. The actual fix is what reference titles
-  // (Race the Sun, Wipeout) appear to do: linear product. The ship bank itself is
-  // already smoothed (lerp at _bankSmoothing below), so the horizon inherits that
-  // smoothness for free. The "subtle horizon at small banks" feel comes naturally
-  // from low _camRollAmt — 0.3× of a small bank is visually negligible.
-  //   _camRollAmt = 0   → rigid horizon (Star Fox SNES)
-  //   _camRollAmt = 1   → full coupling (Wipeout)
-  cameraRoll = shipGroup.rotation.z * _camRollAmt;
-  camera.rotation.z = cameraRoll;
-
   // Cancel wobble instantly when player starts steering again. Wobble is a
   // RELEASE-ONLY effect — if you start steering again mid-decay, it stops.
   if (isSteering && state.wobbleAmp > 0) state.wobbleAmp = 0;
@@ -18533,6 +18517,8 @@ function update(dt) {
   if (state.rollAngle !== 0 || state.rollHeld) {
     // Roll is active — drive rotation.z directly from rollAngle (knife-edge / barrel roll, separate axis)
     shipGroup.rotation.z = state.rollAngle;
+    // Camera roll uses the bank value directly — no wobble involved here.
+    cameraRoll = state.rollAngle * _camRollAmt;
   } else {
     // Lerp the BANK toward target. Wobble is intentionally excluded from the
     // lerp target — the lerp acts as a low-pass filter, and feeding a 2.5Hz
@@ -18545,8 +18531,17 @@ function update(dt) {
     const _baseSmooth = isSteering ? _bankSmoothing : _bankReturnSmoothing;
     const _lerpSpeed = _crossingZero ? _baseSmooth * 3 : _baseSmooth;
     shipGroup.rotation.z = THREE.MathUtils.lerp(shipGroup.rotation.z, _rollTargetNoWobble, Math.min(1, _lerpSpeed * dt));
-    // Wobble is added AFTER the lerp — bypasses the smoothing filter so JUICE
-    // amplitudes survive at full strength on the visible rotation.
+    // ── Camera roll: horizon = ship BANK (pre-wobble) × _camRollAmt.
+    // Captured here, between the bank lerp and the wobble-add, so the horizon
+    // mirrors the deliberate bank only and never inherits the release-wobble
+    // overlay. Direct linear coupling — the bank itself is already smoothed by
+    // the lerp above, so the horizon inherits that smoothness for free.
+    //   _camRollAmt = 0 → rigid horizon (Star Fox SNES)
+    //   _camRollAmt = 1 → full coupling (Wipeout)
+    cameraRoll = shipGroup.rotation.z * _camRollAmt;
+    // Wobble is added AFTER capturing camera roll — bypasses the smoothing
+    // filter so JUICE amplitudes survive at full strength on the ship, while
+    // leaving the horizon untouched.
     shipGroup.rotation.z += wobbleOffset;
     // Hard-clamp the result. Headroom = 1.15× bank cap PLUS the current
     // wobble amplitude, so a release-wobble peak (≈0.14 rad at JUICE=1) can
@@ -18555,6 +18550,7 @@ function update(dt) {
     if (shipGroup.rotation.z >  _rollClamp) shipGroup.rotation.z =  _rollClamp;
     if (shipGroup.rotation.z < -_rollClamp) shipGroup.rotation.z = -_rollClamp;
   }
+  camera.rotation.z = cameraRoll;
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──
   const speedDelta = (state.speed - _prevSpeed) / dt;
   _prevSpeed = state.speed;
