@@ -800,7 +800,7 @@ window.addEventListener('keyup', e => {
 // Start title music on very first user interaction with the page
 function initTitleAudio() {
   if (audioCtx) { _ensureCtxRunning(); return; }  // already initialized
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   _ensureCtxRunning();
   engineGain = audioCtx.createGain();
   engineGain.gain.value = 0.0;
@@ -835,7 +835,7 @@ function initTitleAudio() {
       // Autoplay blocked — unlock audio on first interaction (no visible overlay)
       const unlock = () => {
         if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           engineGain = audioCtx.createGain();
           engineGain.gain.value = 0.0;
           engineGain.connect(audioCtx.destination);

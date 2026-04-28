@@ -33,7 +33,7 @@ function initAudio() {
     _initTrackGains();
     return;
   }
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   _ensureCtxRunning();
 
   // Engine hum removed — keep gain node at 0 so SFX chain still works
@@ -132,11 +132,6 @@ function _initSFXBuffers() {
   _loadSFXBuffer('thunder1', './assets/audio/thunder1.mp3');
   _loadSFXBuffer('thunder2', './assets/audio/thunder2.mp3');
   _loadSFXBuffer('klaxon',   './assets/audio/klaxon.mp3');
-  // Mobile-tight tap response: pre-decode short impact SFX into AudioBuffers
-  _loadSFXBuffer('thruster-impact', './assets/audio/thruster-impact.mp3');
-  _loadSFXBuffer('powerup-burst',   './assets/audio/powerup-burst.mp3');
-  _loadSFXBuffer('retry-tech',      './assets/audio/retry-tech.mp3');
-  _loadSFXBuffer('retry-warp',      './assets/audio/retry-warp.mp3');
   // Argon ambient: looped via dedicated _playArgonLoop (volume modulated each frame)
   _loadSFXBuffer('argon-ambient',   './assets/audio/argon-ambient.mp3');
 }
@@ -162,18 +157,8 @@ function _playArgonLoop(initialVol) {
   return src;
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = {
-  'nearmiss': 'nearmiss-sfx',
-  'whoosh': 'whoosh1',
-  'whoosh-release': 'whoosh-release',
-  'thruster-impact': 'thruster-impact-sfx',
-  'powerup-burst':   'powerup-burst-sfx',
-  'retry-tech':      'retry-tech-sfx',
-  'retry-warp':      'retry-warp-sfx'
-};
-// Play a pre-decoded buffer with gain + optional pan + playbackRate.
-// Returns the BufferSource handle when buffer path is used (caller can .stop()),
-// otherwise returns null/undefined when falling back to <audio>.
+const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release' };
+// Play a pre-decoded buffer with gain + optional pan + playbackRate
 function _playBuffer(name, volume, rate, panVal) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (!audioCtx || state.muted || volume <= 0) return;
@@ -194,9 +179,7 @@ function _playBuffer(name, volume, rate, panVal) {
       gain.connect(audioCtx.destination);
     }
     src.start();
-    // Expose gain on the source so callers can fade if they want
-    src._jhGain = gain;
-    return src;
+    return;
   }
   // Fallback: cloneNode from <audio> element (slower but works if buffer not ready)
   const elId = _sfxFallbackIds[name];

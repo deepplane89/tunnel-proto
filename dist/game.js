@@ -9576,7 +9576,7 @@ function initAudio() {
     _initTrackGains();
     return;
   }
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   _ensureCtxRunning();
 
   // Engine hum removed — keep gain node at 0 so SFX chain still works
@@ -9675,11 +9675,6 @@ function _initSFXBuffers() {
   _loadSFXBuffer('thunder1', './assets/audio/thunder1.mp3');
   _loadSFXBuffer('thunder2', './assets/audio/thunder2.mp3');
   _loadSFXBuffer('klaxon',   './assets/audio/klaxon.mp3');
-  // Mobile-tight tap response: pre-decode short impact SFX into AudioBuffers
-  _loadSFXBuffer('thruster-impact', './assets/audio/thruster-impact.mp3');
-  _loadSFXBuffer('powerup-burst',   './assets/audio/powerup-burst.mp3');
-  _loadSFXBuffer('retry-tech',      './assets/audio/retry-tech.mp3');
-  _loadSFXBuffer('retry-warp',      './assets/audio/retry-warp.mp3');
   // Argon ambient: looped via dedicated _playArgonLoop (volume modulated each frame)
   _loadSFXBuffer('argon-ambient',   './assets/audio/argon-ambient.mp3');
 }
@@ -9705,18 +9700,8 @@ function _playArgonLoop(initialVol) {
   return src;
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = {
-  'nearmiss': 'nearmiss-sfx',
-  'whoosh': 'whoosh1',
-  'whoosh-release': 'whoosh-release',
-  'thruster-impact': 'thruster-impact-sfx',
-  'powerup-burst':   'powerup-burst-sfx',
-  'retry-tech':      'retry-tech-sfx',
-  'retry-warp':      'retry-warp-sfx'
-};
-// Play a pre-decoded buffer with gain + optional pan + playbackRate.
-// Returns the BufferSource handle when buffer path is used (caller can .stop()),
-// otherwise returns null/undefined when falling back to <audio>.
+const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release' };
+// Play a pre-decoded buffer with gain + optional pan + playbackRate
 function _playBuffer(name, volume, rate, panVal) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (!audioCtx || state.muted || volume <= 0) return;
@@ -9737,9 +9722,7 @@ function _playBuffer(name, volume, rate, panVal) {
       gain.connect(audioCtx.destination);
     }
     src.start();
-    // Expose gain on the source so callers can fade if they want
-    src._jhGain = gain;
-    return src;
+    return;
   }
   // Fallback: cloneNode from <audio> element (slower but works if buffer not ready)
   const elId = _sfxFallbackIds[name];
@@ -9802,16 +9785,15 @@ function playCrash() {
 }
 
 // Plasma-punch impact layered alongside engine-roar ignition.
-// Mobile-tight: routes through pre-decoded AudioBuffer (zero-latency) when available,
-// falls back to <audio> element if buffer hasn't decoded yet.
 function playThrusterImpact(vol) {
   if (state.muted) return;
-  const v = (vol == null ? 0.7 : vol);
-  if (typeof _playBuffer === 'function') { _playBuffer('thruster-impact', v, 1.0, null); return; }
-  // Hard fallback if _playBuffer isn't available for any reason
   const _ti = document.getElementById('thruster-impact-sfx');
   if (_ti) {
-    try { _ti.currentTime = 0; _ti.volume = v; _ti.play().catch(() => {}); } catch (_) {}
+    try {
+      _ti.currentTime = 0;
+      _ti.volume = (vol == null ? 0.7 : vol);
+      _ti.play().catch(() => {});
+    } catch (_) {}
   }
 }
 
@@ -9957,12 +9939,10 @@ function playPickup(typeIdx) {
   const freqs = [880, 1100, 660, 990, 770, 660];
   playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.45);
   setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.35), 80);
-  // Quiet electron-burst layer on power-up smash (zero-latency buffer playback).
-  if (typeof _playBuffer === 'function') {
-    _playBuffer('powerup-burst', 0.18, 1.0, null);
-  } else {
-    const _pb = document.getElementById('powerup-burst-sfx');
-    if (_pb) { try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {} }
+  // Quiet electron-burst layer on power-up smash.
+  const _pb = document.getElementById('powerup-burst-sfx');
+  if (_pb) {
+    try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {}
   }
 }
 
@@ -13871,7 +13851,7 @@ window.addEventListener('keyup', e => {
 // Start title music on very first user interaction with the page
 function initTitleAudio() {
   if (audioCtx) { _ensureCtxRunning(); return; }  // already initialized
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   _ensureCtxRunning();
   engineGain = audioCtx.createGain();
   engineGain.gain.value = 0.0;
@@ -13906,7 +13886,7 @@ function initTitleAudio() {
       // Autoplay blocked — unlock audio on first interaction (no visible overlay)
       const unlock = () => {
         if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           engineGain = audioCtx.createGain();
           engineGain.gain.value = 0.0;
           engineGain.connect(audioCtx.destination);
@@ -14476,7 +14456,6 @@ let _gameStarting = false; // reentry lock — prevents double-fire from simulta
 
 // ── Retry with cinematic camera sweep (from game over) ──
 let _retryPending = false; // guard against double-tap during fade
-let _retryWarpSrc = null;  // active retry-warp BufferSource (or null when fallback / inactive)
 function _triggerRetryWithSweep() {
   if (_retrySweepActive || _retryPending) return; // debounce
   _retryPending = true;
@@ -14522,24 +14501,11 @@ function _triggerRetryWithSweep() {
     _retrySweepT = 0;
     _retrySweepThrusterFired = false;
     // Retry SFX: tech-device one-shot (504ms) at sweep start, warp AFTER it finishes.
-    // Mobile-tight: route both through pre-decoded buffers when available.
-    if (typeof _playBuffer === 'function' && !state.muted) {
-      _playBuffer('retry-tech', 0.55, 1.0, null);
-    } else {
-      const _retrySfx = document.getElementById('retry-tech-sfx');
-      if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
-    }
+    const _retrySfx = document.getElementById('retry-tech-sfx');
+    if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
     setTimeout(() => {
-      if (state.muted) return;
-      // Stop any prior warp source (multi-retry safety)
-      if (_retryWarpSrc) { try { _retryWarpSrc.stop(); } catch(_) {} _retryWarpSrc = null; }
-      if (typeof _playBuffer === 'function') {
-        const _src = _playBuffer('retry-warp', 0.85, 1.0, null);
-        if (_src && typeof _src.stop === 'function') _retryWarpSrc = _src;
-      } else {
-        const _retryWarp = document.getElementById('retry-warp-sfx');
-        if (_retryWarp) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
-      }
+      const _retryWarp = document.getElementById('retry-warp-sfx');
+      if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
     }, 300);
     // Fade from black
     fadeEl.style.opacity = '0';
@@ -18393,8 +18359,6 @@ function update(dt) {
       _retrySweepThrusterFired = true;
       // Retry: stop warp, skip engine-roar, plasma-punch IS the ship-movement sound
       _ensureCtxRunning();
-      // Stop the buffer-source warp if it's playing, otherwise pause the <audio> fallback.
-      if (_retryWarpSrc) { try { _retryWarpSrc.stop(); } catch(_) {} _retryWarpSrc = null; }
       const _rsWarp = document.getElementById('retry-warp-sfx');
       if (_rsWarp) { try { _rsWarp.pause(); _rsWarp.currentTime = 0; } catch(_) {} }
       playThrusterImpact(0.7);

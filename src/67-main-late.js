@@ -28,7 +28,6 @@ let _gameStarting = false; // reentry lock — prevents double-fire from simulta
 
 // ── Retry with cinematic camera sweep (from game over) ──
 let _retryPending = false; // guard against double-tap during fade
-let _retryWarpSrc = null;  // active retry-warp BufferSource (or null when fallback / inactive)
 function _triggerRetryWithSweep() {
   if (_retrySweepActive || _retryPending) return; // debounce
   _retryPending = true;
@@ -74,24 +73,11 @@ function _triggerRetryWithSweep() {
     _retrySweepT = 0;
     _retrySweepThrusterFired = false;
     // Retry SFX: tech-device one-shot (504ms) at sweep start, warp AFTER it finishes.
-    // Mobile-tight: route both through pre-decoded buffers when available.
-    if (typeof _playBuffer === 'function' && !state.muted) {
-      _playBuffer('retry-tech', 0.55, 1.0, null);
-    } else {
-      const _retrySfx = document.getElementById('retry-tech-sfx');
-      if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
-    }
+    const _retrySfx = document.getElementById('retry-tech-sfx');
+    if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
     setTimeout(() => {
-      if (state.muted) return;
-      // Stop any prior warp source (multi-retry safety)
-      if (_retryWarpSrc) { try { _retryWarpSrc.stop(); } catch(_) {} _retryWarpSrc = null; }
-      if (typeof _playBuffer === 'function') {
-        const _src = _playBuffer('retry-warp', 0.85, 1.0, null);
-        if (_src && typeof _src.stop === 'function') _retryWarpSrc = _src;
-      } else {
-        const _retryWarp = document.getElementById('retry-warp-sfx');
-        if (_retryWarp) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
-      }
+      const _retryWarp = document.getElementById('retry-warp-sfx');
+      if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
     }, 300);
     // Fade from black
     fadeEl.style.opacity = '0';
@@ -3945,8 +3931,6 @@ function update(dt) {
       _retrySweepThrusterFired = true;
       // Retry: stop warp, skip engine-roar, plasma-punch IS the ship-movement sound
       _ensureCtxRunning();
-      // Stop the buffer-source warp if it's playing, otherwise pause the <audio> fallback.
-      if (_retryWarpSrc) { try { _retryWarpSrc.stop(); } catch(_) {} _retryWarpSrc = null; }
       const _rsWarp = document.getElementById('retry-warp-sfx');
       if (_rsWarp) { try { _rsWarp.pause(); _rsWarp.currentTime = 0; } catch(_) {} }
       playThrusterImpact(0.7);
