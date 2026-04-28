@@ -6474,9 +6474,6 @@ let _bankSmoothing = 8;          // bank lerp speed while steering — into-the-
 let _bankReturnSmoothing = 8;    // bank lerp speed when NOT steering — controls how snappy the return-to-flat lerp is (decoupled from going-into-bank feel)
 let _bankReturnRate = 12;        // how fast _bankVelX (the roll TARGET) decays back to 0 when not steering; bigger = target zeroes faster
 let _camRollAmt = 0.4;           // camera-roll multiplier — horizon mirrors shipGroup.rotation.z * this; ship-roll lerp already handles smoothing
-let _horizonDeadzone = 0.4;      // 0..1 — fraction of |bank|/_bankMax before horizon engages (Race-the-Sun feel: ship banks alone, then world joins). 0 = continuous coupling.
-let _horizonCurve = 1.5;         // (no-op since smoothstep refactor) retained as tuner field; reserved for future smoothstep↔linear blend.
-let _horizonCatchUpRate = 6;     // per-second lerp rate for cameraRoll → target. Higher = horizon catches up to ship faster. 6 → ~90% in ~380ms at 60fps. Decouples horizon-tilt time-rate from ship-bank time-rate so the deadzone clear doesn't materialize the target tilt in one frame.
 let _bankVelX = 0;               // smoothed velocity used for banking (decoupled from drift physics)
 let _wobbleMaxAmp = 0.05;        // max wobble amplitude (baked)
 let _wobbleDamping = 10;         // how fast wobble fades (baked)

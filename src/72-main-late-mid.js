@@ -1161,15 +1161,16 @@ function buildSkinTunerSliders() {
       if (_steerBankRadMax < 0.05) _steerBankRadMax = 0.05;
     }
 
-    // HORIZON COUPLING — how the world reacts to the ship's bank.
+    // HORIZON COUPLING — how much the world tilts with the ship's bank.
+    // Direct linear multiplier on shipGroup.rotation.z. The ship bank itself is
+    // already smoothed (_bankSmoothing lerp), so the horizon inherits that
+    // smoothness — no deadzone, no curve, no temporal lerp needed.
     // Three control points along the perceptual axis:
-    //   m=0.0 → rigid horizon (Star Fox SNES): _camRollAmt=0
-    //   m=0.5 → committed-turn (Race-the-Sun):  _camRollAmt=0.4, deadzone=0.4, curve=1.5
-    //   m=1.0 → continuous-coupled (Wipeout):    _camRollAmt=0.64, deadzone=0,  curve=1.0
+    //   m=0.0 → rigid horizon (Star Fox SNES):   _camRollAmt = 0.0
+    //   m=0.5 → committed-turn (Race-the-Sun):   _camRollAmt = 0.4
+    //   m=1.0 → continuous-coupled (Wipeout):    _camRollAmt = 0.64
     function _applyHorizonCoupling(m) {
-      _camRollAmt      = _macroLerp3(m, 0.0,  0.4, 0.64);
-      _horizonDeadzone = _macroLerp3(m, 0.6,  0.4, 0.0);
-      _horizonCurve    = _macroLerp3(m, 2.0,  1.5, 1.0);
+      _camRollAmt = _macroLerp3(m, 0.0, 0.4, 0.64);
       if (_camRollAmt > 1.0) _camRollAmt = 1.0; // hard-clamp to fine-slider range
     }
 
