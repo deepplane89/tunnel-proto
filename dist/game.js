@@ -18527,6 +18527,24 @@ function update(dt) {
   }
   const wobbleOffset = Math.sin(state.wobblePhase) * state.wobbleAmp * state.wobbleDir;
 
+  // ── DIAG: JUICE wobble trace (throttled to ~4Hz). Remove after diagnosis. ──
+  if (window._wobbleDiag !== false) {
+    state._wbgDiagT = (state._wbgDiagT || 0) + dt;
+    if (state._wbgDiagT > 0.25) {
+      state._wbgDiagT = 0;
+      console.log('[JUICE]',
+        '_wobbleMaxAmp=', _wobbleMaxAmp.toFixed(4),
+        '| state.wobbleAmp=', state.wobbleAmp.toFixed(4),
+        '| wobbleOffset=', wobbleOffset.toFixed(4),
+        '| ship.rot.z(pre-lerp)=', shipGroup.rotation.z.toFixed(4),
+        '| isSteering=', isSteering ? 1 : 0,
+        '| bankNorm=', _steerBankRadMax > 0 ? (Math.abs(shipGroup.rotation.z)/_steerBankRadMax).toFixed(3) : '0',
+        '| shipVelX=', state.shipVelX.toFixed(2),
+        '| isDR=', state.isDeathRun ? 1 : 0,
+        '| lvlIdx=', state.currentLevelIdx);
+    }
+  }
+
   // Bank the ship — track velocity while steering, decay to flat on release.
   if (isSteering) {
     // If steering opposes current bank, zero it so we never dip the wrong way
