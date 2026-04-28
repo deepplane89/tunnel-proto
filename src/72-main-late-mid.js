@@ -1055,6 +1055,103 @@ function buildSkinTunerSliders() {
   function build() {
     panel.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#0af;margin-bottom:6px;">SCENE TUNER (T)</div>';
 
+    // ════════════════════════════════════════════════════════════════════
+    //  FEEL (MACRO) — 3 high-level knobs that drive multiple fine sliders.
+    //  At 0.5 each, all child values match the current live baseline
+    //  (no change). Sliding moves several child knobs together along a
+    //  perceptually-meaningful axis. After moving a macro, the fine
+    //  sliders below still work — the macro is just a fast preset dial.
+    //  Press "RESET MACROS" to snap all three back to 0.5 (neutral).
+    // ════════════════════════════════════════════════════════════════════
+    panel.appendChild(makeHeader('FEEL (MACRO)', '#0fa'));
+
+    // Per-macro state lives on window so it survives panel rebuilds.
+    if (window._feelMacro == null) window._feelMacro = { resp: 0.5, settle: 0.5, world: 0.5 };
+    const _fm = window._feelMacro;
+
+    // Description text
+    const _macroDesc = document.createElement('div');
+    _macroDesc.style.cssText = 'color:#0fa;font-size:10px;margin:2px 0 6px 0;font-family:monospace;line-height:1.4;opacity:0.85;';
+    _macroDesc.innerHTML =
+      '<b>RESPONSIVENESS</b>: how fast ship reacts to input (floaty↔twitchy)<br>' +
+      '<b>SETTLE</b>: how fast motion stops after release (long glide↔parks on dime)<br>' +
+      '<b>WORLD COUPLING</b>: how much world tilts/yaws/pitches with ship (Star Fox↔immersive)';
+    panel.appendChild(_macroDesc);
+
+    // Helper: linear scale around baseline. macro=0.5 -> 1.0x baseline.
+    // macro=0.0 -> lowMul, macro=1.0 -> highMul.
+    function _macroScale(macro, lowMul, highMul) {
+      // 0→0.5→1.0  maps to  lowMul→1.0→highMul
+      if (macro <= 0.5) return lowMul + (1.0 - lowMul) * (macro / 0.5);
+      return 1.0 + (highMul - 1.0) * ((macro - 0.5) / 0.5);
+    }
+
+    // RESPONSIVENESS — input→motion latency. Higher = snappier.
+    // Affects accel curves AND smoothing rates (higher smoothing = faster lerp).
+    function _applyResponsiveness(m) {
+      const k = _macroScale(m, 0.4, 1.6); // 0.0 → 0.4x, 0.5 → 1.0x, 1.0 → 1.6x
+      _accelBase     = 22 * k;
+      _accelSnap     = 52 * k;
+      _bankSmoothing = 8  * k;
+      _pitchSmoothing= 5  * k;
+      _yawSmoothing  = 4  * k;
+    }
+
+    // SETTLE — how long motion lingers after input release.
+    // Higher = parks faster (heavier decay, faster return rates).
+    function _applySettle(m) {
+      const k = _macroScale(m, 0.4, 2.0); // 0.0 → 0.4x, 0.5 → 1.0x, 1.0 → 2.0x
+      _decelBasePct        = 0.02 * k;
+      _decelFullPct        = 0.05 * k;
+      _bankReturnSmoothing = 8    * k;
+      _bankReturnRate      = 12   * k;
+      _overshootDamp       = 6    * k;
+    }
+
+    // WORLD COUPLING — how strongly the visual world reacts with the ship.
+    // Higher = horizon tilts more, ship visually rolls/yaws/pitches harder.
+    // Lower = ship rolls but world stays fixed (Star Fox feel).
+    function _applyWorldCoupling(m) {
+      const k = _macroScale(m, 0.2, 1.6); // 0.0 → 0.2x, 0.5 → 1.0x, 1.0 → 1.6x
+      _camRollAmt      = 0.4  * k;
+      _bankMax         = 0.04 * k;
+      _yawMax          = 0.06 * k;
+      _pitchForwardMax = 0.15 * k;
+      _pitchBackMax    = 0.08 * k;
+      // Hard-clamp to slider ranges so the fine sliders below never read
+      // an out-of-range value (they'd visually pin to the rail).
+      if (_camRollAmt > 1.0)  _camRollAmt  = 1.0;
+      if (_bankMax    > 0.06) _bankMax     = 0.06;
+      if (_yawMax     > 0.2)  _yawMax      = 0.2;
+    }
+
+    // Apply on initial build so live values reflect current macro state.
+    _applyResponsiveness(_fm.resp);
+    _applySettle(_fm.settle);
+    _applyWorldCoupling(_fm.world);
+
+    panel.appendChild(makeSlider('RESPONSIVENESS', _fm.resp, 0, 1, 0.02, v => {
+      _fm.resp = v; _applyResponsiveness(v);
+    }, '#0fa'));
+    panel.appendChild(makeSlider('SETTLE', _fm.settle, 0, 1, 0.02, v => {
+      _fm.settle = v; _applySettle(v);
+    }, '#0fa'));
+    panel.appendChild(makeSlider('WORLD COUPLING', _fm.world, 0, 1, 0.02, v => {
+      _fm.world = v; _applyWorldCoupling(v);
+    }, '#0fa'));
+
+    // RESET MACROS button — snap all three back to 0.5 (neutral baseline).
+    const _macroResetBtn = document.createElement('button');
+    _macroResetBtn.textContent = '↺ RESET MACROS → NEUTRAL (0.5)';
+    _macroResetBtn.style.cssText = 'background:none;border:1px solid #0fa;color:#0fa;padding:3px 8px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:6px 0 4px;width:100%;text-align:left;';
+    _macroResetBtn.onclick = () => {
+      _fm.resp = 0.5; _fm.settle = 0.5; _fm.world = 0.5;
+      _applyResponsiveness(0.5); _applySettle(0.5); _applyWorldCoupling(0.5);
+      build(); // rebuild panel so all sliders (macro AND fine) reflect new values
+      panel.style.display = 'block';
+    };
+    panel.appendChild(_macroResetBtn);
+
     // SPEED TEST — override game speed for tuning visuals at different tiers
     panel.appendChild(makeHeader('SPEED TEST'));
     const _spdLabel = document.createElement('div');
