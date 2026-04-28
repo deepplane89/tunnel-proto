@@ -18571,15 +18571,24 @@ function update(dt) {
     // Roll is active — drive rotation.z directly from rollAngle (knife-edge / barrel roll, separate axis)
     shipGroup.rotation.z = state.rollAngle;
   } else {
-    const _rollTarget = targetRoll + wobbleOffset + _shipRotZOffset;
-    const _crossingZero = (shipGroup.rotation.z > 0.01 && _rollTarget < -0.01) || (shipGroup.rotation.z < -0.01 && _rollTarget > 0.01);
+    // Lerp the BANK toward target. Wobble is intentionally excluded from the
+    // lerp target — the lerp acts as a low-pass filter, and feeding a 2.5Hz
+    // sine through an 8 rad/s smoothing lerp attenuated wobble by ~70% before
+    // it ever reached the visible rotation. Diagnosis confirmed via runtime
+    // logging: source wobble ±0.018 rad survived as ~±0.005 rad on rot.z.
+    const _rollTargetNoWobble = targetRoll + _shipRotZOffset;
+    const _crossingZero = (shipGroup.rotation.z > 0.01 && _rollTargetNoWobble < -0.01) || (shipGroup.rotation.z < -0.01 && _rollTargetNoWobble > 0.01);
     // Use _bankSmoothing while steering, _bankReturnSmoothing when releasing — decoupled into/out of bank.
     const _baseSmooth = isSteering ? _bankSmoothing : _bankReturnSmoothing;
     const _lerpSpeed = _crossingZero ? _baseSmooth * 3 : _baseSmooth;
-    shipGroup.rotation.z = THREE.MathUtils.lerp(shipGroup.rotation.z, _rollTarget, Math.min(1, _lerpSpeed * dt));
-    // Hard-clamp the result so wobble + overshoot can't sneak past the cap.
-    // 1.15× headroom for transient overshoot kick. Only applied outside roll mode.
-    const _rollClamp = _steerBankRadMax * 1.15;
+    shipGroup.rotation.z = THREE.MathUtils.lerp(shipGroup.rotation.z, _rollTargetNoWobble, Math.min(1, _lerpSpeed * dt));
+    // Wobble is added AFTER the lerp — bypasses the smoothing filter so JUICE
+    // amplitudes survive at full strength on the visible rotation.
+    shipGroup.rotation.z += wobbleOffset;
+    // Hard-clamp the result. Headroom = 1.15× bank cap PLUS the current
+    // wobble amplitude, so a release-wobble peak (≈0.14 rad at JUICE=1) can
+    // ride on top of a maxed bank without being decapitated.
+    const _rollClamp = _steerBankRadMax * 1.15 + Math.abs(state.wobbleAmp);
     if (shipGroup.rotation.z >  _rollClamp) shipGroup.rotation.z =  _rollClamp;
     if (shipGroup.rotation.z < -_rollClamp) shipGroup.rotation.z = -_rollClamp;
   }
