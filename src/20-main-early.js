@@ -6424,6 +6424,9 @@ let _bankMax = 0.03;             // bank multiplier (baked from tuner)
 let _bankSmoothing = 8;          // bank lerp speed while steering — into-the-bank response
 let _bankReturnSmoothing = 8;    // bank lerp speed when NOT steering — controls how snappy the return-to-flat lerp is (decoupled from going-into-bank feel)
 let _bankReturnRate = 12;        // how fast _bankVelX (the roll TARGET) decays back to 0 when not steering; bigger = target zeroes faster
+let _camRollAmt = 0.4;           // camera-roll multiplier (radians per normalized lateral vel) — the screen tilt amount
+let _camRollSmooth = 5;          // camera-roll lerp speed while steering
+let _camRollReturnSmooth = 5;    // camera-roll lerp speed when NOT steering — mirror of bank return; higher = horizon snaps back faster, locked to ship-roll feel
 let _bankVelX = 0;               // smoothed velocity used for banking (decoupled from drift physics)
 let _wobbleMaxAmp = 0.05;        // max wobble amplitude (baked)
 let _wobbleDamping = 10;         // how fast wobble fades (baked)

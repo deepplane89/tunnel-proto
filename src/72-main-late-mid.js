@@ -1441,6 +1441,9 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('bank smooth', _bankSmoothing, 1, 16, 0.5, v => _bankSmoothing = v, '#0af'));
     panel.appendChild(makeSlider('bank return smooth', _bankReturnSmoothing, 1, 30, 0.5, v => _bankReturnSmoothing = v, '#0af'));
     panel.appendChild(makeSlider('horizon return', _bankReturnRate, 1, 30, 0.5, v => _bankReturnRate = v, '#0af'));
+    panel.appendChild(makeSlider('cam roll amt', _camRollAmt, 0, 1.0, 0.02, v => _camRollAmt = v, '#0af'));
+    panel.appendChild(makeSlider('cam roll smooth', _camRollSmooth, 1, 30, 0.5, v => _camRollSmooth = v, '#0af'));
+    panel.appendChild(makeSlider('cam roll return', _camRollReturnSmooth, 1, 30, 0.5, v => _camRollReturnSmooth = v, '#0af'));
 
     // WOBBLE
     // WARP SUN COLORS

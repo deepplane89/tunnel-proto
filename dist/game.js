@@ -6686,6 +6686,9 @@ let _bankMax = 0.03;             // bank multiplier (baked from tuner)
 let _bankSmoothing = 8;          // bank lerp speed while steering — into-the-bank response
 let _bankReturnSmoothing = 8;    // bank lerp speed when NOT steering — controls how snappy the return-to-flat lerp is (decoupled from going-into-bank feel)
 let _bankReturnRate = 12;        // how fast _bankVelX (the roll TARGET) decays back to 0 when not steering; bigger = target zeroes faster
+let _camRollAmt = 0.4;           // camera-roll multiplier (radians per normalized lateral vel) — the screen tilt amount
+let _camRollSmooth = 5;          // camera-roll lerp speed while steering
+let _camRollReturnSmooth = 5;    // camera-roll lerp speed when NOT steering — mirror of bank return; higher = horizon snaps back faster, locked to ship-roll feel
 let _bankVelX = 0;               // smoothed velocity used for banking (decoupled from drift physics)
 let _wobbleMaxAmp = 0.05;        // max wobble amplitude (baked)
 let _wobbleDamping = 10;         // how fast wobble fades (baked)
@@ -18391,19 +18394,25 @@ function update(dt) {
     cameraPivot.position.z = 9 + _camPivotZOffset;
   }
 
-  // ── Camera roll: tilt screen when steering (like original Jet Slalom)
-  // camera.rotation is in LOCAL space of pivot; lookAt was already set at init.
-  // We only change rotation.z (roll) — x/y stay from the initial lookAt.
-  const _maxVelNow = _maxVelBase + _snap * _maxVelSnap;
-  const targetCamRoll = -(state.shipVelX / Math.max(1, _maxVelNow)) * 0.4;  // normalized: ~10° max regardless of vel cap
-  cameraRoll = THREE.MathUtils.lerp(cameraRoll, targetCamRoll, 5 * dt);
-  camera.rotation.z = cameraRoll;
-
-
-  // Detect turn release — trigger wobble when player stops steering
+  // Detect turn release — trigger wobble when player stops steering.
+  // Hoisted above camera-roll so we can use the same isSteering signal
+  // for both ship-roll and camera-roll lerps (locked horizon-follows-ship).
   const isSteering = keys['ArrowLeft'] || keys['a'] || keys['A'] ||
                      keys['ArrowRight'] || keys['d'] || keys['D'] ||
                      touch.left || touch.right;
+
+  // ── Camera roll: tilt screen when steering (like original Jet Slalom)
+  // camera.rotation is in LOCAL space of pivot; lookAt was already set at init.
+  // We only change rotation.z (roll) — x/y stay from the initial lookAt.
+  // Driven from _bankVelX (same source as ship-roll) so the horizon tracks
+  // the ship's bank exactly. Lerp speed mirrors the ship's bank smoothing
+  // (steering vs return) so they unwind together.
+  const _maxVelNow = _maxVelBase + _snap * _maxVelSnap;
+  const targetCamRoll = -(_bankVelX / Math.max(1, _maxVelNow)) * _camRollAmt;
+  const _camLerpSpeed = isSteering ? _camRollSmooth : _camRollReturnSmooth;
+  cameraRoll = THREE.MathUtils.lerp(cameraRoll, targetCamRoll, Math.min(1, _camLerpSpeed * dt));
+  camera.rotation.z = cameraRoll;
+
   // Cancel wobble instantly when player starts steering again
   if (isSteering && state.wobbleAmp > 0) state.wobbleAmp = 0;
 
@@ -22585,6 +22594,9 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('bank smooth', _bankSmoothing, 1, 16, 0.5, v => _bankSmoothing = v, '#0af'));
     panel.appendChild(makeSlider('bank return smooth', _bankReturnSmoothing, 1, 30, 0.5, v => _bankReturnSmoothing = v, '#0af'));
     panel.appendChild(makeSlider('horizon return', _bankReturnRate, 1, 30, 0.5, v => _bankReturnRate = v, '#0af'));
+    panel.appendChild(makeSlider('cam roll amt', _camRollAmt, 0, 1.0, 0.02, v => _camRollAmt = v, '#0af'));
+    panel.appendChild(makeSlider('cam roll smooth', _camRollSmooth, 1, 30, 0.5, v => _camRollSmooth = v, '#0af'));
+    panel.appendChild(makeSlider('cam roll return', _camRollReturnSmooth, 1, 30, 0.5, v => _camRollReturnSmooth = v, '#0af'));
 
     // WOBBLE
     // WARP SUN COLORS

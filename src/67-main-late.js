@@ -3961,19 +3961,25 @@ function update(dt) {
     cameraPivot.position.z = 9 + _camPivotZOffset;
   }
 
-  // ── Camera roll: tilt screen when steering (like original Jet Slalom)
-  // camera.rotation is in LOCAL space of pivot; lookAt was already set at init.
-  // We only change rotation.z (roll) — x/y stay from the initial lookAt.
-  const _maxVelNow = _maxVelBase + _snap * _maxVelSnap;
-  const targetCamRoll = -(state.shipVelX / Math.max(1, _maxVelNow)) * 0.4;  // normalized: ~10° max regardless of vel cap
-  cameraRoll = THREE.MathUtils.lerp(cameraRoll, targetCamRoll, 5 * dt);
-  camera.rotation.z = cameraRoll;
-
-
-  // Detect turn release — trigger wobble when player stops steering
+  // Detect turn release — trigger wobble when player stops steering.
+  // Hoisted above camera-roll so we can use the same isSteering signal
+  // for both ship-roll and camera-roll lerps (locked horizon-follows-ship).
   const isSteering = keys['ArrowLeft'] || keys['a'] || keys['A'] ||
                      keys['ArrowRight'] || keys['d'] || keys['D'] ||
                      touch.left || touch.right;
+
+  // ── Camera roll: tilt screen when steering (like original Jet Slalom)
+  // camera.rotation is in LOCAL space of pivot; lookAt was already set at init.
+  // We only change rotation.z (roll) — x/y stay from the initial lookAt.
+  // Driven from _bankVelX (same source as ship-roll) so the horizon tracks
+  // the ship's bank exactly. Lerp speed mirrors the ship's bank smoothing
+  // (steering vs return) so they unwind together.
+  const _maxVelNow = _maxVelBase + _snap * _maxVelSnap;
+  const targetCamRoll = -(_bankVelX / Math.max(1, _maxVelNow)) * _camRollAmt;
+  const _camLerpSpeed = isSteering ? _camRollSmooth : _camRollReturnSmooth;
+  cameraRoll = THREE.MathUtils.lerp(cameraRoll, targetCamRoll, Math.min(1, _camLerpSpeed * dt));
+  camera.rotation.z = cameraRoll;
+
   // Cancel wobble instantly when player starts steering again
   if (isSteering && state.wobbleAmp > 0) state.wobbleAmp = 0;
 
