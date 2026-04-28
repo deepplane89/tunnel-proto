@@ -6684,6 +6684,7 @@ let _yawSmoothing = 4;           // higher = snappier yaw response
 let _yawSmooth = 0;
 let _bankMax = 0.03;             // bank multiplier (baked from tuner)
 let _bankSmoothing = 8;          // bank lerp speed (existing: 8)
+let _bankReturnRate = 12;        // how fast _bankVelX (and thus horizon tilt) decays back to flat when not steering; bigger = snappier return
 let _bankVelX = 0;               // smoothed velocity used for banking (decoupled from drift physics)
 let _wobbleMaxAmp = 0.05;        // max wobble amplitude (baked)
 let _wobbleDamping = 10;         // how fast wobble fades (baked)
@@ -18449,7 +18450,7 @@ function update(dt) {
     if ((steerLeft && _bankVelX > 0) || (steerRight && _bankVelX < 0)) _bankVelX = 0;
     _bankVelX += (state.shipVelX - _bankVelX) * Math.min(1, 20 * dt);
   } else {
-    _bankVelX *= Math.max(0, 1 - 12 * dt); // decay to flat, no pull from shipVelX
+    _bankVelX *= Math.max(0, 1 - _bankReturnRate * dt); // decay to flat, no pull from shipVelX (drives horizon-tilt return-to-midline)
   }
   // Overshoot spring — decays each frame, triggered on steering release
   state._overshootPos = (state._overshootPos || 0);
@@ -22579,6 +22580,7 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeHeader('BANK'));
     panel.appendChild(makeSlider('bank max', _bankMax, 0, 0.06, 0.001, v => _bankMax = v, '#0af'));
     panel.appendChild(makeSlider('bank smooth', _bankSmoothing, 1, 16, 0.5, v => _bankSmoothing = v, '#0af'));
+    panel.appendChild(makeSlider('horizon return', _bankReturnRate, 1, 30, 0.5, v => _bankReturnRate = v, '#0af'));
 
     // WOBBLE
     // WARP SUN COLORS

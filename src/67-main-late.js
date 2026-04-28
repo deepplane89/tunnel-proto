@@ -4021,7 +4021,7 @@ function update(dt) {
     if ((steerLeft && _bankVelX > 0) || (steerRight && _bankVelX < 0)) _bankVelX = 0;
     _bankVelX += (state.shipVelX - _bankVelX) * Math.min(1, 20 * dt);
   } else {
-    _bankVelX *= Math.max(0, 1 - 12 * dt); // decay to flat, no pull from shipVelX
+    _bankVelX *= Math.max(0, 1 - _bankReturnRate * dt); // decay to flat, no pull from shipVelX (drives horizon-tilt return-to-midline)
   }
   // Overshoot spring — decays each frame, triggered on steering release
   state._overshootPos = (state._overshootPos || 0);
