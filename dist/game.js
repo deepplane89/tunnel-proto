@@ -5839,6 +5839,35 @@ function applySkin(skinIndex) {
   if (skinIndex < 0 || skinIndex >= SHIP_SKINS.length) skinIndex = 0;
   activeSkinIdx = skinIndex;
 
+  // ── DEFENSIVE LIGHTING RESET ─────────────────────────────────────────
+  // Always reset lights to safe Runner defaults FIRST, before any per-skin
+  // override. This guarantees that even if the per-skin lighting block at the
+  // bottom is somehow short-circuited (early return, exception, async race),
+  // we never leave the scene with Black Mamba's dirLight.position=(0.20,
+  // -16.70, -19.20) (key light pointing UP from below) or sunLight.intensity=0
+  // (no rake). That stuck state was the visible 'MK Runner is black' bug:
+  // the alt-GLB hull is intentionally dark base-color (0x141820) and depends
+  // on the key-from-above + sun-rake combo to read as anything but
+  // silhouette. Reset is unconditional and idempotent — skins 2/3 re-stomp
+  // these values below, so net behavior is unchanged for them.
+  dirLight.intensity = 2.56; dirLight.position.set(2, 8.8, 8);
+  rimLight.intensity = 0.10; fillLight.intensity = 0.25;
+  sunLight.intensity = 0.22; sunLightL.intensity = 0.10;
+  window._thrusterScale = 1.0;
+  window._baseThrusterScale = 1.0;
+
+  // ── Stale material-ref cleanup ───────────────────────────────────────
+  // shipHullMats / shipEdgeLines are mutated per-frame for near-miss flash,
+  // shield, invincible-speed FX. If we don't clear them at applySkin entry,
+  // the alt-GLB cache-hit path (which has no traverse) leaves stale refs
+  // from the previous (hard-coded) skin in these arrays — those refs point
+  // at materials on the now-INVISIBLE default ship, so the visible alt ship
+  // never receives the FX writes. Clear unconditionally; the !_isAltGlb
+  // branch below repopulates for hard-coded skins, and the alt-GLB cache-hit
+  // re-collection below repopulates for alt-GLB skins.
+  shipHullMats.length = 0;
+  shipEdgeLines.length = 0;
+
   // ── Alt GLB ship handling ──
   // Alt-GLB skins (e.g. RUNNER MK II) take a different path for the MODEL
   // (load GLB + show alt mesh), but they STILL need the per-skin lighting block
@@ -5850,7 +5879,28 @@ function applySkin(skinIndex) {
   const skinDef = SHIP_SKINS[skinIndex];
   const _isAltGlb = !!(skinDef && skinDef.glbFile);
   if (_isAltGlb) {
-    _loadAltShip(skinDef.glbFile, skinDef, () => { _showAltShip(); });
+    _loadAltShip(skinDef.glbFile, skinDef, () => {
+      _showAltShip();
+      // Re-collect hull/edge material refs from the now-visible alt model
+      // (cache-hit path skips the traverse in _loadAltShip itself).
+      if (_altShipModel) {
+        const _altMeshes = _altShipModel.userData._altMeshes || [];
+        for (let i = 0; i < _altMeshes.length; i++) {
+          const mesh = _altMeshes[i];
+          if (!mesh || !mesh.material) continue;
+          const name = mesh.userData._origMatName || '';
+          if (name === 'fire' || name === 'fire1') continue;
+          if (name === 'rocket_base' || (name !== 'white' && name !== 'gray' && name !== 'nozzle' && name !== 'rocket_light' && name !== 'alt_hull')) {
+            shipHullMats.push(mesh.material);
+          } else if (name === 'alt_hull') {
+            shipHullMats.push(mesh.material);
+          }
+          if (name === 'rocket_light' || name === 'white' || name === 'Light') {
+            shipEdgeLines.push(mesh.material);
+          }
+        }
+      }
+    });
   } else {
     _hideAltShip();
   }
@@ -5861,8 +5911,6 @@ function applySkin(skinIndex) {
   if (!_isAltGlb) {
     if (skinIndex >= _prebuiltSkins.length) skinIndex = 0;
     const skinMap = _prebuiltSkins[skinIndex];
-    shipHullMats.length = 0;
-    shipEdgeLines.length = 0;
 
     window._shipModel.traverse(child => {
       if (!child.isMesh) return;
@@ -5883,7 +5931,8 @@ function applySkin(skinIndex) {
   }
 
   // Per-skin lighting overrides (0=Runner, 1=Ghost, 2=Black Mamba, 3=Cipher,
-  // 4=RUNNER MK II falls into default `else` for Runner lighting)
+  // 4=RUNNER MK II falls into default `else` for Runner lighting). Defaults
+  // were already applied at the top — these branches override for skins 2/3.
   if (skinIndex === 2) {
     // Black Mamba: custom dramatic lighting
     dirLight.intensity = 2.37; dirLight.position.set(0.20, -16.70, -19.20);
@@ -5897,14 +5946,8 @@ function applySkin(skinIndex) {
     sunLightL.intensity = 0.0;
     dirLight.intensity = 2.56; dirLight.position.set(2, 8.8, 8);
     rimLight.intensity = 0.0; fillLight.intensity = 0.25;
-  } else {
-    // Restore defaults for other skins
-    dirLight.intensity = 2.56; dirLight.position.set(2, 8.8, 8);
-    rimLight.intensity = 0.10; fillLight.intensity = 0.25;
-    sunLight.intensity = 0.22; sunLightL.intensity = 0.10;
-    window._thrusterScale = 1.0;
-    window._baseThrusterScale = 1.0;
   }
+  // else: defaults already applied at top — no-op.
 }
 
 // Shared hex-panel bump shader patch (used by default ship + matchDefault alt ships)
