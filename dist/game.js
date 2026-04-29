@@ -15486,13 +15486,25 @@ function _drBand1Duration() {
   const lvl = loadPlayerLevel();
   return Math.max(8, 20 - (lvl - 1) * 1.5);
 }
+// DR2_RUN_BANDS — time-window labels used by:
+//   1. Dev-keyboard force-arc (60-main-late.js:472) — needs a `band` object to
+//      pass into DR_MECHANIC_FAMILIES[x].activate(band, role)
+//   2. _drAdvanceArc (line ~2072) — same pattern
+//   3. Slalom gap width + zipper count lookups (band.label → fixed value map)
+//   4. Debug HUD + console logger
+//   5. Cone density / spawn-Z variation (vestigial — sequencer's _seqConeDensity
+//      should own this; flagged for future cleanup)
+//
+// Pass 2C audit: buildRows/peakRows/buildVariant/peakVariant/peakChance fields
+// were defined here but NEVER read anywhere in the codebase. Stripped to keep
+// only what's actually used (label + maxTime via _drGetRunBands).
 const DR2_RUN_BANDS_BASE = [
-  { label: 'BAND1', buildRows: {min:12, max:18}, peakRows: {min:0, max:0},  buildVariant: 'standard', peakVariant: 'standard', peakChance: 0    },
-  { label: 'BAND2', buildRows: {min:55, max:65}, peakRows: {min:60, max:70}, buildVariant: 'standard', peakVariant: 'standard', peakChance: 0    },
-  { label: 'BAND3', buildRows: {min:30, max:40}, peakRows: {min:35, max:50}, buildVariant: 'l4',       peakVariant: 'l4',       peakChance: 0    },
-  { label: 'BAND4', buildRows: {min:40, max:50}, peakRows: {min:45, max:55}, buildVariant: 'l4',       peakVariant: 'l5',       peakChance: 0.5  },
-  { label: 'BAND5', buildRows: {min:35, max:45}, peakRows: {min:40, max:55}, buildVariant: 'l4',       peakVariant: 'l5',       peakChance: 0.55 },
-  { label: 'BAND6', buildRows: {min:40, max:50}, peakRows: {min:45, max:60}, buildVariant: 'l4',       peakVariant: 'l5',       peakChance: 0.65 },
+  { label: 'BAND1' },
+  { label: 'BAND2' },
+  { label: 'BAND3' },
+  { label: 'BAND4' },
+  { label: 'BAND5' },
+  { label: 'BAND6' },
 ];
 // Build runtime bands with resolved Band 1 duration
 // Band 4 (corridors) has dynamic duration — uses Infinity, but the wave director
@@ -16249,8 +16261,9 @@ function _drEndlessTick(dt) {
   state._endlessRotationIdx    = (state._endlessRotationIdx    || 0);
   state._endlessCorridorCount  = (state._endlessCorridorCount  || 0);
 
-  const _drBandIdx = DR2_RUN_BANDS.length - 1;
-  const _drBand    = DR2_RUN_BANDS[_drBandIdx];
+  // (Removed unused _drBandIdx / _drBand declarations — dead code post-Pass 2C.
+  // Endless tick doesn't depend on band lookup; mechanics consume current
+  // sequencer stage state directly.)
 
   const _drMechActive = state.slalomActive || state.zipperActive ||
     state.angledWallsActive || state.drCustomPatternActive || state.corridorMode ||
