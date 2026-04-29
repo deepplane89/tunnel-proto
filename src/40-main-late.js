@@ -2281,11 +2281,9 @@ function checkLevelUp() {
   if (state._tutorialActive) return;
   // Death Run: cycle vibes instead of normal level progression
   if (state.isDeathRun) {
-    // Sequencer handles vibes + speed until endless mode
-    const _seqStage = DR_SEQUENCE[state.seqStageIdx];
-    if (_seqStage && _seqStage.type === 'endless_mix') {
-      checkDeathRunVibe(); checkDeathRunSpeed();
-    }
+    // Speed + vibe are 100% sequencer-driven (DR_SEQUENCE per-stage entry +
+    // _drEndlessTick wave rotation). The old time-band BAND_SPEED writer and
+    // checkDeathRunVibe were vestigial — deleted in Pass 2C cleanup.
     return;
   }
   // JL mode: frozen at L4 — score must never flip currentLevelIdx to L5

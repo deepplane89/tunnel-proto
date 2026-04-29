@@ -380,9 +380,11 @@ const BASE_SPEED         = 36;  // fast from the start
 // DO NOT set state.speed directly. Use _setDRSpeed(). The setter is global
 // (window._setDRSpeed) so it's reachable from every src/*.js file.
 //
-// Pass 2B will mechanically migrate all ~37 existing `state.speed = ...`
-// write sites to use this setter, then delete the parallel BAND_SPEED
-// pathway in checkDeathRunSpeed (which fights the sequencer).
+// Pass 2B (DONE) migrated all ~32 `state.speed = ...` write sites to use this
+// setter. Pass 2C (DONE) deleted the parallel BAND_SPEED pathway in
+// checkDeathRunSpeed (which fought the sequencer) along with the dead
+// checkDeathRunVibe time-band reader. Speed + vibes are now 100%
+// sequencer-driven (DR_SEQUENCE table + _drEndlessTick wave rotation).
 // ─────────────────────────────────────────────────────────────────────────
 const DR_SPEED_TRIGGERS = Object.freeze({
   // Lifecycle
@@ -405,8 +407,7 @@ const DR_SPEED_TRIGGERS = Object.freeze({
   WARP:            'L3 warp transition',
   PENDING_APPLY:   '_pendingSpeed deferred apply (post safe window)',
   // Legacy / to be retired
-  LEGACY_BAND:     'checkDeathRunSpeed BAND_SPEED writer (TO BE DELETED in 2B)',
-  LEGACY_LEVEL:    'pre-DR level-table speed writer (likely dead code)',
+  LEGACY_LEVEL:    'pre-DR level-table speed writer (head-start ramp interval)',
   JL:              'Jet Lightning canyon/base swap (TO BE DELETED with JL surgery)',
 });
 
@@ -12171,11 +12172,9 @@ function checkLevelUp() {
   if (state._tutorialActive) return;
   // Death Run: cycle vibes instead of normal level progression
   if (state.isDeathRun) {
-    // Sequencer handles vibes + speed until endless mode
-    const _seqStage = DR_SEQUENCE[state.seqStageIdx];
-    if (_seqStage && _seqStage.type === 'endless_mix') {
-      checkDeathRunVibe(); checkDeathRunSpeed();
-    }
+    // Speed + vibe are 100% sequencer-driven (DR_SEQUENCE per-stage entry +
+    // _drEndlessTick wave rotation). The old time-band BAND_SPEED writer and
+    // checkDeathRunVibe were vestigial — deleted in Pass 2C cleanup.
     return;
   }
   // JL mode: frozen at L4 — score must never flip currentLevelIdx to L5
@@ -17218,41 +17217,12 @@ function updateDeathRunTransition(dt) {
   }
 }
 
-let _pendingVibeIdx = -1; // deferred vibe transition (waits for mechanic to finish)
-function checkDeathRunVibe() {
-  if (!state.isDeathRun) return;
-  // Vibes synced to bands: each band = new vibe. Band 6+ cycles remaining vibes every 45s.
-  let _curBand = DR2_RUN_BANDS.length - 1;
-  for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) {
-    if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _curBand = bi; break; }
-  }
-  let targetVibeIdx;
-  if (_curBand < 6) {
-    targetVibeIdx = _curBand; // Band 1=vibe 0, Band 2=vibe 1, etc.
-  } else {
-    // Beyond Band 6: cycle through vibes 6+ every 45s
-    targetVibeIdx = 5 + Math.floor((state.elapsed - 180) / 45);
-  }
-  targetVibeIdx = targetVibeIdx % DEATH_RUN_VIBES.length;
-  if (targetVibeIdx !== state.deathRunVibeIdx && _pendingVibeIdx < 0) {
-    // If we're in RELEASE or RECOVERY (no active mechanic), transition now
-    const safePhase = state.drPhase === 'RELEASE' || state.drPhase === 'RECOVERY';
-    if (safePhase) {
-      _applyVibeTransition(targetVibeIdx);
-    } else {
-      // Defer until current mechanic completes
-      _pendingVibeIdx = targetVibeIdx;
-    }
-  }
-  // Check if deferred transition can fire now
-  if (_pendingVibeIdx >= 0) {
-    const safeNow = state.drPhase === 'RELEASE' || state.drPhase === 'RECOVERY';
-    if (safeNow) {
-      _applyVibeTransition(_pendingVibeIdx);
-      _pendingVibeIdx = -1;
-    }
-  }
-}
+// _pendingVibeIdx kept as a deferred-transition slot used by _applyVibeTransition
+// + sequencer stage transitions. The old time-band-driven checkDeathRunVibe()
+// reader was deleted in Pass 2C — vibes are now 100% sequencer-driven
+// (per-stage stage.vibeIdx + _drEndlessTick wave rotation calling
+// _applyVibeTransition directly).
+let _pendingVibeIdx = -1;
 function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
   const fromVibe = DEATH_RUN_VIBES[state.deathRunVibeIdx];
   const toVibe   = DEATH_RUN_VIBES[targetVibeIdx];
@@ -17283,68 +17253,19 @@ function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
   showBanner('TIER ' + (targetVibeIdx + 1), 'levelup', 2500);
   updateCoinColors();
 }
-function checkDeathRunSpeed() {
-  if (!state.isDeathRun) return;
-  // Don't override speed during corridor arc (arc sets its own per-stage speed)
-  if (state._arcActive && state._arcQueue && state._arcQueue[state._arcStage] && state._arcQueue[state._arcStage].speed) return;
-
-  // Speed synced to bands (tiers).
-  // T1-2: base, T3: 1.2x, T4: 1.35x (corridors), T5: 1.5x, T6: 1.85x (max)
-  // The _drSpeedFloor ratchet (set when L5 corridor fires) raises the effective
-  // floor mid-run — see Math.max calls below.
-  const BAND_SPEED = [1.0, 1.0, 1.2, 1.35, 1.5, 1.85]; // idx 0-5 = Band 1-6
-
-  // Get current band index (time-derived; legacy forced-band override archived)
-  let _curBand = DR2_RUN_BANDS.length - 1;
-  for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) {
-    if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _curBand = bi; break; }
-  }
-  const _floor = state._drSpeedFloor || 0;
-  const targetSpeedMult = Math.max(_floor, BAND_SPEED[Math.min(_curBand, BAND_SPEED.length - 1)]);
-  const targetTier = _curBand;
-
-  // Defer speed change if mechanic is active
-  const safeForSpeed = state.drPhase === 'RELEASE' || state.drPhase === 'RECOVERY';
-  if (targetTier !== state.deathRunSpeedTier && !safeForSpeed) {
-    state._pendingSpeedTier = targetTier;
-  }
-  if (safeForSpeed && state._pendingSpeedTier != null && state._pendingSpeedTier >= 0) {
-    const prevTier = state.deathRunSpeedTier;
-    state.deathRunSpeedTier = state._pendingSpeedTier;
-    _setDRSpeed(BASE_SPEED * Math.max(_floor, BAND_SPEED[Math.min(state.deathRunSpeedTier, BAND_SPEED.length - 1)]), 'LEGACY_BAND');
-    state._pendingSpeedTier = -1;
-    if (state.deathRunSpeedTier > prevTier && prevTier >= 0 && !state.introActive) {
-      state._drSpeedBeepFired = false;
-      hapticMedium();
-      // Speed-tier-up surge burst — plasma-punch on its own.
-      playThrusterImpact(0.7);
-      state._thrusterFlare = 2.0;
-    }
-  } else if (safeForSpeed && targetTier !== state.deathRunSpeedTier) {
-    const prevTier = state.deathRunSpeedTier;
-    state.deathRunSpeedTier = targetTier;
-    _setDRSpeed(BASE_SPEED * targetSpeedMult, 'LEGACY_BAND');
-    if (state.deathRunSpeedTier > prevTier && prevTier >= 0 && !state.introActive) {
-      state._drSpeedBeepFired = false;
-      hapticMedium();
-      // Speed-tier-up surge burst (alt branch) — plasma-punch on its own.
-      playThrusterImpact(0.7);
-      state._thrusterFlare = 2.0;
-    }
-  }
-
-  // Animate thruster flare decay
-  if (state._thrusterFlare > 1.0) {
-    window._thrusterScale = state._thrusterFlare;
-    state._thrusterFlare -= 0.03;
-    if (state._thrusterFlare <= 1.0) {
-      state._thrusterFlare = 0;
-      window._thrusterScale = window._baseThrusterScale || 1.0;
-    }
-  }
-
-  // Music: crossfade to l4 when L3 corridor boss starts (handled in _drSeqAdvance)
-}
+// checkDeathRunSpeed + BAND_SPEED table deleted in Pass 2C cleanup.
+// Speed is now 100% sequencer-driven via _setDRSpeed():
+//   - Per-stage entry sets stage.speed * BASE_SPEED (DR_SEQUENCE table)
+//   - Per-tick STAGE_RAMP enforces stage target with _drSpeedFloor ratchet
+//   - Endless stage holds at 2.5x (its DR_SEQUENCE entry)
+//   - Canyon mechanics (L3 knife, preT4A/B) own speed during their 40s windows
+//
+// Removed alongside:
+//   - state._thrusterFlare visual surge (was only fired on BAND_SPEED tier-ups,
+//     never by sequencer stage entries — effectively dead during scripted ladder)
+//   - state._pendingSpeedTier deferral (still reset in init for forward-compat,
+//     but no longer read anywhere)
+//   - playThrusterImpact(0.7) speed-tier-up surge SFX (same: BAND-only path)
 
 let _introTimers = [];
 function clearIntroTimers() {

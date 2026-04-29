@@ -118,9 +118,11 @@ const BASE_SPEED         = 36;  // fast from the start
 // DO NOT set state.speed directly. Use _setDRSpeed(). The setter is global
 // (window._setDRSpeed) so it's reachable from every src/*.js file.
 //
-// Pass 2B will mechanically migrate all ~37 existing `state.speed = ...`
-// write sites to use this setter, then delete the parallel BAND_SPEED
-// pathway in checkDeathRunSpeed (which fights the sequencer).
+// Pass 2B (DONE) migrated all ~32 `state.speed = ...` write sites to use this
+// setter. Pass 2C (DONE) deleted the parallel BAND_SPEED pathway in
+// checkDeathRunSpeed (which fought the sequencer) along with the dead
+// checkDeathRunVibe time-band reader. Speed + vibes are now 100%
+// sequencer-driven (DR_SEQUENCE table + _drEndlessTick wave rotation).
 // ─────────────────────────────────────────────────────────────────────────
 const DR_SPEED_TRIGGERS = Object.freeze({
   // Lifecycle
@@ -143,8 +145,7 @@ const DR_SPEED_TRIGGERS = Object.freeze({
   WARP:            'L3 warp transition',
   PENDING_APPLY:   '_pendingSpeed deferred apply (post safe window)',
   // Legacy / to be retired
-  LEGACY_BAND:     'checkDeathRunSpeed BAND_SPEED writer (TO BE DELETED in 2B)',
-  LEGACY_LEVEL:    'pre-DR level-table speed writer (likely dead code)',
+  LEGACY_LEVEL:    'pre-DR level-table speed writer (head-start ramp interval)',
   JL:              'Jet Lightning canyon/base swap (TO BE DELETED with JL surgery)',
 });
 
