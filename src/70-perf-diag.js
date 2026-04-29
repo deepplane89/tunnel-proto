@@ -361,7 +361,7 @@ function animate() {
   }
 
   // ── Tuner speed override (slider in scene tuner) ──
-  if (_tunerSpeedOverride > 0) state.speed = _tunerSpeedOverride;
+  if (_tunerSpeedOverride > 0) _setDRSpeed(_tunerSpeedOverride, 'TUNER_OVERRIDE');
 
   // Water time tick — drives ripple animation
   mirrorMesh.material.uniforms.time.value += rawDt * 0.5;

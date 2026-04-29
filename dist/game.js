@@ -10430,7 +10430,7 @@ function _stopL3KnifeCanyon(opts) {
   // _drSequencerTick will re-acquire speed control and drive state.speed to
   // whatever the current DR stage wants (clobber gate at 67:960 no longer
   // holds). Writing _l3SavedSpeed here is just the one-frame bridge.
-  if (state._l3SavedSpeed     !== undefined) { state.speed = state._l3SavedSpeed; state._l3SavedSpeed = undefined; }
+  if (state._l3SavedSpeed     !== undefined) { _setDRSpeed(state._l3SavedSpeed, 'CANYON_EXIT'); state._l3SavedSpeed = undefined; }
   if (state._l3SavedPhysLevel !== undefined) { _physLevelOverride = state._l3SavedPhysLevel; state._l3SavedPhysLevel = undefined; }
   console.log('[L3-KNIFE] restored speed=' + state.speed.toFixed(1) + ' physOverride=' + _physLevelOverride);
   if (state._l3SavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
@@ -10502,7 +10502,7 @@ function _updateL3KnifeCanyon(dt) {
     const e = 1 - Math.pow(1 - t, 3);
     const startSpeed  = state._l3SavedSpeed || (BASE_SPEED * 2.0);
     const targetSpeed = BASE_SPEED * _L3_KNIFE_TARGET_SPEED_MULT;
-    state.speed = startSpeed + (targetSpeed - startSpeed) * e;
+    _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     // FOV follows naturally via the global speed-to-FOV lerp in perf-diag.js
     // (targetFOV = _baseFOV + _fovSpeedBoost * speed/80) — matching the rest
     // of the game's speed-change pattern, so no manual FOV write needed here.
@@ -10691,7 +10691,7 @@ function _stopPreT4ACanyon(opts) {
     state._preT4ASavedLT = undefined;
   }
   // Restore speed/physics
-  if (state._preT4ASavedSpeed     !== undefined) { state.speed = state._preT4ASavedSpeed; state._preT4ASavedSpeed = undefined; }
+  if (state._preT4ASavedSpeed     !== undefined) { _setDRSpeed(state._preT4ASavedSpeed, 'CANYON_EXIT'); state._preT4ASavedSpeed = undefined; }
   if (state._preT4ASavedPhysLevel !== undefined) { _physLevelOverride = state._preT4ASavedPhysLevel; state._preT4ASavedPhysLevel = undefined; }
   if (state._preT4ASavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
     camera.fov = state._preT4ASavedFOV;
@@ -10722,7 +10722,7 @@ function _updatePreT4ACanyon(dt) {
     const e = 1 - Math.pow(1 - t, 3);
     const startSpeed  = state._preT4ASavedSpeed || (BASE_SPEED * 2.0);
     const targetSpeed = BASE_SPEED * _PRE_T4A_TARGET_SPEED_MULT;
-    state.speed = startSpeed + (targetSpeed - startSpeed) * e;
+    _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4ARampPhase = 'active';
       console.log('[PRE-T4A] entry ramp complete — speed=' + state.speed.toFixed(1));
@@ -10857,7 +10857,7 @@ function _stopPreT4BCanyon(opts) {
     Object.assign(window._LT, state._preT4BSavedLT);
     state._preT4BSavedLT = undefined;
   }
-  if (state._preT4BSavedSpeed     !== undefined) { state.speed = state._preT4BSavedSpeed; state._preT4BSavedSpeed = undefined; }
+  if (state._preT4BSavedSpeed     !== undefined) { _setDRSpeed(state._preT4BSavedSpeed, 'CANYON_EXIT'); state._preT4BSavedSpeed = undefined; }
   if (state._preT4BSavedPhysLevel !== undefined) { _physLevelOverride = state._preT4BSavedPhysLevel; state._preT4BSavedPhysLevel = undefined; }
   if (state._preT4BSavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
     camera.fov = state._preT4BSavedFOV;
@@ -10886,7 +10886,7 @@ function _updatePreT4BCanyon(dt) {
     const e = 1 - Math.pow(1 - t, 3);
     const startSpeed  = state._preT4BSavedSpeed || (BASE_SPEED * 2.0);
     const targetSpeed = BASE_SPEED * _PRE_T4B_TARGET_SPEED_MULT;
-    state.speed = startSpeed + (targetSpeed - startSpeed) * e;
+    _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4BRampPhase = 'active';
       console.log('[PRE-T4B] entry ramp complete — speed=' + state.speed.toFixed(1));
@@ -12192,7 +12192,7 @@ function checkLevelUp() {
   const continuousBoost = Math.min(state.score / 180, 0.6); // up to +60% extra, ramps faster
   // Freeze speed during corridors — prevents mid-corridor speed jumps
   const inCorridor = state.corridorMode || state.l4CorridorActive || state.l5CorridorActive || state.l3KnifeCanyon;
-  if (!inCorridor) state.speed = BASE_SPEED * (lvlDef.speedMult + continuousBoost);
+  if (!inCorridor) _setDRSpeed(BASE_SPEED * (lvlDef.speedMult + continuousBoost), 'LEGACY_LEVEL');
 
   if (newIdx !== state.currentLevelIdx) {
     state.currentLevelIdx = newIdx;
@@ -13540,7 +13540,7 @@ window.addEventListener('keydown', e => {
       state.seqStageIdx = idx; state.seqStageElapsed = 0;
       state._seqCorridorStarted = false; state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
       state._seqVibeApplied = -1; state._restBeepFired = false;
-      state.speed = BASE_SPEED * s.speed;
+      _setDRSpeed(BASE_SPEED * s.speed, 'KONAMI');
       // Fire music transition based on the most-recent musicTrack at or before this index
       let _t = null;
       for (let i = 0; i <= idx; i++) {
@@ -13611,9 +13611,9 @@ window.addEventListener('keydown', e => {
     if (state.isDeathRun && state.phase === 'playing') {
       if (_bonusRings.length === 0) {
         _ringSpawnRow();
-        state.speed = 0; // live pause for tuning
+        _setDRSpeed(0, 'RING_PAUSE'); // live pause for tuning
       } else {
-        state.speed = BASE_SPEED * (LEVELS[Math.min((state.deathRunSpeedTier || 0) + 1, 4)].speedMult);
+        _setDRSpeed(BASE_SPEED * (LEVELS[Math.min((state.deathRunSpeedTier || 0) + 1, 4)].speedMult), 'RING_PAUSE');
       }
       _ringShowTuner();
       console.log('[DR-DEBUG] Ring tuner toggled. Rings: ' + _bonusRings.length);
@@ -13628,7 +13628,7 @@ window.addEventListener('keydown', e => {
         state.seqStageIdx = 13; state.seqStageElapsed = 0;
         state._seqCorridorStarted = false; state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
         state._seqVibeApplied = -1;
-        state.speed = BASE_SPEED * _s.speed;
+        _setDRSpeed(BASE_SPEED * _s.speed, 'KONAMI');
         console.log('[SEQ-DEBUG] Jump to ENDLESS via P');
       }
     }
@@ -14678,7 +14678,7 @@ function startGame() {
   state.deathRunRestBeat       = 0;
   state.deathRunMechCooldown   = 0;
   state.deathRunCorridorMaxRows = 0;
-  state.speed          = BASE_SPEED;
+  _setDRSpeed(BASE_SPEED, 'INIT');
   state.shipX          = 0;
   state.shipVelX       = 0;
   state.rollAngle      = 0;
@@ -15274,7 +15274,7 @@ function startDeathRun() {
     state._tutorialStep = 0;
   } else {
     state._tutorialStep = -1; // -1 = waiting for first frame before showing box
-    state.speed = BASE_SPEED * _funFloorSpeed;
+    _setDRSpeed(BASE_SPEED * _funFloorSpeed, 'RUN_START');
     setTimeout(() => { state._tutorialStep = -0.5; }, 100); // start with rock mounds
   }
   state._tutorialTimer       = 0;
@@ -15298,7 +15298,7 @@ function startDeathRun() {
   if (!state._tutorialActive && !_retryIsFromDead) {
     state.introActive    = true;
     state.thrusterPower  = 0;
-    state.speed          = BASE_SPEED * 0.35;
+    _setDRSpeed(BASE_SPEED * 0.35, 'RUN_START');
   }
 
   // Music: start with L1 bg track, crossfade to l3/l4 as difficulty ramps
@@ -15425,7 +15425,7 @@ function startDeathRun() {
 
       const firstVibe = DEATH_RUN_VIBES[0];
       const speedIdx = Math.min(firstVibe.speedTier, 4);
-      state.speed = BASE_SPEED * LEVELS[speedIdx].speedMult;
+      _setDRSpeed(BASE_SPEED * LEVELS[speedIdx].speedMult, 'RUN_START');
       // Opening bonus rings — right in front of ship, fly into them before cones
       _ringRemoveAll();
       _ringSpawnRow(0, true); // spawn close to ship for immediate action
@@ -15691,7 +15691,7 @@ function _drSequencerTick(dt) {
   // obstacle field clears, so don't fight it here.
   if (state._pendingSpeed === undefined &&
       !state.invincibleSpeedActive && !state.l3KnifeCanyon && !state.preT4ACanyon && !state.preT4BCanyon &&
-      Math.abs(state.speed - targetSpeed) > 0.5) state.speed = targetSpeed;
+      Math.abs(state.speed - targetSpeed) > 0.5) _setDRSpeed(targetSpeed, 'STAGE_RAMP');
   if (stage.physTier !== undefined) state.deathRunSpeedTier = stage.physTier;
 
   // ── Quilez domain warp: on from S3 onward (the "warped era") and during endless,
@@ -15813,7 +15813,7 @@ function _drSequencerTick(dt) {
     if (_L3_KNIFE_ENABLED) {
       // Fire knife canyon once on stage entry
       if (!state.l3KnifeCanyon && !state.l3KnifeDone) {
-        state.speed = BASE_SPEED * (stage.speed || 2.0);
+        _setDRSpeed(BASE_SPEED * (stage.speed || 2.0), 'STAGE_START');
         try { _startL3KnifeCanyon(); }
         catch (e) { console.error('[L3-KNIFE] _startL3KnifeCanyon threw:', e); }
       }
@@ -16089,7 +16089,7 @@ function _drSeqAdvance() {
       // after 8s so speed never gets permanently stuck.
       state._pendingSpeedDeadline = (state.elapsed || 0) + 8.0;
     } else {
-      state.speed = targetSpeed;
+      _setDRSpeed(targetSpeed, 'STAGE_START');
       state._pendingSpeed = undefined;
       state._pendingSpeedObstacles = null;
     }
@@ -16134,7 +16134,7 @@ function _drApplyPendingSpeed() {
   // Safety deadline override
   const deadlineHit = (state.elapsed || 0) >= (state._pendingSpeedDeadline || 0);
   if (!anyAlive || deadlineHit) {
-    state.speed = state._pendingSpeed;
+    _setDRSpeed(state._pendingSpeed, 'PENDING_APPLY');
     state._pendingSpeed = undefined;
     state._pendingSpeedObstacles = null;
     state._pendingSpeedDeadline = 0;
@@ -16419,7 +16419,7 @@ const DR_MECHANIC_FAMILIES = {
       // sequencer's isActive() returns false and advances to the next stage.
       // Flip _L3_KNIFE_ENABLED to false to restore the legacy cone corridor.
       if (_L3_KNIFE_ENABLED) {
-        state.speed = BASE_SPEED * 2.0; // match corridor speed for canyon scroll
+        _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START'); // match corridor speed for canyon scroll
         try {
           _startL3KnifeCanyon();
         } catch (e) {
@@ -16437,7 +16437,7 @@ const DR_MECHANIC_FAMILIES = {
       state.corridorGapDir    = 1;
       state.corridorDelay     = 1.5;
       state._drL3MaxRows      = rows;
-      state.speed = BASE_SPEED * 2.0; // L3 corridor speed
+      _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START'); // L3 corridor speed
     },
     // DR sequencer polls this to decide when to advance. Knife canyon counts
     // as active until _stopL3KnifeCanyon flips l3KnifeDone=true (after 40s).
@@ -16457,7 +16457,7 @@ const DR_MECHANIC_FAMILIES = {
       // so l3KnifeDone is true. Clear it so the start fn proceeds.
       state.l3KnifeDone     = false;
       state._l3EntryLogged  = false;
-      state.speed = BASE_SPEED * 2.0;
+      _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START');
       console.log('[L3-KNIFE-LOCKED] activate snap=0.1');
       try {
         _startL3KnifeCanyon();
@@ -16472,7 +16472,7 @@ const DR_MECHANIC_FAMILIES = {
     minBand: 3,
     activate(band, role) {
       console.log('[PRE-T4A-ENTRY] preT4AActive=' + !!state.preT4ACanyon + ' preT4ADone=' + !!state.preT4ADone);
-      state.speed = BASE_SPEED * 2.0; // match L3 knife canyon speed for slab scroll
+      _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START'); // match L3 knife canyon speed for slab scroll
       try {
         _startPreT4ACanyon();
       } catch (e) {
@@ -16486,7 +16486,7 @@ const DR_MECHANIC_FAMILIES = {
     minBand: 3,
     activate(band, role) {
       console.log('[PRE-T4B-ENTRY] preT4BActive=' + !!state.preT4BCanyon + ' preT4BDone=' + !!state.preT4BDone);
-      state.speed = BASE_SPEED * 2.0;
+      _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START');
       try {
         _startPreT4BCanyon();
       } catch (e) {
@@ -16511,7 +16511,7 @@ const DR_MECHANIC_FAMILIES = {
       // forms around the player instead of world origin. Sine sweep then
       // oscillates relative to this anchor (see spawnL4CorridorRow).
       state._l4CenterAnchor  = state.shipX || 0;
-      state.speed = BASE_SPEED * 2.1; // L4 corridor speed
+      _setDRSpeed(BASE_SPEED * 2.1, 'STAGE_START'); // L4 corridor speed
     },
     isActive() { return state.l4CorridorActive; }
   },
@@ -16529,7 +16529,7 @@ const DR_MECHANIC_FAMILIES = {
       // Anchor corridor center on the ship's X at activation so the squeeze
       // forms around the player instead of world origin (matches L4 behaviour).
       state._l5CenterAnchor     = state.shipX || 0;
-      state.speed = BASE_SPEED * 2.5; // L5 corridor speed
+      _setDRSpeed(BASE_SPEED * 2.5, 'STAGE_START'); // L5 corridor speed
       state._drSpeedFloor = 2.5; // lock floor — speed never drops below this after L5
     },
     isActive() { return state.l5CorridorActive; }
@@ -16551,7 +16551,7 @@ const DR_MECHANIC_FAMILIES = {
       // Activate first stage + force speed immediately
       const first = state._arcQueue[0];
       DR_MECHANIC_FAMILIES[first.family].activate(band, first.role);
-      state.speed = BASE_SPEED * first.speed;
+      _setDRSpeed(BASE_SPEED * first.speed, 'STAGE_START');
       state.deathRunSpeedTier = 3; // sync tier display
     },
     isActive() { return state._arcActive; }
@@ -16620,7 +16620,7 @@ function _drAdvanceArc() {
   if (next.overrides) Object.assign(state, next.overrides);
   // Apply per-stage speed override (corridor arc ramps speed per corridor)
   if (next.speed) {
-    state.speed = BASE_SPEED * next.speed;
+    _setDRSpeed(BASE_SPEED * next.speed, 'STAGE_RAMP');
   }
 }
 
@@ -16959,9 +16959,9 @@ function _ringToggle() {
   // Works from title screen or during gameplay
   if (_bonusRings.length === 0) {
     _ringSpawnRow(undefined, true); // nearSpawn so rings are visible
-    state.speed = 0;
+    _setDRSpeed(0, 'RING_PAUSE');
   } else {
-    state.speed = BASE_SPEED * (LEVELS[Math.min((state.deathRunSpeedTier || 0) + 1, 4)].speedMult);
+    _setDRSpeed(BASE_SPEED * (LEVELS[Math.min((state.deathRunSpeedTier || 0) + 1, 4)].speedMult), 'RING_PAUSE');
   }
   _ringShowTuner();
 }
@@ -17036,12 +17036,12 @@ function _ringShowTuner() {
     _ringPaused = !_ringPaused;
     if (_ringPaused) {
       state._ringSavedSpeed = state.speed;
-      state.speed = 0;
+      _setDRSpeed(0, 'RING_PAUSE');
       state._ringFrozen = true; // flag checked by update loop to skip game logic
       e.target.textContent = 'PLAY';
       e.target.style.background = '#f66';
     } else {
-      state.speed = state._ringSavedSpeed || BASE_SPEED;
+      _setDRSpeed(state._ringSavedSpeed || BASE_SPEED, 'RING_PAUSE');
       state._ringFrozen = false;
       e.target.textContent = 'PAUSE';
       e.target.style.background = '#0fc';
@@ -17311,7 +17311,7 @@ function checkDeathRunSpeed() {
   if (safeForSpeed && state._pendingSpeedTier != null && state._pendingSpeedTier >= 0) {
     const prevTier = state.deathRunSpeedTier;
     state.deathRunSpeedTier = state._pendingSpeedTier;
-    state.speed = BASE_SPEED * Math.max(_floor, BAND_SPEED[Math.min(state.deathRunSpeedTier, BAND_SPEED.length - 1)]);
+    _setDRSpeed(BASE_SPEED * Math.max(_floor, BAND_SPEED[Math.min(state.deathRunSpeedTier, BAND_SPEED.length - 1)]), 'LEGACY_BAND');
     state._pendingSpeedTier = -1;
     if (state.deathRunSpeedTier > prevTier && prevTier >= 0 && !state.introActive) {
       state._drSpeedBeepFired = false;
@@ -17323,7 +17323,7 @@ function checkDeathRunSpeed() {
   } else if (safeForSpeed && targetTier !== state.deathRunSpeedTier) {
     const prevTier = state.deathRunSpeedTier;
     state.deathRunSpeedTier = targetTier;
-    state.speed = BASE_SPEED * targetSpeedMult;
+    _setDRSpeed(BASE_SPEED * targetSpeedMult, 'LEGACY_BAND');
     if (state.deathRunSpeedTier > prevTier && prevTier >= 0 && !state.introActive) {
       state._drSpeedBeepFired = false;
       hapticMedium();
@@ -17491,7 +17491,7 @@ function activateHeadStart(mega) {
   state.invincibleTimer = (warpDuration + graceDuration) / 1000;
   state.invincibleSpeedActive = true;
   state.invincibleGraceTimer = 0;
-  state.speed = warpSpeed;
+  _setDRSpeed(warpSpeed, 'WARP');
   // Enable magnet to hoover up all coins during warp
   state.magnetActive = true;
   state.magnetTimer = (warpDuration + graceDuration) / 1000;
@@ -17530,10 +17530,10 @@ function activateHeadStart(mega) {
         state._seqConeDensity = 'normal';
         state._seqVibeApplied = -1;
         const _ts = DR_SEQUENCE[_targetStageIdx];
-        if (_ts) state.speed = BASE_SPEED * _ts.speed;
+        if (_ts) _setDRSpeed(BASE_SPEED * _ts.speed, 'LEGACY_LEVEL');
       } else {
         const finalLvl = LEVELS[Math.min(targetLevelIdx, LEVELS.length - 1)];
-        state.speed = BASE_SPEED * finalLvl.speedMult;
+        _setDRSpeed(BASE_SPEED * finalLvl.speedMult, 'LEGACY_LEVEL');
       }
     }
   }, 16);
@@ -19562,7 +19562,7 @@ function update(dt) {
       // Ending: just sail — no cones, dots stay on, gentle deceleration
       state.l5EndingTimer += dt;
       const slowTarget = BASE_SPEED * 0.9;
-      state.speed = Math.max(slowTarget, state.speed - dt * 8);
+      _setDRSpeed(Math.max(slowTarget, state.speed - dt * 8), 'STAGE_RAMP');
       // After 3s of sailing, fade in JET HORIZON title card cinematic-style
       if (!state.l5TitleShown && state.l5EndingTimer >= 3.0) {
         state.l5TitleShown = true;
@@ -21067,7 +21067,7 @@ function animate() {
   }
 
   // ── Tuner speed override (slider in scene tuner) ──
-  if (_tunerSpeedOverride > 0) state.speed = _tunerSpeedOverride;
+  if (_tunerSpeedOverride > 0) _setDRSpeed(_tunerSpeedOverride, 'TUNER_OVERRIDE');
 
   // Water time tick — drives ripple animation
   mirrorMesh.material.uniforms.time.value += rawDt * 0.5;
@@ -22857,7 +22857,7 @@ function buildSkinTunerSliders() {
         _bankSmoothing = p.bankSmoothing;
         _decelBasePct = p.decelBasePct;
         _decelFullPct = p.decelFullPct;
-        if (p.speed === 'L4') state.speed = BASE_SPEED * LEVELS[3].speedMult;
+        if (p.speed === 'L4') _setDRSpeed(BASE_SPEED * LEVELS[3].speedMult, 'JL');
         // Rebuild panel so sliders reflect restored values
         build();
         panel.style.display = 'block';
@@ -25273,7 +25273,7 @@ function startJetLightning() {
   state.currentLevelIdx = 3;
   currentLevelDef     = LEVELS[3];
   targetLevelDef      = LEVELS[3];
-  state.speed         = BASE_SPEED * LEVELS[3].speedMult; // 1.5x = L4
+  _setDRSpeed(BASE_SPEED * LEVELS[3].speedMult, 'JL'); // 1.5x = L4 (canyon test mode startup)
 
   // ── Canyon test mode: activate corridor + canyon walls, kill asteroids ──
   if (_canyonTestMode) {
@@ -25750,7 +25750,7 @@ function _tickJetLightningRamp(dt) {
   if (_jlWasInLiftoff && !_inLiftoff) {
     _astTimer   = 2.0;
     _jlRampTime = 0;
-    state.speed = BASE_SPEED * LEVELS[3].speedMult;
+    _setDRSpeed(BASE_SPEED * LEVELS[3].speedMult, 'JL');
   }
   _jlWasInLiftoff = _inLiftoff;
   if (_inLiftoff) return;
@@ -25765,9 +25765,9 @@ function _tickJetLightningRamp(dt) {
   const _jlBaseSpeed   = BASE_SPEED * LEVELS[3].speedMult;        // 54 u/s
   const _jlCanyonSpeed = _jlBaseSpeed * 1.15;                     // ~62 u/s
   if (_canyonActive || _canyonExiting) {
-    state.speed = _jlCanyonSpeed;
+    _setDRSpeed(_jlCanyonSpeed, 'JL');
   } else {
-    state.speed = _jlBaseSpeed;
+    _setDRSpeed(_jlBaseSpeed, 'JL');
   }
 
   // ── Corridor breather — pause asteroid/lightning spawning, but still check
@@ -26055,7 +26055,7 @@ startGame = function() {
   _origStartGame_JL.apply(this, arguments);
   // After startGame resets speed to BASE_SPEED, bump tutorial to L4
   if (state._tutorialActive) {
-    state.speed = BASE_SPEED * LEVELS[3].speedMult; // L4 = 1.5x
+    _setDRSpeed(BASE_SPEED * LEVELS[3].speedMult, 'JL'); // L4 = 1.5x
     state.currentLevelIdx = 3;
     currentLevelDef = LEVELS[3];
     targetLevelDef  = LEVELS[3];

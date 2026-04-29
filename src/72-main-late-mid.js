@@ -1669,7 +1669,7 @@ function buildSkinTunerSliders() {
         _bankSmoothing = p.bankSmoothing;
         _decelBasePct = p.decelBasePct;
         _decelFullPct = p.decelFullPct;
-        if (p.speed === 'L4') state.speed = BASE_SPEED * LEVELS[3].speedMult;
+        if (p.speed === 'L4') _setDRSpeed(BASE_SPEED * LEVELS[3].speedMult, 'JL');
         // Rebuild panel so sliders reflect restored values
         build();
         panel.style.display = 'block';
@@ -4085,7 +4085,7 @@ function startJetLightning() {
   state.currentLevelIdx = 3;
   currentLevelDef     = LEVELS[3];
   targetLevelDef      = LEVELS[3];
-  state.speed         = BASE_SPEED * LEVELS[3].speedMult; // 1.5x = L4
+  _setDRSpeed(BASE_SPEED * LEVELS[3].speedMult, 'JL'); // 1.5x = L4 (canyon test mode startup)
 
   // ── Canyon test mode: activate corridor + canyon walls, kill asteroids ──
   if (_canyonTestMode) {
@@ -4562,7 +4562,7 @@ function _tickJetLightningRamp(dt) {
   if (_jlWasInLiftoff && !_inLiftoff) {
     _astTimer   = 2.0;
     _jlRampTime = 0;
-    state.speed = BASE_SPEED * LEVELS[3].speedMult;
+    _setDRSpeed(BASE_SPEED * LEVELS[3].speedMult, 'JL');
   }
   _jlWasInLiftoff = _inLiftoff;
   if (_inLiftoff) return;
@@ -4577,9 +4577,9 @@ function _tickJetLightningRamp(dt) {
   const _jlBaseSpeed   = BASE_SPEED * LEVELS[3].speedMult;        // 54 u/s
   const _jlCanyonSpeed = _jlBaseSpeed * 1.15;                     // ~62 u/s
   if (_canyonActive || _canyonExiting) {
-    state.speed = _jlCanyonSpeed;
+    _setDRSpeed(_jlCanyonSpeed, 'JL');
   } else {
-    state.speed = _jlBaseSpeed;
+    _setDRSpeed(_jlBaseSpeed, 'JL');
   }
 
   // ── Corridor breather — pause asteroid/lightning spawning, but still check
@@ -4867,7 +4867,7 @@ startGame = function() {
   _origStartGame_JL.apply(this, arguments);
   // After startGame resets speed to BASE_SPEED, bump tutorial to L4
   if (state._tutorialActive) {
-    state.speed = BASE_SPEED * LEVELS[3].speedMult; // L4 = 1.5x
+    _setDRSpeed(BASE_SPEED * LEVELS[3].speedMult, 'JL'); // L4 = 1.5x
     state.currentLevelIdx = 3;
     currentLevelDef = LEVELS[3];
     targetLevelDef  = LEVELS[3];

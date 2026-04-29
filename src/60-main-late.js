@@ -374,7 +374,7 @@ window.addEventListener('keydown', e => {
       state.seqStageIdx = idx; state.seqStageElapsed = 0;
       state._seqCorridorStarted = false; state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
       state._seqVibeApplied = -1; state._restBeepFired = false;
-      state.speed = BASE_SPEED * s.speed;
+      _setDRSpeed(BASE_SPEED * s.speed, 'KONAMI');
       // Fire music transition based on the most-recent musicTrack at or before this index
       let _t = null;
       for (let i = 0; i <= idx; i++) {
@@ -445,9 +445,9 @@ window.addEventListener('keydown', e => {
     if (state.isDeathRun && state.phase === 'playing') {
       if (_bonusRings.length === 0) {
         _ringSpawnRow();
-        state.speed = 0; // live pause for tuning
+        _setDRSpeed(0, 'RING_PAUSE'); // live pause for tuning
       } else {
-        state.speed = BASE_SPEED * (LEVELS[Math.min((state.deathRunSpeedTier || 0) + 1, 4)].speedMult);
+        _setDRSpeed(BASE_SPEED * (LEVELS[Math.min((state.deathRunSpeedTier || 0) + 1, 4)].speedMult), 'RING_PAUSE');
       }
       _ringShowTuner();
       console.log('[DR-DEBUG] Ring tuner toggled. Rings: ' + _bonusRings.length);
@@ -462,7 +462,7 @@ window.addEventListener('keydown', e => {
         state.seqStageIdx = 13; state.seqStageElapsed = 0;
         state._seqCorridorStarted = false; state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
         state._seqVibeApplied = -1;
-        state.speed = BASE_SPEED * _s.speed;
+        _setDRSpeed(BASE_SPEED * _s.speed, 'KONAMI');
         console.log('[SEQ-DEBUG] Jump to ENDLESS via P');
       }
     }

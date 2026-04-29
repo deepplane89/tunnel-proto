@@ -540,7 +540,7 @@ function _stopL3KnifeCanyon(opts) {
   // _drSequencerTick will re-acquire speed control and drive state.speed to
   // whatever the current DR stage wants (clobber gate at 67:960 no longer
   // holds). Writing _l3SavedSpeed here is just the one-frame bridge.
-  if (state._l3SavedSpeed     !== undefined) { state.speed = state._l3SavedSpeed; state._l3SavedSpeed = undefined; }
+  if (state._l3SavedSpeed     !== undefined) { _setDRSpeed(state._l3SavedSpeed, 'CANYON_EXIT'); state._l3SavedSpeed = undefined; }
   if (state._l3SavedPhysLevel !== undefined) { _physLevelOverride = state._l3SavedPhysLevel; state._l3SavedPhysLevel = undefined; }
   console.log('[L3-KNIFE] restored speed=' + state.speed.toFixed(1) + ' physOverride=' + _physLevelOverride);
   if (state._l3SavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
@@ -612,7 +612,7 @@ function _updateL3KnifeCanyon(dt) {
     const e = 1 - Math.pow(1 - t, 3);
     const startSpeed  = state._l3SavedSpeed || (BASE_SPEED * 2.0);
     const targetSpeed = BASE_SPEED * _L3_KNIFE_TARGET_SPEED_MULT;
-    state.speed = startSpeed + (targetSpeed - startSpeed) * e;
+    _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     // FOV follows naturally via the global speed-to-FOV lerp in perf-diag.js
     // (targetFOV = _baseFOV + _fovSpeedBoost * speed/80) — matching the rest
     // of the game's speed-change pattern, so no manual FOV write needed here.
@@ -801,7 +801,7 @@ function _stopPreT4ACanyon(opts) {
     state._preT4ASavedLT = undefined;
   }
   // Restore speed/physics
-  if (state._preT4ASavedSpeed     !== undefined) { state.speed = state._preT4ASavedSpeed; state._preT4ASavedSpeed = undefined; }
+  if (state._preT4ASavedSpeed     !== undefined) { _setDRSpeed(state._preT4ASavedSpeed, 'CANYON_EXIT'); state._preT4ASavedSpeed = undefined; }
   if (state._preT4ASavedPhysLevel !== undefined) { _physLevelOverride = state._preT4ASavedPhysLevel; state._preT4ASavedPhysLevel = undefined; }
   if (state._preT4ASavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
     camera.fov = state._preT4ASavedFOV;
@@ -832,7 +832,7 @@ function _updatePreT4ACanyon(dt) {
     const e = 1 - Math.pow(1 - t, 3);
     const startSpeed  = state._preT4ASavedSpeed || (BASE_SPEED * 2.0);
     const targetSpeed = BASE_SPEED * _PRE_T4A_TARGET_SPEED_MULT;
-    state.speed = startSpeed + (targetSpeed - startSpeed) * e;
+    _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4ARampPhase = 'active';
       console.log('[PRE-T4A] entry ramp complete — speed=' + state.speed.toFixed(1));
@@ -967,7 +967,7 @@ function _stopPreT4BCanyon(opts) {
     Object.assign(window._LT, state._preT4BSavedLT);
     state._preT4BSavedLT = undefined;
   }
-  if (state._preT4BSavedSpeed     !== undefined) { state.speed = state._preT4BSavedSpeed; state._preT4BSavedSpeed = undefined; }
+  if (state._preT4BSavedSpeed     !== undefined) { _setDRSpeed(state._preT4BSavedSpeed, 'CANYON_EXIT'); state._preT4BSavedSpeed = undefined; }
   if (state._preT4BSavedPhysLevel !== undefined) { _physLevelOverride = state._preT4BSavedPhysLevel; state._preT4BSavedPhysLevel = undefined; }
   if (state._preT4BSavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
     camera.fov = state._preT4BSavedFOV;
@@ -996,7 +996,7 @@ function _updatePreT4BCanyon(dt) {
     const e = 1 - Math.pow(1 - t, 3);
     const startSpeed  = state._preT4BSavedSpeed || (BASE_SPEED * 2.0);
     const targetSpeed = BASE_SPEED * _PRE_T4B_TARGET_SPEED_MULT;
-    state.speed = startSpeed + (targetSpeed - startSpeed) * e;
+    _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4BRampPhase = 'active';
       console.log('[PRE-T4B] entry ramp complete — speed=' + state.speed.toFixed(1));
@@ -2302,7 +2302,7 @@ function checkLevelUp() {
   const continuousBoost = Math.min(state.score / 180, 0.6); // up to +60% extra, ramps faster
   // Freeze speed during corridors — prevents mid-corridor speed jumps
   const inCorridor = state.corridorMode || state.l4CorridorActive || state.l5CorridorActive || state.l3KnifeCanyon;
-  if (!inCorridor) state.speed = BASE_SPEED * (lvlDef.speedMult + continuousBoost);
+  if (!inCorridor) _setDRSpeed(BASE_SPEED * (lvlDef.speedMult + continuousBoost), 'LEGACY_LEVEL');
 
   if (newIdx !== state.currentLevelIdx) {
     state.currentLevelIdx = newIdx;
