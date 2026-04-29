@@ -281,6 +281,17 @@ function animate() {
   }
   const rawDt = Math.min(clock.getDelta(), 0.05);
 
+  // ── PAUSE: render last frame, skip ALL ticks (sim, FOV lerp, shaders) ──
+  // Single guard at the top — obviates per-system pause gates throughout
+  // update() and the visual phase. Composer renders so the screen isn't black.
+  if (state.phase === 'paused') {
+    _perfDiag.markRenderStart();
+    composer.render();
+    _perfDiag.markRenderEnd();
+    _perfDiag.frameEnd();
+    return;
+  }
+
   // ── TITLE SCREEN: render title scene only, skip all gameplay ──────
   if (state.phase === 'title') {
     // Rotate title ship slowly
@@ -391,7 +402,7 @@ function animate() {
   // Keep water X in sync with ship so reflection doesn't drift
   mirrorMesh.position.x = state.shipX;
 
-  if (state.phase === 'paused') { _perfDiag.markRenderStart(); composer.render(); _perfDiag.markRenderEnd(); _perfDiag.frameEnd(); return; }
+  // (Old mid-loop pause guard moved to top of animate() — see line ~285.)
 
   updateAurora(rawDt);
   updateL5Flares(rawDt);

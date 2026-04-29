@@ -103,6 +103,69 @@ const LEVELS = [
 //  CONSTANTS
 // ═══════════════════════════════════════════════════
 const BASE_SPEED         = 36;  // fast from the start
+
+// ═══════════════════════════════════════════════════
+//  SPEED SETTER — SINGLE SOURCE OF TRUTH
+// ═══════════════════════════════════════════════════
+// All gameplay speed changes should go through `_setDRSpeed(value, trigger)`
+// (added 2026-04, infra only — callers will be migrated in Pass 2B). The
+// `trigger` argument MUST be one of DR_SPEED_TRIGGERS keys; this gives us:
+//   1. ONE place to put a breakpoint when speed misbehaves
+//   2. ONE place to add logging (toggle DEBUG_DR_SPEED below)
+//   3. A grep-able audit trail of every legal reason speed can change
+//   4. A future hook for safeForSpeed deferral, ratchet enforcement, etc.
+//
+// DO NOT set state.speed directly. Use _setDRSpeed(). The setter is global
+// (window._setDRSpeed) so it's reachable from every src/*.js file.
+//
+// Pass 2B will mechanically migrate all ~37 existing `state.speed = ...`
+// write sites to use this setter, then delete the parallel BAND_SPEED
+// pathway in checkDeathRunSpeed (which fights the sequencer).
+// ─────────────────────────────────────────────────────────────────────────
+const DR_SPEED_TRIGGERS = Object.freeze({
+  // Lifecycle
+  INIT:            'state initialization (BASE_SPEED default)',
+  RUN_START:       'startGame() reset',
+  RETRY_RESET:     'retry/respawn back to start of run',
+  // Sequencer
+  STAGE_START:     'DR_SEQUENCE advanced to a new stage',
+  STAGE_RAMP:      'in-stage speed ramp (e.g. canyon arc easing)',
+  ENDLESS_TICK:    '_drEndlessTick periodic adjustment',
+  // User / debug
+  TUNER_OVERRIDE:  'scene tuner speed slider',
+  TUNER_PRESET:    'tuner preset applied (e.g. L4 button)',
+  KONAMI:          'Konami / dev menu speed jump',
+  // Mechanics that legitimately re-write speed
+  CANYON_ENTER:    'corridor entry speed transition',
+  CANYON_EXIT:     'corridor exit speed restore',
+  RING_PAUSE:      'ring tuner freeze (sets to 0 / restores prior)',
+  L5_RATCHET:      'L5 corridor speed-floor ratchet enforcement',
+  WARP:            'L3 warp transition',
+  PENDING_APPLY:   '_pendingSpeed deferred apply (post safe window)',
+  // Legacy / to be retired
+  LEGACY_BAND:     'checkDeathRunSpeed BAND_SPEED writer (TO BE DELETED in 2B)',
+  LEGACY_LEVEL:    'pre-DR level-table speed writer (likely dead code)',
+  JL:              'Jet Lightning canyon/base swap (TO BE DELETED with JL surgery)',
+});
+
+let DEBUG_DR_SPEED = false; // flip in console: window.DEBUG_DR_SPEED = true
+window.DEBUG_DR_SPEED = DEBUG_DR_SPEED;
+
+function _setDRSpeed(value, trigger) {
+  if (!DR_SPEED_TRIGGERS[trigger]) {
+    console.warn(`[DR_SPEED] unknown trigger: ${trigger} — add it to DR_SPEED_TRIGGERS or use an existing key`);
+  }
+  if (window.DEBUG_DR_SPEED) {
+    const prev = state.speed;
+    if (Math.abs(prev - value) > 0.01) {
+      console.log(`[DR_SPEED] ${prev.toFixed(2)} → ${value.toFixed(2)} (${trigger})`);
+    }
+  }
+  state.speed = value;
+  state._lastSpeedTrigger = trigger;
+}
+window._setDRSpeed = _setDRSpeed;
+window.DR_SPEED_TRIGGERS = DR_SPEED_TRIGGERS;
 // Play corridor: ship-relative lanes spanning ~2x screen width
 const LANE_COUNT         = 21;   // wide enough that you can never outrun the edges
 const LANE_WIDTH         = 3.2;
