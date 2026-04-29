@@ -2043,8 +2043,7 @@ function spawnObstacles() {
     else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 2 + Math.floor(Math.random() * 2); } // original count restored
     else if (_sm === 'endless')   { _isMixBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
   } else if (state.isDeathRun) {
-    if (state._drForcedBand != null && state._drForcedBand >= 0) { _obsBandIdx = state._drForcedBand; }
-    else { for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _obsBandIdx = bi; break; } _obsBandIdx = bi; } }
+    for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _obsBandIdx = bi; break; } _obsBandIdx = bi; }
     _isWallBand = _obsBandIdx === 1;
     _isRingBand = _obsBandIdx === 2;
     _isFatConeBand = _obsBandIdx === 4;

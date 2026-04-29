@@ -11870,8 +11870,7 @@ function spawnObstacles() {
     else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 2 + Math.floor(Math.random() * 2); } // original count restored
     else if (_sm === 'endless')   { _isMixBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
   } else if (state.isDeathRun) {
-    if (state._drForcedBand != null && state._drForcedBand >= 0) { _obsBandIdx = state._drForcedBand; }
-    else { for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _obsBandIdx = bi; break; } _obsBandIdx = bi; } }
+    for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _obsBandIdx = bi; break; } _obsBandIdx = bi; }
     _isWallBand = _obsBandIdx === 1;
     _isRingBand = _obsBandIdx === 2;
     _isFatConeBand = _obsBandIdx === 4;
@@ -15143,9 +15142,8 @@ function startDeathRun() {
   state.deathRunVibeIdx = 0;
   _pendingVibeIdx = -1;
   state._pendingSpeedTier = -1;
-  state._drForcedBand = -1;
-  state._drBand4Started = false;
-  state._drBand5StartTime = 0;
+  // _drForcedBand / _drBand4Started / _drBand5StartTime: archived 2026-04-29
+  // (legacy wave director). See src/_archived/legacy-wave-director.js.
   state._arcActive = false;
   state._arcQueue = null;
   state._arcStage = 0;
@@ -15206,16 +15204,15 @@ function startDeathRun() {
   applyLevelVisuals(LEVELS[0]);
   updateHUDLevel();
 
-  // Tutorial — fire on first ever run
-  state._tutorialActive      = false; // disabled auto-start — settings-only access
-  state._tutorialStep        = -1; // -1 = waiting for first frame before showing box
-  if (state._tutorialActive) {
-    state.speed = BASE_SPEED * _funFloorSpeed; // fun floor: dial in starting speed via T tuner
-    setTimeout(() => {
-      state._tutorialStep = -0.5; // start with rock mounds
-    }, 100);
-  } else {
+  // Tutorial — auto-start disabled (settings-only entry, see src/65-settings.js).
+  // Settings handler sets _tutorialActive=true BEFORE startGame, so we don't
+  // overwrite it here unless it's already false.
+  if (!state._tutorialActive) {
     state._tutorialStep = 0;
+  } else {
+    state._tutorialStep = -1; // -1 = waiting for first frame before showing box
+    state.speed = BASE_SPEED * _funFloorSpeed;
+    setTimeout(() => { state._tutorialStep = -0.5; }, 100); // start with rock mounds
   }
   state._tutorialTimer       = 0;
   state._tutorialSubStep     = 0;
@@ -17163,12 +17160,8 @@ function checkDeathRunVibe() {
   if (!state.isDeathRun) return;
   // Vibes synced to bands: each band = new vibe. Band 6+ cycles remaining vibes every 45s.
   let _curBand = DR2_RUN_BANDS.length - 1;
-  if (state._drForcedBand != null && state._drForcedBand >= 0) {
-    _curBand = state._drForcedBand;
-  } else {
-    for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) {
-      if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _curBand = bi; break; }
-    }
+  for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) {
+    if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _curBand = bi; break; }
   }
   let targetVibeIdx;
   if (_curBand < 6) {
@@ -17238,14 +17231,10 @@ function checkDeathRunSpeed() {
   // floor mid-run — see Math.max calls below.
   const BAND_SPEED = [1.0, 1.0, 1.2, 1.35, 1.5, 1.85]; // idx 0-5 = Band 1-6
 
-  // Get current band index (respects forced band override)
+  // Get current band index (time-derived; legacy forced-band override archived)
   let _curBand = DR2_RUN_BANDS.length - 1;
-  if (state._drForcedBand != null && state._drForcedBand >= 0) {
-    _curBand = state._drForcedBand;
-  } else {
-    for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) {
-      if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _curBand = bi; break; }
-    }
+  for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) {
+    if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _curBand = bi; break; }
   }
   const _floor = state._drSpeedFloor || 0;
   const targetSpeedMult = Math.max(_floor, BAND_SPEED[Math.min(_curBand, BAND_SPEED.length - 1)]);
@@ -19379,150 +19368,8 @@ function update(dt) {
     if (state.deathRunRestBeat > 0) state.deathRunRestBeat -= dt;
     _drSequencerTick(dt);
   }
-  // ── Legacy wave director (disabled — replaced by sequencer) ──
-  if (false && state.isDeathRun && !state.introActive) {
-    if (false) {
-      // Current run band (with forced band override for dynamic-duration tiers)
-      const _drElapsed = state.elapsed || 0;
-      let _drBandIdx = DR2_RUN_BANDS.length - 1;
-      let _drBand = DR2_RUN_BANDS[_drBandIdx];
-      if (state._drForcedBand != null && state._drForcedBand >= 0) {
-        _drBandIdx = state._drForcedBand;
-        _drBand = DR2_RUN_BANDS[_drBandIdx];
-      } else {
-        for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) {
-          if (_drElapsed < DR2_RUN_BANDS[bi].maxTime) { _drBand = DR2_RUN_BANDS[bi]; _drBandIdx = bi; break; }
-        }
-      }
-      // Band 4 (idx 3): auto-start CORRIDOR_ARC on entry
-      if (_drBandIdx === 3 && !state._drBand4Started) {
-        state._drBand4Started = true;
-        clearAllCorridorFlags(); state.deathRunRestBeat = 1.0;
-        const fam = DR_MECHANIC_FAMILIES['CORRIDOR_ARC'];
-        state.drPhase = 'BUILD'; state.drPhaseTimer = 0; state.drPhaseDuration = 0;
-        fam.activate(_drBand, 'build');
-      }
-      // Band 4→5: when corridor arc finishes, advance to Band 5
-      if (_drBandIdx === 3 && state._drBand4Started && !state._arcActive &&
-          !state.corridorMode && !state.l4CorridorActive && !state.l5CorridorActive) {
-        state._drForcedBand = 4; // Band 5
-        state._drBand5StartTime = state.elapsed;
-        state.drPhase = 'RELEASE'; state.drPhaseTimer = 0;
-        const _relDur = DR2_PHASE_DURATIONS.RELEASE;
-        state.drPhaseDuration = _relDur.min + Math.random() * (_relDur.max - _relDur.min);
-      }
-      // Band 5→6: after 30s in Band 5, advance to Band 6
-      if (state._drForcedBand === 4 && state._drBand5StartTime &&
-          state.elapsed - state._drBand5StartTime >= 30) {
-        state._drForcedBand = 5; // Band 6
-      }
-
-      // Is ANY structured mechanic currently active?
-      // Advance arc stages (must run before mechActive check)
-      _drAdvanceArc();
-      const _drMechActive = state.slalomActive ||
-                            state.zipperActive || state.angledWallsActive ||
-                            state.drCustomPatternActive || state.corridorMode ||
-                            state.l4CorridorActive || state.l5CorridorActive ||
-                            state._arcActive;
-
-      const phase = state.drPhase;
-
-      if (phase === 'RELEASE' || phase === 'RECOVERY') {
-        state.drPhaseTimer += dt;
-        if (state.drPhaseTimer >= state.drPhaseDuration) {
-          if (phase === 'RELEASE') {
-            // Band 1: pure random cones only — loop RELEASE until Band 2
-            if (_drBand.label === 'BAND1') {
-              state.drPhaseTimer = 0;
-              const _relDur = DR2_PHASE_DURATIONS.RELEASE;
-              state.drPhaseDuration = _relDur.min + Math.random() * (_relDur.max - _relDur.min);
-
-            } else {
-              // Brief clear beat before structured mechanic starts
-              const familyKey = _drPickMechanic('build', _drBandIdx);
-              if (!familyKey) {
-                // No eligible mechanics — loop RELEASE
-                state.drPhaseTimer = 0;
-                const _relDur2 = DR2_PHASE_DURATIONS.RELEASE;
-                state.drPhaseDuration = _relDur2.min + Math.random() * (_relDur2.max - _relDur2.min);
-              } else {
-                state.deathRunRestBeat = 1.0 + Math.random() * 0.5;
-                const family = DR_MECHANIC_FAMILIES[familyKey];
-                state.drPhase = 'BUILD';
-                state.drPhaseTimer = 0;
-                state.drPhaseDuration = 0;
-                family.activate(_drBand, 'build');
-                _dr2DebugLog();
-              }
-            }
-          } else {
-            // RECOVERY -> RELEASE
-            state.drPhase = 'RELEASE';
-            state.drPhaseTimer = 0;
-            const _relDur = DR2_PHASE_DURATIONS.RELEASE;
-            state.drPhaseDuration = _relDur.min + Math.random() * (_relDur.max - _relDur.min);
-            state.drWaveCount++;
-            // 40% chance to spawn bonus rings at start of new RELEASE
-            if (!state._tutorialActive && !state._jetLightningMode && Math.random() < 0.6 && _bonusRings.length === 0) { _ringSpawnRow(0); console.log('[DR] Bonus rings spawned (RELEASE), count=' + _bonusRings.length); }
-            _dr2DebugLog();
-          }
-        }
-      } else if (phase === 'BUILD') {
-        if (!_drMechActive) {
-          // BUILD mechanic finished. PEAK or RECOVERY?
-          const doPeak = Math.random() < _drBand.peakChance;
-          if (doPeak) {
-            const familyKey = _drPickMechanic('peak', _drBandIdx);
-            if (!familyKey) {
-              // No eligible peak mechanics — skip to RECOVERY
-              state.drPhase = 'RECOVERY';
-              state.drPhaseTimer = 0;
-              const _recDur2 = DR2_PHASE_DURATIONS.RECOVERY;
-              state.drPhaseDuration = _recDur2.min + Math.random() * (_recDur2.max - _recDur2.min);
-            } else {
-              state.deathRunRestBeat = 1.0 + Math.random() * 0.5;
-              const family = DR_MECHANIC_FAMILIES[familyKey];
-              state.drPhase = 'PEAK';
-              state.drPhaseTimer = 0;
-              state.drPhaseDuration = 0;
-              family.activate(_drBand, 'peak');
-            }
-          } else {
-            state.drPhase = 'RECOVERY';
-            state.drPhaseTimer = 0;
-            const _recDur = DR2_PHASE_DURATIONS.RECOVERY;
-            state.drPhaseDuration = _recDur.min + Math.random() * (_recDur.max - _recDur.min);
-            state.deathRunRestBeat = 0.8 + Math.random() * 0.4;
-
-          }
-          _dr2DebugLog();
-        }
-      } else if (phase === 'PEAK') {
-        if (!_drMechActive) {
-          // PEAK mechanic done → SUSTAIN (brief high-intensity cones before recovery)
-          state.drPhase = 'SUSTAIN';
-          state.drPhaseTimer = 0;
-          const _susDur = DR2_PHASE_DURATIONS.SUSTAIN;
-          state.drPhaseDuration = _susDur.min + Math.random() * (_susDur.max - _susDur.min);
-          _dr2DebugLog();
-        }
-      } else if (phase === 'SUSTAIN') {
-        // Fast random cones, no rest beat — intensity holds before dropping
-        state.drPhaseTimer += dt;
-        if (state.drPhaseTimer >= state.drPhaseDuration) {
-          state.drPhase = 'RECOVERY';
-          state.drPhaseTimer = 0;
-          const _recDur = DR2_PHASE_DURATIONS.RECOVERY;
-          state.drPhaseDuration = _recDur.min + Math.random() * (_recDur.max - _recDur.min);
-          state.deathRunRestBeat = 1.0 + Math.random() * 0.5;
-          // Always spawn bonus rings after surviving peak — reward
-          if (!state._tutorialActive && !state._jetLightningMode && _bonusRings.length === 0) { _ringSpawnRow(0); console.log('[DR] Bonus rings spawned (post-PEAK), count=' + _bonusRings.length); }
-          _dr2DebugLog();
-        }
-      }
-    }
-  }
+  // Legacy wave director archived to src/_archived/legacy-wave-director.js (2026-04-29).
+  // Replaced by DR_SEQUENCE / _drSequencerTick above.
 
   // ── Spawn
   // L3 KNIFE CANYON tick — runs the 40s timer + snap oscillator when active.
@@ -19752,8 +19599,7 @@ function update(dt) {
       // Tighter Z spacing for rings (easier to pass through, need more density)
       let _spawnBand = 0;
       if (state.isDeathRun) {
-        if (state._drForcedBand != null && state._drForcedBand >= 0) { _spawnBand = state._drForcedBand; }
-        else { for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _spawnBand = bi; break; } _spawnBand = bi; } }
+        for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _spawnBand = bi; break; } _spawnBand = bi; }
       }
       const _isFatConeMode = state._seqSpawnMode === 'fat_cones';
       const _spawnZBase = _isFatConeMode ? -22 : (_spawnBand === 1) ? -30 : (_spawnBand === 2 || _spawnBand >= 5) ? -22 : (state.isDeathRun ? -30 : -50);
