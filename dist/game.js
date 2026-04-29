@@ -15487,22 +15487,34 @@ let DR2_RUN_BANDS = _drGetRunBands();
 //   → CI_REST 2.2 → S10 + CJ 2.2
 //   → CJ_REST 2.5 → S11 + CK + ENDLESS 2.5
 //
-// physTier (0/1/2/3) is INDEPENDENT of speed — it controls lateral physics
-// (MAX_VEL/ACCEL/DECEL) snappiness. Tied to deathRunSpeedTier in _physIdx.
-// Don't conflate physTier with speed multiplier.
+// physTier (1/2/3) controls lateral physics (MAX_VEL/ACCEL/DECEL) snappiness.
+// Tied to deathRunSpeedTier in _physIdx. Don't conflate physTier with speed.
+//
+// physTier RULES:
+//   - Floor is 1, never 0 (the old sluggy tier 0 was retired 2026-04).
+//   - MUST be monotonic non-decreasing across the sequence. Once a stage
+//     hits a tier, no later stage may drop below it. If you bump a tier
+//     mid-sequence, lift every following lower-tier stage to match.
+//   - The original design tied physTier loosely to speed regions, but the
+//     hard rule is just: ship handling never gets less snappy as the run
+//     progresses.
+// Current ladder: 1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3
 // ─────────────────────────────────────────────────────────────────────────
 const DR_SEQUENCE = [
   // Stage 1 — random cones (ramp 5→9 cones over 30s)
-  { name: 'S1_CONES',         type: 'random_cones',  duration: 30, speed: 1.5,  density: 'ramp', vibeIdx: 0, physTier: 0 },
-  // Canyon A (placeholder = CC1 mild)
-  { name: 'CA_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 1.8, vibeIdx: 0, physTier: 0 },
-  { name: 'CA_REST',          type: 'rest', duration: 3, speed: 1.8, vibeIdx: 1, physTier: 0 },
+  // physTier promoted 0→1 to match warmer 1.5x cold-start speed.
+  { name: 'S1_CONES',         type: 'random_cones',  duration: 30, speed: 1.5,  density: 'ramp', vibeIdx: 0, physTier: 1 },
+  // Canyon A (placeholder = CC1 mild). physTier promoted 0→1 to match speed.
+  { name: 'CA_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 1.8, vibeIdx: 0, physTier: 1 },
+  { name: 'CA_REST',          type: 'rest', duration: 3, speed: 1.8, vibeIdx: 1, physTier: 1 },
 
-  // Stage 2 — cones + zippers (holds CA's 1.8x — no drop, no yo-yo)
-  { name: 'S2_CONES_ZIPS',    type: 'cones_and_zips', duration: 30, speed: 1.8, vibeIdx: 1, physTier: 1 },
+  // Stage 2 — cones + zippers (holds CA's 1.8x — no drop, no yo-yo).
+  // physTier promoted 1→2 to match speed bump.
+  { name: 'S2_CONES_ZIPS',    type: 'cones_and_zips', duration: 30, speed: 1.8, vibeIdx: 1, physTier: 2 },
   // Canyon B (placeholder = CC1 mild)
-  { name: 'CB_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 1, physTier: 1 },
-  { name: 'CB_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 1 },
+  // physTier lifted 1→2 to keep ladder monotonic non-decreasing after S2's promotion.
+  { name: 'CB_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 1, physTier: 2 },
+  { name: 'CB_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 2 },
 
   // Stage 3 — L3 KNIFE CANYON (40s @ 2.0x). The S3_L3_CORRIDOR handler now
   // fires _startL3KnifeCanyon() directly (formerly the legacy cone-corridor
@@ -15510,7 +15522,8 @@ const DR_SEQUENCE = [
   // branch). The previously-separate CC_L3_KNIFE/CC_REST stages were removed
   // because they fired the knife canyon a SECOND time right after S3, causing
   // duplicate slabs and a stuttery double-canyon.
-  { name: 'S3_L3_CORRIDOR',   type: 'l3_cone_corridor', duration: 40, speed: 2.0, vibeIdx: 2, physTier: 1, useL3Warp: true, musicTrack: 'l4' },
+  // physTier lifted 1→2 to maintain monotonic ladder.
+  { name: 'S3_L3_CORRIDOR',   type: 'l3_cone_corridor', duration: 40, speed: 2.0, vibeIdx: 2, physTier: 2, useL3Warp: true, musicTrack: 'l4' },
   // Brief rest after the knife canyon before angled walls hit
   { name: 'CC_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 2 },
 
@@ -18545,10 +18558,12 @@ function update(dt) {
   const _velNorm = tiltMaxVel > 0 ? Math.max(-1, Math.min(1, _bankVelX / tiltMaxVel)) : 0;
   const targetRoll = -_velNorm * _steerBankRadMax + state._overshootPos;
   if (state.rollAngle !== 0 || state.rollHeld) {
-    // Roll is active — drive rotation.z directly from rollAngle (knife-edge / barrel roll, separate axis)
+    // Roll is active — drive rotation.z directly from rollAngle (knife-edge / barrel roll, separate axis).
     shipGroup.rotation.z = state.rollAngle;
-    // Camera roll uses the bank value directly — no wobble involved here.
-    cameraRoll = state.rollAngle * _camRollAmt;
+    // Horizon DECOUPLED from air-roll mechanic — the ship spins around a flat
+    // horizon (Star Fox / X-Wing barrel-roll look). The HORIZON COUPLING /
+    // _camRollAmt slider still applies to normal steering bank in the else branch.
+    cameraRoll = 0;
   } else {
     // Lerp the BANK toward target. Wobble is intentionally excluded from the
     // lerp target — the lerp acts as a low-pass filter, and feeding a 2.5Hz
