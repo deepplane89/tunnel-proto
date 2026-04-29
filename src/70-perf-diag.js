@@ -337,14 +337,14 @@ function animate() {
   // Skip during retry sweep (sweep controls FOV directly)
   if (!_retrySweepActive) {
     const _fovSpd = state._jetLightningMode ? _jlVisualSpeed : state.speed;
-    const speedFrac = (state.phase === 'playing') ? Math.min(_fovSpd / 80, 1) : 0;
+    const speedFrac = (state.phase === 'playing') ? Math.min(_fovSpd / 100, 1) : 0;
     let targetFOV = _baseFOV + _fovSpeedBoost * speedFrac;
     // Death zoom-out: push FOV wider during explosion (only during dead phase)
     if (_expDeathZoomActive && state.phase === 'dead') targetFOV = _expDeathZoomTarget;
     // Launch snap in first 0.5s, then moderate accel / gentle decel
     const fovDiff = targetFOV - camera.fov;
     const isLaunch = state.phase === 'playing' && (state.elapsed || 0) < 0.5;
-    const fovLerpRate = isLaunch ? 12 : (_expDeathZoomActive ? 0.8 : (fovDiff > 0.5 ? 5 : 2));
+    const fovLerpRate = isLaunch ? 12 : (_expDeathZoomActive ? 0.8 : (fovDiff > 0.5 ? 5 : 3));
     camera.fov = THREE.MathUtils.lerp(camera.fov, targetFOV, fovLerpRate * rawDt);
     camera.updateProjectionMatrix();
   }

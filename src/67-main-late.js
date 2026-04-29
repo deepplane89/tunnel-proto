@@ -980,15 +980,45 @@ let DR2_RUN_BANDS = _drGetRunBands();
 // Canyon slot labels A–K are placeholders pointing at existing canyon families
 // (PRE_T4A = HIGH_WALL_LIGHTNING, PRE_T4B = CC1_MILD_LIGHTNING) until each gets
 // its own designed family.
+//
+// ─── SPEED RAMP — READ BEFORE CHANGING SPEEDS ───────────────────────────
+// `speed` on each stage is a MULTIPLIER of BASE_SPEED (=36). Actual runtime
+// speed = BASE_SPEED × stage.speed (set in _drSequencerTick line ~1104).
+//
+// Talk in MULTIPLIERS (e.g. "1.8×"), not raw speeds (e.g. "64.8"), when
+// communicating with the user. The user thinks in multiplier units.
+//
+// DESIGN PRINCIPLES (do not violate without asking):
+//   1. Speed only goes UP across the run. No drops back. No yo-yo.
+//      (S2 used to be 1.35× after CA's 2.0× — that yo-yo was removed.)
+//   2. CANYONS are the ONLY place speed bumps. Obstacles HOLD the speed
+//      that the previous canyon set.
+//   3. Bumps happen at the canyon transition (well-telegraphed by klaxon
+//      countdown during the rest before — see line ~1152). Never bump
+//      mid-obstacle — that's jarring.
+//   4. The REST AFTER a canyon usually inherits the new speed and carries
+//      it into the next obstacle. Some rests bump speed for the upcoming
+//      stage (e.g. CF_REST 2.0→2.1, CI_REST 2.1→2.2, CJ_REST 2.2→2.5).
+//
+// CURRENT MULTIPLIER LADDER (after S1+S2 cleanup, 2026-04):
+//   S1 1.5 → CA 1.8 → S2 1.8 → CB 2.0 → S3..S6 + canyons 2.0
+//   → CF_REST 2.1 → S7..S9 + canyons 2.1
+//   → CI_REST 2.2 → S10 + CJ 2.2
+//   → CJ_REST 2.5 → S11 + CK + ENDLESS 2.5
+//
+// physTier (0/1/2/3) is INDEPENDENT of speed — it controls lateral physics
+// (MAX_VEL/ACCEL/DECEL) snappiness. Tied to deathRunSpeedTier in _physIdx.
+// Don't conflate physTier with speed multiplier.
+// ─────────────────────────────────────────────────────────────────────────
 const DR_SEQUENCE = [
   // Stage 1 — random cones (ramp 5→9 cones over 30s)
-  { name: 'S1_CONES',         type: 'random_cones',  duration: 30, speed: 1.0,  density: 'ramp', vibeIdx: 0, physTier: 0 },
+  { name: 'S1_CONES',         type: 'random_cones',  duration: 30, speed: 1.5,  density: 'ramp', vibeIdx: 0, physTier: 0 },
   // Canyon A (placeholder = CC1 mild)
-  { name: 'CA_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 0, physTier: 0 },
-  { name: 'CA_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 1, physTier: 0 },
+  { name: 'CA_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 1.8, vibeIdx: 0, physTier: 0 },
+  { name: 'CA_REST',          type: 'rest', duration: 3, speed: 1.8, vibeIdx: 1, physTier: 0 },
 
-  // Stage 2 — cones + zippers
-  { name: 'S2_CONES_ZIPS',    type: 'cones_and_zips', duration: 30, speed: 1.35, vibeIdx: 1, physTier: 1 },
+  // Stage 2 — cones + zippers (holds CA's 1.8x — no drop, no yo-yo)
+  { name: 'S2_CONES_ZIPS',    type: 'cones_and_zips', duration: 30, speed: 1.8, vibeIdx: 1, physTier: 1 },
   // Canyon B (placeholder = CC1 mild)
   { name: 'CB_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 1, physTier: 1 },
   { name: 'CB_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 1 },

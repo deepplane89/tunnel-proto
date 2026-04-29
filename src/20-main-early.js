@@ -6489,7 +6489,7 @@ let _camPivotYOffset = 0.10;     // tuner offset for camera pivot Y (baked)
 let _camPivotZOffset = -0.20;    // tuner offset for camera pivot Z (baked)
 let _camLookYOffset = -5.00;     // tuner offset for camera lookAt Y (baked)
 let _camLookZOffset = 30.50;     // tuner offset for camera lookAt Z (baked)
-let _camFOVOffset = 13;          // tuner offset for camera FOV (baked: 78 - 65 = 13)
+let _camFOVOffset = 13;          // tuner offset for camera FOV (baked from prior _baseFOV tuning)
 let _baseFOV = 78;               // set per orientation in updateCameraFOV
 let _fovSpeedBoost = 22;         // max FOV increase at top speed — cranked for dramatic speed feel
 let _prevSpeed = 0;              // for detecting accel vs decel
