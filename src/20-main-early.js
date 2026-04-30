@@ -3879,9 +3879,8 @@ const sunMat = new THREE.ShaderMaterial({
         float topGlow = smoothstep(0.45, 0.85, yN);
         col += uSunColor * 0.20 * topGlow;
 
-        // Corona edge — HDR (>1.0) so bloom threshold (1.0) catches it.
-        // Tone mapping (ACESFilmic) handles the over-bright values gracefully.
-        vec3 corona = uSunColor * 1.8 + vec3(0.30, 0.15, 0.30);
+        // Corona edge
+        vec3 corona = min(uSunColor * 1.5 + vec3(0.25, 0.12, 0.25), 1.0);
         float coronaBlend = smoothstep(0.82, 0.97, rd);
         float coronaBias = 0.3 + 0.7 * max(smoothstep(0.4, 0.9, yN), smoothstep(0.58, 0.50, yN) * 0.85);
         col = mix(col, corona, coronaBlend * coronaBias);
@@ -3925,7 +3924,7 @@ const sunMat = new THREE.ShaderMaterial({
         // ── Color ramp from f, |q|, r.y (Quilez coloring method) ──
         // Base: ice blue. Hot core: near-white. Cold pockets: deep teal.
         vec3 iceBlue   = uSunColor;                         // 0xaaeeff
-        vec3 hotWhite  = uSunColor * 1.6;                   // HDR hot spot — lets bloom catch core
+        vec3 hotWhite  = min(uSunColor * 1.25, vec3(1.0));  // near-white hot spot
         vec3 deepTeal  = uSunColor * 0.35;                  // cold dark pocket
 
         // f drives overall brightness — high f = hot bright
@@ -4089,11 +4088,10 @@ const sunCapMat = new THREE.ShaderMaterial({
       vec3 botCol = tint * 0.55;
       vec3 topCol = tint * 1.0;
       vec3 body = mix(botCol, topCol, smoothstep(0.0, 1.0, yN));
-      // HDR hot rim + corona — above 1.0 so bloom threshold catches them
-      vec3 hotRim = tint * 1.6 + vec3(0.12, 0.08, 0.0);
+      vec3 hotRim = min(tint * 1.3 + vec3(0.10, 0.06, 0.0), 1.0);
       float rimBlend = smoothstep(0.65, 0.90, r);
       vec3 col = mix(body, hotRim, rimBlend);
-      vec3 corona = tint * 0.95 + vec3(0.45, 0.38, 0.20);
+      vec3 corona = min(tint * 0.7 + vec3(0.35, 0.30, 0.15), 1.0);
       float coronaBlend = smoothstep(0.88, 0.97, r);
       float coronaTopBias = 0.6 + 0.4 * smoothstep(0.0, 0.8, yN);
       col = mix(col, corona, coronaBlend * coronaTopBias);
