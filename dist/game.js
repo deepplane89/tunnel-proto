@@ -10227,19 +10227,25 @@ function getPooledObstacle(type) {
       o.userData.active = true;
       o.userData.type   = type;
       o.visible         = true;
-      // Reset opacity to 0 so the cone fades in from the horizon (no pop-in)
+      // Reset opacity to 0 so the cone fades in from the horizon (no pop-in).
+      //
+      // PERF: only mutate the uOpacity uniform value (and material.opacity for
+      // non-uniform materials). DO NOT set transparent / depthWrite /
+      // needsUpdate here. Those flags are already correct from
+      // createObstacleMesh (cone shader: transparent: true, depthWrite: false)
+      // and never change between activations. Setting needsUpdate = true
+      // schedules a SHADER RECOMPILE on next render — the exact same kind
+      // of recompile that caused the canyon 9→6 lights freeze (commit
+      // 45e6694, 34/90ms hitches). With ~50 cones recycling per minute on a
+      // typical run, this was firing recompiles constantly during normal
+      // gameplay. Mobile-perf relevant.
       const _mc = o.userData._meshes;
       for (let mi = 0; mi < _mc.length; mi++) {
         const child = _mc[mi];
         if (child.material.uniforms && child.material.uniforms.uOpacity) {
           child.material.uniforms.uOpacity.value = 0.0;
-          child.material.transparent = true;
-          child.material.depthWrite = false;
-          child.material.needsUpdate = true;
         } else if (child.material.opacity !== undefined) {
           child.material.opacity = 0.0;
-          child.material.transparent = true;
-          child.material.needsUpdate = true;
         }
       }
       return o;
