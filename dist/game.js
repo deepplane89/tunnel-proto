@@ -610,6 +610,7 @@ const SHIP_SKINS = [
   { name: 'BLACK MAMBA',   price: 800,  description: 'Stealth predator' },
   { name: 'CIPHER',        price: 1400, description: 'Voronoi hull plating' },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
+    coneThrusters: true,
     glbConfig: { posX:0, posY:-0.590, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
       // MK II hull is identical to default RUNNER in Z-extent (rear face exit at world Z≈5.08)
       // and engine bay width — derived from spaceship_01.glb geometry (2026-04-27).
@@ -5878,6 +5879,16 @@ function applySkin(skinIndex) {
   // lighting values.
   const skinDef = SHIP_SKINS[skinIndex];
   const _isAltGlb = !!(skinDef && skinDef.glbFile);
+
+  // ── Cone-thruster opt-in per skin ────────────────────────────────────
+  // Per-skin override: skinDef.coneThrusters = true makes this skin use the
+  // shader cone exhaust (mounted at nozzleWorld()) instead of the particle
+  // thrusters. When ON, hide the particle systems too so only cones show.
+  // Skins without the flag: cones OFF, particles ON (default behavior).
+  const _wantCones = !!(skinDef && skinDef.coneThrusters);
+  window._coneThrustersEnabled = _wantCones;
+  window._hideOldThrusters     = _wantCones;
+
   if (_isAltGlb) {
     _loadAltShip(skinDef.glbFile, skinDef, () => {
       _showAltShip();
