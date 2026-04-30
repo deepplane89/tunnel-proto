@@ -2162,37 +2162,51 @@ function _warpRandX() {
 // Z-aligned streaks — perspective camera creates the radial spread naturally.
 // Each line = leading point + trailing point, both at same X,Y.
 // Leading point moves faster in Z → streak elongates as it approaches.
+//
+// PERF: pre-allocate at MAX_WARP_COUNT once. Speed-driven count adjustment
+// is now done via geometry.setDrawRange() and an active-count cursor —
+// no Float32Array / BufferAttribute reallocation per speed bucket. Was
+// allocating ~22KB of typed arrays + a new BufferAttribute on every speed
+// bucket change, which during acceleration could fire every frame.
+// Game runtime caps at 1800 (line 2067 _warpMaxCount). Tuner slider goes up to 5000
+// for debug sweeps, so we allocate at 5000 to preserve the slider's full range.
+// Cost: 5000 * 6 * 4 = 120 KB Float32 + 5000 * 4 * 2 = 40 KB velocity buffers = 160 KB.
+const _MAX_WARP_COUNT = 5000;
 const _warpGeo = new THREE.BufferGeometry();
-let _warpPos = new Float32Array(WARP_COUNT * 6);
+const _warpPos = new Float32Array(_MAX_WARP_COUNT * 6);
 // Per-particle state: lead velocity, trail velocity (accelerating)
-let _warpLeadVel = new Float32Array(WARP_COUNT);
-let _warpTrailVel = new Float32Array(WARP_COUNT);
+const _warpLeadVel  = new Float32Array(_MAX_WARP_COUNT);
+const _warpTrailVel = new Float32Array(_MAX_WARP_COUNT);
 const _WARP_LEAD_ACCEL  = 0.006;  // leading point acceleration
 const _WARP_TRAIL_ACCEL = 0.003;  // trailing point acceleration (slower)
-function _warpInitPositions(count) {
-  for (let i = 0; i < count; i++) {
-    const x = _warpRandX();
-    const y = _warpRandY();
-    const z = -WARP_DEPTH * 0.5 + Math.random() * WARP_DEPTH * 0.6;
-    _warpPos[i*6]   = x;  _warpPos[i*6+1] = y;  _warpPos[i*6+2] = z;
-    _warpPos[i*6+3] = x;  _warpPos[i*6+4] = y;  _warpPos[i*6+5] = z;
-    _warpLeadVel[i]  = Math.random() * 0.5;
-    _warpTrailVel[i] = Math.random() * 0.3;
-  }
+function _warpInitOne(i) {
+  const x = _warpRandX();
+  const y = _warpRandY();
+  const z = -WARP_DEPTH * 0.5 + Math.random() * WARP_DEPTH * 0.6;
+  _warpPos[i*6]   = x;  _warpPos[i*6+1] = y;  _warpPos[i*6+2] = z;
+  _warpPos[i*6+3] = x;  _warpPos[i*6+4] = y;  _warpPos[i*6+5] = z;
+  _warpLeadVel[i]  = Math.random() * 0.5;
+  _warpTrailVel[i] = Math.random() * 0.3;
 }
-_warpInitPositions(WARP_COUNT);
-let _warpPosAttr = new THREE.BufferAttribute(_warpPos, 3);
+// Initialize ALL slots up to MAX so we never read garbage when count grows.
+for (let i = 0; i < _MAX_WARP_COUNT; i++) _warpInitOne(i);
+const _warpPosAttr = new THREE.BufferAttribute(_warpPos, 3);
 _warpPosAttr.setUsage(THREE.DynamicDrawUsage);
 _warpGeo.setAttribute('position', _warpPosAttr);
+// Initial draw range = WARP_COUNT pairs (each pair = 2 vertices in the LineSegments)
+_warpGeo.setDrawRange(0, WARP_COUNT * 2);
+// Re-init slots that were initialized when not yet visible — keeps positions sane.
 function _warpRebuild(newCount) {
+  if (newCount > _MAX_WARP_COUNT) newCount = _MAX_WARP_COUNT;
+  if (newCount < 1) newCount = 1;
+  // If growing, re-roll the newly-active slots so they spawn fresh
+  // (otherwise they'd carry stale Z values left over from initial init).
+  if (newCount > WARP_COUNT) {
+    for (let i = WARP_COUNT; i < newCount; i++) _warpInitOne(i);
+    _warpPosAttr.needsUpdate = true;
+  }
   WARP_COUNT = newCount;
-  _warpPos = new Float32Array(WARP_COUNT * 6);
-  _warpLeadVel = new Float32Array(WARP_COUNT);
-  _warpTrailVel = new Float32Array(WARP_COUNT);
-  _warpInitPositions(WARP_COUNT);
-  _warpPosAttr = new THREE.BufferAttribute(_warpPos, 3);
-  _warpPosAttr.setUsage(THREE.DynamicDrawUsage);
-  _warpGeo.setAttribute('position', _warpPosAttr);
+  _warpGeo.setDrawRange(0, WARP_COUNT * 2);
 }
 const _warpMat = new THREE.LineBasicMaterial({
   color: new THREE.Color(0.51, 0.45, 0.63), transparent: true, opacity: _warpBrightness,
@@ -2486,23 +2500,34 @@ mirrorMesh.rotation.x = -Math.PI / 2;
 mirrorMesh.position.set(0, 0.01, -100);
 scene.add(mirrorMesh);
 
-// Patch Water's onBeforeRender so the internal mirrorCamera skips layer 2 (thrusters)
-const _origWaterOBR = mirrorMesh.onBeforeRender;
+// Patch Water's onBeforeRender so the internal mirrorCamera skips thruster /
+// flame / cone / warp objects (those default to layer 0 like the rest of
+// the scene, so mirrorCamera DOES see them; we hide explicitly).
+// PERF: was forEach with new closure per call + new _hidden array per frame.
+// Now uses a hoisted scratch buffer and plain for-loops — zero allocations
+// and zero closures per frame.
+const _origWaterOBR  = mirrorMesh.onBeforeRender;
+const _waterHideBuf  = new Array(64);   // scratch — grows once, never re-allocs
+let   _waterHideLen  = 0;
+function _waterMaybeHide(obj) {
+  if (obj && obj.visible) {
+    obj.visible = false;
+    _waterHideBuf[_waterHideLen++] = obj;
+  }
+}
 mirrorMesh.onBeforeRender = function(renderer, scene, camera) {
-  // Temporarily remove layer 2 from all thruster objects so mirror camera won't see them
-  // (mirrorCamera inherits default layers mask = layer 0 only, but to be safe we
-  //  hide them explicitly by toggling visibility)
-  const _hidden = [];
-  const _hide = (obj) => { if (obj.visible) { obj.visible = false; _hidden.push(obj); } };
-  thrusterSystems.forEach(s => _hide(s.points));
-  miniThrusterSystems.forEach(s => _hide(s.points));
-  nozzleBloomSprites.forEach(s => _hide(s));
-  miniBloomSprites.forEach(s => _hide(s));
-  flameMeshes.forEach(s => _hide(s));
-  if (typeof _thrusterCones !== 'undefined') _thrusterCones.forEach(c => _hide(c));
-  _hide(_warpMesh);
+  _waterHideLen = 0;
+  for (let i = 0, n = thrusterSystems.length;     i < n; i++) _waterMaybeHide(thrusterSystems[i].points);
+  for (let i = 0, n = miniThrusterSystems.length; i < n; i++) _waterMaybeHide(miniThrusterSystems[i].points);
+  for (let i = 0, n = nozzleBloomSprites.length;  i < n; i++) _waterMaybeHide(nozzleBloomSprites[i]);
+  for (let i = 0, n = miniBloomSprites.length;    i < n; i++) _waterMaybeHide(miniBloomSprites[i]);
+  for (let i = 0, n = flameMeshes.length;         i < n; i++) _waterMaybeHide(flameMeshes[i]);
+  if (typeof _thrusterCones !== 'undefined') {
+    for (let i = 0, n = _thrusterCones.length;    i < n; i++) _waterMaybeHide(_thrusterCones[i]);
+  }
+  _waterMaybeHide(_warpMesh);
   _origWaterOBR.call(this, renderer, scene, camera);
-  _hidden.forEach(obj => { obj.visible = true; });
+  for (let i = 0; i < _waterHideLen; i++) _waterHideBuf[i].visible = true;
 };
 
 // Almost totally black water — only sun streak illuminates it
