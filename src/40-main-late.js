@@ -1818,6 +1818,8 @@ const LETHAL_RING_POOL_SIZE = 20;
 const _LR_SIDES = 8, _LR_R = 5.25, _LR_Y = 2, _LR_TUBE = 2.2;
 let _lrGeo = null;
 let _lrMatTemplate = null;
+// Exposed on window so the global prewarm pass can force-init the pool at
+// startup instead of letting the first ring spawn pay the shader-compile cost.
 function _initLethalRings() {
   if (_lethalRingPool.length > 0) return;
   // Build octagon torus: a tube that follows the octagon path
@@ -1871,6 +1873,8 @@ function _initLethalRings() {
     _lethalRingPool.push(group);
   }
 }
+// Expose so global prewarm can call it once at startup
+window._initLethalRings = _initLethalRings;
 function _spawnLethalRing(x, z) {
   _initLethalRings();
   for (const r of _lethalRingPool) {

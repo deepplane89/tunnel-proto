@@ -5083,6 +5083,9 @@ window._jlDebug = {
   const _LT_POOL_SIZE = 32;
   const _ltPool = [];
   let _ltPoolReady = false;
+  // Exposed on window so the global prewarm pass (end of file) can force-init
+  // the pool at startup instead of letting the first lightning strike pay the
+  // shader-compile cost mid-gameplay.
   function _ltInitPool() {
     if (_ltPoolReady) return;
     for (let i = 0; i < _LT_POOL_SIZE; i++) {
@@ -5138,6 +5141,8 @@ window._jlDebug = {
     }
     _ltPoolReady = true;
   }
+  // Expose so global prewarm can call it once at startup
+  window._ltInitPool = _ltInitPool;
   function _ltAcquire() {
     if (!_ltPoolReady) _ltInitPool();
     for (let i = 0; i < _ltPool.length; i++) {

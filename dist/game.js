@@ -11815,6 +11815,8 @@ const LETHAL_RING_POOL_SIZE = 20;
 const _LR_SIDES = 8, _LR_R = 5.25, _LR_Y = 2, _LR_TUBE = 2.2;
 let _lrGeo = null;
 let _lrMatTemplate = null;
+// Exposed on window so the global prewarm pass can force-init the pool at
+// startup instead of letting the first ring spawn pay the shader-compile cost.
 function _initLethalRings() {
   if (_lethalRingPool.length > 0) return;
   // Build octagon torus: a tube that follows the octagon path
@@ -11868,6 +11870,8 @@ function _initLethalRings() {
     _lethalRingPool.push(group);
   }
 }
+// Expose so global prewarm can call it once at startup
+window._initLethalRings = _initLethalRings;
 function _spawnLethalRing(x, z) {
   _initLethalRings();
   for (const r of _lethalRingPool) {
@@ -26323,6 +26327,9 @@ window._jlDebug = {
   const _LT_POOL_SIZE = 32;
   const _ltPool = [];
   let _ltPoolReady = false;
+  // Exposed on window so the global prewarm pass (end of file) can force-init
+  // the pool at startup instead of letting the first lightning strike pay the
+  // shader-compile cost mid-gameplay.
   function _ltInitPool() {
     if (_ltPoolReady) return;
     for (let i = 0; i < _LT_POOL_SIZE; i++) {
@@ -26378,6 +26385,8 @@ window._jlDebug = {
     }
     _ltPoolReady = true;
   }
+  // Expose so global prewarm can call it once at startup
+  window._ltInitPool = _ltInitPool;
   function _ltAcquire() {
     if (!_ltPoolReady) _ltInitPool();
     for (let i = 0; i < _ltPool.length; i++) {
@@ -27154,6 +27163,51 @@ window._jlDebug = {
   };
 })();
 // cache bust 1777249800
+
+// ── GLOBAL SHADER PREWARM ──
+// Force-init every lazy pool, then call renderer.compile(scene, camera) so
+// EVERY material in the scene graph (eager + just-initialized lazy pools)
+// gets its shader compiled NOW, during loading, instead of mid-gameplay.
+//
+// This eliminates the "first lightning bolt flash", "first lethal ring spawn
+// hitch", and similar one-frame stalls users see when a new material first
+// hits the screen. Same family of fix as the cone obstacle needsUpdate fix.
+//
+// Runs synchronously at module load (this is the LAST module concatenated, so
+// every dependency is defined). The boot load gate below waits 2 frames after
+// all promises settle for any final pipeline state to flush, which is the
+// safety net if anything still compiles lazily.
+(function _globalShaderPrewarm() {
+  if (typeof window === 'undefined' || typeof renderer === 'undefined') return;
+  const t0 = (typeof performance !== 'undefined') ? performance.now() : 0;
+  const status = (label, pct) => { try { window.__loadGate && window.__loadGate.setStatus(label, pct); } catch(e) {} };
+  try {
+    status('PREWARM', 85);
+    // 1) Force-init every lazy pool so its meshes are now in the scene graph.
+    if (typeof window._ltInitPool === 'function') {
+      try { window._ltInitPool(); } catch (e) { console.warn('[PREWARM] lightning init failed:', e && e.message); }
+    }
+    if (typeof window._initLethalRings === 'function') {
+      try { window._initLethalRings(); } catch (e) { console.warn('[PREWARM] lethal rings init failed:', e && e.message); }
+    }
+    // 2) Compile every material currently in the scene graph. renderer.compile()
+    //    is idempotent — a no-op for materials already compiled, so this is
+    //    safe even though earlier sites already compiled subsets.
+    if (typeof scene !== 'undefined' && typeof camera !== 'undefined') {
+      renderer.compile(scene, camera);
+    }
+    if (typeof titleScene !== 'undefined' && titleScene && typeof camera !== 'undefined') {
+      renderer.compile(titleScene, camera);
+    }
+    const dt = ((typeof performance !== 'undefined') ? performance.now() : 0) - t0;
+    console.log('[PREWARM] global shader prewarm complete in ' + dt.toFixed(0) + 'ms');
+    status('PREWARM', 95);
+  } catch (err) {
+    // Non-fatal — lazy compilation will still happen, we just lose the
+    // upfront-cost benefit. Log and let the game continue.
+    console.warn('[PREWARM] global prewarm failed (non-fatal):', err && err.message);
+  }
+})();
 
 // ── BOOT LOAD GATE ─ fade out the boot loader once critical assets are ready ──
 (function _bootLoadGate() {
