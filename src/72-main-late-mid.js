@@ -5185,8 +5185,9 @@ window._jlDebug = {
     inst._coreRadius = _core;
     inst._glowRadius = _glow;
 
-    // Warning disc — reset opacity, position, show
+    // Warning disc — reset opacity, scale, position, show
     inst.warnMesh.position.set(landX, 0.08, landZ);
+    inst.warnMesh.scale.set(1, 1, 1);
     inst.warnMat.opacity = 0.6;
     inst.warnMesh.visible = true;
 
