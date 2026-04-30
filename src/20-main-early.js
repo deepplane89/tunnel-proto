@@ -5730,6 +5730,14 @@ function applySkin(skinIndex) {
     rimLight.intensity = 0.0; fillLight.intensity = 0.25;
   }
   // else: defaults already applied at top — no-op.
+
+  // Fix: ship-light-pop-on bug. applySkin recreates MeshStandardMaterial
+  // instances every call (lines ~5868-5881). Those fresh materials have never
+  // been seen by the renderer until the first gameplay frame, causing a
+  // 1-frame black/dark ship as the shader compiles against the gameplay
+  // scene's lights. renderer.compile() is idempotent — already-compiled
+  // mats are no-ops, so this is cheap on every call but eliminates the pop.
+  try { renderer.compile(scene, camera); } catch (e) {}
 }
 
 // Shared hex-panel bump shader patch (used by default ship + matchDefault alt ships)
