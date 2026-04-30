@@ -1200,8 +1200,25 @@ const canvas   = document.getElementById('game-canvas');
 const _mobAA = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1);
 // Expose for cross-file mobile gating (perf-diag, etc.)
 window._isMobile = _mobAA;
+
+// ── Initial DPR resolution (graphics quality setting lives in 65-settings.js,
+// loaded after this file). Read the saved setting directly from localStorage so
+// the renderer boots at the correct DPR on first frame. Default 'balanced' (1.5).
+function _bootDPR() {
+  const native = window.devicePixelRatio || 1;
+  let q = 'balanced';
+  try {
+    const raw = (window._LS || localStorage).getItem('jh_settings');
+    if (raw) { const s = JSON.parse(raw); if (s && s.graphicsQuality) q = s.graphicsQuality; }
+  } catch(e) {}
+  if (q === 'performance') return 1.0;
+  if (q === 'sharp')       return Math.min(native, 3);
+  return Math.min(native, 1.5); // balanced (default)
+}
+const _initialDPR = _bootDPR();
+
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_mobAA, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(_initialDPR);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
@@ -1294,7 +1311,7 @@ const _titleCanvas = document.createElement('canvas');
 _titleCanvas.id = 'title-ship-canvas';
 _titleCanvas.style.transform = 'translate(-1px, -14px)';
 const _titleRenderer = new THREE.WebGLRenderer({ canvas: _titleCanvas, antialias: true, alpha: true });
-_titleRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+_titleRenderer.setPixelRatio(_initialDPR);
 _titleRenderer.toneMapping = THREE.ACESFilmicToneMapping;
 _titleRenderer.toneMappingExposure = 1.6;
 // Insert into skin-viewer after DOM ready
@@ -1576,7 +1593,10 @@ function applyPerfMode() {
       Math.floor(window.innerHeight * 0.5)
     );
   } else {
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Use the user's selected graphics quality DPR (defined in 65-settings.js).
+    // Fallback to balanced default (1.5) if helper not yet loaded.
+    const dpr = (typeof window._targetDPR === 'function') ? window._targetDPR() : Math.min(window.devicePixelRatio || 1, 1.5);
+    renderer.setPixelRatio(dpr);
     bloom.resolution.set(Math.floor(window.innerWidth / _BLOOM_DIV), Math.floor(window.innerHeight / _BLOOM_DIV));
   }
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -4416,7 +4436,7 @@ let skyConstellLines = null;  // constellation LineSegments
   const starMat = new THREE.ShaderMaterial({
     uniforms: {
       uTime:        { value: 0.0 },
-      uPixelRatio:  { value: Math.min(window.devicePixelRatio, 2) },
+      uPixelRatio:  { value: _initialDPR },
       uStarR:       { value: 0.40 },
       uStarG:       { value: 0.56 },
       uStarB:       { value: 0.78 },

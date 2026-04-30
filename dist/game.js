@@ -1462,8 +1462,25 @@ const canvas   = document.getElementById('game-canvas');
 const _mobAA = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1);
 // Expose for cross-file mobile gating (perf-diag, etc.)
 window._isMobile = _mobAA;
+
+// ── Initial DPR resolution (graphics quality setting lives in 65-settings.js,
+// loaded after this file). Read the saved setting directly from localStorage so
+// the renderer boots at the correct DPR on first frame. Default 'balanced' (1.5).
+function _bootDPR() {
+  const native = window.devicePixelRatio || 1;
+  let q = 'balanced';
+  try {
+    const raw = (window._LS || localStorage).getItem('jh_settings');
+    if (raw) { const s = JSON.parse(raw); if (s && s.graphicsQuality) q = s.graphicsQuality; }
+  } catch(e) {}
+  if (q === 'performance') return 1.0;
+  if (q === 'sharp')       return Math.min(native, 3);
+  return Math.min(native, 1.5); // balanced (default)
+}
+const _initialDPR = _bootDPR();
+
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_mobAA, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(_initialDPR);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
@@ -1556,7 +1573,7 @@ const _titleCanvas = document.createElement('canvas');
 _titleCanvas.id = 'title-ship-canvas';
 _titleCanvas.style.transform = 'translate(-1px, -14px)';
 const _titleRenderer = new THREE.WebGLRenderer({ canvas: _titleCanvas, antialias: true, alpha: true });
-_titleRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+_titleRenderer.setPixelRatio(_initialDPR);
 _titleRenderer.toneMapping = THREE.ACESFilmicToneMapping;
 _titleRenderer.toneMappingExposure = 1.6;
 // Insert into skin-viewer after DOM ready
@@ -1838,7 +1855,10 @@ function applyPerfMode() {
       Math.floor(window.innerHeight * 0.5)
     );
   } else {
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Use the user's selected graphics quality DPR (defined in 65-settings.js).
+    // Fallback to balanced default (1.5) if helper not yet loaded.
+    const dpr = (typeof window._targetDPR === 'function') ? window._targetDPR() : Math.min(window.devicePixelRatio || 1, 1.5);
+    renderer.setPixelRatio(dpr);
     bloom.resolution.set(Math.floor(window.innerWidth / _BLOOM_DIV), Math.floor(window.innerHeight / _BLOOM_DIV));
   }
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -4678,7 +4698,7 @@ let skyConstellLines = null;  // constellation LineSegments
   const starMat = new THREE.ShaderMaterial({
     uniforms: {
       uTime:        { value: 0.0 },
-      uPixelRatio:  { value: Math.min(window.devicePixelRatio, 2) },
+      uPixelRatio:  { value: _initialDPR },
       uStarR:       { value: 0.40 },
       uStarG:       { value: 0.56 },
       uStarB:       { value: 0.78 },
@@ -14495,7 +14515,43 @@ let _settings = {
   musicMuted: false,
   sfxMuted: false,
   hapticsOn: true,
+  // Graphics quality → DPR clamp. 'balanced' is mobile default.
+  // 'performance' = 1.0, 'balanced' = 1.5, 'sharp' = min(devicePixelRatio, 3)
+  graphicsQuality: 'balanced',
 };
+
+// Returns the DPR cap for the current graphics quality setting.
+// Used by renderer.setPixelRatio() and the starfield shader uPixelRatio uniform.
+function _targetDPR() {
+  const native = window.devicePixelRatio || 1;
+  switch (_settings.graphicsQuality) {
+    case 'performance': return 1.0;
+    case 'sharp':       return Math.min(native, 3);
+    case 'balanced':
+    default:            return Math.min(native, 1.5);
+  }
+}
+window._targetDPR = _targetDPR;
+
+// Apply current graphics quality → update renderer DPR + shader uniforms.
+// Safe to call before renderer/composer exist (guarded).
+function applyGraphicsQuality() {
+  const dpr = _targetDPR();
+  try {
+    if (typeof renderer !== 'undefined' && renderer && !perfMode) {
+      renderer.setPixelRatio(dpr);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      if (typeof composer !== 'undefined' && composer) {
+        composer.setSize(window.innerWidth, window.innerHeight);
+      }
+    }
+    // Sync starfield shader pixel-ratio uniform (line 4419 in 20-main-early.js)
+    if (window._starMat && window._starMat.uniforms && window._starMat.uniforms.uPixelRatio) {
+      window._starMat.uniforms.uPixelRatio.value = dpr;
+    }
+  } catch(e) {}
+}
+window.applyGraphicsQuality = applyGraphicsQuality;
 
 function loadSettings() {
   try {
@@ -14536,6 +14592,11 @@ function openSettings() {
   const hBtn = document.getElementById('haptic-toggle');
   hBtn.textContent = _settings.hapticsOn ? 'ON' : 'OFF';
   hBtn.classList.toggle('off', !_settings.hapticsOn);
+  // Sync graphics quality button states
+  ['performance','balanced','sharp'].forEach(q => {
+    const b = document.getElementById('gfx-' + q);
+    if (b) b.classList.toggle('active', _settings.graphicsQuality === q);
+  });
 
   ov.classList.remove('hidden');
 }
@@ -14631,6 +14692,21 @@ function closeSettings() {
     document.getElementById('mute-sfx').classList.toggle('muted', _settings.sfxMuted);
     document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '♪';
     saveSettings();
+  });
+
+  // Graphics quality 3-way toggle (Performance / Balanced / Sharp)
+  ['performance','balanced','sharp'].forEach(q => {
+    const b = document.getElementById('gfx-' + q);
+    if (!b) return;
+    _tapBind(b, () => {
+      _settings.graphicsQuality = q;
+      ['performance','balanced','sharp'].forEach(qq => {
+        const bb = document.getElementById('gfx-' + qq);
+        if (bb) bb.classList.toggle('active', qq === q);
+      });
+      applyGraphicsQuality();
+      saveSettings();
+    });
   });
 
   // Haptics toggle
