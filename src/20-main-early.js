@@ -348,7 +348,14 @@ const SHIP_SKINS = [
   { name: 'BLACK MAMBA',   price: 800,  description: 'Stealth predator' },
   { name: 'CIPHER',        price: 1400, description: 'Voronoi hull plating' },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
-    coneThrusters: true,
+    // Cone thrusters disabled for MK II per user request (2026-04-29) — particles only.
+    // To re-enable: set `coneThrusters: true`. The cone shader, shipGroup parenting,
+    // baseline rotX=π/2 auto-orient, and L-panel sliders are all still wired up.
+    // Last-tuned _coneThruster values (window._coneThruster defaults):
+    //   length:3.4, radius:0.14, rotX/Y/Z:0 (additive offsets atop π/2 baseline),
+    //   offX/Y/Z:0, neonPower:1.5, noiseSpeed:0.8, noiseStrength:0.13,
+    //   fresnelPower:6.0, opacity:1.0. Position uses _localNozzles[idx] per frame.
+    // coneThrusters: true,
     glbConfig: { posX:0, posY:-0.590, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
       // MK II hull is identical to default RUNNER in Z-extent (rear face exit at world Z≈5.08)
       // and engine bay width — derived from spaceship_01.glb geometry (2026-04-27).
