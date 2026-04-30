@@ -2230,6 +2230,7 @@ mirrorMesh.onBeforeRender = function(renderer, scene, camera) {
   nozzleBloomSprites.forEach(s => _hide(s));
   miniBloomSprites.forEach(s => _hide(s));
   flameMeshes.forEach(s => _hide(s));
+  if (typeof _thrusterCones !== 'undefined') _thrusterCones.forEach(c => _hide(c));
   _hide(_warpMesh);
   _origWaterOBR.call(this, renderer, scene, camera);
   _hidden.forEach(obj => { obj.visible = true; });
@@ -6379,9 +6380,12 @@ window._coneThrustersEnabled = false; // default off; flip per skin
 window._coneThruster = {
   length:       3.4,
   radius:       0.14,
-  rotX:         1.42,
-  rotY:         1.72,
-  rotZ:         0.05,
+  // Auto-orient: cone is parented to shipGroup with baseline rotX=π/2 so it points
+  // straight back (+Z ship-local). rotX/rotY/rotZ here are additive fine-tune offsets
+  // on top of that baseline — leave at 0 unless live-tuning a specific skin.
+  rotX:         0,
+  rotY:         0,
+  rotZ:         0,
   offX:         0,
   offY:         0,
   offZ:         0,
@@ -6516,7 +6520,10 @@ const _thrusterCones = NOZZLE_OFFSETS.map(() => {
   mesh.frustumCulled = false;
   mesh.visible = false;  // shown only when _coneThrustersEnabled
   mesh.renderOrder = 9;
-  scene.add(mesh);
+  // Parent to shipGroup so cone auto-rotates with the ship (matches particle
+  // thrusters' implicit ship-relative behavior). Position is set per-frame in
+  // ship-local space using _localNozzles[idx] (same offsets the particles use).
+  shipGroup.add(mesh);
   return mesh;
 });
 
@@ -6742,12 +6749,17 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
     flameMeshes[idx].visible = false;
 
     // ── Thruster cone mesh ──
+    // Parented to shipGroup — use ship-local offsets so cone follows ship orientation.
+    // Cone geometry tip extends in +Y; ship-back direction is +Z in shipGroup local space
+    // (ship nose faces -Z), so base rotation is rotX=π/2 to point cone tip out the back.
+    // _coneThruster.rotX/rotY/rotZ act as additive fine-tune offsets on top of auto-orient.
     const cone = _thrusterCones[idx];
     if (window._coneThrustersEnabled && tp > 0.01 && window._thrusterVisible !== false) {
       cone.visible = true;
       const ct = window._coneThruster;
-      cone.position.set(wx + ct.offX, wy + ct.offY, wz + ct.offZ);
-      cone.rotation.set(ct.rotX, ct.rotY, ct.rotZ);
+      const localNoz = _localNozzles[idx];
+      cone.position.set(localNoz.x + ct.offX, localNoz.y + ct.offY, localNoz.z + ct.offZ);
+      cone.rotation.set(Math.PI / 2 + ct.rotX, ct.rotY, ct.rotZ);
       cone.scale.set(ct.radius, ct.length * tp, ct.radius);
       // Update shader uniforms from live slider values
       const u = cone.material.uniforms;
