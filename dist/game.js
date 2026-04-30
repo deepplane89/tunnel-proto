@@ -26245,6 +26245,78 @@ window._jlDebug = {
     return new THREE.TubeGeometry(curve, Math.max(4, pts.length), radius, 5, false);
   }
 
+  // ── Lightning bolt object pool ────────────────────────────────────────────
+  // Pre-allocates N slots with all meshes/materials/geometries built once and
+  // added to scene once. _spawnLightning acquires a free slot and resets it;
+  // _ltKill hides it and marks it free. Tube geometries are still rebuilt by
+  // _ltRejag (preserves visual flicker — that's the whole point of the rejag).
+  // Sized for SALVO=9 + PINCH=10 + auto + lateral + linger overlap with margin.
+  const _LT_POOL_SIZE = 32;
+  const _ltPool = [];
+  let _ltPoolReady = false;
+  function _ltInitPool() {
+    if (_ltPoolReady) return;
+    for (let i = 0; i < _LT_POOL_SIZE; i++) {
+      // Warning disc
+      const warnGeo  = new THREE.CircleGeometry(_LT.warnRadius, 32);
+      const warnMat  = new THREE.MeshBasicMaterial({ color:_LT.warnColor, transparent:true, opacity:0.6, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+      const warnMesh = new THREE.Mesh(warnGeo, warnMat);
+      warnMesh.rotation.x = -Math.PI/2;
+      warnMesh.visible = false;
+      scene.add(warnMesh);
+
+      // Ground flash sprite
+      const flashMat = new THREE.SpriteMaterial({ color:_LT.flashColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
+      const flash    = new THREE.Sprite(flashMat);
+      flash.scale.set(10, 10, 1);
+      flash.visible = false;
+      scene.add(flash);
+
+      // Shockwave ring
+      const ringGeo  = new THREE.RingGeometry(0.1, 0.5, 48);
+      const ringMat  = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+      const ring     = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = -Math.PI/2;
+      ring.visible = false;
+      scene.add(ring);
+
+      // Bolt group with placeholder tube geos (rebuilt every spawn via _ltRejag)
+      const boltGroup = new THREE.Group();
+      const coreMat   = new THREE.MeshBasicMaterial({ color:_LT.coreColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
+      const glowMat   = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+      const coreGeo   = _ltBoltGeo(_LT.skyHeight, 0, _LT.segments, _LT.jaggedness,       _LT.coreRadius);
+      const glowGeo   = _ltBoltGeo(_LT.skyHeight, 0, _LT.segments, _LT.jaggedness * 1.4, _LT.glowRadius);
+      const coreMesh  = new THREE.Mesh(coreGeo, coreMat);
+      const glowMesh  = new THREE.Mesh(glowGeo, glowMat);
+      boltGroup.add(coreMesh); boltGroup.add(glowMesh);
+      boltGroup.visible = false;
+      scene.add(boltGroup);
+
+      _ltPool.push({
+        _active: false,
+        // Pose / lifecycle (mutated each spawn)
+        landX: 0, landZ: 0, strikePosZ: 0,
+        phase: 'warn', elapsed: 0, strikeElapsed: 0, lingerElapsed: 0,
+        ringScale: 0.3, hitChecked: false,
+        _coreRadius: _LT.coreRadius, _glowRadius: _LT.glowRadius,
+        // Mesh/mat/geo handles (persistent — never disposed except via _ltDestroyPool)
+        warnMesh, warnGeo, warnMat,
+        flash, flashMat,
+        ring, ringGeo, ringMat,
+        boltGroup, coreMesh, coreGeo, coreMat,
+        glowMesh, glowGeo, glowMat,
+      });
+    }
+    _ltPoolReady = true;
+  }
+  function _ltAcquire() {
+    if (!_ltPoolReady) _ltInitPool();
+    for (let i = 0; i < _ltPool.length; i++) {
+      if (!_ltPool[i]._active) { _ltPool[i]._active = true; return _ltPool[i]; }
+    }
+    return null; // pool exhausted — caller bails out, dropped bolt
+  }
+
   // ── Spawn one lightning bolt ──────────────────────────────────────────────
   // Everything spawns at a Z offset ahead of the ship.
   // Warning disc pulses for warningTime seconds, then bolt slams and lingers.
@@ -26268,66 +26340,56 @@ window._jlDebug = {
     const _core  = (radiiOverride && radiiOverride.coreRadius != null) ? radiiOverride.coreRadius : _LT.coreRadius;
     const _glow  = (radiiOverride && radiiOverride.glowRadius != null) ? radiiOverride.glowRadius : _LT.glowRadius;
 
-    // Warning disc — visible immediately at landZ ahead of ship
-    const warnGeo  = new THREE.CircleGeometry(_LT.warnRadius, 32);
-    const warnMat  = new THREE.MeshBasicMaterial({ color:_LT.warnColor, transparent:true, opacity:0.6, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
-    const warnMesh = new THREE.Mesh(warnGeo, warnMat);
-    warnMesh.rotation.x = -Math.PI/2;
-    warnMesh.position.set(landX, 0.08, landZ);
-    scene.add(warnMesh);
+    // Acquire pooled slot — all meshes/mats/geos pre-built, just reset state
+    const inst = _ltAcquire();
+    if (!inst) return; // pool exhausted (>32 concurrent bolts) — drop this spawn
 
-    // Ground flash
-    const flashMat = new THREE.SpriteMaterial({ color:_LT.flashColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
-    const flash    = new THREE.Sprite(flashMat);
-    flash.scale.set(10, 10, 1);
-    flash.position.set(landX, 1.5, landZ);
-    scene.add(flash);
+    inst.landX = landX;
+    inst.landZ = landZ;
+    inst.strikePosZ = landZ;
+    inst.phase = 'warn';
+    inst.elapsed = 0;
+    inst.strikeElapsed = 0;
+    inst.lingerElapsed = 0;
+    inst.ringScale = 0.3;
+    inst.hitChecked = false;
+    inst._coreRadius = _core;
+    inst._glowRadius = _glow;
 
-    // Shockwave ring
-    const ringGeo  = new THREE.RingGeometry(0.1, 0.5, 48);
-    const ringMat  = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
-    const ring     = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = -Math.PI/2;
-    ring.position.set(landX, 0.1, landZ);
-    scene.add(ring);
+    // Warning disc — reset opacity, position, show
+    inst.warnMesh.position.set(landX, 0.08, landZ);
+    inst.warnMat.opacity = 0.6;
+    inst.warnMesh.visible = true;
 
-    // Bolt group — Z=0 local geometry, group positioned at landZ and scrolled like a cone
-    const boltGroup = new THREE.Group();
-    boltGroup.position.set(0, 0, landZ);
-    const coreMat  = new THREE.MeshBasicMaterial({ color:_LT.coreColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
-    const glowMat  = new THREE.MeshBasicMaterial({ color:_LT.glowColor, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
-    const coreGeo  = _ltBoltGeo(_LT.skyHeight, landX, _LT.segments, _LT.jaggedness,       _core);
-    const glowGeo  = _ltBoltGeo(_LT.skyHeight, landX, _LT.segments, _LT.jaggedness * 1.4, _glow);
-    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-    const glowMesh = new THREE.Mesh(glowGeo, glowMat);
-    boltGroup.add(coreMesh); boltGroup.add(glowMesh);
-    scene.add(boltGroup);
+    // Ground flash — reset opacity, position, show
+    inst.flash.position.set(landX, 1.5, landZ);
+    inst.flashMat.opacity = 0;
+    inst.flash.visible = true;
 
-    const inst = {
-      landX, landZ, strikePosZ: landZ,
-      phase: 'warn', elapsed: 0, strikeElapsed: 0, lingerElapsed: 0,
-      warnMesh, warnGeo, warnMat,
-      flash, flashMat,
-      ring, ringGeo, ringMat,
-      boltGroup, coreMesh, coreGeo, coreMat,
-      glowMesh, glowGeo, glowMat,
-      ringScale: 0.3, hitChecked: false,
-      // Per-instance radii — _ltRejag reads these instead of _LT.* so overrides persist
-      _coreRadius: _core,
-      _glowRadius: _glow,
-    };
+    // Shockwave ring — reset opacity, scale, position, show
+    inst.ring.position.set(landX, 0.1, landZ);
+    inst.ring.scale.set(0.3, 0.3, 1);
+    inst.ringMat.opacity = 0;
+    inst.ring.visible = true;
+
+    // Bolt group — reset Z, opacities, rebuild tubes for this landX/radii (rejag preserves flicker)
+    inst.boltGroup.position.set(0, 0, landZ);
+    inst.coreMat.opacity = 0;
+    inst.glowMat.opacity = 0;
+    inst.boltGroup.visible = true;
+    _ltRejag(inst);
 
     // skipWarn: bolt pops in pre-struck at landZ (no warn disc, no flash, no ring).
     // Ship sees a planted column drifting in from distance — the bolt IS the warning.
     // Used for lateral bolts where a warn disc would reveal the ambush too early.
     if (skipWarn) {
-      inst.phase          = 'strike';
-      inst.strikeElapsed  = 0;
-      warnMat.opacity     = 0;
-      flashMat.opacity    = 0;
-      ringMat.opacity     = 0;
-      coreMat.opacity     = 1.0;
-      glowMat.opacity     = 0.5;
+      inst.phase             = 'strike';
+      inst.strikeElapsed     = 0;
+      inst.warnMat.opacity   = 0;
+      inst.flashMat.opacity  = 0;
+      inst.ringMat.opacity   = 0;
+      inst.coreMat.opacity   = 1.0;
+      inst.glowMat.opacity   = 0.5;
       _ltRejag(inst);
     }
 
@@ -26335,10 +26397,14 @@ window._jlDebug = {
   }
 
   function _ltKill(inst) {
-    scene.remove(inst.warnMesh); inst.warnGeo.dispose(); inst.warnMat.dispose();
-    scene.remove(inst.flash);    inst.flashMat.dispose();
-    scene.remove(inst.ring);     inst.ringGeo.dispose(); inst.ringMat.dispose();
-    scene.remove(inst.boltGroup); inst.coreGeo.dispose(); inst.coreMat.dispose(); inst.glowGeo.dispose(); inst.glowMat.dispose();
+    // Pooled: hide meshes and release slot — no scene.remove, no dispose.
+    // Tube geos (coreGeo/glowGeo) stay attached to their meshes; next spawn
+    // calls _ltRejag which disposes the old tube and assigns a fresh one.
+    inst.warnMesh.visible = false;
+    inst.flash.visible    = false;
+    inst.ring.visible     = false;
+    inst.boltGroup.visible = false;
+    inst._active = false;
   }
 
   function _ltRejag(inst) {
