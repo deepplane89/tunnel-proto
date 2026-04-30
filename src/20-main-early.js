@@ -8444,15 +8444,23 @@ function _updateCanyonWalls(dt, speed) {
 
   const footOff = _canyonWalls._footOff || 0;
 
-  ['left','right'].forEach(k => {
-    const side   = k === 'left' ? -1 : 1;
+  // PERF: was nested forEach with array literal ['left','right'] allocated every
+  // frame plus closure-per-mesh allocations (~40/frame during active canyon).
+  // Converted to plain for-loops with hoisted side constants — zero allocations,
+  // zero closures. Behavior identical: same iteration order, same early-exit
+  // semantics (forEach `return` → `continue`).
+  for (let _kIdx = 0; _kIdx < 2; _kIdx++) {
+    const k = _kIdx === 0 ? 'left' : 'right';
+    const side = _kIdx === 0 ? -1 : 1;
     const meshes = _canyonWalls[k];
+    const meshCount = meshes.length;
 
-    meshes.forEach(m => {
+    for (let _mIdx = 0; _mIdx < meshCount; _mIdx++) {
+      const m = meshes[_mIdx];
       // Freeze regular slabs at their init Z until entrance arrives and reveal fires.
       // Entrance scrolls normally. This keeps the corridor exactly where today's baseline
       // places it (Z=-210 to -490) at the moment of reveal, so corridor math is identical.
-      if (!m.userData.isEntrance && !_canyonWalls._corridorRevealed) return;
+      if (!m.userData.isEntrance && !_canyonWalls._corridorRevealed) continue;
 
       m.position.z += scroll;
 
@@ -8475,13 +8483,13 @@ function _updateCanyonWalls(dt, speed) {
       // ── EXITING: slabs drift forward, no recycle, hide when past despawn ──
       if (_canyonExiting) {
         if (m.position.z > DESPAWN_Z + spacing) m.visible = false;
-        return;
+        continue;
       }
 
       // Entrance slabs: scroll through once then hide — never recycle into corridor
       if (m.userData.isEntrance && m.position.z > DESPAWN_Z + spacing) {
         m.visible = false;
-        return;
+        continue;
       }
 
       // Recycle: slab passed ship → send to back of queue and bake new X
@@ -8531,8 +8539,8 @@ function _updateCanyonWalls(dt, speed) {
         // Hold baked X — rotation frozen at bake time, only updates on recycle
         if (m.userData.bakedX !== undefined) m.position.x = m.userData.bakedX;
       }
-    });
-  });
+    }
+  }
 
   // Auto-destroy once all slabs have scrolled off during exit
   if (_canyonExiting && _canyonWalls) {

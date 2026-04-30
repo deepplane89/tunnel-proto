@@ -266,6 +266,10 @@ const _perfDiag = (function() {
 })();
 window._perfDiag = _perfDiag;
 
+// Hoisted scratch Vector3 reused every frame inside animate() for thruster
+// haze nozzle→screen-UV projection. Avoids per-frame allocation / GC churn.
+const _hazeProjScratch = new THREE.Vector3();
+
 function animate() {
   requestAnimationFrame(animate);
   _perfDiag.frameStart();
@@ -452,7 +456,9 @@ function animate() {
     // measurable cost. Saves ~0.5-1ms/frame on mid-range Android.
     _thrusterHazePass.enabled = !window._isMobile && window._coneThrustersEnabled && state.phase === 'playing' && state.thrusterPower > 0.01;
     if (_thrusterHazePass.enabled) {
-      const _hzProj = new THREE.Vector3();
+      // Reuse hoisted scratch Vector3 instead of allocating one every frame.
+      // (Was new THREE.Vector3() per-frame — GC churn during desktop cone-thruster play.)
+      const _hzProj = _hazeProjScratch;
       let _hazeValid = true;
       // Project left nozzle to screen UV
       const nwL = nozzleWorld(_localNozzles[0]);
