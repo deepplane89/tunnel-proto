@@ -6960,6 +6960,18 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
 
   // Exhaust cone scale/opacity handled in the main update() animation block
 
+  // ── Particle PointsMaterial opacity — scales every additive contribution.
+  // This is the PRIMARY white-hot dial: lower = less pile-up saturation = thruster color survives
+  // through the additive stack instead of clamping to (1,1,1) and triggering bloom halo.
+  const _partOp = (window._thrPart_partOpacity != null) ? window._thrPart_partOpacity : 1.0;
+  const _miniPartOp = (window._thrPart_miniPartOpacity != null) ? window._thrPart_miniPartOpacity : _partOp;
+  for (let i = 0, n = thrusterSystems.length; i < n; i++) {
+    if (thrusterSystems[i].points.material.opacity !== _partOp) thrusterSystems[i].points.material.opacity = _partOp;
+  }
+  for (let i = 0, n = miniThrusterSystems.length; i < n; i++) {
+    if (miniThrusterSystems[i].points.material.opacity !== _miniPartOp) miniThrusterSystems[i].points.material.opacity = _miniPartOp;
+  }
+
   // ── localToWorld: lock all thruster elements to shipGroup transform ──
   shipGroup.updateMatrixWorld(true);
 
@@ -7005,8 +7017,11 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         );
       } else {
         const t0 = sys.ages[i] / sys.lifetimes[i];
-        if (t0 < 0.12) {
-          // Pin to nozzle for the first 12% of life — origin always locked to pod
+        // Position-pin window: how long particles are clamped to the nozzle (causes additive pile-up = white-hot core).
+        // Default 0.12 reproduces original look; lower values disperse particles sooner and reduce additive saturation.
+        const _tPosPin = (window._thrPart_posPinFrac != null) ? window._thrPart_posPinFrac : 0.12;
+        if (t0 < _tPosPin) {
+          // Pin to nozzle — origin locked to pod
           pos[i * 3]     = wx;
           pos[i * 3 + 1] = wy;
           pos[i * 3 + 2] = wz;
@@ -22987,9 +23002,12 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('flame lateral', _flameLateralMult, 0, 0.2, 0.005, v => _flameLateralMult = v, '#f80'));
 
     panel.appendChild(makeHeader('THRUSTERS — GLOBAL'));
-    // ★★ GLB FIRE MESH — likely the dominant white-hot source. Try this FIRST.
-    panel.appendChild(makeSlider('★★ GLB fire emissive×', window._shipFire_emissive != null ? window._shipFire_emissive : 1.0, 0, 2.0, 0.05, v => { window._shipFire_emissive = v; }, '#f00'));
-    panel.appendChild(makeSlider('★★ GLB fire opacity',  window._shipFire_opacity  != null ? window._shipFire_opacity  : 1.0, 0, 1.0, 0.02, v => { window._shipFire_opacity  = v; }, '#f00'));
+    // ★★ PRIMARY white-hot dials — scale additive pile-up at the nozzle.
+    // particle opacity = how much each particle contributes to additive stack (1.0 → saturates to white)
+    // pos-pin frac    = how long particles stay clamped to nozzle pos (longer → more pile-up)
+    panel.appendChild(makeSlider('★★ particle opacity',     window._thrPart_partOpacity != null ? window._thrPart_partOpacity : 1.0, 0.05, 1.0, 0.01, v => { window._thrPart_partOpacity = v; }, '#f00'));
+    panel.appendChild(makeSlider('★★ mini particle opacity',window._thrPart_miniPartOpacity != null ? window._thrPart_miniPartOpacity : 1.0, 0.05, 1.0, 0.01, v => { window._thrPart_miniPartOpacity = v; }, '#f00'));
+    panel.appendChild(makeSlider('★★ pos-pin frac (pile-up)', window._thrPart_posPinFrac != null ? window._thrPart_posPinFrac : 0.12, 0.0, 0.30, 0.005, v => { window._thrPart_posPinFrac = v; }, '#f00'));
     panel.appendChild(makeSlider('thruster scale', window._thrusterScale || 1.0, 0, 3, 0.05, v => { window._thrusterScale = v; }, '#f60'));
     panel.appendChild(makeSlider('point material size', thrusterSystems[0].points.material.size, 0.01, 1.0, 0.01, v => {
       thrusterSystems.forEach(s => s.points.material.size = v);
@@ -23007,10 +23025,9 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('★ mini white-mix', window._miniBloom_whiteMix != null ? window._miniBloom_whiteMix : 0.0, 0, 1, 0.02, v => { window._miniBloom_whiteMix = v; }, '#ff0'));
 
     // ── Particle SYSTEM (the long bright streaks) ──
+    // Removed duds (clamped by additive pile-up so they had no perceivable effect at default settings):
+    //   p.coreEnd, p.coreR, p.coreGB — superseded by ★★ particle opacity / pos-pin frac in GLOBAL.
     panel.appendChild(makeHeader('THRUSTER PARTICLES'));
-    panel.appendChild(makeSlider('p.coreEnd (white phase len)', window._thrPart_coreEnd != null ? window._thrPart_coreEnd : 0.10, 0, 0.30, 0.005, v => { window._thrPart_coreEnd = v; }, '#fa0'));
-    panel.appendChild(makeSlider('p.coreR (white core R)',     window._thrPart_coreR    != null ? window._thrPart_coreR    : 1.00, 0, 1, 0.01,  v => { window._thrPart_coreR    = v; }, '#fa0'));
-    panel.appendChild(makeSlider('p.coreGB (white core G/B start)', window._thrPart_coreGB != null ? window._thrPart_coreGB : 0.85, 0, 1, 0.01, v => { window._thrPart_coreGB = v; }, '#fa0'));
     panel.appendChild(makeSlider('p.midEnd (mid → fade @)',     window._thrPart_midEnd   != null ? window._thrPart_midEnd   : 0.65, 0.10, 0.99, 0.01, v => { window._thrPart_midEnd   = v; }, '#fa0'));
     panel.appendChild(makeSlider('p.midBoost (HDR boost)',      window._thrPart_midBoost != null ? window._thrPart_midBoost : 0.30, 0, 2.0,  0.01, v => { window._thrPart_midBoost = v; }, '#fa0'));
     panel.appendChild(makeSlider('p.sizeBase',                  window._thrPart_sizeBase   != null ? window._thrPart_sizeBase  : 0.22, 0.05, 0.6, 0.01, v => { window._thrPart_sizeBase   = v; }, '#fa0'));
@@ -23043,12 +23060,11 @@ function buildSkinTunerSliders() {
     _expBtn.style.cssText = 'margin:6px 0;padding:6px 10px;background:#222;color:#0f0;border:1px solid #0f0;cursor:pointer;font:11px monospace;width:100%;';
     _expBtn.onclick = () => {
       const KEYS = [
-        '_shipFire_emissive','_shipFire_opacity',
+        '_thrPart_partOpacity','_thrPart_miniPartOpacity','_thrPart_posPinFrac',
         '_thrusterScale','_nozzleBloomScale','_nozzleBloomOpacity','_miniBloomScale','_miniBloomOpacity','_miniBloomOpacitySpd',
         '_nozzleBloom_whiteMix','_miniBloom_whiteMix',
         '_thrusterSpreadX','_thrusterSpreadY','_thrusterLength',
-        '_thrPart_coreEnd','_thrPart_coreR','_thrPart_coreGB','_thrPart_midEnd','_thrPart_midBoost',
-        '_thrPart_sizeBase','_thrPart_sizeSpeed','_thrPart_bumpMult','_thrPart_bumpEnd','_thrPart_sizeJitter',
+        '_thrPart_midEnd','_thrPart_midBoost',
         '_thrPart_sizeBase','_thrPart_sizeSpeed','_thrPart_bumpMult','_thrPart_bumpEnd','_thrPart_sizeJitter',
         '_thrPart_lifeMin','_thrPart_lifeJit','_thrPart_lifeBase','_thrPart_lifeSpd','_thrPart_spawnJit',
         '_thrFlame_coreEnd','_thrFlame_coreRGB','_thrFlame_midEnd',

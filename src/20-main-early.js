@@ -6698,6 +6698,18 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
 
   // Exhaust cone scale/opacity handled in the main update() animation block
 
+  // ── Particle PointsMaterial opacity — scales every additive contribution.
+  // This is the PRIMARY white-hot dial: lower = less pile-up saturation = thruster color survives
+  // through the additive stack instead of clamping to (1,1,1) and triggering bloom halo.
+  const _partOp = (window._thrPart_partOpacity != null) ? window._thrPart_partOpacity : 1.0;
+  const _miniPartOp = (window._thrPart_miniPartOpacity != null) ? window._thrPart_miniPartOpacity : _partOp;
+  for (let i = 0, n = thrusterSystems.length; i < n; i++) {
+    if (thrusterSystems[i].points.material.opacity !== _partOp) thrusterSystems[i].points.material.opacity = _partOp;
+  }
+  for (let i = 0, n = miniThrusterSystems.length; i < n; i++) {
+    if (miniThrusterSystems[i].points.material.opacity !== _miniPartOp) miniThrusterSystems[i].points.material.opacity = _miniPartOp;
+  }
+
   // ── localToWorld: lock all thruster elements to shipGroup transform ──
   shipGroup.updateMatrixWorld(true);
 
@@ -6743,8 +6755,11 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         );
       } else {
         const t0 = sys.ages[i] / sys.lifetimes[i];
-        if (t0 < 0.12) {
-          // Pin to nozzle for the first 12% of life — origin always locked to pod
+        // Position-pin window: how long particles are clamped to the nozzle (causes additive pile-up = white-hot core).
+        // Default 0.12 reproduces original look; lower values disperse particles sooner and reduce additive saturation.
+        const _tPosPin = (window._thrPart_posPinFrac != null) ? window._thrPart_posPinFrac : 0.12;
+        if (t0 < _tPosPin) {
+          // Pin to nozzle — origin locked to pod
           pos[i * 3]     = wx;
           pos[i * 3 + 1] = wy;
           pos[i * 3 + 2] = wz;
