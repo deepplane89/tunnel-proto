@@ -6745,11 +6745,19 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         pos[i * 3 + 2] = wz;
 
         // Velocity: mostly +Z (backward), very tight lateral — condensed needle look
+        // bendInherit: fraction of ship lateral velocity baked into spawn velocity.
+        // This is what makes the trail bend with turns: while turning, shipVelX != 0
+        // → new particles inherit it → trail trails out laterally. Once turn ends,
+        // shipVelX → 0 → new particles spawn straight, old particles keep their inherited
+        // motion and naturally fall off the back of the trail at lifetime rate.
+        // No frame-rate force-pull = no slow trickle back to midline.
         const _spX = window._thrusterSpreadX || 1.0;
         const _spY = window._thrusterSpreadY || 1.0;
         const _len = (_altShipActive && _altShip.thrusterLength != null) ? _altShip.thrusterLength : (window._thrusterLength || 1.0);
+        const _bendInherit = (window._thrPart_bendInherit != null) ? window._thrPart_bendInherit : 0.15;
+        const _shipVelX = (state.shipVelX != null) ? state.shipVelX : 0;
         sys.velocities[i].set(
-          (Math.random() - 0.5) * 0.06 * _spX,
+          (Math.random() - 0.5) * 0.06 * _spX + _shipVelX * _bendInherit,
           (Math.random() - 0.5) * 0.06 * _spY - 0.02,
           (2.5 + Math.random() * 2.0 + speedScale * 1.5) * _len
         );
@@ -6770,8 +6778,12 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
           pos[i * 3 + 1] += v.y * dt;
           pos[i * 3 + 2] += v.z * dt;
           v.multiplyScalar(0.92);
-          // Bend trail: gently pull particle X toward current nozzle X
-          pos[i * 3] += (wx - pos[i * 3]) * 4.0 * dt;
+          // Legacy bend catch-up (force-pull X toward current nozzle X). Default 0 = off.
+          // Caused the "slow trickle back to midline" bug because it kept dragging old
+          // particles toward the nozzle every frame regardless of when they were emitted.
+          // Kept exposed at 0 default; bump to taste if you want a stylistic curve back in.
+          const _bendCatchup = (window._thrPart_bendCatchup != null) ? window._thrPart_bendCatchup : 0.0;
+          if (_bendCatchup > 0) pos[i * 3] += (wx - pos[i * 3]) * _bendCatchup * dt;
         }
       }
 
@@ -6902,9 +6914,11 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         pos[i * 3]     = wx + (Math.random() - 0.5) * _fSpawn;
         pos[i * 3 + 1] = wy + (Math.random() - 0.5) * _fSpawn;
         pos[i * 3 + 2] = wz;
-        // Always straight back — no roll influence on velocity
+        // Inherit ship lateral velocity at spawn (mini system uses same knob as main).
+        const _miniBendInherit = (window._thrPart_bendInherit != null) ? window._thrPart_bendInherit : 0.15;
+        const _shipVelX2 = (state.shipVelX != null) ? state.shipVelX : 0;
         sys.velocities[i].set(
-          0,
+          _shipVelX2 * _miniBendInherit,
           -0.01,
           0.8 + Math.random() * 0.4 + Math.min(speedScale, 1.2) * 0.5
         );
@@ -6918,8 +6932,9 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
           pos[i * 3 + 1] += v.y * dt;
           pos[i * 3 + 2] += v.z * dt;
           v.multiplyScalar(0.90);
-          // Bend trail with ship lateral movement
-          pos[i * 3] += (wx - pos[i * 3]) * 4.0 * dt;
+          // Legacy catch-up (default 0 = off) — see main system for rationale.
+          const _miniBendCatchup = (window._thrPart_bendCatchup != null) ? window._thrPart_bendCatchup : 0.0;
+          if (_miniBendCatchup > 0) pos[i * 3] += (wx - pos[i * 3]) * _miniBendCatchup * dt;
         }
       }
       const t = sys.ages[i] / sys.lifetimes[i];

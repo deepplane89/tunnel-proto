@@ -1550,6 +1550,9 @@ function buildSkinTunerSliders() {
     // Removed duds (clamped by additive pile-up so they had no perceivable effect at default settings):
     //   p.coreEnd, p.coreR, p.coreGB — superseded by ★★ particle opacity / pos-pin frac in GLOBAL.
     panel.appendChild(makeHeader('THRUSTER PARTICLES'));
+    // Trail bend response (turn-in / turn-out feel)
+    panel.appendChild(makeSlider('p.bendInherit (turn responsiveness)', window._thrPart_bendInherit != null ? window._thrPart_bendInherit : 0.15, 0, 0.6, 0.005, v => { window._thrPart_bendInherit = v; }, '#0fa'));
+    panel.appendChild(makeSlider('p.bendCatchup (legacy drag, 0=off)', window._thrPart_bendCatchup != null ? window._thrPart_bendCatchup : 0.0, 0, 6, 0.1, v => { window._thrPart_bendCatchup = v; }, '#0fa'));
     panel.appendChild(makeSlider('p.midEnd (mid → fade @)',     window._thrPart_midEnd   != null ? window._thrPart_midEnd   : 0.65, 0.10, 0.99, 0.01, v => { window._thrPart_midEnd   = v; }, '#fa0'));
     panel.appendChild(makeSlider('p.midBoost (HDR boost)',      window._thrPart_midBoost != null ? window._thrPart_midBoost : 0.30, 0, 2.0,  0.01, v => { window._thrPart_midBoost = v; }, '#fa0'));
     panel.appendChild(makeSlider('p.sizeBase',                  window._thrPart_sizeBase   != null ? window._thrPart_sizeBase  : 0.22, 0.05, 0.6, 0.01, v => { window._thrPart_sizeBase   = v; }, '#fa0'));
@@ -1583,6 +1586,7 @@ function buildSkinTunerSliders() {
     _expBtn.onclick = () => {
       const KEYS = [
         '_thrPart_partOpacity','_thrPart_miniPartOpacity','_thrPart_posPinFrac',
+        '_thrPart_bendInherit','_thrPart_bendCatchup',
         '_thrusterScale','_nozzleBloomScale','_nozzleBloomOpacity','_miniBloomScale','_miniBloomOpacity','_miniBloomOpacitySpd',
         '_nozzleBloom_whiteMix','_miniBloom_whiteMix',
         '_thrusterSpreadX','_thrusterSpreadY','_thrusterLength',
