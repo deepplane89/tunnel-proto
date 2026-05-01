@@ -7082,7 +7082,13 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       const _abs = _altShipActive ? (_altShip.bloomScale || 1.0) : 1.0;
       const bloomSize = (0.6 + speedScale * 0.7) * _ts * _nbs * _shipSc2 * _abs;
       bloom.scale.setScalar(bloomSize);
-      bloom.material.color.set(thrusterColor);
+      // White-mix dial: 0 = pure thrusterColor (current default, cool/saturated), 1 = pure white (hottest)
+      const _nbWhite = (window._nozzleBloom_whiteMix != null) ? window._nozzleBloom_whiteMix : 0.0;
+      bloom.material.color.setRGB(
+        THREE.MathUtils.lerp(thrusterColor.r, 1.0, _nbWhite),
+        THREE.MathUtils.lerp(thrusterColor.g, 1.0, _nbWhite),
+        THREE.MathUtils.lerp(thrusterColor.b, 1.0, _nbWhite)
+      );
       const _nbo = window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34;
       bloom.material.opacity = _nbo * (0.85 + Math.sin(Date.now() * 0.008) * 0.15) * tp;
     } else {
@@ -7206,8 +7212,15 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       const _mbs = window._miniBloomScale || 1.0;
       const _shipSc4 = shipGroup.scale.x;
       mBloom.scale.setScalar((0.25 + speedScale * 0.25) * _mbs * _shipSc4);
-      mBloom.material.color.set(thrusterColor);
-      mBloom.material.opacity = (0.15 + speedScale * 0.15) * tp;
+      const _mbWhite = (window._miniBloom_whiteMix != null) ? window._miniBloom_whiteMix : 0.0;
+      mBloom.material.color.setRGB(
+        THREE.MathUtils.lerp(thrusterColor.r, 1.0, _mbWhite),
+        THREE.MathUtils.lerp(thrusterColor.g, 1.0, _mbWhite),
+        THREE.MathUtils.lerp(thrusterColor.b, 1.0, _mbWhite)
+      );
+      const _mbo = (window._miniBloomOpacity != null) ? window._miniBloomOpacity : 0.15;
+      const _mbs2 = (window._miniBloomOpacitySpd != null) ? window._miniBloomOpacitySpd : 0.15;
+      mBloom.material.opacity = (_mbo + speedScale * _mbs2) * tp;
     } else {
       mBloom.visible = false;
     }
@@ -22960,7 +22973,12 @@ function buildSkinTunerSliders() {
     }, '#f60'));
     panel.appendChild(makeSlider('nozzle bloom size', window._nozzleBloomScale != null ? window._nozzleBloomScale : 1.0, 0.1, 4, 0.05, v => { window._nozzleBloomScale = v; }, '#f60'));
     panel.appendChild(makeSlider('nozzle bloom opacity', window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34, 0, 1, 0.01, v => { window._nozzleBloomOpacity = v; }, '#f60'));
+    // ★ PRIMARY white-hot dial: 0 = pure thruster color sprite (cool), 1 = pure white sprite (current default look at 0)
+    panel.appendChild(makeSlider('★ nozzle white-mix', window._nozzleBloom_whiteMix != null ? window._nozzleBloom_whiteMix : 0.0, 0, 1, 0.02, v => { window._nozzleBloom_whiteMix = v; }, '#ff0'));
     panel.appendChild(makeSlider('mini bloom size', window._miniBloomScale != null ? window._miniBloomScale : 1.0, 0.05, 2, 0.05, v => { window._miniBloomScale = v; }, '#f60'));
+    panel.appendChild(makeSlider('mini bloom opacity', window._miniBloomOpacity != null ? window._miniBloomOpacity : 0.15, 0, 1, 0.01, v => { window._miniBloomOpacity = v; }, '#f60'));
+    panel.appendChild(makeSlider('mini bloom op‧spd', window._miniBloomOpacitySpd != null ? window._miniBloomOpacitySpd : 0.15, 0, 1, 0.01, v => { window._miniBloomOpacitySpd = v; }, '#f60'));
+    panel.appendChild(makeSlider('★ mini white-mix', window._miniBloom_whiteMix != null ? window._miniBloom_whiteMix : 0.0, 0, 1, 0.02, v => { window._miniBloom_whiteMix = v; }, '#ff0'));
 
     // ── Particle SYSTEM (the long bright streaks) ──
     panel.appendChild(makeHeader('THRUSTER PARTICLES'));
