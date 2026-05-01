@@ -6464,10 +6464,6 @@ function createThrusterSystem() {
   const velocities = [];  // not in buffer — stored in userData
   const ages       = new Float32Array(PARTICLE_COUNT);
   const lifetimes  = new Float32Array(PARTICLE_COUNT);
-  // Frozen world-space spawn position per particle. Used by the pin window so
-  // pinned particles stay where they were born instead of being dragged by
-  // subsequent nozzle motion (world-space simulation pattern).
-  const spawnPos   = new Float32Array(PARTICLE_COUNT * 3);
 
   for (let i = 0; i < PARTICLE_COUNT; i++) {
     ages[i]      = Math.random();      // stagger initial ages
@@ -6499,7 +6495,7 @@ function createThrusterSystem() {
   points.renderOrder = 10;  // above water plane
   scene.add(points);
 
-  return { points, geo, velocities, ages, lifetimes, positions, colors, sizes, spawnPos };
+  return { points, geo, velocities, ages, lifetimes, positions, colors, sizes };
 }
 
 NOZZLE_OFFSETS.forEach(() => thrusterSystems.push(createThrusterSystem()));
@@ -6514,7 +6510,6 @@ function createMiniThrusterSystem() {
   const velocities = [];
   const ages       = new Float32Array(MINI_PARTICLE_COUNT);
   const lifetimes  = new Float32Array(MINI_PARTICLE_COUNT);
-  const spawnPos   = new Float32Array(MINI_PARTICLE_COUNT * 3);
   for (let i = 0; i < MINI_PARTICLE_COUNT; i++) {
     ages[i]      = Math.random();
     lifetimes[i] = 0.10 + Math.random() * 0.12;
@@ -6538,7 +6533,7 @@ function createMiniThrusterSystem() {
   points.frustumCulled = false;
   points.renderOrder = 10;
   scene.add(points);
-  return { points, geo, velocities, ages, lifetimes, positions, colors, sizes, spawnPos };
+  return { points, geo, velocities, ages, lifetimes, positions, colors, sizes };
 }
 MINI_NOZZLE_OFFSETS.forEach(() => miniThrusterSystems.push(createMiniThrusterSystem()));
 
@@ -6992,7 +6987,6 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
     const pos = sys.positions;
     const col = sys.colors;
     const sz  = sys.sizes;
-    const spp = sys.spawnPos;
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       sys.ages[i] += dt;
@@ -7008,17 +7002,9 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         sys.lifetimes[i] = (_tLifeMin + Math.random() * _tLifeJit) * (_tLifeBase + speedScale * _tLifeSpd);
 
         const _tSpawn = (window._thrPart_spawnJit != null) ? window._thrPart_spawnJit : 0.03;
-        const _spawnX = wx + (Math.random() - 0.5) * _tSpawn;
-        const _spawnY = wy + (Math.random() - 0.5) * _tSpawn;
-        const _spawnZ = wz;
-        pos[i * 3]     = _spawnX;
-        pos[i * 3 + 1] = _spawnY;
-        pos[i * 3 + 2] = _spawnZ;
-        // Freeze spawn position in world space — pin window will snap back here
-        // instead of following the live nozzle (which keeps drifting after release).
-        spp[i * 3]     = _spawnX;
-        spp[i * 3 + 1] = _spawnY;
-        spp[i * 3 + 2] = _spawnZ;
+        pos[i * 3]     = wx + (Math.random() - 0.5) * _tSpawn;
+        pos[i * 3 + 1] = wy + (Math.random() - 0.5) * _tSpawn;
+        pos[i * 3 + 2] = wz;
 
         // Velocity: mostly +Z (backward), very tight lateral — condensed needle look
         // bendInherit: fraction of ship lateral velocity baked into spawn velocity.
@@ -7043,11 +7029,10 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         // Default 0.12 reproduces original look; lower values disperse particles sooner and reduce additive saturation.
         const _tPosPin = (window._thrPart_posPinFrac != null) ? window._thrPart_posPinFrac : 0.12;
         if (t0 < _tPosPin) {
-          // Pin to FROZEN spawn position (world-space simulation). Particles stay
-          // where they were born; subsequent nozzle drift no longer drags them.
-          pos[i * 3]     = spp[i * 3];
-          pos[i * 3 + 1] = spp[i * 3 + 1];
-          pos[i * 3 + 2] = spp[i * 3 + 2];
+          // Pin to nozzle — origin locked to pod
+          pos[i * 3]     = wx;
+          pos[i * 3 + 1] = wy;
+          pos[i * 3 + 2] = wz;
         } else {
           // Integrate freely after leaving the nozzle
           const v = sys.velocities[i];
@@ -7180,7 +7165,6 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
     const pos = sys.positions;
     const col = sys.colors;
     const sz  = sys.sizes;
-    const spp = sys.spawnPos;
     for (let i = 0; i < MINI_PARTICLE_COUNT; i++) {
       sys.ages[i] += dt;
       if (sys.ages[i] >= sys.lifetimes[i]) {
@@ -7189,15 +7173,9 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         const _fLifeJit = (window._thrFlame_lifeJit != null) ? window._thrFlame_lifeJit : 0.06;
         sys.lifetimes[i] = _fLifeMin + Math.random() * _fLifeJit;
         const _fSpawn = (window._thrFlame_spawnJit != null) ? window._thrFlame_spawnJit : 0.02;
-        const _mSpawnX = wx + (Math.random() - 0.5) * _fSpawn;
-        const _mSpawnY = wy + (Math.random() - 0.5) * _fSpawn;
-        const _mSpawnZ = wz;
-        pos[i * 3]     = _mSpawnX;
-        pos[i * 3 + 1] = _mSpawnY;
-        pos[i * 3 + 2] = _mSpawnZ;
-        spp[i * 3]     = _mSpawnX;
-        spp[i * 3 + 1] = _mSpawnY;
-        spp[i * 3 + 2] = _mSpawnZ;
+        pos[i * 3]     = wx + (Math.random() - 0.5) * _fSpawn;
+        pos[i * 3 + 1] = wy + (Math.random() - 0.5) * _fSpawn;
+        pos[i * 3 + 2] = wz;
         // Inherit ship lateral velocity at spawn (mini system uses same knob as main).
         const _miniBendInherit = (window._thrPart_bendInherit != null) ? window._thrPart_bendInherit : 0.15;
         const _shipVelX2 = (state.shipVelX != null) ? state.shipVelX : 0;
@@ -7209,8 +7187,7 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       } else {
         const t0 = sys.ages[i] / sys.lifetimes[i];
         if (t0 < 0.15) {
-          // Pin to frozen spawn position (world-space simulation).
-          pos[i * 3] = spp[i * 3]; pos[i * 3 + 1] = spp[i * 3 + 1]; pos[i * 3 + 2] = spp[i * 3 + 2];
+          pos[i * 3] = wx; pos[i * 3 + 1] = wy; pos[i * 3 + 2] = wz;
         } else {
           const v = sys.velocities[i];
           pos[i * 3]     += v.x * dt;
