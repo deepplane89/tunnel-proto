@@ -622,10 +622,12 @@ const SHIP_SKINS = [
       // MK II hull is identical to default RUNNER in Z-extent (rear face exit at world Z≈5.08)
       // and engine bay width — derived from spaceship_01.glb geometry (2026-04-27).
       // posY -0.590 vs default -0.500 → y-offset = -0.027 world (0.09 × 0.30 shipGroup scale).
-      nozzleL:[-0.480, 0.023, 5.100], nozzleR:[0.480, 0.023, 5.100],
-      miniL:[-0.150,0.060,5.100], miniR:[0.160,0.060,5.100], thrusterScale:1.0,
-      portraitNozzleL:[-0.480,0.023,5.100], portraitNozzleR:[0.480,0.023,5.100],
-      portraitMiniL:[-0.140,0.070,5.100], portraitMiniR:[0.160,0.070,5.100],
+      // 2026-05-01: per user, MK runner thruster positions set IDENTICAL to RUNNER defaults
+      // (NOZZLE_OFFSETS / MINI_NOZZLE_OFFSETS) — GLBs are physically the same ship.
+      nozzleL:[-0.480, 0.050, 5.100], nozzleR:[0.480, 0.050, 5.100],
+      miniL:[-0.220, 0.080, 5.100], miniR:[0.220, 0.080, 5.100], thrusterScale:1.0,
+      portraitNozzleL:[-0.480, 0.050, 5.100], portraitNozzleR:[0.480, 0.050, 5.100],
+      portraitMiniL:[-0.220, 0.080, 5.100], portraitMiniR:[0.220, 0.080, 5.100],
       matchDefault: true },
     laserConfig: { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 } },
 ];
