@@ -6437,9 +6437,19 @@ const thrusterSystems = [];
 //   - Flame anchor in GLB sits at model y=-0.27, exit y ≈ 0.05 world
 // Picked z=5.10 (just outside hull rear face), y=0.05, x=±0.45 as principled starting point;
 // retune via T-tuner sliders if needed.
+// NOZZLE_OFFSETS: particle thruster spawn positions (kept at hand-tuned values per user).
+// GLB-measured anchors are kept separately in _GLB_NOZZLE_ANCHORS below for cone use.
 const NOZZLE_OFFSETS = [
-  new THREE.Vector3(-0.481, 0.13, 5.114),  // left thruster — GLB-measured (Object_51 rear edge + bore center)
-  new THREE.Vector3( 0.481, 0.13, 5.114),  // right thruster — GLB-measured (Object_51 rear edge + bore center)
+  new THREE.Vector3(-0.48, 0.05, 5.10),  // left pod back-bottom
+  new THREE.Vector3( 0.48, 0.05, 5.10),  // right pod back-bottom
+];
+// GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
+// at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
+// of how NOZZLE_OFFSETS is hand-tuned for visual particle spawn. Used by the cone thruster
+// console-log diagnostic so the cone-to-GLB relationship stays observable as the ship transforms.
+const _GLB_NOZZLE_ANCHORS = [
+  new THREE.Vector3(-0.481, 0.129, 5.114),  // left  — GLB Object_51 rear edge
+  new THREE.Vector3( 0.481, 0.129, 5.114),  // right — GLB Object_51 rear edge
 ];
 // Mini thruster nozzles — inboard hull lights
 const MINI_NOZZLE_OFFSETS = [
@@ -6715,6 +6725,11 @@ window._coneThruster = {
   rotX:         0,
   rotY:         0,
   rotZ:         0,
+  // Per-side position offsets — independent for left and right cones.
+  // World-space, applied on top of NOZZLE_OFFSETS[idx] (idx 0=left, 1=right).
+  offLX:        0,  offLY:        0,  offLZ:        0,
+  offRX:        0,  offRY:        0,  offRZ:        0,
+  // Legacy shared offsets (kept for back-compat — applied to BOTH sides equally).
   offX:         0,
   offY:         0,
   offZ:         0,
@@ -7135,7 +7150,47 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       cone.visible = true;
       const ct = window._coneThruster;
       const localNoz = _localNozzles[idx];
-      cone.position.set(localNoz.x + ct.offX, localNoz.y + ct.offY, localNoz.z + ct.offZ);
+      // Per-side offsets (offLX/Y/Z for idx 0, offRX/Y/Z for idx 1) plus legacy shared offX/Y/Z.
+      const sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
+      const sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
+      const sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
+      cone.position.set(
+        localNoz.x + ct.offX + sideOX,
+        localNoz.y + ct.offY + sideOY,
+        localNoz.z + ct.offZ + sideOZ
+      );
+      // ── Cone↔GLB diagnostic logging (throttled) ──
+      // Log the live cone world position vs the GLB-derived true thruster anchor so the
+      // cone-to-GLB spatial relationship is observable regardless of how shipGroup transforms.
+      // Toggle via window._coneDiag = true (or false to silence).
+      if (window._coneDiag) {
+        window._coneDiagLast = window._coneDiagLast || 0;
+        const _now = performance.now();
+        if (_now - window._coneDiagLast > 500) {
+          window._coneDiagLast = _now;
+          // Cone world pos: use shipGroup.matrixWorld since cone is shipGroup-parented
+          const _coneWorld = cone.getWorldPosition(new THREE.Vector3());
+          // GLB anchor (in NOZZLE_OFFSETS world-at-default-pose space) → ship local → world
+          const _glbAnchor = _GLB_NOZZLE_ANCHORS[idx];
+          const _glbLocal = new THREE.Vector3(
+            _glbAnchor.x / 0.30,
+            (_glbAnchor.y - 0.28) / 0.30,
+            (_glbAnchor.z - 4.5) / 0.30
+          );
+          const _glbWorld = _glbLocal.clone().applyMatrix4(shipGroup.matrixWorld);
+          const _dx = _coneWorld.x - _glbWorld.x;
+          const _dy = _coneWorld.y - _glbWorld.y;
+          const _dz = _coneWorld.z - _glbWorld.z;
+          const _side = idx === 0 ? 'L' : 'R';
+          console.log(
+            `[coneDiag ${_side}] cone(world) ${_coneWorld.x.toFixed(3)},${_coneWorld.y.toFixed(3)},${_coneWorld.z.toFixed(3)} | ` +
+            `GLB anchor(world) ${_glbWorld.x.toFixed(3)},${_glbWorld.y.toFixed(3)},${_glbWorld.z.toFixed(3)} | ` +
+            `Δ ${_dx>=0?'+':''}${_dx.toFixed(3)},${_dy>=0?'+':''}${_dy.toFixed(3)},${_dz>=0?'+':''}${_dz.toFixed(3)} | ` +
+            `ship(world) ${shipGroup.position.x.toFixed(3)},${shipGroup.position.y.toFixed(3)},${shipGroup.position.z.toFixed(3)} | ` +
+            `shipRot ${shipGroup.rotation.x.toFixed(2)},${shipGroup.rotation.y.toFixed(2)},${shipGroup.rotation.z.toFixed(2)}`
+          );
+        }
+      }
       cone.rotation.set(Math.PI / 2 + ct.rotX, ct.rotY, ct.rotZ);
       cone.scale.set(ct.radius, ct.length * tp, ct.radius);
       // Update shader uniforms from live slider values
@@ -23151,9 +23206,16 @@ function buildSkinTunerSliders() {
       panel.appendChild(makeSlider('cone rotX', _ct.rotX, -3.15, 3.15, 0.01, v => { _ct.rotX = v; }, '#f60'));
       panel.appendChild(makeSlider('cone rotY', _ct.rotY, -3.15, 3.15, 0.01, v => { _ct.rotY = v; }, '#f60'));
       panel.appendChild(makeSlider('cone rotZ', _ct.rotZ, -3.15, 3.15, 0.01, v => { _ct.rotZ = v; }, '#f60'));
-      panel.appendChild(makeSlider('cone offX', _ct.offX, -2, 2, 0.01, v => { _ct.offX = v; }, '#f60'));
-      panel.appendChild(makeSlider('cone offY', _ct.offY, -2, 2, 0.01, v => { _ct.offY = v; }, '#f60'));
-      panel.appendChild(makeSlider('cone offZ', _ct.offZ, -2, 2, 0.01, v => { _ct.offZ = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone offX (both)', _ct.offX, -2, 2, 0.01, v => { _ct.offX = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone offY (both)', _ct.offY, -2, 2, 0.01, v => { _ct.offY = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone offZ (both)', _ct.offZ, -2, 2, 0.01, v => { _ct.offZ = v; }, '#f60'));
+      // Per-side independent offsets (added on top of the 'both' offsets above)
+      panel.appendChild(makeSlider('cone L offX', _ct.offLX || 0, -1, 1, 0.005, v => { _ct.offLX = v; }, '#fa0'));
+      panel.appendChild(makeSlider('cone L offY', _ct.offLY || 0, -1, 1, 0.005, v => { _ct.offLY = v; }, '#fa0'));
+      panel.appendChild(makeSlider('cone L offZ', _ct.offLZ || 0, -1, 1, 0.005, v => { _ct.offLZ = v; }, '#fa0'));
+      panel.appendChild(makeSlider('cone R offX', _ct.offRX || 0, -1, 1, 0.005, v => { _ct.offRX = v; }, '#fa0'));
+      panel.appendChild(makeSlider('cone R offY', _ct.offRY || 0, -1, 1, 0.005, v => { _ct.offRY = v; }, '#fa0'));
+      panel.appendChild(makeSlider('cone R offZ', _ct.offRZ || 0, -1, 1, 0.005, v => { _ct.offRZ = v; }, '#fa0'));
       panel.appendChild(makeSlider('neon power', _ct.neonPower, 0.5, 6, 0.1, v => { _ct.neonPower = v; }, '#f60'));
       panel.appendChild(makeSlider('noise speed', _ct.noiseSpeed, 0, 5, 0.1, v => { _ct.noiseSpeed = v; }, '#f60'));
       panel.appendChild(makeSlider('noise strength', _ct.noiseStrength, 0, 1, 0.01, v => { _ct.noiseStrength = v; }, '#f60'));

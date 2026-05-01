@@ -1658,9 +1658,16 @@ function buildSkinTunerSliders() {
       panel.appendChild(makeSlider('cone rotX', _ct.rotX, -3.15, 3.15, 0.01, v => { _ct.rotX = v; }, '#f60'));
       panel.appendChild(makeSlider('cone rotY', _ct.rotY, -3.15, 3.15, 0.01, v => { _ct.rotY = v; }, '#f60'));
       panel.appendChild(makeSlider('cone rotZ', _ct.rotZ, -3.15, 3.15, 0.01, v => { _ct.rotZ = v; }, '#f60'));
-      panel.appendChild(makeSlider('cone offX', _ct.offX, -2, 2, 0.01, v => { _ct.offX = v; }, '#f60'));
-      panel.appendChild(makeSlider('cone offY', _ct.offY, -2, 2, 0.01, v => { _ct.offY = v; }, '#f60'));
-      panel.appendChild(makeSlider('cone offZ', _ct.offZ, -2, 2, 0.01, v => { _ct.offZ = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone offX (both)', _ct.offX, -2, 2, 0.01, v => { _ct.offX = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone offY (both)', _ct.offY, -2, 2, 0.01, v => { _ct.offY = v; }, '#f60'));
+      panel.appendChild(makeSlider('cone offZ (both)', _ct.offZ, -2, 2, 0.01, v => { _ct.offZ = v; }, '#f60'));
+      // Per-side independent offsets (added on top of the 'both' offsets above)
+      panel.appendChild(makeSlider('cone L offX', _ct.offLX || 0, -1, 1, 0.005, v => { _ct.offLX = v; }, '#fa0'));
+      panel.appendChild(makeSlider('cone L offY', _ct.offLY || 0, -1, 1, 0.005, v => { _ct.offLY = v; }, '#fa0'));
+      panel.appendChild(makeSlider('cone L offZ', _ct.offLZ || 0, -1, 1, 0.005, v => { _ct.offLZ = v; }, '#fa0'));
+      panel.appendChild(makeSlider('cone R offX', _ct.offRX || 0, -1, 1, 0.005, v => { _ct.offRX = v; }, '#fa0'));
+      panel.appendChild(makeSlider('cone R offY', _ct.offRY || 0, -1, 1, 0.005, v => { _ct.offRY = v; }, '#fa0'));
+      panel.appendChild(makeSlider('cone R offZ', _ct.offRZ || 0, -1, 1, 0.005, v => { _ct.offRZ = v; }, '#fa0'));
       panel.appendChild(makeSlider('neon power', _ct.neonPower, 0.5, 6, 0.1, v => { _ct.neonPower = v; }, '#f60'));
       panel.appendChild(makeSlider('noise speed', _ct.noiseSpeed, 0, 5, 0.1, v => { _ct.noiseSpeed = v; }, '#f60'));
       panel.appendChild(makeSlider('noise strength', _ct.noiseStrength, 0, 1, 0.01, v => { _ct.noiseStrength = v; }, '#f60'));
