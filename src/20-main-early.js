@@ -6176,8 +6176,8 @@ const thrusterSystems = [];
 // Picked z=5.10 (just outside hull rear face), y=0.05, x=±0.45 as principled starting point;
 // retune via T-tuner sliders if needed.
 const NOZZLE_OFFSETS = [
-  new THREE.Vector3(-0.48, 0.05, 5.10),  // left pod back-bottom
-  new THREE.Vector3( 0.48, 0.05, 5.10),  // right pod back-bottom
+  new THREE.Vector3(-0.481, 0.13, 5.114),  // left thruster — GLB-measured (Object_51 rear edge + bore center)
+  new THREE.Vector3( 0.481, 0.13, 5.114),  // right thruster — GLB-measured (Object_51 rear edge + bore center)
 ];
 // Mini thruster nozzles — inboard hull lights
 const MINI_NOZZLE_OFFSETS = [
@@ -6446,7 +6446,7 @@ window._coneThrustersEnabled = false; // default off; flip per skin
 // Tunable globals for the cone shader — exposed via sliders
 window._coneThruster = {
   length:       3.4,
-  radius:       0.14,
+  radius:       0.31,    // user-tuned to fit visible thruster bore
   // Auto-orient: cone is parented to shipGroup with baseline rotX=π/2 so it points
   // straight back (+Z ship-local). rotX/rotY/rotZ here are additive fine-tune offsets
   // on top of that baseline — leave at 0 unless live-tuning a specific skin.
