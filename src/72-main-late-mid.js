@@ -1523,26 +1523,75 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('flame yaw', _flameYawMult, 0, 0.3, 0.005, v => _flameYawMult = v, '#f80'));
     panel.appendChild(makeSlider('flame lateral', _flameLateralMult, 0, 0.2, 0.005, v => _flameLateralMult = v, '#f80'));
 
-    panel.appendChild(makeHeader('THRUSTERS'));
+    panel.appendChild(makeHeader('THRUSTERS — GLOBAL'));
     panel.appendChild(makeSlider('thruster scale', window._thrusterScale || 1.0, 0, 3, 0.05, v => { window._thrusterScale = v; }, '#f60'));
-    // Core white-hot tint at the nozzle. 1.0 = original strong white, 0.0 = pure
-    // thruster color (no white). Default 0.7 — subtle reduction.
-    panel.appendChild(makeSlider('core white-hot', window._thrusterCoreWhite != null ? window._thrusterCoreWhite : 0.7, 0, 1, 0.05, v => { window._thrusterCoreWhite = v; }, '#f60'));
-    panel.appendChild(makeSlider('particle size', thrusterSystems[0].points.material.size, 0.01, 1.0, 0.01, v => {
+    panel.appendChild(makeSlider('point material size', thrusterSystems[0].points.material.size, 0.01, 1.0, 0.01, v => {
       thrusterSystems.forEach(s => s.points.material.size = v);
     }, '#f60'));
-    panel.appendChild(makeSlider('mini part size', miniThrusterSystems[0].points.material.size, 0.01, 0.5, 0.01, v => {
+    panel.appendChild(makeSlider('mini point mat size', miniThrusterSystems[0].points.material.size, 0.01, 0.5, 0.01, v => {
       miniThrusterSystems.forEach(s => s.points.material.size = v);
     }, '#f60'));
-    panel.appendChild(makeSlider('bloom size', nozzleBloomSprites[0].scale.x || 0.6, 0.1, 4, 0.05, v => {
-      window._nozzleBloomScale = v;
-    }, '#f60'));
-    panel.appendChild(makeSlider('bloom opacity', 0.34, 0, 1, 0.01, v => {
-      window._nozzleBloomOpacity = v;
-    }, '#f60'));
-    panel.appendChild(makeSlider('mini bloom size', miniBloomSprites[0].scale.x || 0.3, 0.05, 2, 0.05, v => {
-      window._miniBloomScale = v;
-    }, '#f60'));
+    panel.appendChild(makeSlider('nozzle bloom size', window._nozzleBloomScale != null ? window._nozzleBloomScale : 1.0, 0.1, 4, 0.05, v => { window._nozzleBloomScale = v; }, '#f60'));
+    panel.appendChild(makeSlider('nozzle bloom opacity', window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34, 0, 1, 0.01, v => { window._nozzleBloomOpacity = v; }, '#f60'));
+    panel.appendChild(makeSlider('mini bloom size', window._miniBloomScale != null ? window._miniBloomScale : 1.0, 0.05, 2, 0.05, v => { window._miniBloomScale = v; }, '#f60'));
+
+    // ── Particle SYSTEM (the long bright streaks) ──
+    panel.appendChild(makeHeader('THRUSTER PARTICLES'));
+    panel.appendChild(makeSlider('p.coreEnd (white phase len)', window._thrPart_coreEnd != null ? window._thrPart_coreEnd : 0.10, 0, 0.30, 0.005, v => { window._thrPart_coreEnd = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.coreR (white core R)',     window._thrPart_coreR    != null ? window._thrPart_coreR    : 1.00, 0, 1, 0.01,  v => { window._thrPart_coreR    = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.coreGB (white core G/B start)', window._thrPart_coreGB != null ? window._thrPart_coreGB : 0.85, 0, 1, 0.01, v => { window._thrPart_coreGB = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.midEnd (mid → fade @)',     window._thrPart_midEnd   != null ? window._thrPart_midEnd   : 0.65, 0.10, 0.99, 0.01, v => { window._thrPart_midEnd   = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.midBoost (HDR boost)',      window._thrPart_midBoost != null ? window._thrPart_midBoost : 0.30, 0, 2.0,  0.01, v => { window._thrPart_midBoost = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.sizeBase',                  window._thrPart_sizeBase   != null ? window._thrPart_sizeBase  : 0.22, 0.05, 0.6, 0.01, v => { window._thrPart_sizeBase   = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.sizeSpeed (size‧speed)',    window._thrPart_sizeSpeed  != null ? window._thrPart_sizeSpeed : 0.10, 0, 0.5,  0.01, v => { window._thrPart_sizeSpeed  = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.bumpMult (nozzle bump×)',   window._thrPart_bumpMult   != null ? window._thrPart_bumpMult  : 1.60, 1.0, 3.0, 0.05, v => { window._thrPart_bumpMult   = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.bumpEnd (bump duration)',   window._thrPart_bumpEnd    != null ? window._thrPart_bumpEnd   : 0.10, 0, 0.30, 0.005, v => { window._thrPart_bumpEnd  = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.sizeJitter',                window._thrPart_sizeJitter != null ? window._thrPart_sizeJitter: 0.06, 0, 0.2,  0.005, v => { window._thrPart_sizeJitter = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.lifeMin',                   window._thrPart_lifeMin != null ? window._thrPart_lifeMin : 0.18, 0.05, 0.5, 0.01, v => { window._thrPart_lifeMin = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.lifeJit',                   window._thrPart_lifeJit != null ? window._thrPart_lifeJit : 0.22, 0,    0.5, 0.01, v => { window._thrPart_lifeJit = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.lifeBase (life floor)',     window._thrPart_lifeBase != null ? window._thrPart_lifeBase : 0.6, 0.2, 1.5, 0.05, v => { window._thrPart_lifeBase = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.lifeSpd (life‧speed)',      window._thrPart_lifeSpd != null ? window._thrPart_lifeSpd : 0.9, 0,   2.0, 0.05, v => { window._thrPart_lifeSpd = v; }, '#fa0'));
+    panel.appendChild(makeSlider('p.spawnJit (spawn radius)',   window._thrPart_spawnJit != null ? window._thrPart_spawnJit : 0.03, 0, 0.20, 0.005, v => { window._thrPart_spawnJit = v; }, '#fa0'));
+
+    // ── Flame mesh (the small near-nozzle puff) ──
+    panel.appendChild(makeHeader('THRUSTER FLAME MESH'));
+    panel.appendChild(makeSlider('f.coreEnd',                   window._thrFlame_coreEnd != null ? window._thrFlame_coreEnd : 0.08, 0, 0.30, 0.005, v => { window._thrFlame_coreEnd = v; }, '#f80'));
+    panel.appendChild(makeSlider('f.coreRGB (white start)',     window._thrFlame_coreRGB != null ? window._thrFlame_coreRGB : 0.85, 0, 1, 0.01, v => { window._thrFlame_coreRGB = v; }, '#f80'));
+    panel.appendChild(makeSlider('f.midEnd',                    window._thrFlame_midEnd  != null ? window._thrFlame_midEnd  : 0.60, 0.10, 0.99, 0.01, v => { window._thrFlame_midEnd  = v; }, '#f80'));
+    panel.appendChild(makeSlider('f.sizeBase',                  window._thrFlame_sizeBase  != null ? window._thrFlame_sizeBase  : 0.035, 0.005, 0.15, 0.005, v => { window._thrFlame_sizeBase  = v; }, '#f80'));
+    panel.appendChild(makeSlider('f.sizeSpeed',                 window._thrFlame_sizeSpeed != null ? window._thrFlame_sizeSpeed : 0.015, 0, 0.10, 0.005, v => { window._thrFlame_sizeSpeed = v; }, '#f80'));
+    panel.appendChild(makeSlider('f.bumpMult',                  window._thrFlame_bumpMult  != null ? window._thrFlame_bumpMult  : 1.40, 1.0, 3.0, 0.05, v => { window._thrFlame_bumpMult  = v; }, '#f80'));
+    panel.appendChild(makeSlider('f.bumpEnd',                   window._thrFlame_bumpEnd   != null ? window._thrFlame_bumpEnd   : 0.10, 0, 0.30, 0.005, v => { window._thrFlame_bumpEnd  = v; }, '#f80'));
+    panel.appendChild(makeSlider('f.lifeMin',                   window._thrFlame_lifeMin != null ? window._thrFlame_lifeMin : 0.05, 0.01, 0.30, 0.005, v => { window._thrFlame_lifeMin = v; }, '#f80'));
+    panel.appendChild(makeSlider('f.lifeJit',                   window._thrFlame_lifeJit != null ? window._thrFlame_lifeJit : 0.06, 0,    0.30, 0.005, v => { window._thrFlame_lifeJit = v; }, '#f80'));
+    panel.appendChild(makeSlider('f.spawnJit',                  window._thrFlame_spawnJit != null ? window._thrFlame_spawnJit : 0.02, 0, 0.20, 0.005, v => { window._thrFlame_spawnJit = v; }, '#f80'));
+
+    // ── Export button: prints all current thruster settings to console + clipboard ──
+    const _expBtn = document.createElement('button');
+    _expBtn.textContent = 'EXPORT thruster settings';
+    _expBtn.style.cssText = 'margin:6px 0;padding:6px 10px;background:#222;color:#0f0;border:1px solid #0f0;cursor:pointer;font:11px monospace;width:100%;';
+    _expBtn.onclick = () => {
+      const KEYS = [
+        '_thrusterScale','_nozzleBloomScale','_nozzleBloomOpacity','_miniBloomScale',
+        '_thrusterSpreadX','_thrusterSpreadY','_thrusterLength',
+        '_thrPart_coreEnd','_thrPart_coreR','_thrPart_coreGB','_thrPart_midEnd','_thrPart_midBoost',
+        '_thrPart_sizeBase','_thrPart_sizeSpeed','_thrPart_bumpMult','_thrPart_bumpEnd','_thrPart_sizeJitter',
+        '_thrPart_lifeMin','_thrPart_lifeJit','_thrPart_lifeBase','_thrPart_lifeSpd','_thrPart_spawnJit',
+        '_thrFlame_coreEnd','_thrFlame_coreRGB','_thrFlame_midEnd',
+        '_thrFlame_sizeBase','_thrFlame_sizeSpeed','_thrFlame_bumpMult','_thrFlame_bumpEnd',
+        '_thrFlame_lifeMin','_thrFlame_lifeJit','_thrFlame_spawnJit',
+      ];
+      const out = {};
+      KEYS.forEach(k => { if (window[k] !== undefined) out[k] = window[k]; });
+      // Material sizes are read off three.js objects, not window
+      try { out['_pointMat_size'] = thrusterSystems[0].points.material.size; } catch(_){}
+      try { out['_miniPointMat_size'] = miniThrusterSystems[0].points.material.size; } catch(_){}
+      const txt = JSON.stringify(out, null, 2);
+      console.log('=== THRUSTER SETTINGS EXPORT ===\n' + txt);
+      try { navigator.clipboard.writeText(txt); _expBtn.textContent = 'copied to clipboard'; setTimeout(()=>_expBtn.textContent='EXPORT thruster settings', 1500); }
+      catch(_) { _expBtn.textContent = 'see console'; setTimeout(()=>_expBtn.textContent='EXPORT thruster settings', 1500); }
+    };
+    panel.appendChild(_expBtn);
 
     // NOZZLE POSITIONS (left/right thruster placement)
     const _nozUpd = () => { try { _rebuildLocalNozzles(); } catch(_) {} };

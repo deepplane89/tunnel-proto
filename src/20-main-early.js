@@ -6641,12 +6641,6 @@ window._thrusterSpreadX = 1.0;   // lateral spread multiplier (wider)
 window._thrusterSpreadY = 1.0;   // vertical spread multiplier (flatter < 1, taller > 1)
 window._thrusterLength  = 1.0;   // exhaust length multiplier
 window._thrusterVisible = true;  // master on/off
-// _thrusterCoreWhite: 0..1, controls the white-hot tint at the nozzle core.
-// 1.0 = original (R locked to 1.0, G/B start at 0.85) — strong white-hot.
-// 0.7 = subtle reduction (default) — core leans 30% toward thrusterColor.
-// 0.0 = no white at all — core is pure thrusterColor from frame 1.
-// Tunable live via the T-tuner slider.
-if (window._thrusterCoreWhite === undefined) window._thrusterCoreWhite = 0.7;
 window._nozzleBloomScale = window._nozzleBloomScale || 1.0;
 window._nozzleBloomOpacity = window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34;
 let _jumpLandingBounce = 0.3;    // how much bounce on landing
@@ -6726,11 +6720,16 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       if (sys.ages[i] >= sys.lifetimes[i]) {
         // Respawn at nozzle
         sys.ages[i] = 0;
-        // Speed-reactive lifetime — longer trail at high speed
-        sys.lifetimes[i] = (0.18 + Math.random() * 0.22) * (0.6 + speedScale * 0.9);
+        // Speed-reactive lifetime — longer trail at high speed [knob-substituted]
+        const _tLifeMin = (window._thrPart_lifeMin != null) ? window._thrPart_lifeMin : 0.18;
+        const _tLifeJit = (window._thrPart_lifeJit != null) ? window._thrPart_lifeJit : 0.22;
+        const _tLifeBase = (window._thrPart_lifeBase != null) ? window._thrPart_lifeBase : 0.6;
+        const _tLifeSpd = (window._thrPart_lifeSpd != null) ? window._thrPart_lifeSpd : 0.9;
+        sys.lifetimes[i] = (_tLifeMin + Math.random() * _tLifeJit) * (_tLifeBase + speedScale * _tLifeSpd);
 
-        pos[i * 3]     = wx + (Math.random() - 0.5) * 0.03;  // tighter spawn
-        pos[i * 3 + 1] = wy + (Math.random() - 0.5) * 0.03;
+        const _tSpawn = (window._thrPart_spawnJit != null) ? window._thrPart_spawnJit : 0.03;
+        pos[i * 3]     = wx + (Math.random() - 0.5) * _tSpawn;
+        pos[i * 3 + 1] = wy + (Math.random() - 0.5) * _tSpawn;
         pos[i * 3 + 2] = wz;
 
         // Velocity: mostly +Z (backward), very tight lateral — condensed needle look
@@ -6764,39 +6763,43 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // Lifetime ratio 0→1
       const t = sys.ages[i] / sys.lifetimes[i];
 
-      // Color: white core → level color → fade.
-      // _thrusterCoreWhite (0..1) shrinks the DURATION of the white phase.
-      // w=1 = full original white-hot core; w=0 = no white phase, pure level color.
-      const _coreW = window._thrusterCoreWhite;
-      const _coreEnd = 0.10 * _coreW;
-      if (_coreW > 0.001 && t < _coreEnd) {
-        // Original hot core: R pinned at 1.0, G/B at 0.85 → fades to thrusterColor.
-        const s = t / _coreEnd;
-        col[i * 3]     = THREE.MathUtils.lerp(1.0, thrusterColor.r, s);
-        col[i * 3 + 1] = THREE.MathUtils.lerp(0.85, thrusterColor.g, s);
-        col[i * 3 + 2] = THREE.MathUtils.lerp(0.85, thrusterColor.b, s);
-      } else if (t < 0.65) {
+      // Color: subtle white core → level color → fade  [ORIGINAL pre-slider behavior]
+      // Sliders simply substitute their values. At defaults, behavior is byte-for-byte original.
+      const _tCoreEnd  = (window._thrPart_coreEnd  != null) ? window._thrPart_coreEnd  : 0.10;
+      const _tCoreR    = (window._thrPart_coreR    != null) ? window._thrPart_coreR    : 1.00;
+      const _tCoreGB   = (window._thrPart_coreGB   != null) ? window._thrPart_coreGB   : 0.85;
+      const _tMidEnd   = (window._thrPart_midEnd   != null) ? window._thrPart_midEnd   : 0.65;
+      const _tMidBoost = (window._thrPart_midBoost != null) ? window._thrPart_midBoost : 0.30;
+      if (t < _tCoreEnd) {
+        const s = t / _tCoreEnd;
+        col[i * 3]     = _tCoreR;
+        col[i * 3 + 1] = THREE.MathUtils.lerp(_tCoreGB, thrusterColor.g, s);
+        col[i * 3 + 2] = THREE.MathUtils.lerp(_tCoreGB, thrusterColor.b, s);
+      } else if (t < _tMidEnd) {
         // Full level color, brighter at high speed
-        const s = Math.max(0, Math.min(1, (t - 0.10) / 0.55));
-        const bright = 1.0 + speedScale * 0.3;
+        const s = (t - _tCoreEnd) / Math.max(0.001, (_tMidEnd - _tCoreEnd));
+        const bright = 1.0 + speedScale * _tMidBoost;
         col[i * 3]     = THREE.MathUtils.lerp(thrusterColor.r * bright, thrusterColor.r, s);
         col[i * 3 + 1] = THREE.MathUtils.lerp(thrusterColor.g * bright, thrusterColor.g, s);
         col[i * 3 + 2] = THREE.MathUtils.lerp(thrusterColor.b * bright, thrusterColor.b, s);
       } else {
         // Fade to black
-        const s = (t - 0.65) / 0.35;
+        const s = (t - _tMidEnd) / Math.max(0.001, (1.0 - _tMidEnd));
         col[i * 3]     = THREE.MathUtils.lerp(thrusterColor.r, 0, s);
         col[i * 3 + 1] = THREE.MathUtils.lerp(thrusterColor.g, 0, s);
         col[i * 3 + 2] = THREE.MathUtils.lerp(thrusterColor.b, 0, s);
       }
 
-      // Size: speed-reactive — bigger/longer at high speed, scaled by thruster power.
-      // Tie the oversized nozzle-core bump to the same _coreW dial so it shrinks with the white phase.
-      const baseSize = 0.22 + speedScale * 0.10;
-      const _szBumpEnd = 0.10 * Math.max(0.35, _coreW);
-      const rawSz = t < _szBumpEnd
-        ? THREE.MathUtils.lerp(baseSize * 1.6, baseSize, t / _szBumpEnd)
-        : (1.0 - t) * (baseSize + Math.random() * 0.06);
+      // Size: speed-reactive — bigger/longer at high speed, scaled by thruster power [ORIGINAL behavior]
+      const _tSzBase   = (window._thrPart_sizeBase   != null) ? window._thrPart_sizeBase   : 0.22;
+      const _tSzSpeed  = (window._thrPart_sizeSpeed  != null) ? window._thrPart_sizeSpeed  : 0.10;
+      const _tSzBumpM  = (window._thrPart_bumpMult   != null) ? window._thrPart_bumpMult   : 1.60;
+      const _tSzBumpE  = (window._thrPart_bumpEnd    != null) ? window._thrPart_bumpEnd    : 0.10;
+      const _tSzJitter = (window._thrPart_sizeJitter != null) ? window._thrPart_sizeJitter : 0.06;
+      const baseSize = _tSzBase + speedScale * _tSzSpeed;
+      const rawSz = t < _tSzBumpE
+        ? THREE.MathUtils.lerp(baseSize * _tSzBumpM, baseSize, t / _tSzBumpE)
+        : (1.0 - t) * (baseSize + Math.random() * _tSzJitter);
       const _shipSc = shipGroup.scale.x;
       sz[i] = rawSz * tp * (window._thrusterScale || 1.0) * _shipSc;
     }
@@ -6871,9 +6874,12 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       sys.ages[i] += dt;
       if (sys.ages[i] >= sys.lifetimes[i]) {
         sys.ages[i] = 0;
-        sys.lifetimes[i] = 0.05 + Math.random() * 0.06;
-        pos[i * 3]     = wx + (Math.random() - 0.5) * 0.02;
-        pos[i * 3 + 1] = wy + (Math.random() - 0.5) * 0.02;
+        const _fLifeMin = (window._thrFlame_lifeMin != null) ? window._thrFlame_lifeMin : 0.05;
+        const _fLifeJit = (window._thrFlame_lifeJit != null) ? window._thrFlame_lifeJit : 0.06;
+        sys.lifetimes[i] = _fLifeMin + Math.random() * _fLifeJit;
+        const _fSpawn = (window._thrFlame_spawnJit != null) ? window._thrFlame_spawnJit : 0.02;
+        pos[i * 3]     = wx + (Math.random() - 0.5) * _fSpawn;
+        pos[i * 3 + 1] = wy + (Math.random() - 0.5) * _fSpawn;
         pos[i * 3 + 2] = wz;
         // Always straight back — no roll influence on velocity
         sys.velocities[i].set(
@@ -6896,16 +6902,17 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         }
       }
       const t = sys.ages[i] / sys.lifetimes[i];
-      // Same _thrusterCoreWhite duration dial as the main thruster particles.
-      const _coreWf = window._thrusterCoreWhite;
-      const _coreEndf = 0.08 * _coreWf;
-      if (_coreWf > 0.001 && t < _coreEndf) {
-        // Original hot near-white core (0.85) → thruster color.
-        const s = t / _coreEndf;
-        col[i*3]   = THREE.MathUtils.lerp(0.85, thrusterColor.r, s);
-        col[i*3+1] = THREE.MathUtils.lerp(0.85, thrusterColor.g, s);
-        col[i*3+2] = THREE.MathUtils.lerp(0.85, thrusterColor.b, s);
-      } else if (t < 0.6) {
+      // Flame-mesh color phases [ORIGINAL pre-slider behavior, knob-substituted]
+      const _fCoreEnd  = (window._thrFlame_coreEnd  != null) ? window._thrFlame_coreEnd  : 0.08;
+      const _fCoreRGB  = (window._thrFlame_coreRGB  != null) ? window._thrFlame_coreRGB  : 0.85;
+      const _fMidEnd   = (window._thrFlame_midEnd   != null) ? window._thrFlame_midEnd   : 0.60;
+      if (t < _fCoreEnd) {
+        // Hot near-white core → thruster color
+        const s = t / _fCoreEnd;
+        col[i*3]   = THREE.MathUtils.lerp(_fCoreRGB, thrusterColor.r, s);
+        col[i*3+1] = THREE.MathUtils.lerp(_fCoreRGB, thrusterColor.g, s);
+        col[i*3+2] = THREE.MathUtils.lerp(_fCoreRGB, thrusterColor.b, s);
+      } else if (t < _fMidEnd) {
         col[i*3]   = thrusterColor.r;
         col[i*3+1] = thrusterColor.g;
         col[i*3+2] = thrusterColor.b;
@@ -6915,8 +6922,13 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         col[i*3+1] = THREE.MathUtils.lerp(thrusterColor.g, 0, s);
         col[i*3+2] = THREE.MathUtils.lerp(thrusterColor.b, 0, s);
       }
-      const bSz = 0.035 + speedScale * 0.015;
-      const raw = t < 0.10 ? THREE.MathUtils.lerp(bSz * 1.4, bSz, t / 0.10) : (1.0 - t) * bSz;
+      // Flame-mesh size [ORIGINAL pre-slider behavior, knob-substituted]
+      const _fSzBase  = (window._thrFlame_sizeBase  != null) ? window._thrFlame_sizeBase  : 0.035;
+      const _fSzSpeed = (window._thrFlame_sizeSpeed != null) ? window._thrFlame_sizeSpeed : 0.015;
+      const _fSzBumpM = (window._thrFlame_bumpMult  != null) ? window._thrFlame_bumpMult  : 1.40;
+      const _fSzBumpE = (window._thrFlame_bumpEnd   != null) ? window._thrFlame_bumpEnd   : 0.10;
+      const bSz = _fSzBase + speedScale * _fSzSpeed;
+      const raw = t < _fSzBumpE ? THREE.MathUtils.lerp(bSz * _fSzBumpM, bSz, t / _fSzBumpE) : (1.0 - t) * bSz;
       const _shipSc3 = shipGroup.scale.x;
       sz[i] = raw * tp * turnFlicker * (window._thrusterScale || 1.0) * _shipSc3;
     }
