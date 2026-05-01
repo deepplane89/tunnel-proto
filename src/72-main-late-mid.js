@@ -1525,6 +1525,9 @@ function buildSkinTunerSliders() {
 
     panel.appendChild(makeHeader('THRUSTERS'));
     panel.appendChild(makeSlider('thruster scale', window._thrusterScale || 1.0, 0, 3, 0.05, v => { window._thrusterScale = v; }, '#f60'));
+    // Core white-hot tint at the nozzle. 1.0 = original strong white, 0.0 = pure
+    // thruster color (no white). Default 0.7 — subtle reduction.
+    panel.appendChild(makeSlider('core white-hot', window._thrusterCoreWhite != null ? window._thrusterCoreWhite : 0.7, 0, 1, 0.05, v => { window._thrusterCoreWhite = v; }, '#f60'));
     panel.appendChild(makeSlider('particle size', thrusterSystems[0].points.material.size, 0.01, 1.0, 0.01, v => {
       thrusterSystems.forEach(s => s.points.material.size = v);
     }, '#f60'));

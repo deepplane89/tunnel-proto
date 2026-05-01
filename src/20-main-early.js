@@ -6641,6 +6641,12 @@ window._thrusterSpreadX = 1.0;   // lateral spread multiplier (wider)
 window._thrusterSpreadY = 1.0;   // vertical spread multiplier (flatter < 1, taller > 1)
 window._thrusterLength  = 1.0;   // exhaust length multiplier
 window._thrusterVisible = true;  // master on/off
+// _thrusterCoreWhite: 0..1, controls the white-hot tint at the nozzle core.
+// 1.0 = original (R locked to 1.0, G/B start at 0.85) — strong white-hot.
+// 0.7 = subtle reduction (default) — core leans 30% toward thrusterColor.
+// 0.0 = no white at all — core is pure thrusterColor from frame 1.
+// Tunable live via the T-tuner slider.
+if (window._thrusterCoreWhite === undefined) window._thrusterCoreWhite = 0.7;
 window._nozzleBloomScale = window._nozzleBloomScale || 1.0;
 window._nozzleBloomOpacity = window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34;
 let _jumpLandingBounce = 0.3;    // how much bounce on landing
@@ -6758,16 +6764,20 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // Lifetime ratio 0→1
       const t = sys.ages[i] / sys.lifetimes[i];
 
-      // Color: subtle white core → level color → fade
-      if (t < 0.10) {
-        // Brief soft white tint at nozzle (toned down)
-        const s = t / 0.10;
-        col[i * 3]     = 1.0;
+      // Color: white core → level color → fade.
+      // _thrusterCoreWhite (0..1) shrinks the DURATION of the white phase.
+      // w=1 = full original white-hot core; w=0 = no white phase, pure level color.
+      const _coreW = window._thrusterCoreWhite;
+      const _coreEnd = 0.10 * _coreW;
+      if (_coreW > 0.001 && t < _coreEnd) {
+        // Original hot core: R pinned at 1.0, G/B at 0.85 → fades to thrusterColor.
+        const s = t / _coreEnd;
+        col[i * 3]     = THREE.MathUtils.lerp(1.0, thrusterColor.r, s);
         col[i * 3 + 1] = THREE.MathUtils.lerp(0.85, thrusterColor.g, s);
         col[i * 3 + 2] = THREE.MathUtils.lerp(0.85, thrusterColor.b, s);
       } else if (t < 0.65) {
         // Full level color, brighter at high speed
-        const s = (t - 0.10) / 0.55;
+        const s = Math.max(0, Math.min(1, (t - 0.10) / 0.55));
         const bright = 1.0 + speedScale * 0.3;
         col[i * 3]     = THREE.MathUtils.lerp(thrusterColor.r * bright, thrusterColor.r, s);
         col[i * 3 + 1] = THREE.MathUtils.lerp(thrusterColor.g * bright, thrusterColor.g, s);
@@ -6780,10 +6790,12 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         col[i * 3 + 2] = THREE.MathUtils.lerp(thrusterColor.b, 0, s);
       }
 
-      // Size: speed-reactive — bigger/longer at high speed, scaled by thruster power
+      // Size: speed-reactive — bigger/longer at high speed, scaled by thruster power.
+      // Tie the oversized nozzle-core bump to the same _coreW dial so it shrinks with the white phase.
       const baseSize = 0.22 + speedScale * 0.10;
-      const rawSz = t < 0.10
-        ? THREE.MathUtils.lerp(baseSize * 1.6, baseSize, t / 0.10)
+      const _szBumpEnd = 0.10 * Math.max(0.35, _coreW);
+      const rawSz = t < _szBumpEnd
+        ? THREE.MathUtils.lerp(baseSize * 1.6, baseSize, t / _szBumpEnd)
         : (1.0 - t) * (baseSize + Math.random() * 0.06);
       const _shipSc = shipGroup.scale.x;
       sz[i] = rawSz * tp * (window._thrusterScale || 1.0) * _shipSc;
@@ -6884,9 +6896,12 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         }
       }
       const t = sys.ages[i] / sys.lifetimes[i];
-      if (t < 0.08) {
-        // Hot white core → thruster color
-        const s = t / 0.08;
+      // Same _thrusterCoreWhite duration dial as the main thruster particles.
+      const _coreWf = window._thrusterCoreWhite;
+      const _coreEndf = 0.08 * _coreWf;
+      if (_coreWf > 0.001 && t < _coreEndf) {
+        // Original hot near-white core (0.85) → thruster color.
+        const s = t / _coreEndf;
         col[i*3]   = THREE.MathUtils.lerp(0.85, thrusterColor.r, s);
         col[i*3+1] = THREE.MathUtils.lerp(0.85, thrusterColor.g, s);
         col[i*3+2] = THREE.MathUtils.lerp(0.85, thrusterColor.b, s);
