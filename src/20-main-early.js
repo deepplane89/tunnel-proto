@@ -6462,8 +6462,11 @@ const flameMeshes = NOZZLE_OFFSETS.map(() => {
 window._coneThrustersEnabled = false; // default off; flip per skin
 // Tunable globals for the cone shader — exposed via sliders
 window._coneThruster = {
-  length:       3.4,
-  radius:       0.31,    // user-tuned to fit visible thruster bore
+  // 2026-05-01: defaults locked to user-tuned values from MK Runner T-tuner session.
+  // Applied globally to both Runner and MK Runner (per user). Per-side offsets are
+  // applied on top of NOZZLE_OFFSETS so cones track the ship through any pose.
+  length:       3.30,
+  radius:       0.29,    // user-tuned to fit visible thruster bore
   // Auto-orient: cone is parented to shipGroup with baseline rotX=π/2 so it points
   // straight back (+Z ship-local). rotX/rotY/rotZ here are additive fine-tune offsets
   // on top of that baseline — leave at 0 unless live-tuning a specific skin.
@@ -6472,14 +6475,14 @@ window._coneThruster = {
   rotZ:         0,
   // Per-side position offsets — independent for left and right cones.
   // World-space, applied on top of NOZZLE_OFFSETS[idx] (idx 0=left, 1=right).
-  offLX:        0,  offLY:        0,  offLZ:        0,
-  offRX:        0,  offRY:        0,  offRZ:        0,
+  offLX:       -0.05,  offLY:       -0.01,  offLZ:        0,
+  offRX:        0.09,  offRY:       -0.01,  offRZ:        0,
   // Legacy shared offsets (kept for back-compat — applied to BOTH sides equally).
   offX:         0,
   offY:         0,
   offZ:         0,
-  neonPower:    1.5,
-  noiseSpeed:   0.8,
+  neonPower:    0.90,
+  noiseSpeed:   0.80,
   noiseStrength:0.13,
   fresnelPower: 6.0,
   opacity:      1.0,

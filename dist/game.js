@@ -6724,8 +6724,11 @@ const flameMeshes = NOZZLE_OFFSETS.map(() => {
 window._coneThrustersEnabled = false; // default off; flip per skin
 // Tunable globals for the cone shader — exposed via sliders
 window._coneThruster = {
-  length:       3.4,
-  radius:       0.31,    // user-tuned to fit visible thruster bore
+  // 2026-05-01: defaults locked to user-tuned values from MK Runner T-tuner session.
+  // Applied globally to both Runner and MK Runner (per user). Per-side offsets are
+  // applied on top of NOZZLE_OFFSETS so cones track the ship through any pose.
+  length:       3.30,
+  radius:       0.29,    // user-tuned to fit visible thruster bore
   // Auto-orient: cone is parented to shipGroup with baseline rotX=π/2 so it points
   // straight back (+Z ship-local). rotX/rotY/rotZ here are additive fine-tune offsets
   // on top of that baseline — leave at 0 unless live-tuning a specific skin.
@@ -6734,14 +6737,14 @@ window._coneThruster = {
   rotZ:         0,
   // Per-side position offsets — independent for left and right cones.
   // World-space, applied on top of NOZZLE_OFFSETS[idx] (idx 0=left, 1=right).
-  offLX:        0,  offLY:        0,  offLZ:        0,
-  offRX:        0,  offRY:        0,  offRZ:        0,
+  offLX:       -0.05,  offLY:       -0.01,  offLZ:        0,
+  offRX:        0.09,  offRY:       -0.01,  offRZ:        0,
   // Legacy shared offsets (kept for back-compat — applied to BOTH sides equally).
   offX:         0,
   offY:         0,
   offZ:         0,
-  neonPower:    1.5,
-  noiseSpeed:   0.8,
+  neonPower:    0.90,
+  noiseSpeed:   0.80,
   noiseStrength:0.13,
   fresnelPower: 6.0,
   opacity:      1.0,
@@ -23079,6 +23082,106 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('flame lateral', _flameLateralMult, 0, 0.2, 0.005, v => _flameLateralMult = v, '#f80'));
 
     panel.appendChild(makeHeader('THRUSTERS — GLOBAL'));
+
+    // ── SHORT THRUSTER PRESET (MK Runner) ──
+    // Captured 2026-05-01 from user's tuned MK Runner session. Toggle ON applies
+    // every value below; toggle OFF restores the snapshot taken just before ON.
+    if (typeof window._SHORT_THRUSTER_PRESET === 'undefined') {
+      window._SHORT_THRUSTER_PRESET = {
+        // Nozzle positions (asymmetric per user tuning)
+        nozL: [-0.48, 0.05, 5.16], nozR: [0.50, -0.01, 5.10],
+        miniL: [-0.15, 0.06, 5.10], miniR: [0.16, 0.06, 5.10],
+        // Global
+        _thrPart_partOpacity: 0.44, _thrPart_miniPartOpacity: 0.44, _thrPart_posPinFrac: 0.12,
+        _thrusterScale: 1.00, _pointMatSize: 0.07, _miniPointMatSize: 0.08,
+        _nozzleBloomScale: 0.45, _nozzleBloomOpacity: 0.24, _nozzleBloom_whiteMix: 0.00,
+        _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
+        // Particles
+        _thrPart_bendInherit: 0.15, _thrPart_bendCatchup: 0.00,
+        _thrPart_midEnd: 0.65, _thrPart_midBoost: 0.30,
+        _thrPart_sizeBase: 0.19, _thrPart_sizeSpeed: 0.13,
+        _thrPart_bumpMult: 1.60, _thrPart_bumpEnd: 0.10, _thrPart_sizeJitter: 0.06,
+        _thrPart_lifeMin: 0.18, _thrPart_lifeJit: 0.22,
+        _thrPart_lifeBase: 0.20, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.10,
+        // Flame mesh
+        _thrFlame_coreEnd: 0.10, _thrFlame_coreRGB: 0.85, _thrFlame_midEnd: 0.60,
+        _thrFlame_sizeBase: 0.04, _thrFlame_sizeSpeed: 0.01,
+        _thrFlame_bumpMult: 1.40, _thrFlame_bumpEnd: 0.07,
+        _thrFlame_lifeMin: 0.05, _thrFlame_lifeJit: 0.06, _thrFlame_spawnJit: 0.02,
+      };
+    }
+    window._shortThrusterOn = !!window._shortThrusterOn;
+    const _applyShortPreset = (on) => {
+      const P = window._SHORT_THRUSTER_PRESET;
+      if (on) {
+        // Snapshot current values so OFF can restore them
+        const snap = {};
+        // Numeric keys (window._*)
+        const numKeys = Object.keys(P).filter(k => k.startsWith('_') && k !== '_pointMatSize' && k !== '_miniPointMatSize');
+        numKeys.forEach(k => { snap[k] = window[k]; });
+        // Material sizes (read off three.js objects)
+        try { snap._pointMatSize = thrusterSystems[0].points.material.size; } catch(_){}
+        try { snap._miniPointMatSize = miniThrusterSystems[0].points.material.size; } catch(_){}
+        // Nozzle positions
+        if (typeof NOZZLE_OFFSETS !== 'undefined' && NOZZLE_OFFSETS[0]) {
+          snap.nozL = [NOZZLE_OFFSETS[0].x, NOZZLE_OFFSETS[0].y, NOZZLE_OFFSETS[0].z];
+          snap.nozR = [NOZZLE_OFFSETS[1].x, NOZZLE_OFFSETS[1].y, NOZZLE_OFFSETS[1].z];
+        }
+        if (typeof MINI_NOZZLE_OFFSETS !== 'undefined' && MINI_NOZZLE_OFFSETS[0]) {
+          snap.miniL = [MINI_NOZZLE_OFFSETS[0].x, MINI_NOZZLE_OFFSETS[0].y, MINI_NOZZLE_OFFSETS[0].z];
+          snap.miniR = [MINI_NOZZLE_OFFSETS[1].x, MINI_NOZZLE_OFFSETS[1].y, MINI_NOZZLE_OFFSETS[1].z];
+        }
+        window._shortThrusterPrevSnap = snap;
+        // Apply preset
+        numKeys.forEach(k => { window[k] = P[k]; });
+        try { thrusterSystems.forEach(s => s.points.material.size = P._pointMatSize); } catch(_){}
+        try { miniThrusterSystems.forEach(s => s.points.material.size = P._miniPointMatSize); } catch(_){}
+        if (typeof NOZZLE_OFFSETS !== 'undefined' && NOZZLE_OFFSETS[0]) {
+          NOZZLE_OFFSETS[0].set(P.nozL[0], P.nozL[1], P.nozL[2]);
+          NOZZLE_OFFSETS[1].set(P.nozR[0], P.nozR[1], P.nozR[2]);
+        }
+        if (typeof MINI_NOZZLE_OFFSETS !== 'undefined' && MINI_NOZZLE_OFFSETS[0]) {
+          MINI_NOZZLE_OFFSETS[0].set(P.miniL[0], P.miniL[1], P.miniL[2]);
+          MINI_NOZZLE_OFFSETS[1].set(P.miniR[0], P.miniR[1], P.miniR[2]);
+        }
+        try { _rebuildLocalNozzles(); } catch(_){}
+      } else {
+        // Restore from snapshot if we have one
+        const snap = window._shortThrusterPrevSnap;
+        if (snap) {
+          Object.keys(snap).forEach(k => {
+            if (k === 'nozL' || k === 'nozR' || k === 'miniL' || k === 'miniR' || k === '_pointMatSize' || k === '_miniPointMatSize') return;
+            window[k] = snap[k];
+          });
+          try { if (snap._pointMatSize != null) thrusterSystems.forEach(s => s.points.material.size = snap._pointMatSize); } catch(_){}
+          try { if (snap._miniPointMatSize != null) miniThrusterSystems.forEach(s => s.points.material.size = snap._miniPointMatSize); } catch(_){}
+          if (snap.nozL && typeof NOZZLE_OFFSETS !== 'undefined') {
+            NOZZLE_OFFSETS[0].set(snap.nozL[0], snap.nozL[1], snap.nozL[2]);
+            NOZZLE_OFFSETS[1].set(snap.nozR[0], snap.nozR[1], snap.nozR[2]);
+          }
+          if (snap.miniL && typeof MINI_NOZZLE_OFFSETS !== 'undefined') {
+            MINI_NOZZLE_OFFSETS[0].set(snap.miniL[0], snap.miniL[1], snap.miniL[2]);
+            MINI_NOZZLE_OFFSETS[1].set(snap.miniR[0], snap.miniR[1], snap.miniR[2]);
+          }
+          try { _rebuildLocalNozzles(); } catch(_){}
+        }
+      }
+    };
+    const _shortBtn = document.createElement('button');
+    const _renderShortBtn = () => {
+      _shortBtn.textContent = window._shortThrusterOn ? 'short thruster preset: ON' : 'short thruster preset: OFF';
+      _shortBtn.style.cssText = 'background:' + (window._shortThrusterOn ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._shortThrusterOn ? '#0f0' : '#f00') + ';padding:6px 12px;cursor:pointer;font:11px monospace;margin:6px 0 8px 0;display:block;width:100%;font-weight:bold;';
+    };
+    _renderShortBtn();
+    _shortBtn.addEventListener('click', () => {
+      window._shortThrusterOn = !window._shortThrusterOn;
+      _applyShortPreset(window._shortThrusterOn);
+      _renderShortBtn();
+      // Rebuild panel so all sliders reflect the new values
+      try { panel.innerHTML = ''; build(); } catch(_){}
+    });
+    panel.appendChild(_shortBtn);
+
     // ★★ PRIMARY white-hot dials — scale additive pile-up at the nozzle.
     // particle opacity = how much each particle contributes to additive stack (1.0 → saturates to white)
     // pos-pin frac    = how long particles stay clamped to nozzle pos (longer → more pile-up)
