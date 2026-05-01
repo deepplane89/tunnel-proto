@@ -6899,13 +6899,20 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       const ct = window._coneThruster;
       const localNoz = _localNozzles[idx];
       // Per-side offsets (offLX/Y/Z for idx 0, offRX/Y/Z for idx 1) plus legacy shared offX/Y/Z.
+      // Sliders express offsets in WORLD units (so user numbers match what the eye sees).
+      // _localNozzles is in ship-local units (NOZZLE_OFFSETS / 0.30), so we must divide the
+      // world-space offsets by the same ship-local scale factor before adding.
+      // (2026-05-01 fix: previously the offsets were added directly in ship-local units, so
+      // a slider value of 0.09 only moved the cone 0.027 in world space — making sliders feel
+      // ~3.3× weaker than expected.)
+      const _coneScale = (typeof shipGroup !== 'undefined' && shipGroup.scale && shipGroup.scale.x) ? shipGroup.scale.x : 0.30;
       const sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
       const sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
       const sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
       cone.position.set(
-        localNoz.x + ct.offX + sideOX,
-        localNoz.y + ct.offY + sideOY,
-        localNoz.z + ct.offZ + sideOZ
+        localNoz.x + (ct.offX + sideOX) / _coneScale,
+        localNoz.y + (ct.offY + sideOY) / _coneScale,
+        localNoz.z + (ct.offZ + sideOZ) / _coneScale
       );
       // ── Cone↔GLB diagnostic logging (throttled) ──
       // Log the live cone world position vs the GLB-derived true thruster anchor so the
