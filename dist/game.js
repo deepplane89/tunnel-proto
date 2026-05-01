@@ -21381,8 +21381,31 @@ function animate() {
   sunGlowSprite.lookAt(_camWP);
   sunCapMesh.lookAt(_camWP);
 
-  // Fire meshes track thrusterPower every frame (no timing gaps)
-  for (const fm of shipFireMeshes) fm.visible = state.thrusterPower > 0 && window._thrusterVisible !== false;
+  // Fire meshes track thrusterPower every frame (no timing gaps).
+  // Also modulate emissiveIntensity + opacity per-frame from window dials so the
+  // GLB-baked exhaust meshes (the dominant white-hot source at the nozzle) are tunable.
+  {
+    const _fEi = (window._shipFire_emissive != null) ? window._shipFire_emissive : 1.0;
+    const _fOp = (window._shipFire_opacity  != null) ? window._shipFire_opacity  : 1.0;
+    const _vis = state.thrusterPower > 0 && window._thrusterVisible !== false && _fOp > 0.001;
+    for (const fm of shipFireMeshes) {
+      fm.visible = _vis;
+      const m = fm.material;
+      if (m) {
+        if ('emissiveIntensity' in m) {
+          if (fm.userData._origEi == null) fm.userData._origEi = (m.emissiveIntensity != null ? m.emissiveIntensity : 1.0);
+          m.emissiveIntensity = fm.userData._origEi * _fEi;
+        }
+        if (_fOp < 0.999) {
+          if (!m.transparent) { m.transparent = true; m.needsUpdate = true; }
+          m.opacity = _fOp;
+        } else if (m.transparent && fm.userData._wasTransparent !== true) {
+          // Don't flip transparent off if material was originally transparent
+          m.opacity = 1.0;
+        }
+      }
+    }
+  }
   // Tick alt ship animation mixer
   if (_altShipActive && _altShipMixer) _altShipMixer.update(rawDt);
   // ── Death sky pivot camera (runs in animate so it works during dead phase) ──
@@ -22964,6 +22987,9 @@ function buildSkinTunerSliders() {
     panel.appendChild(makeSlider('flame lateral', _flameLateralMult, 0, 0.2, 0.005, v => _flameLateralMult = v, '#f80'));
 
     panel.appendChild(makeHeader('THRUSTERS — GLOBAL'));
+    // ★★ GLB FIRE MESH — likely the dominant white-hot source. Try this FIRST.
+    panel.appendChild(makeSlider('★★ GLB fire emissive×', window._shipFire_emissive != null ? window._shipFire_emissive : 1.0, 0, 2.0, 0.05, v => { window._shipFire_emissive = v; }, '#f00'));
+    panel.appendChild(makeSlider('★★ GLB fire opacity',  window._shipFire_opacity  != null ? window._shipFire_opacity  : 1.0, 0, 1.0, 0.02, v => { window._shipFire_opacity  = v; }, '#f00'));
     panel.appendChild(makeSlider('thruster scale', window._thrusterScale || 1.0, 0, 3, 0.05, v => { window._thrusterScale = v; }, '#f60'));
     panel.appendChild(makeSlider('point material size', thrusterSystems[0].points.material.size, 0.01, 1.0, 0.01, v => {
       thrusterSystems.forEach(s => s.points.material.size = v);
@@ -23017,15 +23043,20 @@ function buildSkinTunerSliders() {
     _expBtn.style.cssText = 'margin:6px 0;padding:6px 10px;background:#222;color:#0f0;border:1px solid #0f0;cursor:pointer;font:11px monospace;width:100%;';
     _expBtn.onclick = () => {
       const KEYS = [
-        '_thrusterScale','_nozzleBloomScale','_nozzleBloomOpacity','_miniBloomScale',
+        '_shipFire_emissive','_shipFire_opacity',
+        '_thrusterScale','_nozzleBloomScale','_nozzleBloomOpacity','_miniBloomScale','_miniBloomOpacity','_miniBloomOpacitySpd',
+        '_nozzleBloom_whiteMix','_miniBloom_whiteMix',
         '_thrusterSpreadX','_thrusterSpreadY','_thrusterLength',
         '_thrPart_coreEnd','_thrPart_coreR','_thrPart_coreGB','_thrPart_midEnd','_thrPart_midBoost',
+        '_thrPart_sizeBase','_thrPart_sizeSpeed','_thrPart_bumpMult','_thrPart_bumpEnd','_thrPart_sizeJitter',
         '_thrPart_sizeBase','_thrPart_sizeSpeed','_thrPart_bumpMult','_thrPart_bumpEnd','_thrPart_sizeJitter',
         '_thrPart_lifeMin','_thrPart_lifeJit','_thrPart_lifeBase','_thrPart_lifeSpd','_thrPart_spawnJit',
         '_thrFlame_coreEnd','_thrFlame_coreRGB','_thrFlame_midEnd',
         '_thrFlame_sizeBase','_thrFlame_sizeSpeed','_thrFlame_bumpMult','_thrFlame_bumpEnd',
         '_thrFlame_lifeMin','_thrFlame_lifeJit','_thrFlame_spawnJit',
       ];
+      // De-dup
+      const _seen = {}; for (let i = KEYS.length - 1; i >= 0; i--) { if (_seen[KEYS[i]]) KEYS.splice(i,1); else _seen[KEYS[i]] = 1; }
       const out = {};
       KEYS.forEach(k => { if (window[k] !== undefined) out[k] = window[k]; });
       // Material sizes are read off three.js objects, not window

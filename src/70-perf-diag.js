@@ -429,8 +429,31 @@ function animate() {
   sunGlowSprite.lookAt(_camWP);
   sunCapMesh.lookAt(_camWP);
 
-  // Fire meshes track thrusterPower every frame (no timing gaps)
-  for (const fm of shipFireMeshes) fm.visible = state.thrusterPower > 0 && window._thrusterVisible !== false;
+  // Fire meshes track thrusterPower every frame (no timing gaps).
+  // Also modulate emissiveIntensity + opacity per-frame from window dials so the
+  // GLB-baked exhaust meshes (the dominant white-hot source at the nozzle) are tunable.
+  {
+    const _fEi = (window._shipFire_emissive != null) ? window._shipFire_emissive : 1.0;
+    const _fOp = (window._shipFire_opacity  != null) ? window._shipFire_opacity  : 1.0;
+    const _vis = state.thrusterPower > 0 && window._thrusterVisible !== false && _fOp > 0.001;
+    for (const fm of shipFireMeshes) {
+      fm.visible = _vis;
+      const m = fm.material;
+      if (m) {
+        if ('emissiveIntensity' in m) {
+          if (fm.userData._origEi == null) fm.userData._origEi = (m.emissiveIntensity != null ? m.emissiveIntensity : 1.0);
+          m.emissiveIntensity = fm.userData._origEi * _fEi;
+        }
+        if (_fOp < 0.999) {
+          if (!m.transparent) { m.transparent = true; m.needsUpdate = true; }
+          m.opacity = _fOp;
+        } else if (m.transparent && fm.userData._wasTransparent !== true) {
+          // Don't flip transparent off if material was originally transparent
+          m.opacity = 1.0;
+        }
+      }
+    }
+  }
   // Tick alt ship animation mixer
   if (_altShipActive && _altShipMixer) _altShipMixer.update(rawDt);
   // ── Death sky pivot camera (runs in animate so it works during dead phase) ──
