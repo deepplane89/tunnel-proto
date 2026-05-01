@@ -1465,9 +1465,11 @@ let camTargetX = 0;
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 
-// Bloom resolution: /2 desktop, /3 mobile. Bloom is a blur — lower res is
-// visually invisible but cuts ~50% of bloom's per-frame fragment work on phones.
-const _BLOOM_DIV = _mobAA ? 3 : 2;
+// Bloom resolution: /2 on both desktop and mobile. Previously /3 on mobile,
+// but that left the sun corona/atmosphere glow visibly blurry — bloom IS the
+// look for a hero element like the sun. Cost: ~0.3–0.5 ms/frame on mobile,
+// well within budget after this session's draw-call + alloc savings.
+const _BLOOM_DIV = 2;
 const bloom = new UnrealBloomPass(
   new THREE.Vector2(Math.floor(window.innerWidth / _BLOOM_DIV), Math.floor(window.innerHeight / _BLOOM_DIV)),
   0.35,  // strength — subtle, not overpowering
@@ -3672,7 +3674,10 @@ const SUN_R   = 112;   // big radius (doubled)
 // Core sphere — emissive solid disc look
 // Sun: silhouette-only (always far). 32x32 is visually identical to 64x64
 // and saves ~6k tris. _mobAA is set on mobile UAs (line 1106).
-const _SUN_SEG = _mobAA ? 32 : 48;
+// Sun is a hero visual element — use full 48 segments on mobile too.
+// 16 extra triangles on a single sphere is negligible perf, but eliminates
+// visible silhouette/corona faceting that was happening at 32 segments.
+const _SUN_SEG = 48;
 const sunGeo = new THREE.SphereGeometry(SUN_R * 0.95, _SUN_SEG, _SUN_SEG);
 const sunMat = new THREE.ShaderMaterial({
   uniforms: {
@@ -4052,7 +4057,9 @@ scene.add(sunMesh);
 // renderOrder=1 so it draws AFTER the tendrils (renderOrder=0) and paints over
 // any tendril roots that bleed onto the sun face. Color tracks sunColor.
 // Sun cap circle: 32 segs is indistinguishable from 64 at this size/distance
-const sunCapGeo = new THREE.CircleGeometry(SUN_R * 0.95, _mobAA ? 32 : 48);
+// Match sun sphere segments (48) on mobile too — sun cap traces the same
+// silhouette as the sphere, faceting at 32 was visible against the corona.
+const sunCapGeo = new THREE.CircleGeometry(SUN_R * 0.95, 48);
 const sunCapMat = new THREE.ShaderMaterial({
   uniforms: {
     uSunColor: { value: new THREE.Color(LEVELS[0].sunColor) },
