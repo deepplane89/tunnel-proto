@@ -506,12 +506,10 @@ function _startL3KnifeCanyon() {
   _canyonManual  = true;  // mark manual so JL sequencer doesn't fight us
   _jlCorridor.active = false;
   state.corridorGapCenter = state.shipX || 0;
-  // dirLight kill DISABLED — keep global lighting consistent inside L3-knife
-  // canyon. Save/restore scaffolding kept for easy revert.
-  // if (typeof dirLight !== 'undefined' && dirLight) {
-  //   if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
-  //   dirLight.intensity = 0;
-  // }
+  // Ramped dirLight kill (smooth via _canyonLightT in _updateCanyonWalls).
+  if (typeof window._setCanyonDirLightTarget === 'function') {
+    window._setCanyonDirLightTarget(0);
+  }
   _createCanyonWalls();
   console.log('[L3-KNIFE] ON for ' + _L3_KNIFE_DURATION + 's');
 }
@@ -538,9 +536,13 @@ function _stopL3KnifeCanyon(opts) {
   _canyonManual  = false;
   _jlCorridor.active = false;
   _canyonTuner._l4Recreation = false;
+  // Ramped dirLight restore (smooth via _canyonLightT in _updateCanyonWalls).
+  if (typeof window._clearCanyonDirLightTarget === 'function') {
+    window._clearCanyonDirLightTarget();
+  }
+  // Legacy save/restore left as a safety net in case ramp is bypassed.
   if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
-    dirLight.intensity = _canyonSavedDirLight;
-    _canyonSavedDirLight = null;
+    _canyonSavedDirLight = null; // ramp owns dirLight now; clear stale save.
   }
   _canyonMode = 0;
   // Restore speed/handling/FOV if they were overridden during the canyon.
@@ -730,12 +732,10 @@ function _startPreT4ACanyon() {
   _canyonManual  = true;
   _jlCorridor.active = false;
   state.corridorGapCenter = state.shipX || 0;
-  // dirLight kill DISABLED — keep global lighting consistent inside Pre-T4A
-  // canyon. Save/restore scaffolding kept for easy revert.
-  // if (typeof dirLight !== 'undefined' && dirLight) {
-  //   if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
-  //   dirLight.intensity = 0;
-  // }
+  // Ramped dirLight kill (smooth via _canyonLightT in _updateCanyonWalls).
+  if (typeof window._setCanyonDirLightTarget === 'function') {
+    window._setCanyonDirLightTarget(0);
+  }
   _createCanyonWalls();
 
   // Apply lightning tuner + start RANDOM loop
@@ -797,10 +797,11 @@ function _stopPreT4ACanyon(opts) {
   _canyonManual  = false;
   _jlCorridor.active = false;
   _canyonTuner._l4Recreation = false;
-  if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
-    dirLight.intensity = _canyonSavedDirLight;
-    _canyonSavedDirLight = null;
+  // Ramped dirLight restore (smooth via _canyonLightT in _updateCanyonWalls).
+  if (typeof window._clearCanyonDirLightTarget === 'function') {
+    window._clearCanyonDirLightTarget();
   }
+  if (_canyonSavedDirLight !== null) _canyonSavedDirLight = null; // ramp owns dirLight now
   _canyonMode = 0;
   // Stop lightning loop + clear active bolts so T4A starts clean
   if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
@@ -931,9 +932,9 @@ function _startPreT4BCanyon() {
   _canyonManual  = true;
   _jlCorridor.active = false;
   state.corridorGapCenter = state.shipX || 0;
-  if (typeof dirLight !== 'undefined' && dirLight) {
-    if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
-    dirLight.intensity = 0;
+  // Ramped dirLight kill (smooth via _canyonLightT in _updateCanyonWalls).
+  if (typeof window._setCanyonDirLightTarget === 'function') {
+    window._setCanyonDirLightTarget(0);
   }
   _createCanyonWalls();
 
@@ -966,10 +967,11 @@ function _stopPreT4BCanyon(opts) {
   _canyonManual  = false;
   _jlCorridor.active = false;
   _canyonTuner._l4Recreation = false;
-  if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
-    dirLight.intensity = _canyonSavedDirLight;
-    _canyonSavedDirLight = null;
+  // Ramped dirLight restore (smooth via _canyonLightT in _updateCanyonWalls).
+  if (typeof window._clearCanyonDirLightTarget === 'function') {
+    window._clearCanyonDirLightTarget();
   }
+  if (_canyonSavedDirLight !== null) _canyonSavedDirLight = null; // ramp owns dirLight now
   _canyonMode = 0;
   if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
   if (typeof window._clearAllLightning === 'function') window._clearAllLightning();

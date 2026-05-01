@@ -7581,21 +7581,38 @@ const _CANYON_LIGHT_DEFS = [
 // visibility toggle, no scene.add/remove — so no material recompile wave.
 // (THREE.js: changing intensity does NOT recompile; visibility or presence does.)
 //
-// Color = white (0xffffff) to match dirLight, so canyon walls feel like "more
-// of the same light" rather than a different cyan-tinted scene. Used as fill
-// only — 50% of original intensity — to fix shadow asymmetry on parallel walls
-// without dominating the global lighting character.
+// Color = original cyan (0xc8f0ff). User confirmed this looks best. Smoothing
+// of transitions handled by _canyonLightT ramp below — 600ms smoothstep on
+// enter and exit so the change is imperceptible.
 const _CANYON_PERSISTENT_LIGHTS = _CANYON_LIGHT_DEFS.map(({ pos }) => {
-  const l = new THREE.DirectionalLight(0xffffff, 0); // intensity=0 until canyon active
+  const l = new THREE.DirectionalLight(0xc8f0ff, 0); // intensity=0 until canyon active
   l.position.set(...pos);
   scene.add(l);
   return l;
 });
-// Canyon-light ramp progress (0..1). Ticked in _updateCanyonWalls each frame.
-// Eases canyon fill-light intensity in/out so transitions don't snap.
+// Canyon transition ramp (0..1). Ticked in _updateCanyonWalls each frame.
+// 0 = global lighting (no canyon lights, dirLight at saved value).
+// 1 = canyon lighting (full canyon lights, dirLight at canyon target).
+// Smoothed with smoothstep ease + 600ms duration for imperceptible blend.
 let _canyonLightT = 0;
-const _CANYON_LIGHT_FILL = 0.5;       // multiplier on _CANYON_LIGHT_DEFS intensities
-const _CANYON_LIGHT_RAMP_S = 0.30;    // 300ms fade in/out
+const _CANYON_LIGHT_FILL = 1.0;       // 100% — original intensities preserved
+const _CANYON_LIGHT_RAMP_S = 0.60;    // 600ms ease in/out (long enough to be invisible)
+// Optional dirLight modulation during canyon (used by L3-knife / Pre-T4A / Pre-T4B).
+// _canyonDirLightFrom = saved pre-canyon intensity (set when entering one of those
+// canyons). _canyonDirLightTarget = where to drive it (0 traditionally). When both
+// are non-null, _updateCanyonWalls ramps dirLight = lerp(From, Target, eased(_canyonLightT)).
+let _canyonDirLightFrom = null;
+let _canyonDirLightTarget = null;
+window._setCanyonDirLightTarget = function(target) {
+  if (typeof dirLight === 'undefined' || !dirLight) return;
+  if (_canyonDirLightFrom === null) _canyonDirLightFrom = dirLight.intensity;
+  _canyonDirLightTarget = target;
+};
+window._clearCanyonDirLightTarget = function() {
+  // Called by canyon-exit logic. Ramp will drive dirLight back toward From
+  // as _canyonLightT eases to 0; once fully eased, we restore + clear state.
+  _canyonDirLightTarget = null; // tells ramp to head home
+};
 let _canyonActive = false;
 let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
@@ -8092,12 +8109,13 @@ function _createCanyonWalls() {
   // Holographic grid overlay REMOVED for perf (was doubling draw calls on cyan slabs).
   // Post-processing _holoPass (screen-space) is separate and still active.
 
-  // Canyon-scoped lights — white fill at 50% to preserve global lighting
-  // character while fixing shadow asymmetry on parallel canyon walls. Ramped
-  // in/out via _canyonLightT in _updateCanyonWalls (300ms ease) so transitions
-  // don't snap. Light-count hash unchanged — no recompile hitch.
-  // Start at 0; ramp will drive them up to target on the first few frames.
-  _canyonLightT = 0;
+  // Canyon-scoped lights — original cyan rig at full intensity.
+  // Smoothed in/out via _canyonLightT in _updateCanyonWalls (600ms ease)
+  // so transitions are imperceptible. Light-count hash unchanged — no
+  // recompile hitch. Start at 0; ramp will drive up over ~600ms.
+  // Note: do NOT reset _canyonLightT here — if a previous canyon was still
+  // ramping out, preserve its current value so we ease forward smoothly
+  // instead of snap-restarting at 0.
   _CANYON_PERSISTENT_LIGHTS.forEach((l) => {
     l.intensity = 0;
   });
@@ -8434,19 +8452,30 @@ function _debugCanyonNearShip() {
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || (!_canyonActive && !_canyonExiting)) return;
 
-  // ── Canyon fill-light ramp — fade lights up while active, down while exiting.
-  // White (0xffffff) at 50% of original intensities, eased over 300ms.
-  // Eliminates the snap-in/out feel without changing light count (no recompile).
+  // ── Canyon transition ramp — 600ms smoothstep ease on every enter/exit.
+  // Drives both: (1) the 4 cyan canyon fill-lights, (2) optional dirLight
+  // modulation during L3-knife/Pre-T4A/Pre-T4B (via _setCanyonDirLightTarget).
+  // Light count never changes so no shader recompile.
   const _ltTarget = _canyonActive ? 1 : 0;
   const _ltStep = dt / _CANYON_LIGHT_RAMP_S;
   if (_canyonLightT < _ltTarget) _canyonLightT = Math.min(_ltTarget, _canyonLightT + _ltStep);
   else if (_canyonLightT > _ltTarget) _canyonLightT = Math.max(_ltTarget, _canyonLightT - _ltStep);
-  if (_canyonLightT > 0) {
-    // smoothstep ease for a softer perceived ramp
-    const e = _canyonLightT * _canyonLightT * (3 - 2 * _canyonLightT);
-    const fill = _CANYON_LIGHT_FILL * e;
-    for (let _i = 0; _i < _CANYON_PERSISTENT_LIGHTS.length; _i++) {
-      _CANYON_PERSISTENT_LIGHTS[_i].intensity = _CANYON_LIGHT_DEFS[_i].intensity * fill;
+  // smoothstep ease for an imperceptible perceived blend
+  const e = _canyonLightT * _canyonLightT * (3 - 2 * _canyonLightT);
+  const fill = _CANYON_LIGHT_FILL * e;
+  for (let _i = 0; _i < _CANYON_PERSISTENT_LIGHTS.length; _i++) {
+    _CANYON_PERSISTENT_LIGHTS[_i].intensity = _CANYON_LIGHT_DEFS[_i].intensity * fill;
+  }
+  // dirLight ramp — only active for L3-knife/Pre-T4A/Pre-T4B (which call
+  // _setCanyonDirLightTarget on entry). At t=0 we read From, at t=1 we hit Target.
+  // When _canyonDirLightTarget is null but From is non-null, we're heading home.
+  if (_canyonDirLightFrom !== null && typeof dirLight !== 'undefined' && dirLight) {
+    const target = (_canyonDirLightTarget !== null) ? _canyonDirLightTarget : _canyonDirLightFrom;
+    dirLight.intensity = _canyonDirLightFrom + (target - _canyonDirLightFrom) * e;
+    // Once fully eased home and target was cleared, drop the saved From.
+    if (_canyonDirLightTarget === null && _canyonLightT <= 0.001) {
+      dirLight.intensity = _canyonDirLightFrom;
+      _canyonDirLightFrom = null;
     }
   }
 
