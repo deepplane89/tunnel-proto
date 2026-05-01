@@ -8344,11 +8344,13 @@ function _createCanyonWalls() {
   // Holographic grid overlay REMOVED for perf (was doubling draw calls on cyan slabs).
   // Post-processing _holoPass (screen-space) is separate and still active.
 
-  // Canyon-scoped lights — reuse persistent lights created at module init.
-  // Turn them on by setting intensity; light-count hash stays constant so no
-  // standard/physical/basic/mirror material recompiles (previously 161ms hitch).
-  _CANYON_PERSISTENT_LIGHTS.forEach((l, i) => {
-    l.intensity = _CANYON_LIGHT_DEFS[i].intensity * T.lightIntensity;
+  // Canyon-scoped lights — DISABLED for consistent global lighting. Walls
+  // are now lit purely by the same lights that light the rest of the game.
+  // Lights remain PRESENT in the scene (just zero intensity) to preserve the
+  // light-count hash and avoid the 161ms material recompile hitch. To re-enable
+  // as fill, change `0` below back to `_CANYON_LIGHT_DEFS[i].intensity * T.lightIntensity`.
+  _CANYON_PERSISTENT_LIGHTS.forEach((l) => {
+    l.intensity = 0;
   });
   const canyonLight = { lights: _CANYON_PERSISTENT_LIGHTS };
 
@@ -10538,10 +10540,12 @@ function _startL3KnifeCanyon() {
   _canyonManual  = true;  // mark manual so JL sequencer doesn't fight us
   _jlCorridor.active = false;
   state.corridorGapCenter = state.shipX || 0;
-  if (typeof dirLight !== 'undefined' && dirLight) {
-    if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
-    dirLight.intensity = 0;
-  }
+  // dirLight kill DISABLED — keep global lighting consistent inside L3-knife
+  // canyon. Save/restore scaffolding kept for easy revert.
+  // if (typeof dirLight !== 'undefined' && dirLight) {
+  //   if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+  //   dirLight.intensity = 0;
+  // }
   _createCanyonWalls();
   console.log('[L3-KNIFE] ON for ' + _L3_KNIFE_DURATION + 's');
 }
@@ -10760,10 +10764,12 @@ function _startPreT4ACanyon() {
   _canyonManual  = true;
   _jlCorridor.active = false;
   state.corridorGapCenter = state.shipX || 0;
-  if (typeof dirLight !== 'undefined' && dirLight) {
-    if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
-    dirLight.intensity = 0;
-  }
+  // dirLight kill DISABLED — keep global lighting consistent inside Pre-T4A
+  // canyon. Save/restore scaffolding kept for easy revert.
+  // if (typeof dirLight !== 'undefined' && dirLight) {
+  //   if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+  //   dirLight.intensity = 0;
+  // }
   _createCanyonWalls();
 
   // Apply lightning tuner + start RANDOM loop

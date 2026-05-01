@@ -506,10 +506,12 @@ function _startL3KnifeCanyon() {
   _canyonManual  = true;  // mark manual so JL sequencer doesn't fight us
   _jlCorridor.active = false;
   state.corridorGapCenter = state.shipX || 0;
-  if (typeof dirLight !== 'undefined' && dirLight) {
-    if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
-    dirLight.intensity = 0;
-  }
+  // dirLight kill DISABLED — keep global lighting consistent inside L3-knife
+  // canyon. Save/restore scaffolding kept for easy revert.
+  // if (typeof dirLight !== 'undefined' && dirLight) {
+  //   if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+  //   dirLight.intensity = 0;
+  // }
   _createCanyonWalls();
   console.log('[L3-KNIFE] ON for ' + _L3_KNIFE_DURATION + 's');
 }
@@ -728,10 +730,12 @@ function _startPreT4ACanyon() {
   _canyonManual  = true;
   _jlCorridor.active = false;
   state.corridorGapCenter = state.shipX || 0;
-  if (typeof dirLight !== 'undefined' && dirLight) {
-    if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
-    dirLight.intensity = 0;
-  }
+  // dirLight kill DISABLED — keep global lighting consistent inside Pre-T4A
+  // canyon. Save/restore scaffolding kept for easy revert.
+  // if (typeof dirLight !== 'undefined' && dirLight) {
+  //   if (_canyonSavedDirLight === null) _canyonSavedDirLight = dirLight.intensity;
+  //   dirLight.intensity = 0;
+  // }
   _createCanyonWalls();
 
   // Apply lightning tuner + start RANDOM loop
