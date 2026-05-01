@@ -7842,12 +7842,22 @@ const _CANYON_LIGHT_DEFS = [
 // the entire session. Canyon activate/deactivate just flips intensity — no
 // visibility toggle, no scene.add/remove — so no material recompile wave.
 // (THREE.js: changing intensity does NOT recompile; visibility or presence does.)
+//
+// Color = white (0xffffff) to match dirLight, so canyon walls feel like "more
+// of the same light" rather than a different cyan-tinted scene. Used as fill
+// only — 50% of original intensity — to fix shadow asymmetry on parallel walls
+// without dominating the global lighting character.
 const _CANYON_PERSISTENT_LIGHTS = _CANYON_LIGHT_DEFS.map(({ pos }) => {
-  const l = new THREE.DirectionalLight(0xc8f0ff, 0); // intensity=0 until canyon active
+  const l = new THREE.DirectionalLight(0xffffff, 0); // intensity=0 until canyon active
   l.position.set(...pos);
   scene.add(l);
   return l;
 });
+// Canyon-light ramp progress (0..1). Ticked in _updateCanyonWalls each frame.
+// Eases canyon fill-light intensity in/out so transitions don't snap.
+let _canyonLightT = 0;
+const _CANYON_LIGHT_FILL = 0.5;       // multiplier on _CANYON_LIGHT_DEFS intensities
+const _CANYON_LIGHT_RAMP_S = 0.30;    // 300ms fade in/out
 let _canyonActive = false;
 let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
@@ -8344,11 +8354,12 @@ function _createCanyonWalls() {
   // Holographic grid overlay REMOVED for perf (was doubling draw calls on cyan slabs).
   // Post-processing _holoPass (screen-space) is separate and still active.
 
-  // Canyon-scoped lights — DISABLED for consistent global lighting. Walls
-  // are now lit purely by the same lights that light the rest of the game.
-  // Lights remain PRESENT in the scene (just zero intensity) to preserve the
-  // light-count hash and avoid the 161ms material recompile hitch. To re-enable
-  // as fill, change `0` below back to `_CANYON_LIGHT_DEFS[i].intensity * T.lightIntensity`.
+  // Canyon-scoped lights — white fill at 50% to preserve global lighting
+  // character while fixing shadow asymmetry on parallel canyon walls. Ramped
+  // in/out via _canyonLightT in _updateCanyonWalls (300ms ease) so transitions
+  // don't snap. Light-count hash unchanged — no recompile hitch.
+  // Start at 0; ramp will drive them up to target on the first few frames.
+  _canyonLightT = 0;
   _CANYON_PERSISTENT_LIGHTS.forEach((l) => {
     l.intensity = 0;
   });
@@ -8684,6 +8695,23 @@ function _debugCanyonNearShip() {
 
 function _updateCanyonWalls(dt, speed) {
   if (!_canyonWalls || (!_canyonActive && !_canyonExiting)) return;
+
+  // ── Canyon fill-light ramp — fade lights up while active, down while exiting.
+  // White (0xffffff) at 50% of original intensities, eased over 300ms.
+  // Eliminates the snap-in/out feel without changing light count (no recompile).
+  const _ltTarget = _canyonActive ? 1 : 0;
+  const _ltStep = dt / _CANYON_LIGHT_RAMP_S;
+  if (_canyonLightT < _ltTarget) _canyonLightT = Math.min(_ltTarget, _canyonLightT + _ltStep);
+  else if (_canyonLightT > _ltTarget) _canyonLightT = Math.max(_ltTarget, _canyonLightT - _ltStep);
+  if (_canyonLightT > 0) {
+    // smoothstep ease for a softer perceived ramp
+    const e = _canyonLightT * _canyonLightT * (3 - 2 * _canyonLightT);
+    const fill = _CANYON_LIGHT_FILL * e;
+    for (let _i = 0; _i < _CANYON_PERSISTENT_LIGHTS.length; _i++) {
+      _CANYON_PERSISTENT_LIGHTS[_i].intensity = _CANYON_LIGHT_DEFS[_i].intensity * fill;
+    }
+  }
+
   _canyonDbgFrame++;
   if (_canyonDbgStartTime === null) _canyonDbgStartTime = performance.now();
   const _canyonElapsed = ((performance.now() - _canyonDbgStartTime) / 1000).toFixed(1);
