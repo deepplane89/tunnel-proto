@@ -6110,9 +6110,13 @@ function _hideAltShip() {
   if (_altShipModel) _altShipModel.visible = false;
   if (window._shipModel) window._shipModel.visible = true;
   _altShipActive = false;
-  // Restore default nozzle offsets
-  NOZZLE_OFFSETS[0].set(-0.50, 0.12, 5.20);
-  NOZZLE_OFFSETS[1].set( 0.50, 0.12, 5.20);
+  // Restore default RUNNER nozzle offsets — must match the source-of-truth
+  // NOZZLE_OFFSETS / MINI_NOZZLE_OFFSETS literals declared above. If those
+  // literals change, update these too. (2026-05-01: was incorrectly hard-coded
+  // to (±0.50, 0.12, 5.20) which stomped the real Runner values whenever the
+  // user switched MK → Runner.)
+  NOZZLE_OFFSETS[0].set(-0.48, 0.05, 5.10);
+  NOZZLE_OFFSETS[1].set( 0.48, 0.05, 5.10);
   MINI_NOZZLE_OFFSETS[0].set(-0.22, 0.08, 5.10);
   MINI_NOZZLE_OFFSETS[1].set( 0.22, 0.08, 5.10);
   // Restore stashed thruster globals
