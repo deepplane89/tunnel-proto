@@ -357,7 +357,7 @@ function applyPowerup(typeIdx) {
         const _lsfx = document.getElementById('laser-beam-sfx');
         if (_lsfx && !state.muted) {
           _lsfx.loop = false;
-          _lsfx.volume = 0.5;
+          _lsfx.volume = 0.2; // mixed lower so it sits behind engine + music
           _lsfx.currentTime = 0;
           _lsfx.play().catch(()=>{});
           const _retriggerMs = 120; // ~8 shots/sec; tune this if too fast/slow
@@ -365,10 +365,10 @@ function applyPowerup(typeIdx) {
           state._laserSfxIv = setInterval(() => {
             try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           }, _retriggerMs);
-          // Stop when laser expires
+          // On natural expiry: stop retriggering but let the last in-flight
+          // shot play out in full (no pause / no currentTime reset).
           setTimeout(() => {
             if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
-            try { _lsfx.pause(); _lsfx.currentTime = 0; } catch(_) {}
           }, state.laserTimer * 1000);
         }
         // T1/T2: 2 lanes, narrow. T3: 4 lanes, wider spread
