@@ -86,6 +86,7 @@ function togglePause() {
     const _laserP = document.getElementById('laser-beam-sfx');
     if (_laserP && !_laserP.paused) _laserP.pause();
     if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+    if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
     const _ubeamP = document.getElementById('unibeam-sfx');
     if (_ubeamP && !_ubeamP.paused) _ubeamP.pause();
     // Kill in-flight thunder rumble so it doesn't ring through pause.
@@ -249,6 +250,7 @@ function returnToTitle() {
   const _laserR = document.getElementById('laser-beam-sfx');
   if (_laserR) { _laserR.loop = false; _laserR.pause(); _laserR.currentTime = 0; }
   if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+  if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
   const _ubeamR = document.getElementById('unibeam-sfx');
   if (_ubeamR) { _ubeamR.loop = false; _ubeamR.pause(); _ubeamR.currentTime = 0; }
   // Kill in-flight thunder rumble on title.

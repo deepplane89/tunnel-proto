@@ -3258,6 +3258,7 @@ function killPlayer() {
   const _laserD = document.getElementById('laser-beam-sfx');
   if (_laserD && !_laserD.paused) { _laserD.loop = false; _laserD.pause(); _laserD.currentTime = 0; }
   if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+  if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
   const _ubeamD = document.getElementById('unibeam-sfx');
   if (_ubeamD && !_ubeamD.paused) { _ubeamD.loop = false; _ubeamD.pause(); _ubeamD.currentTime = 0; }
   // Kill in-flight thunder rumble so it doesn't ring through gameover screen.

@@ -13690,12 +13690,16 @@ function applyPowerup(typeIdx) {
           try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           const _retriggerMs = 120; // ~8 shots/sec
           if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+          // Cancel any prior stop-timeout from an earlier pickup so it can't fire
+          // mid-second-laser and kill the new interval before its time.
+          if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
           state._laserSfxIv = setInterval(() => {
             try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           }, _retriggerMs);
           // Stop retriggering when laser ends, but DON'T cut the in-flight shot.
           // It plays out naturally to its end (final tail rings out).
-          setTimeout(() => {
+          state._laserSfxStopTo = setTimeout(() => {
+            state._laserSfxStopTo = null;
             if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
           }, state.laserTimer * 1000);
         }
@@ -13913,6 +13917,7 @@ function togglePause() {
     const _laserP = document.getElementById('laser-beam-sfx');
     if (_laserP && !_laserP.paused) _laserP.pause();
     if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+    if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
     const _ubeamP = document.getElementById('unibeam-sfx');
     if (_ubeamP && !_ubeamP.paused) _ubeamP.pause();
     // Kill in-flight thunder rumble so it doesn't ring through pause.
@@ -14076,6 +14081,7 @@ function returnToTitle() {
   const _laserR = document.getElementById('laser-beam-sfx');
   if (_laserR) { _laserR.loop = false; _laserR.pause(); _laserR.currentTime = 0; }
   if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+  if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
   const _ubeamR = document.getElementById('unibeam-sfx');
   if (_ubeamR) { _ubeamR.loop = false; _ubeamR.pause(); _ubeamR.currentTime = 0; }
   // Kill in-flight thunder rumble on title.
@@ -18598,6 +18604,7 @@ function killPlayer() {
   const _laserD = document.getElementById('laser-beam-sfx');
   if (_laserD && !_laserD.paused) { _laserD.loop = false; _laserD.pause(); _laserD.currentTime = 0; }
   if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+  if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
   const _ubeamD = document.getElementById('unibeam-sfx');
   if (_ubeamD && !_ubeamD.paused) { _ubeamD.loop = false; _ubeamD.pause(); _ubeamD.currentTime = 0; }
   // Kill in-flight thunder rumble so it doesn't ring through gameover screen.

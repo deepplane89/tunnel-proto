@@ -363,12 +363,16 @@ function applyPowerup(typeIdx) {
           try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           const _retriggerMs = 120; // ~8 shots/sec
           if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+          // Cancel any prior stop-timeout from an earlier pickup so it can't fire
+          // mid-second-laser and kill the new interval before its time.
+          if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
           state._laserSfxIv = setInterval(() => {
             try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           }, _retriggerMs);
           // Stop retriggering when laser ends, but DON'T cut the in-flight shot.
           // It plays out naturally to its end (final tail rings out).
-          setTimeout(() => {
+          state._laserSfxStopTo = setTimeout(() => {
+            state._laserSfxStopTo = null;
             if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
           }, state.laserTimer * 1000);
         }
