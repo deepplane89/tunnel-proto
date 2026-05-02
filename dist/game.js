@@ -6522,12 +6522,31 @@ window._nozPoseUp = [
   new THREE.Vector3(-0.27, 0.08, 4.91),  // left  @ pitch-up
   new THREE.Vector3( 0.74, 0.09, 5.01),  // right @ pitch-up
 ];
-// NOTE (saved per user): Default Runner cone-offset slider values that look right at
-// FULL barrel roll (either direction) — captured 2026-05-02 via slider screenshots:
-//   L cone: offX = -0.04, offY = 0.00, offZ = -0.10
-//   R cone: offX =  0.00, offY = 0.00, offZ = -0.11
-// Sacred zero (no roll) sliders: L (-0.02, +0.03, 0), R (+0.02, +0.02, 0).
-// Cone roll-blend was deferred at user request; restore from these values when ready.
+// Per-skin cone-offset poses for signed roll-driven blend. Same axis as particles
+// (state.rollAngle, +-pi/2). _ratio<0 (ArrowUp) -> _conePoseUp; _ratio>0 (ArrowDown)
+// -> _conePoseDown. Sacred zero is whatever the slider holds at state.rollAngle=0
+// (per-skin, never overwritten). Disable via window._conePoseEnabled = false.
+// Keyed by activeSkinIdx so each skin keeps its own tuned poses.
+window._conePoseUp   = {};  // { [skinIdx]: [Vector3 L, Vector3 R] }
+window._conePoseDown = {};
+// Default RUNNER (skin idx 0) — captured 2026-05-02 via slider screenshots.
+window._conePoseUp[0] = [
+  new THREE.Vector3(-0.04,  0.03, -0.04),  // L @ ArrowUp full roll
+  new THREE.Vector3( 0.02,  0.02, -0.13),  // R @ ArrowUp full roll
+];
+window._conePoseDown[0] = [
+  new THREE.Vector3(-0.04,  0.03, -0.10),  // L @ ArrowDown full roll
+  new THREE.Vector3(-0.05,  0.03, -0.15),  // R @ ArrowDown full roll
+];
+// MK RUNNER (skin idx 1) — user reported same set works both directions, so up==down.
+window._conePoseUp[1] = [
+  new THREE.Vector3(-0.04,  0.00, -0.10),
+  new THREE.Vector3( 0.00,  0.00, -0.11),
+];
+window._conePoseDown[1] = [
+  new THREE.Vector3(-0.04,  0.00, -0.10),
+  new THREE.Vector3( 0.00,  0.00, -0.11),
+];
 // GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
 // at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
 // of how NOZZLE_OFFSETS is hand-tuned for visual particle spawn. Used by the cone thruster
@@ -7302,9 +7321,26 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // a slider value of 0.09 only moved the cone 0.027 in world space — making sliders feel
       // ~3.3× weaker than expected.)
       const _coneScale = (typeof shipGroup !== 'undefined' && shipGroup.scale && shipGroup.scale.x) ? shipGroup.scale.x : 0.30;
-      const sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
-      const sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
-      const sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
+      let sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
+      let sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
+      let sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
+      // ── Cone-offset pose-blend (per-skin, signed roll) ──
+      // Lerp from sacred-zero (current slider) toward _conePoseUp[skin] / _conePoseDown[skin]
+      // by signed state.rollAngle / (pi/2). Disable via window._conePoseEnabled = false.
+      if (window._conePoseEnabled !== false && typeof state !== 'undefined' && state) {
+        const _ra2 = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
+        const _ratio2 = Math.max(-1, Math.min(1, _ra2 / (Math.PI * 0.5)));
+        if (Math.abs(_ratio2) > 0.001) {
+          const _bank = (_ratio2 < 0) ? window._conePoseUp : window._conePoseDown;
+          const _tgt = _bank && _bank[activeSkinIdx] && _bank[activeSkinIdx][idx];
+          if (_tgt) {
+            const _t2 = Math.abs(_ratio2);
+            sideOX = sideOX + (_tgt.x - sideOX) * _t2;
+            sideOY = sideOY + (_tgt.y - sideOY) * _t2;
+            sideOZ = sideOZ + (_tgt.z - sideOZ) * _t2;
+          }
+        }
+      }
       cone.position.set(
         localNoz.x + (ct.offX + sideOX) / _coneScale,
         localNoz.y + (ct.offY + sideOY) / _coneScale,
