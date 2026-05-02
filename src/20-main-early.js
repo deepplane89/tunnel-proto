@@ -6827,15 +6827,19 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
   // _rebuildLocalNozzles) and the pose target based on signed pitch ratio.
   // Disabled if window._nozPoseEnabled === false.
   if (window._nozPoseEnabled !== false) {
-    const _pitch = shipGroup.rotation.x || 0;
-    const _ratio = Math.max(-1, Math.min(1, _pitch / (Math.PI * 0.5)));
+    // Driver is roll (state.rollAngle / shipGroup.rotation.z), not pitch.
+    // Roll-up key = +pi/2 -> _nozPoseUp; roll-down key = -pi/2 -> _nozPoseDown.
+    const _roll = shipGroup.rotation.z || 0;
+    const _ratio = Math.max(-1, Math.min(1, _roll / (Math.PI * 0.5)));
     if (Math.abs(_ratio) > 0.001) {
       const _matchDef = _altShipActive && SHIP_SKINS[activeSkinIdx] && SHIP_SKINS[activeSkinIdx].glbConfig && SHIP_SKINS[activeSkinIdx].glbConfig.matchDefault;
       const _sc = (_matchDef || !_altShipActive) ? 0.30 : (shipGroup.scale.x || 0.30);
       const _refX = (_altShipActive && !_matchDef) ? _altShip.posX : 0;
       const _refY = (_altShipActive && !_matchDef) ? _altShip.posY : 0.28;
       const _refZ = (_altShipActive && !_matchDef) ? _altShip.posZ : 4.5;
-      const _pose = (_ratio > 0) ? window._nozPoseUp : window._nozPoseDown;
+      // ArrowUp / rollUp -> rollDir=-1 -> rotation.z negative -> _nozPoseUp.
+      // ArrowDown / rollDown -> rollDir=+1 -> rotation.z positive -> _nozPoseDown.
+      const _pose = (_ratio < 0) ? window._nozPoseUp : window._nozPoseDown;
       const _t = Math.abs(_ratio);
       if (_pose && _pose[0] && _pose[1]) {
         for (let i = 0; i < 2; i++) {
