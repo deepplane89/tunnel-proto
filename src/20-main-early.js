@@ -342,6 +342,18 @@ function saveLevelBeaten(levelIdx) {
 }
 function updateTitleBadges() { /* badges removed from UI */ }
 
+// RUNNER (default ship) cone offsets — user-tuned 2026-05-01.
+// Applied via _applyConeConfig() whenever the active ship is RUNNER (incl. on
+// MK→Runner switch via _hideAltShip). Stored ship-local via shipGroup parent so
+// cones track ship rotation (xwing/barrel-roll) intrinsically.
+const RUNNER_CONE_CFG = {
+  length: 3.30, radius: 0.29,
+  rotX: 0, rotY: 0, rotZ: 0,
+  offX: 0, offY: 0, offZ: 0,
+  offLX: -0.02, offLY: 0.03, offLZ: 0,
+  offRX:  0.02, offRY: 0.02, offRZ: 0,
+};
+
 const SHIP_SKINS = [
   { name: 'RUNNER',         price: 0,    description: 'Default' },
   { name: 'GHOST',         price: 400,  description: 'Clean glossy white' },
@@ -367,6 +379,16 @@ const SHIP_SKINS = [
       miniL:[-0.150, 0.060, 5.100], miniR:[0.160, 0.060, 5.100], thrusterScale:1.0,
       portraitNozzleL:[-0.480, 0.050, 5.100], portraitNozzleR:[0.480, 0.050, 5.100],
       portraitMiniL:[-0.150, 0.060, 5.100], portraitMiniR:[0.160, 0.060, 5.100],
+      // Cone thruster per-ship offsets (world units, applied on top of NOZZLE_OFFSETS).
+      // 2026-05-01: tuned by user. Stored ship-local via shipGroup parent so cones
+      // track ship rotation (xwing/barrel-roll) intrinsically.
+      coneCfg: {
+        length: 3.30, radius: 0.29,
+        rotX: 0, rotY: 0, rotZ: 0,
+        offX: 0, offY: 0, offZ: 0,
+        offLX: -0.02, offLY: 0.00, offLZ: 0,
+        offRX:  0.02, offRY: 0.00, offRZ: 0,
+      },
       matchDefault: true },
     laserConfig: { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 } },
 ];
@@ -5838,6 +5860,18 @@ function _snapshotNozzleBaseline() {
   _nozzleBaseline.posZ  = _altShip.posZ;
 }
 
+// Copy per-ship cone offsets into the live window._coneThruster so the cone
+// renderer picks them up next frame. Only writes keys present in cfg — anything
+// missing keeps its previous live value.
+function _applyConeConfig(cfg) {
+  if (!cfg || !window._coneThruster) return;
+  const ct = window._coneThruster;
+  const KEYS = ['length','radius','rotX','rotY','rotZ',
+                'offX','offY','offZ',
+                'offLX','offLY','offLZ','offRX','offRY','offRZ'];
+  for (const k of KEYS) if (cfg[k] != null) ct[k] = cfg[k];
+}
+
 function _applyGlbConfig(cfg) {
   if (!cfg) return;
   _altShip.posX = cfg.posX || 0; _altShip.posY = cfg.posY || 0; _altShip.posZ = cfg.posZ || 0;
@@ -5851,6 +5885,8 @@ function _applyGlbConfig(cfg) {
   _altShip.thrusterLength = cfg.thrusterLength != null ? cfg.thrusterLength : null;
   _altShip.noMiniThrusters = !!cfg.noMiniThrusters;
   _altShip.bloomScale = cfg.bloomScale != null ? cfg.bloomScale : 1.0;
+  // Per-ship cone thruster offsets (if defined on this skin)
+  if (cfg.coneCfg) _applyConeConfig(cfg.coneCfg);
   _snapshotNozzleBaseline();
 }
 
@@ -6119,6 +6155,8 @@ function _hideAltShip() {
   NOZZLE_OFFSETS[1].set( 0.48, 0.05, 5.10);
   MINI_NOZZLE_OFFSETS[0].set(-0.22, 0.08, 5.10);
   MINI_NOZZLE_OFFSETS[1].set( 0.22, 0.08, 5.10);
+  // Restore RUNNER cone offsets (separate from MK Runner's coneCfg)
+  _applyConeConfig(RUNNER_CONE_CFG);
   // Restore stashed thruster globals
   if (window._prevThrusterScale != null) { window._thrusterScale = window._prevThrusterScale; window._baseThrusterScale = window._prevThrusterScale; }
   if (window._prevThrusterLength != null) window._thrusterLength = window._prevThrusterLength;
@@ -6462,10 +6500,9 @@ const flameMeshes = NOZZLE_OFFSETS.map(() => {
 window._coneThrustersEnabled = false; // default off; flip per skin
 // Tunable globals for the cone shader — exposed via sliders
 window._coneThruster = {
-  // 2026-05-01 (re-tuned after world-units fix): defaults locked to user-tuned values
-  // from MK Runner T-tuner session. Applied globally to both Runner and MK Runner.
-  // Per-side offsets are world-space, applied on top of NOZZLE_OFFSETS so cones track
-  // the ship through any pose.
+  // 2026-05-01: initial values match RUNNER_CONE_CFG (boot ship is Runner).
+  // Per-ship overrides: RUNNER uses RUNNER_CONE_CFG (above), MK RUNNER has its own
+  // coneCfg in glbConfig. Both apply via _applyConeConfig() on ship switch.
   length:       3.30,
   radius:       0.29,    // user-tuned to fit visible thruster bore
   // Auto-orient: cone is parented to shipGroup with baseline rotX=π/2 so it points
@@ -6476,8 +6513,9 @@ window._coneThruster = {
   rotZ:         0,
   // Per-side position offsets — independent for left and right cones.
   // World-space, applied on top of NOZZLE_OFFSETS[idx] (idx 0=left, 1=right).
-  offLX:       -0.02,  offLY:       -0.01,  offLZ:        0,
-  offRX:        0.02,  offRY:       -0.01,  offRZ:        0,
+  // Initial values = RUNNER_CONE_CFG (matching the boot ship).
+  offLX:       -0.02,  offLY:        0.03,  offLZ:        0,
+  offRX:        0.02,  offRY:        0.02,  offRZ:        0,
   // Legacy shared offsets (kept for back-compat — applied to BOTH sides equally).
   offX:         0,
   offY:         0,
