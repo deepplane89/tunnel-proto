@@ -7300,21 +7300,30 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
           // Variation = proof of internal drift. We compute ship-local by
           // applying shipGroup.matrixWorld inverse to both world positions.
           let _podStr = '';
+          let _coneScrStr = `cone(scr) ${_coneScr.x.toFixed(0)},${_coneScr.y.toFixed(0)}`;
+          let _podScrStr = '';
+          let _nozScrStr = '';
           if (window._mkPodAnchor) {
             const _podWorld = window._mkPodAnchor.getWorldPosition(new THREE.Vector3());
-            // Convert both points to shipGroup-local. shipGroup.worldToLocal does this.
             const _coneShipLocal = shipGroup.worldToLocal(_coneWorld.clone());
             const _podShipLocal  = shipGroup.worldToLocal(_podWorld.clone());
             const _ldx = _coneShipLocal.x - _podShipLocal.x;
             const _ldy = _coneShipLocal.y - _podShipLocal.y;
             const _ldz = _coneShipLocal.z - _podShipLocal.z;
-            _podStr = ` | pod(w) ${_podWorld.x.toFixed(3)},${_podWorld.y.toFixed(3)},${_podWorld.z.toFixed(3)} | shipLocalΔ ${_ldx>=0?'+':''}${_ldx.toFixed(3)},${_ldy>=0?'+':''}${_ldy.toFixed(3)},${_ldz>=0?'+':''}${_ldz.toFixed(3)}`;
+            _podStr = ` | shipLocalΔ ${_ldx>=0?'+':''}${_ldx.toFixed(3)},${_ldy>=0?'+':''}${_ldy.toFixed(3)},${_ldz>=0?'+':''}${_ldz.toFixed(3)}`;
+            const _podScr = _toScreen(_podWorld);
+            _podScrStr = ` | pod(scr) ${_podScr.x.toFixed(0)},${_podScr.y.toFixed(0)} (Δcone→pod ${(_podScr.x-_coneScr.x>=0?'+':'')}${(_podScr.x-_coneScr.x).toFixed(0)},${(_podScr.y-_coneScr.y>=0?'+':'')}${(_podScr.y-_coneScr.y).toFixed(0)})`;
+          }
+          // Particle nozzle origin (where the engine particles spawn from)
+          if (typeof _localNozzles !== 'undefined' && _localNozzles && _localNozzles[idx]) {
+            const _nozWorld = _localNozzles[idx].clone().applyMatrix4(shipGroup.matrixWorld);
+            const _nozScr = _toScreen(_nozWorld);
+            _nozScrStr = ` | noz(scr) ${_nozScr.x.toFixed(0)},${_nozScr.y.toFixed(0)} (Δcone→noz ${(_nozScr.x-_coneScr.x>=0?'+':'')}${(_nozScr.x-_coneScr.x).toFixed(0)},${(_nozScr.y-_coneScr.y>=0?'+':'')}${(_nozScr.y-_coneScr.y).toFixed(0)})`;
           }
           console.log(
-            `[coneDiag ${_side}] cone(w) ${_coneWorld.x.toFixed(3)},${_coneWorld.y.toFixed(3)},${_coneWorld.z.toFixed(3)} | ` +
-            `Δscreen ${_spx>=0?'+':''}${_spx.toFixed(1)}px,${_spy>=0?'+':''}${_spy.toFixed(1)}px | ` +
-            `shipRot y=${shipGroup.rotation.y.toFixed(2)} z=${shipGroup.rotation.z.toFixed(2)} x=${shipGroup.rotation.x.toFixed(2)}` +
-            _podStr
+            `[coneDiag ${_side}] ${_coneScrStr} | ` +
+            `pitch=${shipGroup.rotation.x.toFixed(2)} yaw=${shipGroup.rotation.y.toFixed(2)} roll=${shipGroup.rotation.z.toFixed(2)}` +
+            _podScrStr + _nozScrStr + _podStr
           );
         }
       }
