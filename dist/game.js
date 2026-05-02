@@ -7440,16 +7440,7 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
           );
         }
       }
-      // ── Steering gimbal: nozzles tilt OPPOSITE the turn direction (real thrust-vectoring physics).
-      // Thrust torque then rotates ship into the turn. Scale by steering magnitude, applied to all ships.
-      // Kill switch: window._coneSteerEnabled = false. Tune: window._coneSteerScale (default 0.15 rad).
-      let _coneRotY = ct.rotY;
-      if (window._coneSteerEnabled !== false) {
-        const _sNorm = (typeof window._steerNorm === 'number') ? window._steerNorm : 0;
-        const _gScale = (typeof window._coneSteerScale === 'number') ? window._coneSteerScale : 0.15;
-        _coneRotY += -_sNorm * _gScale;
-      }
-      cone.rotation.set(Math.PI / 2 + ct.rotX, _coneRotY, ct.rotZ);
+      cone.rotation.set(Math.PI / 2 + ct.rotX, ct.rotY, ct.rotZ);
       cone.scale.set(ct.radius, ct.length * tp, ct.radius);
       // Update shader uniforms from live slider values
       const u = cone.material.uniforms;
@@ -19197,9 +19188,6 @@ function update(dt) {
   // NEW: normalize _bankVelX to [-1,1] against tiltMaxVel, then multiply by the angular cap.
   // _steerBankRadMax (~0.52 rad / 30°) is a HARD radian limit, independent of speed tier.
   const _velNorm = tiltMaxVel > 0 ? Math.max(-1, Math.min(1, _bankVelX / tiltMaxVel)) : 0;
-  // Publish normalized steering signal [-1, +1] for cone-thruster gimbal (read in src/20-main-early.js).
-  // Already smoothed (via _bankVelX lerp). Force 0 during barrel roll so gimbal doesn't fight roll pose.
-  window._steerNorm = (state.rollAngle !== 0 || state.rollHeld) ? 0 : _velNorm;
   const targetRoll = -_velNorm * _steerBankRadMax + state._overshootPos;
   if (state.rollAngle !== 0 || state.rollHeld) {
     // Roll is active — drive rotation.z directly from rollAngle (knife-edge / barrel roll, separate axis).
