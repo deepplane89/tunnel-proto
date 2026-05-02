@@ -6522,50 +6522,13 @@ window._nozPoseUp = [
   new THREE.Vector3(-0.27, 0.08, 4.91),  // left  @ pitch-up
   new THREE.Vector3( 0.74, 0.09, 5.01),  // right @ pitch-up
 ];
-// Per-skin cone-offset poses for signed roll-driven blend. Same axis as particles
-// (state.rollAngle, +-pi/2). _ratio<0 (ArrowUp) -> _conePoseUp; _ratio>0 (ArrowDown)
-// -> _conePoseDown. Sacred zero is whatever the slider holds at state.rollAngle=0
-// (per-skin, never overwritten). Disable via window._conePoseEnabled = false.
-// Keyed by activeSkinIdx so each skin keeps its own tuned poses.
-window._conePoseUp   = {};  // { [skinIdx]: [Vector3 L, Vector3 R] }
-window._conePoseDown = {};
-// Default RUNNER (skin idx 0) — captured 2026-05-02 via slider screenshots.
-window._conePoseUp[0] = [
-  new THREE.Vector3(-0.04,  0.03, -0.04),  // L @ ArrowUp full roll
-  new THREE.Vector3( 0.02,  0.02, -0.13),  // R @ ArrowUp full roll
-];
-window._conePoseDown[0] = [
-  new THREE.Vector3(-0.04,  0.03, -0.10),  // L @ ArrowDown full roll
-  new THREE.Vector3(-0.05,  0.03, -0.15),  // R @ ArrowDown full roll
-];
-// MK RUNNER (skin idx 1) — RESTORED to working values from commit 558bfb5
-// (single target for both barrel roll directions, magnitude-driven). The Up/Down
-// arrays below are populated with the SAME target so any code path expecting
-// per-direction banks gets the same answer regardless. The blend logic below
-// reads these directly and does not need a separate _conePoseRoll dict.
-window._conePoseUp[1] = [
-  new THREE.Vector3(-0.04,  0.00, -0.10),  // L (works for both Up and Down)
-  new THREE.Vector3( 0.00,  0.00, -0.11),  // R (works for both Up and Down)
-];
-window._conePoseDown[1] = [
-  new THREE.Vector3(-0.04,  0.00, -0.10),  // L (mirrored from Up — single MK target)
-  new THREE.Vector3( 0.00,  0.00, -0.11),  // R (mirrored from Up — single MK target)
-];
-// ── Sacred zero (per-skin) — the cone offset values when state.rollAngle=0.
-// These are FROZEN as consts so the slider can be safely re-purposed to represent
-// the full-roll target during a held roll. At zero roll the slider is ignored;
-// the cone uses ZERO_L/ZERO_R below. At full roll the cone uses the slider value
-// directly (so user drag = direct visual feedback). Mid-roll lerps between them.
-// (2026-05-02 fix: previous blend overwrote the slider at full roll, decoupling
-// slider from visual cone position. See git log for context.)
-window._coneZero = {};
-window._coneZero[0] = [
-  new THREE.Vector3(-0.02,  0.03,  0.00),  // L sacred zero — Default Runner
-  new THREE.Vector3( 0.02,  0.02,  0.00),  // R sacred zero — Default Runner
-];
-window._coneZero[1] = [
-  new THREE.Vector3(-0.02,  0.00,  0.00),  // L sacred zero — MK Runner
-  new THREE.Vector3( 0.02,  0.00,  0.00),  // R sacred zero — MK Runner
+// User-tuned cone-offset deltas for full barrel roll (±pi/2). Same target for both
+// up and down rolls (user confirmed one set works both ways), so blend uses
+// |state.rollAngle| / (pi/2). Targets are absolute slider values, blended FROM the
+// current ct.offL*/offR* sacred-zero values toward these.
+window._conePoseRoll = [
+  new THREE.Vector3(-0.04, 0.00, -0.10),  // left  cone @ full roll
+  new THREE.Vector3( 0.00, 0.00, -0.11),  // right cone @ full roll
 ];
 // GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
 // at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
@@ -7344,29 +7307,19 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       let sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
       let sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
       let sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
-      // ── Cone-offset pose-blend (per-skin, signed roll for Default; magnitude for MK) ──
-      // 2026-05-02 RESTORE: revert to the 558bfb5-style override-at-full-roll
-      // formula (sideO* = sideO* + (target - sideO*) * |ratio|). At full roll
-      // |ratio|=1 so sideO* = target.x — the hardcoded target wins, not the
-      // slider. This is the formula MK Runner was tuned under and looked right.
-      // Default Runner uses signed direction split (Up vs Down banks). MK Runner
-      // uses the same value for both directions (single target). Disable via
-      // window._conePoseEnabled = false.
-      //
-      // NOTE: slider tuning during a held roll is intentionally decorative under
-      // this formula — the slider gets overridden. To retune, edit
-      // _conePoseUp[skin]/_conePoseDown[skin] in source and rebuild.
-      if (window._conePoseEnabled !== false && typeof state !== 'undefined' && state) {
-        const _ra2 = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
-        const _ratio2 = Math.max(-1, Math.min(1, _ra2 / (Math.PI * 0.5)));
-        if (Math.abs(_ratio2) > 0.001) {
-          const _bank = (_ratio2 < 0) ? window._conePoseUp : window._conePoseDown;
-          const _tgt = _bank && _bank[activeSkinIdx] && _bank[activeSkinIdx][idx];
+      // ── Cone-offset pose-blend (roll-magnitude driven) ──
+      // User-tuned per-pose values for full barrel roll (±pi/2) — same target for both
+      // directions, so blend uses |state.rollAngle| / (pi/2). Disable via
+      // window._conePoseEnabled = false. Targets are stored in window._conePoseRoll.
+      if (window._conePoseEnabled !== false && window._conePoseRoll && typeof state !== 'undefined' && state) {
+        const _ra = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
+        const _t = Math.max(0, Math.min(1, Math.abs(_ra) / (Math.PI * 0.5)));
+        if (_t > 0.001) {
+          const _tgt = window._conePoseRoll[idx];
           if (_tgt) {
-            const _t2 = Math.abs(_ratio2);
-            sideOX = sideOX + (_tgt.x - sideOX) * _t2;
-            sideOY = sideOY + (_tgt.y - sideOY) * _t2;
-            sideOZ = sideOZ + (_tgt.z - sideOZ) * _t2;
+            sideOX = sideOX + (_tgt.x - sideOX) * _t;
+            sideOY = sideOY + (_tgt.y - sideOY) * _t;
+            sideOZ = sideOZ + (_tgt.z - sideOZ) * _t;
           }
         }
       }
