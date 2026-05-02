@@ -3559,19 +3559,6 @@ function _spawnFillerAsteroid() {
 function _tickAsteroidSpawner(dt) {
   const T = _asteroidTuner;
 
-  // DIAG: always-logged (throttled once/3s) — prove this function runs and show guard state
-  // Logs to console unconditionally so we can see it in a normal playtest log
-  if (state._jetLightningMode) {
-    window._latTickCounter = (window._latTickCounter || 0) + 1;
-    if (window._latTickCounter >= 180) {
-      window._latTickCounter = 0;
-        +' rT='+_jlRampTime.toFixed(1)
-        +' corridor='+(_jlCorridor && _jlCorridor.active?1:0)
-        +' obs='+(window._jlActiveObstacleType||'-')
-        +' timer='+(T._lateralTimer!=null?T._lateralTimer.toFixed(2):'?')
-        +' gateOK='+((T.lateralEnabled && _jlRampTime>=4)?1:0));
-    }
-  }
 
   // ── Lateral camp punish — asteroid-ONLY. Only fires when the active obstacle is 'asteroid'.
   // Prevents asteroids from firing during LT-only segments (60-90s) and LT-combined segments.
@@ -3584,7 +3571,6 @@ function _tickAsteroidSpawner(dt) {
       const offset = T.lateralMinOff + Math.random() * (T.lateralMaxOff - T.lateralMinOff);
       const sx = (state && state.shipX) || 0;
       const spawnX = sx + side * offset;
-        +' rT='+_jlRampTime.toFixed(1)+' side='+side+' x='+spawnX.toFixed(1));
       if (window._perfDiag) window._perfDiag.tag('lateral_ast');
       _spawnAsteroid(spawnX);
     }
@@ -5452,24 +5438,6 @@ window._jlDebug = {
     glowRadius: 0.8, // 3.2x main (_LT.glowRadius=0.25) — hitbox 0.8u wide
   };
   function _tickLightningLateral(dt) {
-    // ALWAYS-ON DIAG: throttled once/3s so we can see why LT lateral isn't firing.
-    // Mirrors [LAT_DIAG] in _tickAsteroidSpawner. Logs every gate state.
-    if (state && state._jetLightningMode) {
-      window._ltLatTickCounter = (window._ltLatTickCounter || 0) + 1;
-      if (window._ltLatTickCounter >= 180) {
-        window._ltLatTickCounter = 0;
-          +' jl='+(state._jetLightningMode?1:0)
-          +' rT='+(typeof _jlRampTime!=='undefined'?_jlRampTime.toFixed(1):'?')
-          +' obs='+(window._jlActiveObstacleType||'-')
-          +' canyon='+((typeof _canyonActive!=='undefined'&&(_canyonActive||_canyonExiting))?1:0)
-          +' timer='+_LT_LATERAL.timer.toFixed(2)
-          +' gateOK='+((_LT_LATERAL.enabled
-              && typeof _jlRampTime!=='undefined' && _jlRampTime>=4
-              && window._jlActiveObstacleType==='lightning'
-              && !(typeof _canyonActive!=='undefined'&&(_canyonActive||_canyonExiting)))?1:0));
-      }
-    }
-
     if (!_LT_LATERAL.enabled) return;
     if (!state || !state._jetLightningMode) return;
     if (typeof _jlRampTime === 'undefined' || _jlRampTime < 4) return;
@@ -5501,8 +5469,6 @@ window._jlDebug = {
     const predictedX = sx + velX * travelTime * _LT_LATERAL.leadFactor;
     const spawnX    = predictedX + side * offset;
     const landZ     = (_shipZ ? _shipZ() : 3.9) + _LT_LATERAL.spawnZ;
-      +' predX='+predictedX.toFixed(1)+' side='+side+' off='+offset.toFixed(1)
-      +' spawnX='+spawnX.toFixed(1)+' landZ='+landZ.toFixed(1));
     if (window._perfDiag) window._perfDiag.tag('lateral_lt');
     // skipWarn=true: bolt pops in pre-struck — no telegraph disc, bolt itself is the warning.
     // Fat radii: lateral bolts are 3x chunkier than main pattern bolts.
