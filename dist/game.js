@@ -6555,6 +6555,25 @@ window._conePoseUp[3]   = window._conePoseUp[0];
 window._conePoseDown[1] = window._conePoseDown[0];
 window._conePoseDown[2] = window._conePoseDown[0];
 window._conePoseDown[3] = window._conePoseDown[0];
+// ── Steering pose targets (drive cone offsets based on left/right turn magnitude) ──
+// Indexed by activeSkinIdx, then by side (0=L, 1=R). null = no blend on that side
+// (offsets stay at slider/zero values). Blend factor is |window._steerNorm|.
+// Disable via window._coneSteerEnabled = false. Auto-zeroed during barrel roll.
+window._conePoseSteerLeft = {};
+window._conePoseSteerRight = {};
+// Default Runner (skin 0): left turn shifts L offX → 0; right turn shifts R offX → 0.04.
+window._conePoseSteerLeft[0]  = [ new THREE.Vector3( 0.00, 0.00, 0.00), null ];
+window._conePoseSteerRight[0] = [ null, new THREE.Vector3( 0.04, 0.00, 0.00) ];
+// Recolors share Default's steering banks.
+window._conePoseSteerLeft[1]  = window._conePoseSteerLeft[0];
+window._conePoseSteerLeft[2]  = window._conePoseSteerLeft[0];
+window._conePoseSteerLeft[3]  = window._conePoseSteerLeft[0];
+window._conePoseSteerRight[1] = window._conePoseSteerRight[0];
+window._conePoseSteerRight[2] = window._conePoseSteerRight[0];
+window._conePoseSteerRight[3] = window._conePoseSteerRight[0];
+// MK Runner (skin 4): left turn shifts L offX → -0.04; right turn shifts R offX → 0.04.
+window._conePoseSteerLeft[4]  = [ new THREE.Vector3(-0.04, 0.00, 0.00), null ];
+window._conePoseSteerRight[4] = [ null, new THREE.Vector3( 0.04, 0.00, 0.00) ];
 // GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
 // at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
 // of how NOZZLE_OFFSETS is hand-tuned for visual particle spawn. Used by the cone thruster
@@ -7354,6 +7373,25 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
             sideOX = sideOX + (_tgt.x - sideOX) * _t;
             sideOY = sideOY + (_tgt.y - sideOY) * _t;
             sideOZ = sideOZ + (_tgt.z - sideOZ) * _t;
+          }
+        }
+      }
+      // ── Cone-offset pose-blend (steering-magnitude driven) ──
+      // Mirrors the barrel-roll blend above but driven by window._steerNorm ∈ [-1, +1].
+      // Sign picks left/right pose table; magnitude drives blend factor. Per-side null entries
+      // mean "don't blend this side" — the cone stays at its slider/zero value. Disable via
+      // window._coneSteerEnabled = false. _steerNorm is already zeroed during barrel roll.
+      if (window._coneSteerEnabled !== false) {
+        const _sNorm = (typeof window._steerNorm === 'number') ? window._steerNorm : 0;
+        const _sT = Math.max(0, Math.min(1, Math.abs(_sNorm)));
+        if (_sT > 0.001) {
+          const _sBank = (_sNorm < 0) ? window._conePoseSteerLeft : window._conePoseSteerRight;
+          const _sSide = _sBank && _sBank[activeSkinIdx];
+          const _sTgt  = _sSide && _sSide[idx];
+          if (_sTgt) {
+            sideOX = sideOX + (_sTgt.x - sideOX) * _sT;
+            sideOY = sideOY + (_sTgt.y - sideOY) * _sT;
+            sideOZ = sideOZ + (_sTgt.z - sideOZ) * _sT;
           }
         }
       }
@@ -19188,6 +19226,9 @@ function update(dt) {
   // NEW: normalize _bankVelX to [-1,1] against tiltMaxVel, then multiply by the angular cap.
   // _steerBankRadMax (~0.52 rad / 30°) is a HARD radian limit, independent of speed tier.
   const _velNorm = tiltMaxVel > 0 ? Math.max(-1, Math.min(1, _bankVelX / tiltMaxVel)) : 0;
+  // Publish normalized steering signal [-1, +1] for cone-thruster pose blend (read in src/20-main-early.js).
+  // Already smoothed via _bankVelX lerp. Force 0 during barrel roll so steering blend doesn't fight roll pose.
+  window._steerNorm = (state.rollAngle !== 0 || state.rollHeld) ? 0 : _velNorm;
   const targetRoll = -_velNorm * _steerBankRadMax + state._overshootPos;
   if (state.rollAngle !== 0 || state.rollHeld) {
     // Roll is active — drive rotation.z directly from rollAngle (knife-edge / barrel roll, separate axis).
