@@ -4627,7 +4627,7 @@ function update(dt) {
         // Overlapping instances are intentional (machine-gun layering).
         // Volume mixed low so stacked shots don't blow out engine/music bed.
         if (typeof _playBuffer === 'function') {
-          _playBuffer('laser-mg', 0.08, 1.0, null);
+          _playBuffer('laser-mg', 0.25, 1.0, null);
         }
       }
     } else if (_tier === 4) {
