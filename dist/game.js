@@ -7252,19 +7252,17 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       const sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
       const sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
       const sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
-      // Add length/2 along thrust (+Z in shipGroup-local) to compensate for the
-      // geometry recentering: now that cone.position is the centroid (not the
-      // base), pushing it back by half the cone length keeps the visual base
-      // at the same nozzle location it used to occupy.
-      // Note: cone is parented directly to shipGroup with no extra scale, so
-      // cone.scale.y maps cone-local Y units 1:1 to shipGroup-local Z (after
-      // the π/2 X rotation). Do NOT divide by _coneScale here — that bug pushed
-      // the cone 5.5 ship-local units back instead of 1.65.
-      const _halfLen = (ct.length * tp) * 0.5;
+      // Place cone CENTROID at the nozzle. Geometry is centered (Y ± 0.5), so
+      // cone.position is the visual mass center. Putting that center at the
+      // engine port means the visible cone is symmetric around it: front half
+      // is hidden inside the ship body, back half is the visible flame. This
+      // makes alignment orientation-invariant — the bright center stays at
+      // the engine through any pitch/roll/yaw because both points share the
+      // same 3D location.
       cone.position.set(
         localNoz.x + (ct.offX + sideOX) / _coneScale,
         localNoz.y + (ct.offY + sideOY) / _coneScale,
-        localNoz.z + (ct.offZ + sideOZ) / _coneScale + _halfLen
+        localNoz.z + (ct.offZ + sideOZ) / _coneScale
       );
       // ── Cone↔GLB diagnostic logging (throttled) ──
       // Log the live cone world position vs the GLB-derived true thruster anchor so the
