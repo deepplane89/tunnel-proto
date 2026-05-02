@@ -949,28 +949,36 @@ fetchLeaderboard();
 
 function playStartSound() {
   if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
   _ensureCtxRunning();
   const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.85; sfx.play().catch(() => {}); }
+  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.85 * _sM); sfx.play().catch(() => {}); }
 }
 
 function playResumeSound() {
   if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
   _ensureCtxRunning();
   const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.7; sfx.play().catch(() => {}); }
+  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.7 * _sM); sfx.play().catch(() => {}); }
 }
 
 function playExitSound() {
   if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
   _ensureCtxRunning();
   const sfx = document.getElementById('exit-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.9; sfx.playbackRate = 1.0; sfx.play().catch(() => {}); }
+  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.9 * _sM); sfx.playbackRate = 1.0; sfx.play().catch(() => {}); }
 }
 function playTitleTap() {
   if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
   _ensureCtxRunning();
   const sfx = document.getElementById('exit-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.7; sfx.playbackRate = 0.85 + Math.random() * 0.5; sfx.play().catch(() => {}); }
+  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.7 * _sM); sfx.playbackRate = 0.85 + Math.random() * 0.5; sfx.play().catch(() => {}); }
 }
 

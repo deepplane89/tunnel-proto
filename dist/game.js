@@ -10230,10 +10230,12 @@ let _magnetWhirLfo  = null;
 let _magnetWhirLfoG = null;
 function _startMagnetWhir() {
   if (!audioCtx || state.muted || _magnetWhirOsc) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
   _ensureCtxRunning();
   _magnetWhirGain = audioCtx.createGain();
   _magnetWhirGain.gain.setValueAtTime(0, audioCtx.currentTime);
-  _magnetWhirGain.gain.linearRampToValueAtTime(0.055, audioCtx.currentTime + 0.35);
+  _magnetWhirGain.gain.linearRampToValueAtTime(0.055 * _sM, audioCtx.currentTime + 0.35);
   _magnetWhirGain.connect(audioCtx.destination);
   _magnetWhirOsc = audioCtx.createOscillator();
   _magnetWhirOsc.type = 'sawtooth';
@@ -10425,11 +10427,14 @@ function playCrash() {
 // Plasma-punch impact layered alongside engine-roar ignition.
 function playThrusterImpact(vol) {
   if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
+  const _baseV = (vol == null ? 0.7 : vol) * _sM;
   const _ti = document.getElementById('thruster-impact-sfx');
   if (_ti) {
     try {
       _ti.currentTime = 0;
-      _ti.volume = (vol == null ? 0.7 : vol);
+      _ti.volume = Math.min(1, _baseV);
       _ti.play().catch(() => {});
     } catch (_) {}
   }
@@ -10439,7 +10444,7 @@ function playThrusterImpact(vol) {
   if (_erl) {
     try {
       _erl.currentTime = 0;
-      _erl.volume = (vol == null ? 0.7 : vol);
+      _erl.volume = Math.min(1, _baseV);
       _erl.play().catch(() => {});
     } catch (_) {}
   }
@@ -12810,7 +12815,8 @@ function collectCoin(coin, worldPos) {
   // Update title screen running total
   updateTitleCoins();
   // Collect sound — bright 3-note ascending chime (C5-E5-G5)
-  if (audioCtx && !state.muted) {
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (audioCtx && !state.muted && _sM > 0) {
     const t = audioCtx.currentTime;
     if (state.magnetActive) {
       // Magnet whoosh — short rising pitch sweep per sucked coin
@@ -12819,7 +12825,7 @@ function collectCoin(coin, worldPos) {
       wo.type = 'sine';
       wo.frequency.setValueAtTime(280, t);
       wo.frequency.exponentialRampToValueAtTime(980, t + 0.09);
-      wg.gain.setValueAtTime(0.055, t);
+      wg.gain.setValueAtTime(0.055 * _sM, t);
       wg.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
       wo.connect(wg).connect(audioCtx.destination);
       wo.start(); wo.stop(t + 0.12);
@@ -12839,10 +12845,10 @@ function collectCoin(coin, worldPos) {
       osc2.frequency.setValueAtTime(freq * 1.004, onset); // slight detune shimmer
       // Attack
       gain.gain.setValueAtTime(0.0, onset);
-      gain.gain.linearRampToValueAtTime(0.10 - i * 0.01, onset + 0.012);
+      gain.gain.linearRampToValueAtTime((0.10 - i * 0.01) * _sM, onset + 0.012);
       gain.gain.exponentialRampToValueAtTime(0.001, onset + dur);
       gain2.gain.setValueAtTime(0.0, onset);
-      gain2.gain.linearRampToValueAtTime(0.04, onset + 0.012);
+      gain2.gain.linearRampToValueAtTime(0.04 * _sM, onset + 0.012);
       gain2.gain.exponentialRampToValueAtTime(0.001, onset + dur);
       osc.connect(gain).connect(audioCtx.destination);
       osc2.connect(gain2).connect(audioCtx.destination);
@@ -14639,29 +14645,37 @@ fetchLeaderboard();
 
 function playStartSound() {
   if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
   _ensureCtxRunning();
   const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.85; sfx.play().catch(() => {}); }
+  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.85 * _sM); sfx.play().catch(() => {}); }
 }
 
 function playResumeSound() {
   if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
   _ensureCtxRunning();
   const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.7; sfx.play().catch(() => {}); }
+  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.7 * _sM); sfx.play().catch(() => {}); }
 }
 
 function playExitSound() {
   if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
   _ensureCtxRunning();
   const sfx = document.getElementById('exit-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.9; sfx.playbackRate = 1.0; sfx.play().catch(() => {}); }
+  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.9 * _sM); sfx.playbackRate = 1.0; sfx.play().catch(() => {}); }
 }
 function playTitleTap() {
   if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
   _ensureCtxRunning();
   const sfx = document.getElementById('exit-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.7; sfx.playbackRate = 0.85 + Math.random() * 0.5; sfx.play().catch(() => {}); }
+  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.7 * _sM); sfx.playbackRate = 0.85 + Math.random() * 0.5; sfx.play().catch(() => {}); }
 }
 
 // ═══════════════════════════════════════════════════════

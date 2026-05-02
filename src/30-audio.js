@@ -58,10 +58,12 @@ let _magnetWhirLfo  = null;
 let _magnetWhirLfoG = null;
 function _startMagnetWhir() {
   if (!audioCtx || state.muted || _magnetWhirOsc) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
   _ensureCtxRunning();
   _magnetWhirGain = audioCtx.createGain();
   _magnetWhirGain.gain.setValueAtTime(0, audioCtx.currentTime);
-  _magnetWhirGain.gain.linearRampToValueAtTime(0.055, audioCtx.currentTime + 0.35);
+  _magnetWhirGain.gain.linearRampToValueAtTime(0.055 * _sM, audioCtx.currentTime + 0.35);
   _magnetWhirGain.connect(audioCtx.destination);
   _magnetWhirOsc = audioCtx.createOscillator();
   _magnetWhirOsc.type = 'sawtooth';
