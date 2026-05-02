@@ -6264,9 +6264,18 @@ window._nozPoseUp = [
 // up and down rolls (user confirmed one set works both ways), so blend uses
 // |state.rollAngle| / (pi/2). Targets are absolute slider values, blended FROM the
 // current ct.offL*/offR* sacred-zero values toward these.
-window._conePoseRoll = [
-  new THREE.Vector3(-0.04, 0.00, -0.10),  // left  cone @ full roll
-  new THREE.Vector3( 0.00, 0.00, -0.11),  // right cone @ full roll
+//
+// 2026-05-02: per-skin lookup so Default Runner and MK Runner can each have their
+// own working values. Indexed by activeSkinIdx. Default Runner uses its most-recent
+// Down-direction tune; MK Runner uses the 558bfb5 values (verified visually correct).
+window._conePoseRoll = {};
+window._conePoseRoll[0] = [
+  new THREE.Vector3(-0.04, 0.03, -0.10),  // L — Default Runner full roll
+  new THREE.Vector3(-0.05, 0.03, -0.15),  // R — Default Runner full roll
+];
+window._conePoseRoll[1] = [
+  new THREE.Vector3(-0.04, 0.00, -0.10),  // L — MK Runner full roll (558bfb5)
+  new THREE.Vector3( 0.00, 0.00, -0.11),  // R — MK Runner full roll (558bfb5)
 ];
 // GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
 // at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
@@ -7053,7 +7062,8 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         const _ra = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
         const _t = Math.max(0, Math.min(1, Math.abs(_ra) / (Math.PI * 0.5)));
         if (_t > 0.001) {
-          const _tgt = window._conePoseRoll[idx];
+          const _bank = window._conePoseRoll[activeSkinIdx];
+          const _tgt = _bank && _bank[idx];
           if (_tgt) {
             sideOX = sideOX + (_tgt.x - sideOX) * _t;
             sideOY = sideOY + (_tgt.y - sideOY) * _t;
