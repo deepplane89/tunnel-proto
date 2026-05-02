@@ -7229,8 +7229,8 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // ── Cone↔GLB diagnostic logging (throttled) ──
       // Log the live cone world position vs the GLB-derived true thruster anchor so the
       // cone-to-GLB spatial relationship is observable regardless of how shipGroup transforms.
-      // Toggle via window._coneDiag = true (or false to silence).
-      if (window._coneDiag) {
+      // Default ON for the parallax investigation; set window._coneDiag = false to silence.
+      if (window._coneDiag !== false) {
         window._coneDiagLast = window._coneDiagLast || 0;
         const _now = performance.now();
         if (_now - window._coneDiagLast > 500) {
