@@ -18131,7 +18131,15 @@ function clearMusicTimers() {
 function fadeOutIntroOverlay(el) {
   el.classList.add('fading-out');
   el.style.pointerEvents = 'none';  // restore pass-through immediately
-  setTimeout(() => { el.style.display = 'none'; el.innerHTML = ''; el.classList.remove('fading-out'); }, 820);
+  // Track the hide timer on the element so a rapid replay can cancel it before
+  // it wipes the freshly-shown overlay (caused intermittent prologue no-show).
+  if (el._hideTimer) { clearTimeout(el._hideTimer); el._hideTimer = null; }
+  el._hideTimer = setTimeout(() => {
+    el._hideTimer = null;
+    el.style.display = 'none';
+    el.innerHTML = '';
+    el.classList.remove('fading-out');
+  }, 820);
   // Spawn opening rings right as prologue ends — close to ship for instant dopamine hit
 
 }
@@ -18297,8 +18305,13 @@ function showIntroText() {
   const overlay = document.getElementById('intro-overlay');
   if (!overlay) return;
   clearIntroTimers();
+  // Cancel any in-flight fadeOutIntroOverlay hide-timer that would otherwise
+  // fire 820ms later and wipe the overlay we're about to show.
+  if (overlay._hideTimer) { clearTimeout(overlay._hideTimer); overlay._hideTimer = null; }
+  overlay.classList.remove('fading-out');
   overlay.innerHTML = '';
   overlay.style.display = 'flex';
+  overlay.style.pointerEvents = '';
 
   const lineA = document.createElement('div');
   lineA.className = 'intro-line line-a';
