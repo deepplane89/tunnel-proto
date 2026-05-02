@@ -6827,9 +6827,11 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
   // _rebuildLocalNozzles) and the pose target based on signed pitch ratio.
   // Disabled if window._nozPoseEnabled === false.
   if (window._nozPoseEnabled !== false) {
-    // Driver is roll (state.rollAngle / shipGroup.rotation.z), not pitch.
-    // Roll-up key = +pi/2 -> _nozPoseUp; roll-down key = -pi/2 -> _nozPoseDown.
-    const _roll = shipGroup.rotation.z || 0;
+    // Driver is state.rollAngle (knife-edge / barrel-roll axis), NOT shipGroup.rotation.z.
+    // rotation.z also picks up steering-bank lerp (_steerBankRadMax ~0.52 rad), which would
+    // wrongly blend toward up/down pose during normal turning. state.rollAngle is 0 unless
+    // ArrowUp/Down (or rollUp/Down touch) is engaged.
+    const _roll = (typeof state !== 'undefined' && state && typeof state.rollAngle === 'number') ? state.rollAngle : 0;
     const _ratio = Math.max(-1, Math.min(1, _roll / (Math.PI * 0.5)));
     if (Math.abs(_ratio) > 0.001) {
       const _matchDef = _altShipActive && SHIP_SKINS[activeSkinIdx] && SHIP_SKINS[activeSkinIdx].glbConfig && SHIP_SKINS[activeSkinIdx].glbConfig.matchDefault;
