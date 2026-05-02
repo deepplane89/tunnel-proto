@@ -6260,12 +6260,39 @@ window._nozPoseUp = [
   new THREE.Vector3(-0.27, 0.08, 4.91),  // left  @ pitch-up
   new THREE.Vector3( 0.74, 0.09, 5.01),  // right @ pitch-up
 ];
-// NOTE (saved per user): Default Runner cone-offset slider values that look right at
-// FULL barrel roll (either direction) — captured 2026-05-02 via slider screenshots:
-//   L cone: offX = -0.04, offY = 0.00, offZ = -0.10
-//   R cone: offX =  0.00, offY = 0.00, offZ = -0.11
-// Sacred zero (no roll) sliders: L (-0.02, +0.03, 0), R (+0.02, +0.02, 0).
-// Cone roll-blend was deferred at user request; restore from these values when ready.
+// User-tuned cone-offset deltas for full barrel roll (±pi/2). Same target for both
+// up and down rolls (user confirmed one set works both ways), so blend uses
+// |state.rollAngle| / (pi/2). Targets are absolute slider values, blended FROM the
+// current ct.offL*/offR* sacred-zero values toward these.
+//
+// 2026-05-02: per-skin lookup so Default Runner and MK Runner can each have their
+// own working values. Indexed by activeSkinIdx. Default Runner uses its most-recent
+// Down-direction tune; MK Runner uses the 558bfb5 values (verified visually correct).
+window._conePoseRoll = {};
+window._conePoseRoll[4] = [
+  new THREE.Vector3(-0.04, 0.00, -0.10),  // L — MK Runner full roll (558bfb5)
+  new THREE.Vector3( 0.00, 0.00, -0.11),  // R — MK Runner full roll (558bfb5)
+];
+// Default Runner (and its recolors GHOST/BLACK MAMBA/CIPHER) use a per-direction
+// Up/Down split because the user tuned distinct targets for each. Captured
+// 2026-05-02 from raw-slider build (b6c6b82 — no blend, slider drives cone 1:1).
+window._conePoseUp = {};
+window._conePoseDown = {};
+window._conePoseUp[0] = [
+  new THREE.Vector3(-0.02, 0.03, -0.09),  // L — Default Runner ArrowUp full roll
+  new THREE.Vector3( 0.03, 0.02, -0.14),  // R — Default Runner ArrowUp full roll
+];
+window._conePoseDown[0] = [
+  new THREE.Vector3(-0.04, 0.02, -0.12),  // L — Default Runner ArrowDown full roll
+  new THREE.Vector3(-0.04, 0.02, -0.17),  // R — Default Runner ArrowDown full roll
+];
+// Recolors share Default's banks.
+window._conePoseUp[1]   = window._conePoseUp[0];
+window._conePoseUp[2]   = window._conePoseUp[0];
+window._conePoseUp[3]   = window._conePoseUp[0];
+window._conePoseDown[1] = window._conePoseDown[0];
+window._conePoseDown[2] = window._conePoseDown[0];
+window._conePoseDown[3] = window._conePoseDown[0];
 // GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
 // at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
 // of how NOZZLE_OFFSETS is hand-tuned for visual particle spawn. Used by the cone thruster
@@ -7040,9 +7067,34 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // a slider value of 0.09 only moved the cone 0.027 in world space — making sliders feel
       // ~3.3× weaker than expected.)
       const _coneScale = (typeof shipGroup !== 'undefined' && shipGroup.scale && shipGroup.scale.x) ? shipGroup.scale.x : 0.30;
-      const sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
-      const sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
-      const sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
+      let sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
+      let sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
+      let sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
+      // ── Cone-offset pose-blend (roll-magnitude driven) ──
+      // User-tuned per-pose values for full barrel roll (±pi/2) — same target for both
+      // directions, so blend uses |state.rollAngle| / (pi/2). Disable via
+      // window._conePoseEnabled = false. Targets are stored in window._conePoseRoll.
+      if (window._conePoseEnabled !== false && typeof state !== 'undefined' && state) {
+        const _ra = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
+        const _t = Math.max(0, Math.min(1, Math.abs(_ra) / (Math.PI * 0.5)));
+        if (_t > 0.001) {
+          // Default Runner + recolors (idx 0–3): direction-split Up/Down banks.
+          // MK Runner (idx 4): single magnitude bank (_conePoseRoll), 558bfb5 formula.
+          let _tgt = null;
+          if (activeSkinIdx <= 3 && window._conePoseUp && window._conePoseDown) {
+            const _bank = (_ra < 0) ? window._conePoseUp[activeSkinIdx] : window._conePoseDown[activeSkinIdx];
+            _tgt = _bank && _bank[idx];
+          } else if (window._conePoseRoll) {
+            const _bank = window._conePoseRoll[activeSkinIdx];
+            _tgt = _bank && _bank[idx];
+          }
+          if (_tgt) {
+            sideOX = sideOX + (_tgt.x - sideOX) * _t;
+            sideOY = sideOY + (_tgt.y - sideOY) * _t;
+            sideOZ = sideOZ + (_tgt.z - sideOZ) * _t;
+          }
+        }
+      }
       cone.position.set(
         localNoz.x + (ct.offX + sideOX) / _coneScale,
         localNoz.y + (ct.offY + sideOY) / _coneScale,
