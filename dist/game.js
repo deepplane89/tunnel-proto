@@ -6923,8 +6923,16 @@ const _thrusterCones = NOZZLE_OFFSETS.map(() => {
   const _ct = window._coneThruster;
   // Unit cone: radius=1, height=1 — scaled at runtime via cone.scale
   const geo = new THREE.ConeGeometry(1, 1, 16, 1, true);
-  // Shift so base sits at local origin, tip extends in +Y
-  geo.translate(0, 0.5, 0);
+  // CONE PIVOT FIX (2026-05-01): previously translated +0.5Y so base sat at
+  // origin; that meant cone.position was the BASE, but the geometric centroid
+  // (visual mass center) was 0.5 ship-local units further along thrust. When
+  // the ship rotated, the centroid swung in a wider arc than cone.position,
+  // and what the eye locks onto (the bright mass center) appeared misaligned
+  // even though cone.position was rigidly tracking the nozzle. We now leave
+  // the cone centered at its origin (Y range -0.5..+0.5) so cone.position IS
+  // the centroid. Tip-out direction is preserved by adding length/2 to the
+  // per-frame Z position (see cone.position.set below).
+  // geo.translate(0, 0.5, 0); // OLD — caused centroid-vs-pivot mismatch
   const mat = new THREE.ShaderMaterial({
     vertexShader: _coneVertSrc,
     fragmentShader: _coneFragSrc,
@@ -7244,10 +7252,15 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       const sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
       const sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
       const sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
+      // Add length/2 along thrust (+Z in shipGroup-local) to compensate for the
+      // geometry recentering: now that cone.position is the centroid (not the
+      // base), pushing it back by half the cone length keeps the visual base
+      // at the same nozzle location it used to occupy.
+      const _halfLen = (ct.length * tp) * 0.5 / _coneScale;
       cone.position.set(
         localNoz.x + (ct.offX + sideOX) / _coneScale,
         localNoz.y + (ct.offY + sideOY) / _coneScale,
-        localNoz.z + (ct.offZ + sideOZ) / _coneScale
+        localNoz.z + (ct.offZ + sideOZ) / _coneScale + _halfLen
       );
       // ── Cone↔GLB diagnostic logging (throttled) ──
       // Log the live cone world position vs the GLB-derived true thruster anchor so the
@@ -7320,10 +7333,22 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
             const _nozScr = _toScreen(_nozWorld);
             _nozScrStr = ` | noz(scr) ${_nozScr.x.toFixed(0)},${_nozScr.y.toFixed(0)} (Δcone→noz ${(_nozScr.x-_coneScr.x>=0?'+':'')}${(_nozScr.x-_coneScr.x).toFixed(0)},${(_nozScr.y-_coneScr.y>=0?'+':'')}${(_nozScr.y-_coneScr.y).toFixed(0)})`;
           }
+          // Bounding-box center (geometric centroid in world space). After the
+          // pivot fix, this should equal cone(scr) within 1px. Before the fix
+          // it was 0.5 ship-local along thrust away from cone.position.
+          let _bboxStr = '';
+          if (cone.geometry) {
+            if (!cone.geometry.boundingBox) cone.geometry.computeBoundingBox();
+            const _bbCenter = cone.geometry.boundingBox.getCenter(new THREE.Vector3());
+            cone.updateMatrixWorld(true);
+            _bbCenter.applyMatrix4(cone.matrixWorld);
+            const _bbScr = _toScreen(_bbCenter);
+            _bboxStr = ` | bbox(scr) ${_bbScr.x.toFixed(0)},${_bbScr.y.toFixed(0)} (Δcone→bbox ${(_bbScr.x-_coneScr.x>=0?'+':'')}${(_bbScr.x-_coneScr.x).toFixed(0)},${(_bbScr.y-_coneScr.y>=0?'+':'')}${(_bbScr.y-_coneScr.y).toFixed(0)})`;
+          }
           console.log(
             `[coneDiag ${_side}] ${_coneScrStr} | ` +
             `pitch=${shipGroup.rotation.x.toFixed(2)} yaw=${shipGroup.rotation.y.toFixed(2)} roll=${shipGroup.rotation.z.toFixed(2)}` +
-            _podScrStr + _nozScrStr + _podStr
+            _bboxStr + _podScrStr + _nozScrStr + _podStr
           );
         }
       }
