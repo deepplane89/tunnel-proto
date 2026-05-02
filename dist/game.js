@@ -7256,7 +7256,11 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // geometry recentering: now that cone.position is the centroid (not the
       // base), pushing it back by half the cone length keeps the visual base
       // at the same nozzle location it used to occupy.
-      const _halfLen = (ct.length * tp) * 0.5 / _coneScale;
+      // Note: cone is parented directly to shipGroup with no extra scale, so
+      // cone.scale.y maps cone-local Y units 1:1 to shipGroup-local Z (after
+      // the π/2 X rotation). Do NOT divide by _coneScale here — that bug pushed
+      // the cone 5.5 ship-local units back instead of 1.65.
+      const _halfLen = (ct.length * tp) * 0.5;
       cone.position.set(
         localNoz.x + (ct.offX + sideOX) / _coneScale,
         localNoz.y + (ct.offY + sideOY) / _coneScale,
