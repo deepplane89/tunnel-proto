@@ -6273,7 +6273,13 @@ window._conePoseRoll[0] = [
   new THREE.Vector3(-0.04, 0.03, -0.10),  // L — Default Runner full roll
   new THREE.Vector3(-0.05, 0.03, -0.15),  // R — Default Runner full roll
 ];
-window._conePoseRoll[1] = [
+// SHIP_SKINS index map: 0=RUNNER, 1=GHOST, 2=BLACK MAMBA, 3=CIPHER, 4=RUNNER MK II.
+// GHOST/BLACK MAMBA/CIPHER are recolors of the default Runner body, so they
+// share Default's cone roll-pose values. MK Runner (4) has its own bank.
+window._conePoseRoll[1] = window._conePoseRoll[0];  // GHOST shares Default
+window._conePoseRoll[2] = window._conePoseRoll[0];  // BLACK MAMBA shares Default
+window._conePoseRoll[3] = window._conePoseRoll[0];  // CIPHER shares Default
+window._conePoseRoll[4] = [
   new THREE.Vector3(-0.04, 0.00, -0.10),  // L — MK Runner full roll (558bfb5)
   new THREE.Vector3( 0.00, 0.00, -0.11),  // R — MK Runner full roll (558bfb5)
 ];
