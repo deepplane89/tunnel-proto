@@ -6260,6 +6260,14 @@ window._nozPoseUp = [
   new THREE.Vector3(-0.27, 0.08, 4.91),  // left  @ pitch-up
   new THREE.Vector3( 0.74, 0.09, 5.01),  // right @ pitch-up
 ];
+// User-tuned cone-offset deltas for full barrel roll (±pi/2). Same target for both
+// up and down rolls (user confirmed one set works both ways), so blend uses
+// |state.rollAngle| / (pi/2). Targets are absolute slider values, blended FROM the
+// current ct.offL*/offR* sacred-zero values toward these.
+window._conePoseRoll = [
+  new THREE.Vector3(-0.04, 0.00, -0.10),  // left  cone @ full roll
+  new THREE.Vector3( 0.00, 0.00, -0.11),  // right cone @ full roll
+];
 // GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
 // at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
 // of how NOZZLE_OFFSETS is hand-tuned for visual particle spawn. Used by the cone thruster
@@ -7034,9 +7042,25 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // a slider value of 0.09 only moved the cone 0.027 in world space — making sliders feel
       // ~3.3× weaker than expected.)
       const _coneScale = (typeof shipGroup !== 'undefined' && shipGroup.scale && shipGroup.scale.x) ? shipGroup.scale.x : 0.30;
-      const sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
-      const sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
-      const sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
+      let sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
+      let sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
+      let sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
+      // ── Cone-offset pose-blend (roll-magnitude driven) ──
+      // User-tuned per-pose values for full barrel roll (±pi/2) — same target for both
+      // directions, so blend uses |state.rollAngle| / (pi/2). Disable via
+      // window._conePoseEnabled = false. Targets are stored in window._conePoseRoll.
+      if (window._conePoseEnabled !== false && window._conePoseRoll && typeof state !== 'undefined' && state) {
+        const _ra = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
+        const _t = Math.max(0, Math.min(1, Math.abs(_ra) / (Math.PI * 0.5)));
+        if (_t > 0.001) {
+          const _tgt = window._conePoseRoll[idx];
+          if (_tgt) {
+            sideOX = sideOX + (_tgt.x - sideOX) * _t;
+            sideOY = sideOY + (_tgt.y - sideOY) * _t;
+            sideOZ = sideOZ + (_tgt.z - sideOZ) * _t;
+          }
+        }
+      }
       cone.position.set(
         localNoz.x + (ct.offX + sideOX) / _coneScale,
         localNoz.y + (ct.offY + sideOY) / _coneScale,
