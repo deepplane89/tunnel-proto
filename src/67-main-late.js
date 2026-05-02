@@ -147,7 +147,10 @@ function startGame() {
   touch.rollUp         = false;
   touch.rollDown       = false;
   state.rollDir        = 0;
-  shipGroup.position.set(0, _hoverBaseY, 0);
+  shipGroup.position.x = 0;
+  shipGroup.position.y = _hoverBaseY;
+  // NB: shipGroup.position.z is set once at module init (3.9) and never
+  // changes during gameplay — do NOT reset it here.
   shipGroup.rotation.set(_shipRotXOffset, 0, 0);
   // Clear any in-flight launch-lift state from a prior aborted run.
   state._introLiftActive = false;

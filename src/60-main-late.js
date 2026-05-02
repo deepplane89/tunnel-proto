@@ -174,7 +174,9 @@ function returnToTitle() {
   state._introLiftActive = false;
   state._introLiftTimer = 0;
   state._introShipY = _hoverBaseY;
-  shipGroup.position.set(0, _hoverBaseY, 0);
+  shipGroup.position.x = 0;
+  shipGroup.position.y = _hoverBaseY;
+  // Preserve shipGroup.position.z (init'd to 3.9, never changes during gameplay).
   shipGroup.rotation.set(_shipRotXOffset, 0, 0);
   killThrusterSputter();
   // Cancel any pending retry-sweep startGame call so it can't fire after exit
