@@ -6496,6 +6496,17 @@ const _GLB_NOZZLE_ANCHORS = [
   new THREE.Vector3(-0.481, 0.129, 5.114),  // left  — GLB Object_51 rear edge
   new THREE.Vector3( 0.481, 0.129, 5.114),  // right — GLB Object_51 rear edge
 ];
+// Visible-wingtip-thruster rear-face centroid (Object_5 nozzle mesh, idx 1).
+// This is the actual exhaust hole the player sees, distinct from Object_51.
+// Used by the cone diagnostic to test parallax theory: if the cone (Z=5.10)
+// and this anchor (Z=4.543) are on the same camera ray at zero roll, they
+// will project to the same screen pixel — that's why everything looks aligned
+// at zero. Any rotation should reveal a screen-pixel gap proportional to ΔZ
+// projected onto the camera's right/up axes.
+const _GLB_VISIBLE_THRUSTER = [
+  new THREE.Vector3(-0.394, 0.129, 4.543),  // left  wingtip rear face centroid
+  new THREE.Vector3( 0.394, 0.129, 4.543),  // right wingtip rear face centroid
+];
 // Mini thruster nozzles — inboard hull lights
 const MINI_NOZZLE_OFFSETS = [
   new THREE.Vector3(-0.22, 0.08, 5.10),  // left inner hull
@@ -7237,13 +7248,34 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
           const _dx = _coneWorld.x - _glbWorld.x;
           const _dy = _coneWorld.y - _glbWorld.y;
           const _dz = _coneWorld.z - _glbWorld.z;
+          // ALSO compute the visible-wingtip-thruster anchor (Object_5 rear face)
+          // and project both points to screen space. Parallax-theory test: if the
+          // cone and the visible thruster are on the same camera ray at zero roll,
+          // their screen-pixel positions will match. Any camera-angle change
+          // (turn/roll) should produce a screen-pixel Δ proportional to depth gap.
+          const _visAnchor = _GLB_VISIBLE_THRUSTER[idx];
+          const _visLocal = new THREE.Vector3(
+            _visAnchor.x / 0.30,
+            (_visAnchor.y - 0.28) / 0.30,
+            (_visAnchor.z - 4.5) / 0.30
+          );
+          const _visWorld = _visLocal.clone().applyMatrix4(shipGroup.matrixWorld);
+          const _toScreen = (wp) => {
+            const v = wp.clone().project(camera); // NDC: x,y in [-1,1]
+            const w = (typeof renderer !== 'undefined' && renderer.domElement) ? renderer.domElement.clientWidth  : window.innerWidth;
+            const h = (typeof renderer !== 'undefined' && renderer.domElement) ? renderer.domElement.clientHeight : window.innerHeight;
+            return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h };
+          };
+          const _coneScr = _toScreen(_coneWorld);
+          const _visScr  = _toScreen(_visWorld);
+          const _spx = _coneScr.x - _visScr.x;
+          const _spy = _coneScr.y - _visScr.y;
           const _side = idx === 0 ? 'L' : 'R';
           console.log(
-            `[coneDiag ${_side}] cone(world) ${_coneWorld.x.toFixed(3)},${_coneWorld.y.toFixed(3)},${_coneWorld.z.toFixed(3)} | ` +
-            `GLB anchor(world) ${_glbWorld.x.toFixed(3)},${_glbWorld.y.toFixed(3)},${_glbWorld.z.toFixed(3)} | ` +
-            `Δ ${_dx>=0?'+':''}${_dx.toFixed(3)},${_dy>=0?'+':''}${_dy.toFixed(3)},${_dz>=0?'+':''}${_dz.toFixed(3)} | ` +
-            `ship(world) ${shipGroup.position.x.toFixed(3)},${shipGroup.position.y.toFixed(3)},${shipGroup.position.z.toFixed(3)} | ` +
-            `shipRot ${shipGroup.rotation.x.toFixed(2)},${shipGroup.rotation.y.toFixed(2)},${shipGroup.rotation.z.toFixed(2)}`
+            `[coneDiag ${_side}] cone(w) ${_coneWorld.x.toFixed(3)},${_coneWorld.y.toFixed(3)},${_coneWorld.z.toFixed(3)} | ` +
+            `vis(w) ${_visWorld.x.toFixed(3)},${_visWorld.y.toFixed(3)},${_visWorld.z.toFixed(3)} | ` +
+            `Δscreen ${_spx>=0?'+':''}${_spx.toFixed(1)}px,${_spy>=0?'+':''}${_spy.toFixed(1)}px | ` +
+            `shipRot y=${shipGroup.rotation.y.toFixed(2)} z=${shipGroup.rotation.z.toFixed(2)} x=${shipGroup.rotation.x.toFixed(2)}`
           );
         }
       }
