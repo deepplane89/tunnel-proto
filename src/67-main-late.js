@@ -793,6 +793,11 @@ function startDeathRun() {
   const overlay = document.getElementById('intro-overlay');
   if (overlay && !state._tutorialActive && !_retryIsFromDead) {
     clearIntroTimers();
+    // Cancel any in-flight fadeOutIntroOverlay hide-timer from a prior
+    // returnToTitle, otherwise it fires 820ms later and wipes the overlay
+    // we're about to populate (root cause of rapid title<->play prologue no-show).
+    if (overlay._hideTimer) { clearTimeout(overlay._hideTimer); overlay._hideTimer = null; }
+    overlay.classList.remove('fading-out');
     overlay.innerHTML = '';
     overlay.style.display = 'flex';
     overlay.style.pointerEvents = 'auto';
@@ -2755,9 +2760,6 @@ function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
 
 let _introTimers = [];
 function clearIntroTimers() {
-  const _n = _introTimers.length;
-  const _caller = (new Error().stack || '').split('\n').slice(1, 4).map(s => s.trim()).join(' <- ');
-  console.log('[DIAG-PROLOGUE] clearIntroTimers t=' + performance.now().toFixed(0) + ' killed=' + _n + ' phase=' + state.phase + ' introActive=' + state.introActive + ' caller=' + _caller);
   _introTimers.forEach(id => { clearTimeout(id); clearInterval(id); cancelAnimationFrame(id); });
   _introTimers = [];
   state.thrusterPower = 0;  // kill any mid-spurt flicker
@@ -2798,15 +2800,12 @@ function clearMusicTimers() {
 }
 
 function fadeOutIntroOverlay(el) {
-  const _caller = (new Error().stack || '').split('\n').slice(1, 4).map(s => s.trim()).join(' <- ');
-  console.log('[DIAG-PROLOGUE] fadeOutIntroOverlay t=' + performance.now().toFixed(0) + ' phase=' + state.phase + ' introActive=' + state.introActive + ' children=' + el.children.length + ' caller=' + _caller);
   el.classList.add('fading-out');
   el.style.pointerEvents = 'none';  // restore pass-through immediately
   // Track the hide timer on the element so a rapid replay can cancel it before
   // it wipes the freshly-shown overlay (caused intermittent prologue no-show).
   if (el._hideTimer) { clearTimeout(el._hideTimer); el._hideTimer = null; }
   el._hideTimer = setTimeout(() => {
-    console.log('[DIAG-PROLOGUE] fadeOutIntroOverlay HIDE-TIMER FIRED t=' + performance.now().toFixed(0) + ' phase=' + state.phase + ' introActive=' + state.introActive + ' children=' + el.children.length);
     el._hideTimer = null;
     el.style.display = 'none';
     el.innerHTML = '';
@@ -2975,21 +2974,7 @@ function activateHeadStart(mega) {
 
 function showIntroText() {
   const overlay = document.getElementById('intro-overlay');
-  if (!overlay) { console.log('[DIAG-PROLOGUE] showIntroText: NO OVERLAY ELEMENT'); return; }
-  const _cs0 = getComputedStyle(overlay);
-  console.log('[DIAG-PROLOGUE] showIntroText ENTRY t=' + performance.now().toFixed(0)
-    + ' phase=' + state.phase
-    + ' introActive=' + state.introActive
-    + ' currentLevelIdx=' + state.currentLevelIdx
-    + ' _retryIsFromDead=' + _retryIsFromDead
-    + ' _tutorialActive=' + state._tutorialActive
-    + ' _jetLightningMode=' + state._jetLightningMode
-    + ' _skipL1Intro=' + _skipL1Intro
-    + ' overlay.display=' + _cs0.display
-    + ' overlay.opacity=' + _cs0.opacity
-    + ' overlay.classes="' + overlay.className + '"'
-    + ' overlay.children=' + overlay.children.length
-    + ' hideTimer=' + (overlay._hideTimer ? 'SET' : 'null'));
+  if (!overlay) return;
   clearIntroTimers();
   // Cancel any in-flight fadeOutIntroOverlay hide-timer that would otherwise
   // fire 820ms later and wipe the overlay we're about to show.
@@ -3020,12 +3005,6 @@ function showIntroText() {
   overlay.appendChild(lineB);
   overlay.appendChild(lineC);
   overlay.appendChild(skipHint);
-  const _cs1 = getComputedStyle(overlay);
-  console.log('[DIAG-PROLOGUE] showIntroText APPENDED t=' + performance.now().toFixed(0)
-    + ' overlay.display=' + _cs1.display
-    + ' overlay.opacity=' + _cs1.opacity
-    + ' overlay.classes="' + overlay.className + '"'
-    + ' overlay.children=' + overlay.children.length);
 
   // Mobile: tap anywhere on the intro overlay to skip (250ms grace so the follow-through
   // tap from "tap to play" doesn't immediately kill the freshly-launched prologue)
@@ -3046,20 +3025,7 @@ function showIntroText() {
   }, { passive: false });
 
   // Line A fades in at 3s (3.5s duration → done ~6.5s)
-  _introTimers.push(setTimeout(() => {
-    lineA.classList.add('playing');
-    const cs = getComputedStyle(lineA);
-    const ovcs = getComputedStyle(overlay);
-    console.log('[DIAG-PROLOGUE] lineA.playing FIRED t=' + performance.now().toFixed(0)
-      + ' inDOM=' + (lineA.isConnected)
-      + ' lineA.classes="' + lineA.className + '"'
-      + ' lineA.opacity=' + cs.opacity
-      + ' lineA.anim=' + cs.animationName
-      + ' overlay.display=' + ovcs.display
-      + ' overlay.opacity=' + ovcs.opacity
-      + ' overlay.classes="' + overlay.className + '"'
-      + ' overlay.children=' + overlay.children.length);
-  }, 3000));
+  _introTimers.push(setTimeout(() => { lineA.classList.add('playing'); }, 3000));
   // 2s pause → Line B starts at 8.5s (3.5s duration → done ~12s)
   _introTimers.push(setTimeout(() => { lineB.classList.add('playing'); }, 8500));
   // Engine startup SFX — fade is baked into the audio file, just play from start
