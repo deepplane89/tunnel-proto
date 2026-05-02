@@ -346,16 +346,12 @@ function updateTitleBadges() { /* badges removed from UI */ }
 // Applied via _applyConeConfig() whenever the active ship is RUNNER (incl. on
 // MK→Runner switch via _hideAltShip). Stored ship-local via shipGroup parent so
 // cones track ship rotation (xwing/barrel-roll) intrinsically.
-// Y offsets compensate for the GLB-anchor switch: cone now pivots at GLB Y=0.129 (hull
-// thruster height) instead of NOZZLE_OFFSETS Y=0.05 (particle spawn). World-Y delta is
-// 0.129 − 0.05 = +0.079, so visible-position offY values are reduced by 0.079 to keep
-// the cones in the same world spot at zero-roll. (2026-05-01 roll-drift fix.)
 const RUNNER_CONE_CFG = {
   length: 3.30, radius: 0.29,
   rotX: 0, rotY: 0, rotZ: 0,
   offX: 0, offY: 0, offZ: 0,
-  offLX: -0.02, offLY: -0.049, offLZ: 0,  // was 0.03, −0.079 anchor compensation
-  offRX:  0.02, offRY: -0.059, offRZ: 0,  // was 0.02, −0.079 anchor compensation
+  offLX: -0.02, offLY: 0.03, offLZ: 0,
+  offRX:  0.02, offRY: 0.02, offRZ: 0,
 };
 
 const SHIP_SKINS = [
@@ -390,9 +386,8 @@ const SHIP_SKINS = [
         length: 3.30, radius: 0.29,
         rotX: 0, rotY: 0, rotZ: 0,
         offX: 0, offY: 0, offZ: 0,
-        // −0.079 Y compensation for GLB-anchor switch (cone now pivots at hull thruster Y).
-        offLX: -0.02, offLY: -0.079, offLZ: 0,  // was 0.00
-        offRX:  0.02, offRY: -0.079, offRZ: 0,  // was 0.00
+        offLX: -0.02, offLY: 0.00, offLZ: 0,
+        offRX:  0.02, offRY: 0.00, offRZ: 0,
       },
       matchDefault: true },
     laserConfig: { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 } },
@@ -6517,10 +6512,10 @@ window._coneThruster = {
   rotY:         0,
   rotZ:         0,
   // Per-side position offsets — independent for left and right cones.
-  // World-space, applied on top of _GLB_NOZZLE_ANCHORS[idx] (idx 0=left, 1=right).
+  // World-space, applied on top of NOZZLE_OFFSETS[idx] (idx 0=left, 1=right).
   // Initial values = RUNNER_CONE_CFG (matching the boot ship).
-  offLX:       -0.02,  offLY:       -0.049, offLZ:        0,
-  offRX:        0.02,  offRY:       -0.059, offRZ:        0,
+  offLX:       -0.02,  offLY:        0.03,  offLZ:        0,
+  offRX:        0.02,  offRY:        0.02,  offRZ:        0,
   // Legacy shared offsets (kept for back-compat — applied to BOTH sides equally).
   offX:         0,
   offY:         0,
@@ -6941,10 +6936,7 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
     if (window._coneThrustersEnabled && tp > 0.01 && window._thrusterVisible !== false) {
       cone.visible = true;
       const ct = window._coneThruster;
-      // Use _localConeAnchors (GLB-derived) instead of _localNozzles (particle-spawn).
-      // This makes cones pivot at the same height as the visible hull thruster, so they
-      // stay locked during roll/turn/barrel-roll instead of sweeping a different arc.
-      const localNoz = _localConeAnchors[idx];
+      const localNoz = _localNozzles[idx];
       // Per-side offsets (offLX/Y/Z for idx 0, offRX/Y/Z for idx 1) plus legacy shared offX/Y/Z.
       // Sliders express offsets in WORLD units (so user numbers match what the eye sees).
       // _localNozzles is in ship-local units (NOZZLE_OFFSETS / 0.30), so we must divide the
