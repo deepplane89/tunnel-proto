@@ -390,8 +390,10 @@ window.addEventListener('keydown', e => {
   if (e.key === 'Escape' && phaseAtEvent === 'paused')  togglePause();
   if (isSpace && phaseAtEvent === 'paused')  togglePause();
   if (isSpace && phaseAtEvent === 'dead')  { initAudio(); _triggerRetryWithSweep(); }
-  // Enter skips the intro text sequence
-  if (e.key === 'Enter' && state.phase === 'playing' && state.introActive && !state.isDeathRun) {
+  // Enter skips the intro text sequence (with 250ms grace so a stray tap right after
+  // pressing Play doesn't immediately kill the freshly-launched prologue)
+  if (e.key === 'Enter' && state.phase === 'playing' && state.introActive && !state.isDeathRun &&
+      (performance.now() - (state._introStartedAt || 0)) >= 250) {
     clearIntroTimers();
     const _ov = document.getElementById('intro-overlay');
     if (_ov) { fadeOutIntroOverlay(_ov); }
@@ -684,8 +686,10 @@ window.addEventListener('keyup', e => {
 
     el.addEventListener('touchstart', e => {
       e.preventDefault();
-      // If intro is active — tap anywhere skips it
-      if (state.phase === 'playing' && state.introActive && !state.isDeathRun) {
+      // If intro is active — tap anywhere skips it (250ms grace so the follow-through
+      // tap from "tap to play" doesn't immediately kill the freshly-launched prologue)
+      if (state.phase === 'playing' && state.introActive && !state.isDeathRun &&
+          (performance.now() - (state._introStartedAt || 0)) >= 250) {
         const _ov = document.getElementById('intro-overlay');
         clearIntroTimers();
         if (_ov) fadeOutIntroOverlay(_ov);

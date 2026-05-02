@@ -14217,8 +14217,10 @@ window.addEventListener('keydown', e => {
   if (e.key === 'Escape' && phaseAtEvent === 'paused')  togglePause();
   if (isSpace && phaseAtEvent === 'paused')  togglePause();
   if (isSpace && phaseAtEvent === 'dead')  { initAudio(); _triggerRetryWithSweep(); }
-  // Enter skips the intro text sequence
-  if (e.key === 'Enter' && state.phase === 'playing' && state.introActive && !state.isDeathRun) {
+  // Enter skips the intro text sequence (with 250ms grace so a stray tap right after
+  // pressing Play doesn't immediately kill the freshly-launched prologue)
+  if (e.key === 'Enter' && state.phase === 'playing' && state.introActive && !state.isDeathRun &&
+      (performance.now() - (state._introStartedAt || 0)) >= 250) {
     clearIntroTimers();
     const _ov = document.getElementById('intro-overlay');
     if (_ov) { fadeOutIntroOverlay(_ov); }
@@ -14511,8 +14513,10 @@ window.addEventListener('keyup', e => {
 
     el.addEventListener('touchstart', e => {
       e.preventDefault();
-      // If intro is active — tap anywhere skips it
-      if (state.phase === 'playing' && state.introActive && !state.isDeathRun) {
+      // If intro is active — tap anywhere skips it (250ms grace so the follow-through
+      // tap from "tap to play" doesn't immediately kill the freshly-launched prologue)
+      if (state.phase === 'playing' && state.introActive && !state.isDeathRun &&
+          (performance.now() - (state._introStartedAt || 0)) >= 250) {
         const _ov = document.getElementById('intro-overlay');
         clearIntroTimers();
         if (_ov) fadeOutIntroOverlay(_ov);
@@ -15736,6 +15740,7 @@ function startGame() {
   // ── L1 cinematic intro text (only on fresh game start at level 0, NOT on retry) ──
   if (state.currentLevelIdx === 0 && !_skipL1Intro && !state._tutorialActive && !state._jetLightningMode && !_retryIsFromDead) {
     state.introActive = true;   // blocks cone spawning
+    state._introStartedAt = performance.now(); // grace window for skip handlers
     state.thrusterPower = 0;    // thrusters off during prologue
     showIntroText();
   }
@@ -16103,6 +16108,7 @@ function startDeathRun() {
   // Prologue: ship idles, wait for tap to launch (skip in tutorial and retry)
   if (!state._tutorialActive && !_retryIsFromDead) {
     state.introActive    = true;
+    state._introStartedAt = performance.now(); // grace window for skip handlers
     state.thrusterPower  = 0;
     _setDRSpeed(BASE_SPEED * 0.35, 'RUN_START');
   }
@@ -18335,9 +18341,11 @@ function showIntroText() {
   overlay.appendChild(lineC);
   overlay.appendChild(skipHint);
 
-  // Mobile: tap anywhere on the intro overlay to skip
+  // Mobile: tap anywhere on the intro overlay to skip (250ms grace so the follow-through
+  // tap from "tap to play" doesn't immediately kill the freshly-launched prologue)
   overlay.addEventListener('touchstart', function _tapSkip(e) {
     e.preventDefault();
+    if ((performance.now() - (state._introStartedAt || 0)) < 250) return;
     overlay.removeEventListener('touchstart', _tapSkip);
     clearIntroTimers();
     fadeOutIntroOverlay(overlay);
