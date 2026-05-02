@@ -3198,8 +3198,10 @@ function killPlayer() {
   // Stop engine SFX
   const _engD = document.getElementById('engine-start');
   const _roarD = document.getElementById('engine-roar');
+  const _roarLD = document.getElementById('engine-roar-layer');
   if (_engD && !_engD.paused) { _engD.pause(); _engD.currentTime = 0; }
   if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
+  if (_roarLD && !_roarLD.paused) { _roarLD.pause(); _roarLD.currentTime = 0; }
   stopEngineBaseline({ reset: true });
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }

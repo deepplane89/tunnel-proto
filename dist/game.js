@@ -10509,6 +10509,9 @@ function playCrash() {
   _ensureCtxRunning();
   const sfx = document.getElementById('crash-sound');
   if (sfx) { sfx.currentTime = 0; sfx.volume = 0.25; sfx.play().catch(() => {}); }
+  // Layered crash-impact sample — same gate as base crash, matched volume.
+  const _cl = document.getElementById('crash-layer-sound');
+  if (_cl) { try { _cl.currentTime = 0; _cl.volume = 0.25; _cl.play().catch(() => {}); } catch (_) {} }
 }
 
 // Plasma-punch impact layered alongside engine-roar ignition.
@@ -10520,6 +10523,16 @@ function playThrusterImpact(vol) {
       _ti.currentTime = 0;
       _ti.volume = (vol == null ? 0.7 : vol);
       _ti.play().catch(() => {});
+    } catch (_) {}
+  }
+  // Engine-roar layer — fires alongside plasma-punch on takeoff + speed-tier-ups.
+  // Same mute gate as plasma-punch; volume scales with the impact volume.
+  const _erl = document.getElementById('engine-roar-layer');
+  if (_erl) {
+    try {
+      _erl.currentTime = 0;
+      _erl.volume = (vol == null ? 0.7 : vol);
+      _erl.play().catch(() => {});
     } catch (_) {}
   }
 }
@@ -13863,8 +13876,10 @@ function togglePause() {
     // Pause engine SFX
     const _engP = document.getElementById('engine-start');
     const _roarP = document.getElementById('engine-roar');
+    const _roarLP = document.getElementById('engine-roar-layer');
     if (_engP && !_engP.paused) _engP.pause();
     if (_roarP && !_roarP.paused) _roarP.pause();
+    if (_roarLP && !_roarLP.paused) _roarLP.pause();
     stopEngineBaseline();
     if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
     if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
@@ -13964,8 +13979,10 @@ function returnToTitle() {
   // Stop engine SFX
   const _engR = document.getElementById('engine-start');
   const _roarR = document.getElementById('engine-roar');
+  const _roarLR = document.getElementById('engine-roar-layer');
   if (_engR) { _engR.pause(); _engR.currentTime = 0; }
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
+  if (_roarLR) { _roarLR.pause(); _roarLR.currentTime = 0; }
   stopEngineBaseline({ reset: true });
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
@@ -18428,8 +18445,10 @@ function killPlayer() {
   // Stop engine SFX
   const _engD = document.getElementById('engine-start');
   const _roarD = document.getElementById('engine-roar');
+  const _roarLD = document.getElementById('engine-roar-layer');
   if (_engD && !_engD.paused) { _engD.pause(); _engD.currentTime = 0; }
   if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
+  if (_roarLD && !_roarLD.paused) { _roarLD.pause(); _roarLD.currentTime = 0; }
   stopEngineBaseline({ reset: true });
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }

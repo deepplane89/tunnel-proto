@@ -2,6 +2,9 @@
   _ensureCtxRunning();
   const sfx = document.getElementById('crash-sound');
   if (sfx) { sfx.currentTime = 0; sfx.volume = 0.25; sfx.play().catch(() => {}); }
+  // Layered crash-impact sample — same gate as base crash, matched volume.
+  const _cl = document.getElementById('crash-layer-sound');
+  if (_cl) { try { _cl.currentTime = 0; _cl.volume = 0.25; _cl.play().catch(() => {}); } catch (_) {} }
 }
 
 // Plasma-punch impact layered alongside engine-roar ignition.
@@ -13,6 +16,16 @@ function playThrusterImpact(vol) {
       _ti.currentTime = 0;
       _ti.volume = (vol == null ? 0.7 : vol);
       _ti.play().catch(() => {});
+    } catch (_) {}
+  }
+  // Engine-roar layer — fires alongside plasma-punch on takeoff + speed-tier-ups.
+  // Same mute gate as plasma-punch; volume scales with the impact volume.
+  const _erl = document.getElementById('engine-roar-layer');
+  if (_erl) {
+    try {
+      _erl.currentTime = 0;
+      _erl.volume = (vol == null ? 0.7 : vol);
+      _erl.play().catch(() => {});
     } catch (_) {}
   }
 }

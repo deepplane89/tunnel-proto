@@ -66,8 +66,10 @@ function togglePause() {
     // Pause engine SFX
     const _engP = document.getElementById('engine-start');
     const _roarP = document.getElementById('engine-roar');
+    const _roarLP = document.getElementById('engine-roar-layer');
     if (_engP && !_engP.paused) _engP.pause();
     if (_roarP && !_roarP.paused) _roarP.pause();
+    if (_roarLP && !_roarLP.paused) _roarLP.pause();
     stopEngineBaseline();
     if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
     if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
@@ -167,8 +169,10 @@ function returnToTitle() {
   // Stop engine SFX
   const _engR = document.getElementById('engine-start');
   const _roarR = document.getElementById('engine-roar');
+  const _roarLR = document.getElementById('engine-roar-layer');
   if (_engR) { _engR.pause(); _engR.currentTime = 0; }
   if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
+  if (_roarLR) { _roarLR.pause(); _roarLR.currentTime = 0; }
   stopEngineBaseline({ reset: true });
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
