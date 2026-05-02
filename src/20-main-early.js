@@ -7049,7 +7049,11 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // User-tuned per-pose values for full barrel roll (±pi/2) — same target for both
       // directions, so blend uses |state.rollAngle| / (pi/2). Disable via
       // window._conePoseEnabled = false. Targets are stored in window._conePoseRoll.
-      if (window._conePoseEnabled !== false && window._conePoseRoll && typeof state !== 'undefined' && state) {
+      // Tuning override: window._conePoseTune = true bypasses the blend entirely so
+      // ct.offL*/offR* sliders drive raw at all roll values (lets you adjust live
+      // while ArrowUp/Down is held). Zero state stays sacred because the slider
+      // values themselves don't change when keys are released.
+      if (window._conePoseTune !== true && window._conePoseEnabled !== false && window._conePoseRoll && typeof state !== 'undefined' && state) {
         const _ra = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
         const _t = Math.max(0, Math.min(1, Math.abs(_ra) / (Math.PI * 0.5)));
         if (_t > 0.001) {
