@@ -6538,14 +6538,14 @@ window._conePoseDown[0] = [
   new THREE.Vector3(-0.04,  0.03, -0.10),  // L @ ArrowDown full roll
   new THREE.Vector3(-0.05,  0.03, -0.15),  // R @ ArrowDown full roll
 ];
-// MK RUNNER (skin idx 1) — user reported same set works both directions, so up==down.
+// MK RUNNER (skin idx 1) — captured 2026-05-02 via slider screenshots.
 window._conePoseUp[1] = [
-  new THREE.Vector3(-0.04,  0.00, -0.10),
-  new THREE.Vector3( 0.00,  0.00, -0.11),
+  new THREE.Vector3(-0.03,  0.00, -0.07),  // L @ ArrowUp full roll
+  new THREE.Vector3(-0.09,  0.00, -0.01),  // R @ ArrowUp full roll
 ];
 window._conePoseDown[1] = [
-  new THREE.Vector3(-0.04,  0.00, -0.10),
-  new THREE.Vector3( 0.00,  0.00, -0.11),
+  new THREE.Vector3(-0.03,  0.00, -0.07),  // L @ ArrowDown full roll
+  new THREE.Vector3(-0.09, -0.01, -0.23),  // R @ ArrowDown full roll
 ];
 // GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
 // at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
