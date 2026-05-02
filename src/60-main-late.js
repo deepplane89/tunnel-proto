@@ -124,6 +124,7 @@ function togglePause() {
 }
 
 function returnToTitle() {
+  console.log('[DIAG-PROLOGUE] returnToTitle ENTRY t=' + performance.now().toFixed(0) + ' fromPhase=' + state.phase + ' introActive=' + state.introActive);
   state.phase = 'title';
   // Release transition reentry locks — a tap mid-startGame followed by
   // pause+exit can otherwise leave these stuck, blocking the next Play tap.
@@ -690,6 +691,7 @@ window.addEventListener('keyup', e => {
       // tap from "tap to play" doesn't immediately kill the freshly-launched prologue)
       if (state.phase === 'playing' && state.introActive && !state.isDeathRun &&
           (performance.now() - (state._introStartedAt || 0)) >= 250) {
+        console.log('[DIAG-PROLOGUE] joystick-touchstart SKIP-HANDLER FIRED t=' + performance.now().toFixed(0) + ' elapsedSinceIntroStart=' + (performance.now() - (state._introStartedAt || 0)).toFixed(0));
         const _ov = document.getElementById('intro-overlay');
         clearIntroTimers();
         if (_ov) fadeOutIntroOverlay(_ov);
@@ -706,6 +708,7 @@ window.addEventListener('keyup', e => {
       // Start game if on title/dead — mark this touch as game-starting (ignore swipes from it)
       const ph = state.phase;
       const isStartingTouch = (ph === 'title' || ph === 'dead');
+      if (isStartingTouch) console.log('[DIAG-PROLOGUE] joystick-touchstart STARTING-TOUCH t=' + performance.now().toFixed(0) + ' phase=' + ph + ' introActive=' + state.introActive);
       for (const t of e.changedTouches) {
         activeTouches.set(t.identifier, { startY: t.clientY, swiped: false, isStart: isStartingTouch });
       }
