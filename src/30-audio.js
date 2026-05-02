@@ -135,7 +135,7 @@ function _initSFXBuffers() {
   // Argon ambient: looped via dedicated _playArgonLoop (volume modulated each frame)
   _loadSFXBuffer('argon-ambient',   './assets/audio/argon-ambient.mp3');
   // Laser machine-gun: one-shot per fire-rate tick instead of looping the whole clip.
-  _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.wav');
+  _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
 }
 
 // ── Argon looping handle (Web Audio path) ──
@@ -159,7 +159,7 @@ function _playArgonLoop(initialVol) {
   return src;
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release' };
+const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx' };
 // Play a pre-decoded buffer with gain + optional pan + playbackRate
 function _playBuffer(name, volume, rate, panVal) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);

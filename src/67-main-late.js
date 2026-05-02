@@ -3216,6 +3216,7 @@ function killPlayer() {
   // Stop looped weapon SFX on game over.
   const _laserD = document.getElementById('laser-beam-sfx');
   if (_laserD && !_laserD.paused) { _laserD.loop = false; _laserD.pause(); _laserD.currentTime = 0; }
+  if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
   const _ubeamD = document.getElementById('unibeam-sfx');
   if (_ubeamD && !_ubeamD.paused) { _ubeamD.loop = false; _ubeamD.pause(); _ubeamD.currentTime = 0; }
   // Kill in-flight thunder rumble so it doesn't ring through gameover screen.
@@ -4622,12 +4623,6 @@ function update(dt) {
         const lanes = state._laserBoltLanes || _lbLanes;
         const half  = (lanes - 1) / 2;
         for (let li = 0; li < lanes; li++) spawnLaserBolt(li - half);
-        // Per-tick MG sound: one shot fires at the bolt-spawn cadence.
-        // Slight pitch jitter so adjacent ticks don't phase-lock and sound robotic.
-        if (typeof _playBuffer === 'function') {
-          const _rate = 0.96 + Math.random() * 0.08;
-          _playBuffer('laser-mg', 0.32, _rate, null);
-        }
       }
     } else if (_tier === 4) {
       // T4: static unibeam — pivot at ship nose, no rotation

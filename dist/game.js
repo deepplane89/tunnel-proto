@@ -10405,7 +10405,7 @@ function _initSFXBuffers() {
   // Argon ambient: looped via dedicated _playArgonLoop (volume modulated each frame)
   _loadSFXBuffer('argon-ambient',   './assets/audio/argon-ambient.mp3');
   // Laser machine-gun: one-shot per fire-rate tick instead of looping the whole clip.
-  _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.wav');
+  _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
 }
 
 // ── Argon looping handle (Web Audio path) ──
@@ -10429,7 +10429,7 @@ function _playArgonLoop(initialVol) {
   return src;
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release' };
+const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx' };
 // Play a pre-decoded buffer with gain + optional pan + playbackRate
 function _playBuffer(name, volume, rate, panVal) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
@@ -13678,10 +13678,26 @@ function applyPowerup(typeIdx) {
         // T1-T3: bolt machine gun mode
         laserPivot.visible = false;
         state.laserBoltTimer = 0;
-        // Laser MG SFX: per-tick buffer fire happens in the bolt-spawn loop
-        // (67-main-late.js). No looped element here — the rate of fire IS the
-        // machine-gun feel. See state.laserFireRate.
-
+        // Play laser beam SFX — retrigger at MG cadence (no pitch change).
+        // Instead of loop=true (which waits for the wav to end), we reset
+        // currentTime = 0 every _retriggerMs to fake a faster repeat rate.
+        const _lsfx = document.getElementById('laser-beam-sfx');
+        if (_lsfx && !state.muted) {
+          _lsfx.loop = false;
+          _lsfx.volume = 0.5;
+          _lsfx.currentTime = 0;
+          _lsfx.play().catch(()=>{});
+          const _retriggerMs = 120; // ~8 shots/sec; tune this if too fast/slow
+          if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+          state._laserSfxIv = setInterval(() => {
+            try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
+          }, _retriggerMs);
+          // Stop when laser expires
+          setTimeout(() => {
+            if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+            try { _lsfx.pause(); _lsfx.currentTime = 0; } catch(_) {}
+          }, state.laserTimer * 1000);
+        }
         // T1/T2: 2 lanes, narrow. T3: 4 lanes, wider spread
         // If scene tuner (T) is open, let slider values stay in control
         if (!window._sceneTunerOpen) {
@@ -13895,6 +13911,7 @@ function togglePause() {
     // currentTime preserved so they pick up where they left off on resume.
     const _laserP = document.getElementById('laser-beam-sfx');
     if (_laserP && !_laserP.paused) _laserP.pause();
+    if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
     const _ubeamP = document.getElementById('unibeam-sfx');
     if (_ubeamP && !_ubeamP.paused) _ubeamP.pause();
     // Kill in-flight thunder rumble so it doesn't ring through pause.
@@ -14019,6 +14036,7 @@ function returnToTitle() {
   // Stop looped weapon SFX on return to title.
   const _laserR = document.getElementById('laser-beam-sfx');
   if (_laserR) { _laserR.loop = false; _laserR.pause(); _laserR.currentTime = 0; }
+  if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
   const _ubeamR = document.getElementById('unibeam-sfx');
   if (_ubeamR) { _ubeamR.loop = false; _ubeamR.pause(); _ubeamR.currentTime = 0; }
   // Kill in-flight thunder rumble on title.
@@ -18495,6 +18513,7 @@ function killPlayer() {
   // Stop looped weapon SFX on game over.
   const _laserD = document.getElementById('laser-beam-sfx');
   if (_laserD && !_laserD.paused) { _laserD.loop = false; _laserD.pause(); _laserD.currentTime = 0; }
+  if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
   const _ubeamD = document.getElementById('unibeam-sfx');
   if (_ubeamD && !_ubeamD.paused) { _ubeamD.loop = false; _ubeamD.pause(); _ubeamD.currentTime = 0; }
   // Kill in-flight thunder rumble so it doesn't ring through gameover screen.
@@ -19901,12 +19920,6 @@ function update(dt) {
         const lanes = state._laserBoltLanes || _lbLanes;
         const half  = (lanes - 1) / 2;
         for (let li = 0; li < lanes; li++) spawnLaserBolt(li - half);
-        // Per-tick MG sound: one shot fires at the bolt-spawn cadence.
-        // Slight pitch jitter so adjacent ticks don't phase-lock and sound robotic.
-        if (typeof _playBuffer === 'function') {
-          const _rate = 0.96 + Math.random() * 0.08;
-          _playBuffer('laser-mg', 0.32, _rate, null);
-        }
       }
     } else if (_tier === 4) {
       // T4: static unibeam — pivot at ship nose, no rotation

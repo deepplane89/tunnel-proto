@@ -351,10 +351,26 @@ function applyPowerup(typeIdx) {
         // T1-T3: bolt machine gun mode
         laserPivot.visible = false;
         state.laserBoltTimer = 0;
-        // Laser MG SFX: per-tick buffer fire happens in the bolt-spawn loop
-        // (67-main-late.js). No looped element here — the rate of fire IS the
-        // machine-gun feel. See state.laserFireRate.
-
+        // Play laser beam SFX — retrigger at MG cadence (no pitch change).
+        // Instead of loop=true (which waits for the wav to end), we reset
+        // currentTime = 0 every _retriggerMs to fake a faster repeat rate.
+        const _lsfx = document.getElementById('laser-beam-sfx');
+        if (_lsfx && !state.muted) {
+          _lsfx.loop = false;
+          _lsfx.volume = 0.5;
+          _lsfx.currentTime = 0;
+          _lsfx.play().catch(()=>{});
+          const _retriggerMs = 120; // ~8 shots/sec; tune this if too fast/slow
+          if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+          state._laserSfxIv = setInterval(() => {
+            try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
+          }, _retriggerMs);
+          // Stop when laser expires
+          setTimeout(() => {
+            if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+            try { _lsfx.pause(); _lsfx.currentTime = 0; } catch(_) {}
+          }, state.laserTimer * 1000);
+        }
         // T1/T2: 2 lanes, narrow. T3: 4 lanes, wider spread
         // If scene tuner (T) is open, let slider values stay in control
         if (!window._sceneTunerOpen) {
