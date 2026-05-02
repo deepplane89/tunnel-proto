@@ -7326,7 +7326,11 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // User-tuned per-pose values for full barrel roll (±pi/2) — same target for both
       // directions, so blend uses |state.rollAngle| / (pi/2). Disable via
       // window._conePoseEnabled = false. Targets are stored in window._conePoseRoll.
-      if (window._conePoseEnabled !== false && window._conePoseRoll && typeof state !== 'undefined' && state) {
+      // Default Runner (skin 0): slider drives cone directly during roll — no
+      // override — so user can drag the L/R offX/Y/Z sliders during a held roll
+      // and read the new target values off the panel. MK and recolors keep the
+      // override-at-full-roll formula so their tuned banks are not disturbed.
+      if (window._conePoseEnabled !== false && window._conePoseRoll && typeof state !== 'undefined' && state && activeSkinIdx !== 0) {
         const _ra = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
         const _t = Math.max(0, Math.min(1, Math.abs(_ra) / (Math.PI * 0.5)));
         if (_t > 0.001) {
