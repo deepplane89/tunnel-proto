@@ -36,7 +36,6 @@
       renderer.compile(titleScene, camera);
     }
     const dt = ((typeof performance !== 'undefined') ? performance.now() : 0) - t0;
-    console.log('[PREWARM] global shader prewarm complete in ' + dt.toFixed(0) + 'ms');
     status('PREWARM', 95);
   } catch (err) {
     // Non-fatal — lazy compilation will still happen, we just lose the

@@ -464,7 +464,6 @@ window.addEventListener('keydown', e => {
         const _fadeMs = (_t === 'l4') ? 2000 : 2000;
         musicFadeTo(_t, _fadeMs);
       }
-      console.log('[SEQ-DEBUG] Jump to stage ' + idx + ': ' + s.name);
     };
     if (e.shiftKey && _shiftDigitNameMap[_digit]) {
       if (_shiftDigitNameMap[_digit] === 'ENDLESS') {
@@ -530,7 +529,6 @@ window.addEventListener('keydown', e => {
         _setDRSpeed(BASE_SPEED * (LEVELS[Math.min((state.deathRunSpeedTier || 0) + 1, 4)].speedMult), 'RING_PAUSE');
       }
       _ringShowTuner();
-      console.log('[DR-DEBUG] Ring tuner toggled. Rings: ' + _bonusRings.length);
     }
   }
   // P = force custom pattern (DR only)
@@ -543,7 +541,6 @@ window.addEventListener('keydown', e => {
         state._seqCorridorStarted = false; state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
         state._seqVibeApplied = -1;
         _setDRSpeed(BASE_SPEED * _s.speed, 'KONAMI');
-        console.log('[SEQ-DEBUG] Jump to ENDLESS via P');
       }
     }
   }
@@ -573,7 +570,6 @@ window.addEventListener('keydown', e => {
         clearAllCorridorFlags(); state.deathRunRestBeat = 0;
         state.drPhase = 'BUILD'; state.drPhaseTimer = 0; state.drPhaseDuration = 0;
         fam.activate(_forceBand, 'build');
-        console.log('[DR-DEBUG] Forced ' + famKey);
       }
     }
   }
@@ -804,7 +800,6 @@ window.addEventListener('keyup', e => {
     // Give plenty of fuel to buy upgrades
     saveFuelCells(loadFuelCells() + 99999);
     updateTitleFuelCells();
-    console.log('[ADMIN] Full shop unlocked');
   }
   if (skinLabel) {
     skinLabel.addEventListener('touchstart', e => {

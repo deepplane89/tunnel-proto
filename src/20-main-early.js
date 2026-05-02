@@ -159,7 +159,6 @@ function _setDRSpeed(value, trigger) {
   if (window.DEBUG_DR_SPEED) {
     const prev = state.speed;
     if (Math.abs(prev - value) > 0.01) {
-      console.log(`[DR_SPEED] ${prev.toFixed(2)} → ${value.toFixed(2)} (${trigger})`);
     }
   }
   state.speed = value;
@@ -6052,7 +6051,6 @@ function _loadAltShip(glbFile, skinDef, callback) {
       }
     });
     window._mkPodAnchor = _bestPodNode;
-    if (_bestPodNode) console.log('[POD ANCHOR]', _bestPodNode.name || '(unnamed)', 'localZ centroid=', _bestPodCentroidZ.toFixed(3));
     model.visible = false; // hidden until skin is applied
     shipGroup.add(model);
     // Set up AnimationMixer if GLB has animations
@@ -6066,7 +6064,6 @@ function _loadAltShip(glbFile, skinDef, callback) {
         action.clampWhenFinished = true;
         clips[clip.name] = action;
       });
-      console.log('[ALT SHIP] Animations:', Object.keys(clips).join(', '));
       // Snap hatch/door/landing-gear animations to CLOSED (end frame) for flight mode
       const _closeAnims = [
         'Cargo_DoorAction', 'Cargo_Door_AAction',
@@ -6104,7 +6101,6 @@ function _loadAltShip(glbFile, skinDef, callback) {
         renderer.compile(scene, camera);
       }
     } catch (e) { /* non-fatal */ }
-    console.log('[ALT SHIP] Loaded:', glbFile);
     if (callback) callback();
   }, undefined, (err) => {
     console.error('[ALT SHIP] Failed to load:', err);
@@ -7145,81 +7141,6 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // ── Cone↔GLB diagnostic logging (throttled) ──
       // Log the live cone world position vs the GLB-derived true thruster anchor so the
       // cone-to-GLB spatial relationship is observable regardless of how shipGroup transforms.
-      // Default ON for the parallax investigation; set window._coneDiag = false to silence.
-      if (window._coneDiag !== false) {
-        window._coneDiagLast = window._coneDiagLast || 0;
-        const _now = performance.now();
-        if (_now - window._coneDiagLast > 500) {
-          window._coneDiagLast = _now;
-          // Cone world pos: use shipGroup.matrixWorld since cone is shipGroup-parented
-          const _coneWorld = cone.getWorldPosition(new THREE.Vector3());
-          // GLB anchor (in NOZZLE_OFFSETS world-at-default-pose space) → ship local → world
-          const _glbAnchor = _GLB_NOZZLE_ANCHORS[idx];
-          const _glbLocal = new THREE.Vector3(
-            _glbAnchor.x / 0.30,
-            (_glbAnchor.y - 0.28) / 0.30,
-            (_glbAnchor.z - 4.5) / 0.30
-          );
-          const _glbWorld = _glbLocal.clone().applyMatrix4(shipGroup.matrixWorld);
-          const _dx = _coneWorld.x - _glbWorld.x;
-          const _dy = _coneWorld.y - _glbWorld.y;
-          const _dz = _coneWorld.z - _glbWorld.z;
-          // ALSO compute the visible-wingtip-thruster anchor (Object_5 rear face)
-          // and project both points to screen space. Parallax-theory test: if the
-          // cone and the visible thruster are on the same camera ray at zero roll,
-          // their screen-pixel positions will match. Any camera-angle change
-          // (turn/roll) should produce a screen-pixel Δ proportional to depth gap.
-          const _visAnchor = _GLB_VISIBLE_THRUSTER[idx];
-          const _visLocal = new THREE.Vector3(
-            _visAnchor.x / 0.30,
-            (_visAnchor.y - 0.28) / 0.30,
-            (_visAnchor.z - 4.5) / 0.30
-          );
-          const _visWorld = _visLocal.clone().applyMatrix4(shipGroup.matrixWorld);
-          const _toScreen = (wp) => {
-            const v = wp.clone().project(camera); // NDC: x,y in [-1,1]
-            const w = (typeof renderer !== 'undefined' && renderer.domElement) ? renderer.domElement.clientWidth  : window.innerWidth;
-            const h = (typeof renderer !== 'undefined' && renderer.domElement) ? renderer.domElement.clientHeight : window.innerHeight;
-            return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h };
-          };
-          const _coneScr = _toScreen(_coneWorld);
-          const _visScr  = _toScreen(_visWorld);
-          const _spx = _coneScr.x - _visScr.x;
-          const _spy = _coneScr.y - _visScr.y;
-          const _side = idx === 0 ? 'L' : 'R';
-          // ── Live pod anchor (GLB-internal node) to test internal-drift theory ──
-          // If cone is rigid with shipGroup AND pod is rigid with shipGroup, the
-          // SHIP-LOCAL Δ (cone_local − pod_local) must be constant frame-to-frame.
-          // Variation = proof of internal drift. We compute ship-local by
-          // applying shipGroup.matrixWorld inverse to both world positions.
-          let _podStr = '';
-          let _coneScrStr = `cone(scr) ${_coneScr.x.toFixed(0)},${_coneScr.y.toFixed(0)}`;
-          let _podScrStr = '';
-          let _nozScrStr = '';
-          if (window._mkPodAnchor) {
-            const _podWorld = window._mkPodAnchor.getWorldPosition(new THREE.Vector3());
-            const _coneShipLocal = shipGroup.worldToLocal(_coneWorld.clone());
-            const _podShipLocal  = shipGroup.worldToLocal(_podWorld.clone());
-            const _ldx = _coneShipLocal.x - _podShipLocal.x;
-            const _ldy = _coneShipLocal.y - _podShipLocal.y;
-            const _ldz = _coneShipLocal.z - _podShipLocal.z;
-            _podStr = ` | shipLocalΔ ${_ldx>=0?'+':''}${_ldx.toFixed(3)},${_ldy>=0?'+':''}${_ldy.toFixed(3)},${_ldz>=0?'+':''}${_ldz.toFixed(3)}`;
-            const _podScr = _toScreen(_podWorld);
-            _podScrStr = ` | pod(scr) ${_podScr.x.toFixed(0)},${_podScr.y.toFixed(0)} (Δcone→pod ${(_podScr.x-_coneScr.x>=0?'+':'')}${(_podScr.x-_coneScr.x).toFixed(0)},${(_podScr.y-_coneScr.y>=0?'+':'')}${(_podScr.y-_coneScr.y).toFixed(0)})`;
-          }
-          // Particle nozzle origin (where the engine particles spawn from)
-          if (typeof _localNozzles !== 'undefined' && _localNozzles && _localNozzles[idx]) {
-            const _nozWorld = _localNozzles[idx].clone().applyMatrix4(shipGroup.matrixWorld);
-            const _nozScr = _toScreen(_nozWorld);
-            _nozScrStr = ` | noz(scr) ${_nozScr.x.toFixed(0)},${_nozScr.y.toFixed(0)} (Δcone→noz ${(_nozScr.x-_coneScr.x>=0?'+':'')}${(_nozScr.x-_coneScr.x).toFixed(0)},${(_nozScr.y-_coneScr.y>=0?'+':'')}${(_nozScr.y-_coneScr.y).toFixed(0)})`;
-          }
-          console.log(
-            `[coneDiag ${_side}] ${_coneScrStr} | ` +
-            `pitch=${shipGroup.rotation.x.toFixed(2)} yaw=${shipGroup.rotation.y.toFixed(2)} roll=${shipGroup.rotation.z.toFixed(2)}` +
-            _podScrStr + _nozScrStr + _podStr
-          );
-        }
-      }
       cone.rotation.set(Math.PI / 2 + ct.rotX, ct.rotY, ct.rotZ);
       cone.scale.set(ct.radius, ct.length * tp, ct.radius);
       // Update shader uniforms from live slider values
@@ -8472,7 +8393,6 @@ function _buildCanyonSlabGeo(seed, thickOverride, snapOverride) {
 
 function _createCanyonWalls() {
   if (_canyonWalls) return;
-  console.warn('[CANYON] _createCanyonWalls called — manual:', _canyonManual, '| stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonDbgFrame = 0; _canyonDbgLastNearestRot = null; _canyonDbgStartTime = null;
   const T = _canyonTuner;
   // Defensive clamp: canyons must never have more than 1 entry slab. Some
@@ -8666,30 +8586,21 @@ function _createCanyonWalls() {
       }
     });
   });
-  console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
-  console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick+' spawnDepth='+T.spawnDepth);
 
   // ==== SPAWN DUMP: where every slab actually starts on the Z axis ====
   // Camera far clip ~600, camera at z=9, so slabs past z=-591 are frustum-culled.
   const _leftSorted = [...chunks.left].sort((a,b) => b.position.z - a.position.z);
   const _ent = _leftSorted.filter(p => p.userData.isEntrance);
   const _reg = _leftSorted.filter(p => !p.userData.isEntrance);
-  console.log('[SPAWN] ===== LEFT SIDE SLAB Z POSITIONS =====');
-  console.log('[SPAWN] entrance count='+_ent.length+' regular count='+_reg.length);
   _ent.forEach((p, i) => {
-    console.log('[SPAWN ENT] '+i+' z='+p.position.z.toFixed(1)+' x='+p.position.x.toFixed(1)+' visible='+p.visible);
   });
   _reg.forEach((p, i) => {
     const beyondFarClip = p.position.z < -591;
-    console.log('[SPAWN REG] '+i+' z='+p.position.z.toFixed(1)+' x='+p.position.x.toFixed(1)+' visible='+p.visible+(beyondFarClip?' [BEYOND FAR CLIP]':''));
   });
   if (_reg.length > 0) {
     const zMax = _reg[0].position.z;
     const zMin = _reg[_reg.length-1].position.z;
-    console.log('[SPAWN] regular Z range: max(closest to ship)='+zMax.toFixed(1)+' min(farthest)='+zMin.toFixed(1)+' span='+(zMax-zMin).toFixed(1));
-    console.log('[SPAWN] expected: closest regular should be just behind last entrance (entrance at z=-150,-170,-190), farthest regular near spawnDepth='+T.spawnDepth);
   }
-  console.log('[SPAWN] =====================================');
 
   _canyonWalls = {
     strips:       [...chunks.left, ...chunks.right],
@@ -8732,7 +8643,6 @@ function _createCanyonWalls() {
       }
     }
     renderer.compile(_warmScene, _warmCam);
-    console.log('[CANYON PREWARM] compiled '+_seenGeos.size+' unique geometries (shaders compile on first use)');
     if (window._perfDiag) window._perfDiag.tag('canyon_prewarm', _seenGeos.size+'geos');
     // Don't dispose proxy geometries — they reference real slab geometries still in use
     // _warmScene goes out of scope, proxy meshes GC naturally
@@ -8743,7 +8653,6 @@ function _createCanyonWalls() {
 
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
-  console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonSinePhase = 0;
   _l4RowsElapsed    = 0;
   _canyonExiting    = false;
@@ -8861,7 +8770,6 @@ function _debugCanyonNearShip() {
       const src = s.m.userData.bakedAtZ ? 'R' : 'I';
       return `i${idx}[${src}] z=${z.toFixed(1)} yawPred=${yawPredDeg.toFixed(1)} yawBaked=${yawBakedDeg.toFixed(1)} dx=${dx.toFixed(2)}`;
     });
-    console.log(`[NEAR ${k.toUpperCase()}] ${entries.join(' | ')}`);
   });
 }
 
@@ -8902,14 +8810,12 @@ function _updateCanyonWalls(dt, speed) {
   if (DEBUG_CANYON && _canyonDbgFrame % 120 === 0) {
     const spacing2 = _canyonWalls._spacing;
     // Global snapshot
-    console.log(`[CANYON SNAP] t=${_canyonElapsed}s frame=${_canyonDbgFrame} phase=${_canyonSinePhase.toFixed(3)} pool=${_canyonWalls.left.length}`);
 
     // Coverage check
     const allZ = _canyonWalls.left.concat(_canyonWalls.right)
       .filter(m => m.visible).map(m => m.position.z).sort((a,b)=>a-b);
     const minZ = allZ.length ? allZ[0].toFixed(1) : '?';
     const maxZ = allZ.length ? allZ[allZ.length-1].toFixed(1) : '?';
-    console.log(`[COVERAGE] slabsZ=[${minZ},${maxZ}] count=${allZ.length}`);
 
     // Nearest slab detail
     let nearestM = null, nearestDist = Infinity;
@@ -8926,10 +8832,8 @@ function _updateCanyonWalls(dt, speed) {
       const dx2        = _canyonXAtZ(nearestM.position.z + spacing2) - _canyonXAtZ(nearestM.position.z);
       const correctRot = (Math.atan2(dx2, spacing2) * 180 / Math.PI).toFixed(2);
       const src        = nearestM.userData.bakedAtZ ? 'RECYCLED' : 'INIT';
-      console.log(`[NEAREST] z=${nearZ2} rot=${nearRot}° correct=${correctRot}° bakedAtZ=${nearBaked} bakedRot=${nearBRot}° src=${src}`);
       if (_canyonDbgLastNearestRot !== null) {
         const delta = Math.abs(parseFloat(nearRot) - _canyonDbgLastNearestRot);
-        if (delta < 1.0) console.warn(`[STRAIGHT?] t=${_canyonElapsed}s rot=${nearRot}° stuck (delta=${delta.toFixed(2)}°) src=${src}`);
       }
       _canyonDbgLastNearestRot = parseFloat(nearRot);
     }
@@ -8966,7 +8870,6 @@ function _updateCanyonWalls(dt, speed) {
       _canyonWalls._corridorRevealed = true;
       _canyonWalls.left.forEach(m => { if (!m.userData.isEntrance) m.visible = true; });
       _canyonWalls.right.forEach(m => { if (!m.userData.isEntrance) m.visible = true; });
-      console.log('[CANYON] corridor revealed at entrance Z='+nearestEntZ.toFixed(1));
       if (window._perfDiag) window._perfDiag.tag('canyon_reveal');
     }
   }
@@ -9063,7 +8966,6 @@ function _updateCanyonWalls(dt, speed) {
             if (window._canyonMatDbg) {
               const prev = m.children[0].material === _canyonWalls.cyanMat ? 'CYAN' : m.children[0].material === _canyonWalls.darkMat ? 'dark' : '?';
               const now  = wantCyan ? 'CYAN' : 'dark';
-              console.log(`[RECYCLE] side=${side} slabZ=${slabZ.toFixed(1)} posIdx=${posIdx} allCyan=${T._allCyan} allDark=${T._allDark} → ${prev}→${now}`);
             }
             if (m.children[0].material !== wantMat) m.children[0].material = wantMat;
           }

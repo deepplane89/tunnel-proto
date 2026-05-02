@@ -524,7 +524,6 @@ function _startL3KnifeCanyon() {
     window._setCanyonDirLightTarget(0);
   }
   _createCanyonWalls();
-  console.log('[L3-KNIFE] ON for ' + _L3_KNIFE_DURATION + 's');
 }
 
 // opts.immediate (default true): tear down walls right now. Pass false on the
@@ -565,7 +564,6 @@ function _stopL3KnifeCanyon(opts) {
   // holds). Writing _l3SavedSpeed here is just the one-frame bridge.
   if (state._l3SavedSpeed     !== undefined) { _setDRSpeed(state._l3SavedSpeed, 'CANYON_EXIT'); state._l3SavedSpeed = undefined; }
   if (state._l3SavedPhysLevel !== undefined) { _physLevelOverride = state._l3SavedPhysLevel; state._l3SavedPhysLevel = undefined; }
-  console.log('[L3-KNIFE] restored speed=' + state.speed.toFixed(1) + ' physOverride=' + _physLevelOverride);
   if (state._l3SavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
     camera.fov = state._l3SavedFOV;
     camera.updateProjectionMatrix();
@@ -575,7 +573,6 @@ function _stopL3KnifeCanyon(opts) {
   state.l3KnifeRampT     = 0;
   // Clear snap-lock so future entries (no lock) don't inherit it.
   state._l3KnifeSnapLocked = null;
-  console.log('[L3-KNIFE] OFF');
 }
 
 // Entry-to-active ramp tuning.
@@ -626,7 +623,6 @@ function _updateL3KnifeCanyon(dt) {
     state.l3KnifeRampT     = 0;
     // Snap to crisp L5 handling immediately — physics doesn't lerp well.
     _physLevelOverride = 4;
-    console.log('[L3-KNIFE] entry ramp start (ship at canyon mouth)');
   }
   if (state.l3KnifeRampPhase === 'ramping') {
     state.l3KnifeRampT = (state.l3KnifeRampT || 0) + dt;
@@ -641,7 +637,6 @@ function _updateL3KnifeCanyon(dt) {
     // of the game's speed-change pattern, so no manual FOV write needed here.
     if (t >= 1) {
       state.l3KnifeRampPhase = 'active';
-      console.log('[L3-KNIFE] entry ramp complete — speed=' + state.speed.toFixed(1));
     }
   }
 
@@ -652,7 +647,6 @@ function _updateL3KnifeCanyon(dt) {
     state._l3KnifeExitStarted = true;
     if (typeof _canyonActive !== 'undefined')  _canyonActive  = false;
     if (typeof _canyonExiting !== 'undefined') _canyonExiting = true;
-    console.log('[L3-KNIFE] exit scroll-out start');
   }
 
   // Auto-end after duration. No currentLevelIdx guard — in DR mode
@@ -758,35 +752,7 @@ function _startPreT4ACanyon() {
     if (!ok) console.warn('[PRE-T4A] failed to start RANDOM lightning pattern');
   }
 
-  console.log('[PRE-T4A] ON for ' + _PRE_T4A_DURATION + 's');
 
-  // ── DIAGNOSTIC: dump everything that controls sine tightness ──
-  // Fires once on canyon start, then every 2s for 10s while inside.
-  // Easy copy/paste back to the agent.
-  (function _preT4ADiag() {
-    const T = _canyonTuner;
-    let n = 0;
-    const dump = () => {
-      const lines = [
-        '════════════ PRE_T4A DIAG (t='+(state.preT4AElapsed||0).toFixed(1)+'s) ════════════',
-        'mode='+_canyonMode+'  speed='+state.speed.toFixed(2)+'  rampPhase='+(state.preT4ARampPhase||'?'),
-        'sine: period='+T.sinePeriod+'  amp='+T.sineAmp+'  speed='+T.sineSpeed+'  intensity='+T.sineIntensity,
-        'sineRamp: startI='+T.sineStartI+'  startZ='+T.sineStartZ+'  fullZ='+T.sineFullZ,
-        'halfX: override='+T.halfXOverride+'  start='+T.halfXStart+'  full='+T.halfXFull,
-        'scrollSpeed='+T.scrollSpeed+'  spawnDepth='+T.spawnDepth+'  entranceSlabs='+T.entranceSlabs,
-        'phase='+_canyonSinePhase.toFixed(3)+'  corridorGapCenter='+(state.corridorGapCenter||0).toFixed(2),
-        'effectiveScroll(u/s)='+(state.speed*T.scrollSpeed).toFixed(1)+'  cyclesPerSec='+((state.speed*T.scrollSpeed)/T.sinePeriod).toFixed(3),
-        '════════════════════════════════════════════════',
-      ];
-      console.log(lines.join('\n'));
-      window._preT4ADiagLast = lines.join('\n');
-    };
-    dump();
-    const iv = setInterval(() => {
-      if (!state.preT4ACanyon || ++n >= 5) { clearInterval(iv); return; }
-      dump();
-    }, 2000);
-  })();
 }
 
 // opts.immediate (default true): tear down walls now. Pass false on natural
@@ -832,7 +798,6 @@ function _stopPreT4ACanyon(opts) {
     camera.updateProjectionMatrix();
     state._preT4ASavedFOV = undefined;
   }
-  console.log('[PRE-T4A] OFF');
 }
 
 function _updatePreT4ACanyon(dt) {
@@ -848,7 +813,6 @@ function _updatePreT4ACanyon(dt) {
     state.preT4ARampPhase = 'ramping';
     state.preT4ARampT     = 0;
     _physLevelOverride    = 4;
-    console.log('[PRE-T4A] entry ramp start (ship at canyon mouth)');
   }
   if (state.preT4ARampPhase === 'ramping') {
     state.preT4ARampT = (state.preT4ARampT || 0) + dt;
@@ -859,7 +823,6 @@ function _updatePreT4ACanyon(dt) {
     _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4ARampPhase = 'active';
-      console.log('[PRE-T4A] entry ramp complete — speed=' + state.speed.toFixed(1));
     }
   }
 
@@ -871,7 +834,6 @@ function _updatePreT4ACanyon(dt) {
     // Also stop firing new lightning bolts — existing bolts age out via
     // _updateLightning while preT4ACanyon flag is still true.
     if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
-    console.log('[PRE-T4A] exit scroll-out start');
   }
 
   // Auto-end after duration. DR sequencer's family.isActive() returns false
@@ -957,7 +919,6 @@ function _startPreT4BCanyon() {
     if (!ok) console.warn('[PRE-T4B] failed to start RANDOM lightning pattern');
   }
 
-  console.log('[PRE-T4B] ON for ' + _PRE_T4B_DURATION + 's (preset 1, lightning freq=2.0s)');
 }
 
 // opts.immediate (default true): tear down walls now. Pass false on natural
@@ -999,7 +960,6 @@ function _stopPreT4BCanyon(opts) {
     camera.updateProjectionMatrix();
     state._preT4BSavedFOV = undefined;
   }
-  console.log('[PRE-T4B] OFF');
 }
 
 function _updatePreT4BCanyon(dt) {
@@ -1013,7 +973,6 @@ function _updatePreT4BCanyon(dt) {
     state.preT4BRampPhase = 'ramping';
     state.preT4BRampT     = 0;
     _physLevelOverride    = 4;
-    console.log('[PRE-T4B] entry ramp start (ship at canyon mouth)');
   }
   if (state.preT4BRampPhase === 'ramping') {
     state.preT4BRampT = (state.preT4BRampT || 0) + dt;
@@ -1024,7 +983,6 @@ function _updatePreT4BCanyon(dt) {
     _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4BRampPhase = 'active';
-      console.log('[PRE-T4B] entry ramp complete — speed=' + state.speed.toFixed(1));
     }
   }
 
@@ -1033,7 +991,6 @@ function _updatePreT4BCanyon(dt) {
     if (typeof _canyonActive !== 'undefined')  _canyonActive  = false;
     if (typeof _canyonExiting !== 'undefined') _canyonExiting = true;
     if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
-    console.log('[PRE-T4B] exit scroll-out start');
   }
 
   if (state.preT4BElapsed >= _PRE_T4B_DURATION) {
@@ -1640,7 +1597,6 @@ function spawnL4CorridorRow() {
       const knifeT = (curveRows - knifeStart) / (knifeEnd - knifeStart);
       const spike = 1 - Math.abs(knifeT * 2 - 1);
       baseHalfX = baseHalfX - (baseHalfX - 3) * spike;
-      if (curveRows === knifeStart) console.log('[L4-DEBUG] KNIFE-EDGE START, halfX=' + baseHalfX.toFixed(1) + ', curveRow=' + curveRows);
     }
     halfX = baseHalfX;
   }

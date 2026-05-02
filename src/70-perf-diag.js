@@ -5,7 +5,7 @@
 //  Toggle: window._perfDiagOn = false to silence.
 //  Threshold: frames >20ms log as [FREEZE]. Rolling p95/p99 every 2s as [PERF].
 // ═══════════════════════════════════════════════════════════════════════════
-window._perfDiagOn = true;
+window._perfDiagOn = false;
 const _perfDiag = (function() {
   let _frameStartTs = 0;
   let _renderStartTs = 0;

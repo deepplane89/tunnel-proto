@@ -3565,7 +3565,6 @@ function _tickAsteroidSpawner(dt) {
     window._latTickCounter = (window._latTickCounter || 0) + 1;
     if (window._latTickCounter >= 180) {
       window._latTickCounter = 0;
-      if (DEBUG_LAT) console.log('[LAT_DIAG] tick jl=1 le='+(T.lateralEnabled?1:0)
         +' rT='+_jlRampTime.toFixed(1)
         +' corridor='+(_jlCorridor && _jlCorridor.active?1:0)
         +' obs='+(window._jlActiveObstacleType||'-')
@@ -3585,7 +3584,6 @@ function _tickAsteroidSpawner(dt) {
       const offset = T.lateralMinOff + Math.random() * (T.lateralMaxOff - T.lateralMinOff);
       const sx = (state && state.shipX) || 0;
       const spawnX = sx + side * offset;
-      if (DEBUG_LAT) console.log('[LAT_FIRE] obs='+(window._jlActiveObstacleType||'ast')
         +' rT='+_jlRampTime.toFixed(1)+' side='+side+' x='+spawnX.toFixed(1));
       if (window._perfDiag) window._perfDiag.tag('lateral_ast');
       _spawnAsteroid(spawnX);
@@ -5460,7 +5458,6 @@ window._jlDebug = {
       window._ltLatTickCounter = (window._ltLatTickCounter || 0) + 1;
       if (window._ltLatTickCounter >= 180) {
         window._ltLatTickCounter = 0;
-        if (DEBUG_LAT) console.log('[LT_LAT_DIAG] en='+(_LT_LATERAL.enabled?1:0)
           +' jl='+(state._jetLightningMode?1:0)
           +' rT='+(typeof _jlRampTime!=='undefined'?_jlRampTime.toFixed(1):'?')
           +' obs='+(window._jlActiveObstacleType||'-')
@@ -5504,7 +5501,6 @@ window._jlDebug = {
     const predictedX = sx + velX * travelTime * _LT_LATERAL.leadFactor;
     const spawnX    = predictedX + side * offset;
     const landZ     = (_shipZ ? _shipZ() : 3.9) + _LT_LATERAL.spawnZ;
-    if (DEBUG_LAT) console.log('[LT_LAT_FIRE] sx='+sx.toFixed(1)+' velX='+velX.toFixed(2)
       +' predX='+predictedX.toFixed(1)+' side='+side+' off='+offset.toFixed(1)
       +' spawnX='+spawnX.toFixed(1)+' landZ='+landZ.toFixed(1));
     if (window._perfDiag) window._perfDiag.tag('lateral_lt');

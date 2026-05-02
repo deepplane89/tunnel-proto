@@ -955,7 +955,6 @@ function startDeathRun() {
           _warmScene.add(new THREE.Mesh(_warmGeo, _warmDarkMat));
           renderer.compile(_warmScene, _warmCam);
           _warmGeo.dispose(); _warmCyanMat.dispose(); _warmDarkMat.dispose();
-          console.log('[DR-PREWARM] canyon textures + shaders compiled');
         } catch (err) {
           console.warn('[DR-PREWARM] failed:', err && err.message);
         }
@@ -1554,7 +1553,6 @@ function _drSeqAdvance() {
 
   const next = DR_SEQUENCE[state.seqStageIdx];
   if (next) {
-    console.log('[SEQ] Stage ' + state.seqStageIdx + ': ' + next.name);
     _drLogEvent('seq_advance', next.name + ' | speed=' + next.speed + 'x | physTier=' + next.physTier);
     // Speed handling:
     //   • DECREASE or unchanged → apply immediately (slowdowns aren't jarring).
@@ -1917,8 +1915,6 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['build', 'peak'],
     minBand: 3,
     activate(band, role) {
-      console.log('[L3-ENTRY] knifeEnabled=' + _L3_KNIFE_ENABLED + ' knifeActive=' + !!state.l3KnifeCanyon + ' knifeDone=' + !!state.l3KnifeDone + ' corridorMode=' + !!state.corridorMode + ' isDR=' + !!state.isDeathRun + ' band=' + (band && band.label));
-      console.log('[L3-ENTRY-DIAG] activeObstacles=' + activeObstacles.length + ' activeForcefields=' + _activeForcefields.length + ' zipperActive=' + !!state.zipperActive + ' restBeat=' + (state.deathRunRestBeat||0).toFixed(2));
       // NEW: knife-canyon replacement for L3 cone corridor. Fires once per L3
       // entry; _stopL3KnifeCanyon sets l3KnifeDone=true after 40s so the DR
       // sequencer's isActive() returns false and advances to the next stage.
@@ -1963,7 +1959,6 @@ const DR_MECHANIC_FAMILIES = {
       state.l3KnifeDone     = false;
       state._l3EntryLogged  = false;
       _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START');
-      console.log('[L3-KNIFE-LOCKED] activate snap=0.1');
       try {
         _startL3KnifeCanyon();
       } catch (e) {
@@ -1976,7 +1971,6 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['build', 'peak'],
     minBand: 3,
     activate(band, role) {
-      console.log('[PRE-T4A-ENTRY] preT4AActive=' + !!state.preT4ACanyon + ' preT4ADone=' + !!state.preT4ADone);
       _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START'); // match L3 knife canyon speed for slab scroll
       try {
         _startPreT4ACanyon();
@@ -1990,7 +1984,6 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['build', 'peak'],
     minBand: 3,
     activate(band, role) {
-      console.log('[PRE-T4B-ENTRY] preT4BActive=' + !!state.preT4BCanyon + ' preT4BDone=' + !!state.preT4BDone);
       _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START');
       try {
         _startPreT4BCanyon();
@@ -2286,7 +2279,6 @@ function _drSaveSession(reason) {
       body: JSON.stringify(session)
     }).catch(() => {});
   } catch(e) {}
-  console.log('[DR-ANALYTICS] Session saved (' + _drSessionLog.length + ' events)');
   _drSessionLog = [];
 }
 
@@ -2324,7 +2316,6 @@ function _dr2DebugLog() {
     if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { bandLabel = DR2_RUN_BANDS[bi].label; break; }
   }
   const family = state._drLastMechanic || 'RANDOM_CONES';
-  console.log(`[DR] phase=${state.drPhase} band=${bandLabel} family=${family} elapsed=${elapsed}s tier=${state.deathRunSpeedTier} wave#${state.drWaveCount}`);
   _drLogEvent('phase', `${state.drPhase} | ${bandLabel} | ${family}`);
 }
 
@@ -3565,7 +3556,6 @@ function killPlayer() {
           // Leave _seqCorridorStarted=true so DR sequencer keeps waiting on
           // isActive() until the fresh 40s canyon finishes.
           _startL3KnifeCanyon();
-          console.log('[L3-KNIFE] repaired — canyon restarted from scratch');
         } else if (state._deathCorridorType === 'l3') {
           state.corridorMode = true; state.corridorSpawnZ = -7; state.corridorRowsDone = 0; state.corridorSineT = 0;
         } else if (state._deathCorridorType === 'l4') {
@@ -4932,9 +4922,7 @@ function update(dt) {
       if (state.l4SpawnZ >= 0) {
         state.l4SpawnZ = -7 + (Math.random() - 0.5) * 2;
         spawnL4CorridorRow(); // increments l4RowsDone internally
-        if (state.l4RowsDone % 50 === 0) console.log('[L4-DEBUG] row ' + state.l4RowsDone + '/' + (state._drL4MaxRows || 999));
         if (state.l4RowsDone >= (state._drL4MaxRows || 999)) {
-          console.log('[L4-DEBUG] ENDED at row ' + state.l4RowsDone);
           state.l4CorridorActive = false;
         }
       }
@@ -6028,7 +6016,6 @@ window.addEventListener('keydown', (e) => {
         _canyonSavedDirLight = null;
       }
       _canyonMode = 0;
-      console.log('[L4-RECREATION] OFF');
       if (panelVisible) buildPanel();
       return;
     }
@@ -6081,7 +6068,6 @@ window.addEventListener('keydown', (e) => {
       dirLight.intensity = 0;
     }
     _createCanyonWalls();
-    console.log('[L4-RECREATION] ON — flag=true, mode=1, rampCompress=' + _canyonTuner._l4RampCompress + ', ampScale=' + _canyonTuner._l4AmpScale);
     if (panelVisible) buildPanel();
   });
 })();

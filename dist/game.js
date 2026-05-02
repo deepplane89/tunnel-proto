@@ -421,7 +421,6 @@ function _setDRSpeed(value, trigger) {
   if (window.DEBUG_DR_SPEED) {
     const prev = state.speed;
     if (Math.abs(prev - value) > 0.01) {
-      console.log(`[DR_SPEED] ${prev.toFixed(2)} → ${value.toFixed(2)} (${trigger})`);
     }
   }
   state.speed = value;
@@ -6314,7 +6313,6 @@ function _loadAltShip(glbFile, skinDef, callback) {
       }
     });
     window._mkPodAnchor = _bestPodNode;
-    if (_bestPodNode) console.log('[POD ANCHOR]', _bestPodNode.name || '(unnamed)', 'localZ centroid=', _bestPodCentroidZ.toFixed(3));
     model.visible = false; // hidden until skin is applied
     shipGroup.add(model);
     // Set up AnimationMixer if GLB has animations
@@ -6328,7 +6326,6 @@ function _loadAltShip(glbFile, skinDef, callback) {
         action.clampWhenFinished = true;
         clips[clip.name] = action;
       });
-      console.log('[ALT SHIP] Animations:', Object.keys(clips).join(', '));
       // Snap hatch/door/landing-gear animations to CLOSED (end frame) for flight mode
       const _closeAnims = [
         'Cargo_DoorAction', 'Cargo_Door_AAction',
@@ -6366,7 +6363,6 @@ function _loadAltShip(glbFile, skinDef, callback) {
         renderer.compile(scene, camera);
       }
     } catch (e) { /* non-fatal */ }
-    console.log('[ALT SHIP] Loaded:', glbFile);
     if (callback) callback();
   }, undefined, (err) => {
     console.error('[ALT SHIP] Failed to load:', err);
@@ -7407,81 +7403,6 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // ── Cone↔GLB diagnostic logging (throttled) ──
       // Log the live cone world position vs the GLB-derived true thruster anchor so the
       // cone-to-GLB spatial relationship is observable regardless of how shipGroup transforms.
-      // Default ON for the parallax investigation; set window._coneDiag = false to silence.
-      if (window._coneDiag !== false) {
-        window._coneDiagLast = window._coneDiagLast || 0;
-        const _now = performance.now();
-        if (_now - window._coneDiagLast > 500) {
-          window._coneDiagLast = _now;
-          // Cone world pos: use shipGroup.matrixWorld since cone is shipGroup-parented
-          const _coneWorld = cone.getWorldPosition(new THREE.Vector3());
-          // GLB anchor (in NOZZLE_OFFSETS world-at-default-pose space) → ship local → world
-          const _glbAnchor = _GLB_NOZZLE_ANCHORS[idx];
-          const _glbLocal = new THREE.Vector3(
-            _glbAnchor.x / 0.30,
-            (_glbAnchor.y - 0.28) / 0.30,
-            (_glbAnchor.z - 4.5) / 0.30
-          );
-          const _glbWorld = _glbLocal.clone().applyMatrix4(shipGroup.matrixWorld);
-          const _dx = _coneWorld.x - _glbWorld.x;
-          const _dy = _coneWorld.y - _glbWorld.y;
-          const _dz = _coneWorld.z - _glbWorld.z;
-          // ALSO compute the visible-wingtip-thruster anchor (Object_5 rear face)
-          // and project both points to screen space. Parallax-theory test: if the
-          // cone and the visible thruster are on the same camera ray at zero roll,
-          // their screen-pixel positions will match. Any camera-angle change
-          // (turn/roll) should produce a screen-pixel Δ proportional to depth gap.
-          const _visAnchor = _GLB_VISIBLE_THRUSTER[idx];
-          const _visLocal = new THREE.Vector3(
-            _visAnchor.x / 0.30,
-            (_visAnchor.y - 0.28) / 0.30,
-            (_visAnchor.z - 4.5) / 0.30
-          );
-          const _visWorld = _visLocal.clone().applyMatrix4(shipGroup.matrixWorld);
-          const _toScreen = (wp) => {
-            const v = wp.clone().project(camera); // NDC: x,y in [-1,1]
-            const w = (typeof renderer !== 'undefined' && renderer.domElement) ? renderer.domElement.clientWidth  : window.innerWidth;
-            const h = (typeof renderer !== 'undefined' && renderer.domElement) ? renderer.domElement.clientHeight : window.innerHeight;
-            return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h };
-          };
-          const _coneScr = _toScreen(_coneWorld);
-          const _visScr  = _toScreen(_visWorld);
-          const _spx = _coneScr.x - _visScr.x;
-          const _spy = _coneScr.y - _visScr.y;
-          const _side = idx === 0 ? 'L' : 'R';
-          // ── Live pod anchor (GLB-internal node) to test internal-drift theory ──
-          // If cone is rigid with shipGroup AND pod is rigid with shipGroup, the
-          // SHIP-LOCAL Δ (cone_local − pod_local) must be constant frame-to-frame.
-          // Variation = proof of internal drift. We compute ship-local by
-          // applying shipGroup.matrixWorld inverse to both world positions.
-          let _podStr = '';
-          let _coneScrStr = `cone(scr) ${_coneScr.x.toFixed(0)},${_coneScr.y.toFixed(0)}`;
-          let _podScrStr = '';
-          let _nozScrStr = '';
-          if (window._mkPodAnchor) {
-            const _podWorld = window._mkPodAnchor.getWorldPosition(new THREE.Vector3());
-            const _coneShipLocal = shipGroup.worldToLocal(_coneWorld.clone());
-            const _podShipLocal  = shipGroup.worldToLocal(_podWorld.clone());
-            const _ldx = _coneShipLocal.x - _podShipLocal.x;
-            const _ldy = _coneShipLocal.y - _podShipLocal.y;
-            const _ldz = _coneShipLocal.z - _podShipLocal.z;
-            _podStr = ` | shipLocalΔ ${_ldx>=0?'+':''}${_ldx.toFixed(3)},${_ldy>=0?'+':''}${_ldy.toFixed(3)},${_ldz>=0?'+':''}${_ldz.toFixed(3)}`;
-            const _podScr = _toScreen(_podWorld);
-            _podScrStr = ` | pod(scr) ${_podScr.x.toFixed(0)},${_podScr.y.toFixed(0)} (Δcone→pod ${(_podScr.x-_coneScr.x>=0?'+':'')}${(_podScr.x-_coneScr.x).toFixed(0)},${(_podScr.y-_coneScr.y>=0?'+':'')}${(_podScr.y-_coneScr.y).toFixed(0)})`;
-          }
-          // Particle nozzle origin (where the engine particles spawn from)
-          if (typeof _localNozzles !== 'undefined' && _localNozzles && _localNozzles[idx]) {
-            const _nozWorld = _localNozzles[idx].clone().applyMatrix4(shipGroup.matrixWorld);
-            const _nozScr = _toScreen(_nozWorld);
-            _nozScrStr = ` | noz(scr) ${_nozScr.x.toFixed(0)},${_nozScr.y.toFixed(0)} (Δcone→noz ${(_nozScr.x-_coneScr.x>=0?'+':'')}${(_nozScr.x-_coneScr.x).toFixed(0)},${(_nozScr.y-_coneScr.y>=0?'+':'')}${(_nozScr.y-_coneScr.y).toFixed(0)})`;
-          }
-          console.log(
-            `[coneDiag ${_side}] ${_coneScrStr} | ` +
-            `pitch=${shipGroup.rotation.x.toFixed(2)} yaw=${shipGroup.rotation.y.toFixed(2)} roll=${shipGroup.rotation.z.toFixed(2)}` +
-            _podScrStr + _nozScrStr + _podStr
-          );
-        }
-      }
       cone.rotation.set(Math.PI / 2 + ct.rotX, ct.rotY, ct.rotZ);
       cone.scale.set(ct.radius, ct.length * tp, ct.radius);
       // Update shader uniforms from live slider values
@@ -8734,7 +8655,6 @@ function _buildCanyonSlabGeo(seed, thickOverride, snapOverride) {
 
 function _createCanyonWalls() {
   if (_canyonWalls) return;
-  console.warn('[CANYON] _createCanyonWalls called — manual:', _canyonManual, '| stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonDbgFrame = 0; _canyonDbgLastNearestRot = null; _canyonDbgStartTime = null;
   const T = _canyonTuner;
   // Defensive clamp: canyons must never have more than 1 entry slab. Some
@@ -8928,30 +8848,21 @@ function _createCanyonWalls() {
       }
     });
   });
-  console.log('[INIT] sineIntensity=', _canyonTuner.sineIntensity, 'sinePhase=', _canyonSinePhase);
-  console.log('[INIT] SPACING='+SPACING+' initCount='+initCount+' autoPool='+autoPool+' entranceSlabs='+T.entranceSlabs+' entranceThick='+T.entranceThick+' spawnDepth='+T.spawnDepth);
 
   // ==== SPAWN DUMP: where every slab actually starts on the Z axis ====
   // Camera far clip ~600, camera at z=9, so slabs past z=-591 are frustum-culled.
   const _leftSorted = [...chunks.left].sort((a,b) => b.position.z - a.position.z);
   const _ent = _leftSorted.filter(p => p.userData.isEntrance);
   const _reg = _leftSorted.filter(p => !p.userData.isEntrance);
-  console.log('[SPAWN] ===== LEFT SIDE SLAB Z POSITIONS =====');
-  console.log('[SPAWN] entrance count='+_ent.length+' regular count='+_reg.length);
   _ent.forEach((p, i) => {
-    console.log('[SPAWN ENT] '+i+' z='+p.position.z.toFixed(1)+' x='+p.position.x.toFixed(1)+' visible='+p.visible);
   });
   _reg.forEach((p, i) => {
     const beyondFarClip = p.position.z < -591;
-    console.log('[SPAWN REG] '+i+' z='+p.position.z.toFixed(1)+' x='+p.position.x.toFixed(1)+' visible='+p.visible+(beyondFarClip?' [BEYOND FAR CLIP]':''));
   });
   if (_reg.length > 0) {
     const zMax = _reg[0].position.z;
     const zMin = _reg[_reg.length-1].position.z;
-    console.log('[SPAWN] regular Z range: max(closest to ship)='+zMax.toFixed(1)+' min(farthest)='+zMin.toFixed(1)+' span='+(zMax-zMin).toFixed(1));
-    console.log('[SPAWN] expected: closest regular should be just behind last entrance (entrance at z=-150,-170,-190), farthest regular near spawnDepth='+T.spawnDepth);
   }
-  console.log('[SPAWN] =====================================');
 
   _canyonWalls = {
     strips:       [...chunks.left, ...chunks.right],
@@ -8994,7 +8905,6 @@ function _createCanyonWalls() {
       }
     }
     renderer.compile(_warmScene, _warmCam);
-    console.log('[CANYON PREWARM] compiled '+_seenGeos.size+' unique geometries (shaders compile on first use)');
     if (window._perfDiag) window._perfDiag.tag('canyon_prewarm', _seenGeos.size+'geos');
     // Don't dispose proxy geometries — they reference real slab geometries still in use
     // _warmScene goes out of scope, proxy meshes GC naturally
@@ -9005,7 +8915,6 @@ function _createCanyonWalls() {
 
 function _destroyCanyonWalls() {
   if (!_canyonWalls) return;
-  console.warn('[CANYON] _destroyCanyonWalls called — stack:', new Error().stack.split('\n').slice(1,5).join(' | '));
   _canyonSinePhase = 0;
   _l4RowsElapsed    = 0;
   _canyonExiting    = false;
@@ -9123,7 +9032,6 @@ function _debugCanyonNearShip() {
       const src = s.m.userData.bakedAtZ ? 'R' : 'I';
       return `i${idx}[${src}] z=${z.toFixed(1)} yawPred=${yawPredDeg.toFixed(1)} yawBaked=${yawBakedDeg.toFixed(1)} dx=${dx.toFixed(2)}`;
     });
-    console.log(`[NEAR ${k.toUpperCase()}] ${entries.join(' | ')}`);
   });
 }
 
@@ -9164,14 +9072,12 @@ function _updateCanyonWalls(dt, speed) {
   if (DEBUG_CANYON && _canyonDbgFrame % 120 === 0) {
     const spacing2 = _canyonWalls._spacing;
     // Global snapshot
-    console.log(`[CANYON SNAP] t=${_canyonElapsed}s frame=${_canyonDbgFrame} phase=${_canyonSinePhase.toFixed(3)} pool=${_canyonWalls.left.length}`);
 
     // Coverage check
     const allZ = _canyonWalls.left.concat(_canyonWalls.right)
       .filter(m => m.visible).map(m => m.position.z).sort((a,b)=>a-b);
     const minZ = allZ.length ? allZ[0].toFixed(1) : '?';
     const maxZ = allZ.length ? allZ[allZ.length-1].toFixed(1) : '?';
-    console.log(`[COVERAGE] slabsZ=[${minZ},${maxZ}] count=${allZ.length}`);
 
     // Nearest slab detail
     let nearestM = null, nearestDist = Infinity;
@@ -9188,10 +9094,8 @@ function _updateCanyonWalls(dt, speed) {
       const dx2        = _canyonXAtZ(nearestM.position.z + spacing2) - _canyonXAtZ(nearestM.position.z);
       const correctRot = (Math.atan2(dx2, spacing2) * 180 / Math.PI).toFixed(2);
       const src        = nearestM.userData.bakedAtZ ? 'RECYCLED' : 'INIT';
-      console.log(`[NEAREST] z=${nearZ2} rot=${nearRot}° correct=${correctRot}° bakedAtZ=${nearBaked} bakedRot=${nearBRot}° src=${src}`);
       if (_canyonDbgLastNearestRot !== null) {
         const delta = Math.abs(parseFloat(nearRot) - _canyonDbgLastNearestRot);
-        if (delta < 1.0) console.warn(`[STRAIGHT?] t=${_canyonElapsed}s rot=${nearRot}° stuck (delta=${delta.toFixed(2)}°) src=${src}`);
       }
       _canyonDbgLastNearestRot = parseFloat(nearRot);
     }
@@ -9228,7 +9132,6 @@ function _updateCanyonWalls(dt, speed) {
       _canyonWalls._corridorRevealed = true;
       _canyonWalls.left.forEach(m => { if (!m.userData.isEntrance) m.visible = true; });
       _canyonWalls.right.forEach(m => { if (!m.userData.isEntrance) m.visible = true; });
-      console.log('[CANYON] corridor revealed at entrance Z='+nearestEntZ.toFixed(1));
       if (window._perfDiag) window._perfDiag.tag('canyon_reveal');
     }
   }
@@ -9325,7 +9228,6 @@ function _updateCanyonWalls(dt, speed) {
             if (window._canyonMatDbg) {
               const prev = m.children[0].material === _canyonWalls.cyanMat ? 'CYAN' : m.children[0].material === _canyonWalls.darkMat ? 'dark' : '?';
               const now  = wantCyan ? 'CYAN' : 'dark';
-              console.log(`[RECYCLE] side=${side} slabZ=${slabZ.toFixed(1)} posIdx=${posIdx} allCyan=${T._allCyan} allDark=${T._allDark} → ${prev}→${now}`);
             }
             if (m.children[0].material !== wantMat) m.children[0].material = wantMat;
           }
@@ -11037,7 +10939,6 @@ function _startL3KnifeCanyon() {
     window._setCanyonDirLightTarget(0);
   }
   _createCanyonWalls();
-  console.log('[L3-KNIFE] ON for ' + _L3_KNIFE_DURATION + 's');
 }
 
 // opts.immediate (default true): tear down walls right now. Pass false on the
@@ -11078,7 +10979,6 @@ function _stopL3KnifeCanyon(opts) {
   // holds). Writing _l3SavedSpeed here is just the one-frame bridge.
   if (state._l3SavedSpeed     !== undefined) { _setDRSpeed(state._l3SavedSpeed, 'CANYON_EXIT'); state._l3SavedSpeed = undefined; }
   if (state._l3SavedPhysLevel !== undefined) { _physLevelOverride = state._l3SavedPhysLevel; state._l3SavedPhysLevel = undefined; }
-  console.log('[L3-KNIFE] restored speed=' + state.speed.toFixed(1) + ' physOverride=' + _physLevelOverride);
   if (state._l3SavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
     camera.fov = state._l3SavedFOV;
     camera.updateProjectionMatrix();
@@ -11088,7 +10988,6 @@ function _stopL3KnifeCanyon(opts) {
   state.l3KnifeRampT     = 0;
   // Clear snap-lock so future entries (no lock) don't inherit it.
   state._l3KnifeSnapLocked = null;
-  console.log('[L3-KNIFE] OFF');
 }
 
 // Entry-to-active ramp tuning.
@@ -11139,7 +11038,6 @@ function _updateL3KnifeCanyon(dt) {
     state.l3KnifeRampT     = 0;
     // Snap to crisp L5 handling immediately — physics doesn't lerp well.
     _physLevelOverride = 4;
-    console.log('[L3-KNIFE] entry ramp start (ship at canyon mouth)');
   }
   if (state.l3KnifeRampPhase === 'ramping') {
     state.l3KnifeRampT = (state.l3KnifeRampT || 0) + dt;
@@ -11154,7 +11052,6 @@ function _updateL3KnifeCanyon(dt) {
     // of the game's speed-change pattern, so no manual FOV write needed here.
     if (t >= 1) {
       state.l3KnifeRampPhase = 'active';
-      console.log('[L3-KNIFE] entry ramp complete — speed=' + state.speed.toFixed(1));
     }
   }
 
@@ -11165,7 +11062,6 @@ function _updateL3KnifeCanyon(dt) {
     state._l3KnifeExitStarted = true;
     if (typeof _canyonActive !== 'undefined')  _canyonActive  = false;
     if (typeof _canyonExiting !== 'undefined') _canyonExiting = true;
-    console.log('[L3-KNIFE] exit scroll-out start');
   }
 
   // Auto-end after duration. No currentLevelIdx guard — in DR mode
@@ -11271,35 +11167,7 @@ function _startPreT4ACanyon() {
     if (!ok) console.warn('[PRE-T4A] failed to start RANDOM lightning pattern');
   }
 
-  console.log('[PRE-T4A] ON for ' + _PRE_T4A_DURATION + 's');
 
-  // ── DIAGNOSTIC: dump everything that controls sine tightness ──
-  // Fires once on canyon start, then every 2s for 10s while inside.
-  // Easy copy/paste back to the agent.
-  (function _preT4ADiag() {
-    const T = _canyonTuner;
-    let n = 0;
-    const dump = () => {
-      const lines = [
-        '════════════ PRE_T4A DIAG (t='+(state.preT4AElapsed||0).toFixed(1)+'s) ════════════',
-        'mode='+_canyonMode+'  speed='+state.speed.toFixed(2)+'  rampPhase='+(state.preT4ARampPhase||'?'),
-        'sine: period='+T.sinePeriod+'  amp='+T.sineAmp+'  speed='+T.sineSpeed+'  intensity='+T.sineIntensity,
-        'sineRamp: startI='+T.sineStartI+'  startZ='+T.sineStartZ+'  fullZ='+T.sineFullZ,
-        'halfX: override='+T.halfXOverride+'  start='+T.halfXStart+'  full='+T.halfXFull,
-        'scrollSpeed='+T.scrollSpeed+'  spawnDepth='+T.spawnDepth+'  entranceSlabs='+T.entranceSlabs,
-        'phase='+_canyonSinePhase.toFixed(3)+'  corridorGapCenter='+(state.corridorGapCenter||0).toFixed(2),
-        'effectiveScroll(u/s)='+(state.speed*T.scrollSpeed).toFixed(1)+'  cyclesPerSec='+((state.speed*T.scrollSpeed)/T.sinePeriod).toFixed(3),
-        '════════════════════════════════════════════════',
-      ];
-      console.log(lines.join('\n'));
-      window._preT4ADiagLast = lines.join('\n');
-    };
-    dump();
-    const iv = setInterval(() => {
-      if (!state.preT4ACanyon || ++n >= 5) { clearInterval(iv); return; }
-      dump();
-    }, 2000);
-  })();
 }
 
 // opts.immediate (default true): tear down walls now. Pass false on natural
@@ -11345,7 +11213,6 @@ function _stopPreT4ACanyon(opts) {
     camera.updateProjectionMatrix();
     state._preT4ASavedFOV = undefined;
   }
-  console.log('[PRE-T4A] OFF');
 }
 
 function _updatePreT4ACanyon(dt) {
@@ -11361,7 +11228,6 @@ function _updatePreT4ACanyon(dt) {
     state.preT4ARampPhase = 'ramping';
     state.preT4ARampT     = 0;
     _physLevelOverride    = 4;
-    console.log('[PRE-T4A] entry ramp start (ship at canyon mouth)');
   }
   if (state.preT4ARampPhase === 'ramping') {
     state.preT4ARampT = (state.preT4ARampT || 0) + dt;
@@ -11372,7 +11238,6 @@ function _updatePreT4ACanyon(dt) {
     _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4ARampPhase = 'active';
-      console.log('[PRE-T4A] entry ramp complete — speed=' + state.speed.toFixed(1));
     }
   }
 
@@ -11384,7 +11249,6 @@ function _updatePreT4ACanyon(dt) {
     // Also stop firing new lightning bolts — existing bolts age out via
     // _updateLightning while preT4ACanyon flag is still true.
     if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
-    console.log('[PRE-T4A] exit scroll-out start');
   }
 
   // Auto-end after duration. DR sequencer's family.isActive() returns false
@@ -11470,7 +11334,6 @@ function _startPreT4BCanyon() {
     if (!ok) console.warn('[PRE-T4B] failed to start RANDOM lightning pattern');
   }
 
-  console.log('[PRE-T4B] ON for ' + _PRE_T4B_DURATION + 's (preset 1, lightning freq=2.0s)');
 }
 
 // opts.immediate (default true): tear down walls now. Pass false on natural
@@ -11512,7 +11375,6 @@ function _stopPreT4BCanyon(opts) {
     camera.updateProjectionMatrix();
     state._preT4BSavedFOV = undefined;
   }
-  console.log('[PRE-T4B] OFF');
 }
 
 function _updatePreT4BCanyon(dt) {
@@ -11526,7 +11388,6 @@ function _updatePreT4BCanyon(dt) {
     state.preT4BRampPhase = 'ramping';
     state.preT4BRampT     = 0;
     _physLevelOverride    = 4;
-    console.log('[PRE-T4B] entry ramp start (ship at canyon mouth)');
   }
   if (state.preT4BRampPhase === 'ramping') {
     state.preT4BRampT = (state.preT4BRampT || 0) + dt;
@@ -11537,7 +11398,6 @@ function _updatePreT4BCanyon(dt) {
     _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4BRampPhase = 'active';
-      console.log('[PRE-T4B] entry ramp complete — speed=' + state.speed.toFixed(1));
     }
   }
 
@@ -11546,7 +11406,6 @@ function _updatePreT4BCanyon(dt) {
     if (typeof _canyonActive !== 'undefined')  _canyonActive  = false;
     if (typeof _canyonExiting !== 'undefined') _canyonExiting = true;
     if (typeof window._stopLtPattern === 'function') window._stopLtPattern();
-    console.log('[PRE-T4B] exit scroll-out start');
   }
 
   if (state.preT4BElapsed >= _PRE_T4B_DURATION) {
@@ -12153,7 +12012,6 @@ function spawnL4CorridorRow() {
       const knifeT = (curveRows - knifeStart) / (knifeEnd - knifeStart);
       const spike = 1 - Math.abs(knifeT * 2 - 1);
       baseHalfX = baseHalfX - (baseHalfX - 3) * spike;
-      if (curveRows === knifeStart) console.log('[L4-DEBUG] KNIFE-EDGE START, halfX=' + baseHalfX.toFixed(1) + ', curveRow=' + curveRows);
     }
     halfX = baseHalfX;
   }
@@ -14295,7 +14153,6 @@ window.addEventListener('keydown', e => {
         const _fadeMs = (_t === 'l4') ? 2000 : 2000;
         musicFadeTo(_t, _fadeMs);
       }
-      console.log('[SEQ-DEBUG] Jump to stage ' + idx + ': ' + s.name);
     };
     if (e.shiftKey && _shiftDigitNameMap[_digit]) {
       if (_shiftDigitNameMap[_digit] === 'ENDLESS') {
@@ -14361,7 +14218,6 @@ window.addEventListener('keydown', e => {
         _setDRSpeed(BASE_SPEED * (LEVELS[Math.min((state.deathRunSpeedTier || 0) + 1, 4)].speedMult), 'RING_PAUSE');
       }
       _ringShowTuner();
-      console.log('[DR-DEBUG] Ring tuner toggled. Rings: ' + _bonusRings.length);
     }
   }
   // P = force custom pattern (DR only)
@@ -14374,7 +14230,6 @@ window.addEventListener('keydown', e => {
         state._seqCorridorStarted = false; state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
         state._seqVibeApplied = -1;
         _setDRSpeed(BASE_SPEED * _s.speed, 'KONAMI');
-        console.log('[SEQ-DEBUG] Jump to ENDLESS via P');
       }
     }
   }
@@ -14404,7 +14259,6 @@ window.addEventListener('keydown', e => {
         clearAllCorridorFlags(); state.deathRunRestBeat = 0;
         state.drPhase = 'BUILD'; state.drPhaseTimer = 0; state.drPhaseDuration = 0;
         fam.activate(_forceBand, 'build');
-        console.log('[DR-DEBUG] Forced ' + famKey);
       }
     }
   }
@@ -14635,7 +14489,6 @@ window.addEventListener('keyup', e => {
     // Give plenty of fuel to buy upgrades
     saveFuelCells(loadFuelCells() + 99999);
     updateTitleFuelCells();
-    console.log('[ADMIN] Full shop unlocked');
   }
   if (skinLabel) {
     skinLabel.addEventListener('touchstart', e => {
@@ -16301,7 +16154,6 @@ function startDeathRun() {
           _warmScene.add(new THREE.Mesh(_warmGeo, _warmDarkMat));
           renderer.compile(_warmScene, _warmCam);
           _warmGeo.dispose(); _warmCyanMat.dispose(); _warmDarkMat.dispose();
-          console.log('[DR-PREWARM] canyon textures + shaders compiled');
         } catch (err) {
           console.warn('[DR-PREWARM] failed:', err && err.message);
         }
@@ -16900,7 +16752,6 @@ function _drSeqAdvance() {
 
   const next = DR_SEQUENCE[state.seqStageIdx];
   if (next) {
-    console.log('[SEQ] Stage ' + state.seqStageIdx + ': ' + next.name);
     _drLogEvent('seq_advance', next.name + ' | speed=' + next.speed + 'x | physTier=' + next.physTier);
     // Speed handling:
     //   • DECREASE or unchanged → apply immediately (slowdowns aren't jarring).
@@ -17263,8 +17114,6 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['build', 'peak'],
     minBand: 3,
     activate(band, role) {
-      console.log('[L3-ENTRY] knifeEnabled=' + _L3_KNIFE_ENABLED + ' knifeActive=' + !!state.l3KnifeCanyon + ' knifeDone=' + !!state.l3KnifeDone + ' corridorMode=' + !!state.corridorMode + ' isDR=' + !!state.isDeathRun + ' band=' + (band && band.label));
-      console.log('[L3-ENTRY-DIAG] activeObstacles=' + activeObstacles.length + ' activeForcefields=' + _activeForcefields.length + ' zipperActive=' + !!state.zipperActive + ' restBeat=' + (state.deathRunRestBeat||0).toFixed(2));
       // NEW: knife-canyon replacement for L3 cone corridor. Fires once per L3
       // entry; _stopL3KnifeCanyon sets l3KnifeDone=true after 40s so the DR
       // sequencer's isActive() returns false and advances to the next stage.
@@ -17309,7 +17158,6 @@ const DR_MECHANIC_FAMILIES = {
       state.l3KnifeDone     = false;
       state._l3EntryLogged  = false;
       _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START');
-      console.log('[L3-KNIFE-LOCKED] activate snap=0.1');
       try {
         _startL3KnifeCanyon();
       } catch (e) {
@@ -17322,7 +17170,6 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['build', 'peak'],
     minBand: 3,
     activate(band, role) {
-      console.log('[PRE-T4A-ENTRY] preT4AActive=' + !!state.preT4ACanyon + ' preT4ADone=' + !!state.preT4ADone);
       _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START'); // match L3 knife canyon speed for slab scroll
       try {
         _startPreT4ACanyon();
@@ -17336,7 +17183,6 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['build', 'peak'],
     minBand: 3,
     activate(band, role) {
-      console.log('[PRE-T4B-ENTRY] preT4BActive=' + !!state.preT4BCanyon + ' preT4BDone=' + !!state.preT4BDone);
       _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START');
       try {
         _startPreT4BCanyon();
@@ -17632,7 +17478,6 @@ function _drSaveSession(reason) {
       body: JSON.stringify(session)
     }).catch(() => {});
   } catch(e) {}
-  console.log('[DR-ANALYTICS] Session saved (' + _drSessionLog.length + ' events)');
   _drSessionLog = [];
 }
 
@@ -17670,7 +17515,6 @@ function _dr2DebugLog() {
     if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { bandLabel = DR2_RUN_BANDS[bi].label; break; }
   }
   const family = state._drLastMechanic || 'RANDOM_CONES';
-  console.log(`[DR] phase=${state.drPhase} band=${bandLabel} family=${family} elapsed=${elapsed}s tier=${state.deathRunSpeedTier} wave#${state.drWaveCount}`);
   _drLogEvent('phase', `${state.drPhase} | ${bandLabel} | ${family}`);
 }
 
@@ -18911,7 +18755,6 @@ function killPlayer() {
           // Leave _seqCorridorStarted=true so DR sequencer keeps waiting on
           // isActive() until the fresh 40s canyon finishes.
           _startL3KnifeCanyon();
-          console.log('[L3-KNIFE] repaired — canyon restarted from scratch');
         } else if (state._deathCorridorType === 'l3') {
           state.corridorMode = true; state.corridorSpawnZ = -7; state.corridorRowsDone = 0; state.corridorSineT = 0;
         } else if (state._deathCorridorType === 'l4') {
@@ -20278,9 +20121,7 @@ function update(dt) {
       if (state.l4SpawnZ >= 0) {
         state.l4SpawnZ = -7 + (Math.random() - 0.5) * 2;
         spawnL4CorridorRow(); // increments l4RowsDone internally
-        if (state.l4RowsDone % 50 === 0) console.log('[L4-DEBUG] row ' + state.l4RowsDone + '/' + (state._drL4MaxRows || 999));
         if (state.l4RowsDone >= (state._drL4MaxRows || 999)) {
-          console.log('[L4-DEBUG] ENDED at row ' + state.l4RowsDone);
           state.l4CorridorActive = false;
         }
       }
@@ -21374,7 +21215,6 @@ window.addEventListener('keydown', (e) => {
         _canyonSavedDirLight = null;
       }
       _canyonMode = 0;
-      console.log('[L4-RECREATION] OFF');
       if (panelVisible) buildPanel();
       return;
     }
@@ -21427,7 +21267,6 @@ window.addEventListener('keydown', (e) => {
       dirLight.intensity = 0;
     }
     _createCanyonWalls();
-    console.log('[L4-RECREATION] ON — flag=true, mode=1, rampCompress=' + _canyonTuner._l4RampCompress + ', ampScale=' + _canyonTuner._l4AmpScale);
     if (panelVisible) buildPanel();
   });
 })();
@@ -21519,7 +21358,7 @@ const _fpsEl = document.getElementById('fps-overlay');
 //  Toggle: window._perfDiagOn = false to silence.
 //  Threshold: frames >20ms log as [FREEZE]. Rolling p95/p99 every 2s as [PERF].
 // ═══════════════════════════════════════════════════════════════════════════
-window._perfDiagOn = true;
+window._perfDiagOn = false;
 const _perfDiag = (function() {
   let _frameStartTs = 0;
   let _renderStartTs = 0;
@@ -25590,7 +25429,6 @@ function _tickAsteroidSpawner(dt) {
     window._latTickCounter = (window._latTickCounter || 0) + 1;
     if (window._latTickCounter >= 180) {
       window._latTickCounter = 0;
-      if (DEBUG_LAT) console.log('[LAT_DIAG] tick jl=1 le='+(T.lateralEnabled?1:0)
         +' rT='+_jlRampTime.toFixed(1)
         +' corridor='+(_jlCorridor && _jlCorridor.active?1:0)
         +' obs='+(window._jlActiveObstacleType||'-')
@@ -25610,7 +25448,6 @@ function _tickAsteroidSpawner(dt) {
       const offset = T.lateralMinOff + Math.random() * (T.lateralMaxOff - T.lateralMinOff);
       const sx = (state && state.shipX) || 0;
       const spawnX = sx + side * offset;
-      if (DEBUG_LAT) console.log('[LAT_FIRE] obs='+(window._jlActiveObstacleType||'ast')
         +' rT='+_jlRampTime.toFixed(1)+' side='+side+' x='+spawnX.toFixed(1));
       if (window._perfDiag) window._perfDiag.tag('lateral_ast');
       _spawnAsteroid(spawnX);
@@ -27485,7 +27322,6 @@ window._jlDebug = {
       window._ltLatTickCounter = (window._ltLatTickCounter || 0) + 1;
       if (window._ltLatTickCounter >= 180) {
         window._ltLatTickCounter = 0;
-        if (DEBUG_LAT) console.log('[LT_LAT_DIAG] en='+(_LT_LATERAL.enabled?1:0)
           +' jl='+(state._jetLightningMode?1:0)
           +' rT='+(typeof _jlRampTime!=='undefined'?_jlRampTime.toFixed(1):'?')
           +' obs='+(window._jlActiveObstacleType||'-')
@@ -27529,7 +27365,6 @@ window._jlDebug = {
     const predictedX = sx + velX * travelTime * _LT_LATERAL.leadFactor;
     const spawnX    = predictedX + side * offset;
     const landZ     = (_shipZ ? _shipZ() : 3.9) + _LT_LATERAL.spawnZ;
-    if (DEBUG_LAT) console.log('[LT_LAT_FIRE] sx='+sx.toFixed(1)+' velX='+velX.toFixed(2)
       +' predX='+predictedX.toFixed(1)+' side='+side+' off='+offset.toFixed(1)
       +' spawnX='+spawnX.toFixed(1)+' landZ='+landZ.toFixed(1));
     if (window._perfDiag) window._perfDiag.tag('lateral_lt');
@@ -28158,7 +27993,6 @@ window._jlDebug = {
       renderer.compile(titleScene, camera);
     }
     const dt = ((typeof performance !== 'undefined') ? performance.now() : 0) - t0;
-    console.log('[PREWARM] global shader prewarm complete in ' + dt.toFixed(0) + 'ms');
     status('PREWARM', 95);
   } catch (err) {
     // Non-fatal — lazy compilation will still happen, we just lose the
