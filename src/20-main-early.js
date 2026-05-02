@@ -6249,6 +6249,17 @@ const NOZZLE_OFFSETS = [
   new THREE.Vector3(-0.48, 0.05, 5.10),  // left pod back-bottom
   new THREE.Vector3( 0.48, 0.05, 5.10),  // right pod back-bottom
 ];
+// User-tuned per-pose nozzle positions for signed-pitch pose-blend (Runner default).
+// Pose-blend interpolates _localNozzles between NOZZLE_OFFSETS (zero pitch) and these
+// targets at full pitch (±π/2). See the pose-blend block in the per-frame loop.
+window._nozPoseDown = [
+  new THREE.Vector3(-0.55, 0.10, 5.16),  // left  @ pitch-down
+  new THREE.Vector3( 0.40, 0.09, 5.10),  // right @ pitch-down
+];
+window._nozPoseUp = [
+  new THREE.Vector3(-0.27, 0.08, 4.91),  // left  @ pitch-up
+  new THREE.Vector3( 0.74, 0.09, 5.01),  // right @ pitch-up
+];
 // GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
 // at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
 // of how NOZZLE_OFFSETS is hand-tuned for visual particle spawn. Used by the cone thruster
@@ -6806,6 +6817,44 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
   }
   for (let i = 0, n = miniThrusterSystems.length; i < n; i++) {
     if (miniThrusterSystems[i].points.material.opacity !== _miniPartOp) miniThrusterSystems[i].points.material.opacity = _miniPartOp;
+  }
+
+  // ── Pose-blended nozzle offsets (signed-pitch interpolation) ──
+  // Empirical fix for visible thruster drift under pitch: the static nozzle
+  // positions only align at zero pitch. User-tuned values for full pitch-up
+  // and pitch-down are stored in window._nozPoseUp / _nozPoseDown. Here we
+  // lerp _localNozzles between the zero-pose (already in _localNozzles from
+  // _rebuildLocalNozzles) and the pose target based on signed pitch ratio.
+  // Disabled if window._nozPoseEnabled === false.
+  if (window._nozPoseEnabled !== false) {
+    const _pitch = shipGroup.rotation.x || 0;
+    const _ratio = Math.max(-1, Math.min(1, _pitch / (Math.PI * 0.5)));
+    if (Math.abs(_ratio) > 0.001) {
+      const _matchDef = _altShipActive && SHIP_SKINS[activeSkinIdx] && SHIP_SKINS[activeSkinIdx].glbConfig && SHIP_SKINS[activeSkinIdx].glbConfig.matchDefault;
+      const _sc = (_matchDef || !_altShipActive) ? 0.30 : (shipGroup.scale.x || 0.30);
+      const _refX = (_altShipActive && !_matchDef) ? _altShip.posX : 0;
+      const _refY = (_altShipActive && !_matchDef) ? _altShip.posY : 0.28;
+      const _refZ = (_altShipActive && !_matchDef) ? _altShip.posZ : 4.5;
+      const _pose = (_ratio > 0) ? window._nozPoseUp : window._nozPoseDown;
+      const _t = Math.abs(_ratio);
+      if (_pose && _pose[0] && _pose[1]) {
+        for (let i = 0; i < 2; i++) {
+          const _zx = NOZZLE_OFFSETS[i].x, _zy = NOZZLE_OFFSETS[i].y, _zz = NOZZLE_OFFSETS[i].z;
+          const _px = _pose[i].x,           _py = _pose[i].y,          _pz = _pose[i].z;
+          const _bx = _zx + (_px - _zx) * _t;
+          const _by = _zy + (_py - _zy) * _t;
+          const _bz = _zz + (_pz - _zz) * _t;
+          _localNozzles[i].set((_bx - _refX) / _sc, (_by - _refY) / _sc, (_bz - _refZ) / _sc);
+        }
+      }
+    } else {
+      // Near zero pitch — ensure _localNozzles reflects pure zero pose.
+      // (Rebuild only if last pitch was non-trivial; cheap to just re-apply.)
+      if (window._nozPoseLastRatio && Math.abs(window._nozPoseLastRatio) > 0.001) {
+        _rebuildLocalNozzles();
+      }
+    }
+    window._nozPoseLastRatio = _ratio;
   }
 
   // ── localToWorld: lock all thruster elements to shipGroup transform ──
