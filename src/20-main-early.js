@@ -6276,15 +6276,15 @@ window._conePoseDown[0] = [
   new THREE.Vector3(-0.04,  0.03, -0.10),  // L @ ArrowDown full roll
   new THREE.Vector3(-0.05,  0.03, -0.15),  // R @ ArrowDown full roll
 ];
-// MK RUNNER (skin idx 1) — captured 2026-05-02 via slider screenshots under
-// Fix D (slider value = full-roll target, intrinsic meaning).
+// MK RUNNER (skin idx 1) — captured 2026-05-02 via slider screenshots (re-tune
+// after restoring previous values gave visual reference for full-roll position).
 window._conePoseUp[1] = [
-  new THREE.Vector3(-0.12,  0.01,  0.06),  // L @ ArrowUp full roll
-  new THREE.Vector3( 0.06, -0.03, -0.17),  // R @ ArrowUp full roll
+  new THREE.Vector3(-0.06,  0.00,  0.00),  // L @ ArrowUp full roll
+  new THREE.Vector3(-0.03, -0.01, -0.07),  // R @ ArrowUp full roll
 ];
 window._conePoseDown[1] = [
-  new THREE.Vector3( 0.05,  0.00,  0.00),  // L @ ArrowDown full roll
-  new THREE.Vector3( 0.05,  0.00,  0.00),  // R @ ArrowDown full roll
+  new THREE.Vector3(-0.06, -0.03, -0.13),  // L @ ArrowDown full roll
+  new THREE.Vector3(-0.03,  0.00, -0.13),  // R @ ArrowDown full roll
 ];
 // ── Sacred zero (per-skin) — the cone offset values when state.rollAngle=0.
 // These are FROZEN as consts so the slider can be safely re-purposed to represent
