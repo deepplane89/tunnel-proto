@@ -13921,6 +13921,7 @@ function togglePause() {
       _thunderActiveSrc = null;
     }
     if (state._lakeFadeIv) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
+    if (activeFadeIv) { clearInterval(activeFadeIv); activeFadeIv = null; }
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
     if (state._tutorialActive) _tutHideText();
@@ -13995,9 +13996,37 @@ function returnToTitle() {
   const _introOv = document.getElementById('intro-overlay');
   if (_introOv) { fadeOutIntroOverlay(_introOv); }
   state.introActive = false;
+  // Reset launch-lift state so a mid-lift exit doesn't leave the next start
+  // (or the title scene's shared shipGroup) pitched/raised.
+  state._introLiftActive = false;
+  state._introLiftTimer = 0;
+  state._introShipY = _hoverBaseY;
+  shipGroup.position.set(0, _hoverBaseY, 0);
+  shipGroup.rotation.set(_shipRotXOffset, 0, 0);
   killThrusterSputter();
+  // Cancel any pending retry-sweep startGame call so it can't fire after exit
+  if (_retryFadeTimer) { clearTimeout(_retryFadeTimer); _retryFadeTimer = null; }
+  // Dismiss head-start prompt if it was up — its 4s auto-dismiss timeout
+  // would otherwise fire over the title screen.
+  dismissHeadStart();
   // Clear all in-flight objects and mechanic state
   _clearAllMechanics();
+  // Bonus rings (opening rings) are not in _clearAllMechanics — wipe explicitly.
+  _ringRemoveAll();
+  // Coins, laser bolts, active powerups: startGame() resets these but exiting
+  // to title and starting a new run could otherwise show stale objects flash
+  // during the title fade.
+  ;[...activeCoins].forEach(returnCoinToPool);
+  activeCoins.length = 0;
+  coinArcPending.length = 0;
+  laserBolts.forEach(b => { b.visible = false; });
+  activePowerups.forEach(pu => {
+    pu.userData.active = false;
+    pu.visible = false;
+    pu.position.set(0, -9999, 0);
+    pu.scale.setScalar(1);
+  });
+  activePowerups.length = 0;
   [..._activeForcefields].forEach(returnForcefieldToPool);
   _activeForcefields.length = 0;
   // Show title, hide everything else
@@ -15333,6 +15362,7 @@ let _gameStarting = false; // reentry lock — prevents double-fire from simulta
 
 // ── Retry with cinematic camera sweep (from game over) ──
 let _retryPending = false; // guard against double-tap during fade
+let _retryFadeTimer = null; // setTimeout handle so transitions can abort the orphan startGame call
 function _triggerRetryWithSweep() {
   if (_retrySweepActive || _retryPending) return; // debounce
   _retryPending = true;
@@ -15344,7 +15374,9 @@ function _triggerRetryWithSweep() {
   // Save JL continuation state before the reset wipes it
   const _jlDeathX    = _wasJetLightning ? (state.shipX || 0) : 0;
   const _jlDeathRamp = _wasJetLightning ? (_jlRampTime || 0) : 0;
-  setTimeout(() => {
+  if (_retryFadeTimer) { clearTimeout(_retryFadeTimer); _retryFadeTimer = null; }
+  _retryFadeTimer = setTimeout(() => {
+    _retryFadeTimer = null;
     _retryPending = false;
     // ── During black: reset scene ──
     if (_wasJetLightning) startJetLightning();
@@ -15449,7 +15481,12 @@ function startGame() {
   touch.rollUp         = false;
   touch.rollDown       = false;
   state.rollDir        = 0;
-  shipGroup.rotation.z = 0;
+  shipGroup.position.set(0, _hoverBaseY, 0);
+  shipGroup.rotation.set(_shipRotXOffset, 0, 0);
+  // Clear any in-flight launch-lift state from a prior aborted run.
+  state._introLiftActive = false;
+  state._introLiftTimer = 0;
+  state._introShipY = _hoverBaseY;
   state.tiltTimer      = 0;
   state.corridorCenter = 0;
   state.corridorMode       = false;
@@ -18430,6 +18467,7 @@ function killPlayer() {
   // retry sweep doesn't keep them latched if death races the transition.
   _gameStarting = false;
   _retryPending = false;
+  if (_retryFadeTimer) { clearTimeout(_retryFadeTimer); _retryFadeTimer = null; }
   if (state._lakeFadeIv) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
   // Tear down L3 knife canyon if death happened during it
   if (state.l3KnifeCanyon) _stopL3KnifeCanyon();

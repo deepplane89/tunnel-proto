@@ -28,6 +28,7 @@ let _gameStarting = false; // reentry lock — prevents double-fire from simulta
 
 // ── Retry with cinematic camera sweep (from game over) ──
 let _retryPending = false; // guard against double-tap during fade
+let _retryFadeTimer = null; // setTimeout handle so transitions can abort the orphan startGame call
 function _triggerRetryWithSweep() {
   if (_retrySweepActive || _retryPending) return; // debounce
   _retryPending = true;
@@ -39,7 +40,9 @@ function _triggerRetryWithSweep() {
   // Save JL continuation state before the reset wipes it
   const _jlDeathX    = _wasJetLightning ? (state.shipX || 0) : 0;
   const _jlDeathRamp = _wasJetLightning ? (_jlRampTime || 0) : 0;
-  setTimeout(() => {
+  if (_retryFadeTimer) { clearTimeout(_retryFadeTimer); _retryFadeTimer = null; }
+  _retryFadeTimer = setTimeout(() => {
+    _retryFadeTimer = null;
     _retryPending = false;
     // ── During black: reset scene ──
     if (_wasJetLightning) startJetLightning();
@@ -144,7 +147,12 @@ function startGame() {
   touch.rollUp         = false;
   touch.rollDown       = false;
   state.rollDir        = 0;
-  shipGroup.rotation.z = 0;
+  shipGroup.position.set(0, _hoverBaseY, 0);
+  shipGroup.rotation.set(_shipRotXOffset, 0, 0);
+  // Clear any in-flight launch-lift state from a prior aborted run.
+  state._introLiftActive = false;
+  state._introLiftTimer = 0;
+  state._introShipY = _hoverBaseY;
   state.tiltTimer      = 0;
   state.corridorCenter = 0;
   state.corridorMode       = false;
@@ -3125,6 +3133,7 @@ function killPlayer() {
   // retry sweep doesn't keep them latched if death races the transition.
   _gameStarting = false;
   _retryPending = false;
+  if (_retryFadeTimer) { clearTimeout(_retryFadeTimer); _retryFadeTimer = null; }
   if (state._lakeFadeIv) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
   // Tear down L3 knife canyon if death happened during it
   if (state.l3KnifeCanyon) _stopL3KnifeCanyon();
