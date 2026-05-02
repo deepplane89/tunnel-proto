@@ -13631,7 +13631,7 @@ function applyPowerup(typeIdx) {
   if (def.id === 'shield') state.sessionShields++;
   if (def.id === 'laser') state.sessionLasers++;
   if (def.id === 'invincible') state.sessionInvincibles++;
-  if (def.id !== 'shield') playPickup(typeIdx); // shield has its own activate sound
+  playPickup(typeIdx); // pickup smash for ALL powerups; shield also layers shield-activate-sfx below
   addCrashFlash(def.color);
 
   switch (def.id) {
