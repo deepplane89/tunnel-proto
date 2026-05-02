@@ -10483,7 +10483,9 @@ function playWhoosh(direction, intensity) {
   lastWhooshTime = now;
   const speedNorm = Math.min(1, (state.speed || 20) / 60);
   const rate = 0.88 + Math.random() * 0.24 + speedNorm * 0.08;
-  const vol = 0.06 + intensity * 0.14;
+  // Bumped 2026-05-02: argon ambient gone, whoosh now carries the strafe layer alone.
+  // Was 0.06 + 0.14*intensity (0.06–0.20). Now 0.14 + 0.30*intensity (0.14–0.44).
+  const vol = 0.14 + intensity * 0.30;
   const pan = direction * (0.3 + intensity * 0.4);
   _playBuffer('whoosh', vol, rate, pan);
 }
@@ -10492,7 +10494,9 @@ function playWhooshRelease(direction, holdTime) {
   if (state.muted) return;
   const intensity = Math.min(1, (holdTime - 1.5) / 1.5);
   const rate = 0.90 + Math.random() * 0.15 + intensity * 0.1;
-  const vol = 0.08 + intensity * 0.18;
+  // Bumped 2026-05-02: matched scale-up with playWhoosh.
+  // Was 0.08 + 0.18*intensity (0.08–0.26). Now 0.18 + 0.38*intensity (0.18–0.56).
+  const vol = 0.18 + intensity * 0.38;
   const pan = direction * (0.2 + intensity * 0.3);
   _playBuffer('whoosh-release', vol, rate, pan);
 }
