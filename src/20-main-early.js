@@ -6294,14 +6294,16 @@ window._conePoseDown[1] = window._conePoseDown[0];
 window._conePoseDown[2] = window._conePoseDown[0];
 window._conePoseDown[3] = window._conePoseDown[0];
 // ── Steering pose targets (drive cone offsets based on left/right turn magnitude) ──
-// Indexed by activeSkinIdx, then by side (0=L, 1=R). null = no blend on that side
-// (offsets stay at slider/zero values). Blend factor is |window._steerNorm|.
-// Disable via window._coneSteerEnabled = false. Auto-zeroed during barrel roll.
+// Indexed by activeSkinIdx, then by side (0=L, 1=R). Per-side entry = {x, y, z}
+// where ONLY defined axes blend; missing axes (or null entries) leave the slider value alone.
+// Blend factor is |window._steerNorm|. Disable via window._coneSteerEnabled = false.
+// Auto-zeroed during barrel roll. CRITICAL: missing axis !== 0 — omitted axes are
+// untouched so they stay at whatever the slider/default has.
 window._conePoseSteerLeft = {};
 window._conePoseSteerRight = {};
 // Default Runner (skin 0): left turn shifts L offX → 0; right turn shifts R offX → 0.04.
-window._conePoseSteerLeft[0]  = [ new THREE.Vector3( 0.00, 0.00, 0.00), null ];
-window._conePoseSteerRight[0] = [ null, new THREE.Vector3( 0.04, 0.00, 0.00) ];
+window._conePoseSteerLeft[0]  = [ { x:  0.00 }, null ];
+window._conePoseSteerRight[0] = [ null,         { x:  0.04 } ];
 // Recolors share Default's steering banks.
 window._conePoseSteerLeft[1]  = window._conePoseSteerLeft[0];
 window._conePoseSteerLeft[2]  = window._conePoseSteerLeft[0];
@@ -6310,8 +6312,8 @@ window._conePoseSteerRight[1] = window._conePoseSteerRight[0];
 window._conePoseSteerRight[2] = window._conePoseSteerRight[0];
 window._conePoseSteerRight[3] = window._conePoseSteerRight[0];
 // MK Runner (skin 4): left turn shifts L offX → -0.04; right turn shifts R offX → 0.04.
-window._conePoseSteerLeft[4]  = [ new THREE.Vector3(-0.04, 0.00, 0.00), null ];
-window._conePoseSteerRight[4] = [ null, new THREE.Vector3( 0.04, 0.00, 0.00) ];
+window._conePoseSteerLeft[4]  = [ { x: -0.04 }, null ];
+window._conePoseSteerRight[4] = [ null,         { x:  0.04 } ];
 // GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
 // at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
 // of how NOZZLE_OFFSETS is hand-tuned for visual particle spawn. Used by the cone thruster
@@ -7127,9 +7129,11 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
           const _sSide = _sBank && _sBank[activeSkinIdx];
           const _sTgt  = _sSide && _sSide[idx];
           if (_sTgt) {
-            sideOX = sideOX + (_sTgt.x - sideOX) * _sT;
-            sideOY = sideOY + (_sTgt.y - sideOY) * _sT;
-            sideOZ = sideOZ + (_sTgt.z - sideOZ) * _sT;
+            // Only blend axes that are explicitly defined on the target.
+            // Omitted axes leave sideOX/sideOY/sideOZ at their slider/roll-blended value.
+            if (typeof _sTgt.x === 'number') sideOX = sideOX + (_sTgt.x - sideOX) * _sT;
+            if (typeof _sTgt.y === 'number') sideOY = sideOY + (_sTgt.y - sideOY) * _sT;
+            if (typeof _sTgt.z === 'number') sideOZ = sideOZ + (_sTgt.z - sideOZ) * _sT;
           }
         }
       }
