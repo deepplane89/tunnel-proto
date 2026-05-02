@@ -93,6 +93,7 @@ function togglePause() {
       try { _thunderActiveSrc.stop(); } catch (_) {}
       _thunderActiveSrc = null;
     }
+    if (state._lakeFadeIv) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
     if (state._tutorialActive) _tutHideText();
@@ -123,6 +124,11 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
+  // Release transition reentry locks — a tap mid-startGame followed by
+  // pause+exit can otherwise leave these stuck, blocking the next Play tap.
+  // (Both flags live in 67-main-late.js but share the concat'd module scope.)
+  _gameStarting = false;
+  _retryPending = false;
   shipGroup.visible = true;
   _killExplosion();
   // ── Hard camera reset: prevent stale death/retry camera leaking into title ──
@@ -137,6 +143,7 @@ function returnToTitle() {
   camera.updateProjectionMatrix();
   if (_gameOverDelayTimer) { clearTimeout(_gameOverDelayTimer); _gameOverDelayTimer = null; }
   if (_titleFadeTimer) { clearTimeout(_titleFadeTimer); _titleFadeTimer = null; }
+  if (state._lakeFadeIv) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
   clearMusicTimers();
   // Show inline leaderboard on title
   const _tlb = document.getElementById('title-leaderboard');

@@ -13920,6 +13920,7 @@ function togglePause() {
       try { _thunderActiveSrc.stop(); } catch (_) {}
       _thunderActiveSrc = null;
     }
+    if (state._lakeFadeIv) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
     if (state._tutorialActive) _tutHideText();
@@ -13950,6 +13951,11 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
+  // Release transition reentry locks — a tap mid-startGame followed by
+  // pause+exit can otherwise leave these stuck, blocking the next Play tap.
+  // (Both flags live in 67-main-late.js but share the concat'd module scope.)
+  _gameStarting = false;
+  _retryPending = false;
   shipGroup.visible = true;
   _killExplosion();
   // ── Hard camera reset: prevent stale death/retry camera leaking into title ──
@@ -13964,6 +13970,7 @@ function returnToTitle() {
   camera.updateProjectionMatrix();
   if (_gameOverDelayTimer) { clearTimeout(_gameOverDelayTimer); _gameOverDelayTimer = null; }
   if (_titleFadeTimer) { clearTimeout(_titleFadeTimer); _titleFadeTimer = null; }
+  if (state._lakeFadeIv) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
   clearMusicTimers();
   // Show inline leaderboard on title
   const _tlb = document.getElementById('title-leaderboard');
@@ -15673,11 +15680,13 @@ function startGame() {
     setTrackVol('lake', 0);
     lakeMusic.play().catch(() => {});
     // Fade lake in over 800ms to match bg track fade
+    // Tracked on state so pause/title/gameover paths can cancel a stale fade.
+    if (state._lakeFadeIv) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
     const _lakeStart = performance.now();
-    const _lakeFade = setInterval(() => {
+    state._lakeFadeIv = setInterval(() => {
       const t = Math.min((performance.now() - _lakeStart) / 800, 1);
       setTrackVol('lake', TRACK_VOL.lake * t);
-      if (t >= 1) clearInterval(_lakeFade);
+      if (t >= 1) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
     }, 16);
   }
   // engine hum removed
@@ -18417,6 +18426,11 @@ function killPlayer() {
                            : null;
 
   state.phase = 'dead';
+  // Defensive: release transition reentry locks so an in-flight startGame /
+  // retry sweep doesn't keep them latched if death races the transition.
+  _gameStarting = false;
+  _retryPending = false;
+  if (state._lakeFadeIv) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
   // Tear down L3 knife canyon if death happened during it
   if (state.l3KnifeCanyon) _stopL3KnifeCanyon();
   // Tear down pre-T4A canyon if death happened during it
