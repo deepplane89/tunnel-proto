@@ -10620,7 +10620,6 @@ function _playThunderRotating() {
 
 // ── Lightning strike: buzzy arc + deep boom two-layer SFX ──
 function _playLightningStrike() {
-  console.log('[DIAG-LT-SFX] called: ctx=' + (!!audioCtx) + ' muted=' + state.muted + ' phase=' + state.phase + ' intro=' + state.introActive + ' lift=' + state._introLiftActive + ' ctxState=' + (audioCtx && audioCtx.state) + ' sfxMult=' + (typeof sfxMult === 'function' ? sfxMult() : 'N/A') + ' thBuf1=' + (typeof _sfxBuffers !== 'undefined' && !!_sfxBuffers.thunder1) + ' thBuf2=' + (typeof _sfxBuffers !== 'undefined' && !!_sfxBuffers.thunder2) + ' thActive=' + !!_thunderActiveSrc);
   if (!audioCtx || state.muted) return;
   // Hard gate: only fire during active gameplay, never during intro/lift/menus/etc.
   if (state.phase !== 'playing' || state.introActive || state._introLiftActive) return;
@@ -15579,6 +15578,15 @@ function startGame() {
   // Reset camera to starting position (full reset — prevent stale death/retry state)
   _retrySweepActive = false;
   _retrySweepT = 0;
+  // Belt-and-suspenders: nuke any transient gameplay flags that could have leaked
+  // from a prior run (rapid game-over→retry, double-tap, backgrounded tab, etc).
+  // _retryIsFromDead / _retryPending are released at end of fn (after retry branches consume them).
+  state._seqSpawnMode  = 'cones';   // default; startDeathRun re-sets to 'cones' explicitly
+  state.preT4ADone     = false;
+  state.preT4BDone     = false;
+  state.l3KnifeDone    = false;
+  state.angledWallsActive = false;
+  state._ringsActive   = false;
   cameraPivot.position.set(0, 2.8 + _camPivotYOffset, 9 + _camPivotZOffset);
   cameraRoll = 0;
   camera.rotation.set(0, 0, 0);
@@ -15754,8 +15762,14 @@ function startGame() {
 
   // ── HEAD START PROMPT (skip on retry — camera sweep replaces it) ──
   if (!_retryIsFromDead) showHeadStartPrompt();
-  // Release reentry lock after one frame so simultaneous events have already fired
-  requestAnimationFrame(() => { _gameStarting = false; });
+  // Release reentry lock after one frame so simultaneous events have already fired.
+  // Also clear retry-from-dead flags here (AFTER all branches that consume them have run)
+  // so the next startGame() call sees a clean slate.
+  requestAnimationFrame(() => {
+    _gameStarting = false;
+    _retryIsFromDead = false;
+    _retryPending    = false;
+  });
 }
 
 // ═══════════════════════════════════════════════════
