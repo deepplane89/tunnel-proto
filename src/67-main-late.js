@@ -4623,12 +4623,6 @@ function update(dt) {
         const lanes = state._laserBoltLanes || _lbLanes;
         const half  = (lanes - 1) / 2;
         for (let li = 0; li < lanes; li++) spawnLaserBolt(li - half);
-        // Per-tick MG sound — fresh buffer source each fire, plays full clip.
-        // Overlapping instances are intentional (machine-gun layering).
-        // Volume mixed low so stacked shots don't blow out engine/music bed.
-        if (typeof _playBuffer === 'function') {
-          _playBuffer('laser-mg', 0.25, 1.0, null);
-        }
       }
     } else if (_tier === 4) {
       // T4: static unibeam — pivot at ship nose, no rotation

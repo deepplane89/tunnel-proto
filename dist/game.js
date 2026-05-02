@@ -13678,10 +13678,27 @@ function applyPowerup(typeIdx) {
         // T1-T3: bolt machine gun mode
         laserPivot.visible = false;
         state.laserBoltTimer = 0;
-        // Laser MG SFX: per-tick buffer fire (overlapping instances allowed).
-        // Each shot is a fresh AudioBufferSourceNode that plays the wav in full,
-        // so the final shot's tail rings out naturally even after the laser ends.
-        // See bolt-spawn loop in 67-main-late.js.
+        // Laser MG SFX: retrigger the <audio> element at MG cadence.
+        // Element-based path (not buffer source) for iOS reliability — buffer
+        // sources require a fully-unlocked AudioContext, which can be silent
+        // on the first laser pickup of a session. Element clones work after
+        // any user gesture, including touch.
+        const _lsfx = document.getElementById('laser-beam-sfx');
+        if (_lsfx && !state.muted) {
+          _lsfx.loop = false;
+          _lsfx.volume = 0.2;
+          try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
+          const _retriggerMs = 120; // ~8 shots/sec
+          if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+          state._laserSfxIv = setInterval(() => {
+            try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
+          }, _retriggerMs);
+          // Stop retriggering when laser ends, but DON'T cut the in-flight shot.
+          // It plays out naturally to its end (final tail rings out).
+          setTimeout(() => {
+            if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+          }, state.laserTimer * 1000);
+        }
         // T1/T2: 2 lanes, narrow. T3: 4 lanes, wider spread
         // If scene tuner (T) is open, let slider values stay in control
         if (!window._sceneTunerOpen) {
@@ -19904,12 +19921,6 @@ function update(dt) {
         const lanes = state._laserBoltLanes || _lbLanes;
         const half  = (lanes - 1) / 2;
         for (let li = 0; li < lanes; li++) spawnLaserBolt(li - half);
-        // Per-tick MG sound — fresh buffer source each fire, plays full clip.
-        // Overlapping instances are intentional (machine-gun layering).
-        // Volume mixed low so stacked shots don't blow out engine/music bed.
-        if (typeof _playBuffer === 'function') {
-          _playBuffer('laser-mg', 0.25, 1.0, null);
-        }
       }
     } else if (_tier === 4) {
       // T4: static unibeam — pivot at ship nose, no rotation
