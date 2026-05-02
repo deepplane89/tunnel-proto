@@ -13891,6 +13891,17 @@ function togglePause() {
     _stopMagnetWhir();
     const _invP = document.getElementById('invincible-loop-sfx');
     if (_invP && !_invP.paused) _invP.pause();
+    // Pause looped weapon SFX so they don't bleed through pause.
+    // currentTime preserved so they pick up where they left off on resume.
+    const _laserP = document.getElementById('laser-beam-sfx');
+    if (_laserP && !_laserP.paused) _laserP.pause();
+    const _ubeamP = document.getElementById('unibeam-sfx');
+    if (_ubeamP && !_ubeamP.paused) _ubeamP.pause();
+    // Kill in-flight thunder rumble so it doesn't ring through pause.
+    if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
+      try { _thunderActiveSrc.stop(); } catch (_) {}
+      _thunderActiveSrc = null;
+    }
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
     if (state._tutorialActive) _tutHideText();
@@ -13904,6 +13915,17 @@ function togglePause() {
     // Resume invincible loop if active
     const _invU = document.getElementById('invincible-loop-sfx');
     if (_invU && state.invincibleTimer > 0 && !state.muted) { _invU.play().catch(()=>{}); }
+    // Resume looped weapon SFX if their power-up timer is still running.
+    if (state.laserActive && !state.muted) {
+      const _tier = state.laserTier || 1;
+      if (_tier <= 3) {
+        const _laserU = document.getElementById('laser-beam-sfx');
+        if (_laserU) _laserU.play().catch(()=>{});
+      } else {
+        const _ubeamU = document.getElementById('unibeam-sfx');
+        if (_ubeamU) _ubeamU.play().catch(()=>{});
+      }
+    }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
   }
 }
@@ -13994,6 +14016,16 @@ function returnToTitle() {
   _stopMagnetWhir();
   const _invR = document.getElementById('invincible-loop-sfx');
   if (_invR) { _invR.pause(); _invR.currentTime = 0; _invR.loop = false; }
+  // Stop looped weapon SFX on return to title.
+  const _laserR = document.getElementById('laser-beam-sfx');
+  if (_laserR) { _laserR.loop = false; _laserR.pause(); _laserR.currentTime = 0; }
+  const _ubeamR = document.getElementById('unibeam-sfx');
+  if (_ubeamR) { _ubeamR.loop = false; _ubeamR.pause(); _ubeamR.currentTime = 0; }
+  // Kill in-flight thunder rumble on title.
+  if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
+    try { _thunderActiveSrc.stop(); } catch (_) {}
+    _thunderActiveSrc = null;
+  }
   if (titleMusic) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
   updateTitleCoins();
   updateTitleFuelCells();
@@ -18460,6 +18492,16 @@ function killPlayer() {
   _stopMagnetWhir();
   const _invD = document.getElementById('invincible-loop-sfx');
   if (_invD && !_invD.paused) { _invD.pause(); _invD.currentTime = 0; _invD.loop = false; }
+  // Stop looped weapon SFX on game over.
+  const _laserD = document.getElementById('laser-beam-sfx');
+  if (_laserD && !_laserD.paused) { _laserD.loop = false; _laserD.pause(); _laserD.currentTime = 0; }
+  const _ubeamD = document.getElementById('unibeam-sfx');
+  if (_ubeamD && !_ubeamD.paused) { _ubeamD.loop = false; _ubeamD.pause(); _ubeamD.currentTime = 0; }
+  // Kill in-flight thunder rumble so it doesn't ring through gameover screen.
+  if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
+    try { _thunderActiveSrc.stop(); } catch (_) {}
+    _thunderActiveSrc = null;
+  }
   playCrash();
   // addCrashFlash(); // disabled to isolate face explosion
 
@@ -19211,12 +19253,9 @@ function update(dt) {
       playWhooshRelease(Math.sign(state.shipVelX), holdSec);
     }
   }
-  // Lane-change whoosh on turn start + track hold time
+  // Track turn-start time for release whoosh; lane-change whoosh removed per user 2026-05-02.
   if (!state.wasSteering && isSteering) {
     state.steerStartTime = performance.now();
-    const dir = (keys['ArrowLeft'] || keys['a'] || keys['A'] || touch.left) ? -1 : 1;
-    const velIntensity = Math.min(1, Math.abs(state.shipVelX) / 14);
-    playWhoosh(dir, Math.max(0.3, velIntensity));
   }
   state.wasSteering = isSteering;
 

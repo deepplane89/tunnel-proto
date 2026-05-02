@@ -81,6 +81,17 @@ function togglePause() {
     _stopMagnetWhir();
     const _invP = document.getElementById('invincible-loop-sfx');
     if (_invP && !_invP.paused) _invP.pause();
+    // Pause looped weapon SFX so they don't bleed through pause.
+    // currentTime preserved so they pick up where they left off on resume.
+    const _laserP = document.getElementById('laser-beam-sfx');
+    if (_laserP && !_laserP.paused) _laserP.pause();
+    const _ubeamP = document.getElementById('unibeam-sfx');
+    if (_ubeamP && !_ubeamP.paused) _ubeamP.pause();
+    // Kill in-flight thunder rumble so it doesn't ring through pause.
+    if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
+      try { _thunderActiveSrc.stop(); } catch (_) {}
+      _thunderActiveSrc = null;
+    }
     setPauseOverlay(true);
     pauseGameTrackInPlace(currentGameTrack());
     if (state._tutorialActive) _tutHideText();
@@ -94,6 +105,17 @@ function togglePause() {
     // Resume invincible loop if active
     const _invU = document.getElementById('invincible-loop-sfx');
     if (_invU && state.invincibleTimer > 0 && !state.muted) { _invU.play().catch(()=>{}); }
+    // Resume looped weapon SFX if their power-up timer is still running.
+    if (state.laserActive && !state.muted) {
+      const _tier = state.laserTier || 1;
+      if (_tier <= 3) {
+        const _laserU = document.getElementById('laser-beam-sfx');
+        if (_laserU) _laserU.play().catch(()=>{});
+      } else {
+        const _ubeamU = document.getElementById('unibeam-sfx');
+        if (_ubeamU) _ubeamU.play().catch(()=>{});
+      }
+    }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
   }
 }
@@ -184,6 +206,16 @@ function returnToTitle() {
   _stopMagnetWhir();
   const _invR = document.getElementById('invincible-loop-sfx');
   if (_invR) { _invR.pause(); _invR.currentTime = 0; _invR.loop = false; }
+  // Stop looped weapon SFX on return to title.
+  const _laserR = document.getElementById('laser-beam-sfx');
+  if (_laserR) { _laserR.loop = false; _laserR.pause(); _laserR.currentTime = 0; }
+  const _ubeamR = document.getElementById('unibeam-sfx');
+  if (_ubeamR) { _ubeamR.loop = false; _ubeamR.pause(); _ubeamR.currentTime = 0; }
+  // Kill in-flight thunder rumble on title.
+  if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
+    try { _thunderActiveSrc.stop(); } catch (_) {}
+    _thunderActiveSrc = null;
+  }
   if (titleMusic) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
   updateTitleCoins();
   updateTitleFuelCells();

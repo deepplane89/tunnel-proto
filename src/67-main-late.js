@@ -3213,6 +3213,16 @@ function killPlayer() {
   _stopMagnetWhir();
   const _invD = document.getElementById('invincible-loop-sfx');
   if (_invD && !_invD.paused) { _invD.pause(); _invD.currentTime = 0; _invD.loop = false; }
+  // Stop looped weapon SFX on game over.
+  const _laserD = document.getElementById('laser-beam-sfx');
+  if (_laserD && !_laserD.paused) { _laserD.loop = false; _laserD.pause(); _laserD.currentTime = 0; }
+  const _ubeamD = document.getElementById('unibeam-sfx');
+  if (_ubeamD && !_ubeamD.paused) { _ubeamD.loop = false; _ubeamD.pause(); _ubeamD.currentTime = 0; }
+  // Kill in-flight thunder rumble so it doesn't ring through gameover screen.
+  if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
+    try { _thunderActiveSrc.stop(); } catch (_) {}
+    _thunderActiveSrc = null;
+  }
   playCrash();
   // addCrashFlash(); // disabled to isolate face explosion
 
@@ -3964,12 +3974,9 @@ function update(dt) {
       playWhooshRelease(Math.sign(state.shipVelX), holdSec);
     }
   }
-  // Lane-change whoosh on turn start + track hold time
+  // Track turn-start time for release whoosh; lane-change whoosh removed per user 2026-05-02.
   if (!state.wasSteering && isSteering) {
     state.steerStartTime = performance.now();
-    const dir = (keys['ArrowLeft'] || keys['a'] || keys['A'] || touch.left) ? -1 : 1;
-    const velIntensity = Math.min(1, Math.abs(state.shipVelX) / 14);
-    playWhoosh(dir, Math.max(0.3, velIntensity));
   }
   state.wasSteering = isSteering;
 
