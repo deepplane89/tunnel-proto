@@ -6260,28 +6260,30 @@ window._nozPoseUp = [
   new THREE.Vector3(-0.27, 0.08, 4.91),  // left  @ pitch-up
   new THREE.Vector3( 0.74, 0.09, 5.01),  // right @ pitch-up
 ];
-// User-tuned cone-offset deltas for full barrel roll (±pi/2). Same target for both
-// up and down rolls (user confirmed one set works both ways), so blend uses
-// |state.rollAngle| / (pi/2). Targets are absolute slider values, blended FROM the
-// current ct.offL*/offR* sacred-zero values toward these.
-//
-// 2026-05-02: per-skin lookup so Default Runner and MK Runner can each have their
-// own working values. Indexed by activeSkinIdx. Default Runner uses its most-recent
-// Down-direction tune; MK Runner uses the 558bfb5 values (verified visually correct).
-window._conePoseRoll = {};
-window._conePoseRoll[0] = [
-  new THREE.Vector3(-0.04, 0.03, -0.10),  // L — Default Runner full roll
-  new THREE.Vector3(-0.05, 0.03, -0.15),  // R — Default Runner full roll
+// Per-skin cone-offset poses for signed roll-driven blend. Same axis as particles
+// (state.rollAngle, +-pi/2). _ratio<0 (ArrowUp) -> _conePoseUp; _ratio>0 (ArrowDown)
+// -> _conePoseDown. Sacred zero is whatever the slider holds at state.rollAngle=0
+// (per-skin, never overwritten). Disable via window._conePoseEnabled = false.
+// Keyed by activeSkinIdx so each skin keeps its own tuned poses.
+window._conePoseUp   = {};  // { [skinIdx]: [Vector3 L, Vector3 R] }
+window._conePoseDown = {};
+// Default RUNNER (skin idx 0) — captured 2026-05-02 via slider screenshots.
+window._conePoseUp[0] = [
+  new THREE.Vector3(-0.04,  0.03, -0.04),  // L @ ArrowUp full roll
+  new THREE.Vector3( 0.02,  0.02, -0.13),  // R @ ArrowUp full roll
 ];
-// SHIP_SKINS index map: 0=RUNNER, 1=GHOST, 2=BLACK MAMBA, 3=CIPHER, 4=RUNNER MK II.
-// GHOST/BLACK MAMBA/CIPHER are recolors of the default Runner body, so they
-// share Default's cone roll-pose values. MK Runner (4) has its own bank.
-window._conePoseRoll[1] = window._conePoseRoll[0];  // GHOST shares Default
-window._conePoseRoll[2] = window._conePoseRoll[0];  // BLACK MAMBA shares Default
-window._conePoseRoll[3] = window._conePoseRoll[0];  // CIPHER shares Default
-window._conePoseRoll[4] = [
-  new THREE.Vector3(-0.04, 0.00, -0.10),  // L — MK Runner full roll (558bfb5)
-  new THREE.Vector3( 0.00, 0.00, -0.11),  // R — MK Runner full roll (558bfb5)
+window._conePoseDown[0] = [
+  new THREE.Vector3(-0.04,  0.03, -0.10),  // L @ ArrowDown full roll
+  new THREE.Vector3(-0.05,  0.03, -0.15),  // R @ ArrowDown full roll
+];
+// MK RUNNER (skin idx 1) — user reported same set works both directions, so up==down.
+window._conePoseUp[1] = [
+  new THREE.Vector3(-0.04,  0.00, -0.10),
+  new THREE.Vector3( 0.00,  0.00, -0.11),
+];
+window._conePoseDown[1] = [
+  new THREE.Vector3(-0.04,  0.00, -0.10),
+  new THREE.Vector3( 0.00,  0.00, -0.11),
 ];
 // GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
 // at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
@@ -7060,20 +7062,20 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       let sideOX = idx === 0 ? (ct.offLX || 0) : (ct.offRX || 0);
       let sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
       let sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
-      // ── Cone-offset pose-blend (roll-magnitude driven) ──
-      // User-tuned per-pose values for full barrel roll (±pi/2) — same target for both
-      // directions, so blend uses |state.rollAngle| / (pi/2). Disable via
-      // window._conePoseEnabled = false. Targets are stored in window._conePoseRoll.
-      if (window._conePoseEnabled !== false && window._conePoseRoll && typeof state !== 'undefined' && state) {
-        const _ra = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
-        const _t = Math.max(0, Math.min(1, Math.abs(_ra) / (Math.PI * 0.5)));
-        if (_t > 0.001) {
-          const _bank = window._conePoseRoll[activeSkinIdx];
-          const _tgt = _bank && _bank[idx];
+      // ── Cone-offset pose-blend (per-skin, signed roll) ──
+      // Lerp from sacred-zero (current slider) toward _conePoseUp[skin] / _conePoseDown[skin]
+      // by signed state.rollAngle / (pi/2). Disable via window._conePoseEnabled = false.
+      if (window._conePoseEnabled !== false && typeof state !== 'undefined' && state) {
+        const _ra2 = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
+        const _ratio2 = Math.max(-1, Math.min(1, _ra2 / (Math.PI * 0.5)));
+        if (Math.abs(_ratio2) > 0.001) {
+          const _bank = (_ratio2 < 0) ? window._conePoseUp : window._conePoseDown;
+          const _tgt = _bank && _bank[activeSkinIdx] && _bank[activeSkinIdx][idx];
           if (_tgt) {
-            sideOX = sideOX + (_tgt.x - sideOX) * _t;
-            sideOY = sideOY + (_tgt.y - sideOY) * _t;
-            sideOZ = sideOZ + (_tgt.z - sideOZ) * _t;
+            const _t2 = Math.abs(_ratio2);
+            sideOX = sideOX + (_tgt.x - sideOX) * _t2;
+            sideOY = sideOY + (_tgt.y - sideOY) * _t2;
+            sideOZ = sideOZ + (_tgt.z - sideOZ) * _t2;
           }
         }
       }
