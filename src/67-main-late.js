@@ -241,6 +241,8 @@ function startGame() {
   state.l3KnifeDone    = false;
   state.angledWallsActive = false;
   state._ringsActive   = false;
+  // Reset invariant-assertion bookkeeping (watchdogs that detect stuck states).
+  if (typeof _resetInvariants === 'function') _resetInvariants();
   cameraPivot.position.set(0, 2.8 + _camPivotYOffset, 9 + _camPivotZOffset);
   cameraRoll = 0;
   camera.rotation.set(0, 0, 0);
@@ -3080,6 +3082,12 @@ function showIntroText() {
 }
 
 function killPlayer() {
+  // Reentry guard: if we're already dead/dying this frame, swallow duplicate calls.
+  // Prevents double-fire from same-frame collisions (e.g. cone + laser + obstacle
+  // hitting in one tick) which would otherwise re-run the entire 200-line teardown
+  // — spawning explosions twice, double-stopping canyons, double-logging the death,
+  // and potentially leaking transient state.
+  if (state.phase !== 'playing') return;
   // Tutorial: flash and respawn, reset current zip row if in zip phase
   if (state._tutorialActive) {
     hapticMedium();
@@ -3772,9 +3780,116 @@ let accumulator = 0;
 const clock = new THREE.Clock();
 let scoreTick = 0;
 
+// ── Invariant assertions ────────────────────────────────────────────────────────────────────────────
+// Watchdogs that catch stuck game-state bugs the FIRST time they happen.
+// All read-only — never modify state. Each fires at most once per condition
+// per run (no spam). Output is plain English with a paste-to-agent prompt.
+//
+// If you see [INVARIANT-FAIL] in the console, copy the WHOLE block and paste
+// it to the agent. The dump names exactly which flag is stuck.
+let _invSpawnFiredThisRun  = false;
+let _invSweepFiredThisRun  = false;
+let _invIntroFiredThisRun  = false;
+let _invSweepStuckSince    = 0; // perf.now() when retrySweepActive first observed
+let _invIntroStuckSince    = 0; // perf.now() when invalid intro/lift combo first observed
+function _resetInvariants() {
+  _invSpawnFiredThisRun = false;
+  _invSweepFiredThisRun = false;
+  _invIntroFiredThisRun = false;
+  _invSweepStuckSince   = 0;
+  _invIntroStuckSince   = 0;
+  state._invObstaclesSpawned = 0;
+}
+function _checkInvariants() {
+  if (state.phase !== 'playing') return;
+  const now = performance.now();
+
+  // 1) SPAWN WATCHDOG: in normal play (not in any special mode) cones should have
+  //    spawned by now. >4s with zero spawns means the spawn gate is stuck.
+  if (!_invSpawnFiredThisRun
+      && state.elapsed > 4
+      && (state._invObstaclesSpawned || 0) === 0
+      && !state._tutorialActive
+      && !state._jetLightningMode
+      && !state.zipperActive
+      && !state.l5EndingActive
+      && !state.l5CorridorActive
+      && !state.drCustomPatternActive
+      && !state.angledWallsActive
+      && !state.corridorMode
+      && !state.l4CorridorActive
+      && !state.l5CorridorActive
+      && !state.slalomActive
+      && !state._ringsActive) {
+    _invSpawnFiredThisRun = true;
+    console.warn(
+      '[INVARIANT-FAIL] cones haven\'t spawned in ' + state.elapsed.toFixed(1) + 's of normal play.\n' +
+      'Game appears stuck. Copy this whole block and paste to the agent:\n' +
+      '  introActive='        + !!state.introActive +
+      ' _introLiftActive='    + !!state._introLiftActive +
+      ' _retrySweepActive='   + !!_retrySweepActive +
+      ' _retryPending='       + !!_retryPending +
+      ' _retryIsFromDead='    + !!_retryIsFromDead +
+      ' _seqSpawnMode='       + (state._seqSpawnMode || 'unset') +
+      ' preT4ADone='          + !!state.preT4ADone +
+      ' preT4BDone='          + !!state.preT4BDone +
+      ' l3KnifeDone='         + !!state.l3KnifeDone +
+      ' angledWallsActive='   + !!state.angledWallsActive +
+      ' _ringsActive='        + !!state._ringsActive +
+      ' deathRunRestBeat='    + (state.deathRunRestBeat || 0).toFixed(2) +
+      ' isDeathRun='          + !!state.isDeathRun +
+      ' currentLevelIdx='     + (state.currentLevelIdx | 0) +
+      ' nextSpawnZ='          + (state.nextSpawnZ || 0).toFixed(1) +
+      ' elapsed='             + state.elapsed.toFixed(2)
+    );
+  }
+
+  // 2) SWEEP WATCHDOG: retry sweep is supposed to last ~1.3s. >3s = stuck.
+  if (_retrySweepActive) {
+    if (_invSweepStuckSince === 0) _invSweepStuckSince = now;
+    if (!_invSweepFiredThisRun && (now - _invSweepStuckSince) > 3000) {
+      _invSweepFiredThisRun = true;
+      console.warn(
+        '[INVARIANT-FAIL] retry sweep has been active for >3s (expected ~1.3s).\n' +
+        'Sweep completion handler missed. Copy this and paste to the agent:\n' +
+        '  _retrySweepActive=true _retrySweepT=' + (_retrySweepT || 0).toFixed(3) +
+        ' introActive='      + !!state.introActive +
+        ' _introLiftActive=' + !!state._introLiftActive +
+        ' phase='            + state.phase +
+        ' elapsed='          + state.elapsed.toFixed(2)
+      );
+    }
+  } else {
+    _invSweepStuckSince = 0;
+  }
+
+  // 3) INTRO/LIFT STATE-MACHINE CHECK: certain combos are invalid.
+  //    introActive=false && _introLiftActive=true is OK briefly (lift in progress)
+  //    but should resolve within ~3s. If still stuck after 5s, something's wrong.
+  const liftOnly = !state.introActive && state._introLiftActive;
+  if (liftOnly) {
+    if (_invIntroStuckSince === 0) _invIntroStuckSince = now;
+    if (!_invIntroFiredThisRun && (now - _invIntroStuckSince) > 5000) {
+      _invIntroFiredThisRun = true;
+      console.warn(
+        '[INVARIANT-FAIL] _introLiftActive has been true for >5s (lift should finish in ~2s).\n' +
+        'Lift animation never completed. Copy this and paste to the agent:\n' +
+        '  introActive='      + !!state.introActive +
+        ' _introLiftActive='  + !!state._introLiftActive +
+        ' _introLiftTimer='   + (state._introLiftTimer || 0).toFixed(2) +
+        ' phase='             + state.phase +
+        ' elapsed='           + state.elapsed.toFixed(2)
+      );
+    }
+  } else {
+    _invIntroStuckSince = 0;
+  }
+}
+
 function update(dt) {
   if (state.phase !== 'playing') return;
   if (state._ringFrozen) return; // ring tuner freeze — scene renders but game logic paused
+  _checkInvariants();
   // Gyroscope input — mobile only, no-op on desktop
 
   state.elapsed += dt;  // real-time accumulator for smooth animations

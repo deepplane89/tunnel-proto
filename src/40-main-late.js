@@ -1923,6 +1923,7 @@ function _spawnLateralEchoes(baseX, z, kind, opts) {
 }
 
 function spawnObstacles() {
+  state._invObstaclesSpawned = (state._invObstaclesSpawned || 0) + 1;
   let lvl;
   if (state.isDeathRun) {
     // Sequencer density: sparse (T1) vs dense (T2) vs normal (T3+) vs endless
