@@ -134,6 +134,8 @@ function _initSFXBuffers() {
   _loadSFXBuffer('klaxon',   './assets/audio/klaxon.mp3');
   // Argon ambient: looped via dedicated _playArgonLoop (volume modulated each frame)
   _loadSFXBuffer('argon-ambient',   './assets/audio/argon-ambient.mp3');
+  // Laser machine-gun: one-shot per fire-rate tick instead of looping the whole clip.
+  _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.wav');
 }
 
 // ── Argon looping handle (Web Audio path) ──

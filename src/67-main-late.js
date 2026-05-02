@@ -4622,6 +4622,12 @@ function update(dt) {
         const lanes = state._laserBoltLanes || _lbLanes;
         const half  = (lanes - 1) / 2;
         for (let li = 0; li < lanes; li++) spawnLaserBolt(li - half);
+        // Per-tick MG sound: one shot fires at the bolt-spawn cadence.
+        // Slight pitch jitter so adjacent ticks don't phase-lock and sound robotic.
+        if (typeof _playBuffer === 'function') {
+          const _rate = 0.96 + Math.random() * 0.08;
+          _playBuffer('laser-mg', 0.32, _rate, null);
+        }
       }
     } else if (_tier === 4) {
       // T4: static unibeam — pivot at ship nose, no rotation

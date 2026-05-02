@@ -10404,6 +10404,8 @@ function _initSFXBuffers() {
   _loadSFXBuffer('klaxon',   './assets/audio/klaxon.mp3');
   // Argon ambient: looped via dedicated _playArgonLoop (volume modulated each frame)
   _loadSFXBuffer('argon-ambient',   './assets/audio/argon-ambient.mp3');
+  // Laser machine-gun: one-shot per fire-rate tick instead of looping the whole clip.
+  _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.wav');
 }
 
 // ── Argon looping handle (Web Audio path) ──
@@ -13676,16 +13678,10 @@ function applyPowerup(typeIdx) {
         // T1-T3: bolt machine gun mode
         laserPivot.visible = false;
         state.laserBoltTimer = 0;
-        // Play laser beam SFX — loop for the duration of the laser
-        const _lsfx = document.getElementById('laser-beam-sfx');
-        if (_lsfx && !state.muted) {
-          _lsfx.currentTime = 0;
-          _lsfx.volume = 0.5;
-          _lsfx.loop = true;
-          _lsfx.play().catch(()=>{});
-          // Stop when laser expires
-          setTimeout(() => { _lsfx.loop = false; _lsfx.pause(); _lsfx.currentTime = 0; }, state.laserTimer * 1000);
-        }
+        // Laser MG SFX: per-tick buffer fire happens in the bolt-spawn loop
+        // (67-main-late.js). No looped element here — the rate of fire IS the
+        // machine-gun feel. See state.laserFireRate.
+
         // T1/T2: 2 lanes, narrow. T3: 4 lanes, wider spread
         // If scene tuner (T) is open, let slider values stay in control
         if (!window._sceneTunerOpen) {
@@ -19905,6 +19901,12 @@ function update(dt) {
         const lanes = state._laserBoltLanes || _lbLanes;
         const half  = (lanes - 1) / 2;
         for (let li = 0; li < lanes; li++) spawnLaserBolt(li - half);
+        // Per-tick MG sound: one shot fires at the bolt-spawn cadence.
+        // Slight pitch jitter so adjacent ticks don't phase-lock and sound robotic.
+        if (typeof _playBuffer === 'function') {
+          const _rate = 0.96 + Math.random() * 0.08;
+          _playBuffer('laser-mg', 0.32, _rate, null);
+        }
       }
     } else if (_tier === 4) {
       // T4: static unibeam — pivot at ship nose, no rotation
