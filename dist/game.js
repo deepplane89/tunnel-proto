@@ -6548,6 +6548,22 @@ window._conePoseDown[1] = [
   new THREE.Vector3(-0.06, -0.03, -0.13),  // L @ ArrowDown full roll
   new THREE.Vector3(-0.03,  0.00, -0.13),  // R @ ArrowDown full roll
 ];
+// ── Sacred zero (per-skin) — the cone offset values when state.rollAngle=0.
+// These are FROZEN as consts so the slider can be safely re-purposed to represent
+// the full-roll target during a held roll. At zero roll the slider is ignored;
+// the cone uses ZERO_L/ZERO_R below. At full roll the cone uses the slider value
+// directly (so user drag = direct visual feedback). Mid-roll lerps between them.
+// (2026-05-02 fix: previous blend overwrote the slider at full roll, decoupling
+// slider from visual cone position. See git log for context.)
+window._coneZero = {};
+window._coneZero[0] = [
+  new THREE.Vector3(-0.02,  0.03,  0.00),  // L sacred zero — Default Runner
+  new THREE.Vector3( 0.02,  0.02,  0.00),  // R sacred zero — Default Runner
+];
+window._coneZero[1] = [
+  new THREE.Vector3(-0.02,  0.00,  0.00),  // L sacred zero — MK Runner
+  new THREE.Vector3( 0.02,  0.00,  0.00),  // R sacred zero — MK Runner
+];
 // GLB-derived true thruster center per side (Object_51 rear edge + Object_28/33 bore center,
 // at_c079637.glb pre-merge runner). These are the EXACT geometric thruster anchors regardless
 // of how NOZZLE_OFFSETS is hand-tuned for visual particle spawn. Used by the cone thruster
@@ -7326,20 +7342,77 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       let sideOY = idx === 0 ? (ct.offLY || 0) : (ct.offRY || 0);
       let sideOZ = idx === 0 ? (ct.offLZ || 0) : (ct.offRZ || 0);
       // ── Cone-offset pose-blend (per-skin, signed roll) ──
-      // Lerp from sacred-zero (current slider) toward _conePoseUp[skin] / _conePoseDown[skin]
-      // by signed state.rollAngle / (pi/2). Disable via window._conePoseEnabled = false.
+      // FIX D (2026-05-02): slider now represents the full-roll TARGET, not the
+      // resting position. Sacred zero comes from window._coneZero[skin] consts.
+      // At zero roll: cone uses sacred zero (slider ignored — value frozen).
+      // At full roll: cone uses slider value directly (drag = direct feedback).
+      // While a roll key is held the user can drag the slider to retune the
+      // currently-held direction; on release the cone returns to sacred zero.
+      // Disable via window._conePoseEnabled = false.
+      //
+      // SEEDING: on roll-key press, ct.offL*/offR* is auto-seeded from the
+      // saved _conePoseUp/Down[skin][idx] target so Runner's tuned look is
+      // preserved out of the box. On roll-key release, the live ct.offL*/R*
+      // is stashed back into _conePoseUp/Down[skin][idx] so any drag the user
+      // performed during the held roll is remembered for next time.
       if (window._conePoseEnabled !== false && typeof state !== 'undefined' && state) {
         const _ra2 = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
+        const _rd2 = (typeof state.rollDir === 'number') ? state.rollDir : 0;
         const _ratio2 = Math.max(-1, Math.min(1, _ra2 / (Math.PI * 0.5)));
-        if (Math.abs(_ratio2) > 0.001) {
-          const _bank = (_ratio2 < 0) ? window._conePoseUp : window._conePoseDown;
-          const _tgt = _bank && _bank[activeSkinIdx] && _bank[activeSkinIdx][idx];
+        const _t2 = Math.abs(_ratio2);
+        // Track rollDir transitions (per-skin per-side state on window)
+        // _coneSeedState[skinIdx][idx] = { lastDir: -1|0|+1 }
+        if (!window._coneSeedState) window._coneSeedState = {};
+        if (!window._coneSeedState[activeSkinIdx]) window._coneSeedState[activeSkinIdx] = [{lastDir:0},{lastDir:0}];
+        const _seedSt = window._coneSeedState[activeSkinIdx][idx];
+        const _zeroBank = window._coneZero && window._coneZero[activeSkinIdx];
+        const _zero = _zeroBank && _zeroBank[idx];
+        const _bankUp   = window._conePoseUp   && window._conePoseUp[activeSkinIdx];
+        const _bankDown = window._conePoseDown && window._conePoseDown[activeSkinIdx];
+        // Transition: 0 -> ±1 → seed slider from saved target
+        if (_seedSt.lastDir === 0 && _rd2 !== 0) {
+          const _bk = _rd2 < 0 ? _bankUp : _bankDown;
+          const _tgt = _bk && _bk[idx];
           if (_tgt) {
-            const _t2 = Math.abs(_ratio2);
-            sideOX = sideOX + (_tgt.x - sideOX) * _t2;
-            sideOY = sideOY + (_tgt.y - sideOY) * _t2;
-            sideOZ = sideOZ + (_tgt.z - sideOZ) * _t2;
+            if (idx === 0) { ct.offLX = _tgt.x; ct.offLY = _tgt.y; ct.offLZ = _tgt.z; }
+            else           { ct.offRX = _tgt.x; ct.offRY = _tgt.y; ct.offRZ = _tgt.z; }
+            // Update local copy so this frame uses seeded value too
+            sideOX = _tgt.x; sideOY = _tgt.y; sideOZ = _tgt.z;
           }
+        }
+        // Transition: ±1 -> 0 → stash live slider back into saved target,
+        // then reset slider to sacred zero so resting cone matches zero const.
+        else if (_seedSt.lastDir !== 0 && _rd2 === 0) {
+          const _bk = _seedSt.lastDir < 0 ? _bankUp : _bankDown;
+          const _tgt = _bk && _bk[idx];
+          if (_tgt) {
+            _tgt.x = sideOX; _tgt.y = sideOY; _tgt.z = sideOZ;
+          }
+          if (_zero) {
+            if (idx === 0) { ct.offLX = _zero.x; ct.offLY = _zero.y; ct.offLZ = _zero.z; }
+            else           { ct.offRX = _zero.x; ct.offRY = _zero.y; ct.offRZ = _zero.z; }
+            sideOX = _zero.x; sideOY = _zero.y; sideOZ = _zero.z;
+          }
+        }
+        // Transition: ±1 -> ∓1 (direction flip mid-roll) → stash, then seed new dir
+        else if (_seedSt.lastDir !== 0 && _rd2 !== 0 && _seedSt.lastDir !== _rd2) {
+          const _bkOld = _seedSt.lastDir < 0 ? _bankUp : _bankDown;
+          const _tgtOld = _bkOld && _bkOld[idx];
+          if (_tgtOld) { _tgtOld.x = sideOX; _tgtOld.y = sideOY; _tgtOld.z = sideOZ; }
+          const _bkNew = _rd2 < 0 ? _bankUp : _bankDown;
+          const _tgtNew = _bkNew && _bkNew[idx];
+          if (_tgtNew) {
+            if (idx === 0) { ct.offLX = _tgtNew.x; ct.offLY = _tgtNew.y; ct.offLZ = _tgtNew.z; }
+            else           { ct.offRX = _tgtNew.x; ct.offRY = _tgtNew.y; ct.offRZ = _tgtNew.z; }
+            sideOX = _tgtNew.x; sideOY = _tgtNew.y; sideOZ = _tgtNew.z;
+          }
+        }
+        _seedSt.lastDir = _rd2;
+        // Now blend: zero const → slider target via |ratio|
+        if (_zero) {
+          sideOX = _zero.x + (sideOX - _zero.x) * _t2;
+          sideOY = _zero.y + (sideOY - _zero.y) * _t2;
+          sideOZ = _zero.z + (sideOZ - _zero.z) * _t2;
         }
       }
       cone.position.set(
