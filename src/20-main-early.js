@@ -6030,6 +6030,29 @@ function _loadAltShip(glbFile, skinDef, callback) {
     });
     // Store mesh refs for runtime material tuning
     model.userData._altMeshes = _altMeshes;
+    // ── Pod anchor capture for cone-drift diagnostic ──
+    // Find the rear-most mesh node in this GLB (per-side wingtip pod or single
+    // symmetric mesh) and stash a ref so the cone diagnostic can call
+    // getWorldPosition() on it each frame. If the cone is rigid with shipGroup
+    // and the pod node is rigid with shipGroup, the world-space Δ between them
+    // must be constant frame-to-frame in ship-local space (rotates with ship
+    // but stays the same after un-rotating). Any time-variation in that Δ = a
+    // hidden GLB-internal transform we haven't found via grep.
+    let _bestPodNode = null;
+    let _bestPodCentroidZ = -Infinity;
+    model.traverse(child => {
+      if (!child.isMesh || !child.geometry) return;
+      if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+      const bb = child.geometry.boundingBox;
+      // Local-space centroid Z. We want the rear-most pod node.
+      const cz = (bb.min.z + bb.max.z) * 0.5;
+      if (cz > _bestPodCentroidZ) {
+        _bestPodCentroidZ = cz;
+        _bestPodNode = child;
+      }
+    });
+    window._mkPodAnchor = _bestPodNode;
+    if (_bestPodNode) console.log('[POD ANCHOR]', _bestPodNode.name || '(unnamed)', 'localZ centroid=', _bestPodCentroidZ.toFixed(3));
     model.visible = false; // hidden until skin is applied
     shipGroup.add(model);
     // Set up AnimationMixer if GLB has animations
@@ -7009,11 +7032,27 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
           const _spx = _coneScr.x - _visScr.x;
           const _spy = _coneScr.y - _visScr.y;
           const _side = idx === 0 ? 'L' : 'R';
+          // ── Live pod anchor (GLB-internal node) to test internal-drift theory ──
+          // If cone is rigid with shipGroup AND pod is rigid with shipGroup, the
+          // SHIP-LOCAL Δ (cone_local − pod_local) must be constant frame-to-frame.
+          // Variation = proof of internal drift. We compute ship-local by
+          // applying shipGroup.matrixWorld inverse to both world positions.
+          let _podStr = '';
+          if (window._mkPodAnchor) {
+            const _podWorld = window._mkPodAnchor.getWorldPosition(new THREE.Vector3());
+            // Convert both points to shipGroup-local. shipGroup.worldToLocal does this.
+            const _coneShipLocal = shipGroup.worldToLocal(_coneWorld.clone());
+            const _podShipLocal  = shipGroup.worldToLocal(_podWorld.clone());
+            const _ldx = _coneShipLocal.x - _podShipLocal.x;
+            const _ldy = _coneShipLocal.y - _podShipLocal.y;
+            const _ldz = _coneShipLocal.z - _podShipLocal.z;
+            _podStr = ` | pod(w) ${_podWorld.x.toFixed(3)},${_podWorld.y.toFixed(3)},${_podWorld.z.toFixed(3)} | shipLocalΔ ${_ldx>=0?'+':''}${_ldx.toFixed(3)},${_ldy>=0?'+':''}${_ldy.toFixed(3)},${_ldz>=0?'+':''}${_ldz.toFixed(3)}`;
+          }
           console.log(
             `[coneDiag ${_side}] cone(w) ${_coneWorld.x.toFixed(3)},${_coneWorld.y.toFixed(3)},${_coneWorld.z.toFixed(3)} | ` +
-            `vis(w) ${_visWorld.x.toFixed(3)},${_visWorld.y.toFixed(3)},${_visWorld.z.toFixed(3)} | ` +
             `Δscreen ${_spx>=0?'+':''}${_spx.toFixed(1)}px,${_spy>=0?'+':''}${_spy.toFixed(1)}px | ` +
-            `shipRot y=${shipGroup.rotation.y.toFixed(2)} z=${shipGroup.rotation.z.toFixed(2)} x=${shipGroup.rotation.x.toFixed(2)}`
+            `shipRot y=${shipGroup.rotation.y.toFixed(2)} z=${shipGroup.rotation.z.toFixed(2)} x=${shipGroup.rotation.x.toFixed(2)}` +
+            _podStr
           );
         }
       }
