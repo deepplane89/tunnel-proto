@@ -10620,6 +10620,7 @@ function _playThunderRotating() {
 
 // ── Lightning strike: buzzy arc + deep boom two-layer SFX ──
 function _playLightningStrike() {
+  console.log('[DIAG-LT-SFX] called: ctx=' + (!!audioCtx) + ' muted=' + state.muted + ' phase=' + state.phase + ' intro=' + state.introActive + ' lift=' + state._introLiftActive + ' ctxState=' + (audioCtx && audioCtx.state) + ' sfxMult=' + (typeof sfxMult === 'function' ? sfxMult() : 'N/A') + ' thBuf1=' + (typeof _sfxBuffers !== 'undefined' && !!_sfxBuffers.thunder1) + ' thBuf2=' + (typeof _sfxBuffers !== 'undefined' && !!_sfxBuffers.thunder2) + ' thActive=' + !!_thunderActiveSrc);
   if (!audioCtx || state.muted) return;
   // Hard gate: only fire during active gameplay, never during intro/lift/menus/etc.
   if (state.phase !== 'playing' || state.introActive || state._introLiftActive) return;
