@@ -1115,7 +1115,7 @@ const DR_SEQUENCE = [
   // on stage entry so other stages sharing vibeIdx 2 are unaffected.
   { name: 'S6_RINGS',         type: 'lethal_rings',  duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2, sunOverride: 2 },
   // Canyon F — HIGH WALL LIGHTNING (real)
-  { name: 'CF_HIGH_WALL',     type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2 },
+  { name: 'CF_HIGH_WALL',     type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2, darkSlabs: true },
   { name: 'CF_REST',          type: 'rest', duration: 3, speed: 2.1, vibeIdx: 3, physTier: 2, musicTrack: 'keepgoing' },
 
   // Stage 7 — L4 sine corridor (full 518 rows, ~48s @ 2.1x)
@@ -1270,7 +1270,24 @@ function _drSequencerTick(dt) {
       state.deathRunRestBeat = 1.5; // brief clear before corridor walls appear
       const fam = DR_MECHANIC_FAMILIES[stage.family];
       const dummyBand = { label: 'BAND4', peakChance: 1 };
+      // Per-stage canyon skin: mutate shared tuner before activate so darkMat
+      // is built with the right roughness, then restore so other PRE_T4A
+      // canyons keep their alternating look.
+      let _restoreT4A = null;
+      if (stage.darkSlabs && typeof _PRE_T4A_CANYON_TUNER !== 'undefined') {
+        _restoreT4A = {
+          _allDark: _PRE_T4A_CANYON_TUNER._allDark,
+          _allCyan: _PRE_T4A_CANYON_TUNER._allCyan,
+          darkRgh:  _PRE_T4A_CANYON_TUNER.darkRgh,
+          darkEmi:  _PRE_T4A_CANYON_TUNER.darkEmi,
+        };
+        _PRE_T4A_CANYON_TUNER._allDark = true;
+        _PRE_T4A_CANYON_TUNER._allCyan = false;
+        _PRE_T4A_CANYON_TUNER.darkRgh  = 0.32;
+        _PRE_T4A_CANYON_TUNER.darkEmi  = 1.4;
+      }
       fam.activate(dummyBand, 'peak');
+      if (_restoreT4A) Object.assign(_PRE_T4A_CANYON_TUNER, _restoreT4A);
     }
     // If stage has a duration, use time — more reliable than row count at variable speeds
     if (stage.duration) {
