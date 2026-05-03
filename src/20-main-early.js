@@ -5767,7 +5767,11 @@ let _titleSkinOverrides = null;
 // Apply a skin to the title ship clone — maps by mesh name, not uuid
 function applyTitleSkin(skinIndex) {
   if (!_titleShipModel || !_prebuiltSkins.length) return;
-  if (skinIndex < 0 || skinIndex >= _prebuiltSkins.length) skinIndex = 0;
+  // Clamp out-of-range to default — BUT only when the skin is also missing
+  // from SHIP_SKINS. Alt-GLB skins (e.g. MK Runner at idx 4) are valid even
+  // though _prebuiltSkins doesn't have an entry for them: their materials
+  // come from the alt GLB itself, not the per-skin material map.
+  if (skinIndex < 0 || skinIndex >= SHIP_SKINS.length) skinIndex = 0;
 
   // ── ALT-GLB SWAP (e.g. RUNNER MK II) ─────────────────────────────────
   // Default Runner reuses the original cloned mesh and only swaps materials.
