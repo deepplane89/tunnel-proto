@@ -15182,7 +15182,15 @@ function updateStreakBadge() {
   // variables, so the boxes resize cleanly without breaking the layout.
   // All values logged to console + visible in slider readout chips.
   // ════════════════════════════════════════════════════════════════════════
-  const EDIT_KEY = 'jh_showroom_layout_v2';
+  // Per-orientation layout storage. Title screen uses the same
+  // pattern (PORTRAIT/LANDSCAPE/DESKTOP presets, re-applied every
+  // resize). Showroom now stores landscape and portrait layouts
+  // independently so rotating the phone snaps cleanly instead of
+  // carrying stale pixel sizes from the other orientation.
+  const EDIT_KEY_BASE = 'jh_showroom_layout_v2';
+  function _editKey() {
+    return EDIT_KEY_BASE + '_' + (window.innerWidth >= window.innerHeight ? 'l' : 'p');
+  }
   const EDIT_DEFS = {
     stagew:  { def: 800, var: '--ed-stagew',  unit: 'px' },
     stageh:  { def: 400, var: '--ed-stageh',  unit: 'px' },
@@ -15194,11 +15202,11 @@ function updateStreakBadge() {
   };
 
   function _editLoad() {
-    try { return JSON.parse(localStorage.getItem(EDIT_KEY) || '{}') || {}; }
+    try { return JSON.parse(localStorage.getItem(_editKey()) || '{}') || {}; }
     catch(_) { return {}; }
   }
   function _editSave(d) {
-    try { localStorage.setItem(EDIT_KEY, JSON.stringify(d)); } catch(_){}
+    try { localStorage.setItem(_editKey(), JSON.stringify(d)); } catch(_){}
   }
 
   function _editApplyAll() {
@@ -15311,7 +15319,12 @@ function updateStreakBadge() {
   }
 
   function _editReset() {
-    try { localStorage.removeItem(EDIT_KEY); } catch(_){}
+    try {
+      // Reset BOTH orientations so the user gets a clean re-fit on rotate.
+      localStorage.removeItem(EDIT_KEY_BASE + '_l');
+      localStorage.removeItem(EDIT_KEY_BASE + '_p');
+      localStorage.removeItem(EDIT_KEY_BASE); // legacy single-key cleanup
+    } catch(_){}
     _editApplyAll();
     if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
     try { console.log('[showroom-layout] RESET'); } catch(_){}
