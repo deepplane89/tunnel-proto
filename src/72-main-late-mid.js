@@ -300,6 +300,9 @@ function buildSkinTunerSliders() {
       if (group.parts.includes(name) && mesh.material) mats.push(mesh.material);
     });
     if (!mats.length) return;
+    // Skip groups whose materials are all non-PBR (e.g. Ghost's HolographicMaterial slots).
+    // Those get their own dedicated tuner section below.
+    if (!mats.some(m => m.color)) return;
 
     const section = document.createElement('div');
     section.style.cssText = 'margin-bottom:16px;border-bottom:1px solid #333;padding-bottom:10px;';
@@ -390,6 +393,67 @@ function buildSkinTunerSliders() {
 
     container.appendChild(section);
   });
+
+  // ═══════════════════════════════════════════════════
+  //  GHOST HOLO — scoped to this skin's HolographicMaterial slots only.
+  //  Writes uniforms directly to the ship's holo materials so it does
+  //  NOT touch powerup cubes (which use the same material class).
+  // ═══════════════════════════════════════════════════
+  {
+    const ghostMats = [];
+    allMeshes.forEach(({ mesh }) => {
+      const m = mesh.material;
+      if (m && m.uniforms && m.uniforms.hologramColor) ghostMats.push(m);
+    });
+    if (ghostMats.length) {
+      const ghostHeader = document.createElement('div');
+      ghostHeader.style.cssText = 'font-size:14px;font-weight:bold;color:#0df;margin:16px 0 8px;border-top:2px solid #0df;padding-top:8px;';
+      ghostHeader.textContent = 'GHOST HOLO';
+      container.appendChild(ghostHeader);
+
+      const subtitle = document.createElement('div');
+      subtitle.style.cssText = 'font-size:10px;color:#7af;margin:-4px 0 6px;';
+      subtitle.textContent = 'Scoped to ship — does not affect powerup cubes';
+      container.appendChild(subtitle);
+
+      const sample = ghostMats[0];
+      const sv = (k, fb) => (sample.uniforms[k] ? sample.uniforms[k].value : fb);
+      const setU = (k, v) => { for (const m of ghostMats) { const u = m.uniforms[k]; if (u) u.value = v; } };
+
+      // Hologram Color — single hue slider (HSL, full saturation/mid lightness).
+      const initColor = sv('hologramColor', new THREE.Color('#00d5ff'));
+      const initHsl = {}; initColor.getHSL(initHsl);
+      container.appendChild(makeSlider('Hue', initHsl.h, 0, 1, 0.005, v => {
+        const c = new THREE.Color(); c.setHSL(v, 1.0, 0.5);
+        for (const m of ghostMats) m.uniforms.hologramColor.value.copy(c);
+      }, '#0df'));
+
+      container.appendChild(makeSlider('Fresnel Opacity',  sv('fresnelOpacity', 1.0),     0, 1,    0.01, v => setU('fresnelOpacity', v),     '#0df'));
+      container.appendChild(makeSlider('Fresnel Amount',   sv('fresnelAmount', 0.7),      0, 1,    0.01, v => setU('fresnelAmount', v),      '#0df'));
+      container.appendChild(makeSlider('Scanline Size',    sv('scanlineSize', 3.7),       1, 15,   0.1,  v => setU('scanlineSize', v),       '#0df'));
+      container.appendChild(makeSlider('Brightness',       sv('hologramBrightness', 1.6), 0, 2,    0.01, v => setU('hologramBrightness', v), '#0df'));
+      container.appendChild(makeSlider('Signal Speed',     sv('signalSpeed', 0.01),       0, 2,    0.01, v => setU('signalSpeed', v),        '#0df'));
+      container.appendChild(makeSlider('Hologram Opacity', sv('hologramOpacity', 0.7),    0, 1,    0.01, v => setU('hologramOpacity', v),    '#0df'));
+
+      // Toggles
+      const toggleRow = document.createElement('div');
+      toggleRow.style.cssText = 'display:flex;gap:12px;margin:6px 0 8px;font-size:11px;';
+      function gMakeToggle(label, initial, onChange) {
+        const wrap = document.createElement('label');
+        wrap.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.checked = !!initial;
+        cb.style.cssText = 'margin:0;cursor:pointer;accent-color:#0df;';
+        cb.addEventListener('change', () => onChange(cb.checked));
+        const txt = document.createElement('span'); txt.textContent = label;
+        wrap.appendChild(cb); wrap.appendChild(txt);
+        return wrap;
+      }
+      toggleRow.appendChild(gMakeToggle('Blinking',           sv('enableBlinking', true),   v => setU('enableBlinking', v)));
+      toggleRow.appendChild(gMakeToggle('Blink Fresnel Only', sv('blinkFresnelOnly', true), v => setU('blinkFresnelOnly', v)));
+      container.appendChild(toggleRow);
+    }
+  }
 
   // ═══════════════════════════════════════════════════
   //  GLOBAL FINISH + WEIRD FX (all skins)
