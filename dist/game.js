@@ -14614,13 +14614,18 @@ function updateStreakBadge() {
 
   function _onResize() {
     if (!_open) return;
-    // Lock orientation switching: hide canvas, swap tune values, wait for
-    // CSS grid to fully reflow, then resize canvas to new stage rect, then
-    // reveal. Prevents the visible "morph" between layouts — it just snaps
-    // cleanly to the other orientation's saved settings.
+    // Lock orientation switching: hide canvas, swap tune values, re-apply
+    // layout (auto-fit if user hasn't manually edited), wait for CSS grid
+    // to fully reflow, then resize canvas to new stage rect, then reveal.
+    // Prevents the visible "morph" between layouts — it just snaps cleanly
+    // to the new orientation's fitted layout.
     const canvas = document.getElementById('title-ship-canvas');
     if (canvas) canvas.style.visibility = 'hidden';
     _refreshTunesForOrientation();
+    // Re-run layout: when going portrait→landscape (or back) the saved
+    // pixel sizes from the previous orientation will be wrong. _editApplyAll
+    // auto-fits on landscape unless user has touched a slider.
+    if (typeof _editApplyAll === 'function') _editApplyAll();
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         _resizeStageCanvas();
