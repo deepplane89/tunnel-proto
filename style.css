@@ -4835,8 +4835,11 @@ body.sr-open #title-leaderboard {
 
 /* ───────── PORTRAIT (default) ───────── */
 /* Stage = top region, panel = bottom slate, handling = thin strip between. */
-.sr-overlay {
-  display: grid !important;
+/* NOTE: do NOT use display:!important here — it would override
+   .sr-overlay.hidden { display:none } from the v1 rules above and the
+   garage would be permanently visible at boot. Use specificity instead. */
+.sr-overlay:not(.hidden) {
+  display: grid;
   grid-template-rows: 1fr auto auto;
   grid-template-columns: 1fr;
   align-items: stretch;
@@ -4844,6 +4847,7 @@ body.sr-open #title-leaderboard {
   padding: 8px;
   gap: 6px;
 }
+.sr-overlay.hidden { display: none !important; }
 .sr-stage {
   position: relative !important;
   inset: auto !important;
