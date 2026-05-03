@@ -6087,11 +6087,6 @@ window._bakeSkin = async function(skinIndex) {
 
 // Title-only cloned-material cache for per-skin overrides (see applyTitleSkin)
 let _titleSkinOverrides = null;
-// Title-only alt-GLB clones, keyed by glbFile. Each is a deep-clone of the
-// gameplay alt model, with title-tuned scale/transform applied. Inserted into
-// the existing tiltGroup so we inherit runner's spin/tilt/framing.
-const _titleAltClones = {};
-let _titleAltCurrent = null; // currently visible alt clone (or null)
 
 // Apply a skin to the title ship clone — maps by mesh name, not uuid
 function applyTitleSkin(skinIndex) {
@@ -6099,58 +6094,6 @@ function applyTitleSkin(skinIndex) {
   if (skinIndex < 0 || skinIndex >= _prebuiltSkins.length) skinIndex = 0;
 
   const isLocked = !_skinAdminMode && !isSkinUnlocked(skinIndex);
-
-  // ── ALT-GLB SKIN HANDLING (title) ───────────────────────────────
-  // Skins with glbFile (e.g. RUNNER MK II) use a different model. Swap the
-  // model inside tiltGroup: hide default runner clone, show a title-only clone
-  // of the alt model. Reuses runner's spin/tilt/scale 0.12 transform.
-  const _altSkinDef = (typeof SHIP_SKINS !== 'undefined' && SHIP_SKINS[skinIndex]) || null;
-  const _isAltGlbTitle = !!(_altSkinDef && _altSkinDef.glbFile);
-  const tiltGroup = (function() {
-    const pivot = titleScene.getObjectByName('titleShipPivot');
-    return pivot && pivot.children && pivot.children[0] || null;
-  })();
-
-  // Hide previously-shown alt clone if any
-  if (_titleAltCurrent) {
-    _titleAltCurrent.visible = false;
-  }
-
-  if (_isAltGlbTitle) {
-    // Hide default runner clone
-    if (_titleShipModel) _titleShipModel.visible = false;
-    const glbFile = _altSkinDef.glbFile;
-    const cached = _altShipCache && _altShipCache[glbFile];
-    if (!cached || !cached.model) {
-      // Alt model not loaded yet — fall back to runner clone visible until cache fills.
-      if (_titleShipModel) _titleShipModel.visible = true;
-    } else {
-      let titleClone = _titleAltClones[glbFile];
-      if (!titleClone) {
-        titleClone = cached.model.clone(true);
-        // Match runner's title transform: scale 0.12, centered at origin
-        titleClone.position.set(0, 0, 0);
-        titleClone.rotation.set(0, 0, 0);
-        titleClone.scale.setScalar(0.12);
-        // Hide placeholder slabs (same heuristic as gameplay loader: ≤12 tris)
-        titleClone.traverse(c => {
-          if (!c.isMesh) return;
-          c.castShadow = false;
-          const geoCount = c.geometry ? (c.geometry.index ? c.geometry.index.count / 3 : (c.geometry.attributes.position ? c.geometry.attributes.position.count / 3 : 0)) : 0;
-          if (geoCount <= 12) c.visible = false;
-        });
-        if (tiltGroup) tiltGroup.add(titleClone);
-        _titleAltClones[glbFile] = titleClone;
-      }
-      titleClone.visible = true;
-      _titleAltCurrent = titleClone;
-    }
-    return; // alt skins skip the per-mesh material path below (they ship with their own materials)
-  }
-
-  // Non-alt skin: ensure default runner clone is visible
-  if (_titleShipModel) _titleShipModel.visible = true;
-  _titleAltCurrent = null;
 
   // Get source model's meshes to pull materials from (since _prebuiltSkins uses source uuids)
   const srcModel = window._shipModel;
