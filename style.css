@@ -4937,19 +4937,10 @@ body.sr-open #title-leaderboard {
   border-radius: 6px;
   overflow: hidden;
 }
-/* Apply ship X/Y to the relocated canvas inside the stage. */
-.sr-overlay:not(.hidden) #title-ship-canvas {
-  transform: translate(var(--sr-tune-shipx, 0), var(--sr-tune-shipy, 0));
-}
-/* Handling bar scale. transform-origin keeps it anchored to its slot. */
-.sr-overlay:not(.hidden) .sr-handling-slot .shop-handling-bar {
-  transform: scale(var(--sr-tune-handling, 1));
-  transform-origin: left center;
-}
-/* Panel Y offset — slides the whole tab/content panel up or down. */
-.sr-overlay:not(.hidden) .sr-panel {
-  transform: translateY(var(--sr-tune-panely, 0));
-}
+/* Ship X/Y, handling scale, panel translate REMOVED — rigid layout only.
+   Each box is locked inside its grid cell. STAGE slider resizes the stage
+   square; ZOOM slider changes camera FOV inside the canvas. Nothing else
+   can shift positions. */
 .sr-overlay.hidden { display: none !important; }
 .sr-stage {
   position: relative !important;
@@ -5092,16 +5083,20 @@ body.sr-open #title-leaderboard {
     padding: 8px;
     gap: 8px;
   }
-  .sr-overlay:not(.hidden) .sr-stage         { grid-area: stage; }
-  .sr-overlay:not(.hidden) .sr-handling-slot { grid-area: handle; }
+  .sr-overlay:not(.hidden) .sr-stage         { grid-area: stage; min-width: 0; min-height: 0; }
+  .sr-overlay:not(.hidden) .sr-handling-slot { grid-area: handle; min-width: 0; overflow: hidden; }
   .sr-overlay:not(.hidden) .sr-panel {
     grid-area: panel;
     max-width: none;
     width: 100%;
     max-height: none;
     height: 100%;
+    min-width: 0;
+    min-height: 0;
     padding: 8px 10px 10px;
     align-self: stretch;
+    overflow: hidden;
+    box-sizing: border-box;
   }
   /* Tabs on one row, smaller padding */
   .sr-overlay .sr-tabs {
