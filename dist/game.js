@@ -13639,15 +13639,15 @@ function updateStreakBadge() {
   // anchors are children of _titleShipModel — their localPosition IS the
   // tuned offset. Drag updates their localPosition; wheel updates scale.
   // 'flip' inverts the exhaust direction (Z velocity sign).
-  const SR_TUNER_KEY = 'jh_showroom_tuner_v6';
+  const SR_TUNER_KEY = 'jh_showroom_tuner_v7';
   // Z is relative to auto-detected hull back; 0 = visible hull back.
   // pitch/yaw are exhaust direction angles in degrees (0,0 = straight back along -Z).
   // 'sel' picks which group is being dragged: L|R = main, mL|mR = mini.
   const SR_TUNER_DEFAULT = {
-    L:  { x: -1.583, y:  0.037, z: 0.0, scale: 2.854, pitch: 0, yaw: 0 },
-    R:  { x:  1.583, y:  0.037, z: 0.0, scale: 2.854, pitch: 0, yaw: 0 },
-    mL: { x: -0.5,   y: -0.05,  z: 0.0, scale: 1.5,   pitch: 0, yaw: 0 },
-    mR: { x:  0.5,   y: -0.05,  z: 0.0, scale: 1.5,   pitch: 0, yaw: 0 },
+    L:  { x: -1.665, y:  0.010, z: 0.0, scale: 2.854, pitch: 0, yaw: 0 },
+    R:  { x:  1.665, y:  0.010, z: 0.0, scale: 2.854, pitch: 0, yaw: 0 },
+    mL: { x: -0.852, y:  0.032, z: 0.0, scale: 1.5,   pitch: 0, yaw: 0 },
+    mR: { x:  0.852, y:  0.032, z: 0.0, scale: 1.5,   pitch: 0, yaw: 0 },
     mirror: true,
     flip: false,
     rotMode: false, // when true, mouse drag rotates the exhaust angle instead of moving position
@@ -13658,7 +13658,7 @@ function updateStreakBadge() {
       bloomOpacity: 0.18,  // 0..1
       partSize: 1.00,      // 0..3 multiplier on point size
       partOpacity: 1.00,   // 0..1
-      lifeBase: 0.60,      // 0.1..2 trail length base
+      lifeBase: 0.10,      // 0.1..2 trail length base
       lifeJit: 0.22,       // 0..1 trail length jitter
       miniSize: 0.55,      // 0.1..2 mini-thruster size mult
       miniBloom: 0.50,     // 0..2 mini-thruster bloom mult
