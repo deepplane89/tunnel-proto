@@ -58,7 +58,7 @@
   // anchors are children of _titleShipModel — their localPosition IS the
   // tuned offset. Drag updates their localPosition; wheel updates scale.
   // 'flip' inverts the exhaust direction (Z velocity sign).
-  const SR_TUNER_KEY = 'jh_showroom_tuner_v4';
+  const SR_TUNER_KEY = 'jh_showroom_tuner_v5';
   // Z is relative to auto-detected hull back; 0 = visible hull back.
   // pitch/yaw are exhaust direction angles in degrees (0,0 = straight back along -Z).
   // 'sel' picks which group is being dragged: L|R = main, mL|mR = mini.
@@ -839,7 +839,8 @@
     const el = document.createElement('div');
     el.id = 'sr-fx-hud';
     el.style.cssText = [
-      'position:fixed','top:8px','right:8px','z-index:99999',
+      'position:fixed','top:8px','left:8px','z-index:99998',
+      'transform:translateY(260px)', // sits below the tuner HUD (which is fixed top:8 left:8)
       'font:12px/1.35 ui-monospace,Menlo,monospace','color:#cef',
       'background:rgba(0,12,24,0.82)','border:1px solid #3af','padding:8px 10px',
       'border-radius:6px','user-select:none','pointer-events:auto',
