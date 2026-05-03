@@ -14612,36 +14612,44 @@ function updateStreakBadge() {
     canvas.style.height = h + 'px';
   }
 
-  // Debounce resize/orientation events so iOS rotation animation (which
-  // fires multiple intermediate resize events) doesn't cause a visible
-  // morph. Hide canvas immediately on first event, debounce the actual
-  // layout work until 200ms after events stop firing, then reveal.
+  // Orientation handling.
+  // Per https://www.quirksmode.org/blog/archives/2013/11/orientationchan.html
+  // and MDN, the cleanest cross-browser way to detect orientation flips
+  // (without firing on phantom resizes / URL bar / keyboard / rotation
+  // animation intermediate frames) is matchMedia. It fires exactly once
+  // AFTER the viewport has finished updating.
+  // For non-orientation resizes (URL bar show/hide), we still want the
+  // canvas to fit its stage — but we don't want to recompute layout.
   let _resizeT = null;
-  let _resizeLastOrient = null;
   function _onResize() {
     if (!_open) return;
-    const canvas = document.getElementById('title-ship-canvas');
-    if (canvas) canvas.style.visibility = 'hidden';
+    // Just resize the canvas to fit the current stage rect. No layout
+    // recompute on phantom/URL-bar resizes.
     if (_resizeT) clearTimeout(_resizeT);
     _resizeT = setTimeout(() => {
       _resizeT = null;
-      const orient = window.innerWidth >= window.innerHeight ? 'l' : 'p';
-      const orientChanged = (_resizeLastOrient !== orient);
-      _resizeLastOrient = orient;
-      _refreshTunesForOrientation();
-      // Only recompute showroom layout when orientation actually flipped,
-      // not on every minor resize (URL bar show/hide, keyboard, etc.).
-      if (orientChanged && typeof _editApplyAll === 'function') {
-        _editApplyAll();
-      }
+      _resizeStageCanvas();
+    }, 100);
+  }
+  function _onOrientationFlip() {
+    if (!_open) return;
+    // Hide canvas during rotation, wait for layout to settle, recompute,
+    // then reveal. matchMedia fires AFTER viewport updates so innerWidth
+    // is already correct here, but iOS Safari sometimes still needs an
+    // extra frame for CSS reflow.
+    const canvas = document.getElementById('title-ship-canvas');
+    if (canvas) canvas.style.visibility = 'hidden';
+    _refreshTunesForOrientation();
+    if (typeof _editApplyAll === 'function') _editApplyAll();
+    // Triple rAF: viewport → CSS vars apply → grid reflows → canvas resize.
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           _resizeStageCanvas();
-          const c = document.getElementById('title-ship-canvas');
-          if (c) c.style.visibility = '';
+          if (canvas) canvas.style.visibility = '';
         });
       });
-    }, 220);
+    });
   }
 
   // ─── Showroom thruster preview: build, tick, show/hide ─────────────
@@ -15099,12 +15107,20 @@ function updateStreakBadge() {
     // Relocate after the overlay is visible so getBoundingClientRect is right.
     requestAnimationFrame(() => {
       _relocateCanvasToStage();
-      // Seed orient cache so post-open resizes don't false-trigger.
-      _resizeLastOrient = window.innerWidth >= window.innerHeight ? 'l' : 'p';
       if (!_resizeBound) {
         _resizeBound = true;
         window.addEventListener('resize', _onResize);
-        window.addEventListener('orientationchange', _onResize);
+        // matchMedia fires exactly once on orientation flip, AFTER the
+        // viewport has fully updated. This is the reliable way to detect
+        // rotation without phantom events from URL bar, keyboard, etc.
+        try {
+          const mq = window.matchMedia('(orientation: landscape)');
+          if (mq && typeof mq.addEventListener === 'function') {
+            mq.addEventListener('change', _onOrientationFlip);
+          } else if (mq && typeof mq.addListener === 'function') {
+            mq.addListener(_onOrientationFlip); // legacy Safari
+          }
+        } catch(_){}
       }
       // Init thruster preview lazily on first open + show it.
       _thrInit();
