@@ -14177,6 +14177,7 @@ function updateStreakBadge() {
   // right in portrait would be wrong in landscape and vice versa.
   // Storage keys: jh_showroom_<key>_p (portrait) / jh_showroom_<key>_l (landscape).
   const SR_TUNE_KEYS = {
+    stage:    { def: 100, min: 40,  max: 160 },
     zoom:     { def: 100, min: 40,  max: 160 },
     shipx:    { def: 0,   min: -50, max: 50  },
     shipy:    { def: 0,   min: -50, max: 50  },
@@ -14203,6 +14204,14 @@ function updateStreakBadge() {
     if (!overlay) return;
     if (key === 'zoom') {
       _resizeStageCanvas(); // re-reads localStorage for FOV multiplier
+      return;
+    }
+    if (key === 'stage') {
+      // Drive a unitless multiplier; portrait CSS uses it to scale stage
+      // row, landscape uses it to scale stage column. Then re-resize canvas.
+      overlay.style.setProperty('--sr-tune-stage', String(val / 100));
+      // double rAF so grid reflows before canvas resize reads new rect
+      requestAnimationFrame(() => requestAnimationFrame(() => _resizeStageCanvas()));
       return;
     }
     if (key === 'shipx')    overlay.style.setProperty('--sr-tune-shipx', val + 'px');

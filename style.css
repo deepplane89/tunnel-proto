@@ -4809,11 +4809,16 @@ html, body {
   font-size: 9px;
 }
 .sr-tune-val {
-  flex: 0 0 32px;
+  display: inline-block;
+  flex: 0 0 38px;
   text-align: right;
-  font: 600 10px/1 'Orbitron', sans-serif;
-  color: var(--sr-accent);
-  text-shadow: 0 0 6px var(--sr-accent-glow);
+  font: 700 12px/1 'Orbitron', sans-serif;
+  color: #cffafe;
+  text-shadow: 0 0 6px rgba(34,211,238,0.8);
+  background: rgba(0,14,28,0.6);
+  border: 1px solid rgba(34,211,238,0.35);
+  padding: 3px 5px;
+  border-radius: 3px;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -4909,18 +4914,16 @@ body.sr-open #title-leaderboard {
    garage would be permanently visible at boot. Use specificity instead. */
 .sr-overlay:not(.hidden) {
   display: grid;
-  /* Pin panel to fixed bottom slab so its height does NOT change per tab.
-     Stage gets all remaining space — ship preview stays exactly the same
-     size whether you're on Skins, Thrusters, Add-ons, or Power-ups. */
-  grid-template-rows: 1fr auto 50vh;
+  /* Stage height = 45vh * stage-multiplier (def 1). Panel = 50vh fixed.
+     Handling = auto. Slider 40 -> 18vh stage, 160 -> 72vh stage. */
+  grid-template-rows: calc(45vh * var(--sr-tune-stage, 1)) auto 50vh;
   grid-template-columns: 1fr;
   align-items: stretch;
   justify-items: stretch;
-  /* Uniform outer padding + uniform gap. Every grid child fills its cell
-     edge-to-edge, so stage / handling / panel boxes line up perfectly. */
   padding: 8px;
   gap: 8px;
   /* CSS variables driven by the SKINS tuning sliders. Defaults = no-op. */
+  --sr-tune-stage: 1;
   --sr-tune-shipx: 0px;
   --sr-tune-shipy: 0px;
   --sr-tune-handling: 1;
@@ -5072,7 +5075,10 @@ body.sr-open #title-leaderboard {
  */
 @media (orientation: landscape) {
   .sr-overlay:not(.hidden) {
-    grid-template-columns: 1fr 240px;
+    /* Stage column = stage-multiplier * 1fr, panel column = inverse so total
+       stays bounded. Slider 100 -> stage:1fr panel:240px (default).
+       Slider 160 -> wider stage, narrower panel. */
+    grid-template-columns: calc(var(--sr-tune-stage, 1) * 1fr) calc(240px / var(--sr-tune-stage, 1));
     grid-template-rows: 1fr auto;
     grid-template-areas:
       "stage  panel"
