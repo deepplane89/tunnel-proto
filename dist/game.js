@@ -15194,9 +15194,9 @@ function updateStreakBadge() {
     const overlay = document.getElementById('thruster-overlay');
     if (!overlay) return;
     let saved = _editLoad();
-    // Auto-fit to viewport on first open (no saved layout) on desktop landscape.
+    // Auto-fit to viewport on first open (no saved layout) whenever landscape.
     if (!saved || Object.keys(saved).length === 0) {
-      if (window.innerWidth >= 900) {
+      if (window.innerWidth >= window.innerHeight) {
         _editFitScreen();
         return;
       }
