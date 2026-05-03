@@ -1115,7 +1115,7 @@ const DR_SEQUENCE = [
   // on stage entry so other stages sharing vibeIdx 2 are unaffected.
   { name: 'S6_RINGS',         type: 'lethal_rings',  duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2, sunOverride: 2 },
   // Canyon F — HIGH WALL LIGHTNING (real)
-  { name: 'CF_HIGH_WALL',     type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2, darkSlabs: true },
+  { name: 'CF_HIGH_WALL',     type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2 },
   { name: 'CF_REST',          type: 'rest', duration: 3, speed: 2.1, vibeIdx: 3, physTier: 2, musicTrack: 'keepgoing' },
 
   // Stage 7 — L4 sine corridor (full 518 rows, ~48s @ 2.1x)
@@ -1271,13 +1271,6 @@ function _drSequencerTick(dt) {
       const fam = DR_MECHANIC_FAMILIES[stage.family];
       const dummyBand = { label: 'BAND4', peakChance: 1 };
       fam.activate(dummyBand, 'peak');
-      // Per-stage canyon skin override (PRE_T4A_CANYON shares one tuner across stages)
-      if (stage.darkSlabs && typeof _canyonTuner !== 'undefined') {
-        _canyonTuner._allDark = true;
-        _canyonTuner._allCyan = false;
-        _canyonTuner.darkRgh = 0.32;
-        _canyonTuner.darkEmi = 1.4;
-      }
     }
     // If stage has a duration, use time — more reliable than row count at variable speeds
     if (stage.duration) {
