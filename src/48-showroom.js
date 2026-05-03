@@ -58,14 +58,19 @@
   // anchors are children of _titleShipModel — their localPosition IS the
   // tuned offset. Drag updates their localPosition; wheel updates scale.
   // 'flip' inverts the exhaust direction (Z velocity sign).
-  const SR_TUNER_KEY = 'jh_showroom_tuner_v2';
-  // Z is now relative to the auto-detected hull back; 0 = right at hull back.
+  const SR_TUNER_KEY = 'jh_showroom_tuner_v3';
+  // Z is relative to auto-detected hull back; 0 = visible hull back.
+  // pitch/yaw are exhaust direction angles in degrees (0,0 = straight back along -Z).
+  // 'sel' picks which group is being dragged: L|R = main, mL|mR = mini.
   const SR_TUNER_DEFAULT = {
-    L: { x: -0.48, y: 0.05, z: 0.0, scale: 1.0 },
-    R: { x:  0.48, y: 0.05, z: 0.0, scale: 1.0 },
+    L:  { x: -1.583, y:  0.037, z: 0.0, scale: 2.854, pitch: 0, yaw: 0 },
+    R:  { x:  1.583, y:  0.037, z: 0.0, scale: 2.854, pitch: 0, yaw: 0 },
+    mL: { x: -0.5,   y: -0.05,  z: 0.0, scale: 1.5,   pitch: 0, yaw: 0 },
+    mR: { x:  0.5,   y: -0.05,  z: 0.0, scale: 1.5,   pitch: 0, yaw: 0 },
     mirror: true,
-    flip: false,
-    selected: 'L',
+    flip: true,
+    rotMode: false, // when true, mouse drag rotates the exhaust angle instead of moving position
+    selected: 'L',  // 'L' | 'R' | 'mL' | 'mR'
   };
   let _tuner = null;
   function _loadTuner() {
@@ -74,8 +79,10 @@
       if (raw) {
         const parsed = JSON.parse(raw);
         return Object.assign({}, SR_TUNER_DEFAULT, parsed, {
-          L: Object.assign({}, SR_TUNER_DEFAULT.L, parsed.L||{}),
-          R: Object.assign({}, SR_TUNER_DEFAULT.R, parsed.R||{}),
+          L:  Object.assign({}, SR_TUNER_DEFAULT.L,  parsed.L  || {}),
+          R:  Object.assign({}, SR_TUNER_DEFAULT.R,  parsed.R  || {}),
+          mL: Object.assign({}, SR_TUNER_DEFAULT.mL, parsed.mL || {}),
+          mR: Object.assign({}, SR_TUNER_DEFAULT.mR, parsed.mR || {}),
         });
       }
     } catch(_){}
@@ -466,120 +473,119 @@
     } catch(_){}
   }
 
+  // Build one particle+bloom system in titleScene; returns its handle.
+  function _buildPodSystem(N, tex, isMini) {
+    const positions  = new Float32Array(N * 3);
+    const colors     = new Float32Array(N * 3);
+    const sizes      = new Float32Array(N);
+    const velocities = [];
+    const age        = new Float32Array(N);
+    const life       = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      age[i] = Math.random();
+      life[i] = SR_DEFAULTS.lifeMin + Math.random() * SR_DEFAULTS.lifeJit;
+      velocities.push(new THREE.Vector3());
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
+    geo.setAttribute('size',     new THREE.BufferAttribute(sizes,     1));
+    const mat = new THREE.PointsMaterial({
+      size: isMini ? 0.08 : 0.13,
+      map: tex,
+      vertexColors: true,
+      transparent: true,
+      opacity: 1.0,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true,
+    });
+    const pts = new THREE.Points(geo, mat);
+    pts.frustumCulled = false;
+    pts.renderOrder = isMini ? 12 : 10;
+    pts.visible = false;
+    titleScene.add(pts);
+    const bMat = new THREE.SpriteMaterial({
+      map: tex, color: 0xffffff, transparent: true, opacity: 0,
+      depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+    });
+    const bSpr = new THREE.Sprite(bMat);
+    bSpr.frustumCulled = false;
+    bSpr.renderOrder = isMini ? 13 : 11;
+    bSpr.visible = false;
+    titleScene.add(bSpr);
+    return { points: pts, geo, positions, colors, sizes, velocities, ages: age, lifetimes: life, bloom: bSpr, isMini };
+  }
+
   function _thrInit() {
     if (_thr) return;
     if (typeof titleScene === 'undefined' || !titleScene) return;
     if (typeof NOZZLE_OFFSETS === 'undefined' || !NOZZLE_OFFSETS) return;
     _captureBaselineIfMissing();
-    const N = SR_PARTICLE_COUNT;
-    const points = [], geos = [], poses = [], cols = [], szs = [], vels = [], ages = [], lifes = [], blooms = [];
     const tex = _makeBloomTex();
-    for (let p = 0; p < 2; p++) {
-      const positions  = new Float32Array(N * 3);
-      const colors     = new Float32Array(N * 3);
-      const sizes      = new Float32Array(N);
-      const velocities = [];
-      const age        = new Float32Array(N);
-      const life       = new Float32Array(N);
-      for (let i = 0; i < N; i++) {
-        age[i] = Math.random();
-        life[i] = SR_DEFAULTS.lifeMin + Math.random() * SR_DEFAULTS.lifeJit;
-        velocities.push(new THREE.Vector3());
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
-      geo.setAttribute('size',     new THREE.BufferAttribute(sizes,     1));
-      const mat = new THREE.PointsMaterial({
-        size: 0.13,
-        map: tex,
-        vertexColors: true,
-        transparent: true,
-        opacity: 1.0,
-        depthWrite: false,
-        depthTest: false,
-        blending: THREE.AdditiveBlending,
-        sizeAttenuation: true,
-      });
-      const pts = new THREE.Points(geo, mat);
-      pts.frustumCulled = false;
-      pts.renderOrder = 10;
-      pts.visible = false;
-      titleScene.add(pts);
-
-      const bMat = new THREE.SpriteMaterial({
-        map: tex,
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        depthTest: false,
-        blending: THREE.AdditiveBlending,
-      });
-      const bSpr = new THREE.Sprite(bMat);
-      bSpr.frustumCulled = false;
-      bSpr.renderOrder = 11;
-      bSpr.visible = false;
-      titleScene.add(bSpr);
-
-      points.push(pts); geos.push(geo); poses.push(positions); cols.push(colors); szs.push(sizes);
-      vels.push(velocities); ages.push(age); lifes.push(life); blooms.push(bSpr);
-    }
-    // Hand-tuned anchors as children of the title ship model. Their local
-    // position IS the nozzle offset — no math needed, getWorldPosition()
-    // walks the entire parent chain (pivot/spinGroup/tiltGroup/etc).
+    // 4 pod systems: main L, main R, mini L, mini R.
+    const NB = SR_PARTICLE_COUNT;
+    const NM = Math.max(40, Math.floor(SR_PARTICLE_COUNT * 0.6));
+    const groups = {
+      L:  _buildPodSystem(NB, tex, false),
+      R:  _buildPodSystem(NB, tex, false),
+      mL: _buildPodSystem(NM, tex, true),
+      mR: _buildPodSystem(NM, tex, true),
+    };
     if (!_tuner) _tuner = _loadTuner();
     const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
-    const anchors = [new THREE.Object3D(), new THREE.Object3D()];
-    anchors[0].name = 'sr_anchor_L';
-    anchors[1].name = 'sr_anchor_R';
-    if (ship) {
-      ship.add(anchors[0]);
-      ship.add(anchors[1]);
-    } else {
-      // Fallback: park in titleScene so getWorldPosition still works.
-      titleScene.add(anchors[0]);
-      titleScene.add(anchors[1]);
-    }
+    const anchors = {};
+    ['L','R','mL','mR'].forEach(k => {
+      const a = new THREE.Object3D();
+      a.name = 'sr_anchor_' + k;
+      anchors[k] = a;
+      if (ship) ship.add(a); else titleScene.add(a);
+    });
     // Auto-detect the actual hull back-Z in ship-model local space so the
     // tuner's Z value means "distance behind visible hull back" instead of
     // "absolute model Z" — cancels out any GLB padding/empty-space at the
     // back of the bounding box. Re-measured on every init in case shapes swap.
-    let hullBackZ = 0; // local-space Z at which the visible hull ends
+    let hullBackZ = 0;
     if (ship) {
       try {
         const bbox = new THREE.Box3().setFromObject(ship);
         if (bbox && isFinite(bbox.max.z) && isFinite(bbox.min.z)) {
-          // Convert world-space bbox extremes into ship-model local space.
           ship.updateMatrixWorld(true);
           const vMax = new THREE.Vector3(0, 0, bbox.max.z);
           const vMin = new THREE.Vector3(0, 0, bbox.min.z);
           ship.worldToLocal(vMax);
           ship.worldToLocal(vMin);
-          // The "back" of the ship in our local frame is the more-negative Z
-          // (we exhaust toward -Z, so the hull's back end is the smallest Z).
           hullBackZ = Math.min(vMax.z, vMin.z);
         }
       } catch(_){}
     }
     _thr = {
-      points, geos, poses, cols, szs, vels, ages, lifes, blooms,
+      groups,           // { L, R, mL, mR }
+      anchors,          // { L, R, mL, mR }
       color: new THREE.Color(0x66ccff),
       _v: new THREE.Vector3(),
-      anchors,
       hullBackZ,
     };
     _applyTunerToAnchors();
   }
 
   // Push tuner state into the anchor Object3Ds. Anchor local Z is
-  // hullBackZ + tuner.z, so tuner.z == 0 sits exactly at the visible hull
-  // back, regardless of GLB padding.
+  // hullBackZ + tuner.z so tuner.z == 0 sits at the visible hull back.
+  // Pitch/yaw are converted to a quaternion so anchor's local -Z direction
+  // (the exhaust direction) tilts — we read it via getWorldDirection in tick.
+  const _DEG2RAD = Math.PI / 180;
   function _applyTunerToAnchors() {
     if (!_thr || !_thr.anchors || !_tuner) return;
     const hz = _thr.hullBackZ || 0;
-    _thr.anchors[0].position.set(_tuner.L.x, _tuner.L.y, hz + _tuner.L.z);
-    _thr.anchors[1].position.set(_tuner.R.x, _tuner.R.y, hz + _tuner.R.z);
+    ['L','R','mL','mR'].forEach(k => {
+      const t = _tuner[k]; const a = _thr.anchors[k];
+      if (!t || !a) return;
+      a.position.set(t.x, t.y, hz + t.z);
+      // Pitch around X (looking at side profile, +pitch tilts exhaust upward).
+      // Yaw around Y (+yaw rotates exhaust toward +X).
+      a.rotation.set((t.pitch||0) * _DEG2RAD, (t.yaw||0) * _DEG2RAD, 0);
+    });
   }
 
   // ── Drag tuner: HUD + mouse handlers ───────────────────────────
@@ -603,26 +609,27 @@
       'border-radius:6px','user-select:none','pointer-events:auto',
       'min-width:240px','box-shadow:0 0 12px rgba(60,180,255,0.25)'
     ].join(';');
+    const btn = (a, lbl, danger) =>
+      '<button data-act="'+a+'" style="flex:1;background:'+(danger?'#411':'#114')+';color:'+(danger?'#fcc':'#9cf')+';border:1px solid '+(danger?'#f55':'#3af')+';padding:3px 6px;border-radius:3px;cursor:pointer;min-width:32px">'+lbl+'</button>';
     el.innerHTML = [
       '<div style="font-weight:700;color:#7df;margin-bottom:4px;letter-spacing:1px">THRUSTER TUNER</div>',
       '<div id="sr-tu-readout" style="white-space:pre;font-size:11px"></div>',
       '<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">',
-        '<button data-act="sel-L" style="flex:1;background:#114;color:#9cf;border:1px solid #3af;padding:3px 6px;border-radius:3px;cursor:pointer">L</button>',
-        '<button data-act="sel-R" style="flex:1;background:#114;color:#9cf;border:1px solid #3af;padding:3px 6px;border-radius:3px;cursor:pointer">R</button>',
-        '<button data-act="mirror" style="flex:1;background:#114;color:#9cf;border:1px solid #3af;padding:3px 6px;border-radius:3px;cursor:pointer">MIR</button>',
-        '<button data-act="flip" style="flex:1;background:#114;color:#9cf;border:1px solid #3af;padding:3px 6px;border-radius:3px;cursor:pointer">FLP</button>',
-        '<button data-act="reset" style="flex:1;background:#411;color:#fcc;border:1px solid #f55;padding:3px 6px;border-radius:3px;cursor:pointer">RST</button>',
+        btn('sel-L','L'), btn('sel-R','R'), btn('sel-mL','mL'), btn('sel-mR','mR'),
       '</div>',
-      '<div style="font-size:10px;color:#7af;margin-top:6px;line-height:1.3">drag = move x/y &middot; wheel = scale &middot; shift+wheel = z</div>',
+      '<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">',
+        btn('mirror','MIR'), btn('flip','FLP'), btn('rot','ROT'), btn('reset','RST', true),
+      '</div>',
+      '<div style="font-size:10px;color:#7af;margin-top:6px;line-height:1.3">drag = move x/y &middot; wheel = scale &middot; shift+wheel = z<br>ROT mode: drag = pitch/yaw &middot; wheel = scale</div>',
     ].join('');
     document.body.appendChild(el);
     el.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return;
       const act = b.dataset.act;
-      if (act === 'sel-L') _tuner.selected = 'L';
-      else if (act === 'sel-R') _tuner.selected = 'R';
+      if (act && act.indexOf('sel-') === 0) _tuner.selected = act.slice(4);
       else if (act === 'mirror') _tuner.mirror = !_tuner.mirror;
       else if (act === 'flip') _tuner.flip = !_tuner.flip;
+      else if (act === 'rot') _tuner.rotMode = !_tuner.rotMode;
       else if (act === 'reset') {
         _tuner = JSON.parse(JSON.stringify(SR_TUNER_DEFAULT));
         _applyTunerToAnchors();
@@ -638,41 +645,48 @@
     if (!_tunerHud || !_tuner) return;
     const ro = _tunerHud.querySelector('#sr-tu-readout');
     const f = (n) => (Math.round(n*1000)/1000).toFixed(3);
+    const fa = (n) => (Math.round(n*10)/10).toFixed(1);
     const sel = _tuner.selected;
-    const lstr = (sel==='L'?'>':' ')+'L  x='+f(_tuner.L.x)+' y='+f(_tuner.L.y)+' z='+f(_tuner.L.z)+' s='+f(_tuner.L.scale);
-    const rstr = (sel==='R'?'>':' ')+'R  x='+f(_tuner.R.x)+' y='+f(_tuner.R.y)+' z='+f(_tuner.R.z)+' s='+f(_tuner.R.scale);
+    const row = (k) => {
+      const t = _tuner[k];
+      return (sel===k?'>':' ')+(k+'  ').slice(0,3)+
+        ' x='+f(t.x)+' y='+f(t.y)+' z='+f(t.z)+
+        ' s='+f(t.scale)+' p='+fa(t.pitch||0)+' yw='+fa(t.yaw||0);
+    };
     const hz = (_thr && _thr.hullBackZ != null) ? _thr.hullBackZ : 0;
-    ro.textContent = lstr+'\n'+rstr+'\nmirror='+(_tuner.mirror?'ON ':'off')+' flip='+(_tuner.flip?'ON':'off')+'  hullZ='+f(hz);
-    // Highlight active button states.
+    ro.textContent = row('L')+'\n'+row('R')+'\n'+row('mL')+'\n'+row('mR')+
+      '\nmir='+(_tuner.mirror?'ON ':'off')+' flp='+(_tuner.flip?'ON':'off')+
+      ' rot='+(_tuner.rotMode?'ON':'off')+' hz='+f(hz);
     _tunerHud.querySelectorAll('button').forEach(b => {
       const a = b.dataset.act;
       let on = false;
-      if (a==='sel-L') on = sel==='L';
-      else if (a==='sel-R') on = sel==='R';
+      if (a && a.indexOf('sel-') === 0) on = sel === a.slice(4);
       else if (a==='mirror') on = _tuner.mirror;
       else if (a==='flip') on = _tuner.flip;
-      b.style.background = on ? '#3af' : '#114';
-      b.style.color = on ? '#001' : '#9cf';
+      else if (a==='rot') on = _tuner.rotMode;
+      b.style.background = on ? '#3af' : (a==='reset' ? '#411' : '#114');
+      b.style.color = on ? '#001' : (a==='reset' ? '#fcc' : '#9cf');
     });
   }
 
+  // Mirror partner mapping: dragging L mirrors to R; dragging mL to mR. Mini
+  // group has its own pair so main and mini don't get tangled.
+  const _MIRROR_PAIR = { L: 'R', R: 'L', mL: 'mR', mR: 'mL' };
+
   // Convert a screen-pixel delta to a world-space delta at the anchor's depth,
   // then bake into the anchor's parent (titleShipModel) local space.
-  function _screenDeltaToLocal(dxPx, dyPx, anchorIdx) {
+  function _screenDeltaToLocal(dxPx, dyPx, sel) {
     if (!_thr || !_thr.anchors) return null;
     const canvas = document.getElementById('title-ship-canvas');
     if (!canvas || typeof titleCamera === 'undefined' || !titleCamera) return null;
     const rect = canvas.getBoundingClientRect();
-    const a = _thr.anchors[anchorIdx];
-    a.getWorldPosition(_tunerVec); // anchor world pos
-    // Project to NDC.
+    const a = _thr.anchors[sel];
+    if (!a) return null;
+    a.getWorldPosition(_tunerVec);
     const ndc = _tunerVec.clone().project(titleCamera);
-    // New NDC after applying screen delta (NDC: x in [-1,1], y inverted).
     const ndx = ndc.x + (2 * dxPx / rect.width);
     const ndy = ndc.y - (2 * dyPx / rect.height);
-    // Unproject back to world at the same Z (preserve z NDC).
     _tunerVec2.set(ndx, ndy, ndc.z).unproject(titleCamera);
-    // Convert world delta into anchor's parent local space.
     const parent = a.parent;
     if (!parent) return null;
     parent.updateMatrixWorld(true);
@@ -685,19 +699,40 @@
 
   function _applyDeltaToTuner(dx, dy, dz) {
     const sel = _tuner.selected;
-    const t = _tuner[sel];
+    const t = _tuner[sel]; if (!t) return;
     t.x += dx; t.y += dy; t.z += (dz||0);
     if (_tuner.mirror) {
-      const other = _tuner[sel === 'L' ? 'R' : 'L'];
-      other.x = -t.x; other.y = t.y; other.z = t.z;
+      const other = _tuner[_MIRROR_PAIR[sel]];
+      if (other) { other.x = -t.x; other.y = t.y; other.z = t.z; }
     }
   }
 
   function _applyScaleToTuner(mul) {
     const sel = _tuner.selected;
-    const t = _tuner[sel];
+    const t = _tuner[sel]; if (!t) return;
     t.scale = Math.max(0.05, Math.min(8.0, t.scale * mul));
-    if (_tuner.mirror) _tuner[sel === 'L' ? 'R' : 'L'].scale = t.scale;
+    if (_tuner.mirror) {
+      const other = _tuner[_MIRROR_PAIR[sel]];
+      if (other) other.scale = t.scale;
+    }
+  }
+
+  // Rotate-mode delta: pixel-y → pitch (deg), pixel-x → yaw (deg). Mirrored
+  // partner gets MIRRORED yaw (sign-flipped) so a 'pinch outward' affects both
+  // sides symmetrically; pitch stays the same on both.
+  function _applyRotDeltaToTuner(dxPx, dyPx) {
+    const sel = _tuner.selected;
+    const t = _tuner[sel]; if (!t) return;
+    const SENS = 0.25; // deg per pixel
+    t.pitch = (t.pitch || 0) + dyPx * SENS;
+    t.yaw   = (t.yaw   || 0) + dxPx * SENS;
+    // Clamp to a sane range.
+    t.pitch = Math.max(-90, Math.min(90, t.pitch));
+    t.yaw   = Math.max(-90, Math.min(90, t.yaw));
+    if (_tuner.mirror) {
+      const other = _tuner[_MIRROR_PAIR[sel]];
+      if (other) { other.pitch = t.pitch; other.yaw = -t.yaw; }
+    }
   }
 
   function _onTunerMouseDown(e) {
@@ -710,10 +745,14 @@
   }
   function _onTunerMouseMove(e) {
     if (!_tunerDragging || !_open) return;
-    const sel = _tuner.selected === 'L' ? 0 : 1;
-    const d = _screenDeltaToLocal(e.movementX || 0, e.movementY || 0, sel);
-    if (!d) return;
-    _applyDeltaToTuner(d.dx, d.dy, 0);
+    const dx = e.movementX || 0, dy = e.movementY || 0;
+    if (_tuner.rotMode) {
+      _applyRotDeltaToTuner(dx, dy);
+    } else {
+      const d = _screenDeltaToLocal(dx, dy, _tuner.selected);
+      if (!d) return;
+      _applyDeltaToTuner(d.dx, d.dy, 0);
+    }
     _applyTunerToAnchors();
     _updateTunerHud();
   }
@@ -764,8 +803,10 @@
 
   function _thrShow(visible) {
     if (!_thr) return;
-    _thr.points.forEach(p => p.visible = !!visible);
-    _thr.blooms.forEach(b => b.visible = !!visible);
+    Object.values(_thr.groups).forEach(g => {
+      g.points.visible = !!visible;
+      g.bloom.visible = !!visible;
+    });
   }
 
   // Read the equipped color from storage and update the cached color.
@@ -825,61 +866,68 @@
     const tCol = _thr.color;
     const ss = SR_SPEED_SCALE;
     const tp = SR_TP;
+    const flipSign = _tuner.flip ? 1 : -1;  // -1 = exhaust into anchor -Z (default)
+    const _exhDir = new THREE.Vector3();
 
-    for (let idx = 0; idx < 2; idx++) {
-      const sys = {
-        positions: _thr.poses[idx], colors: _thr.cols[idx], sizes: _thr.szs[idx],
-        velocities: _thr.vels[idx], ages: _thr.ages[idx], lifetimes: _thr.lifes[idx],
-      };
-      const points = _thr.points[idx];
-      const bloom = _thr.blooms[idx];
+    const KEYS = ['L','R','mL','mR'];
+    for (let ki = 0; ki < KEYS.length; ki++) {
+      const k = KEYS[ki];
+      const g = _thr.groups[k];
+      const a = _thr.anchors[k];
+      const tu = _tuner[k];
+      if (!g || !a || !tu) continue;
+      const isMini = !!g.isMini;
+      const N = g.positions.length / 3 | 0;
 
-      // Get nozzle world position from the hand-tuned anchor (child of title
-      // ship) — walks the entire parent chain so it works regardless of how
-      // the ship is parented or scaled.
-      _thr.anchors[idx].getWorldPosition(_thr._v);
+      // World position of the nozzle anchor.
+      a.getWorldPosition(_thr._v);
       const wx = _thr._v.x, wy = _thr._v.y, wz = _thr._v.z;
-      const aScale = (idx === 0 ? _tuner.L.scale : _tuner.R.scale) || 1.0;
-      const flipSign = _tuner.flip ? 1 : -1;  // -1 = exhaust into -Z (default)
+      // World direction the anchor's local -Z points to (this is exhaust dir).
+      a.getWorldDirection(_exhDir); // returns world +Z forward
+      // Three's getWorldDirection gives the +Z axis of the object; exhaust is -Z
+      // when flip=false. Multiply by flipSign so 'flip' inverts the exhaust dir.
+      const exhX = flipSign * _exhDir.x;
+      const exhY = flipSign * _exhDir.y;
+      const exhZ = flipSign * _exhDir.z;
 
-      // Particle material: keep size in sync with preset _pointMatSize × anchor scale.
-      const matSize = pointSize * aScale;
-      if (points.material.size !== matSize) points.material.size = matSize;
-      if (points.material.opacity !== partOp) points.material.opacity = partOp;
+      const aScale = tu.scale || 1.0;
+      const baseSizeMult = isMini ? 0.55 : 1.0;
+      const baseBloomMult = isMini ? 0.5 : 1.0;
 
-      const pos = sys.positions, col = sys.colors, sz = sys.sizes;
-      for (let i = 0; i < SR_PARTICLE_COUNT; i++) {
-        sys.ages[i] += dt;
-        if (sys.ages[i] >= sys.lifetimes[i]) {
-          sys.ages[i] = 0;
-          sys.lifetimes[i] = (lifeMin + Math.random() * lifeJit) * (lifeBase + ss * lifeSpd);
+      // Particle material size.
+      const matSize = pointSize * aScale * baseSizeMult;
+      if (g.points.material.size !== matSize) g.points.material.size = matSize;
+      if (g.points.material.opacity !== partOp) g.points.material.opacity = partOp;
+
+      const pos = g.positions, col = g.colors, sz = g.sizes;
+      for (let i = 0; i < N; i++) {
+        g.ages[i] += dt;
+        if (g.ages[i] >= g.lifetimes[i]) {
+          g.ages[i] = 0;
+          g.lifetimes[i] = (lifeMin + Math.random() * lifeJit) * (lifeBase + ss * lifeSpd);
           pos[i*3]     = wx + (Math.random() - 0.5) * spawnJit;
           pos[i*3 + 1] = wy + (Math.random() - 0.5) * spawnJit;
           pos[i*3 + 2] = wz;
-          // No lateral inheritance (showroom ship doesn't move sideways).
-          // Velocity points away from the ship's BACK in world space. Title ship
-          // has its back facing roughly world -Z (since tiltGroup.rotation.x = 0.13
-          // leaves the ship near-horizontal and the GLB's +Z is the front), so
-          // we exhaust into world -Z.
-          sys.velocities[i].set(
-            (Math.random() - 0.5) * 0.06 * aScale,
-            (Math.random() - 0.5) * 0.06 * aScale - 0.02 * aScale,
-            flipSign * (2.5 + Math.random() * 2.0 + ss * 1.5) * aScale
+          // Velocity = exhaust direction × speed + small jitter perpendicular.
+          const sp = (2.5 + Math.random() * 2.0 + ss * 1.5) * aScale;
+          g.velocities[i].set(
+            exhX * sp + (Math.random() - 0.5) * 0.06 * aScale,
+            exhY * sp + (Math.random() - 0.5) * 0.06 * aScale - 0.02 * aScale,
+            exhZ * sp
           );
         } else {
-          const t0 = sys.ages[i] / sys.lifetimes[i];
+          const t0 = g.ages[i] / g.lifetimes[i];
           if (t0 < posPinFrac) {
             pos[i*3] = wx; pos[i*3 + 1] = wy; pos[i*3 + 2] = wz;
           } else {
-            const v = sys.velocities[i];
+            const v = g.velocities[i];
             pos[i*3]     += v.x * dt;
             pos[i*3 + 1] += v.y * dt;
             pos[i*3 + 2] += v.z * dt;
             v.multiplyScalar(0.92);
           }
         }
-        const t = sys.ages[i] / sys.lifetimes[i];
-        // Color curve
+        const t = g.ages[i] / g.lifetimes[i];
         if (t < coreEnd) {
           const s = t / coreEnd;
           col[i*3]     = coreR;
@@ -897,27 +945,25 @@
           col[i*3 + 1] = THREE.MathUtils.lerp(tCol.g, 0, s);
           col[i*3 + 2] = THREE.MathUtils.lerp(tCol.b, 0, s);
         }
-        // Size curve
         const baseSize = szBase + ss * szSpeed;
         const rawSz = t < bumpEnd
           ? THREE.MathUtils.lerp(baseSize * bumpMult, baseSize, t / bumpEnd)
           : (1.0 - t) * (baseSize + Math.random() * szJitter);
-        sz[i] = rawSz * tp * thrScale;
+        sz[i] = rawSz * tp * thrScale * baseSizeMult;
       }
-      _thr.geos[idx].attributes.position.needsUpdate = true;
-      _thr.geos[idx].attributes.color.needsUpdate    = true;
-      _thr.geos[idx].attributes.size.needsUpdate     = true;
+      g.geo.attributes.position.needsUpdate = true;
+      g.geo.attributes.color.needsUpdate    = true;
+      g.geo.attributes.size.needsUpdate     = true;
 
-      // Bloom sprite at nozzle.
-      bloom.position.set(wx, wy, wz);
-      const bloomSize = (0.6 + ss * 0.7) * thrScale * bloomScl * aScale;
-      bloom.scale.setScalar(bloomSize);
-      bloom.material.color.setRGB(
+      g.bloom.position.set(wx, wy, wz);
+      const bloomSize = (0.6 + ss * 0.7) * thrScale * bloomScl * aScale * baseBloomMult;
+      g.bloom.scale.setScalar(bloomSize);
+      g.bloom.material.color.setRGB(
         THREE.MathUtils.lerp(tCol.r, 1.0, bloomWM),
         THREE.MathUtils.lerp(tCol.g, 1.0, bloomWM),
         THREE.MathUtils.lerp(tCol.b, 1.0, bloomWM)
       );
-      bloom.material.opacity = bloomOp * ((1 - bloomPul) + Math.sin(Date.now() * 0.008) * bloomPul) * tp;
+      g.bloom.material.opacity = bloomOp * ((1 - bloomPul) + Math.sin(Date.now() * 0.008) * bloomPul) * tp;
     }
   }
 
