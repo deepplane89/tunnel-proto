@@ -93,10 +93,14 @@
   let _tunerLoadedKey = SR_TUNER_KEY;
 
   // Resolve the storage key for the currently-displayed ship.
+  // INTENTIONALLY a single shared key across all ships — thruster positions
+  // are the same for every skin. Per-ship buckets caused stale values to
+  // load on swap (one bucket would drift behind the other), making the
+  // anchors render in the wrong spot until RST overwrote them. If per-ship
+  // tuning is ever needed, gate it behind an explicit user-driven toggle
+  // rather than re-introducing implicit per-GLB buckets.
   function _currentTunerKey() {
-    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
-    const altFile = ship && ship.userData && ship.userData._altGlb;
-    return altFile ? (SR_TUNER_KEY + '__' + altFile) : SR_TUNER_KEY;
+    return SR_TUNER_KEY;
   }
 
   function _loadTunerFromKey(key) {
