@@ -133,7 +133,30 @@ No commit pushed for Pass 2 — audit-only.
 
 ---
 
-## 4. Mesh visibility flags (original notes)
+## 4. Three.js scene state (🟡 PASS 4 IN PROGRESS — 1 leak fixed; fog/camera/layers TBD)
+
+**Result so far: 1 light leak fixed (dirLight). Fog/camera/layers not yet swept.**
+
+| Site | Pattern | Status |
+|---|---|---|
+| `_canyonSavedDirLight` (72:4510) save/restore via `_jlCanyonStart` / `_jlCanyonStartOpen` / `_jlCanyonStop` | Save sets `dirLight.intensity = 0`; only `_jlCanyonStop` restores, fired only via JL stage `onDeactivate`. Death path tears down ramp-system canyons (L3 knife / preT4A / preT4B) but **never calls `_jlCanyonStop`** — next run starts with `dirLight.intensity` stuck at 0 | ❌ → ✅ **Defensive restore added** in startGame (67:124) and returnToTitle (60:207): if `_canyonSavedDirLight !== null` after canyon teardown, restore and null. Same pattern dev hotkeys V/B/K already use |
+| `applySkin` lighting reset (20:5736-5738) | Resets `dirLight`, `rimLight`, `fillLight`, `sunLight`, `sunLightL` intensity every call. `applySkin` is invoked in startGame at 67:110, so per-skin lights re-init every run | ✅ |
+| `shieldLight`, `magnetLight`, `_flashLight` | Explicit gameplay reset paths verified in Pass 3 visibility sweep | ✅ |
+| Newer ramp-system canyon dirLight (`_canyonDirLightFrom` / `_canyonDirLightTarget` / `_canyonLightT`, 20:8039-8050, 20:8883+) | Used by L3 knife / preT4A / preT4B. These nullify `_canyonSavedDirLight` to mark "ramp owns it now" — not a leak | ✅ |
+
+**Fix applied (commit 96a3561):**
+- `src/67-main-late.js:121-127` — restore `_canyonSavedDirLight` if non-null after `_destroyCanyonWalls()` in startGame
+- `src/60-main-late.js:202-210` — same in returnToTitle
+- Cache `v=1777738000` → `v=1777738500`
+
+**Still to sweep (Pass 4 remainder):**
+- Fog writes — 20:1, 40:2, 67:1, 72:2 (6 sites)
+- Camera writes — 20:1, 60:3, 67:9, 70:1, 72:6 (20 sites)
+- Scene layers — 20:5
+
+---
+
+## 4 (original) Mesh visibility flags (original notes)
 
 Lots of `mesh.visible =` writes (~174 spotted). Most are toggled both ways by
 gameplay logic (e.g. powerup spawn → visible=true, expire → visible=false) but
@@ -166,20 +189,47 @@ Mutators to enumerate:
 
 ---
 
-## 6. Timers & intervals — orphan cleanup
+## 6. Timers & intervals (✅ PASS 6 COMPLETE — audit-only, no fix needed)
 
-~142 setTimeout/setInterval calls. Each needs to either:
-- Be tracked (in `_introTimers`, `_musicTimers`, etc.) and cleared on startGame
-- OR be self-contained and idempotent (firing late doesn't matter)
+**Result: all gameplay-relevant timers are properly cleaned up. The remaining
+uncovered timers are dev-tuner-only or trivially edge-case.**
 
-Highest-risk locations:
-- src/67-main-late.js (61 calls) — gameplay tick + powerup activation
-- src/72-main-late-mid.js (29 calls) — wave director, vibe transitions
-- src/40-main-late.js (6 calls)
+186 setTimeout/setInterval hits across 13 files. 36 are stored as named handles
+(rest are fire-and-forget). Coverage table:
 
-Already-tracked lists: `_introTimers`, `_musicTimers`, `_bannerTimers`(?),
-`_argonCutIv`, `_argonReplayTo`, `_gameOverDelayTimer`. Need to confirm every
-gameplay timer either lives in one of these or is idempotent.
+| Handle | Cleanup path | Status |
+|---|---|---|
+| `_retryFadeTimer` | startGame:43, returnToTitle:190, death:3228 | ✅ |
+| `_titleFadeTimer` | returnToTitle:149; self-clears on fire | ✅ |
+| `_gameOverDelayTimer` | startGame:137, returnToTitle:148 | ✅ |
+| `_lakeFadeIv` | startGame:432, returnToTitle:150, death:3229; self-clears at t>=1 | ✅ |
+| `state._argonCutIv`, `state._argonReplayTo` | death:3314-3315, returnToTitle:74-75 | ✅ |
+| `state._laserSfxIv`, `state._laserSfxStopTo` | death:3329-3330, returnToTitle:90-91 | ✅ |
+| `_introTimers[]` | `clearIntroTimers()` in startGame:105 + returnToTitle:175 + 4 other paths | ✅ |
+| `_musicTimers[]` | `clearMusicTimers()` in startGame:106 | ✅ |
+| `_sputterTimer` | `killThrusterSputter()` in startGame:59 + returnToTitle:188 | ✅ |
+| `_hsTimeout`, `_hsRamp` | `dismissHeadStart()` in startGame:3242 + returnToTitle:193 | ✅ |
+| `_ltLoopTimeout` (lightning loop) | `_clearAllLightning` calls `_stopLtLoop` (Pass 3 fix) | ✅ |
+| `_resizeTimer` | Self-managed; phase-agnostic | ✅ |
+| `_skinTapTimer`, `adminTapTimer`, `tapTimer` (60:815, 40:2492, 72:2015) | Tap-debounce; self-reset to 0 | ✅ |
+| `_gameOverTapTimer` | Re-armed and counter reset on each death (67:3680-3692); stale fire is harmless | ✅ |
+| `el._fadeTimer`, `el._hideTimer` | DOM-only opacity/display; no state mutation | ✅ |
+| `safetyTimer` (62:258) | Reward wheel disabled | n/a |
+| `rafId` (20:1425) starfield | Title-screen visibility observer manages start/stop | ✅ |
+
+**Dev-tuner-only timers (not in shipped gameplay path — no fix needed):**
+| Handle | Use | Notes |
+|---|---|---|
+| `_awLoopTimer` (20:9236) | Angled-walls dev panel `_awLoop` | User-toggle only |
+| `_fcLoopTimer` (72:5728) | Fat-cone dev panel `_startFcLoop` | Spawns gate on `phase==='playing'` so no-op on dead/title; if user toggled it then died, it keeps re-arming as a slow CPU drip but no state leak |
+| `_activePatternTimeout` (72:3952) | Asteroid pattern dev panel | Same as above; all callbacks gate on phase |
+
+**One trivially-edge-case leak (not fixing):**
+- `setTimeout(() => { state._tutorialStep = -0.5; }, 100)` at 67:797. If player
+  dies within 100ms of a tutorial-mode start, the timer fires after death and
+  mutates `_tutorialStep`. Unreachable in real play.
+
+No commit pushed for Pass 6 — audit-only.
 
 ---
 
@@ -228,11 +278,11 @@ Mutators to enumerate:
 ## Pass plan
 
 Pass 1 (✅ done): Post-processing uniforms — section 1
-Pass 2 (✅ done): Material opacity/color/emissive sweep — section 3 (highest visual leak risk)
+Pass 2 (✅ done): Material opacity/color/emissive sweep — section 2
 Pass 3 (✅ done): Mesh visibility sweep — section 3 (2 leaks fixed)
-Pass 4 (next): Three.js scene state — section 4
+Pass 4 (🟡 partial): Three.js scene state — lights done (1 leak fixed); fog/camera/layers TBD
+Pass 6 (✅ done): Timers & intervals — audit-only, no fix needed
 Pass 5: Audio loops — section 5
-Pass 6: Timers — section 6
 Pass 7: DOM overlays — section 7
 Pass 8: state.* coverage diff — section 9
 Pass 9: window globals — section 8 (low priority)
