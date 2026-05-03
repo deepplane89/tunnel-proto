@@ -14457,7 +14457,7 @@ window.addEventListener('keydown', e => {
       'V': 'L3_CORRIDOR',
       'K': 'L4_SINE_CORRIDOR',
       'J': 'L5_SINE_CORRIDOR',
-      'Q': 'SLALOM',
+      // 'Q' reserved for GOD MODE panel toggle (see 72-main-late-mid.js)
       'N': 'ZIPPER',
       'B': 'ANGLED_WALL',
     };
