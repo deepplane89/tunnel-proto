@@ -644,7 +644,7 @@
         let targetFov = baseFov;
         if (aspect > 1.2) {
           const t = Math.min(1, (aspect - 1.2) / (2.2 - 1.2));
-          targetFov = baseFov * (1 - t * 0.35); // 35deg → 22.75deg at widest
+          targetFov = baseFov * (1 - t * 0.55); // 35deg → ~15.75deg at widest
         }
         titleCamera.fov = targetFov;
         titleCamera.updateProjectionMatrix();
