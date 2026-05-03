@@ -8266,6 +8266,13 @@ function _l4SineAtZ(worldZ) {
   // This makes the whole corridor walk THROUGH L4's progression (approach → curve → peak → knife)
   // over time, mirroring how _canyonSinePhase drives C1/C2 sine motion.
   const rows      = rawRows * (T._l4RampCompress || 1.0) + _l4RowsElapsed;
+  // Base = corridorGapCenter (set to state.shipX at canyon trigger time, see
+  // _startL3KnifeCanyon at 40-main-late.js:526). Mirrors _canyonXAtZ which
+  // also bases off corridorGapCenter — without this the L4-recreation canyon
+  // builds anchored to world X=0 even when the ship is offset, so the
+  // entrance + entire corridor lands off-ship. Anchor-chain (_bakeSlabCurveForL4
+  // deltas) then carries the ship-X anchor through every slab.
+  const base = state.corridorGapCenter || 0;
   // Center (sine) — mirrors L4 math exactly
   let center = 0;
   if (rows >= C.CLOSE_ROWS + C.STRAIGHT) {
@@ -8283,7 +8290,7 @@ function _l4SineAtZ(worldZ) {
     const phase     = (2 * Math.PI) * curveRows / periodAvg;
     center = amp * Math.sin(phase);
   }
-  return center;
+  return base + center;
 }
 
 // Bend a slab's inner-face vertex buffer to follow L4 sine. Called after the
@@ -8660,14 +8667,7 @@ function _createCanyonWalls() {
         // ~9-10u off from the corridor opening (entrance built off _canyonXAtZ
         // anchored to z=-170 produces non-zero sine at z=-150 while _l4SineAtZ
         // is ~0 there). Match whichever curve the regulars are on.
-        // _l4SineAtZ is anchored to world X=0 (no corridorGapCenter base); on
-        // mobile the player often drifts before trigger and the gate lands
-        // off-ship. Add corridorGapCenter (= state.shipX at trigger time) to
-        // the entrance ONLY — regular slabs walk through the L4 progression
-        // independently and stay world-anchored.
-        const center   = _canyonTuner._l4Recreation
-          ? (_l4SineAtZ(finalZ) + (state.corridorGapCenter || 0))
-          : _canyonXAtZ(finalZ);
+        const center   = _canyonTuner._l4Recreation ? _l4SineAtZ(finalZ) : _canyonXAtZ(finalZ);
         pivot.userData.bakedX    = center + halfX * side;
         pivot.userData.entFinalZ = finalZ; // for trigger check later
         pivot.position.x = pivot.userData.bakedX;
