@@ -1433,9 +1433,16 @@
       const all = _editLoad();
       all[name] = r;
       _editSave(all);
+      try { console.log('[showroom-layout]', name, 'w=' + r.w, 'h=' + r.h, 'x=' + r.x, 'y=' + r.y); } catch(_){}
       if (name === 'sr-stage') _resizeStageCanvas();
     };
     const onUp = () => {
+      if (mode) {
+        try {
+          const r = _editGetCurrentRect(name);
+          console.log('[showroom-layout-FINAL]', name, JSON.stringify(r));
+        } catch(_){}
+      }
       mode = null;
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
