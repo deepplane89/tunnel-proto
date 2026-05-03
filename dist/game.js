@@ -1694,7 +1694,7 @@ function claimReward(rungIndex, clickEvent) {
   } else if (r.kind === 'stat') {
     color = '#00eeff'; icon = '\u2605'; dest = '#missions-fuel-count'; count = 14;
   } else if (r.kind === 'thruster' || r.kind === 'thrustercolor') {
-    color = REWARD_COLORS.thruster; icon = '\u25B2'; dest = '#title-ship-canvas'; count = 18;
+    color = REWARD_COLORS.thruster; icon = '\u25B2'; dest = '#title-thrusters-btn'; count = 18;
     window._LS.setItem('jetslide_thrusters_new', '1'); // flag for thruster panel NEW badge
   } else {
     color = '#fff'; icon = '\u2B50'; dest = '#missions-fuel-count'; count = 14;
@@ -1941,7 +1941,7 @@ function _mountTitleCanvas() {
   titleCamera.aspect = w / h;
   titleCamera.updateProjectionMatrix();
   _titleCanvas.style.cursor = 'pointer';
-  _tapBind(_titleCanvas, () => { if (typeof openThrusterPanel === 'function') openThrusterPanel(); });
+  _tapBind(_titleCanvas, () => { if (typeof openShop === 'function') openShop(); });
   showcase.appendChild(_titleCanvas);
 }
 if (document.readyState === 'loading') {
