@@ -7130,7 +7130,7 @@ window._thrPart_lifeBase     = (window._thrPart_lifeBase     != null) ? window._
 window._thrPart_lifeSpd      = (window._thrPart_lifeSpd      != null) ? window._thrPart_lifeSpd      : 0.00;
 window._thrPart_spawnJit     = (window._thrPart_spawnJit     != null) ? window._thrPart_spawnJit     : 0.00;
 // Flame mesh
-window._thrFlame_coreEnd   = (window._thrFlame_coreEnd   != null) ? window._thrFlame_coreEnd   : 0.08;
+window._thrFlame_coreEnd   = (window._thrFlame_coreEnd   != null) ? window._thrFlame_coreEnd   : 0.00;
 window._thrFlame_coreRGB   = (window._thrFlame_coreRGB   != null) ? window._thrFlame_coreRGB   : 0.37;
 window._thrFlame_midEnd    = (window._thrFlame_midEnd    != null) ? window._thrFlame_midEnd    : 0.35;
 window._thrFlame_sizeBase  = (window._thrFlame_sizeBase  != null) ? window._thrFlame_sizeBase  : 0.06;
