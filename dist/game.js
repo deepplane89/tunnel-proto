@@ -1866,7 +1866,7 @@ function _mountTitleCanvas() {
   titleCamera.aspect = w / h;
   titleCamera.updateProjectionMatrix();
   _titleCanvas.style.cursor = 'pointer';
-  _tapBind(_titleCanvas, () => { if (typeof openShop === 'function') openShop(); });
+  _tapBind(_titleCanvas, () => { if (typeof openThrusterPanel === 'function') openThrusterPanel('skins'); });
   showcase.appendChild(_titleCanvas);
 }
 if (document.readyState === 'loading') {
@@ -13681,6 +13681,10 @@ function updateStreakBadge() {
   let _resizeBound = false;
   // Saved canvas placement so we can restore on close.
   let _canvasSaved = null; // { parent, nextSibling, w, h, transform, dpr, camAspect, rendererW, rendererH }
+  // Saved DOM placement of shop power-up + handling content while it lives in
+  // the showroom panel. Restored on close so openShop() (if ever called) still
+  // finds its own children. Garage is now the canonical entry point.
+  let _shopReparentSaved = null;
 
   // ── Showroom-only thruster preview (independent of gameplay systems) ──
   // Lifted from updateThrusters() in 20-main-early.js. Same particle spawn
@@ -14122,6 +14126,14 @@ function updateStreakBadge() {
     document.querySelectorAll('.sr-pane').forEach(p => {
       p.classList.toggle('sr-hidden', p.dataset.pane !== tab);
     });
+    // When entering Power-ups tab, refresh cards so coin counts / locks update.
+    if (tab === 'powerups') {
+      try {
+        if (typeof renderPowerupCards === 'function') renderPowerupCards();
+        const coinCount = document.getElementById('shop-coin-count');
+        if (coinCount && typeof _totalCoins !== 'undefined') coinCount.textContent = _totalCoins;
+      } catch(_){}
+    }
   }
 
   function _onTabClick(e) {
@@ -14662,12 +14674,54 @@ function updateStreakBadge() {
   }
 
   // ── Public: open / close / refresh ───────────────────────────────────
+  // Move shop's existing power-up DOM (cards container, detail view, handling
+  // bar) into the showroom panel. We physically reparent the existing nodes so
+  // the shop's own functions keep operating on the same IDs without rewiring.
+  function _mountShopIntoShowroom() {
+    if (_shopReparentSaved) return;
+    const handling = document.getElementById('shop-handling-bar');
+    const powerups = document.getElementById('shop-tab-powerups');
+    const detail = document.getElementById('shop-detail');
+    const handlingSlot = document.getElementById('sr-handling-slot');
+    const powerupsPane = document.querySelector('.sr-pane[data-pane="powerups"]');
+    if (!handling || !powerups || !handlingSlot || !powerupsPane) return;
+    _shopReparentSaved = {
+      handlingHome: handling.parentNode,
+      handlingNext: handling.nextSibling,
+      powerupsHome: powerups.parentNode,
+      powerupsNext: powerups.nextSibling,
+      detailHome: detail ? detail.parentNode : null,
+      detailNext: detail ? detail.nextSibling : null,
+    };
+    handlingSlot.appendChild(handling);
+    powerupsPane.appendChild(powerups);
+    if (detail) powerupsPane.appendChild(detail);
+    try { if (typeof _renderShopHandlingBar === 'function') _renderShopHandlingBar(); } catch(_){}
+    try { if (typeof renderPowerupCards === 'function') renderPowerupCards(); } catch(_){}
+    try {
+      const cc = document.getElementById('shop-coin-count');
+      if (cc && typeof _totalCoins !== 'undefined') cc.textContent = _totalCoins;
+    } catch(_){}
+  }
+  function _unmountShopFromShowroom() {
+    if (!_shopReparentSaved) return;
+    const s = _shopReparentSaved;
+    const handling = document.getElementById('shop-handling-bar');
+    const powerups = document.getElementById('shop-tab-powerups');
+    const detail = document.getElementById('shop-detail');
+    if (handling && s.handlingHome) s.handlingHome.insertBefore(handling, s.handlingNext);
+    if (powerups && s.powerupsHome) s.powerupsHome.insertBefore(powerups, s.powerupsNext);
+    if (detail && s.detailHome) s.detailHome.insertBefore(detail, s.detailNext);
+    _shopReparentSaved = null;
+  }
+
   function open(tab) {
     const overlay = document.getElementById('thruster-overlay');
     if (!overlay) return;
     _wireOnce();
     overlay.classList.remove('hidden');
     document.body.classList.add('sr-open');
+    _mountShopIntoShowroom();
     _switchTab(tab || 'thrusters');
     // Seed the garage preview index from whatever ship is currently on the
     // title canvas. Keeps the dropdown in sync with the visible ship without
@@ -14704,6 +14758,7 @@ function updateStreakBadge() {
   function close() {
     const overlay = document.getElementById('thruster-overlay');
     _restoreCanvas();
+    _unmountShopFromShowroom();
     if (overlay) overlay.classList.add('hidden');
     document.body.classList.remove('sr-open');
     _open = false;

@@ -1483,7 +1483,7 @@ function _mountTitleCanvas() {
   titleCamera.aspect = w / h;
   titleCamera.updateProjectionMatrix();
   _titleCanvas.style.cursor = 'pointer';
-  _tapBind(_titleCanvas, () => { if (typeof openShop === 'function') openShop(); });
+  _tapBind(_titleCanvas, () => { if (typeof openThrusterPanel === 'function') openThrusterPanel('skins'); });
   showcase.appendChild(_titleCanvas);
 }
 if (document.readyState === 'loading') {

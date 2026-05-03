@@ -4820,3 +4820,195 @@ body.sr-open #title-ship-canvas {
     height: auto;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────── */
+/* HANDLING SLOT — pinned under ship preview (showroom center column) */
+/* ─────────────────────────────────────────────────────────────────────── */
+.sr-handling-slot {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  /* Sits just above the panel in portrait. Landscape repositions below. */
+  bottom: 290px;
+  z-index: 3;
+  pointer-events: auto;
+  /* When empty (before garage opens) collapse height. */
+  min-height: 0;
+}
+.sr-handling-slot:empty { display: none; }
+/* Tighter handling bar inside the slot — overrides shop's spacing. */
+.sr-handling-slot .shop-handling-bar {
+  margin: 0;
+  padding: 6px 10px;
+  background: rgba(0, 12, 24, 0.55);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  border-radius: 6px;
+}
+.sr-handling-slot .shop-handling-label { font-size: 9px; letter-spacing: 1.2px; }
+.sr-handling-slot .shop-handling-tier { font-size: 11px; }
+.sr-handling-slot .shop-handling-track { height: 4px; margin: 4px 0; }
+.sr-handling-slot .shop-handling-next { font-size: 9px; }
+
+/* ─────────────────────────────────────────────────────────────────────── */
+/* POWER-UPS PANE INSIDE SHOWROOM — keep cards readable in panel context  */
+/* ─────────────────────────────────────────────────────────────────────── */
+.sr-pane[data-pane="powerups"] #shop-tab-powerups {
+  width: 100%;
+}
+.sr-pane[data-pane="powerups"] .shop-cards {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 0;
+}
+.sr-pane[data-pane="powerups"] .shop-card {
+  padding: 10px 8px;
+  gap: 4px;
+}
+.sr-pane[data-pane="powerups"] .shop-detail {
+  position: static;
+  background: transparent;
+  padding: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────── */
+/* LANDSCAPE LAYOUT — phones in landscape (max-height 500px)              */
+/* Game over: 2-col stats/CTAs. Showroom: 3-col tabs/ship/content.        */
+/* All overlays lock to viewport (no scroll).                             */
+/* ─────────────────────────────────────────────────────────────────────── */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Lock overlays — no page-level scroll in landscape phones. */
+  #gameover-screen.overlay,
+  #shop-overlay.overlay {
+    overflow: hidden !important;
+  }
+
+  /* ── GAME OVER — 2 columns, stats left / CTAs right ── */
+  #gameover-screen .gameover-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto;
+    gap: 8px 24px;
+    align-items: center;
+    width: 100%;
+    max-width: 560px;
+    height: 100%;
+    max-height: 100vh;
+    padding: 8px 16px;
+    overflow: hidden;
+  }
+  #gameover-screen .gameover-content > img,
+  #gameover-screen .gameover-title,
+  #gameover-screen .go-hero,
+  #gameover-screen .go-best,
+  #gameover-screen .go-coins-line,
+  #gameover-screen .go-level-section,
+  #gameover-screen .go-levelup,
+  #gameover-screen .go-handling-section,
+  #gameover-screen .go-handling-upgrade {
+    grid-column: 1;
+  }
+  #gameover-screen .go-saveme,
+  #gameover-screen .score-submit,
+  #gameover-screen .go-actions {
+    grid-column: 2;
+  }
+  /* Compact sizing so it all fits in 231 CSS px height */
+  #gameover-screen .gameover-content > img { width: 32px !important; height: 32px !important; margin: 0 auto; }
+  #gameover-screen .gameover-title { font-size: 22px; margin: 2px 0; }
+  #gameover-screen .go-hero { padding: 4px 8px; }
+  #gameover-screen .go-hero-val { font-size: 22px; }
+  #gameover-screen .go-best { padding: 2px 6px; }
+  #gameover-screen .go-coins-line { font-size: 14px; }
+  #gameover-screen .go-level-section,
+  #gameover-screen .go-handling-section { padding: 4px 6px; }
+
+  /* ── SHOWROOM — 3-column landscape grid ── */
+  body.sr-open #thruster-overlay {
+    align-items: stretch;
+    padding: 10px;
+  }
+  body.sr-open .sr-stage {
+    /* Center-column ship preview. */
+    top: 8px;
+    left: 88px;
+    right: 240px;
+    bottom: 56px;
+    height: auto;
+  }
+  body.sr-open .sr-handling-slot {
+    /* Pin under ship in center column. */
+    left: 88px;
+    right: 240px;
+    bottom: 12px;
+    top: auto;
+  }
+  body.sr-open .sr-panel {
+    /* Right column — tabs + content. Width fixed to 220px. */
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    bottom: 8px;
+    left: auto;
+    width: 224px;
+    max-width: 224px;
+    padding: 8px 10px 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  body.sr-open .sr-tabs {
+    /* Move tabs to LEFT column as a vertical rail. */
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    bottom: 8px;
+    width: 72px;
+    flex-direction: column;
+    gap: 4px;
+    border-bottom: none;
+    border-right: 1px solid var(--sr-edge-soft);
+    margin-right: 0;
+    padding-right: 6px;
+    z-index: 4;
+    pointer-events: auto;
+  }
+  body.sr-open .sr-tab {
+    width: 100%;
+    text-align: left;
+    padding: 8px 6px;
+    font-size: 10px;
+    letter-spacing: 1.2px;
+    border-bottom: none;
+    border-left: 2px solid transparent;
+  }
+  body.sr-open .sr-tab.active {
+    border-left-color: var(--sr-accent);
+    border-bottom-color: transparent;
+  }
+  body.sr-open .sr-body {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 0;
+  }
+  /* Compact powerup cards: 2 columns inside narrow right panel. */
+  body.sr-open .sr-pane[data-pane="powerups"] .shop-cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  body.sr-open .sr-pane[data-pane="powerups"] .shop-card {
+    padding: 6px 4px;
+    gap: 2px;
+  }
+  body.sr-open .sr-pane[data-pane="powerups"] .shop-card-name {
+    font-size: 10px;
+  }
+  body.sr-open .sr-pane[data-pane="powerups"] .shop-card-desc {
+    font-size: 9px;
+  }
+  /* Hide the title-leaderboard while showroom is open in landscape — was
+     hanging on the left and pushing ship preview off-center. */
+  body.sr-open .title-leaderboard,
+  body.sr-open #title-leaderboard {
+    display: none !important;
+  }
+}
