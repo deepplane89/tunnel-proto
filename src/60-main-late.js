@@ -199,6 +199,15 @@ function returnToTitle() {
   // falling onto the title screen). Clear them explicitly here.
   if (typeof window._clearAllLightning === 'function') window._clearAllLightning();
   if (typeof window._clearAllAsteroids === 'function') window._clearAllAsteroids();
+  // Restore dirLight.intensity if a JL canyon was active when the player
+  // exited (death-then-exit, or future direct exit-mid-canyon). _jlCanyonStop
+  // is the only function that restores _canyonSavedDirLight, and it doesn't
+  // run on death/exit — leaving the title scene with the sun's directional
+  // light at 0.
+  if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+    dirLight.intensity = _canyonSavedDirLight;
+    _canyonSavedDirLight = null;
+  }
   // Bonus rings (opening rings) are not in _clearAllMechanics — wipe explicitly.
   _ringRemoveAll();
   // Coins, laser bolts, active powerups: startGame() resets these but exiting

@@ -118,6 +118,13 @@ function startGame() {
   _destroyTerrainWalls();
   // Clean up canyon if active
   if (_canyonActive || _canyonWalls) { _destroyCanyonWalls(); }
+  // Restore dirLight if a JL canyon was killed mid-run before _jlCanyonStop
+  // could fire (death path tears down walls but never calls Stop). Without
+  // this the next run starts with dirLight.intensity stuck at 0.
+  if (_canyonSavedDirLight !== null && typeof dirLight !== 'undefined' && dirLight) {
+    dirLight.intensity = _canyonSavedDirLight;
+    _canyonSavedDirLight = null;
+  }
   _canyonActive = false;
   _canyonManual = false;
   _canyonMode = 0;
