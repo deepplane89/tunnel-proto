@@ -186,8 +186,8 @@ function openShopDetail(id) {
 
   content.innerHTML = `
     <div class="shop-detail-header">
+      <button class="shop-detail-back" id="shop-detail-back-btn" aria-label="Back" style="color:${color};border-color:${color}">‹ BACK</button>
       ${isPowerup ? `<span class="shop-detail-icon" style="color:${color}">${up.icon}</span>` : ''}
-      <span class="shop-detail-name" style="color:${color}">${up.name}</span>
     </div>
     <div class="shop-detail-pips">${renderPips(tier, color)}</div>
     <div class="shop-detail-tiers">${tiersHTML}</div>
@@ -196,6 +196,9 @@ function openShopDetail(id) {
         UPGRADE <img src="assets/images/single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ${cost}
       </button>`}
   `;
+
+  const backBtn = document.getElementById('shop-detail-back-btn');
+  if (backBtn) _tapBind(backBtn, () => closeShopDetail());
 
   if (!maxed) {
     const buyBtn = document.getElementById('shop-buy-btn');
