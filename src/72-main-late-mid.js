@@ -3715,6 +3715,90 @@ function _clearAllAsteroids() {
 // title / gameover screen if the player dies mid-storm.
 window._clearAllAsteroids = _clearAllAsteroids;
 
+// ── THRUSTER INVENTORY: top-level apply (used by startGame + title preview) ──
+// Writes the equipped preset's window globals + nozzle offsets + particle
+// material sizes, then applies the equipped cosmetic color on top. Mirrors
+// the closure-scoped _writeThrValues / _applyThrPreset in the G-key tuner
+// but is callable globally (and is reused by the title thruster panel for
+// live preview).
+//
+// This is the run-start hook: 67-main-late.js startGame() calls
+// window._applyEquippedThruster() right after applySkin(), then sets
+// window._thrusterColorLocked = true.
+(function _installThrusterApply(){
+  function _writeThrPresetValues(P) {
+    if (!P) return;
+    Object.keys(P).forEach(k => {
+      if (k === 'label') return;
+      const v = P[k];
+      if (v == null) return;
+      try {
+        if (k === '_pointMatSize') {
+          thrusterSystems.forEach(s => s.points.material.size = v);
+        } else if (k === '_miniPointMatSize') {
+          miniThrusterSystems.forEach(s => s.points.material.size = v);
+        } else if (k === 'nozL' || k === 'nozR') {
+          if (typeof NOZZLE_OFFSETS !== 'undefined' && NOZZLE_OFFSETS[0]) {
+            const t = (k === 'nozL') ? NOZZLE_OFFSETS[0] : NOZZLE_OFFSETS[1];
+            t.set(v[0], v[1], v[2]);
+          }
+        } else if (k === 'miniL' || k === 'miniR') {
+          if (typeof MINI_NOZZLE_OFFSETS !== 'undefined' && MINI_NOZZLE_OFFSETS[0]) {
+            const t = (k === 'miniL') ? MINI_NOZZLE_OFFSETS[0] : MINI_NOZZLE_OFFSETS[1];
+            t.set(v[0], v[1], v[2]);
+          }
+        } else if (k.charAt(0) === '_') {
+          window[k] = v;
+        }
+      } catch(_){}
+    });
+    try { if (typeof _rebuildLocalNozzles === 'function') _rebuildLocalNozzles(); } catch(_){}
+  }
+
+  // Apply a preset by key. 'baseline' may be runtime-captured null on a fresh
+  // load before the dev tuner has been opened — in that case the live values
+  // are already the baseline so the no-op is safe.
+  window._applyThrusterPresetByKey = function(key) {
+    const P = (window._THRUSTER_PRESETS || {})[key];
+    if (!P) return false;
+    _writeThrPresetValues(P);
+    window._activeThrusterPreset = key;
+    return true;
+  };
+
+  // Apply an equipped cosmetic color override. 'default' (or unknown key) is
+  // a no-op — thruster keeps whatever color the preset/scene set. Caller is
+  // responsible for setting the lock flag afterward (startGame does this).
+  window._applyThrusterColorByKey = function(key) {
+    const palette = window._THRUSTER_COLOR_PALETTE || {};
+    const entry = palette[key];
+    if (!entry || entry.hex == null) return false;
+    try {
+      // updateThrusterColor honors the lock flag, so we bypass it by writing
+      // thrusterColor directly. (thrusterColor is module-scope from
+      // 20-main-early.js; in the concatenated bundle it's reachable here.)
+      const wasLocked = window._thrusterColorLocked;
+      window._thrusterColorLocked = false;
+      if (typeof updateThrusterColor === 'function') {
+        updateThrusterColor(new THREE.Color(entry.hex));
+      } else if (typeof thrusterColor !== 'undefined' && thrusterColor && thrusterColor.set) {
+        thrusterColor.set(entry.hex);
+      }
+      window._thrusterColorLocked = wasLocked;
+      return true;
+    } catch(_) { return false; }
+  };
+
+  // One-shot: read storage, apply preset, then color. Used at run start and
+  // by the title panel after equip changes.
+  window._applyEquippedThruster = function() {
+    if (typeof loadThrusterData !== 'function') return;
+    const d = loadThrusterData();
+    window._applyThrusterPresetByKey(d.selectedPreset || 'baseline');
+    window._applyThrusterColorByKey(d.selectedColor || 'default');
+  };
+})();
+
 // ── Hook into main animate loop — append _updateAsteroids after _updateShockwave
 // (done via monkey-patch pattern to avoid re-editing large blocks)
 const _origUpdateShockwave = _updateShockwave;

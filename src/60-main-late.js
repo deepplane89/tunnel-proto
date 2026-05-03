@@ -128,6 +128,9 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
+  // Release the thruster color lock so the title vibe (and the title
+  // thruster panel preview) can repaint the thruster color again.
+  window._thrusterColorLocked = false;
   // Release transition reentry locks — a tap mid-startGame followed by
   // pause+exit can otherwise leave these stuck, blocking the next Play tap.
   // (Both flags live in 67-main-late.js but share the concat'd module scope.)

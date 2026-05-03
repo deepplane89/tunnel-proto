@@ -418,6 +418,53 @@ function saveSkinData(data) {
   window._LS.setItem(SKIN_STORAGE_KEY, JSON.stringify(data));
 }
 
+// ── THRUSTER INVENTORY (presets + cosmetic colors) ───────────────────────────────
+// Storage shape:
+//   { selectedPreset, selectedColor, unlockedPresets:[], unlockedColors:[] }
+// 'baseline' preset and 'default' color are always unlocked.
+const THRUSTER_STORAGE_KEY = 'jh_thrusters';
+function loadThrusterData() {
+  const defaults = {
+    selectedPreset: 'baseline',
+    selectedColor:  'default',
+    unlockedPresets: ['baseline'],
+    unlockedColors:  ['default'],
+  };
+  const raw = window._LS.getItem(THRUSTER_STORAGE_KEY);
+  if (!raw) return defaults;
+  try {
+    const d = JSON.parse(raw);
+    if (!Array.isArray(d.unlockedPresets)) d.unlockedPresets = ['baseline'];
+    if (!Array.isArray(d.unlockedColors))  d.unlockedColors  = ['default'];
+    if (!d.unlockedPresets.includes('baseline')) d.unlockedPresets.push('baseline');
+    if (!d.unlockedColors.includes('default'))   d.unlockedColors.push('default');
+    // Migration: drop unlocked entries that no longer exist in data tables
+    try {
+      const presets = window._THRUSTER_PRESETS || {};
+      const palette = window._THRUSTER_COLOR_PALETTE || {};
+      d.unlockedPresets = d.unlockedPresets.filter(k => k in presets);
+      d.unlockedColors  = d.unlockedColors.filter(k => k in palette);
+    } catch(_){}
+    if (typeof d.selectedPreset !== 'string' || !d.unlockedPresets.includes(d.selectedPreset)) {
+      d.selectedPreset = 'baseline';
+    }
+    if (typeof d.selectedColor !== 'string' || !d.unlockedColors.includes(d.selectedColor)) {
+      d.selectedColor = 'default';
+    }
+    return d;
+  } catch { return defaults; }
+}
+function saveThrusterData(data) {
+  window._LS.setItem(THRUSTER_STORAGE_KEY, JSON.stringify(data));
+}
+
+// ── THRUSTER COLOR LOCK ─────────────────────────────────────────────────────
+// When true, updateThrusterColor() and the per-frame thruster-color lerps
+// (in updateTransition + applyDeathRunVibeTransition) are no-ops. Set true
+// at run start so tier/vibe transitions never change thruster color mid-run.
+// Cleared on title return so the title vibe preview can repaint.
+window._thrusterColorLocked = false;
+
 function loadCoinWallet() {
   return parseInt(window._LS.getItem(COIN_STORAGE_KEY) || '0', 10);
 }
@@ -749,33 +796,42 @@ const MISSION_LADDER = [
   { type:'mission', id:'score3k', desc:'Score 3,000+ in one run', check:(r)=>r.score>=3000 },
   { type:'mission', id:'coins25', desc:'Collect 25 coins in one run', check:(r)=>r.coins>=25 },
   { type:'reward', reward:{ kind:'fuelcells', amount:50, label:'50 Fuel Cells', xp:100 } },
+  { type:'reward', reward:{ kind:'thrustercolor', colorKey:'red', label:'Unlock CRIMSON Thruster Color' } },
   { type:'mission', id:'runs5', desc:'Complete 5 runs', check:(r,lt)=>lt.runs>=5 },
   { type:'mission', id:'score7k', desc:'Score 7,000+ in one run', check:(r)=>r.score>=7000 },
   { type:'reward', reward:{ kind:'unlock', powerup:'laser', label:'Unlock LASER', coins:250 } },
+  { type:'reward', reward:{ kind:'thruster', presetKey:'short', label:'Unlock SHORT Thruster' } },
   { type:'mission', id:'coins50', desc:'Collect 50 coins in one run', check:(r)=>r.coins>=50 },
   { type:'mission', id:'pu3', desc:'Collect 3 powerups in one run', check:(r)=>r.powerups>=3 },
   { type:'reward', reward:{ kind:'fuelcells', amount:75, label:'75 Fuel Cells', xp:150 } },
+  { type:'reward', reward:{ kind:'thrustercolor', colorKey:'green', label:'Unlock TOXIC Thruster Color' } },
   { type:'mission', id:'score15k', desc:'Score 15,000+ in one run', check:(r)=>r.score>=15000 },
   { type:'mission', id:'coins100', desc:'Collect 100 coins in one run', check:(r)=>r.coins>=100 },
   { type:'reward', reward:{ kind:'stat', stat:'spawnrate', value:0.10, label:'Pickup Spawn +10%' } },
   { type:'mission', id:'shield2', desc:'Use shield 2 times in one run', check:(r)=>r.shields>=2 },
   { type:'mission', id:'drtier2', desc:'Reach speed tier 2 in DR', check:(r)=>r.isDR&&r.drTier>=2 },
   { type:'reward', reward:{ kind:'unlock', powerup:'invincible', label:'Unlock OVERDRIVE', fuelcells:100 } },
+  { type:'reward', reward:{ kind:'thruster', presetKey:'light', label:'Unlock LIGHT Thruster' } },
+  { type:'reward', reward:{ kind:'thrustercolor', colorKey:'cyan', label:'Unlock CYAN Thruster Color' } },
   { type:'mission', id:'runs15', desc:'Complete 15 runs', check:(r,lt)=>lt.runs>=15 },
   { type:'mission', id:'ltcoins500', desc:'Collect 500 total coins', check:(r,lt)=>lt.coins>=500 },
   { type:'reward', reward:{ kind:'coins', amount:500, label:'500 Coins', xp:200 } },
+  { type:'reward', reward:{ kind:'thrustercolor', colorKey:'pink', label:'Unlock NEON PINK Thruster Color' } },
   { type:'mission', id:'score25k', desc:'Score 25,000+ in one run', check:(r)=>r.score>=25000 },
   { type:'mission', id:'pu5', desc:'Collect 5 powerups in one run', check:(r)=>r.powerups>=5 },
   { type:'reward', reward:{ kind:'stat', stat:'spawnrate', value:0.15, label:'Pickup Spawn +15%' } },
   { type:'mission', id:'laser3', desc:'Use laser 3 times in one run', check:(r)=>r.lasers>=3 },
   { type:'mission', id:'coins150', desc:'Collect 150 coins in one run', check:(r)=>r.coins>=150 },
   { type:'reward', reward:{ kind:'unlock', powerup:'magnet', label:'Unlock MAGNET', fuelcells:150 } },
+  { type:'reward', reward:{ kind:'thruster', presetKey:'fatIon', label:'Unlock FAT ION Thruster' } },
+  { type:'reward', reward:{ kind:'thrustercolor', colorKey:'orange', label:'Unlock EMBER Thruster Color' } },
   { type:'mission', id:'ltcoins2k', desc:'Collect 2,000 total coins', check:(r,lt)=>lt.coins>=2000 },
   { type:'mission', id:'runs30', desc:'Complete 30 runs', check:(r,lt)=>lt.runs>=30 },
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:1, label:'Score Mult +1x' } },
   { type:'mission', id:'score40k', desc:'Score 40,000+ in one run', check:(r)=>r.score>=40000 },
   { type:'mission', id:'drtier3', desc:'Reach speed tier 3 in DR', check:(r)=>r.isDR&&r.drTier>=3 },
   { type:'reward', reward:{ kind:'fuelcells', amount:200, label:'200 Fuel Cells', xp:250 } },
+  { type:'reward', reward:{ kind:'thrustercolor', colorKey:'gold', label:'Unlock SOLAR GOLD Thruster Color' } },
   { type:'mission', id:'invinc2', desc:'Use invincible 2 times in one run', check:(r)=>r.invincibles>=2 },
   { type:'mission', id:'coins200', desc:'Collect 200 coins in one run', check:(r)=>r.coins>=200 },
   { type:'reward', reward:{ kind:'coins', amount:1000, label:'1,000 Coins', xp:300 } },
@@ -792,12 +848,14 @@ const MISSION_LADDER = [
   { type:'mission', id:'score80k', desc:'Score 80,000+ in one run', check:(r)=>r.score>=80000 },
   { type:'mission', id:'drtier4', desc:'Reach speed tier 4 in DR', check:(r)=>r.isDR&&r.drTier>=4 },
   { type:'reward', reward:{ kind:'fuelcells', amount:300, label:'300 Fuel Cells', coins:1500, xp:400 } },
+  { type:'reward', reward:{ kind:'thrustercolor', colorKey:'violet', label:'Unlock VIOLET Thruster Color' } },
   { type:'mission', id:'coins300', desc:'Collect 300 coins in one run', check:(r)=>r.coins>=300 },
   { type:'mission', id:'pu12', desc:'Collect 12 powerups in one run', check:(r)=>r.powerups>=12 },
   { type:'reward', reward:{ kind:'stat', stat:'spawnrate', value:0.25, label:'Pickup Spawn +25%' } },
   { type:'mission', id:'score100k', desc:'Score 100,000+ in one run', check:(r)=>r.score>=100000 },
   { type:'mission', id:'drcoins200', desc:'Collect 200 coins in one DR', check:(r)=>r.isDR&&r.coins>=200 },
   { type:'reward', reward:{ kind:'fuelcells', amount:400, label:'400 Fuel Cells', xp:450 } },
+  { type:'reward', reward:{ kind:'thrustercolor', colorKey:'white', label:'Unlock WHITE HOT Thruster Color' } },
   { type:'mission', id:'runs75', desc:'Complete 75 runs', check:(r,lt)=>lt.runs>=75 },
   { type:'mission', id:'ltcoins10k', desc:'Collect 10,000 total coins', check:(r,lt)=>lt.coins>=10000 },
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:3, label:'Score Mult +3x' } },
@@ -815,7 +873,7 @@ const MISSION_LADDER = [
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:5, label:'Score Mult +5x', coins:3000 } },
 ];
 
-const REWARD_COLORS = { fuelcells:'#4488ff', coins:'#ffcc00', stat:'#00eeff', unlock:'#44ff88' };
+const REWARD_COLORS = { fuelcells:'#4488ff', coins:'#ffcc00', stat:'#00eeff', unlock:'#44ff88', thruster:'#ff66bb', thrustercolor:'#ff66bb' };
 
 // ═══════════════════════════════════════════════════
 //  BANNER TOAST SYSTEM
@@ -888,6 +946,22 @@ function applyReward(r) {
     window._LS.setItem('jetslide_pu_unlocked', JSON.stringify(unlocked));
     if (r.fuelcells) saveFuelCells(loadFuelCells() + r.fuelcells);
     if (r.coins) { saveCoinWallet(loadCoinWallet() + r.coins); _totalCoins = loadCoinWallet(); updateTitleCoins(); }
+  }
+  // Thruster preset cosmetic unlock (e.g. 'short', 'light', 'fatIon').
+  if (r.kind === 'thruster' && r.presetKey) {
+    const td = loadThrusterData();
+    if (!td.unlockedPresets.includes(r.presetKey)) {
+      td.unlockedPresets.push(r.presetKey);
+      saveThrusterData(td);
+    }
+  }
+  // Thruster color cosmetic unlock (e.g. 'red', 'green', 'gold').
+  if (r.kind === 'thrustercolor' && r.colorKey) {
+    const td = loadThrusterData();
+    if (!td.unlockedColors.includes(r.colorKey)) {
+      td.unlockedColors.push(r.colorKey);
+      saveThrusterData(td);
+    }
   }
   // stat rewards: value is derived from ladder position, no separate storage
   // XP bonus (added to current XP pool)
@@ -1005,6 +1079,134 @@ function closeMissions() {
 }
 window.closeMissions = closeMissions;
 
+// ── THRUSTER INVENTORY PANEL ─────────────────────────────────────────
+let _thrusterPanelOpenedFromGameplay = false;
+
+function renderThrusterPanel() {
+  const body = document.getElementById('thruster-panel-body');
+  if (!body) return;
+  const presets = window._THRUSTER_PRESETS || {};
+  const palette = window._THRUSTER_COLOR_PALETTE || {};
+  const td = loadThrusterData();
+  const adminAll = (typeof _skinAdminMode !== 'undefined') && _skinAdminMode;
+
+  const isPresetUnlocked = (k) => k === 'baseline' || adminAll || td.unlockedPresets.includes(k);
+  const isColorUnlocked  = (k) => k === 'default'  || adminAll || td.unlockedColors.includes(k);
+
+  // Build preset rows
+  let presetHTML = '<div style="font:11px monospace;letter-spacing:1px;color:#ff66bb;margin:4px 0 8px;text-transform:uppercase;">Thruster Preset</div>';
+  presetHTML += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-bottom:14px;">';
+  Object.keys(presets).forEach(key => {
+    const P = presets[key];
+    const label = (P && P.label) || key.toUpperCase();
+    const unlocked = isPresetUnlocked(key);
+    const equipped = (td.selectedPreset === key);
+    const bg = equipped ? '#2a0a18' : unlocked ? '#1a1a1a' : '#0a0a0a';
+    const border = equipped ? '#ff66bb' : unlocked ? '#444' : '#222';
+    const color = equipped ? '#ff66bb' : unlocked ? '#ddd' : '#555';
+    const tag = equipped ? 'EQUIPPED' : unlocked ? 'TAP TO EQUIP' : 'LOCKED';
+    presetHTML += '<button class="thr-preset-btn" data-key="' + key + '" data-unlocked="' + (unlocked?1:0) + '" style="background:' + bg + ';color:' + color + ';border:1px solid ' + border + ';padding:8px 6px;cursor:' + (unlocked?'pointer':'not-allowed') + ';font:10px monospace;text-align:left;line-height:1.3;"><div style="font-weight:bold;font-size:11px;margin-bottom:2px;">' + label + '</div><div style="opacity:0.6;font-size:9px;">' + tag + '</div></button>';
+  });
+  presetHTML += '</div>';
+
+  // Build color rows
+  let colorHTML = '<div style="font:11px monospace;letter-spacing:1px;color:#ff66bb;margin:4px 0 8px;text-transform:uppercase;">Cosmetic Color</div>';
+  colorHTML += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px;margin-bottom:14px;">';
+  Object.keys(palette).forEach(key => {
+    const C = palette[key];
+    const label = C.label || key.toUpperCase();
+    const swatch = C.swatch || '#888';
+    const unlocked = isColorUnlocked(key);
+    const equipped = (td.selectedColor === key);
+    const ring = equipped ? '#ff66bb' : unlocked ? '#444' : '#222';
+    const bg = equipped ? '#2a0a18' : '#1a1a1a';
+    const labelColor = equipped ? '#ff66bb' : unlocked ? '#ddd' : '#555';
+    const dot = unlocked
+      ? '<div style="width:28px;height:28px;border-radius:50%;background:' + swatch + ';margin:0 auto 4px;box-shadow:0 0 8px ' + swatch + '99;border:2px solid ' + (equipped ? '#ff66bb' : '#222') + ';"></div>'
+      : '<div style="width:28px;height:28px;border-radius:50%;background:#0a0a0a;margin:0 auto 4px;border:2px solid #222;display:flex;align-items:center;justify-content:center;color:#444;font-size:14px;">?</div>';
+    colorHTML += '<button class="thr-color-btn" data-key="' + key + '" data-unlocked="' + (unlocked?1:0) + '" style="background:' + bg + ';color:' + labelColor + ';border:1px solid ' + ring + ';padding:8px 4px;cursor:' + (unlocked?'pointer':'not-allowed') + ';font:9px monospace;text-align:center;">' + dot + '<div>' + label + '</div></button>';
+  });
+  colorHTML += '</div>';
+
+  // Future-expandable rows (fins, turrets, etc.)
+  const futureHTML = '<div style="font:11px monospace;letter-spacing:1px;color:#444;margin:4px 0 8px;text-transform:uppercase;">Coming Soon</div>' +
+    '<div style="opacity:0.4;display:grid;grid-template-columns:1fr 1fr;gap:6px;">' +
+    '<div style="background:#0a0a0a;border:1px dashed #222;padding:10px;text-align:center;color:#444;font:10px monospace;">FINS</div>' +
+    '<div style="background:#0a0a0a;border:1px dashed #222;padding:10px;text-align:center;color:#444;font:10px monospace;">TURRETS</div>' +
+    '</div>';
+
+  body.innerHTML = presetHTML + colorHTML + futureHTML;
+
+  // Wire click handlers (live preview + persist)
+  body.querySelectorAll('.thr-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.getAttribute('data-unlocked') !== '1') return;
+      const key = btn.getAttribute('data-key');
+      const d = loadThrusterData();
+      d.selectedPreset = key;
+      saveThrusterData(d);
+      // Live preview on the title ship: apply preset + reapply equipped color
+      try { if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster(); } catch(_){}
+      try { playTitleTap(); } catch(_){}
+      renderThrusterPanel();
+    });
+  });
+  body.querySelectorAll('.thr-color-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.getAttribute('data-unlocked') !== '1') return;
+      const key = btn.getAttribute('data-key');
+      const d = loadThrusterData();
+      d.selectedColor = key;
+      saveThrusterData(d);
+      // Live preview — _applyEquippedThruster handles 'default' as no-op so
+      // switching back to default reverts to the title vibe color on next paint.
+      try { if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster(); } catch(_){}
+      try { playTitleTap(); } catch(_){}
+      renderThrusterPanel();
+    });
+  });
+}
+
+function openThrusterPanel() {
+  initAudio();
+  try { playTitleTap(); } catch(_){}
+  const overlay = document.getElementById('thruster-overlay');
+  if (!overlay) return;
+  if (state.phase === 'playing') {
+    _thrusterPanelOpenedFromGameplay = true;
+    state.phase = 'paused';
+    const _engP = document.getElementById('engine-start');
+    const _roarP = document.getElementById('engine-roar');
+    if (_engP && !_engP.paused) _engP.pause();
+    if (_roarP && !_roarP.paused) _roarP.pause();
+  } else {
+    _thrusterPanelOpenedFromGameplay = false;
+  }
+  overlay.classList.remove('hidden');
+  // Clear NEW badge once seen
+  window._LS.removeItem('jetslide_thrusters_new');
+  const dot = document.getElementById('title-thrusters-new-dot');
+  if (dot) dot.style.display = 'none';
+  renderThrusterPanel();
+}
+window.openThrusterPanel = openThrusterPanel;
+
+function closeThrusterPanel() {
+  try { playTitleTap(); } catch(_){}
+  const overlay = document.getElementById('thruster-overlay');
+  if (!overlay) return;
+  overlay.classList.add('hidden');
+  if (_thrusterPanelOpenedFromGameplay && state.phase === 'paused') {
+    state.phase = 'playing';
+    _thrusterPanelOpenedFromGameplay = false;
+    const _engP = document.getElementById('engine-start');
+    const _roarP = document.getElementById('engine-roar');
+    if (_engP && _engP.paused) _engP.play().catch(()=>{});
+    if (_roarP && _roarP.paused) _roarP.play().catch(()=>{});
+  }
+}
+window.closeThrusterPanel = closeThrusterPanel;
+
 function hasClaimableReward() {
   const pos = loadLadderPos();
   return pos < MISSION_LADDER.length && MISSION_LADDER[pos].type === 'reward';
@@ -1025,6 +1227,9 @@ function updateNotificationDots() {
   if (sBtn) sBtn.classList.toggle('has-dot', hasNewShopUnlock());
   if (shipLabel) shipLabel.classList.toggle('has-dot', !!getPendingHandlingUpgrade());
   if (hudShopBtn) hudShopBtn.classList.toggle('has-dot', !state._shopOpened && _canAffordAnyShopItem());
+  // Thruster panel NEW badge — set by claimReward when a thruster reward fires.
+  const thrDot = document.getElementById('title-thrusters-new-dot');
+  if (thrDot) thrDot.style.display = (window._LS.getItem('jetslide_thrusters_new') === '1') ? 'block' : 'none';
 }
 
 // ── Particle burst animation ──────────────────────────────
@@ -1105,6 +1310,9 @@ function claimReward(rungIndex, clickEvent) {
     window._LS.setItem('jetslide_shop_new', '1'); // flag for shop NEW badge
   } else if (r.kind === 'stat') {
     color = '#00eeff'; icon = '\u2605'; dest = '#missions-fuel-count'; count = 14;
+  } else if (r.kind === 'thruster' || r.kind === 'thrustercolor') {
+    color = REWARD_COLORS.thruster; icon = '\u25B2'; dest = '#title-thrusters-btn'; count = 18;
+    window._LS.setItem('jetslide_thrusters_new', '1'); // flag for thruster panel NEW badge
   } else {
     color = '#fff'; icon = '\u2B50'; dest = '#missions-fuel-count'; count = 14;
   }
@@ -1181,7 +1389,7 @@ function renderLadder() {
       const isNext = !earned && !claimable && (i > 0 && MISSION_LADDER[i - 1].type === 'mission' && i - 1 === pos);
       const cls = earned ? 'earned' : claimable ? 'claimable' : isNext ? 'next' : 'locked';
       const color = REWARD_COLORS[rung.reward.kind] || '#fff';
-      const icon = rung.reward.kind === 'fuelcells' ? _FUEL_SVG : rung.reward.kind === 'coins' ? '\u2B21' : rung.reward.kind === 'unlock' ? '\uD83D\uDD13' : '\u2605';
+      const icon = rung.reward.kind === 'fuelcells' ? _FUEL_SVG : rung.reward.kind === 'coins' ? '\u2B21' : rung.reward.kind === 'unlock' ? '\uD83D\uDD13' : (rung.reward.kind === 'thruster' || rung.reward.kind === 'thrustercolor') ? '\u25B2' : '\u2605';
       return `<div class="ladder-rung reward ${cls}" data-rung="${i}" style="--reward-color:${color}">
         ${icon} ${rung.reward.label}
         ${claimable ? '<span class="claim-tap">TAP TO COLLECT</span>' : ''}
@@ -6942,6 +7150,10 @@ let _fovSpeedBoost = 22;         // max FOV increase at top speed — cranked fo
 let _prevSpeed = 0;              // for detecting accel vs decel
 
 function updateThrusterColor(color) {
+  // Locked during a run so tier/vibe transitions can't repaint the thruster.
+  // Cleared on title return. Bypass with updateThrusterColor.force = true if
+  // ever needed (currently no callsite uses it).
+  if (window._thrusterColorLocked) return;
   thrusterColor.copy(color);
 }
 

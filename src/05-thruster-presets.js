@@ -97,3 +97,25 @@ window._THRUSTER_PRESETS = {
 // Which preset is currently active (one at a time, mutually exclusive).
 // null = none (sliders show whatever the user last set).
 window._activeThrusterPreset = null;
+
+// ── THRUSTER COLOR PALETTE ───────────────────────────────────────────────────
+// Cosmetic-only color overrides that apply on top of the active preset.
+// 'default' (null hex) means "don't override — keep whatever color the run
+// started with". Every other entry is a fixed hex applied at run start and
+// LOCKED for the entire run (tier transitions are gated by
+// window._thrusterColorLocked).
+//
+// Add new colors by appending an entry here. The title panel auto-renders
+// every key in this map. Order matters — keep 'default' first.
+window._THRUSTER_COLOR_PALETTE = {
+  default: { label: 'DEFAULT',   hex: null,     swatch: '#888888' },
+  blue:    { label: 'ION BLUE',  hex: 0x44aaff, swatch: '#44aaff' },
+  cyan:    { label: 'CYAN',      hex: 0x33eeff, swatch: '#33eeff' },
+  violet:  { label: 'VIOLET',    hex: 0xee00ff, swatch: '#ee00ff' },
+  red:     { label: 'CRIMSON',   hex: 0xff3300, swatch: '#ff3300' },
+  orange:  { label: 'EMBER',     hex: 0xff9a00, swatch: '#ff9a00' },
+  green:   { label: 'TOXIC',     hex: 0x44ff88, swatch: '#44ff88' },
+  pink:    { label: 'NEON PINK', hex: 0xff66bb, swatch: '#ff66bb' },
+  gold:    { label: 'SOLAR GOLD',hex: 0xffcc33, swatch: '#ffcc33' },
+  white:   { label: 'WHITE HOT', hex: 0xffffff, swatch: '#ffffff' },
+};

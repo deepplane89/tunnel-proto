@@ -111,6 +111,16 @@ function startGame() {
   } else {
     applySkin(0);
   }
+  // ── THRUSTER INVENTORY: apply equipped preset + cosmetic color, then LOCK ──
+  // Lock prevents tier/vibe transitions from repainting the thruster mid-run
+  // (gates updateThrusterColor + the two thruster-color lerps). The lock is
+  // cleared on title return by the same code path that re-arms the title vibe.
+  try {
+    if (typeof window._applyEquippedThruster === 'function') {
+      window._applyEquippedThruster();
+    }
+  } catch(_){}
+  window._thrusterColorLocked = true;
   state.phase          = 'playing';
   shipGroup.visible    = true;
   _killExplosion();
@@ -2754,8 +2764,11 @@ function updateDeathRunTransition(dt) {
   sunCapMat.uniforms.uIsGold.value = sunMat.uniforms.uIsGold.value;
   // Bloom
   bloom.strength = from.bloomStrength + (to.bloomStrength - from.bloomStrength) * t;
-  // Thruster color
-  thrusterColor.lerpColors(from.thrusterColor, to.thrusterColor, t);
+  // Thruster color — skipped when run-time lock is set (cosmetic color
+  // override system: see loadThrusterData / startGame run-start hook).
+  if (!window._thrusterColorLocked) {
+    thrusterColor.lerpColors(from.thrusterColor, to.thrusterColor, t);
+  }
   // Warp palette — apply target vibe's colors if defined
   const _warpTarget = t >= 0.5 ? to : from;
   if (_warpTarget.warpCol1) {

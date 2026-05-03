@@ -288,12 +288,15 @@ function updateTransition(dt) {
   sunCapMat.uniforms.uWarpCol2.value.copy(sunMat.uniforms.uWarpCol2.value);
   sunCapMat.uniforms.uWarpCol3.value.copy(sunMat.uniforms.uWarpCol3.value);
 
-  // Thruster color lerp
-  const ci2 = LEVELS.indexOf(currentLevelDef);
-  const ti2 = LEVELS.indexOf(targetLevelDef);
-  const tc = THRUSTER_COLORS[Math.min(ci2, THRUSTER_COLORS.length - 1)];
-  const tt = THRUSTER_COLORS[Math.min(ti2, THRUSTER_COLORS.length - 1)];
-  thrusterColor.lerpColors(tc, tt, t);
+  // Thruster color lerp — skipped when run-time lock is set (cosmetic color
+  // override system: see loadThrusterData / startGame run-start hook).
+  if (!window._thrusterColorLocked) {
+    const ci2 = LEVELS.indexOf(currentLevelDef);
+    const ti2 = LEVELS.indexOf(targetLevelDef);
+    const tc = THRUSTER_COLORS[Math.min(ci2, THRUSTER_COLORS.length - 1)];
+    const tt = THRUSTER_COLORS[Math.min(ti2, THRUSTER_COLORS.length - 1)];
+    thrusterColor.lerpColors(tc, tt, t);
+  }
 
   bloom.strength = currentLevelDef.bloomStrength + (targetLevelDef.bloomStrength - currentLevelDef.bloomStrength) * t;
 
