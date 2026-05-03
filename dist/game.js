@@ -5907,6 +5907,129 @@ function initTitleShipPreview(sourceModel) {
   titleScene.add(ambientLight);
 }
 
+// ── ONE-SHOT SKIN BAKE (devtools-only) ───────────────────────────────────
+// Usage from console: await window._bakeSkin(3)  // bakes Cipher
+// Renders the gameplay ship under gameplay's per-skin lighting AND under
+// title's neutral studio lighting, samples per-material-slot average linear
+// RGB, computes scale factors, prints proposed SKIN_DEFS overrides.
+// Not called by anything in the build — pure inspection tool.
+window._bakeSkin = async function(skinIndex) {
+  const ship = window._shipModel;
+  if (!ship) { console.warn('[bake] ship not loaded'); return; }
+  const W = 256, H = 256;
+  const rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.UnsignedByteType });
+  const buf = new Uint8Array(W * H * 4);
+
+  // Snapshot current visibility
+  const visSnap = new Map();
+  ship.traverse(c => { if (c.isMesh) visSnap.set(c.uuid, c.visible); });
+
+  // Snapshot current gameplay lights
+  const lightSnap = {
+    dirI: dirLight.intensity, dirP: dirLight.position.clone(),
+    rimI: rimLight.intensity, fillI: fillLight.intensity,
+    sunI: sunLight.intensity, sunLI: sunLightL.intensity,
+  };
+
+  // Build per-slot mesh groups by origName
+  const slotMeshes = { rocket_base: [], white: [], gray: [], nozzle: [], rocket_light: [] };
+  ship.traverse(c => {
+    if (!c.isMesh) return;
+    const n = c.userData._origMatName || '';
+    if (n === 'fire' || n === 'fire1') return;
+    if (slotMeshes[n]) slotMeshes[n].push(c);
+  });
+
+  function setVisOnly(slot) {
+    ship.traverse(c => {
+      if (!c.isMesh) return;
+      const n = c.userData._origMatName || '';
+      c.visible = (slotMeshes[slot] && slotMeshes[slot].includes(c));
+    });
+  }
+
+  function avgLinear() {
+    renderer.setRenderTarget(rt);
+    renderer.clear();
+    renderer.render(scene, camera);
+    renderer.readRenderTargetPixels(rt, 0, 0, W, H, buf);
+    renderer.setRenderTarget(null);
+    let r=0,g=0,b=0,n=0;
+    for (let i = 0; i < buf.length; i += 4) {
+      const a = buf[i+3]; if (a < 8) continue;
+      // sRGB byte -> linear
+      const sr = buf[i]/255, sg = buf[i+1]/255, sb = buf[i+2]/255;
+      const lr = sr <= 0.04045 ? sr/12.92 : Math.pow((sr+0.055)/1.055, 2.4);
+      const lg = sg <= 0.04045 ? sg/12.92 : Math.pow((sg+0.055)/1.055, 2.4);
+      const lb = sb <= 0.04045 ? sb/12.92 : Math.pow((sb+0.055)/1.055, 2.4);
+      r += lr; g += lg; b += lb; n++;
+    }
+    return n ? [r/n, g/n, b/n, n] : [0,0,0,0];
+  }
+
+  // Apply target skin first
+  applySkin(skinIndex);
+  await new Promise(r => requestAnimationFrame(r));
+
+  // ── PASS A: gameplay lighting (per-skin overrides already applied by applySkin) ──
+  const gameplay = {};
+  for (const slot of Object.keys(slotMeshes)) {
+    if (!slotMeshes[slot].length) { gameplay[slot] = null; continue; }
+    setVisOnly(slot);
+    gameplay[slot] = avgLinear();
+  }
+
+  // ── PASS B: neutral studio lighting (mirror title's studio rig values) ──
+  // Title uses keyLight=4.5, fill=2.2 bluish, rim=2.5, top=1.5, ambient bluish 1.2.
+  // Approximate that on the gameplay rig: bright key from front-right, no rake.
+  dirLight.intensity = 4.5; dirLight.position.set(3, 2, 5);
+  rimLight.intensity = 2.5; fillLight.intensity = 2.2;
+  sunLight.intensity = 0.0; sunLightL.intensity = 0.0;
+
+  const neutral = {};
+  for (const slot of Object.keys(slotMeshes)) {
+    if (!slotMeshes[slot].length) { neutral[slot] = null; continue; }
+    setVisOnly(slot);
+    neutral[slot] = avgLinear();
+  }
+
+  // Restore visibility + lighting
+  ship.traverse(c => { if (c.isMesh && visSnap.has(c.uuid)) c.visible = visSnap.get(c.uuid); });
+  dirLight.intensity = lightSnap.dirI; dirLight.position.copy(lightSnap.dirP);
+  rimLight.intensity = lightSnap.rimI; fillLight.intensity = lightSnap.fillI;
+  sunLight.intensity = lightSnap.sunI; sunLightL.intensity = lightSnap.sunLI;
+
+  // ── COMPUTE: per-slot scale factor neutral->gameplay (linear) ──
+  // Then derive proposed material params. For diamond-shader slots, scale
+  // emissiveIntensity. For PBR slots, scale base color.
+  function fmtRGB(c) { return c ? `rgb(${(c[0]*255).toFixed(1)}, ${(c[1]*255).toFixed(1)}, ${(c[2]*255).toFixed(1)}) n=${c[3]}` : 'n/a'; }
+  function scaleFactor(g, n) {
+    if (!g || !n || n[0]+n[1]+n[2] < 0.001) return [1,1,1];
+    return [
+      Math.max(0, Math.min(8, g[0] / Math.max(n[0], 0.001))),
+      Math.max(0, Math.min(8, g[1] / Math.max(n[1], 0.001))),
+      Math.max(0, Math.min(8, g[2] / Math.max(n[2], 0.001))),
+    ];
+  }
+
+  const out = { skin: skinIndex, gameplay, neutral, scales: {} };
+  for (const slot of Object.keys(slotMeshes)) {
+    out.scales[slot] = scaleFactor(gameplay[slot], neutral[slot]);
+  }
+
+  console.log('[bake] gameplay linear avg:');
+  for (const k of Object.keys(gameplay)) console.log('  ' + k + ': ' + fmtRGB(gameplay[k]));
+  console.log('[bake] neutral linear avg:');
+  for (const k of Object.keys(neutral)) console.log('  ' + k + ': ' + fmtRGB(neutral[k]));
+  console.log('[bake] scale factor (gameplay/neutral):');
+  for (const k of Object.keys(out.scales)) {
+    const s = out.scales[k];
+    console.log('  ' + k + ': [' + s[0].toFixed(3) + ', ' + s[1].toFixed(3) + ', ' + s[2].toFixed(3) + ']');
+  }
+  rt.dispose();
+  return out;
+};
+
 // Apply a skin to the title ship clone — maps by mesh name, not uuid
 function applyTitleSkin(skinIndex) {
   if (!_titleShipModel || !_prebuiltSkins.length) return;
