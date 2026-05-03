@@ -12430,9 +12430,10 @@ function spawnObstacles() {
     } else if (_density === 'dense') {
       obs = 6; maxObs = 8; gap = 1.0;
     } else if (_density === 'ramp') {
-      // Linear ramp 5→9 over the stage. _seqRampT01 set by sequencer tick.
+      // Linear ramp 5→7 over the stage. _seqRampT01 set by sequencer tick.
+      // (Was 5→9; end of tier 1 felt like a wall.)
       const t = state._seqRampT01 || 0;
-      obs = Math.round(5 + 4 * t);
+      obs = Math.round(5 + 2 * t);
       maxObs = obs + 2;
       gap = 1.0;
     } else if (_density === 'normal') {
@@ -27111,15 +27112,7 @@ function _tickJetLightningRamp(dt) {
     }
   }
 
-  let visible = false;
-  document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'q' || e.key === 'Q') {
-      visible = !visible;
-      if (visible) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  // Q hotkey removed (was toggling JL sequencer panel; JL is dead).
 })();
 
 // Hook ramp into composer chain (safe to call before lightning IIFE since it

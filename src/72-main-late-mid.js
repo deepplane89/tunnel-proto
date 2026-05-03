@@ -4962,15 +4962,7 @@ function _tickJetLightningRamp(dt) {
     }
   }
 
-  let visible = false;
-  document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'q' || e.key === 'Q') {
-      visible = !visible;
-      if (visible) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  // Q hotkey removed (was toggling JL sequencer panel; JL is dead).
 })();
 
 // Hook ramp into composer chain (safe to call before lightning IIFE since it
