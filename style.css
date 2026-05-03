@@ -5075,10 +5075,10 @@ body.sr-open #title-leaderboard {
  */
 @media (orientation: landscape), (min-width: 900px) {
   .sr-overlay:not(.hidden) {
-    /* Stage column = stage-multiplier * 1fr, panel column = inverse so total
-       stays bounded. Slider 100 -> stage:1fr panel:240px (default).
-       Slider 160 -> wider stage, narrower panel. */
-    grid-template-columns: calc(var(--sr-tune-stage, 1) * 1fr) calc(240px / var(--sr-tune-stage, 1));
+    /* Stage column = 1fr (auto-fills), panel column = 240px / multiplier.
+       Slider 100 -> 240px panel; 160 -> 150px panel; 40 -> 600px panel.
+       NOTE: calc() can't multiply fr units, so we keep stage at plain 1fr. */
+    grid-template-columns: 1fr calc(240px / var(--sr-tune-stage, 1));
     grid-template-rows: 1fr auto;
     grid-template-areas:
       "stage  panel"
