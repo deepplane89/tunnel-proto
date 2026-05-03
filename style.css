@@ -5313,7 +5313,7 @@ body.sr-open #title-leaderboard {
   top: 44px;
   right: 8px;
   z-index: 10;
-  width: 240px;
+  width: 300px;
   padding: 10px;
   background: rgba(0, 14, 28, 0.92);
   border: 1px solid rgba(34, 211, 238, 0.5);
@@ -5330,9 +5330,9 @@ body.sr-edit-mode .sr-edit-panel { display: block; }
   margin-bottom: 6px;
 }
 .sr-edit-row > span:first-child {
-  flex: 0 0 60px;
-  font: 700 9px/1 'Orbitron', sans-serif;
-  letter-spacing: 1px;
+  flex: 0 0 130px;
+  font: 700 9px/1.1 'Orbitron', sans-serif;
+  letter-spacing: 0.5px;
   color: #cffafe;
 }
 .sr-edit-row input[type="range"] {
