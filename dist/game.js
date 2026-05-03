@@ -13842,14 +13842,36 @@ function updateStreakBadge() {
   }
 
   // ── Build dropdown <option>s ─────────────────────────────────────────
-  // Garage-local preview state — decoupled from the equipped skin saved on
-  // the title screen. Opening the garage shows whatever was last previewed
-  // here; closing the garage restores the equipped skin to the title preview.
-  // Lives only in memory (intentionally not persisted) so a fresh page load
-  // shows the equipped skin first.
+  // Garage-local preview state — separate from the equipped skin saved on the
+  // title screen. Lives only in memory so a fresh page load shows the
+  // currently-displayed (equipped) ship first.
   let _garagePreviewIdx = null;
   function _equippedSkinIdx() {
     try { return (loadSkinData() || {}).selected || 0; } catch(_) { return 0; }
+  }
+  // Reverse-lookup: which SHIP_SKINS index matches the ship currently shown
+  // on the title canvas? Lets garage open sync the dropdown to the canvas
+  // WITHOUT firing a skin swap (which would wipe thruster anchors).
+  function _displayedSkinIdx() {
+    try {
+      const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+      const altFile = ship && ship.userData && ship.userData._altGlb;
+      if (typeof SHIP_SKINS !== 'undefined' && Array.isArray(SHIP_SKINS)) {
+        for (let i = 0; i < SHIP_SKINS.length; i++) {
+          const s = SHIP_SKINS[i];
+          if (!s) continue;
+          if (altFile) { if (s.glbFile === altFile) return i; }
+          else { if (!s.glbFile) return i; }
+        }
+      }
+    } catch(_){}
+    return _equippedSkinIdx();
+  }
+  // Preview a skin in the title-ship canvas WITHOUT touching equipped state.
+  function _previewSkin(idx) {
+    if (typeof applyTitleSkin === 'function') {
+      try { applyTitleSkin(idx); } catch(_){}
+    }
   }
 
   function _buildSkinOptions(sel) {
@@ -13858,7 +13880,7 @@ function updateStreakBadge() {
     if (typeof SHIP_SKINS === 'undefined') return;
     const reqs = _getUnlockReqs();
     // Highlight the GARAGE preview, not the equipped skin — they're separate.
-    const previewIdx = (_garagePreviewIdx != null) ? _garagePreviewIdx : _equippedSkinIdx();
+    const selectedIdx = (_garagePreviewIdx != null) ? _garagePreviewIdx : _equippedSkinIdx();
     SHIP_SKINS.forEach((skin, idx) => {
       if (skin.hidden) return;
       const unlocked = _isSkinUnlockedSafe(idx);
@@ -13872,40 +13894,9 @@ function updateStreakBadge() {
         opt.disabled = true;
       }
       opt.textContent = label;
-      if (idx === previewIdx) opt.selected = true;
+      if (idx === selectedIdx) opt.selected = true;
       sel.appendChild(opt);
     });
-  }
-
-  // Preview a skin in the title-ship canvas WITHOUT touching equipped state.
-  // applyTitleSkin only updates the visual clone; navigateToSkin would write
-  // data.selected which we explicitly want to avoid.
-  function _previewSkin(idx) {
-    if (typeof applyTitleSkin === 'function') {
-      try { applyTitleSkin(idx); } catch(_){}
-    }
-  }
-
-  // Reverse-lookup: which SHIP_SKINS index matches the ship currently shown
-  // in the title canvas? Used so garage open can sync the dropdown to the
-  // canvas WITHOUT firing a skin swap (which would reset thruster anchors).
-  function _displayedSkinIdx() {
-    try {
-      const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
-      const altFile = ship && ship.userData && ship.userData._altGlb;
-      if (typeof SHIP_SKINS !== 'undefined' && Array.isArray(SHIP_SKINS)) {
-        for (let i = 0; i < SHIP_SKINS.length; i++) {
-          const s = SHIP_SKINS[i];
-          if (!s) continue;
-          if (altFile) {
-            if (s.glbFile === altFile) return i;
-          } else {
-            if (!s.glbFile) return i;
-          }
-        }
-      }
-    } catch(_){}
-    return _equippedSkinIdx();
   }
 
   function _buildShapeOptions(sel) {
@@ -13962,109 +13953,6 @@ function updateStreakBadge() {
     _buildSkinOptions(document.getElementById('sr-select-skin'));
     _buildShapeOptions(document.getElementById('sr-select-shape'));
     _buildColorOptions(document.getElementById('sr-select-color'));
-    _populateAddons();
-  }
-
-  // ── ADD-ONS pane: per-mesh toggle UI for alt-GLB ships only ──
-  // The current ship's top-level child meshes (excluding the body) are listed
-  // with a checkbox. State is persisted per-GLB filename so MK Runner's add-on
-  // config is independent from any future alt-GLB.
-  const SR_ADDONS_KEY = 'jh_showroom_addons_v1';
-  // Mesh names treated as "body" (always visible, never shown as toggleable).
-  // For MK Runner, the hull is Cube.007. Anything starting with 'Cube' is
-  // treated as the body unless explicitly listed as an add-on elsewhere.
-  const SR_BODY_PART_PATTERNS = [/^Cube/i];
-  function _isBodyPart(name) {
-    return SR_BODY_PART_PATTERNS.some(rx => rx.test(name || ''));
-  }
-  function _loadAddonsState() {
-    try { return JSON.parse(localStorage.getItem(SR_ADDONS_KEY) || '{}') || {}; }
-    catch(_) { return {}; }
-  }
-  function _saveAddonsState(state) {
-    try { localStorage.setItem(SR_ADDONS_KEY, JSON.stringify(state || {})); } catch(_){}
-  }
-  function _currentAddonsKey() {
-    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
-    return (ship && ship.userData && ship.userData._altGlb) || null;
-  }
-  // Direct children of the ship root that contain a mesh and aren't the body.
-  function _collectAddonNodes() {
-    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
-    if (!ship) return [];
-    const out = [];
-    ship.children.forEach((c, i) => {
-      let hasMesh = false;
-      c.traverse(o => { if (o.isMesh) hasMesh = true; });
-      if (!hasMesh) return;
-      const name = (c.name && c.name.trim()) || ('Part_' + i);
-      if (_isBodyPart(name)) return;
-      out.push({ name: name, node: c });
-    });
-    return out;
-  }
-  // Apply persisted visibility state to the current ship's parts. Called
-  // after the ship swaps so toggles survive a skin change. ONLY touches a
-  // node's visibility when the user has explicitly saved a state for it —
-  // never defaults parts OFF. Hiding parts the user didn't toggle would
-  // (a) break ships that look right at baseline, and (b) shrink the bbox so
-  // hullBackZ recomputes wrong on RST.
-  function _applyAddonsToShip() {
-    const key = _currentAddonsKey();
-    if (!key) return;
-    const state = _loadAddonsState();
-    const map = state[key];
-    if (!map) return;
-    _collectAddonNodes().forEach(p => {
-      if (Object.prototype.hasOwnProperty.call(map, p.name)) {
-        p.node.visible = !!map[p.name];
-      }
-    });
-  }
-  function _populateAddons() {
-    const list = document.getElementById('sr-addons-list');
-    if (!list) return;
-    const key = _currentAddonsKey();
-    if (!key) {
-      list.innerHTML = '<div class="sr-addon-empty">No add-ons available for this ship</div>';
-      return;
-    }
-    const parts = _collectAddonNodes();
-    if (!parts.length) {
-      list.innerHTML = '<div class="sr-addon-empty">No add-ons available for this ship</div>';
-      return;
-    }
-    const state = _loadAddonsState();
-    const map = state[key] || {};
-    let html = '';
-    parts.forEach(p => {
-      // Checkbox reflects the part's CURRENT visibility — do NOT mutate
-      // node.visible here. Mutating it would re-trigger the bbox/hullBackZ
-      // mismatch we just fixed in _applyAddonsToShip.
-      const stored = Object.prototype.hasOwnProperty.call(map, p.name)
-        ? !!map[p.name]
-        : !!p.node.visible;
-      const safe = String(p.name).replace(/"/g, '&quot;');
-      html += '<label class="sr-addon-row">'+
-        '<input type="checkbox" data-addon="'+safe+'" '+(stored?'checked':'')+'>'+
-        '<span>'+safe+'</span>'+
-      '</label>';
-    });
-    list.innerHTML = html;
-    list.querySelectorAll('input[type="checkbox"][data-addon]').forEach(inp => {
-      inp.addEventListener('change', (e) => {
-        const k = _currentAddonsKey();
-        if (!k) return;
-        const name = e.target.dataset.addon;
-        const visible = !!e.target.checked;
-        const hit = _collectAddonNodes().find(p => p.name === name);
-        if (hit) hit.node.visible = visible;
-        const s = _loadAddonsState();
-        if (!s[k]) s[k] = {};
-        s[k][name] = visible;
-        _saveAddonsState(s);
-      });
-    });
   }
 
   // ── Wire dropdown change handlers ────────────────────────────────────
@@ -14078,9 +13966,6 @@ function updateStreakBadge() {
     _previewSkin(idx);
     // Skin swap may load a new GLB whose materials default to transparent.
     requestAnimationFrame(() => { try { _forceShipOpaque(); } catch(_){} });
-    // Refresh add-ons list — the new ship may be an alt-GLB with toggleable
-    // parts (or a default ship with none).
-    try { _populateAddons(); } catch(_){}
     try { playTitleTap(); } catch(_){}
   }
 
@@ -14935,10 +14820,9 @@ function updateStreakBadge() {
     overlay.classList.remove('hidden');
     document.body.classList.add('sr-open');
     _switchTab(tab || 'thrusters');
-    // Seed the garage preview index from whatever ship is CURRENTLY showing
-    // on the title canvas. This keeps the dropdown in sync with the visible
-    // ship without firing a skin swap (which would wipe thruster anchors and
-    // recompute hullBackZ — the bug the user kept hitting on RST).
+    // Seed the garage preview index from whatever ship is currently on the
+    // title canvas. Keeps the dropdown in sync with the visible ship without
+    // firing a skin swap (which would wipe thruster anchors).
     _garagePreviewIdx = _displayedSkinIdx();
     _populateAll();
     // Relocate after the overlay is visible so getBoundingClientRect is right.
@@ -14971,8 +14855,7 @@ function updateStreakBadge() {
     _showTuner(false);
     _showFx(false);
     // If the player previewed a different skin in the garage but never hit
-    // USE on the title screen, snap the title canvas back to the equipped
-    // skin so close() never leaves the title showing a non-equipped ship.
+    // USE on the title, snap the title canvas back to the equipped skin.
     if (_garagePreviewIdx != null && _garagePreviewIdx !== _equippedSkinIdx()) {
       try { _previewSkin(_equippedSkinIdx()); } catch(_){}
     }
@@ -15013,8 +14896,6 @@ function updateStreakBadge() {
     // _applyTunerToAnchors uses the right per-ship pod offsets. Persists
     // the outgoing ship's edits to its own key, never crosses streams.
     try { _swapTunerForCurrentShip(); } catch(_){}
-    // Apply persisted add-on visibility to the freshly-swapped ship parts.
-    try { _applyAddonsToShip(); } catch(_){}
     try { if (typeof _updateTunerHud === 'function') _updateTunerHud(); } catch(_){}
     if (_open) {
       _thrInit();
