@@ -5238,6 +5238,7 @@ function updateGridColor(color) {
   mirrorMat.uniforms.uLineColor.value.copy(color);
   // Ship edge lines + accent strip track level color
   shipEdgeLines.forEach(m => {
+    if (!m.color) return;
     m.color.copy(color);
     if (m.emissive) m.emissive.copy(color);
   });
