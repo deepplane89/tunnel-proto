@@ -14209,21 +14209,41 @@ function updateStreakBadge() {
       anchors[k] = a;
       if (ship) ship.add(a); else titleScene.add(a);
     });
-    // Auto-detect the actual hull back-Z in ship-model local space so the
-    // tuner's Z value means "distance behind visible hull back" instead of
-    // "absolute model Z" — cancels out any GLB padding/empty-space at the
-    // back of the bounding box. Re-measured on every init in case shapes swap.
+    // Auto-detect the actual hull back-Z in ship-model local space.
+    // "Back" = the side of the ship facing AWAY from the title camera (which
+    // sits at +Z looking at the origin), so back-of-ship is the local-Z value
+    // whose world position has the most-positive Z. This handles models that
+    // bake a rotation into their own transform (e.g. MK Runner with rotY=π,
+    // where its local +Z points toward the camera, not away from it).
     let hullBackZ = 0;
     if (ship) {
       try {
-        const bbox = new THREE.Box3().setFromObject(ship);
-        if (bbox && isFinite(bbox.max.z) && isFinite(bbox.min.z)) {
-          ship.updateMatrixWorld(true);
-          const vMax = new THREE.Vector3(0, 0, bbox.max.z);
-          const vMin = new THREE.Vector3(0, 0, bbox.min.z);
-          ship.worldToLocal(vMax);
-          ship.worldToLocal(vMin);
-          hullBackZ = Math.min(vMax.z, vMin.z);
+        // Compute bbox in ship-LOCAL space by traversing meshes and
+        // accumulating their local-to-ship-space vertex extents. World-space
+        // Box3 won't help us here because we need the local Z of the back.
+        const localBox = new THREE.Box3();
+        const tmp = new THREE.Vector3();
+        const inv = new THREE.Matrix4();
+        ship.updateMatrixWorld(true);
+        inv.copy(ship.matrixWorld).invert();
+        ship.traverse((o) => {
+          if (!o.isMesh || !o.geometry) return;
+          if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+          const gb = o.geometry.boundingBox;
+          if (!gb) return;
+          // 8 corners of the geometry bbox → mesh world space → ship local space.
+          for (let cx = 0; cx < 2; cx++) for (let cy = 0; cy < 2; cy++) for (let cz = 0; cz < 2; cz++) {
+            tmp.set(cx ? gb.max.x : gb.min.x, cy ? gb.max.y : gb.min.y, cz ? gb.max.z : gb.min.z);
+            o.localToWorld(tmp);
+            tmp.applyMatrix4(inv);
+            localBox.expandByPoint(tmp);
+          }
+        });
+        if (isFinite(localBox.max.z) && isFinite(localBox.min.z)) {
+          // Pick the local Z whose world position has the larger Z (= back).
+          const wMax = new THREE.Vector3(0, 0, localBox.max.z); ship.localToWorld(wMax);
+          const wMin = new THREE.Vector3(0, 0, localBox.min.z); ship.localToWorld(wMin);
+          hullBackZ = (wMax.z >= wMin.z) ? localBox.max.z : localBox.min.z;
         }
       } catch(_){}
     }
