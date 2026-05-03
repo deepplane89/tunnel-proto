@@ -1438,12 +1438,13 @@ html, body {
   }
 
   /* ── TITLE SCREEN — compact landscape layout ──────────── */
+  /* No scroll. Inner pieces shrink instead. */
   .title-content {
     gap: 10px;
     padding: 8px 24px;
     max-height: 100vh;
     max-height: 100dvh;
-    overflow-y: auto;
+    overflow: hidden;
   }
   .game-title {
     line-height: 0.9;
