@@ -193,6 +193,12 @@ function returnToTitle() {
   dismissHeadStart();
   // Clear all in-flight objects and mechanic state
   _clearAllMechanics();
+  // Lightning + asteroids are pool-based and not in _clearAllMechanics; both
+  // can leak past death/exit (lightning bolts freeze visible mid-strike, and
+  // _updateAsteroids ticks every frame regardless of phase so rocks keep
+  // falling onto the title screen). Clear them explicitly here.
+  if (typeof window._clearAllLightning === 'function') window._clearAllLightning();
+  if (typeof window._clearAllAsteroids === 'function') window._clearAllAsteroids();
   // Bonus rings (opening rings) are not in _clearAllMechanics — wipe explicitly.
   _ringRemoveAll();
   // Coins, laser bolts, active powerups: startGame() resets these but exiting

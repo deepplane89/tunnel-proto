@@ -124,6 +124,9 @@ function startGame() {
   _canyonSinePhase = 0;
   // Clean up lightning if active
   if (typeof window._clearAllLightning === 'function') window._clearAllLightning();
+  // Clean up asteroids if active — _updateAsteroids ticks every frame regardless
+  // of phase, so dying mid-storm leaves rocks falling onto the title screen.
+  if (typeof window._clearAllAsteroids === 'function') window._clearAllAsteroids();
   if (_gameOverDelayTimer) { clearTimeout(_gameOverDelayTimer); _gameOverDelayTimer = null; }
   state.score          = 0;
   state.multiplier     = 1;

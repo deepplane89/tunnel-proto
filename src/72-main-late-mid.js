@@ -3709,6 +3709,11 @@ function _clearAllAsteroids() {
   _astSweepX = 0; _astSweepDir = 1;
   _astStaggerQueue.length = 0;
 }
+// Expose for run-reset paths (startGame / returnToTitle / canyon teardown).
+// _updateAsteroids ticks every frame regardless of state.phase, so an in-flight
+// asteroid storm would otherwise keep falling and trigger landing FX on the
+// title / gameover screen if the player dies mid-storm.
+window._clearAllAsteroids = _clearAllAsteroids;
 
 // ── Hook into main animate loop — append _updateAsteroids after _updateShockwave
 // (done via monkey-patch pattern to avoid re-editing large blocks)

@@ -14108,6 +14108,12 @@ function returnToTitle() {
   dismissHeadStart();
   // Clear all in-flight objects and mechanic state
   _clearAllMechanics();
+  // Lightning + asteroids are pool-based and not in _clearAllMechanics; both
+  // can leak past death/exit (lightning bolts freeze visible mid-strike, and
+  // _updateAsteroids ticks every frame regardless of phase so rocks keep
+  // falling onto the title screen). Clear them explicitly here.
+  if (typeof window._clearAllLightning === 'function') window._clearAllLightning();
+  if (typeof window._clearAllAsteroids === 'function') window._clearAllAsteroids();
   // Bonus rings (opening rings) are not in _clearAllMechanics — wipe explicitly.
   _ringRemoveAll();
   // Coins, laser bolts, active powerups: startGame() resets these but exiting
@@ -15565,6 +15571,9 @@ function startGame() {
   _canyonSinePhase = 0;
   // Clean up lightning if active
   if (typeof window._clearAllLightning === 'function') window._clearAllLightning();
+  // Clean up asteroids if active — _updateAsteroids ticks every frame regardless
+  // of phase, so dying mid-storm leaves rocks falling onto the title screen.
+  if (typeof window._clearAllAsteroids === 'function') window._clearAllAsteroids();
   if (_gameOverDelayTimer) { clearTimeout(_gameOverDelayTimer); _gameOverDelayTimer = null; }
   state.score          = 0;
   state.multiplier     = 1;
@@ -25907,6 +25916,11 @@ function _clearAllAsteroids() {
   _astSweepX = 0; _astSweepDir = 1;
   _astStaggerQueue.length = 0;
 }
+// Expose for run-reset paths (startGame / returnToTitle / canyon teardown).
+// _updateAsteroids ticks every frame regardless of state.phase, so an in-flight
+// asteroid storm would otherwise keep falling and trigger landing FX on the
+// title / gameover screen if the player dies mid-storm.
+window._clearAllAsteroids = _clearAllAsteroids;
 
 // ── Hook into main animate loop — append _updateAsteroids after _updateShockwave
 // (done via monkey-patch pattern to avoid re-editing large blocks)

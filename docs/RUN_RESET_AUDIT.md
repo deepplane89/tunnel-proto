@@ -103,7 +103,37 @@ No commit pushed for Pass 2 — audit-only.
 
 ---
 
-## 4. Mesh visibility flags
+## 3. Mesh visibility flags (✅ PASS 3 COMPLETE — 2 leaks fixed)
+
+**Result: two pool-based mechanics leaked across run-end transitions.**
+
+| Site | Pattern | Status |
+|---|---|---|
+| `_ltActive` lightning bolts (72:5109) | `_updateLightning` gates on `phase==='playing'` so ticks stop on death, but instances stay in array with `boltGroup.visible = true` — frozen visible mid-strike | ❌ → ✅ `window._clearAllLightning` already called from startGame; **added to returnToTitle** |
+| `_asteroidActive` asteroids (72:3152) | `_updateAsteroids(dt)` at 72:3747 is OUTSIDE the `phase==='playing'` gate — ticks every frame on title/gameover, asteroids keep falling and trigger landing FX | ❌ → ✅ **Exposed `window._clearAllAsteroids`, called from startGame and returnToTitle** |
+| `shipGroup`, `auroraGroup`, `l5fGroup`, `l5DustPoints`, `shieldMesh`, `shieldWire`, `laserPivot`, `laserBolts`, `magnetRing/2` | Explicit reset in startGame (67:115-336) | ✅ |
+| `laserMesh.visible`, `laserGlowMesh.visible` | Set true at 67:4752-4764, never set false. Children of `laserPivot` so hidden via parent. Internal flag persists but cosmetically harmless | ✅ No-op |
+| `_flashSprite`, `_flashLight` | Self-clearing in `_updateFlash` after 0.15s | ✅ |
+| `_shockDiscMesh` | Self-clearing in `_updateShockwave` | ✅ |
+| Asteroid `warnMesh`/`flash`/`ring`/`boltGroup` (lightning) | Pool-init at spawn, pool-return on kill | ✅ (now that pools clear) |
+| `_lethalRingActive` | `_clearAllMechanics` covers it | ✅ |
+| `activeObstacles`, `_awActive` | `_clearAllMechanics` covers them | ✅ |
+| `activeCoins`, `activePowerups`, `_activeForcefields` | startGame + returnToTitle both reset | ✅ |
+| Face explosion fragments (`_activeShatterEffects`) | Self-clearing on `now >= fx.endT` timeout | ✅ |
+| `_canyonWalls` slabs | Explicit teardown via `_destroyCanyonWalls` in startGame | ✅ |
+| `_terrainWalls.strips` | Explicit teardown via `_destroyTerrainWalls` in startGame | ✅ |
+| Title-only meshes (mirror, dust, sprites) | Toggled by settings/title logic, not gameplay | ✅ |
+| Thruster systems / nozzle bloom / cones | Per-frame derived from `playing && tp > 0.01` | ✅ |
+| `_dbgShipBox`, `_dbgObsPool` | Debug panel only | ✅ Dev-only |
+
+**Fixes applied:**
+- `src/72-main-late-mid.js:3712-3716` — expose `window._clearAllAsteroids`
+- `src/67-main-late.js:127-129` — call `window._clearAllAsteroids` from startGame
+- `src/60-main-late.js:196-201` — call both `_clearAllLightning` and `_clearAllAsteroids` from returnToTitle
+
+---
+
+## 4. Mesh visibility flags (original notes)
 
 Lots of `mesh.visible =` writes (~174 spotted). Most are toggled both ways by
 gameplay logic (e.g. powerup spawn → visible=true, expire → visible=false) but
@@ -199,8 +229,8 @@ Mutators to enumerate:
 
 Pass 1 (✅ done): Post-processing uniforms — section 1
 Pass 2 (✅ done): Material opacity/color/emissive sweep — section 3 (highest visual leak risk)
-Pass 3 (next): Mesh visibility sweep — section 4
-Pass 4: Three.js scene state — section 2
+Pass 3 (✅ done): Mesh visibility sweep — section 3 (2 leaks fixed)
+Pass 4 (next): Three.js scene state — section 4
 Pass 5: Audio loops — section 5
 Pass 6: Timers — section 6
 Pass 7: DOM overlays — section 7
