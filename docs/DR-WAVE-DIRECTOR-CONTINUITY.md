@@ -3,10 +3,24 @@
 
 ---
 
+## ⚠️ CRITICAL — READ FIRST
+
+**THERE IS NO CAMPAIGN / LEVEL MODE / STORY MODE. THE GAME IS DEATH RUN ONLY.**
+
+When the player taps PLAY, they go directly into the Death Run sequencer (`DR_SEQUENCE` in `src/67-main-late.js`). There is no L1/L2/L3/L4/L5 campaign progression as a separate mode. References to "L3", "L4", "L5" in code names (e.g. `L4_SINE_CORRIDOR`, `_startL3KnifeCanyon`, `state.currentLevelIdx`) are LEGACY NAMES for visual/mechanic templates that the Death Run sequencer reuses — they are NOT a separate game mode.
+
+**Implications when working on this codebase:**
+- Banners say "TIER N", not "LEVEL N" — vibe transitions show `'TIER ' + (vibeIdx + 1)`
+- The campaign-mode `transitionToLevel()` / `playLevelUp()` path in `src/40-main-late.js:~2295` (`if (newIdx !== state.currentLevelIdx)`) is dormant — Death Run uses `_applyVibeTransition` in `src/67-main-late.js`
+- Don't add features that assume a campaign progression — every gameplay change must integrate with `DR_SEQUENCE` stages
+- `state.currentLevelIdx` is still set by Death Run vibe transitions (it tracks the current sun shader index 0-4) — don't remove it, but don't treat it as a campaign level
+
+---
+
 ## Game Overview
 
 ### What Is Jet Horizon?
-Jet Horizon is an endless runner web game with a synthwave aesthetic. The player controls a small hovercraft (ship) flying forward over a reflective water grid, dodging procedurally generated obstacles. The game runs entirely in the browser using Three.js for 3D rendering.
+Jet Horizon is an endless runner web game with a synthwave aesthetic. The player controls a small hovercraft (ship) flying forward over a reflective water grid, dodging procedurally generated obstacles. The game runs entirely in the browser using Three.js for 3D rendering. **Single mode: Death Run** — a sequenced procedural run with 11 stages (corridors, canyons, walls, rings, fat cones, slalom, zipper) ending in endless mix.
 
 ### Visual Style
 - Dark sky with stars, nebula clouds, and a large retro sun on the horizon
