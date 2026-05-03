@@ -3868,11 +3868,9 @@ function update(dt) {
   state.shipX   += state.shipVelX * dt;
 
   // ── Argon edge-trigger + intensity modulation ──
-  // DISABLED 2026-05-02 (user request): the steering-driven argon ambient was
-  // the unwanted strafing sound. Block kept intact behind a kill switch so the
-  // mechanic is one toggle away from being revived. Stop-paths in pause /
-  // title / game over still run defensively in case state ever leaks.
-  if (false && state.phase === 'playing' && !_introBlock) {
+  // Re-enabled 2026-05-03 with new vr-flutter-rumble sample (file swapped at
+  // assets/audio/argon-ambient.mp3, same id/buffer name).
+  if (state.phase === 'playing' && !_introBlock) {
     const _isSteering = !!(steerLeft || steerRight);
     const _wasSteering = !!state._argonSteering;
     const _argonEl = document.getElementById('argon-ambient-sfx');
