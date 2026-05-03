@@ -346,23 +346,12 @@
     ship.traverse(o => { if (!hit && o.name === name) hit = o; });
     return hit;
   }
-  // Apply persisted visibility state to the current ship's add-on nodes.
-  // Defaults to OFF when no save exists for that ship/part. Called from
-  // _populateAddons (on tab populate) and from resetThrusterAnchors after
-  // a ship swap, so toggles survive a skin change.
-  function _applyAddonsToShip() {
-    const key = _currentAddonsKey();
-    if (!key) return;
-    const names = ADDON_REGISTRY[key];
-    if (!names) return;
-    const map = (_loadAddonsState()[key]) || {};
-    names.forEach(n => {
-      const node = _findAddonNode(n);
-      if (!node) return;
-      const stored = Object.prototype.hasOwnProperty.call(map, n) ? !!map[n] : false;
-      node.visible = stored;
-    });
-  }
+  // INTENTIONALLY a no-op for now. Earlier versions auto-applied saved
+  // visibility state on ship swap, but mutating add-on visibility right
+  // before _thrInit measures the bbox shifted hullBackZ — which moved RST
+  // landing position. Keeping this empty guarantees the thruster system
+  // never sees a hull with hidden pieces.
+  function _applyAddonsToShip() { /* no-op: see comment */ }
   function _populateAddons() {
     const list = document.getElementById('sr-addons-list');
     if (!list) return;
@@ -372,19 +361,17 @@
       list.innerHTML = '<div class="sr-addon-empty">No add-ons available for this ship</div>';
       return;
     }
-    const map = (_loadAddonsState()[key]) || {};
     let html = '';
     names.forEach(n => {
       const node = _findAddonNode(n);
-      const stored = Object.prototype.hasOwnProperty.call(map, n)
-        ? !!map[n]
-        : (node ? !!node.visible : false);
-      // Reflect stored state on the node so checkbox + visual stay in sync.
-      // Defaults newly-loaded ship to OFF for any part the user hasn't saved.
-      if (node) node.visible = stored;
+      // Checkbox reflects the part's CURRENT visibility — do NOT mutate it
+      // here. Mutating visibility before _thrInit reads the bbox would shift
+      // hullBackZ and break RST. The user toggles on click; visibility is
+      // ephemeral within a session.
+      const checked = node ? !!node.visible : true;
       const safe = String(n).replace(/"/g, '&quot;');
       html += '<label class="sr-addon-row">'+
-        '<input type="checkbox" data-addon="'+safe+'" '+(stored?'checked':'')+'>'+
+        '<input type="checkbox" data-addon="'+safe+'" '+(checked?'checked':'')+'>'+
         '<span>'+safe+'</span>'+
       '</label>';
     });
@@ -740,6 +727,19 @@
     let hullBackZ = 0;
     if (ship) {
       try {
+        // Measure bbox against the FULL factory hull (all add-ons visible),
+        // not the user's currently-toggled state. Otherwise hiding fins/rings/
+        // turrets would shrink the bbox and shift hullBackZ — which would in
+        // turn shift RST landing position.
+        const key = _currentAddonsKey();
+        const names = (key && ADDON_REGISTRY[key]) || [];
+        const restore = [];
+        names.forEach(n => {
+          const node = _findAddonNode(n);
+          if (!node) return;
+          restore.push({ node: node, was: node.visible });
+          node.visible = true;
+        });
         const bbox = new THREE.Box3().setFromObject(ship);
         if (bbox && isFinite(bbox.max.z) && isFinite(bbox.min.z)) {
           ship.updateMatrixWorld(true);
@@ -749,6 +749,8 @@
           ship.worldToLocal(vMin);
           hullBackZ = Math.min(vMax.z, vMin.z);
         }
+        // Restore the user's actual toggle state.
+        restore.forEach(r => { r.node.visible = r.was; });
       } catch(_){}
     }
     _thr = {
