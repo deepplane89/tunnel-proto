@@ -355,7 +355,19 @@ function startGame() {
   document.getElementById('lb-overlay').classList.add('hidden');
   // Show touch controls on mobile (any touch-capable device)
   if (navigator.maxTouchPoints > 0) {
-    document.getElementById('touch-controls').classList.remove('hidden');
+    const _tc = document.getElementById('touch-controls');
+    _tc.classList.remove('hidden');
+    // Hide the visual arrow indicators once the player has steered through
+    // the prologue at least once (LS flag set in _launchDeathRun). Tutorial
+    // always shows arrows so new players know where to tap. Touch zones
+    // themselves remain active either way.
+    let _steerLearned = false;
+    try { _steerLearned = localStorage.getItem('jh_steerLearned') === '1'; } catch (_) {}
+    if (_steerLearned && !state._tutorialActive) {
+      _tc.classList.add('arrows-hidden');
+    } else {
+      _tc.classList.remove('arrows-hidden');
+    }
   }
   updateHUDLevel();
   updateMultiplierHUD();
@@ -890,6 +902,11 @@ function startDeathRun() {
 
       fadeOutIntroOverlay(overlay);
       state.introActive = false;
+      // Mark steering as learned — next run’s touch-controls will hide the arrows.
+      // Skipped if tutorial is active (tutorial isn’t “real” steering practice).
+      if (!state._tutorialActive) {
+        try { localStorage.setItem('jh_steerLearned', '1'); } catch (_) {}
+      }
       state.elapsed = 0; // reset so wave director Band 1 starts fresh from launch
 
       // Engine roar only on launch (engine-start already killed by clearIntroTimers)

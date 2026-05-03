@@ -686,14 +686,28 @@ html, body {
   grid-template-columns: 1fr auto 1fr;
   grid-template-rows: auto;
   align-items: start;
-  padding: var(--space-4) var(--space-6);
+  padding: var(--space-2) var(--space-4);
   gap: var(--space-4);
 }
 .hud.hidden { display: none; }
 
-.hud-left  { justify-self: start; padding-left: 16px; }
+.hud-left  { justify-self: start; padding-left: 12px; padding-top: 4px; }
 .hud-center { justify-self: center; text-align: center; }
 .hud-right { justify-self: end; text-align: right; padding-right: 60px; }
+
+/* Single compact row — score, multiplier, coins, fuel cells */
+.hud-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1;
+}
+.hud-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.18);
+  margin: 0 4px;
+}
 
 .hud-label {
   font-size: var(--text-xs);
@@ -703,10 +717,10 @@ html, body {
 }
 .hud-value {
   font-family: var(--font-display);
-  font-size: var(--text-xl);
+  font-size: 22px;
   font-weight: 700;
   color: var(--color-cyan);
-  text-shadow: 0 0 10px var(--color-cyan);
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.55);
   font-variant-numeric: tabular-nums lining-nums;
 }
 .hud-level-name {
@@ -721,7 +735,7 @@ html, body {
   font-size: var(--text-sm);
   font-weight: 700;
   color: var(--color-gold);
-  text-shadow: 0 0 10px var(--color-gold);
+  text-shadow: 0 0 6px var(--color-gold);
   animation: mult-pulse 0.5s ease infinite alternate;
 }
 .hud-mult.hidden { display: none; }
@@ -753,6 +767,41 @@ html, body {
   letter-spacing: 0.15em;
   font-variant-numeric: tabular-nums;
 }
+
+/* HUD-row scoped overrides — compact inline icons + softer glow.
+   Scoped under .hud-row so title-screen .hud-coin-icon / .hud-coin-val
+   styles are unaffected. */
+.hud-row .hud-coin-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  vertical-align: middle;
+  font-size: inherit;
+  color: inherit;
+}
+.hud-row .hud-fuel-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+.hud-row .hud-coin-val {
+  font-size: 13px;
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.55);
+  letter-spacing: 0.05em;
+  margin-left: 1px;
+}
+.hud-row .hud-fuel-val {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: #d8eaff;
+  text-shadow: 0 0 6px rgba(120, 200, 255, 0.45);
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  margin-left: 1px;
+}
+
 .hud-coin-label {
   font-family: var(--font-display);
   font-size: 9px;
@@ -1164,6 +1213,14 @@ html, body {
 }
 .touch-left.active::after,
 .touch-right.active::after { opacity: 0.45; }
+
+/* Hide the arrow indicators after the player has steered through prologue
+   once (LS flag set in _launchDeathRun). Tutorial keeps them visible by
+   never adding this class. Touch zones themselves remain active. */
+.touch-controls.arrows-hidden .touch-left::after,
+.touch-controls.arrows-hidden .touch-right::after { opacity: 0; }
+.touch-controls.arrows-hidden .touch-left.active::after,
+.touch-controls.arrows-hidden .touch-right.active::after { opacity: 0; }
 
 
 
