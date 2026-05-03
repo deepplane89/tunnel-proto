@@ -14626,14 +14626,37 @@ function updateStreakBadge() {
     // displayed size is controlled by CSS (always fills the stage cell).
   }
 
+  // Re-apply the showroom-specific ship pose (centered pivot + side-profile
+  // tilt). The title screen's applyDefaults() runs on every resize and
+  // overwrites pivot.position + rotation.x with title-screen values; we
+  // need to reclaim them after every rotation while showroom is open.
+  function _reapplyShowroomPose() {
+    try {
+      if (typeof titleScene === 'undefined' || !titleScene) return;
+      const pivot = titleScene.getObjectByName('titleShipPivot');
+      const tiltGroup = pivot && pivot.children && pivot.children[0];
+      if (pivot) {
+        pivot.position.x = 0;
+        pivot.position.y = 0;
+      }
+      if (tiltGroup) {
+        tiltGroup.rotation.x = 0.13;
+        tiltGroup.rotation.y = 0;
+        tiltGroup.rotation.z = 0;
+      }
+    } catch(_){}
+  }
+
   let _resizeT = null;
   function _onResize() {
     if (!_open) return;
-    // Just resize the canvas to fit the current stage rect. No layout
-    // recompute on phantom/URL-bar resizes.
+    // Debounce 100ms so iOS Safari mid-rotation events coalesce, then
+    // resize canvas AND reclaim ship pose (title screen's applyDefaults
+    // also fires on resize and overwrites pivot/rotation).
     if (_resizeT) clearTimeout(_resizeT);
     _resizeT = setTimeout(() => {
       _resizeT = null;
+      _reapplyShowroomPose();
       _resizeStageCanvas();
     }, 100);
   }
