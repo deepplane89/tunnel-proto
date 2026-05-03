@@ -14441,6 +14441,13 @@ function updateStreakBadge() {
     });
     _tunerHudInited = true;
   }
+  function _devHudsEnabled() {
+    try {
+      if (window.JH_DEV_HUDS === true) return true;
+      if (localStorage.getItem('jh_showroom_dev_huds') === '1') return true;
+    } catch(_){}
+    return false;
+  }
   function _showTuner(show) {
     _ensureTunerHudInit();
     if (window.TunerHud) window.TunerHud.showTuner(show);
@@ -14681,8 +14688,15 @@ function updateStreakBadge() {
       _forceShipOpaque();
       _thrSyncColor();
       _thrShow(true);
-      _showTuner(true);
-      _showFx(true);
+      // Tuner + FX HUDs are dev-only. Toggle on by setting
+      // localStorage.jh_showroom_dev_huds = '1' (or window.JH_DEV_HUDS = true).
+      if (_devHudsEnabled()) {
+        _showTuner(true);
+        _showFx(true);
+      } else {
+        _showTuner(false);
+        _showFx(false);
+      }
     });
     _open = true;
   }
