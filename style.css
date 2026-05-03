@@ -4799,31 +4799,8 @@ body.sr-open #title-ship-canvas {
  * can re-enable later, but don't render it. */
 .sr-grid { display: none; }
 
-/* LANDSCAPE / desktop: dock panel to the right side instead of bottom. The
- * stage is shrunk so the ship sits centered in the visible area to the LEFT
- * of the panel, not under it. */
-@media (min-aspect-ratio: 1/1) and (min-width: 720px) {
-  .sr-overlay {
-    align-items: stretch;
-    justify-content: flex-end;
-    padding: 24px;
-    background: linear-gradient(270deg,
-      rgba(7,9,18,0.55) 0%,
-      rgba(7,9,18,0.0) 50%);
-  }
-  .sr-panel {
-    max-width: 380px;
-    align-self: stretch;
-  }
-  /* Stage shrinks to leave 380px panel + 24px+24px padding on the right. */
-  .sr-stage {
-    top: 0;
-    bottom: 0;
-    left: 0;
-    right: 428px;
-    height: auto;
-  }
-}
+/* (Removed v1 desktop-landscape absolute-positioned dock; v2 grid layout in
+ * the LANDSCAPE block below now owns landscape sizing for the showroom.) */
 
 /* ═══════════════════════════════════════════════════════════════════════ */
 /* GARAGE / SHOWROOM v2 — Grid-based layout (portrait + landscape)         */
@@ -4953,26 +4930,31 @@ body.sr-open #title-leaderboard {
 }
 .sr-pane[data-pane="powerups"] .shop-detail.hidden { display: none; }
 
-/* ───────── LANDSCAPE (max-height 500px = phones in landscape) ───────── */
-@media (orientation: landscape) and (max-height: 500px) {
-  /* 2-column grid: ship gets ~70%, panel ~30%, handling spans both at bottom. */
-  .sr-overlay {
-    grid-template-columns: 1fr 200px;
+/* ───────── LANDSCAPE (orientation:landscape) ─────────
+ * Use min-specificity matching .sr-overlay:not(.hidden) so portrait grid
+ * rules above don't bleed through. Layout: ship + handling on left
+ * (stage stacked over handling bar), panel docked to right.
+ */
+@media (orientation: landscape) {
+  .sr-overlay:not(.hidden) {
+    grid-template-columns: 1fr 240px;
     grid-template-rows: 1fr auto;
     grid-template-areas:
       "stage  panel"
       "handle panel";
-    padding: 6px;
-    gap: 6px;
+    padding: 8px;
+    gap: 8px;
   }
-  .sr-stage         { grid-area: stage; }
-  .sr-handling-slot { grid-area: handle; }
-  .sr-overlay .sr-panel {
+  .sr-overlay:not(.hidden) .sr-stage         { grid-area: stage; }
+  .sr-overlay:not(.hidden) .sr-handling-slot { grid-area: handle; }
+  .sr-overlay:not(.hidden) .sr-panel {
     grid-area: panel;
-    max-width: 200px;
+    max-width: none;
+    width: 100%;
     max-height: none;
     height: 100%;
-    padding: 6px 10px 10px;
+    padding: 8px 10px 10px;
+    align-self: stretch;
   }
   /* Tabs on one row, smaller padding */
   .sr-overlay .sr-tabs {
@@ -4989,30 +4971,33 @@ body.sr-open #title-leaderboard {
     top: 4px; right: 4px;
     font-size: 11px;
   }
-  /* Single-column power-up cards in narrow landscape panel — stops cramping. */
+  /* Single-column power-up cards in narrow landscape panel — horizontal rows. */
   .sr-pane[data-pane="powerups"] .shop-cards {
     grid-template-columns: 1fr;
-    gap: 6px;
+    grid-auto-rows: 1fr;
+    gap: 4px;
+    height: 100%;
   }
   .sr-pane[data-pane="powerups"] .shop-card {
-    padding: 8px 10px;
+    padding: 4px 8px;
     flex-direction: row;
     text-align: left;
     gap: 8px;
     align-items: center;
   }
   .sr-pane[data-pane="powerups"] .shop-card-icon {
-    width: 24px; height: 24px;
+    width: 20px; height: 20px;
     flex-shrink: 0;
   }
   .sr-pane[data-pane="powerups"] .shop-card-name {
-    font-size: 11px;
+    font-size: 10px;
+    flex: 1;
   }
   .sr-pane[data-pane="powerups"] .shop-card-pips {
-    margin: 2px 0;
+    margin: 0;
   }
   .sr-pane[data-pane="powerups"] .shop-card-desc {
-    display: none; /* too cramped in landscape, shown on tap-to-detail */
+    display: none;
   }
   /* Compact handling bar in landscape. */
   .sr-handling-slot .shop-handling-bar {
