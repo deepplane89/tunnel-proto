@@ -14667,6 +14667,10 @@ function updateStreakBadge() {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       for (let i = 0; i < mats.length; i++) {
         const m = mats[i]; if (!m) continue;
+        // Skip skins that legitimately need transparency (Ghost holo + any
+        // custom ShaderMaterial that uses transparency as part of its look).
+        if (m.uniforms && m.uniforms.hologramColor) continue;
+        if (m.isShaderMaterial || m.isRawShaderMaterial) continue;
         if (m.transparent) m.transparent = false;
         if (m.opacity !== 1) m.opacity = 1;
         if (m.depthWrite === false) m.depthWrite = true;
