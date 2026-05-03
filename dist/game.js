@@ -24095,12 +24095,81 @@ function buildSkinTunerSliders() {
     _renderShortBtn();
     _shortBtn.addEventListener('click', () => {
       window._shortThrusterOn = !window._shortThrusterOn;
+      // Mutually exclusive with FAT ION
+      if (window._shortThrusterOn && window._fatIonOn) { window._fatIonOn = false; _applyFatIonPreset(false); }
       _applyShortPreset(window._shortThrusterOn);
       _renderShortBtn();
+      try { _renderFatIonBtn(); } catch(_){}
       // Rebuild panel so all sliders reflect the new values
       try { panel.innerHTML = ''; build(); } catch(_){}
     });
     panel.appendChild(_shortBtn);
+
+    // ── FAT ION PRESET ──
+    // Captured 2026-05-02 from user's tuned session. Globals + particles + flame mesh only.
+    if (typeof window._FAT_ION_PRESET === 'undefined') {
+      window._FAT_ION_PRESET = {
+        // Global
+        _thrPart_partOpacity: 0.48, _thrPart_miniPartOpacity: 0.52, _thrPart_posPinFrac: 0.14,
+        _thrusterScale: 0.70, _pointMatSize: 0.12, _miniPointMatSize: 0.06,
+        _nozzleBloomScale: 2.45, _nozzleBloomOpacity: 0.94, _nozzleBloom_whiteMix: 0.00,
+        _nozzleBloomPulse: 0.15,
+        _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
+        // Particles
+        _thrPart_bendInherit: 0.15, _thrPart_bendCatchup: 0.00,
+        _thrPart_midEnd: 0.10, _thrPart_midBoost: 1.02,
+        _thrPart_sizeBase: 0.05, _thrPart_sizeSpeed: 0.00,
+        _thrPart_bumpMult: 1.00, _thrPart_bumpEnd: 0.00, _thrPart_sizeJitter: 0.00,
+        _thrPart_lifeMin: 0.05, _thrPart_lifeJit: 0.08,
+        _thrPart_lifeBase: 1.30, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.09,
+        // Flame mesh
+        _thrFlame_coreEnd: 0.00, _thrFlame_coreRGB: 0.37, _thrFlame_midEnd: 0.35,
+        _thrFlame_sizeBase: 0.06, _thrFlame_sizeSpeed: 0.10,
+        _thrFlame_bumpMult: 3.00, _thrFlame_bumpEnd: 0.30,
+        _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.07,
+      };
+    }
+    window._fatIonOn = !!window._fatIonOn;
+    const _applyFatIonPreset = (on) => {
+      const P = window._FAT_ION_PRESET;
+      if (on) {
+        const snap = {};
+        const numKeys = Object.keys(P).filter(k => k.startsWith('_') && k !== '_pointMatSize' && k !== '_miniPointMatSize');
+        numKeys.forEach(k => { snap[k] = window[k]; });
+        try { snap._pointMatSize = thrusterSystems[0].points.material.size; } catch(_){}
+        try { snap._miniPointMatSize = miniThrusterSystems[0].points.material.size; } catch(_){}
+        window._fatIonPrevSnap = snap;
+        numKeys.forEach(k => { window[k] = P[k]; });
+        try { thrusterSystems.forEach(s => s.points.material.size = P._pointMatSize); } catch(_){}
+        try { miniThrusterSystems.forEach(s => s.points.material.size = P._miniPointMatSize); } catch(_){}
+      } else {
+        const snap = window._fatIonPrevSnap;
+        if (snap) {
+          Object.keys(snap).forEach(k => {
+            if (k === '_pointMatSize' || k === '_miniPointMatSize') return;
+            window[k] = snap[k];
+          });
+          try { if (snap._pointMatSize != null) thrusterSystems.forEach(s => s.points.material.size = snap._pointMatSize); } catch(_){}
+          try { if (snap._miniPointMatSize != null) miniThrusterSystems.forEach(s => s.points.material.size = snap._miniPointMatSize); } catch(_){}
+        }
+      }
+    };
+    const _fatIonBtn = document.createElement('button');
+    const _renderFatIonBtn = () => {
+      _fatIonBtn.textContent = window._fatIonOn ? 'FAT ION: ON' : 'FAT ION: OFF';
+      _fatIonBtn.style.cssText = 'background:' + (window._fatIonOn ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._fatIonOn ? '#0f0' : '#f00') + ';padding:6px 12px;cursor:pointer;font:11px monospace;margin:0 0 8px 0;display:block;width:100%;font-weight:bold;';
+    };
+    _renderFatIonBtn();
+    _fatIonBtn.addEventListener('click', () => {
+      window._fatIonOn = !window._fatIonOn;
+      // Mutually exclusive with SHORT preset
+      if (window._fatIonOn && window._shortThrusterOn) { window._shortThrusterOn = false; _applyShortPreset(false); }
+      _applyFatIonPreset(window._fatIonOn);
+      _renderFatIonBtn();
+      try { _renderShortBtn(); } catch(_){}
+      try { panel.innerHTML = ''; build(); } catch(_){}
+    });
+    panel.appendChild(_fatIonBtn);
 
     panel.appendChild(makeSlider('nozzle pulse depth', window._nozzleBloomPulse != null ? window._nozzleBloomPulse : 0.15, 0, 0.5, 0.01, v => { window._nozzleBloomPulse = v; }, '#f60'));
 
