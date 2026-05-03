@@ -13635,6 +13635,36 @@ function updateStreakBadge() {
   const SR_SPEED_SCALE = 1.0;
   const SR_TP = 1.0;
 
+  // ── Drag-tuner state (persists to localStorage) ──────────────────────
+  // anchors are children of _titleShipModel — their localPosition IS the
+  // tuned offset. Drag updates their localPosition; wheel updates scale.
+  // 'flip' inverts the exhaust direction (Z velocity sign).
+  const SR_TUNER_KEY = 'jh_showroom_tuner_v1';
+  const SR_TUNER_DEFAULT = {
+    L: { x: -0.48, y: 0.05, z: -5.10, scale: 1.0 },
+    R: { x:  0.48, y: 0.05, z: -5.10, scale: 1.0 },
+    mirror: true,
+    flip: false,
+    selected: 'L',
+  };
+  let _tuner = null;
+  function _loadTuner() {
+    try {
+      const raw = localStorage.getItem(SR_TUNER_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return Object.assign({}, SR_TUNER_DEFAULT, parsed, {
+          L: Object.assign({}, SR_TUNER_DEFAULT.L, parsed.L||{}),
+          R: Object.assign({}, SR_TUNER_DEFAULT.R, parsed.R||{}),
+        });
+      }
+    } catch(_){}
+    return JSON.parse(JSON.stringify(SR_TUNER_DEFAULT));
+  }
+  function _saveTuner() {
+    try { localStorage.setItem(SR_TUNER_KEY, JSON.stringify(_tuner)); } catch(_){}
+  }
+
   // ── Mission-ladder unlock requirement cache (M3, M7, ...) ────────────
   let _unlockReqCache = null;
   function _getUnlockReqs() {
@@ -14075,11 +14105,215 @@ function updateStreakBadge() {
       points.push(pts); geos.push(geo); poses.push(positions); cols.push(colors); szs.push(sizes);
       vels.push(velocities); ages.push(age); lifes.push(life); blooms.push(bSpr);
     }
+    // Hand-tuned anchors as children of the title ship model. Their local
+    // position IS the nozzle offset — no math needed, getWorldPosition()
+    // walks the entire parent chain (pivot/spinGroup/tiltGroup/etc).
+    if (!_tuner) _tuner = _loadTuner();
+    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+    const anchors = [new THREE.Object3D(), new THREE.Object3D()];
+    anchors[0].name = 'sr_anchor_L';
+    anchors[1].name = 'sr_anchor_R';
+    if (ship) {
+      ship.add(anchors[0]);
+      ship.add(anchors[1]);
+    } else {
+      // Fallback: park in titleScene so getWorldPosition still works.
+      titleScene.add(anchors[0]);
+      titleScene.add(anchors[1]);
+    }
     _thr = {
       points, geos, poses, cols, szs, vels, ages, lifes, blooms,
       color: new THREE.Color(0x66ccff),
       _v: new THREE.Vector3(),
+      anchors,
     };
+    _applyTunerToAnchors();
+  }
+
+  // Push tuner state into the anchor Object3Ds.
+  function _applyTunerToAnchors() {
+    if (!_thr || !_thr.anchors || !_tuner) return;
+    _thr.anchors[0].position.set(_tuner.L.x, _tuner.L.y, _tuner.L.z);
+    _thr.anchors[1].position.set(_tuner.R.x, _tuner.R.y, _tuner.R.z);
+  }
+
+  // ── Drag tuner: HUD + mouse handlers ───────────────────────────
+  // Mouse drag on the title canvas moves the selected anchor in the screen
+  // plane (X/Y). Mouse wheel scales. Shift+wheel moves Z. Buttons toggle
+  // selection (L/R), mirror, flip. Numbers display live so user can screenshot.
+  let _tunerHud = null;
+  let _tunerDragging = false;
+  let _tunerWired = false;
+  const _tunerVec = new THREE.Vector3();
+  const _tunerVec2 = new THREE.Vector3();
+
+  function _ensureTunerHud() {
+    if (_tunerHud) return _tunerHud;
+    const el = document.createElement('div');
+    el.id = 'sr-tuner-hud';
+    el.style.cssText = [
+      'position:fixed','top:8px','left:8px','z-index:99999',
+      'font:12px/1.35 ui-monospace,Menlo,monospace','color:#cef',
+      'background:rgba(0,12,24,0.82)','border:1px solid #3af','padding:8px 10px',
+      'border-radius:6px','user-select:none','pointer-events:auto',
+      'min-width:240px','box-shadow:0 0 12px rgba(60,180,255,0.25)'
+    ].join(';');
+    el.innerHTML = [
+      '<div style="font-weight:700;color:#7df;margin-bottom:4px;letter-spacing:1px">THRUSTER TUNER</div>',
+      '<div id="sr-tu-readout" style="white-space:pre;font-size:11px"></div>',
+      '<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">',
+        '<button data-act="sel-L" style="flex:1;background:#114;color:#9cf;border:1px solid #3af;padding:3px 6px;border-radius:3px;cursor:pointer">L</button>',
+        '<button data-act="sel-R" style="flex:1;background:#114;color:#9cf;border:1px solid #3af;padding:3px 6px;border-radius:3px;cursor:pointer">R</button>',
+        '<button data-act="mirror" style="flex:1;background:#114;color:#9cf;border:1px solid #3af;padding:3px 6px;border-radius:3px;cursor:pointer">MIR</button>',
+        '<button data-act="flip" style="flex:1;background:#114;color:#9cf;border:1px solid #3af;padding:3px 6px;border-radius:3px;cursor:pointer">FLP</button>',
+        '<button data-act="reset" style="flex:1;background:#411;color:#fcc;border:1px solid #f55;padding:3px 6px;border-radius:3px;cursor:pointer">RST</button>',
+      '</div>',
+      '<div style="font-size:10px;color:#7af;margin-top:6px;line-height:1.3">drag = move x/y &middot; wheel = scale &middot; shift+wheel = z</div>',
+    ].join('');
+    document.body.appendChild(el);
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      const act = b.dataset.act;
+      if (act === 'sel-L') _tuner.selected = 'L';
+      else if (act === 'sel-R') _tuner.selected = 'R';
+      else if (act === 'mirror') _tuner.mirror = !_tuner.mirror;
+      else if (act === 'flip') _tuner.flip = !_tuner.flip;
+      else if (act === 'reset') {
+        _tuner = JSON.parse(JSON.stringify(SR_TUNER_DEFAULT));
+        _applyTunerToAnchors();
+      }
+      _saveTuner();
+      _updateTunerHud();
+    });
+    _tunerHud = el;
+    return el;
+  }
+
+  function _updateTunerHud() {
+    if (!_tunerHud || !_tuner) return;
+    const ro = _tunerHud.querySelector('#sr-tu-readout');
+    const f = (n) => (Math.round(n*1000)/1000).toFixed(3);
+    const sel = _tuner.selected;
+    const lstr = (sel==='L'?'>':' ')+'L  x='+f(_tuner.L.x)+' y='+f(_tuner.L.y)+' z='+f(_tuner.L.z)+' s='+f(_tuner.L.scale);
+    const rstr = (sel==='R'?'>':' ')+'R  x='+f(_tuner.R.x)+' y='+f(_tuner.R.y)+' z='+f(_tuner.R.z)+' s='+f(_tuner.R.scale);
+    ro.textContent = lstr+'\n'+rstr+'\nmirror='+(_tuner.mirror?'ON ':'off')+' flip='+(_tuner.flip?'ON':'off');
+    // Highlight active button states.
+    _tunerHud.querySelectorAll('button').forEach(b => {
+      const a = b.dataset.act;
+      let on = false;
+      if (a==='sel-L') on = sel==='L';
+      else if (a==='sel-R') on = sel==='R';
+      else if (a==='mirror') on = _tuner.mirror;
+      else if (a==='flip') on = _tuner.flip;
+      b.style.background = on ? '#3af' : '#114';
+      b.style.color = on ? '#001' : '#9cf';
+    });
+  }
+
+  // Convert a screen-pixel delta to a world-space delta at the anchor's depth,
+  // then bake into the anchor's parent (titleShipModel) local space.
+  function _screenDeltaToLocal(dxPx, dyPx, anchorIdx) {
+    if (!_thr || !_thr.anchors) return null;
+    const canvas = document.getElementById('title-ship-canvas');
+    if (!canvas || typeof titleCamera === 'undefined' || !titleCamera) return null;
+    const rect = canvas.getBoundingClientRect();
+    const a = _thr.anchors[anchorIdx];
+    a.getWorldPosition(_tunerVec); // anchor world pos
+    // Project to NDC.
+    const ndc = _tunerVec.clone().project(titleCamera);
+    // New NDC after applying screen delta (NDC: x in [-1,1], y inverted).
+    const ndx = ndc.x + (2 * dxPx / rect.width);
+    const ndy = ndc.y - (2 * dyPx / rect.height);
+    // Unproject back to world at the same Z (preserve z NDC).
+    _tunerVec2.set(ndx, ndy, ndc.z).unproject(titleCamera);
+    // Convert world delta into anchor's parent local space.
+    const parent = a.parent;
+    if (!parent) return null;
+    parent.updateMatrixWorld(true);
+    const wOld = _tunerVec.clone();
+    const wNew = _tunerVec2.clone();
+    parent.worldToLocal(wOld);
+    parent.worldToLocal(wNew);
+    return { dx: wNew.x - wOld.x, dy: wNew.y - wOld.y };
+  }
+
+  function _applyDeltaToTuner(dx, dy, dz) {
+    const sel = _tuner.selected;
+    const t = _tuner[sel];
+    t.x += dx; t.y += dy; t.z += (dz||0);
+    if (_tuner.mirror) {
+      const other = _tuner[sel === 'L' ? 'R' : 'L'];
+      other.x = -t.x; other.y = t.y; other.z = t.z;
+    }
+  }
+
+  function _applyScaleToTuner(mul) {
+    const sel = _tuner.selected;
+    const t = _tuner[sel];
+    t.scale = Math.max(0.05, Math.min(8.0, t.scale * mul));
+    if (_tuner.mirror) _tuner[sel === 'L' ? 'R' : 'L'].scale = t.scale;
+  }
+
+  function _onTunerMouseDown(e) {
+    if (!_open) return;
+    if (e.target.closest('#sr-tuner-hud')) return;
+    if (e.target.closest('.sr-panel')) return;
+    if (e.button !== 0) return;
+    _tunerDragging = true;
+    e.preventDefault();
+  }
+  function _onTunerMouseMove(e) {
+    if (!_tunerDragging || !_open) return;
+    const sel = _tuner.selected === 'L' ? 0 : 1;
+    const d = _screenDeltaToLocal(e.movementX || 0, e.movementY || 0, sel);
+    if (!d) return;
+    _applyDeltaToTuner(d.dx, d.dy, 0);
+    _applyTunerToAnchors();
+    _updateTunerHud();
+  }
+  function _onTunerMouseUp() {
+    if (_tunerDragging) {
+      _tunerDragging = false;
+      _saveTuner();
+    }
+  }
+  function _onTunerWheel(e) {
+    if (!_open) return;
+    if (e.target.closest('.sr-panel')) return;
+    if (e.target.closest('#sr-tuner-hud')) return;
+    e.preventDefault();
+    if (e.shiftKey) {
+      // Z move (along ship long axis, in local space).
+      const dz = -e.deltaY * 0.002;
+      _applyDeltaToTuner(0, 0, dz);
+    } else {
+      // Scale.
+      const mul = e.deltaY < 0 ? 1.06 : 1/1.06;
+      _applyScaleToTuner(mul);
+    }
+    _applyTunerToAnchors();
+    _updateTunerHud();
+    _saveTuner();
+  }
+
+  function _wireTunerOnce() {
+    if (_tunerWired) return;
+    _tunerWired = true;
+    window.addEventListener('mousedown', _onTunerMouseDown, { passive: false });
+    window.addEventListener('mousemove', _onTunerMouseMove);
+    window.addEventListener('mouseup', _onTunerMouseUp);
+    window.addEventListener('wheel', _onTunerWheel, { passive: false });
+  }
+
+  function _showTuner(show) {
+    if (show) {
+      _ensureTunerHud();
+      _tunerHud.style.display = 'block';
+      _wireTunerOnce();
+      _updateTunerHud();
+    } else if (_tunerHud) {
+      _tunerHud.style.display = 'none';
+    }
   }
 
   function _thrShow(visible) {
@@ -14154,17 +14388,17 @@ function updateStreakBadge() {
       const points = _thr.points[idx];
       const bloom = _thr.blooms[idx];
 
-      // Get nozzle world position via title ship transform.
-      // Gameplay applies model.rotation.y = π to the ship (5387 in 20-main-early.js)
-      // so its +Z is "back". Title ship has no flip, so we mirror: negate the
-      // Z component of NOZZLE_OFFSETS before localToWorld so the nozzle ends up
-      // at the back of the title ship (same physical spot).
-      _thr._v.set(NOZZLE_OFFSETS[idx].x, NOZZLE_OFFSETS[idx].y, -NOZZLE_OFFSETS[idx].z);
-      ship.localToWorld(_thr._v);
+      // Get nozzle world position from the hand-tuned anchor (child of title
+      // ship) — walks the entire parent chain so it works regardless of how
+      // the ship is parented or scaled.
+      _thr.anchors[idx].getWorldPosition(_thr._v);
       const wx = _thr._v.x, wy = _thr._v.y, wz = _thr._v.z;
+      const aScale = (idx === 0 ? _tuner.L.scale : _tuner.R.scale) || 1.0;
+      const flipSign = _tuner.flip ? 1 : -1;  // -1 = exhaust into -Z (default)
 
-      // Particle material: keep size in sync with preset _pointMatSize.
-      if (points.material.size !== pointSize) points.material.size = pointSize;
+      // Particle material: keep size in sync with preset _pointMatSize × anchor scale.
+      const matSize = pointSize * aScale;
+      if (points.material.size !== matSize) points.material.size = matSize;
       if (points.material.opacity !== partOp) points.material.opacity = partOp;
 
       const pos = sys.positions, col = sys.colors, sz = sys.sizes;
@@ -14182,9 +14416,9 @@ function updateStreakBadge() {
           // leaves the ship near-horizontal and the GLB's +Z is the front), so
           // we exhaust into world -Z.
           sys.velocities[i].set(
-            (Math.random() - 0.5) * 0.06,
-            (Math.random() - 0.5) * 0.06 - 0.02,
-            -(2.5 + Math.random() * 2.0 + ss * 1.5)
+            (Math.random() - 0.5) * 0.06 * aScale,
+            (Math.random() - 0.5) * 0.06 * aScale - 0.02 * aScale,
+            flipSign * (2.5 + Math.random() * 2.0 + ss * 1.5) * aScale
           );
         } else {
           const t0 = sys.ages[i] / sys.lifetimes[i];
@@ -14230,7 +14464,7 @@ function updateStreakBadge() {
 
       // Bloom sprite at nozzle.
       bloom.position.set(wx, wy, wz);
-      const bloomSize = (0.6 + ss * 0.7) * thrScale * bloomScl;
+      const bloomSize = (0.6 + ss * 0.7) * thrScale * bloomScl * aScale;
       bloom.scale.setScalar(bloomSize);
       bloom.material.color.setRGB(
         THREE.MathUtils.lerp(tCol.r, 1.0, bloomWM),
@@ -14262,6 +14496,7 @@ function updateStreakBadge() {
       _thrInit();
       _thrSyncColor();
       _thrShow(true);
+      _showTuner(true);
     });
     _open = true;
   }
@@ -14274,6 +14509,7 @@ function updateStreakBadge() {
     _open = false;
     // Hide preview immediately so it never shows on the live title screen.
     _thrShow(false);
+    _showTuner(false);
   }
 
   function refresh() {
