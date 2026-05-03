@@ -1079,82 +1079,188 @@ function closeMissions() {
 }
 window.closeMissions = closeMissions;
 
-// ── THRUSTER INVENTORY PANEL ─────────────────────────────────────────
+// ── SHIP HUB (loadout panel) ─────────────────────────────────────────
+// V1: Thrusters tab only. Skins / Power-ups tabs wired but hidden until built.
 let _thrusterPanelOpenedFromGameplay = false;
+let _hubActiveTab = 'thrusters';
 
-function renderThrusterPanel() {
-  const body = document.getElementById('thruster-panel-body');
+// Map preset/color keys to their MISSION_LADDER rung index — used to label
+// locked items with where they unlock (e.g. "M3"). Built lazily.
+let _thrusterUnlockReqCache = null;
+function _getThrusterUnlockReqs() {
+  if (_thrusterUnlockReqCache) return _thrusterUnlockReqCache;
+  const presets = {}, colors = {};
+  let missionCount = 0;
+  if (Array.isArray(MISSION_LADDER)) {
+    for (let i = 0; i < MISSION_LADDER.length; i++) {
+      const r = MISSION_LADDER[i];
+      if (r.type === 'mission') { missionCount++; continue; }
+      if (r.type !== 'reward' || !r.reward) continue;
+      // Use mission count as the surface label — "unlocks at M5" is more
+      // meaningful to the player than raw rung index 11.
+      if (r.reward.kind === 'thruster' && r.reward.presetKey) {
+        presets[r.reward.presetKey] = missionCount;
+      } else if (r.reward.kind === 'thrustercolor' && r.reward.colorKey) {
+        colors[r.reward.colorKey] = missionCount;
+      }
+    }
+  }
+  _thrusterUnlockReqCache = { presets, colors };
+  return _thrusterUnlockReqCache;
+}
+
+// SVG cone glyph generator. Each preset maps to width/length/glow params.
+// Color is the equipped swatch hex (or null → fallback white-ish).
+function _hubConeSVG(presetKey, colorHex, size /* 'big'|'small' */) {
+  const big = size === 'big';
+  // Per-preset visual character (width, length, glow). Tuned to feel different
+  // at a glance — not 1:1 with the runtime params.
+  const P = {
+    baseline: { w: 28, l: 70, glow: 14 },
+    short:    { w: 30, l: 44, glow: 10 },
+    light:    { w: 14, l: 78, glow: 6 },
+    fatIon:   { w: 44, l: 60, glow: 28 },
+  }[presetKey] || { w: 26, l: 64, glow: 12 };
+
+  // Big preview is drawn into a 200×120 viewBox; small thumbs into 60×60.
+  const c = colorHex || '#cfd8ff';
+  const id = 'cone-' + presetKey + '-' + (big ? 'b' : 's') + '-' + Math.random().toString(36).slice(2, 7);
+  if (big) {
+    // Cone tapers from a hot core at the nozzle to a soft tip at the right.
+    const cx = 60, cy = 60;       // nozzle center (left)
+    const tipX = cx + P.l;        // cone tip (right)
+    const halfW = P.w / 2;
+    return (
+      '<defs>' +
+        '<linearGradient id="' + id + '-grad" x1="0%" x2="100%" y1="50%" y2="50%">' +
+          '<stop offset="0%"  stop-color="#ffffff" stop-opacity="1"/>' +
+          '<stop offset="15%" stop-color="' + c + '" stop-opacity="1"/>' +
+          '<stop offset="100%" stop-color="' + c + '" stop-opacity="0"/>' +
+        '</linearGradient>' +
+        '<radialGradient id="' + id + '-glow" cx="50%" cy="50%" r="50%">' +
+          '<stop offset="0%"  stop-color="' + c + '" stop-opacity="0.7"/>' +
+          '<stop offset="60%" stop-color="' + c + '" stop-opacity="0.15"/>' +
+          '<stop offset="100%" stop-color="' + c + '" stop-opacity="0"/>' +
+        '</radialGradient>' +
+      '</defs>' +
+      // soft nozzle bloom halo
+      '<circle cx="' + cx + '" cy="' + cy + '" r="' + (P.glow + 6) + '" fill="url(#' + id + '-glow)"/>' +
+      // cone body
+      '<polygon points="' +
+        cx + ',' + (cy - halfW) + ' ' +
+        tipX + ',' + cy + ' ' +
+        cx + ',' + (cy + halfW) +
+      '" fill="url(#' + id + '-grad)"/>' +
+      // hot core dot at nozzle
+      '<circle cx="' + cx + '" cy="' + cy + '" r="' + (halfW * 0.55) + '" fill="#ffffff" opacity="0.9"/>'
+    );
+  } else {
+    // Thumb: scale to fit 60×60 viewBox, cone points right.
+    const scale = 0.55;
+    const cx = 18, cy = 30;
+    const tipX = cx + P.l * scale;
+    const halfW = (P.w * scale) / 2;
+    return (
+      '<defs>' +
+        '<linearGradient id="' + id + '-grad" x1="0%" x2="100%" y1="50%" y2="50%">' +
+          '<stop offset="0%"  stop-color="#ffffff" stop-opacity="1"/>' +
+          '<stop offset="20%" stop-color="' + c + '" stop-opacity="1"/>' +
+          '<stop offset="100%" stop-color="' + c + '" stop-opacity="0"/>' +
+        '</linearGradient>' +
+      '</defs>' +
+      '<polygon points="' +
+        cx + ',' + (cy - halfW) + ' ' +
+        tipX + ',' + cy + ' ' +
+        cx + ',' + (cy + halfW) +
+      '" fill="url(#' + id + '-grad)"/>' +
+      '<circle cx="' + cx + '" cy="' + cy + '" r="' + (halfW * 0.55) + '" fill="#ffffff" opacity="0.9"/>'
+    );
+  }
+}
+
+function renderHubPreview() {
+  const svg = document.getElementById('hub-preview-svg');
+  if (!svg) return;
+  const td = loadThrusterData();
+  const palette = window._THRUSTER_COLOR_PALETTE || {};
+  const colorEntry = palette[td.selectedColor] || palette['default'] || {};
+  const colorHex = colorEntry.hex ? colorEntry.swatch : (colorEntry.swatch || '#cfd8ff');
+  svg.innerHTML = _hubConeSVG(td.selectedPreset, colorHex, 'big');
+
+  // Equipped strip
+  const eq = document.getElementById('hub-equipped');
+  if (eq) {
+    const presets = window._THRUSTER_PRESETS || {};
+    const presetLabel = ((presets[td.selectedPreset] && presets[td.selectedPreset].label) || td.selectedPreset).toUpperCase();
+    const colorLabel = (colorEntry.label || td.selectedColor).toUpperCase();
+    eq.innerHTML = '<span class="hub-eq-name">' + presetLabel + '</span> \u00b7 ' + colorLabel;
+  }
+}
+
+function renderThrustersTab() {
+  const body = document.getElementById('hub-body');
   if (!body) return;
   const presets = window._THRUSTER_PRESETS || {};
   const palette = window._THRUSTER_COLOR_PALETTE || {};
+  const reqs = _getThrusterUnlockReqs();
   const td = loadThrusterData();
   const adminAll = (typeof _skinAdminMode !== 'undefined') && _skinAdminMode;
 
   const isPresetUnlocked = (k) => k === 'baseline' || adminAll || td.unlockedPresets.includes(k);
   const isColorUnlocked  = (k) => k === 'default'  || adminAll || td.unlockedColors.includes(k);
 
-  // Build preset rows
-  let presetHTML = '<div style="font:11px monospace;letter-spacing:1px;color:#ff66bb;margin:4px 0 8px;text-transform:uppercase;">Thruster Preset</div>';
-  presetHTML += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-bottom:14px;">';
+  // SHAPE grid — chunky cards w/ cone glyph + (if locked) unlock label
+  let html = '<div class="hub-section-title">SHAPE</div><div class="hub-shape-grid">';
   Object.keys(presets).forEach(key => {
-    const P = presets[key];
-    const label = (P && P.label) || key.toUpperCase();
     const unlocked = isPresetUnlocked(key);
     const equipped = (td.selectedPreset === key);
-    const bg = equipped ? '#2a0a18' : unlocked ? '#1a1a1a' : '#0a0a0a';
-    const border = equipped ? '#ff66bb' : unlocked ? '#444' : '#222';
-    const color = equipped ? '#ff66bb' : unlocked ? '#ddd' : '#555';
-    const tag = equipped ? 'EQUIPPED' : unlocked ? 'TAP TO EQUIP' : 'LOCKED';
-    presetHTML += '<button class="thr-preset-btn" data-key="' + key + '" data-unlocked="' + (unlocked?1:0) + '" style="background:' + bg + ';color:' + color + ';border:1px solid ' + border + ';padding:8px 6px;cursor:' + (unlocked?'pointer':'not-allowed') + ';font:10px monospace;text-align:left;line-height:1.3;"><div style="font-weight:bold;font-size:11px;margin-bottom:2px;">' + label + '</div><div style="opacity:0.6;font-size:9px;">' + tag + '</div></button>';
+    const colorEntry = palette[td.selectedColor] || {};
+    const c = unlocked ? (colorEntry.swatch || '#cfd8ff') : '#666';
+    const cls = ['hub-shape-card'];
+    if (equipped) cls.push('equipped');
+    if (!unlocked) cls.push('locked');
+    const lockLabel = !unlocked && reqs.presets[key] ? '<div class="hub-lock-req">M' + reqs.presets[key] + '</div>' : '';
+    html += '<button class="' + cls.join(' ') + '" data-key="' + key + '" data-unlocked="' + (unlocked?1:0) + '">' +
+            '<svg viewBox="0 0 60 60" preserveAspectRatio="xMidYMid meet">' + _hubConeSVG(key, c, 'small') + '</svg>' +
+            lockLabel +
+            '</button>';
   });
-  presetHTML += '</div>';
+  html += '</div>';
 
-  // Build color rows
-  let colorHTML = '<div style="font:11px monospace;letter-spacing:1px;color:#ff66bb;margin:4px 0 8px;text-transform:uppercase;">Cosmetic Color</div>';
-  colorHTML += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px;margin-bottom:14px;">';
+  // COLOR row — horizontal swatches
+  html += '<div class="hub-section-title">COLOR</div><div class="hub-color-row">';
   Object.keys(palette).forEach(key => {
     const C = palette[key];
-    const label = C.label || key.toUpperCase();
     const swatch = C.swatch || '#888';
     const unlocked = isColorUnlocked(key);
     const equipped = (td.selectedColor === key);
-    const ring = equipped ? '#ff66bb' : unlocked ? '#444' : '#222';
-    const bg = equipped ? '#2a0a18' : '#1a1a1a';
-    const labelColor = equipped ? '#ff66bb' : unlocked ? '#ddd' : '#555';
-    const dot = unlocked
-      ? '<div style="width:28px;height:28px;border-radius:50%;background:' + swatch + ';margin:0 auto 4px;box-shadow:0 0 8px ' + swatch + '99;border:2px solid ' + (equipped ? '#ff66bb' : '#222') + ';"></div>'
-      : '<div style="width:28px;height:28px;border-radius:50%;background:#0a0a0a;margin:0 auto 4px;border:2px solid #222;display:flex;align-items:center;justify-content:center;color:#444;font-size:14px;">?</div>';
-    colorHTML += '<button class="thr-color-btn" data-key="' + key + '" data-unlocked="' + (unlocked?1:0) + '" style="background:' + bg + ';color:' + labelColor + ';border:1px solid ' + ring + ';padding:8px 4px;cursor:' + (unlocked?'pointer':'not-allowed') + ';font:9px monospace;text-align:center;">' + dot + '<div>' + label + '</div></button>';
+    const cls = ['hub-swatch'];
+    if (equipped) cls.push('equipped');
+    if (!unlocked) cls.push('locked');
+    const bg = unlocked ? swatch : 'transparent';
+    const style = 'background:' + bg + ';--swatch-glow:' + swatch + ';';
+    html += '<button class="' + cls.join(' ') + '" data-key="' + key + '" data-unlocked="' + (unlocked?1:0) + '" style="' + style + '" aria-label="' + (C.label || key) + '"></button>';
   });
-  colorHTML += '</div>';
+  html += '</div>';
 
-  // Future-expandable rows (fins, turrets, etc.)
-  const futureHTML = '<div style="font:11px monospace;letter-spacing:1px;color:#444;margin:4px 0 8px;text-transform:uppercase;">Coming Soon</div>' +
-    '<div style="opacity:0.4;display:grid;grid-template-columns:1fr 1fr;gap:6px;">' +
-    '<div style="background:#0a0a0a;border:1px dashed #222;padding:10px;text-align:center;color:#444;font:10px monospace;">FINS</div>' +
-    '<div style="background:#0a0a0a;border:1px dashed #222;padding:10px;text-align:center;color:#444;font:10px monospace;">TURRETS</div>' +
-    '</div>';
+  body.innerHTML = html;
 
-  body.innerHTML = presetHTML + colorHTML + futureHTML;
-
-  // Wire click handlers (live preview + persist)
-  body.querySelectorAll('.thr-preset-btn').forEach(btn => {
+  // Wire taps
+  body.querySelectorAll('.hub-shape-card').forEach(btn => {
     btn.addEventListener('click', () => {
       if (btn.getAttribute('data-unlocked') !== '1') return;
       const key = btn.getAttribute('data-key');
       const d = loadThrusterData();
-      // Admin-mode taps unlock items implicitly so loadThrusterData()'s
-      // "selected must be in unlocked" guard doesn't snap us back to baseline.
       if (!d.unlockedPresets.includes(key)) d.unlockedPresets.push(key);
       d.selectedPreset = key;
       saveThrusterData(d);
-      // Live preview on the title ship: apply preset + reapply equipped color
       try { if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster(); } catch(_){}
       try { playTitleTap(); } catch(_){}
-      renderThrusterPanel();
+      renderThrustersTab();
+      renderHubPreview();
     });
   });
-  body.querySelectorAll('.thr-color-btn').forEach(btn => {
+  body.querySelectorAll('.hub-swatch').forEach(btn => {
     btn.addEventListener('click', () => {
       if (btn.getAttribute('data-unlocked') !== '1') return;
       const key = btn.getAttribute('data-key');
@@ -1162,16 +1268,32 @@ function renderThrusterPanel() {
       if (!d.unlockedColors.includes(key)) d.unlockedColors.push(key);
       d.selectedColor = key;
       saveThrusterData(d);
-      // Live preview — _applyEquippedThruster handles 'default' as no-op so
-      // switching back to default reverts to the title vibe color on next paint.
       try { if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster(); } catch(_){}
       try { playTitleTap(); } catch(_){}
-      renderThrusterPanel();
+      renderThrustersTab();
+      renderHubPreview();
     });
   });
 }
 
-function openThrusterPanel() {
+function renderHubTab(tab) {
+  _hubActiveTab = tab;
+  // Tab visual state
+  document.querySelectorAll('.hub-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  // Body content per tab
+  if (tab === 'thrusters') {
+    renderThrustersTab();
+  } else {
+    // Future tabs: skins, powerups. For V1 they’re hidden so this branch
+    // shouldn’t fire, but leave a graceful fallback.
+    const body = document.getElementById('hub-body');
+    if (body) body.innerHTML = '';
+  }
+}
+
+function openThrusterPanel(targetTab) {
   initAudio();
   try { playTitleTap(); } catch(_){}
   const overlay = document.getElementById('thruster-overlay');
@@ -1191,7 +1313,19 @@ function openThrusterPanel() {
   window._LS.removeItem('jetslide_thrusters_new');
   const dot = document.getElementById('title-thrusters-new-dot');
   if (dot) dot.style.display = 'none';
-  renderThrusterPanel();
+  // Wire tab clicks once
+  document.querySelectorAll('.hub-tab').forEach(t => {
+    if (t._hubBound) return;
+    t._hubBound = true;
+    t.addEventListener('click', () => {
+      if (t.classList.contains('hidden')) return;
+      try { playTitleTap(); } catch(_){}
+      renderHubTab(t.dataset.tab);
+      renderHubPreview();
+    });
+  });
+  renderHubTab(targetTab || 'thrusters');
+  renderHubPreview();
 }
 window.openThrusterPanel = openThrusterPanel;
 

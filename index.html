@@ -322,16 +322,18 @@
 </div>
 
 <!-- ── DAILY STREAK OVERLAY ─────────────────────── -->
-<!-- ── THRUSTER INVENTORY OVERLAY ── -->
+<!-- ── SHIP HUB (loadout) — V1 hosts Thrusters tab; Skins/Powerups tabs hidden until built ── -->
 <div id="thruster-overlay" class="overlay hidden" style="z-index:500;">
-  <div class="missions-content" style="max-width:560px;">
-    <div class="missions-header">
-      <h2 class="missions-title" style="color:#ff66bb;text-shadow:0 0 12px rgba(255,102,187,0.5);">THRUSTERS</h2>
+  <div class="hub-panel">
+    <div class="hub-tabs" id="hub-tabs">
+      <button class="hub-tab hidden" data-tab="skins">SKINS</button>
+      <button class="hub-tab active" data-tab="thrusters">THRUSTERS</button>
+      <button class="hub-tab hidden" data-tab="powerups">POWER-UPS</button>
     </div>
-    <div id="thruster-panel-body" style="max-height:60vh;overflow-y:auto;padding:8px 4px;color:#ddd;font:12px monospace;">
-      <!-- Populated by renderThrusterPanel() -->
-    </div>
-    <button class="btn-space btn-exit missions-close-btn" onclick="closeThrusterPanel()">CLOSE</button>
+    <div class="hub-preview" id="hub-preview"><svg id="hub-preview-svg" viewBox="0 0 200 120" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div class="hub-equipped" id="hub-equipped"></div>
+    <div class="hub-body" id="hub-body"></div>
+    <button class="hub-close" onclick="closeThrusterPanel()">✕</button>
   </div>
 </div>
 
@@ -574,6 +576,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1777741500"></script>
+<script type="module" src="./dist/game.js?v=1777742000"></script>
 </body>
 </html>
