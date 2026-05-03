@@ -5364,17 +5364,25 @@ body.sr-edit-mode .sr-edit-panel { display: block; }
   padding: 3px 4px;
   border-radius: 3px;
 }
+.sr-edit-fit,
 .sr-edit-reset {
   width: 100%;
   margin-top: 4px;
   padding: 6px;
-  background: rgba(220, 38, 38, 0.25);
-  border: 1px solid rgba(220, 38, 38, 0.6);
-  color: #fee;
   font: 700 10px/1 'Orbitron', sans-serif;
   letter-spacing: 1.5px;
   cursor: pointer;
   border-radius: 3px;
+}
+.sr-edit-fit {
+  background: rgba(34, 211, 238, 0.25);
+  border: 1px solid rgba(34, 211, 238, 0.6);
+  color: #cffafe;
+}
+.sr-edit-reset {
+  background: rgba(220, 38, 38, 0.25);
+  border: 1px solid rgba(220, 38, 38, 0.6);
+  color: #fee;
 }
 
 /* In edit mode, dashed outline on each managed box for visibility. */

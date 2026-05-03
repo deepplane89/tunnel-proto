@@ -1390,6 +1390,33 @@
       reset.dataset.wired = '1';
       reset.addEventListener('click', () => { _editReset(); });
     }
+    const fit = document.getElementById('sr-edit-fit');
+    if (fit && fit.dataset.wired !== '1') {
+      fit.dataset.wired = '1';
+      fit.addEventListener('click', () => { _editFitScreen(); });
+    }
+  }
+
+  // FIT SCREEN: snap slider values so total layout = full viewport.
+  // Layout math: outer pad on all sides + gap between cols/rows.
+  //   stagew + panelw + 2*pad + gap = innerWidth
+  //   stageh + handleh + 2*pad + gap = innerHeight
+  // Default ratio: panel = 30% of width, handle = 80px, rest goes to stage.
+  function _editFitScreen() {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const pad = 8;
+    const gap = 8;
+    const handleh = 80;
+    const panelw = Math.round(W * 0.30);
+    const stagew = W - panelw - 2 * pad - gap;
+    const stageh = H - handleh - 2 * pad - gap;
+    const panelh = stageh + handleh + gap; // panel spans both rows
+    const next = { stagew, stageh, handleh, panelw, panelh, pad, gap };
+    _editSave(next);
+    _editApplyAll();
+    if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
+    try { console.log('[showroom-layout] FIT', JSON.stringify(next)); } catch(_){}
   }
 
   function _editReset() {
