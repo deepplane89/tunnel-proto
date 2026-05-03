@@ -58,7 +58,7 @@
   // anchors are children of _titleShipModel — their localPosition IS the
   // tuned offset. Drag updates their localPosition; wheel updates scale.
   // 'flip' inverts the exhaust direction (Z velocity sign).
-  const SR_TUNER_KEY = 'jh_showroom_tuner_v5';
+  const SR_TUNER_KEY = 'jh_showroom_tuner_v6';
   // Z is relative to auto-detected hull back; 0 = visible hull back.
   // pitch/yaw are exhaust direction angles in degrees (0,0 = straight back along -Z).
   // 'sel' picks which group is being dragged: L|R = main, mL|mR = mini.
@@ -68,7 +68,7 @@
     mL: { x: -0.5,   y: -0.05,  z: 0.0, scale: 1.5,   pitch: 0, yaw: 0 },
     mR: { x:  0.5,   y: -0.05,  z: 0.0, scale: 1.5,   pitch: 0, yaw: 0 },
     mirror: true,
-    flip: true,
+    flip: false,
     rotMode: false, // when true, mouse drag rotates the exhaust angle instead of moving position
     selected: 'L',  // 'L' | 'R' | 'mL' | 'mR'
     // Showroom-local fx overrides (do NOT leak to gameplay).
