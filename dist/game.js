@@ -13639,10 +13639,11 @@ function updateStreakBadge() {
   // anchors are children of _titleShipModel — their localPosition IS the
   // tuned offset. Drag updates their localPosition; wheel updates scale.
   // 'flip' inverts the exhaust direction (Z velocity sign).
-  const SR_TUNER_KEY = 'jh_showroom_tuner_v1';
+  const SR_TUNER_KEY = 'jh_showroom_tuner_v2';
+  // Z is now relative to the auto-detected hull back; 0 = right at hull back.
   const SR_TUNER_DEFAULT = {
-    L: { x: -0.48, y: 0.05, z: -5.10, scale: 1.0 },
-    R: { x:  0.48, y: 0.05, z: -5.10, scale: 1.0 },
+    L: { x: -0.48, y: 0.05, z: 0.0, scale: 1.0 },
+    R: { x:  0.48, y: 0.05, z: 0.0, scale: 1.0 },
     mirror: true,
     flip: false,
     selected: 'L',
@@ -14121,20 +14122,45 @@ function updateStreakBadge() {
       titleScene.add(anchors[0]);
       titleScene.add(anchors[1]);
     }
+    // Auto-detect the actual hull back-Z in ship-model local space so the
+    // tuner's Z value means "distance behind visible hull back" instead of
+    // "absolute model Z" — cancels out any GLB padding/empty-space at the
+    // back of the bounding box. Re-measured on every init in case shapes swap.
+    let hullBackZ = 0; // local-space Z at which the visible hull ends
+    if (ship) {
+      try {
+        const bbox = new THREE.Box3().setFromObject(ship);
+        if (bbox && isFinite(bbox.max.z) && isFinite(bbox.min.z)) {
+          // Convert world-space bbox extremes into ship-model local space.
+          ship.updateMatrixWorld(true);
+          const vMax = new THREE.Vector3(0, 0, bbox.max.z);
+          const vMin = new THREE.Vector3(0, 0, bbox.min.z);
+          ship.worldToLocal(vMax);
+          ship.worldToLocal(vMin);
+          // The "back" of the ship in our local frame is the more-negative Z
+          // (we exhaust toward -Z, so the hull's back end is the smallest Z).
+          hullBackZ = Math.min(vMax.z, vMin.z);
+        }
+      } catch(_){}
+    }
     _thr = {
       points, geos, poses, cols, szs, vels, ages, lifes, blooms,
       color: new THREE.Color(0x66ccff),
       _v: new THREE.Vector3(),
       anchors,
+      hullBackZ,
     };
     _applyTunerToAnchors();
   }
 
-  // Push tuner state into the anchor Object3Ds.
+  // Push tuner state into the anchor Object3Ds. Anchor local Z is
+  // hullBackZ + tuner.z, so tuner.z == 0 sits exactly at the visible hull
+  // back, regardless of GLB padding.
   function _applyTunerToAnchors() {
     if (!_thr || !_thr.anchors || !_tuner) return;
-    _thr.anchors[0].position.set(_tuner.L.x, _tuner.L.y, _tuner.L.z);
-    _thr.anchors[1].position.set(_tuner.R.x, _tuner.R.y, _tuner.R.z);
+    const hz = _thr.hullBackZ || 0;
+    _thr.anchors[0].position.set(_tuner.L.x, _tuner.L.y, hz + _tuner.L.z);
+    _thr.anchors[1].position.set(_tuner.R.x, _tuner.R.y, hz + _tuner.R.z);
   }
 
   // ── Drag tuner: HUD + mouse handlers ───────────────────────────
@@ -14196,7 +14222,8 @@ function updateStreakBadge() {
     const sel = _tuner.selected;
     const lstr = (sel==='L'?'>':' ')+'L  x='+f(_tuner.L.x)+' y='+f(_tuner.L.y)+' z='+f(_tuner.L.z)+' s='+f(_tuner.L.scale);
     const rstr = (sel==='R'?'>':' ')+'R  x='+f(_tuner.R.x)+' y='+f(_tuner.R.y)+' z='+f(_tuner.R.z)+' s='+f(_tuner.R.scale);
-    ro.textContent = lstr+'\n'+rstr+'\nmirror='+(_tuner.mirror?'ON ':'off')+' flip='+(_tuner.flip?'ON':'off');
+    const hz = (_thr && _thr.hullBackZ != null) ? _thr.hullBackZ : 0;
+    ro.textContent = lstr+'\n'+rstr+'\nmirror='+(_tuner.mirror?'ON ':'off')+' flip='+(_tuner.flip?'ON':'off')+'  hullZ='+f(hz);
     // Highlight active button states.
     _tunerHud.querySelectorAll('button').forEach(b => {
       const a = b.dataset.act;
