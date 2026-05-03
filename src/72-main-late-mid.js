@@ -4923,7 +4923,7 @@ function _tickJetLightningRamp(dt) {
   }
 
   function build() {
-    panel.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#fa0;margin-bottom:6px;">⚡ JL SEQUENCER (Q)</div>';
+    panel.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#fa0;margin-bottom:6px;">GOD MODE (Q)</div>';
 
     // ── God mode toggle
     const godBtn = mkBtn(_godMode ? '☑ GOD MODE  (no damage)' : '☐ GOD MODE  (no damage)', _godMode ? '#0f0' : '#555', () => {
@@ -4935,92 +4935,9 @@ function _tickJetLightningRamp(dt) {
     godBtn.style.width = '100%';
     godBtn.style.marginBottom = '6px';
     panel.appendChild(godBtn);
-
-    // ── Global scalars
-    panel.appendChild(mkH('SCALARS'));
-    const intSlider = mkS('intensity', _jlIntensity, 0.1, 3.0, 0.05, v => { _jlIntensity = v; }, '#fa0');
-    panel.appendChild(intSlider.row);
-    const sizeSlider = mkS('size', _jlSizeScalar, 0.2, 3.0, 0.05, v => { _jlSizeScalar = v; }, '#f80');
-    panel.appendChild(sizeSlider.row);
-
-    // ── Live readout
-    const info = document.createElement('div');
-    info.style.cssText = 'font-size:9px;color:#666;margin:4px 0 8px;line-height:1.6;white-space:pre;';
-    const refreshInfo = () => {
-      if (!state._jetLightningMode) { info.textContent = 'JL not active'; return; }
-      const t = _jlRampTime || 0;
-      const active = _JL_TRACKS
-        .filter(tr => t >= tr.startT && (tr.endT === null || t < tr.endT))
-        .map(tr => tr.label || tr.id).join(', ');
-      info.textContent = 't=' + t.toFixed(1) + 's   intensity=' + _jlIntensity.toFixed(2) + '   size=' + _jlSizeScalar.toFixed(2) + '\nactive: ' + (active || 'none');
-    };
-    const _infoInterval = setInterval(refreshInfo, 250);
-    refreshInfo();
-    panel.appendChild(info);
-
-    // ── Jump buttons: one per track
-    panel.appendChild(mkH('JUMP TO TRACK'));
-    const jumpNote = document.createElement('div');
-    jumpNote.style.cssText = 'font-size:9px;color:#666;margin-bottom:4px;';
-    jumpNote.textContent = 'Sets game clock to track startT. JL mode only.';
-    panel.appendChild(jumpNote);
-
-    let _lastJumpBtn = null;
-    for (const track of _JL_TRACKS) {
-      const color = track.type === 'asteroid'     ? '#f80'
-                  : track.type === 'lightning'    ? '#6af'
-                  : track.type === 'fatcone'      ? '#0f8'
-                  : track.type === 'lethal_rings' ? '#f44'
-                  : '#888';
-      const endLabel = track.endT !== null ? track.endT + 's' : '∞';
-      const btn = mkBtn(
-        (track.label || track.id) + '  [' + track.startT + 's–' + endLabel + ']',
-        color,
-        () => {
-          if (!state._jetLightningMode) return;
-          // Reset all track activation flags so onActivate fires correctly
-          for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
-          // Tear down any active canyon before jumping
-          if (_canyonActive) _jlCanyonStop();
-          _jlRampTime = track.startT;
-          // If jumping to a non-asteroid track, disable asteroids so they don't overlap
-          if (track.type !== 'asteroid') {
-            _asteroidTuner.enabled = false;
-          } else {
-            _asteroidTuner.enabled = true;
-            _astTimer = 0.1;
-          }
-          // If jumping to a non-lightning track, disable lightning
-          if (track.type !== 'lightning') {
-            if (window._LT) window._LT.enabled = false;
-          }
-          if (track.id === 'fatcone') { if (window._startFcLoop) window._startFcLoop(null); }
-          else { if (window._stopFcLoop) window._stopFcLoop(); }
-          // If jumping away from lethal rings, clear in-flight rings
-          if (track.type !== 'lethal_rings') {
-            for (const lr of _lethalRingActive) { lr.userData.active = false; lr.visible = false; lr.position.set(0,-9999,0); }
-            _lethalRingActive.length = 0;
-          } else {
-            _jlLrTimer = 1.0; // fire first row quickly on jump
-          }
-          if (_lastJumpBtn) { _lastJumpBtn.style.fontWeight = 'normal'; _lastJumpBtn.style.background = 'none'; }
-          btn.style.fontWeight = 'bold'; btn.style.background = color + '22';
-          _lastJumpBtn = btn;
-        }
-      );
-      btn.style.width = '100%'; btn.style.textAlign = 'left';
-      // Highlight currently active track
-      const t = _jlRampTime || 0;
-      if (t >= track.startT && (track.endT === null || t < track.endT)) {
-        btn.style.fontWeight = 'bold'; btn.style.background = color + '22';
-        _lastJumpBtn = btn;
-      }
-      panel.appendChild(btn);
-    }
   }
 
-  // Q hotkey: toggle JL sequencer panel (JL gameplay is dead, but panel still
-  // hosts GOD MODE and other dev toggles — restoring as the only way to access them).
+  // Q hotkey: toggle GOD MODE panel.
   let _jlPanelVisible = false;
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
