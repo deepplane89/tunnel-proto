@@ -7633,7 +7633,9 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         THREE.MathUtils.lerp(thrusterColor.b, 1.0, _nbWhite)
       );
       const _nbo = window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34;
-      bloom.material.opacity = _nbo * (0.85 + Math.sin(Date.now() * 0.008) * 0.15) * tp;
+      // Pulse depth: amplitude of the sin throb. 0 = steady, 0.15 = legacy default.
+      const _nbPulse = (window._nozzleBloomPulse != null) ? window._nozzleBloomPulse : 0.15;
+      bloom.material.opacity = _nbo * ((1 - _nbPulse) + Math.sin(Date.now() * 0.008) * _nbPulse) * tp;
     } else {
       bloom.visible = false;
     }
@@ -24115,6 +24117,7 @@ function buildSkinTunerSliders() {
     }, '#f60'));
     panel.appendChild(makeSlider('nozzle bloom size', window._nozzleBloomScale != null ? window._nozzleBloomScale : 1.0, 0.1, 4, 0.05, v => { window._nozzleBloomScale = v; }, '#f60'));
     panel.appendChild(makeSlider('nozzle bloom opacity', window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34, 0, 1, 0.01, v => { window._nozzleBloomOpacity = v; }, '#f60'));
+    panel.appendChild(makeSlider('nozzle pulse depth', window._nozzleBloomPulse != null ? window._nozzleBloomPulse : 0.15, 0, 0.5, 0.01, v => { window._nozzleBloomPulse = v; }, '#f60'));
     // ★ PRIMARY white-hot dial: 0 = pure thruster color sprite (cool), 1 = pure white sprite (current default look at 0)
     panel.appendChild(makeSlider('★ nozzle white-mix', window._nozzleBloom_whiteMix != null ? window._nozzleBloom_whiteMix : 0.0, 0, 1, 0.02, v => { window._nozzleBloom_whiteMix = v; }, '#ff0'));
     panel.appendChild(makeSlider('mini bloom size', window._miniBloomScale != null ? window._miniBloomScale : 1.0, 0.05, 2, 0.05, v => { window._miniBloomScale = v; }, '#f60'));
@@ -24163,7 +24166,7 @@ function buildSkinTunerSliders() {
       const KEYS = [
         '_thrPart_partOpacity','_thrPart_miniPartOpacity','_thrPart_posPinFrac',
         '_thrPart_bendInherit','_thrPart_bendCatchup',
-        '_thrusterScale','_nozzleBloomScale','_nozzleBloomOpacity','_miniBloomScale','_miniBloomOpacity','_miniBloomOpacitySpd',
+        '_thrusterScale','_nozzleBloomScale','_nozzleBloomOpacity','_nozzleBloomPulse','_miniBloomScale','_miniBloomOpacity','_miniBloomOpacitySpd',
         '_nozzleBloom_whiteMix','_miniBloom_whiteMix',
         '_thrusterSpreadX','_thrusterSpreadY','_thrusterLength',
         '_thrPart_midEnd','_thrPart_midBoost',

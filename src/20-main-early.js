@@ -7371,7 +7371,9 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         THREE.MathUtils.lerp(thrusterColor.b, 1.0, _nbWhite)
       );
       const _nbo = window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34;
-      bloom.material.opacity = _nbo * (0.85 + Math.sin(Date.now() * 0.008) * 0.15) * tp;
+      // Pulse depth: amplitude of the sin throb. 0 = steady, 0.15 = legacy default.
+      const _nbPulse = (window._nozzleBloomPulse != null) ? window._nozzleBloomPulse : 0.15;
+      bloom.material.opacity = _nbo * ((1 - _nbPulse) + Math.sin(Date.now() * 0.008) * _nbPulse) * tp;
     } else {
       bloom.visible = false;
     }
