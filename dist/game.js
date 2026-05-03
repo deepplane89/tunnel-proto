@@ -13639,7 +13639,7 @@ function updateStreakBadge() {
   // anchors are children of _titleShipModel — their localPosition IS the
   // tuned offset. Drag updates their localPosition; wheel updates scale.
   // 'flip' inverts the exhaust direction (Z velocity sign).
-  const SR_TUNER_KEY = 'jh_showroom_tuner_v3';
+  const SR_TUNER_KEY = 'jh_showroom_tuner_v4';
   // Z is relative to auto-detected hull back; 0 = visible hull back.
   // pitch/yaw are exhaust direction angles in degrees (0,0 = straight back along -Z).
   // 'sel' picks which group is being dragged: L|R = main, mL|mR = mini.
@@ -13652,6 +13652,18 @@ function updateStreakBadge() {
     flip: true,
     rotMode: false, // when true, mouse drag rotates the exhaust angle instead of moving position
     selected: 'L',  // 'L' | 'R' | 'mL' | 'mR'
+    // Showroom-local fx overrides (do NOT leak to gameplay).
+    fx: {
+      bloomScale: 0.40,    // 0..2
+      bloomOpacity: 0.18,  // 0..1
+      partSize: 1.00,      // 0..3 multiplier on point size
+      partOpacity: 1.00,   // 0..1
+      lifeBase: 0.60,      // 0.1..2 trail length base
+      lifeJit: 0.22,       // 0..1 trail length jitter
+      miniSize: 0.55,      // 0.1..2 mini-thruster size mult
+      miniBloom: 0.50,     // 0..2 mini-thruster bloom mult
+    },
+    panelOpen: true,
   };
   let _tuner = null;
   function _loadTuner() {
@@ -13664,6 +13676,7 @@ function updateStreakBadge() {
           R:  Object.assign({}, SR_TUNER_DEFAULT.R,  parsed.R  || {}),
           mL: Object.assign({}, SR_TUNER_DEFAULT.mL, parsed.mL || {}),
           mR: Object.assign({}, SR_TUNER_DEFAULT.mR, parsed.mR || {}),
+          fx: Object.assign({}, SR_TUNER_DEFAULT.fx, parsed.fx || {}),
         });
       }
     } catch(_){}
@@ -13820,6 +13833,8 @@ function updateStreakBadge() {
     if (typeof navigateToSkin === 'function') {
       try { navigateToSkin(idx); } catch(_){}
     }
+    // Skin swap may load a new GLB whose materials default to transparent.
+    requestAnimationFrame(() => { try { _forceShipOpaque(); } catch(_){} });
     try { playTitleTap(); } catch(_){}
   }
 
@@ -14078,7 +14093,7 @@ function updateStreakBadge() {
       transparent: true,
       opacity: 1.0,
       depthWrite: false,
-      depthTest: false,
+      depthTest: true, // z-test against ship hull so additive bloom doesn't blow out the hull
       blending: THREE.AdditiveBlending,
       sizeAttenuation: true,
     });
@@ -14089,7 +14104,7 @@ function updateStreakBadge() {
     titleScene.add(pts);
     const bMat = new THREE.SpriteMaterial({
       map: tex, color: 0xffffff, transparent: true, opacity: 0,
-      depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+      depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending,
     });
     const bSpr = new THREE.Sprite(bMat);
     bSpr.frustumCulled = false;
@@ -14319,6 +14334,7 @@ function updateStreakBadge() {
   function _onTunerMouseDown(e) {
     if (!_open) return;
     if (e.target.closest('#sr-tuner-hud')) return;
+    if (e.target.closest('#sr-fx-hud')) return;
     if (e.target.closest('.sr-panel')) return;
     if (e.button !== 0) return;
     _tunerDragging = true;
@@ -14347,6 +14363,7 @@ function updateStreakBadge() {
     if (!_open) return;
     if (e.target.closest('.sr-panel')) return;
     if (e.target.closest('#sr-tuner-hud')) return;
+    if (e.target.closest('#sr-fx-hud')) return;
     e.preventDefault();
     if (e.shiftKey) {
       // Z move (along ship long axis, in local space).
@@ -14379,6 +14396,86 @@ function updateStreakBadge() {
       _updateTunerHud();
     } else if (_tunerHud) {
       _tunerHud.style.display = 'none';
+    }
+  }
+
+  // ── FX slider HUD (showroom-only) ───────────────────────────────
+  // Sliders that mutate _tuner.fx (persisted in localStorage). Values are
+  // read by _thrTick on every frame, so changes are live. NOTHING here
+  // touches gameplay particles — see the gating note above _thrTick.
+  let _fxHud = null;
+  const _FX_DEFS = [
+    { key:'bloomScale',   lbl:'bloom scale',   min:0,    max:2.0, step:0.01 },
+    { key:'bloomOpacity', lbl:'bloom opacity', min:0,    max:1.0, step:0.01 },
+    { key:'partSize',     lbl:'particle size', min:0.1,  max:3.0, step:0.01 },
+    { key:'partOpacity',  lbl:'particle alpha',min:0,    max:1.0, step:0.01 },
+    { key:'lifeBase',     lbl:'trail length',  min:0.1,  max:2.0, step:0.01 },
+    { key:'lifeJit',      lbl:'trail jitter',  min:0,    max:1.0, step:0.01 },
+    { key:'miniSize',     lbl:'mini size mult',min:0.1,  max:2.0, step:0.01 },
+    { key:'miniBloom',    lbl:'mini bloom mult',min:0,   max:2.0, step:0.01 },
+  ];
+  function _ensureFxHud() {
+    if (_fxHud) return _fxHud;
+    if (!_tuner) _tuner = _loadTuner();
+    const el = document.createElement('div');
+    el.id = 'sr-fx-hud';
+    el.style.cssText = [
+      'position:fixed','top:8px','right:8px','z-index:99999',
+      'font:12px/1.35 ui-monospace,Menlo,monospace','color:#cef',
+      'background:rgba(0,12,24,0.82)','border:1px solid #3af','padding:8px 10px',
+      'border-radius:6px','user-select:none','pointer-events:auto',
+      'min-width:220px','box-shadow:0 0 12px rgba(60,180,255,0.25)'
+    ].join(';');
+    let rows = '<div style="font-weight:700;color:#7df;margin-bottom:6px;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center">FX <button data-fx-act="reset" style="background:#411;color:#fcc;border:1px solid #f55;padding:2px 6px;border-radius:3px;cursor:pointer;font-size:10px">RST</button></div>';
+    for (let i = 0; i < _FX_DEFS.length; i++) {
+      const d = _FX_DEFS[i];
+      rows += '<div style="display:flex;align-items:center;gap:6px;margin-top:3px">'+
+        '<div style="flex:0 0 96px;font-size:10px;color:#9cf">'+d.lbl+'</div>'+
+        '<input type="range" data-fx-key="'+d.key+'" min="'+d.min+'" max="'+d.max+'" step="'+d.step+'" style="flex:1;accent-color:#3af">'+
+        '<div data-fx-val="'+d.key+'" style="flex:0 0 40px;font-size:10px;text-align:right;color:#cef"></div>'+
+      '</div>';
+    }
+    el.innerHTML = rows;
+    document.body.appendChild(el);
+    el.addEventListener('input', (e) => {
+      const inp = e.target.closest('input[type=range]'); if (!inp) return;
+      const k = inp.dataset.fxKey;
+      const v = parseFloat(inp.value);
+      if (_tuner && _tuner.fx && Number.isFinite(v)) {
+        _tuner.fx[k] = v;
+        const out = el.querySelector('[data-fx-val="'+k+'"]');
+        if (out) out.textContent = (Math.round(v*100)/100).toFixed(2);
+      }
+    });
+    el.addEventListener('change', () => { _saveTuner(); });
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-fx-act="reset"]'); if (!b) return;
+      _tuner.fx = JSON.parse(JSON.stringify(SR_TUNER_DEFAULT.fx));
+      _saveTuner();
+      _syncFxHud();
+    });
+    _fxHud = el;
+    _syncFxHud();
+    return el;
+  }
+  function _syncFxHud() {
+    if (!_fxHud || !_tuner || !_tuner.fx) return;
+    for (let i = 0; i < _FX_DEFS.length; i++) {
+      const k = _FX_DEFS[i].key;
+      const inp = _fxHud.querySelector('input[data-fx-key="'+k+'"]');
+      const out = _fxHud.querySelector('[data-fx-val="'+k+'"]');
+      const v = _tuner.fx[k];
+      if (inp) inp.value = v;
+      if (out) out.textContent = (Math.round(v*100)/100).toFixed(2);
+    }
+  }
+  function _showFx(show) {
+    if (show) {
+      _ensureFxHud();
+      _fxHud.style.display = 'block';
+      _syncFxHud();
+    } else if (_fxHud) {
+      _fxHud.style.display = 'none';
     }
   }
 
@@ -14439,10 +14536,19 @@ function updateStreakBadge() {
     const partOp    = (window._thrPart_partOpacity != null) ? window._thrPart_partOpacity : D.partOpacity;
     const thrScale  = (window._thrusterScale     != null) ? window._thrusterScale     : 1.0;
     const pointSize = (window._THRUSTER_PRESETS && window._activeThrusterPreset && window._THRUSTER_PRESETS[window._activeThrusterPreset] && window._THRUSTER_PRESETS[window._activeThrusterPreset]._pointMatSize) || 0.13;
-    const bloomScl  = (window._nozzleBloomScale  != null) ? window._nozzleBloomScale  : D.bloomScale;
-    const bloomOp   = (window._nozzleBloomOpacity!= null) ? window._nozzleBloomOpacity: D.bloomOpacity;
     const bloomWM   = (window._nozzleBloom_whiteMix != null) ? window._nozzleBloom_whiteMix : D.bloomWhiteMix;
     const bloomPul  = (window._nozzleBloomPulse  != null) ? window._nozzleBloomPulse  : D.bloomPulse;
+
+    // Showroom-only fx overrides (gated to this preview only — never leak to gameplay).
+    const fx        = (_tuner && _tuner.fx) || SR_TUNER_DEFAULT.fx;
+    const bloomScl  = fx.bloomScale;
+    const bloomOp   = fx.bloomOpacity;
+    const fxPartSz  = fx.partSize;
+    const fxPartOp  = fx.partOpacity;
+    const fxLifeB   = fx.lifeBase;
+    const fxLifeJ   = fx.lifeJit;
+    const fxMiniSz  = fx.miniSize;
+    const fxMiniBl  = fx.miniBloom;
 
     const tCol = _thr.color;
     const ss = SR_SPEED_SCALE;
@@ -14472,20 +14578,21 @@ function updateStreakBadge() {
       const exhZ = flipSign * _exhDir.z;
 
       const aScale = tu.scale || 1.0;
-      const baseSizeMult = isMini ? 0.55 : 1.0;
-      const baseBloomMult = isMini ? 0.5 : 1.0;
+      const baseSizeMult  = (isMini ? fxMiniSz : 1.0) * fxPartSz;
+      const baseBloomMult = (isMini ? fxMiniBl : 1.0);
 
       // Particle material size.
       const matSize = pointSize * aScale * baseSizeMult;
       if (g.points.material.size !== matSize) g.points.material.size = matSize;
-      if (g.points.material.opacity !== partOp) g.points.material.opacity = partOp;
+      const wantOp = partOp * fxPartOp;
+      if (g.points.material.opacity !== wantOp) g.points.material.opacity = wantOp;
 
       const pos = g.positions, col = g.colors, sz = g.sizes;
       for (let i = 0; i < N; i++) {
         g.ages[i] += dt;
         if (g.ages[i] >= g.lifetimes[i]) {
           g.ages[i] = 0;
-          g.lifetimes[i] = (lifeMin + Math.random() * lifeJit) * (lifeBase + ss * lifeSpd);
+          g.lifetimes[i] = (lifeMin + Math.random() * fxLifeJ) * (fxLifeB + ss * lifeSpd);
           pos[i*3]     = wx + (Math.random() - 0.5) * spawnJit;
           pos[i*3 + 1] = wy + (Math.random() - 0.5) * spawnJit;
           pos[i*3 + 2] = wz;
@@ -14548,6 +14655,26 @@ function updateStreakBadge() {
     }
   }
 
+  // Force the title ship's materials to fully opaque so the GLB doesn't
+  // appear transparent in the showroom preview. Re-runs whenever a new
+  // shape/skin is loaded by the showroom open hook.
+  function _forceShipOpaque() {
+    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+    if (!ship) return;
+    ship.traverse((o) => {
+      if (!o || !o.isMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (let i = 0; i < mats.length; i++) {
+        const m = mats[i]; if (!m) continue;
+        if (m.transparent) m.transparent = false;
+        if (m.opacity !== 1) m.opacity = 1;
+        if (m.depthWrite === false) m.depthWrite = true;
+        if (m.alphaTest && m.alphaTest > 0) m.alphaTest = 0;
+        m.needsUpdate = true;
+      }
+    });
+  }
+
   // ── Public: open / close / refresh ───────────────────────────────────
   function open(tab) {
     const overlay = document.getElementById('thruster-overlay');
@@ -14567,9 +14694,11 @@ function updateStreakBadge() {
       }
       // Init thruster preview lazily on first open + show it.
       _thrInit();
+      _forceShipOpaque();
       _thrSyncColor();
       _thrShow(true);
       _showTuner(true);
+      _showFx(true);
     });
     _open = true;
   }
@@ -14583,6 +14712,7 @@ function updateStreakBadge() {
     // Hide preview immediately so it never shows on the live title screen.
     _thrShow(false);
     _showTuner(false);
+    _showFx(false);
   }
 
   function refresh() {
