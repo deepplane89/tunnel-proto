@@ -14580,13 +14580,17 @@ function updateStreakBadge() {
 
   function _onResize() {
     if (!_open) return;
-    _refreshTunesForOrientation(); // swap to other-orientation tune values
-    // Defer twice: orientationchange on iOS fires BEFORE the CSS grid has
-    // reflowed, so reading getBoundingClientRect() right now returns the
-    // OLD stage rectangle. Two rAFs guarantee layout has settled.
+    // Lock orientation switching: hide canvas, swap tune values, wait for
+    // CSS grid to fully reflow, then resize canvas to new stage rect, then
+    // reveal. Prevents the visible "morph" between layouts — it just snaps
+    // cleanly to the other orientation's saved settings.
+    const canvas = document.getElementById('title-ship-canvas');
+    if (canvas) canvas.style.visibility = 'hidden';
+    _refreshTunesForOrientation();
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         _resizeStageCanvas();
+        if (canvas) canvas.style.visibility = '';
       });
     });
   }
