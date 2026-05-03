@@ -5073,7 +5073,7 @@ body.sr-open #title-leaderboard {
  * rules above don't bleed through. Layout: ship + handling on left
  * (stage stacked over handling bar), panel docked to right.
  */
-@media (orientation: landscape) {
+@media (orientation: landscape), (min-width: 900px) {
   .sr-overlay:not(.hidden) {
     /* Stage column = stage-multiplier * 1fr, panel column = inverse so total
        stays bounded. Slider 100 -> stage:1fr panel:240px (default).

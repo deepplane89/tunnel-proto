@@ -348,6 +348,9 @@
     panely:   { def: 0,   min: -100, max: 100 },
   };
   function _orient() {
+    // Treat any wide viewport (>=900px) as landscape so desktop uses the
+    // side-by-side layout regardless of strict portrait/landscape ratio.
+    if (window.innerWidth >= 900) return 'l';
     return (window.innerWidth > window.innerHeight) ? 'l' : 'p';
   }
   function _tuneStorageKey(key) {
@@ -734,7 +737,7 @@
         // storage so portrait vs landscape have independent zoom settings.
         let zoomPct = 100;
         try {
-          const orient = (window.innerWidth > window.innerHeight) ? 'l' : 'p';
+          const orient = _orient();
           const stored = parseInt(localStorage.getItem('jh_showroom_zoom_' + orient) || '100', 10);
           if (!isNaN(stored)) zoomPct = Math.max(40, Math.min(160, stored));
         } catch(_){}
