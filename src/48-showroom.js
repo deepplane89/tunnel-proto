@@ -724,35 +724,13 @@
     // pick more-negative local Z (matches pre-bac0720 behavior the user
     // confirmed worked). MK Runner / alt-GLB: same, then we let the user
     // tune separately because their GLB shape lays out differently.
-    let hullBackZ = 0;
-    if (ship) {
-      try {
-        // Measure bbox against the FULL factory hull (all add-ons visible),
-        // not the user's currently-toggled state. Otherwise hiding fins/rings/
-        // turrets would shrink the bbox and shift hullBackZ — which would in
-        // turn shift RST landing position.
-        const key = _currentAddonsKey();
-        const names = (key && ADDON_REGISTRY[key]) || [];
-        const restore = [];
-        names.forEach(n => {
-          const node = _findAddonNode(n);
-          if (!node) return;
-          restore.push({ node: node, was: node.visible });
-          node.visible = true;
-        });
-        const bbox = new THREE.Box3().setFromObject(ship);
-        if (bbox && isFinite(bbox.max.z) && isFinite(bbox.min.z)) {
-          ship.updateMatrixWorld(true);
-          const vMax = new THREE.Vector3(0, 0, bbox.max.z);
-          const vMin = new THREE.Vector3(0, 0, bbox.min.z);
-          ship.worldToLocal(vMax);
-          ship.worldToLocal(vMin);
-          hullBackZ = Math.min(vMax.z, vMin.z);
-        }
-        // Restore the user's actual toggle state.
-        restore.forEach(r => { r.node.visible = r.was; });
-      } catch(_){}
-    }
+    // hullBackZ is intentionally a CONSTANT. Tuner offsets are absolute
+    // anchor positions in ship-local space, plus this fixed back-Z origin.
+    // Measuring per-ship caused the thrusters to drift on swap because
+    // bbox depended on async matrix updates and child geometry. The
+    // user-confirmed working value for the default Runner is -2.394, and
+    // the same tuner reproduces correctly on MK Runner with the same value.
+    const hullBackZ = -2.394;
     _thr = {
       groups,           // { L, R, mL, mR }
       anchors,          // { L, R, mL, mR }
