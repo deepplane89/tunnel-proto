@@ -27134,7 +27134,17 @@ function _tickJetLightningRamp(dt) {
     }
   }
 
-  // Q hotkey removed (was toggling JL sequencer panel; JL is dead).
+  // Q hotkey: toggle JL sequencer panel (JL gameplay is dead, but panel still
+  // hosts GOD MODE and other dev toggles — restoring as the only way to access them).
+  let _jlPanelVisible = false;
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'q' || e.key === 'Q') {
+      _jlPanelVisible = !_jlPanelVisible;
+      if (_jlPanelVisible) { build(); panel.style.display = 'block'; }
+      else panel.style.display = 'none';
+    }
+  });
 })();
 
 // Hook ramp into composer chain (safe to call before lightning IIFE since it
