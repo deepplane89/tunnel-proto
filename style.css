@@ -4774,6 +4774,50 @@ html, body {
   text-shadow: 0 0 8px var(--sr-accent-glow);
 }
 
+/* ZOOM SLIDER — subtle range control under SKINS tab to scale ship preview. */
+.sr-zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1 1 auto;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+}
+.sr-zoom-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  background: linear-gradient(90deg, rgba(34,211,238,0.15) 0%, rgba(34,211,238,0.55) 100%);
+  border-radius: 1px;
+}
+.sr-zoom-slider::-moz-range-track {
+  height: 2px;
+  background: linear-gradient(90deg, rgba(34,211,238,0.15) 0%, rgba(34,211,238,0.55) 100%);
+  border-radius: 1px;
+  border: none;
+}
+.sr-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--sr-accent);
+  border: 1px solid rgba(255,255,255,0.4);
+  box-shadow: 0 0 8px var(--sr-accent-glow);
+  margin-top: -6px;
+  cursor: pointer;
+}
+.sr-zoom-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--sr-accent);
+  border: 1px solid rgba(255,255,255,0.4);
+  box-shadow: 0 0 8px var(--sr-accent-glow);
+  cursor: pointer;
+}
+
 /* While the hub is open: hide title-screen UI chrome (buttons/labels/coin row)
  * so only the ship + showroom panel are visible. The live ship keeps spinning
  * and the thruster preview keeps updating because we never stop rendering.

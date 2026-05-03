@@ -14168,6 +14168,31 @@ function updateStreakBadge() {
       window.SciFiSelect.refresh(sColor);
     }
     _populateAddons();
+    _wireZoomSlider();
+  }
+
+  // Zoom slider — idempotent. Reads/writes localStorage 'jh_showroom_zoom'.
+  function _wireZoomSlider() {
+    const slider = document.getElementById('sr-zoom-slider');
+    if (!slider || slider.dataset.wired === '1') {
+      // Still sync value from storage on every populate.
+      if (slider) {
+        try {
+          const v = parseInt(localStorage.getItem('jh_showroom_zoom') || '100', 10);
+          slider.value = isNaN(v) ? 100 : Math.max(40, Math.min(160, v));
+        } catch(_){}
+      }
+      return;
+    }
+    slider.dataset.wired = '1';
+    try {
+      const v = parseInt(localStorage.getItem('jh_showroom_zoom') || '100', 10);
+      slider.value = isNaN(v) ? 100 : Math.max(40, Math.min(160, v));
+    } catch(_){}
+    slider.addEventListener('input', () => {
+      try { localStorage.setItem('jh_showroom_zoom', String(slider.value)); } catch(_){}
+      _resizeStageCanvas();
+    });
   }
 
   // ── ADD-ONS ───────────────────────────────────────────────────────────
@@ -14483,7 +14508,19 @@ function updateStreakBadge() {
           const t = Math.min(1, (aspect - 1.2) / (2.2 - 1.2));
           targetFov = baseFov * (1 - t * 0.55); // 35deg → ~15.75deg at widest
         }
-        titleCamera.fov = targetFov;
+        // User zoom override: slider 40-160 (100 = baseline). Lower slider =
+        // smaller ship (wider FOV); higher slider = bigger ship (narrower FOV).
+        // Stored as jh_showroom_zoom percent.
+        let zoomPct = 100;
+        try {
+          const stored = parseInt(localStorage.getItem('jh_showroom_zoom') || '100', 10);
+          if (!isNaN(stored)) zoomPct = Math.max(40, Math.min(160, stored));
+        } catch(_){}
+        // Multiplier: pct=100 → 1.0; pct=40 → 1.6 (wider, smaller ship);
+        // pct=160 → 0.55 (narrower, bigger ship). Linear inverse.
+        const zoomMul = 100 / zoomPct;
+        targetFov = targetFov * zoomMul;
+        titleCamera.fov = Math.max(8, Math.min(60, targetFov));
         titleCamera.updateProjectionMatrix();
       }
     } catch(_){}
