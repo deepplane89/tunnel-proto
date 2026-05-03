@@ -13886,6 +13886,28 @@ function updateStreakBadge() {
     }
   }
 
+  // Reverse-lookup: which SHIP_SKINS index matches the ship currently shown
+  // in the title canvas? Used so garage open can sync the dropdown to the
+  // canvas WITHOUT firing a skin swap (which would reset thruster anchors).
+  function _displayedSkinIdx() {
+    try {
+      const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+      const altFile = ship && ship.userData && ship.userData._altGlb;
+      if (typeof SHIP_SKINS !== 'undefined' && Array.isArray(SHIP_SKINS)) {
+        for (let i = 0; i < SHIP_SKINS.length; i++) {
+          const s = SHIP_SKINS[i];
+          if (!s) continue;
+          if (altFile) {
+            if (s.glbFile === altFile) return i;
+          } else {
+            if (!s.glbFile) return i;
+          }
+        }
+      }
+    } catch(_){}
+    return _equippedSkinIdx();
+  }
+
   function _buildShapeOptions(sel) {
     if (!sel) return;
     sel.innerHTML = '';
@@ -13982,16 +14004,21 @@ function updateStreakBadge() {
     return out;
   }
   // Apply persisted visibility state to the current ship's parts. Called
-  // after the ship swaps so toggles survive a skin change. Default state
-  // when no save exists yet: all add-ons OFF.
+  // after the ship swaps so toggles survive a skin change. ONLY touches a
+  // node's visibility when the user has explicitly saved a state for it —
+  // never defaults parts OFF. Hiding parts the user didn't toggle would
+  // (a) break ships that look right at baseline, and (b) shrink the bbox so
+  // hullBackZ recomputes wrong on RST.
   function _applyAddonsToShip() {
     const key = _currentAddonsKey();
     if (!key) return;
     const state = _loadAddonsState();
-    const map = state[key] || {};
+    const map = state[key];
+    if (!map) return;
     _collectAddonNodes().forEach(p => {
-      const has = Object.prototype.hasOwnProperty.call(map, p.name);
-      p.node.visible = has ? !!map[p.name] : false;
+      if (Object.prototype.hasOwnProperty.call(map, p.name)) {
+        p.node.visible = !!map[p.name];
+      }
     });
   }
   function _populateAddons() {
@@ -14011,10 +14038,12 @@ function updateStreakBadge() {
     const map = state[key] || {};
     let html = '';
     parts.forEach(p => {
-      // Default to OFF when no save exists — user toggles them ON deliberately.
-      const stored = Object.prototype.hasOwnProperty.call(map, p.name) ? !!map[p.name] : false;
-      // Reconcile node visibility with stored state on every (re)build.
-      p.node.visible = stored;
+      // Checkbox reflects the part's CURRENT visibility — do NOT mutate
+      // node.visible here. Mutating it would re-trigger the bbox/hullBackZ
+      // mismatch we just fixed in _applyAddonsToShip.
+      const stored = Object.prototype.hasOwnProperty.call(map, p.name)
+        ? !!map[p.name]
+        : !!p.node.visible;
       const safe = String(p.name).replace(/"/g, '&quot;');
       html += '<label class="sr-addon-row">'+
         '<input type="checkbox" data-addon="'+safe+'" '+(stored?'checked':'')+'>'+
@@ -14906,11 +14935,11 @@ function updateStreakBadge() {
     overlay.classList.remove('hidden');
     document.body.classList.add('sr-open');
     _switchTab(tab || 'thrusters');
-    // Sync the title canvas with the garage's preview index BEFORE populating —
-    // _populateAddons reads _titleShipModel.userData._altGlb to decide whether
-    // any add-ons exist. If we populate first, an MK Runner preview shows
-    // "No add-ons available" because the canvas still has the equipped ship.
-    try { _previewSkin((_garagePreviewIdx != null) ? _garagePreviewIdx : _equippedSkinIdx()); } catch(_){}
+    // Seed the garage preview index from whatever ship is CURRENTLY showing
+    // on the title canvas. This keeps the dropdown in sync with the visible
+    // ship without firing a skin swap (which would wipe thruster anchors and
+    // recompute hullBackZ — the bug the user kept hitting on RST).
+    _garagePreviewIdx = _displayedSkinIdx();
     _populateAll();
     // Relocate after the overlay is visible so getBoundingClientRect is right.
     requestAnimationFrame(() => {
@@ -14941,9 +14970,12 @@ function updateStreakBadge() {
     _thrShow(false);
     _showTuner(false);
     _showFx(false);
-    // Restore the title canvas to the EQUIPPED skin so the title screen never
-    // shows the garage's preview ship after closing.
-    try { _previewSkin(_equippedSkinIdx()); } catch(_){}
+    // If the player previewed a different skin in the garage but never hit
+    // USE on the title screen, snap the title canvas back to the equipped
+    // skin so close() never leaves the title showing a non-equipped ship.
+    if (_garagePreviewIdx != null && _garagePreviewIdx !== _equippedSkinIdx()) {
+      try { _previewSkin(_equippedSkinIdx()); } catch(_){}
+    }
   }
 
   function refresh() {
