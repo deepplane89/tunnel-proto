@@ -642,7 +642,7 @@
     canvas.style.maxWidth = '';
     canvas.style.maxHeight = '';
     stage.appendChild(canvas);
-    _lockStageSize();
+    // CSS @media owns the box layout; JS only resizes the WebGL canvas.
     _resizeStageCanvas();
     // Override ship pose for showroom: force horizontal (side-profile) tilt
     // in BOTH portrait and landscape so thrusters are visible. The live title
@@ -789,14 +789,6 @@
     // displayed size is controlled by CSS (always fills the stage cell).
   }
 
-  // Orientation handling.
-  // Per https://www.quirksmode.org/blog/archives/2013/11/orientationchan.html
-  // and MDN, the cleanest cross-browser way to detect orientation flips
-  // (without firing on phantom resizes / URL bar / keyboard / rotation
-  // animation intermediate frames) is matchMedia. It fires exactly once
-  // AFTER the viewport has finished updating.
-  // For non-orientation resizes (URL bar show/hide), we still want the
-  // canvas to fit its stage — but we don't want to recompute layout.
   let _resizeT = null;
   function _onResize() {
     if (!_open) return;
@@ -808,70 +800,6 @@
       _resizeStageCanvas();
     }, 100);
   }
-  // Force-lock the stage box dimensions per orientation. We compute the
-  // exact pixel size for the current orientation and stamp it on .sr-stage
-  // as inline width/height. The grid layout becomes irrelevant for sizing
-  // — the stage cell is whatever pixel size we say it is. On rotation,
-  // matchMedia fires AFTER viewport settles → we recompute and re-stamp.
-  // No mid-rotation reads of getBoundingClientRect, no morph glitch.
-  // Force-lock the entire showroom layout per orientation. Stamps pixel
-  // sizes inline on the overlay grid template AND the stage box, so the
-  // CSS templates can't shift things during rotation. Triggered by
-  // matchMedia AFTER the orientation flip completes.
-  function _lockStageSize() {
-    const overlay = document.getElementById('thruster-overlay');
-    const stage = document.getElementById('sr-stage');
-    if (!overlay || !stage) return null;
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-    const isLandscape = W >= H;
-    const pad = 8, gap = 8;
-    if (isLandscape) {
-      const handleh = H < 500 ? 64 : 90;
-      const panelw = Math.max(220, Math.round(W * 0.30));
-      const stageW = W - panelw - 2 * pad - gap;
-      const stageH = H - handleh - 2 * pad - gap;
-      // Lock overlay grid template explicitly.
-      overlay.style.gridTemplateColumns = stageW + 'px ' + panelw + 'px';
-      overlay.style.gridTemplateRows    = stageH + 'px ' + handleh + 'px';
-      overlay.style.padding = pad + 'px';
-      overlay.style.gap = gap + 'px';
-      // Lock stage box.
-      stage.style.width  = stageW + 'px';
-      stage.style.height = stageH + 'px';
-      return { w: stageW, h: stageH };
-    } else {
-      // Portrait: clear locks, let CSS portrait grid (45vh / auto / 50vh) drive.
-      overlay.style.gridTemplateColumns = '';
-      overlay.style.gridTemplateRows = '';
-      overlay.style.padding = '';
-      overlay.style.gap = '';
-      stage.style.width = '';
-      stage.style.height = '';
-      const stageW = W - 2 * pad;
-      const stageH = Math.round(H * 0.45);
-      return { w: stageW, h: stageH };
-    }
-  }
-
-  function _onOrientationFlip() {
-    if (!_open) return;
-    const canvas = document.getElementById('title-ship-canvas');
-    if (canvas) canvas.style.visibility = 'hidden';
-    _refreshTunesForOrientation();
-    if (typeof _editApplyAll === 'function') _editApplyAll();
-    // Triple rAF so iOS finishes the rotation animation before we measure.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          _lockStageSize();
-          _resizeStageCanvas();
-          if (canvas) canvas.style.visibility = '';
-        });
-      });
-    });
-  }
-
   // ─── Showroom thruster preview: build, tick, show/hide ─────────────
   // Builds 2 particle systems + 2 bloom sprites in titleScene, mirroring the
   // gameplay particle/bloom code path with showroom-fixed inputs.
@@ -1330,17 +1258,6 @@
       if (!_resizeBound) {
         _resizeBound = true;
         window.addEventListener('resize', _onResize);
-        // matchMedia fires exactly once on orientation flip, AFTER the
-        // viewport has fully updated. This is the reliable way to detect
-        // rotation without phantom events from URL bar, keyboard, etc.
-        try {
-          const mq = window.matchMedia('(orientation: landscape)');
-          if (mq && typeof mq.addEventListener === 'function') {
-            mq.addEventListener('change', _onOrientationFlip);
-          } else if (mq && typeof mq.addListener === 'function') {
-            mq.addListener(_onOrientationFlip); // legacy Safari
-          }
-        } catch(_){}
       }
       // Init thruster preview lazily on first open + show it.
       _thrInit();
