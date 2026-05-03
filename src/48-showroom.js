@@ -775,26 +775,36 @@
     canvas.style.height = h + 'px';
   }
 
+  // Debounce resize/orientation events so iOS rotation animation (which
+  // fires multiple intermediate resize events) doesn't cause a visible
+  // morph. Hide canvas immediately on first event, debounce the actual
+  // layout work until 200ms after events stop firing, then reveal.
+  let _resizeT = null;
+  let _resizeLastOrient = null;
   function _onResize() {
     if (!_open) return;
-    // Lock orientation switching: hide canvas, swap tune values, re-apply
-    // layout (auto-fit if user hasn't manually edited), wait for CSS grid
-    // to fully reflow, then resize canvas to new stage rect, then reveal.
-    // Prevents the visible "morph" between layouts — it just snaps cleanly
-    // to the new orientation's fitted layout.
     const canvas = document.getElementById('title-ship-canvas');
     if (canvas) canvas.style.visibility = 'hidden';
-    _refreshTunesForOrientation();
-    // Re-run layout: when going portrait→landscape (or back) the saved
-    // pixel sizes from the previous orientation will be wrong. _editApplyAll
-    // auto-fits on landscape unless user has touched a slider.
-    if (typeof _editApplyAll === 'function') _editApplyAll();
-    requestAnimationFrame(() => {
+    if (_resizeT) clearTimeout(_resizeT);
+    _resizeT = setTimeout(() => {
+      _resizeT = null;
+      const orient = window.innerWidth >= window.innerHeight ? 'l' : 'p';
+      const orientChanged = (_resizeLastOrient !== orient);
+      _resizeLastOrient = orient;
+      _refreshTunesForOrientation();
+      // Only recompute showroom layout when orientation actually flipped,
+      // not on every minor resize (URL bar show/hide, keyboard, etc.).
+      if (orientChanged && typeof _editApplyAll === 'function') {
+        _editApplyAll();
+      }
       requestAnimationFrame(() => {
-        _resizeStageCanvas();
-        if (canvas) canvas.style.visibility = '';
+        requestAnimationFrame(() => {
+          _resizeStageCanvas();
+          const c = document.getElementById('title-ship-canvas');
+          if (c) c.style.visibility = '';
+        });
       });
-    });
+    }, 220);
   }
 
   // ─── Showroom thruster preview: build, tick, show/hide ─────────────
@@ -1252,6 +1262,8 @@
     // Relocate after the overlay is visible so getBoundingClientRect is right.
     requestAnimationFrame(() => {
       _relocateCanvasToStage();
+      // Seed orient cache so post-open resizes don't false-trigger.
+      _resizeLastOrient = window.innerWidth >= window.innerHeight ? 'l' : 'p';
       if (!_resizeBound) {
         _resizeBound = true;
         window.addEventListener('resize', _onResize);
