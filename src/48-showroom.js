@@ -314,22 +314,9 @@
   }
 
   function _populateAll() {
-    const sSkin  = document.getElementById('sr-select-skin');
-    const sShape = document.getElementById('sr-select-shape');
-    const sColor = document.getElementById('sr-select-color');
-    _buildSkinOptions(sSkin);
-    _buildShapeOptions(sShape);
-    _buildColorOptions(sColor);
-    // Enhance + refresh the custom sci-fi dropdowns. enhance() is idempotent;
-    // refresh() rebuilds the popup menu items after options change.
-    if (window.SciFiSelect) {
-      window.SciFiSelect.enhance(sSkin);
-      window.SciFiSelect.enhance(sShape);
-      window.SciFiSelect.enhance(sColor);
-      window.SciFiSelect.refresh(sSkin);
-      window.SciFiSelect.refresh(sShape);
-      window.SciFiSelect.refresh(sColor);
-    }
+    _buildSkinOptions(document.getElementById('sr-select-skin'));
+    _buildShapeOptions(document.getElementById('sr-select-shape'));
+    _buildColorOptions(document.getElementById('sr-select-color'));
     _populateAddons();
   }
 
@@ -596,8 +583,6 @@
       }
       if (typeof titleCamera !== 'undefined' && titleCamera && s.camAspect) {
         titleCamera.aspect = s.camAspect;
-        // Restore FOV — showroom may have ramped it for tighter ship framing.
-        if (s.origFov != null) titleCamera.fov = s.origFov;
         titleCamera.updateProjectionMatrix();
       }
       // Restore ship pose.
@@ -621,32 +606,13 @@
     const w = Math.max(64, Math.floor(r.width));
     const h = Math.max(64, Math.floor(r.height));
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const aspect = w / h;
     try {
       if (typeof _titleRenderer !== 'undefined' && _titleRenderer) {
         _titleRenderer.setPixelRatio(dpr);
         _titleRenderer.setSize(w, h, false);
       }
       if (typeof titleCamera !== 'undefined' && titleCamera) {
-        titleCamera.aspect = aspect;
-        // Showroom-only FOV reframe: in landscape (aspect > 1) the same FOV
-        // makes the ship look small because there's more horizontal world
-        // visible. Lower FOV = zoom in. This change is gated on _canvasSaved
-        // (only active while showroom is open) and restored by _restoreCanvas.
-        // Save original FOV once, on first resize after relocation.
-        if (_canvasSaved.origFov == null) {
-          _canvasSaved.origFov = titleCamera.fov;
-        }
-        // Portrait keeps base FOV (already framed correctly). Only landscape
-        // (aspect > 1.2) zooms in, because wider stages otherwise leave the
-        // ship looking tiny. Ramp from aspect 1.2 → 1.0x base to 2.2 → 0.65x.
-        const baseFov = _canvasSaved.origFov || 35;
-        let targetFov = baseFov;
-        if (aspect > 1.2) {
-          const t = Math.min(1, (aspect - 1.2) / (2.2 - 1.2));
-          targetFov = baseFov * (1 - t * 0.35); // 35deg → 22.75deg at widest
-        }
-        titleCamera.fov = targetFov;
+        titleCamera.aspect = w / h;
         titleCamera.updateProjectionMatrix();
       }
     } catch(_){}
