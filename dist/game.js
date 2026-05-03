@@ -13611,6 +13611,30 @@ function updateStreakBadge() {
   // Saved canvas placement so we can restore on close.
   let _canvasSaved = null; // { parent, nextSibling, w, h, transform, dpr, camAspect, rendererW, rendererH }
 
+  // ── Showroom-only thruster preview (independent of gameplay systems) ──
+  // Lifted from updateThrusters() in 20-main-early.js. Same particle spawn
+  // rules + bloom sprite, but with fixed 'speed' and the title ship's nozzle
+  // world position. Reads _THRUSTER_PRESETS knobs (window.*) so changing the
+  // SHAPE dropdown re-tunes immediately. Reads _THRUSTER_COLOR_PALETTE for
+  // COLOR. Lives entirely in titleScene; gameplay scene is untouched.
+  const SR_PARTICLE_COUNT = 80; // per pod (gameplay uses 160; this is a stationary preview)
+  let _thr = null; // { points[2], geo[2], pos[2], col[2], sz[2], vel[2][], age[2], life[2], bloom[2], color }
+  // Showroom-side base values (mirrors of gameplay defaults at the call site).
+  // Used so showroom particles look right even before any preset is applied.
+  const SR_DEFAULTS = {
+    posPinFrac: 0.12, lifeMin: 0.18, lifeJit: 0.22, lifeBase: 0.6, lifeSpd: 0.9, spawnJit: 0.03,
+    coreEnd: 0.10, coreR: 1.00, coreGB: 0.85, midEnd: 0.65, midBoost: 0.30,
+    sizeBase: 0.22, sizeSpeed: 0.10, bumpMult: 1.60, bumpEnd: 0.10, sizeJitter: 0.06,
+    bloomScale: 0.4, bloomOpacity: 0.18, bloomWhiteMix: 0.0, bloomPulse: 0.15,
+    partOpacity: 1.0,
+  };
+  // Fixed per-frame inputs for the preview (no real ship physics):
+  // - speedScale 1.0 (cruise speed, normal preset look)
+  // - thrusterPower 1.0 (full power)
+  // - shipVelX 0 (no lateral motion → no trail bend)
+  const SR_SPEED_SCALE = 1.0;
+  const SR_TP = 1.0;
+
   // ── Mission-ladder unlock requirement cache (M3, M7, ...) ────────────
   let _unlockReqCache = null;
   function _getUnlockReqs() {
@@ -13771,6 +13795,9 @@ function updateStreakBadge() {
       saveThrusterData(d);
       if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster();
     } catch(_){}
+    // Re-sync color (preset apply may have set a new tint) and let the
+    // tick loop pick up the new knobs on the next frame.
+    _thrSyncColor();
     try { playTitleTap(); } catch(_){}
   }
 
@@ -13784,6 +13811,8 @@ function updateStreakBadge() {
       saveThrusterData(d);
       if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster();
     } catch(_){}
+    // Sync showroom preview color immediately.
+    _thrSyncColor();
     try { playTitleTap(); } catch(_){}
   }
 
@@ -13857,6 +13886,21 @@ function updateStreakBadge() {
     canvas.style.maxHeight = '';
     stage.appendChild(canvas);
     _resizeStageCanvas();
+    // Override ship pose for showroom: force horizontal (side-profile) tilt
+    // in BOTH portrait and landscape so thrusters are visible. The live title
+    // screen restores its own pose on close.
+    try {
+      const pivot = (typeof titleScene !== 'undefined') ? titleScene.getObjectByName('titleShipPivot') : null;
+      const tiltGroup = pivot && pivot.children && pivot.children[0];
+      if (tiltGroup) {
+        _canvasSaved.tiltX = tiltGroup.rotation.x;
+        _canvasSaved.tiltY = tiltGroup.rotation.y;
+        _canvasSaved.tiltZ = tiltGroup.rotation.z;
+        tiltGroup.rotation.x = 0.13;
+        tiltGroup.rotation.y = 0;
+        tiltGroup.rotation.z = 0;
+      }
+    } catch(_){}
   }
 
   function _restoreCanvas() {
@@ -13883,6 +13927,14 @@ function updateStreakBadge() {
       if (typeof titleCamera !== 'undefined' && titleCamera && s.camAspect) {
         titleCamera.aspect = s.camAspect;
         titleCamera.updateProjectionMatrix();
+      }
+      // Restore ship pose.
+      const pivot = (typeof titleScene !== 'undefined') ? titleScene.getObjectByName('titleShipPivot') : null;
+      const tiltGroup = pivot && pivot.children && pivot.children[0];
+      if (tiltGroup && typeof s.tiltX === 'number') {
+        tiltGroup.rotation.x = s.tiltX;
+        tiltGroup.rotation.y = s.tiltY || 0;
+        tiltGroup.rotation.z = s.tiltZ || 0;
       }
     } catch(_){}
     _canvasSaved = null;
@@ -13916,6 +13968,248 @@ function updateStreakBadge() {
     _resizeStageCanvas();
   }
 
+  // ─── Showroom thruster preview: build, tick, show/hide ─────────────
+  // Builds 2 particle systems + 2 bloom sprites in titleScene, mirroring the
+  // gameplay particle/bloom code path with showroom-fixed inputs.
+  function _makeBloomTex() {
+    const size = 64;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+    g.addColorStop(0,   'rgba(255,255,255,1.0)');
+    g.addColorStop(0.2, 'rgba(255,255,255,0.6)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.15)');
+    g.addColorStop(1.0, 'rgba(255,255,255,0.0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    return new THREE.CanvasTexture(c);
+  }
+
+  function _thrInit() {
+    if (_thr) return;
+    if (typeof titleScene === 'undefined' || !titleScene) return;
+    if (typeof NOZZLE_OFFSETS === 'undefined' || !NOZZLE_OFFSETS) return;
+    const N = SR_PARTICLE_COUNT;
+    const points = [], geos = [], poses = [], cols = [], szs = [], vels = [], ages = [], lifes = [], blooms = [];
+    const tex = _makeBloomTex();
+    for (let p = 0; p < 2; p++) {
+      const positions  = new Float32Array(N * 3);
+      const colors     = new Float32Array(N * 3);
+      const sizes      = new Float32Array(N);
+      const velocities = [];
+      const age        = new Float32Array(N);
+      const life       = new Float32Array(N);
+      for (let i = 0; i < N; i++) {
+        age[i] = Math.random();
+        life[i] = SR_DEFAULTS.lifeMin + Math.random() * SR_DEFAULTS.lifeJit;
+        velocities.push(new THREE.Vector3());
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
+      geo.setAttribute('size',     new THREE.BufferAttribute(sizes,     1));
+      const mat = new THREE.PointsMaterial({
+        size: 0.13,
+        map: tex,
+        vertexColors: true,
+        transparent: true,
+        opacity: 1.0,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+        sizeAttenuation: true,
+      });
+      const pts = new THREE.Points(geo, mat);
+      pts.frustumCulled = false;
+      pts.renderOrder = 10;
+      pts.visible = false;
+      titleScene.add(pts);
+
+      const bMat = new THREE.SpriteMaterial({
+        map: tex,
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+      });
+      const bSpr = new THREE.Sprite(bMat);
+      bSpr.frustumCulled = false;
+      bSpr.renderOrder = 11;
+      bSpr.visible = false;
+      titleScene.add(bSpr);
+
+      points.push(pts); geos.push(geo); poses.push(positions); cols.push(colors); szs.push(sizes);
+      vels.push(velocities); ages.push(age); lifes.push(life); blooms.push(bSpr);
+    }
+    _thr = {
+      points, geos, poses, cols, szs, vels, ages, lifes, blooms,
+      color: new THREE.Color(0x66ccff),
+      _v: new THREE.Vector3(),
+    };
+  }
+
+  function _thrShow(visible) {
+    if (!_thr) return;
+    _thr.points.forEach(p => p.visible = !!visible);
+    _thr.blooms.forEach(b => b.visible = !!visible);
+  }
+
+  // Read the equipped color from storage and update the cached color.
+  function _thrSyncColor() {
+    if (!_thr) return;
+    let key = 'default';
+    try { key = (loadThrusterData() || {}).selectedColor || 'default'; } catch(_){}
+    const palette = window._THRUSTER_COLOR_PALETTE || {};
+    const entry = palette[key];
+    // 'default' (hex null) — use a neutral cyan-white so the preview reads;
+    // gameplay's 'default' inherits whatever color the run started with, but
+    // for a static showroom we pick a sensible fallback.
+    if (!entry || entry.hex == null) {
+      _thr.color.setRGB(0.55, 0.85, 1.0);
+    } else {
+      _thr.color.set(entry.hex);
+    }
+  }
+
+  // Per-frame tick. Mirrors updateThrusters() particle + bloom logic with
+  // showroom-fixed inputs (no shipGroup, no state.speed, no state.shipVelX).
+  function _thrTick(dt) {
+    if (!_thr || !_open) return;
+    // Find the title ship pivot — we transform NOZZLE_OFFSETS through its
+    // world matrix to get nozzle world positions every frame (cheap).
+    if (typeof titleScene === 'undefined' || !titleScene) return;
+    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+    if (!ship) return;
+    ship.updateMatrixWorld(true);
+
+    // Read knobs (preset writes these onto window.* via _writeThrPresetValues)
+    const D = SR_DEFAULTS;
+    const posPinFrac = (window._thrPart_posPinFrac != null) ? window._thrPart_posPinFrac : D.posPinFrac;
+    const lifeMin   = (window._thrPart_lifeMin   != null) ? window._thrPart_lifeMin   : D.lifeMin;
+    const lifeJit   = (window._thrPart_lifeJit   != null) ? window._thrPart_lifeJit   : D.lifeJit;
+    const lifeBase  = (window._thrPart_lifeBase  != null) ? window._thrPart_lifeBase  : D.lifeBase;
+    const lifeSpd   = (window._thrPart_lifeSpd   != null) ? window._thrPart_lifeSpd   : D.lifeSpd;
+    const spawnJit  = (window._thrPart_spawnJit  != null) ? window._thrPart_spawnJit  : D.spawnJit;
+    const coreEnd   = (window._thrPart_coreEnd   != null) ? window._thrPart_coreEnd   : D.coreEnd;
+    const coreR     = (window._thrPart_coreR     != null) ? window._thrPart_coreR     : D.coreR;
+    const coreGB    = (window._thrPart_coreGB    != null) ? window._thrPart_coreGB    : D.coreGB;
+    const midEnd    = (window._thrPart_midEnd    != null) ? window._thrPart_midEnd    : D.midEnd;
+    const midBoost  = (window._thrPart_midBoost  != null) ? window._thrPart_midBoost  : D.midBoost;
+    const szBase    = (window._thrPart_sizeBase  != null) ? window._thrPart_sizeBase  : D.sizeBase;
+    const szSpeed   = (window._thrPart_sizeSpeed != null) ? window._thrPart_sizeSpeed : D.sizeSpeed;
+    const bumpMult  = (window._thrPart_bumpMult  != null) ? window._thrPart_bumpMult  : D.bumpMult;
+    const bumpEnd   = (window._thrPart_bumpEnd   != null) ? window._thrPart_bumpEnd   : D.bumpEnd;
+    const szJitter  = (window._thrPart_sizeJitter!= null) ? window._thrPart_sizeJitter: D.sizeJitter;
+    const partOp    = (window._thrPart_partOpacity != null) ? window._thrPart_partOpacity : D.partOpacity;
+    const thrScale  = (window._thrusterScale     != null) ? window._thrusterScale     : 1.0;
+    const pointSize = (window._THRUSTER_PRESETS && window._activeThrusterPreset && window._THRUSTER_PRESETS[window._activeThrusterPreset] && window._THRUSTER_PRESETS[window._activeThrusterPreset]._pointMatSize) || 0.13;
+    const bloomScl  = (window._nozzleBloomScale  != null) ? window._nozzleBloomScale  : D.bloomScale;
+    const bloomOp   = (window._nozzleBloomOpacity!= null) ? window._nozzleBloomOpacity: D.bloomOpacity;
+    const bloomWM   = (window._nozzleBloom_whiteMix != null) ? window._nozzleBloom_whiteMix : D.bloomWhiteMix;
+    const bloomPul  = (window._nozzleBloomPulse  != null) ? window._nozzleBloomPulse  : D.bloomPulse;
+
+    const tCol = _thr.color;
+    const ss = SR_SPEED_SCALE;
+    const tp = SR_TP;
+
+    for (let idx = 0; idx < 2; idx++) {
+      const sys = {
+        positions: _thr.poses[idx], colors: _thr.cols[idx], sizes: _thr.szs[idx],
+        velocities: _thr.vels[idx], ages: _thr.ages[idx], lifetimes: _thr.lifes[idx],
+      };
+      const points = _thr.points[idx];
+      const bloom = _thr.blooms[idx];
+
+      // Get nozzle world position via title ship transform.
+      // Gameplay applies model.rotation.y = π to the ship (5387 in 20-main-early.js)
+      // so its +Z is "back". Title ship has no flip, so we mirror: negate the
+      // Z component of NOZZLE_OFFSETS before localToWorld so the nozzle ends up
+      // at the back of the title ship (same physical spot).
+      _thr._v.set(NOZZLE_OFFSETS[idx].x, NOZZLE_OFFSETS[idx].y, -NOZZLE_OFFSETS[idx].z);
+      ship.localToWorld(_thr._v);
+      const wx = _thr._v.x, wy = _thr._v.y, wz = _thr._v.z;
+
+      // Particle material: keep size in sync with preset _pointMatSize.
+      if (points.material.size !== pointSize) points.material.size = pointSize;
+      if (points.material.opacity !== partOp) points.material.opacity = partOp;
+
+      const pos = sys.positions, col = sys.colors, sz = sys.sizes;
+      for (let i = 0; i < SR_PARTICLE_COUNT; i++) {
+        sys.ages[i] += dt;
+        if (sys.ages[i] >= sys.lifetimes[i]) {
+          sys.ages[i] = 0;
+          sys.lifetimes[i] = (lifeMin + Math.random() * lifeJit) * (lifeBase + ss * lifeSpd);
+          pos[i*3]     = wx + (Math.random() - 0.5) * spawnJit;
+          pos[i*3 + 1] = wy + (Math.random() - 0.5) * spawnJit;
+          pos[i*3 + 2] = wz;
+          // No lateral inheritance (showroom ship doesn't move sideways).
+          // Velocity points away from the ship's BACK in world space. Title ship
+          // has its back facing roughly world -Z (since tiltGroup.rotation.x = 0.13
+          // leaves the ship near-horizontal and the GLB's +Z is the front), so
+          // we exhaust into world -Z.
+          sys.velocities[i].set(
+            (Math.random() - 0.5) * 0.06,
+            (Math.random() - 0.5) * 0.06 - 0.02,
+            -(2.5 + Math.random() * 2.0 + ss * 1.5)
+          );
+        } else {
+          const t0 = sys.ages[i] / sys.lifetimes[i];
+          if (t0 < posPinFrac) {
+            pos[i*3] = wx; pos[i*3 + 1] = wy; pos[i*3 + 2] = wz;
+          } else {
+            const v = sys.velocities[i];
+            pos[i*3]     += v.x * dt;
+            pos[i*3 + 1] += v.y * dt;
+            pos[i*3 + 2] += v.z * dt;
+            v.multiplyScalar(0.92);
+          }
+        }
+        const t = sys.ages[i] / sys.lifetimes[i];
+        // Color curve
+        if (t < coreEnd) {
+          const s = t / coreEnd;
+          col[i*3]     = coreR;
+          col[i*3 + 1] = THREE.MathUtils.lerp(coreGB, tCol.g, s);
+          col[i*3 + 2] = THREE.MathUtils.lerp(coreGB, tCol.b, s);
+        } else if (t < midEnd) {
+          const s = (t - coreEnd) / Math.max(0.001, (midEnd - coreEnd));
+          const bright = 1.0 + ss * midBoost;
+          col[i*3]     = THREE.MathUtils.lerp(tCol.r * bright, tCol.r, s);
+          col[i*3 + 1] = THREE.MathUtils.lerp(tCol.g * bright, tCol.g, s);
+          col[i*3 + 2] = THREE.MathUtils.lerp(tCol.b * bright, tCol.b, s);
+        } else {
+          const s = (t - midEnd) / Math.max(0.001, (1.0 - midEnd));
+          col[i*3]     = THREE.MathUtils.lerp(tCol.r, 0, s);
+          col[i*3 + 1] = THREE.MathUtils.lerp(tCol.g, 0, s);
+          col[i*3 + 2] = THREE.MathUtils.lerp(tCol.b, 0, s);
+        }
+        // Size curve
+        const baseSize = szBase + ss * szSpeed;
+        const rawSz = t < bumpEnd
+          ? THREE.MathUtils.lerp(baseSize * bumpMult, baseSize, t / bumpEnd)
+          : (1.0 - t) * (baseSize + Math.random() * szJitter);
+        sz[i] = rawSz * tp * thrScale;
+      }
+      _thr.geos[idx].attributes.position.needsUpdate = true;
+      _thr.geos[idx].attributes.color.needsUpdate    = true;
+      _thr.geos[idx].attributes.size.needsUpdate     = true;
+
+      // Bloom sprite at nozzle.
+      bloom.position.set(wx, wy, wz);
+      const bloomSize = (0.6 + ss * 0.7) * thrScale * bloomScl;
+      bloom.scale.setScalar(bloomSize);
+      bloom.material.color.setRGB(
+        THREE.MathUtils.lerp(tCol.r, 1.0, bloomWM),
+        THREE.MathUtils.lerp(tCol.g, 1.0, bloomWM),
+        THREE.MathUtils.lerp(tCol.b, 1.0, bloomWM)
+      );
+      bloom.material.opacity = bloomOp * ((1 - bloomPul) + Math.sin(Date.now() * 0.008) * bloomPul) * tp;
+    }
+  }
+
   // ── Public: open / close / refresh ───────────────────────────────────
   function open(tab) {
     const overlay = document.getElementById('thruster-overlay');
@@ -13933,6 +14227,10 @@ function updateStreakBadge() {
         window.addEventListener('resize', _onResize);
         window.addEventListener('orientationchange', _onResize);
       }
+      // Init thruster preview lazily on first open + show it.
+      _thrInit();
+      _thrSyncColor();
+      _thrShow(true);
     });
     _open = true;
   }
@@ -13943,15 +14241,31 @@ function updateStreakBadge() {
     if (overlay) overlay.classList.add('hidden');
     document.body.classList.remove('sr-open');
     _open = false;
+    // Hide preview immediately so it never shows on the live title screen.
+    _thrShow(false);
   }
 
   function refresh() {
     if (!_open) return;
     _unlockReqCache = null; // recompute in case missions changed
     _populateAll();
+    _thrSyncColor();
   }
 
-  window.Showroom = { open: open, close: close, refresh: refresh };
+  // Public tick — called from the title-phase render loop in 70-perf-diag.js,
+  // which guards by checking window.Showroom?._open before invoking. When the
+  // showroom is closed, the body of _thrTick early-returns, so this is free.
+  function tick(dt) { _thrTick(dt); }
+
+  // Public color sync — called by _onColorChange so dropdown updates the preview
+  // without needing a full open/close cycle.
+  function syncColor() { _thrSyncColor(); }
+
+  window.Showroom = {
+    open: open, close: close, refresh: refresh,
+    tick: tick, syncColor: syncColor,
+    isOpen: function() { return _open; },
+  };
 })();
 //  SHOP SYSTEM
 // ═══════════════════════════════════════════════════
@@ -22588,6 +22902,12 @@ function animate() {
           mat.emissiveIntensity = mat.userData._baseEI + pulse;
         }
       }
+    }
+
+    // Showroom thruster preview tick — only runs while showroom is open
+    // (Showroom.tick early-returns when closed, so this is a free no-op otherwise).
+    if (window.Showroom && window.Showroom.isOpen && window.Showroom.isOpen()) {
+      try { window.Showroom.tick(rawDt); } catch(_){}
     }
 
     _titleRenderer.render(titleScene, titleCamera);

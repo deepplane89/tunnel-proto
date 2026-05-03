@@ -319,6 +319,12 @@ function animate() {
       }
     }
 
+    // Showroom thruster preview tick — only runs while showroom is open
+    // (Showroom.tick early-returns when closed, so this is a free no-op otherwise).
+    if (window.Showroom && window.Showroom.isOpen && window.Showroom.isOpen()) {
+      try { window.Showroom.tick(rawDt); } catch(_){}
+    }
+
     _titleRenderer.render(titleScene, titleCamera);
     return;
   }

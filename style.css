@@ -4537,7 +4537,10 @@ html, body {
 .sr-stage {
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 60vh;
+  /* Portrait: fill from top down to where the panel begins (panel ~280px tall
+   * including bottom padding). The ship sits centered in this region. */
+  bottom: 280px;
+  height: auto;
   pointer-events: none;
   display: flex;
   align-items: center;
@@ -4743,17 +4746,32 @@ html, body {
 
 /* While the hub is open: hide title-screen UI chrome (buttons/labels/coin row)
  * so only the ship + showroom panel are visible. The live ship keeps spinning
- * and the thruster preview keeps updating because we never stop rendering. */
-body.sr-open #title-screen > *:not(#title-ship-canvas):not(#title-star-canvas) {
+ * and the thruster preview keeps updating because we never stop rendering.
+ * Hide direct children of #title-screen except the ship canvas, and ALSO hide
+ * top-level overlays that sit as siblings of #title-screen (a2hs banner,
+ * leaderboard, star canvas). */
+body.sr-open #title-screen > *:not(#title-ship-canvas) {
   opacity: 0.0;
   pointer-events: none;
   transition: opacity 0.18s ease;
+}
+body.sr-open #title-star-canvas,
+body.sr-open #title-leaderboard,
+body.sr-open #a2hs-banner {
+  display: none !important;
 }
 body.sr-open #title-ship-canvas {
   filter: saturate(1.06) contrast(1.02);
 }
 
-/* LANDSCAPE / desktop: dock panel to the right side instead of bottom. */
+/* Hide the decorative grid floor — perspective transform doesn't read well
+ * over a dark scene and adds visual noise. Keep the element in markup so we
+ * can re-enable later, but don't render it. */
+.sr-grid { display: none; }
+
+/* LANDSCAPE / desktop: dock panel to the right side instead of bottom. The
+ * stage is shrunk so the ship sits centered in the visible area to the LEFT
+ * of the panel, not under it. */
 @media (min-aspect-ratio: 1/1) and (min-width: 720px) {
   .sr-overlay {
     align-items: stretch;
@@ -4766,5 +4784,13 @@ body.sr-open #title-ship-canvas {
   .sr-panel {
     max-width: 380px;
     align-self: stretch;
+  }
+  /* Stage shrinks to leave 380px panel + 24px+24px padding on the right. */
+  .sr-stage {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 428px;
+    height: auto;
   }
 }
