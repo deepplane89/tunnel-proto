@@ -13921,6 +13921,102 @@ function updateStreakBadge() {
     _buildSkinOptions(document.getElementById('sr-select-skin'));
     _buildShapeOptions(document.getElementById('sr-select-shape'));
     _buildColorOptions(document.getElementById('sr-select-color'));
+    _populateAddons();
+  }
+
+  // ── ADD-ONS pane: per-mesh toggle UI for alt-GLB ships only ──
+  // The current ship's top-level child meshes (excluding the body) are listed
+  // with a checkbox. State is persisted per-GLB filename so MK Runner's add-on
+  // config is independent from any future alt-GLB.
+  const SR_ADDONS_KEY = 'jh_showroom_addons_v1';
+  // Mesh names treated as "body" (always visible, never shown as toggleable).
+  // For MK Runner, the hull is Cube.007. Anything starting with 'Cube' is
+  // treated as the body unless explicitly listed as an add-on elsewhere.
+  const SR_BODY_PART_PATTERNS = [/^Cube/i];
+  function _isBodyPart(name) {
+    return SR_BODY_PART_PATTERNS.some(rx => rx.test(name || ''));
+  }
+  function _loadAddonsState() {
+    try { return JSON.parse(localStorage.getItem(SR_ADDONS_KEY) || '{}') || {}; }
+    catch(_) { return {}; }
+  }
+  function _saveAddonsState(state) {
+    try { localStorage.setItem(SR_ADDONS_KEY, JSON.stringify(state || {})); } catch(_){}
+  }
+  function _currentAddonsKey() {
+    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+    return (ship && ship.userData && ship.userData._altGlb) || null;
+  }
+  // Direct children of the ship root that contain a mesh and aren't the body.
+  function _collectAddonNodes() {
+    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+    if (!ship) return [];
+    const out = [];
+    ship.children.forEach((c, i) => {
+      let hasMesh = false;
+      c.traverse(o => { if (o.isMesh) hasMesh = true; });
+      if (!hasMesh) return;
+      const name = (c.name && c.name.trim()) || ('Part_' + i);
+      if (_isBodyPart(name)) return;
+      out.push({ name: name, node: c });
+    });
+    return out;
+  }
+  // Apply persisted visibility state to the current ship's parts. Called
+  // after the ship swaps so toggles survive a skin change. Default state
+  // when no save exists yet: all add-ons OFF.
+  function _applyAddonsToShip() {
+    const key = _currentAddonsKey();
+    if (!key) return;
+    const state = _loadAddonsState();
+    const map = state[key] || {};
+    _collectAddonNodes().forEach(p => {
+      const has = Object.prototype.hasOwnProperty.call(map, p.name);
+      p.node.visible = has ? !!map[p.name] : false;
+    });
+  }
+  function _populateAddons() {
+    const list = document.getElementById('sr-addons-list');
+    if (!list) return;
+    const key = _currentAddonsKey();
+    if (!key) {
+      list.innerHTML = '<div class="sr-addon-empty">No add-ons available for this ship</div>';
+      return;
+    }
+    const parts = _collectAddonNodes();
+    if (!parts.length) {
+      list.innerHTML = '<div class="sr-addon-empty">No add-ons available for this ship</div>';
+      return;
+    }
+    const state = _loadAddonsState();
+    const map = state[key] || {};
+    let html = '';
+    parts.forEach(p => {
+      // Default to OFF when no save exists — user toggles them ON deliberately.
+      const stored = Object.prototype.hasOwnProperty.call(map, p.name) ? !!map[p.name] : false;
+      // Reconcile node visibility with stored state on every (re)build.
+      p.node.visible = stored;
+      const safe = String(p.name).replace(/"/g, '&quot;');
+      html += '<label class="sr-addon-row">'+
+        '<input type="checkbox" data-addon="'+safe+'" '+(stored?'checked':'')+'>'+
+        '<span>'+safe+'</span>'+
+      '</label>';
+    });
+    list.innerHTML = html;
+    list.querySelectorAll('input[type="checkbox"][data-addon]').forEach(inp => {
+      inp.addEventListener('change', (e) => {
+        const k = _currentAddonsKey();
+        if (!k) return;
+        const name = e.target.dataset.addon;
+        const visible = !!e.target.checked;
+        const hit = _collectAddonNodes().find(p => p.name === name);
+        if (hit) hit.node.visible = visible;
+        const s = _loadAddonsState();
+        if (!s[k]) s[k] = {};
+        s[k][name] = visible;
+        _saveAddonsState(s);
+      });
+    });
   }
 
   // ── Wire dropdown change handlers ────────────────────────────────────
@@ -14860,6 +14956,8 @@ function updateStreakBadge() {
     // _applyTunerToAnchors uses the right per-ship pod offsets. Persists
     // the outgoing ship's edits to its own key, never crosses streams.
     try { _swapTunerForCurrentShip(); } catch(_){}
+    // Apply persisted add-on visibility to the freshly-swapped ship parts.
+    try { _applyAddonsToShip(); } catch(_){}
     try { if (typeof _updateTunerHud === 'function') _updateTunerHud(); } catch(_){}
     if (_open) {
       _thrInit();

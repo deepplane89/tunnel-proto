@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Zain:wght@300;400;700&family=Silkscreen&family=Rajdhani:wght@300;400;600;700&family=Permanent+Marker&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=1777765000" />
+  <link rel="stylesheet" href="./style.css?v=1777766000" />
 
   <script type="importmap">
   {
@@ -333,6 +333,7 @@
     <div class="sr-tabs" id="sr-tabs">
       <button class="sr-tab" data-tab="skins">SKINS</button>
       <button class="sr-tab active" data-tab="thrusters">THRUSTERS</button>
+      <button class="sr-tab" data-tab="addons">ADD-ONS</button>
       <button class="sr-tab sr-hidden" data-tab="powerups">POWER-UPS</button>
     </div>
     <div class="sr-body" id="sr-body">
@@ -362,6 +363,12 @@
             <span class="sr-chevron" aria-hidden="true">▾</span>
           </div>
         </label>
+      </div>
+      <!-- ADD-ONS PANE — toggle named meshes on the current ship's GLB. Only
+           populated for alt-GLBs (e.g. MK Runner). Default Runner shows a
+           muted message because it has no separable named parts. -->
+      <div class="sr-pane sr-hidden" data-pane="addons">
+        <div id="sr-addons-list" class="sr-addons-list"></div>
       </div>
       <!-- POWERUPS PANE — placeholder, hidden -->
       <div class="sr-pane sr-hidden" data-pane="powerups"></div>
@@ -609,6 +616,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1777765000"></script>
+<script type="module" src="./dist/game.js?v=1777766000"></script>
 </body>
 </html>

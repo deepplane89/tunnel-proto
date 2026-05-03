@@ -4670,6 +4670,32 @@ html, body {
 .sr-pane { display: flex; flex-direction: column; gap: 10px; }
 .sr-pane.sr-hidden { display: none; }
 
+/* ADD-ONS list — one row per toggleable mesh */
+.sr-addons-list { display: flex; flex-direction: column; gap: 8px; }
+.sr-addon-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 20, 40, 0.45);
+  border: 1px solid rgba(60, 180, 255, 0.35);
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--sr-text);
+  font: 11px ui-monospace, Menlo, monospace;
+  letter-spacing: 0.5px;
+}
+.sr-addon-row:hover { background: rgba(0, 30, 60, 0.65); border-color: #3af; }
+.sr-addon-row input[type="checkbox"] { accent-color: #3af; cursor: pointer; }
+.sr-addon-row.sr-disabled { opacity: 0.35; cursor: not-allowed; }
+.sr-addon-empty {
+  color: rgba(180, 220, 255, 0.55);
+  font: 11px ui-monospace, Menlo, monospace;
+  text-align: center;
+  padding: 20px 12px;
+  border: 1px dashed rgba(60, 180, 255, 0.25);
+  border-radius: 4px;
+}
+
 /* ROW: label + dropdown */
 .sr-row {
   display: flex;
