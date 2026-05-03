@@ -64,21 +64,42 @@ Mutators to enumerate:
 
 ---
 
-## 3. Material mutations — opacity / color / emissive
+## 2. Material mutations — opacity / color / emissive (✅ PASS 2 COMPLETE)
 
-These are gameplay-driven (powerup tints, near-miss flash, dark-slab override,
-canyon skin tuner). High leak risk because materials are shared and persistent.
+**Result: no real leaks. All mutations are either per-frame re-derived,
+pool-reset on checkout, dev-tuner-only, init-time-only, or auto-heal via
+an existing fade-back loop.**
 
-Mutators to enumerate:
-- `material.opacity` writes (~110 spotted) — most for powerup VFX (shield mesh,
-  laser tube, magnet wire). Each needs: visible=false AND opacity=0 reset.
-- `material.color.set/copy` (~31 spotted) — hull tint cycling (invincible
-  rainbow), canyon dark-slab override, skin recolor
-- `emissive.set/copy` and `emissiveIntensity =` (~28 spotted) — near-miss red
-  flash, invincible glow, hull pulse
-- Canyon skin tuner mutations: `_PRE_T4A_CANYON_TUNER`, `_PRE_T4B_CANYON_TUNER`
-  — we already restore originals after activate, but verify on death/retry mid-canyon
-- Sun shader uniforms (`uIsL3Warp` already reset, but verify: uTime, uColor*, uTint)
+| Site | Pattern | Status |
+|---|---|---|
+| 67:4866-4914 hull tint (rainbow / near-miss-red / grace-flash) | Nested in `if (state.invincibleTimer > 0)` gate | ✅ Auto-heals: fade-back loop at 67:4921-4937 runs every frame OUTSIDE the gate while `_firstPbrHull.emissiveIntensity > 0`, lerping color→white and emissive→0 over ~30 frames during title/pause/restart |
+| 67:2462, 2599, 5258-5429 ring/canyon/wall opacity | Per-frame derived from age/fadeT or pool-returned on death (`returnObstacleToPool`, `_awActive` cleared on startGame) | ✅ Re-derived each frame |
+| 67:3789, 3801 tintObsColor / resetObsColor | Pool obstacle utility, every tint paired with reset, pool returned on startGame | ✅ |
+| 67:5819, 5844 canyon dev-tuner emissive | Dev skin-tuner panel slider callback only | ✅ Dev-only |
+| 67:330-338 (startGame) shield/laser/magnet opacity | Explicit reset already in place | ✅ |
+| 72:332-373, 1510, 1576, 1832, 2363, 2414, 2471, 2586, 2786, 2841, 2862 | Dev-tuner panel callbacks only | ✅ Dev-only |
+| 72:5333-5589 lightning bolt mat opacity | Pool-based projectile, re-init on spawn (`spawnLightning`), pool cleared on `_clearAllMechanics` from startGame | ✅ |
+| 20:2145, 2149 _warpMat / nebulaMat | Per-frame derived from `_warpBrightness`, `currentNebulaTint.lerp` | ✅ |
+| 20:3143, 3162 _flashSpriteMat | `_FLASH_DUR = 0.15s`, `_updateFlash` ticks every frame from main loop, self-resolves in 150ms | ✅ Self-clearing |
+| 20:4898-4900, 4950-4951 aurora / l5 fronds | Per-frame derived from `auroraFadeT` / `l5fFadeT` | ✅ |
+| 20:5088 sun lights color | Init-time only via `applyLevelVisuals` chain | ✅ |
+| 20:5202 shipEdgeLines color/emissive | `updateGridColor` called from `applyLevelVisuals(LEVELS[0])` in startGame | ✅ |
+| 20:5684 skin-2 hull color override | Init-time per-skin clone in `_prebuiltSkins` | ✅ |
+| 20:6076-6084 alt-ship loader | Init-time inside `_loadAltShip` callback | ✅ |
+| 20:6962-6965 thruster particle opacity | Per-frame from `window._thrPart_partOpacity` knob | ✅ |
+| 20:7151-7159, 7349-7356 nozzle bloom mats | Per-frame derived from speedScale + `window._nozzleBloom*` | ✅ |
+| 20:9015 canyon slab emissive fade | Per-frame derived from `fadeT` | ✅ |
+| 20:9226-9227 angled-wall init opacity=0 | Init-time at spawn, runtime fade re-derives | ✅ |
+| 20:9457-9458 angled-wall dev-tuner | Dev-only callback | ✅ |
+| 20:9607 coin pool color set | Re-applied on every pool checkout from `_activeCoinMult` | ✅ |
+
+**Key insight:** the hull tint cycle 4866-4914 is the same nested-block
+pattern as the aberration bug (mutator inside `if (state.invincibleTimer > 0)`),
+but a fade-back loop already runs OUTSIDE the gate (4921-4937) and auto-heals
+color/emissive/EI to white/black/0 (default ship) or level-grid-color (edge
+lines). No fix needed.
+
+No commit pushed for Pass 2 — audit-only.
 
 ---
 
@@ -176,9 +197,9 @@ Mutators to enumerate:
 
 ## Pass plan
 
-Pass 1 (now): Post-processing uniforms — section 1
-Pass 2: Material opacity/color/emissive sweep — section 3 (highest visual leak risk)
-Pass 3: Mesh visibility sweep — section 4
+Pass 1 (✅ done): Post-processing uniforms — section 1
+Pass 2 (✅ done): Material opacity/color/emissive sweep — section 3 (highest visual leak risk)
+Pass 3 (next): Mesh visibility sweep — section 4
 Pass 4: Three.js scene state — section 2
 Pass 5: Audio loops — section 5
 Pass 6: Timers — section 6
