@@ -1452,7 +1452,7 @@ html, body {
   .skin-nav {
     transform: translateY(-15px);
   }
-  #title-ship-canvas {
+  body:not(.sr-open) #title-ship-canvas {
     width: 200px !important;
     height: 180px !important;
     object-fit: contain;
@@ -4426,16 +4426,16 @@ html, body {
 /* ── Small screen adjustments ── */
 @media (max-height: 700px) {
   .game-title { font-size: clamp(40px, 9vw, 72px); }
-  #title-ship-canvas { width: 160px; height: 140px; }
-  .ship-showcase { min-height: 90px; }
+  body:not(.sr-open) #title-ship-canvas { width: 160px; height: 140px; }
+  body:not(.sr-open) .ship-showcase { min-height: 90px; }
   .btn-mode { padding: 14px 0; font-size: 16px; }
   .title-mode-buttons { gap: 8px; bottom: max(env(safe-area-inset-bottom, 20px), 20px); }
 }
 
 @media (max-height: 580px) {
   .game-title { font-size: clamp(32px, 8vw, 56px); }
-  #title-ship-canvas { width: 120px; height: 100px; }
-  .ship-showcase { min-height: 70px; }
+  body:not(.sr-open) #title-ship-canvas { width: 120px; height: 100px; }
+  body:not(.sr-open) .ship-showcase { min-height: 70px; }
 }
 
 /* ════════════════════════════════════════════════════════
