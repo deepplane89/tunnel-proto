@@ -15703,6 +15703,15 @@ function startGame() {
   state.invincibleSpeedActive = false;
   state.multiplierTimer = 0;
   state.invincibleTimer = 0;
+  // Defensive reset: chromatic aberration uniform can get stuck at MAX if the
+  // run ended (death / retry) mid-invincible before the timer naturally hit 0,
+  // leaving the RGB-split effect visible on the next session. Reset to the
+  // platform baseline (0 on mobile, 0.0015 on desktop) here so every fresh
+  // run starts clean.
+  if (typeof vignettePass !== 'undefined' && vignettePass && vignettePass.uniforms && vignettePass.uniforms.aberration) {
+    const _isMobAB = (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+    vignettePass.uniforms.aberration.value = _isMobAB ? 0.0 : 0.0015;
+  }
   state.laserTimer     = 0;
   state.sessionCoins   = 0;
   _activeCoinMult      = 1;  // reset coin multiplier for new run
