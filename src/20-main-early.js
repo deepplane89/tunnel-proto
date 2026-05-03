@@ -5823,6 +5823,9 @@ window._bakeSkin = async function(skinIndex) {
   return out;
 };
 
+// Title-only cloned-material cache for per-skin overrides (see applyTitleSkin)
+let _titleSkinOverrides = null;
+
 // Apply a skin to the title ship clone — maps by mesh name, not uuid
 function applyTitleSkin(skinIndex) {
   if (!_titleShipModel || !_prebuiltSkins.length) return;
@@ -5851,6 +5854,37 @@ function applyTitleSkin(skinIndex) {
 
   const skinMap = _prebuiltSkins[skinIndex];
 
+  // ── TITLE-ONLY MATERIAL OVERRIDES ────────────────────────────────
+  // Some skins look correct under gameplay's dramatic lighting but read wrong
+  // under title's bright studio rig (e.g. BM's rust hull color #d36b4a reads
+  // black in-game because sun=0 + dirLight from below; reads orange on title).
+  // Clone affected materials per skin and override their base colors so the
+  // title preview matches the in-game appearance. Gameplay materials in
+  // _prebuiltSkins are NOT touched.
+  if (!_titleSkinOverrides) _titleSkinOverrides = new Map(); // skinIdx -> Map<srcUuid, ClonedMat>
+  function getTitleMat(skinIdx, srcUuid, srcMat) {
+    let bySkin = _titleSkinOverrides.get(skinIdx);
+    if (!bySkin) { bySkin = new Map(); _titleSkinOverrides.set(skinIdx, bySkin); }
+    if (bySkin.has(srcUuid)) return bySkin.get(srcUuid);
+    // Skin 2 (Black Mamba): force hull-color slots to near-black so title
+    // reads black under bright studio lights. Cyan emissive on white/
+    // rocket_light slots is preserved — only base color slots are darkened.
+    if (skinIdx === 2) {
+      const meshAtUuid = srcUuidToMesh.get(srcUuid);
+      const slot = (meshAtUuid && meshAtUuid.userData._origMatName) || '';
+      // Only override hull-color slots (base color visible). Cyan-glow slots
+      // (white, rocket_light) keep their original cyan look.
+      if (slot === 'rocket_base' || slot === 'gray' || slot === 'fallback') {
+        const cloned = srcMat.clone();
+        if (cloned.color) cloned.color.setHex(0x000000);
+        bySkin.set(srcUuid, cloned);
+        return cloned;
+      }
+    }
+    bySkin.set(srcUuid, srcMat);
+    return srcMat;
+  }
+
   for (const entry of _titleMeshMap) {
     const { mesh, origName } = entry;
     if (origName === 'fire' || origName === 'fire1') {
@@ -5867,8 +5901,9 @@ function applyTitleSkin(skinIndex) {
       nameCounter.set(origName, count + 1);
       const srcUuids = srcNameToUuid.get(origName);
       if (srcUuids && srcUuids[count]) {
-        const mat = skinMap.get(srcUuids[count]);
-        if (mat) mesh.material = mat;
+        const srcUuid = srcUuids[count];
+        const mat = skinMap.get(srcUuid);
+        if (mat) mesh.material = getTitleMat(skinIndex, srcUuid, mat);
       }
     }
   }
