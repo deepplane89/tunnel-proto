@@ -20513,8 +20513,10 @@ function update(dt) {
       const f = state.nearMissFlash;
       const red = new THREE.Color(1.0, 0.15, 0.05);
       for (let i = 0; i < shipHullMats.length; i++) {
-        shipHullMats[i].emissive.copy(red);
-        shipHullMats[i].emissiveIntensity = f * 2.5;
+        const m = shipHullMats[i];
+        if (!m.emissive) continue; // skip holo / shader materials (no PBR props)
+        m.emissive.copy(red);
+        m.emissiveIntensity = f * 2.5;
       }
       state.nearMissFlash = Math.max(0, state.nearMissFlash - dt * 3.0); // ~0.33s decay
     }
@@ -20527,16 +20529,20 @@ function update(dt) {
       const eC      = new THREE.Color().setHSL(emissHue, 1.0, 0.5);
       const eiPulse = 1.4 + Math.sin(state.elapsed * 6 * Math.PI * 2) * 0.6;
       for (let i = 0; i < shipHullMats.length; i++) {
-        shipHullMats[i].color.copy(c);
-        shipHullMats[i].emissive.copy(eC);
-        shipHullMats[i].emissiveIntensity = eiPulse;
+        const m = shipHullMats[i];
+        if (!m.emissive || !m.color) continue;
+        m.color.copy(c);
+        m.emissive.copy(eC);
+        m.emissiveIntensity = eiPulse;
       }
       const eHue2 = (hue + 0.5) % 1.0;
       const eC2   = new THREE.Color().setHSL(eHue2, 1.0, 0.6);
       for (let i = 0; i < shipEdgeLines.length; i++) {
-        shipEdgeLines[i].color.copy(eC2);
-        shipEdgeLines[i].emissive.copy(eC2);
-        shipEdgeLines[i].emissiveIntensity = 3.0;
+        const m = shipEdgeLines[i];
+        if (!m.color || !m.emissive) continue;
+        m.color.copy(eC2);
+        m.emissive.copy(eC2);
+        m.emissiveIntensity = 3.0;
       }
     }
     // Grace period: speed boost ended but still invincible — slow white flash
@@ -20544,24 +20550,35 @@ function update(dt) {
       const flash = 0.5 + 0.5 * Math.sin(state.elapsed * 3 * Math.PI * 2); // ~1.5 Hz pulse
       const c = new THREE.Color(1, 1, 1);
       for (let i = 0; i < shipHullMats.length; i++) {
-        shipHullMats[i].color.copy(c);
-        shipHullMats[i].emissive.copy(c);
-        shipHullMats[i].emissiveIntensity = flash * 1.5;
+        const m = shipHullMats[i];
+        if (!m.emissive || !m.color) continue;
+        m.color.copy(c);
+        m.emissive.copy(c);
+        m.emissiveIntensity = flash * 1.5;
       }
     }
   }
-  if (shipHullMats.length && shipHullMats[0].emissiveIntensity > 0) {
+  // Find first PBR-style hull mat for the turbo-fade gate (skip holo/shader mats)
+  let _firstPbrHull = null;
+  for (let i = 0; i < shipHullMats.length; i++) {
+    if (shipHullMats[i].emissive && shipHullMats[i].color) { _firstPbrHull = shipHullMats[i]; break; }
+  }
+  if (_firstPbrHull && _firstPbrHull.emissiveIntensity > 0) {
     // Fade back to white when turbo ends
     for (let i = 0; i < shipHullMats.length; i++) {
-      shipHullMats[i].color.lerp(new THREE.Color(0xffffff), 0.08);
-      shipHullMats[i].emissive.lerp(new THREE.Color(0x000000), 0.08);
-      shipHullMats[i].emissiveIntensity = Math.max(0, shipHullMats[i].emissiveIntensity - 0.02);
+      const m = shipHullMats[i];
+      if (!m.emissive || !m.color) continue;
+      m.color.lerp(new THREE.Color(0xffffff), 0.08);
+      m.emissive.lerp(new THREE.Color(0x000000), 0.08);
+      m.emissiveIntensity = Math.max(0, m.emissiveIntensity - 0.02);
     }
     // Restore edge lines to current level color
     const _lvlColor = LEVELS[state.currentLevelIdx].gridColor;
     for (let i = 0; i < shipEdgeLines.length; i++) {
-      shipEdgeLines[i].color.lerp(_lvlColor, 0.08);
-      if (shipEdgeLines[i].emissive) shipEdgeLines[i].emissive.lerp(_lvlColor, 0.08);
+      const m = shipEdgeLines[i];
+      if (!m.color) continue;
+      m.color.lerp(_lvlColor, 0.08);
+      if (m.emissive) m.emissive.lerp(_lvlColor, 0.08);
     }
   }
   if (state.magnetActive) {
