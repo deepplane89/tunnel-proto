@@ -324,35 +324,44 @@ const state = {
   wheelEarned: false,
 };
 
-// ── DIAG: introActive write trap (TEMPORARY — strip after stuck-introActive bug fixed) ──
-(function installIntroActiveTrap(){
-  let _backing = false;
-  window._introTrace = window._introTrace || [];
-  function pushTrace(val){
-    try {
-      const stk = (new Error()).stack || '';
-      const lines = stk.split('\n').slice(2, 7).map(s => s.trim());
-      window._introTrace.push({
-        t: (typeof performance !== 'undefined' ? performance.now() : Date.now()).toFixed(1),
-        v: !!val,
-        phase: state.phase,
-        gs: !!window._gameStarting,
-        rp: !!window._retryPending,
-        rfd: !!window._retryIsFromDead,
-        skl1: !!window._skipL1Intro,
-        rsa: !!window._retrySweepActive,
-        ila: !!window._introLiftActive,
-        st: lines
-      });
-      if (window._introTrace.length > 40) window._introTrace.shift();
-    } catch(e) {}
+// ── DIAG: write traps for introActive + _seqSpawnMode (TEMPORARY — strip after bug fix) ──
+(function installDiagTraps(){
+  function makeTrap(name, traceArr) {
+    let _backing = (name === 'introActive') ? false : 'cones';
+    function pushTrace(val){
+      try {
+        const stk = (new Error()).stack || '';
+        const lines = stk.split('\n').slice(2, 8).map(s => s.trim());
+        traceArr.push({
+          t: (typeof performance !== 'undefined' ? performance.now() : Date.now()).toFixed(1),
+          v: val,
+          phase: state.phase,
+          gs: !!window._gameStarting,
+          rp: !!window._retryPending,
+          rfd: !!window._retryIsFromDead,
+          skl1: !!window._skipL1Intro,
+          rsa: !!window._retrySweepActive,
+          ila: !!window._introLiftActive,
+          stage: state.seqStageIdx,
+          stE: (state.seqStageElapsed || 0).toFixed(2),
+          st: lines
+        });
+        if (traceArr.length > 60) traceArr.shift();
+      } catch(e) {}
+    }
+    Object.defineProperty(state, name, {
+      configurable: true,
+      enumerable: true,
+      get(){ return _backing; },
+      set(v){ pushTrace(v); _backing = (name === 'introActive') ? !!v : v; }
+    });
+    // Expose direct backing read for watchdog (bypasses getter for sanity check)
+    window['_' + name + 'Backing'] = function(){ return _backing; };
   }
-  Object.defineProperty(state, 'introActive', {
-    configurable: true,
-    enumerable: true,
-    get(){ return _backing; },
-    set(v){ pushTrace(v); _backing = !!v; }
-  });
+  window._introTrace = window._introTrace || [];
+  window._seqModeTrace = window._seqModeTrace || [];
+  makeTrap('introActive', window._introTrace);
+  makeTrap('_seqSpawnMode', window._seqModeTrace);
 })();
 
 // ── SKIN SYSTEM ─────────────────────────────────────────────

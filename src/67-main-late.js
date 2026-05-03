@@ -3792,95 +3792,131 @@ let _invSweepFiredThisRun  = false;
 let _invIntroFiredThisRun  = false;
 let _invSweepStuckSince    = 0; // perf.now() when retrySweepActive first observed
 let _invIntroStuckSince    = 0; // perf.now() when invalid intro/lift combo first observed
+let _invDumpCount          = 0; // DIAG: count of comprehensive dumps this run
+let _invLastDumpAt         = 0; // DIAG: perf.now() of last dump (re-fire every 4s)
 function _resetInvariants() {
   _invSpawnFiredThisRun = false;
   _invSweepFiredThisRun = false;
   _invIntroFiredThisRun = false;
   _invSweepStuckSince   = 0;
   _invIntroStuckSince   = 0;
+  _invDumpCount         = 0;
+  _invLastDumpAt        = 0;
   state._invObstaclesSpawned = 0;
+}
+// DIAG: comprehensive dump used by all watchdogs. Includes trap-bypass sanity check,
+// full spawn-pipeline gate state, sequencer state, and recent intro/seqMode traces.
+function _diagDump(label) {
+  const introBacking = (typeof window._introActiveBacking === 'function') ? window._introActiveBacking() : '(no backing fn)';
+  const seqBacking   = (typeof window.__seqSpawnModeBacking === 'function') ? window.__seqSpawnModeBacking() : '(no backing fn)';
+  const stage = (typeof DR_SEQUENCE !== 'undefined' && DR_SEQUENCE[state.seqStageIdx]) || null;
+  const introTrace = (window._introTrace || []).slice(-10);
+  const seqTrace   = (window._seqModeTrace || []).slice(-10);
+  function fmtTrace(arr, label) {
+    return arr.map(function(e, i){
+      return '  ' + label + '#' + i + ' t=' + e.t + 'ms v=' + JSON.stringify(e.v) +
+        ' phase=' + e.phase + ' stage=' + e.stage + ' stE=' + e.stE +
+        ' gs=' + e.gs + ' rp=' + e.rp + ' rfd=' + e.rfd + ' skl1=' + e.skl1 +
+        ' rsa=' + e.rsa + ' ila=' + e.ila +
+        '\n      ' + (e.st || []).join(' <- ');
+    }).join('\n');
+  }
+  // Compute outer spawn gate (line ~5263) status
+  const outerGateOpen = !state._tutorialActive && !state._jetLightningMode &&
+    !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive &&
+    !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive &&
+    !(state.isDeathRun && state.deathRunRestBeat > 0) &&
+    (typeof _awTunerPaused !== 'undefined' ? !_awTunerPaused : true) && !state._ringsActive;
+  // Compute inner spawn gate (line ~5278)
+  const innerGateOpen = !state.corridorMode && !state.l4CorridorActive &&
+    state.corridorDelay <= 0 && !state.slalomActive && !state.drCustomPatternActive &&
+    (typeof _noSpawnMode !== 'undefined' ? !_noSpawnMode : true);
+  // _seqSpawnMode gate inside spawnObstacles (line ~2001)
+  const seqModeGateOpen = state._seqSpawnMode !== 'none';
+  console.warn(
+    '[DIAG-DUMP #' + (++_invDumpCount) + '] ' + label + '\n' +
+    'Copy this WHOLE block (everything below) and paste to the agent:\n' +
+    '=== CORE STATE ===\n' +
+    '  phase='               + state.phase +
+    ' elapsed='             + (state.elapsed || 0).toFixed(2) +
+    ' isDeathRun='          + !!state.isDeathRun +
+    ' currentLevelIdx='     + (state.currentLevelIdx | 0) + '\n' +
+    '=== INTRO / SWEEP FLAGS ===\n' +
+    '  introActive(getter)='  + !!state.introActive +
+    ' introActive(_backing)=' + JSON.stringify(introBacking) +
+    ' (mismatch=' + (!!state.introActive !== !!introBacking) + ')\n' +
+    '  _introLiftActive='    + !!state._introLiftActive +
+    ' _introStartedAt='     + ((state._introStartedAt || 0).toFixed ? (state._introStartedAt || 0).toFixed(0) : state._introStartedAt) +
+    ' _retrySweepActive='   + !!_retrySweepActive +
+    ' _retryPending='       + !!_retryPending +
+    ' _retryIsFromDead='    + !!_retryIsFromDead +
+    ' _gameStarting='       + !!window._gameStarting +
+    ' _skipL1Intro='        + !!window._skipL1Intro + '\n' +
+    '=== SEQUENCER STATE ===\n' +
+    '  seqStageIdx='         + (state.seqStageIdx | 0) +
+    ' stageName='           + (stage ? stage.name : '(no stage)') +
+    ' stageDur='            + (stage ? stage.duration : 0) +
+    ' seqStageElapsed='     + (state.seqStageElapsed || 0).toFixed(2) +
+    ' _seqRampT01='         + ((state._seqRampT01 || 0).toFixed ? (state._seqRampT01 || 0).toFixed(2) : state._seqRampT01) + '\n' +
+    '  _seqSpawnMode(getter)=' + JSON.stringify(state._seqSpawnMode) +
+    ' _seqSpawnMode(_backing)=' + JSON.stringify(seqBacking) +
+    ' (mismatch=' + (state._seqSpawnMode !== seqBacking) + ')\n' +
+    '  _seqConeDensity='    + state._seqConeDensity +
+    ' deathRunRestBeat='    + (state.deathRunRestBeat || 0).toFixed(2) +
+    ' deathRunSpeedTier='   + (state.deathRunSpeedTier || 0) + '\n' +
+    '=== SPAWN PIPELINE ===\n' +
+    '  _invObstaclesSpawned=' + (state._invObstaclesSpawned || 0) +
+    ' nextSpawnZ='          + (state.nextSpawnZ || 0).toFixed(1) +
+    ' state.speed='         + (state.speed || 0).toFixed(1) +
+    ' frameCount='          + (state.frameCount || 0) + '\n' +
+    '  outerGate(line5263)=' + outerGateOpen +
+    ' innerGate(line5278)=' + innerGateOpen +
+    ' seqModeGate=' + seqModeGateOpen + '\n' +
+    '  blockers: ' + JSON.stringify({
+      tut: !!state._tutorialActive, jl: !!state._jetLightningMode,
+      zip: !!state.zipperActive, l5End: !!state.l5EndingActive,
+      l5Cor: !!state.l5CorridorActive, drCust: !!state.drCustomPatternActive,
+      angled: !!state.angledWallsActive, intro: !!state.introActive,
+      restBeat: (state.deathRunRestBeat || 0) > 0,
+      awTuner: (typeof _awTunerPaused !== 'undefined' ? !!_awTunerPaused : false),
+      rings: !!state._ringsActive,
+      cor: !!state.corridorMode, l4Cor: !!state.l4CorridorActive,
+      corDelay: (state.corridorDelay || 0) > 0,
+      slalom: !!state.slalomActive,
+      noSpawn: (typeof _noSpawnMode !== 'undefined' ? !!_noSpawnMode : false),
+      seqNone: state._seqSpawnMode === 'none'
+    }) + '\n' +
+    '  preT4ADone=' + !!state.preT4ADone + ' preT4BDone=' + !!state.preT4BDone +
+    ' l3KnifeDone=' + !!state.l3KnifeDone +
+    ' _ringsActive=' + !!state._ringsActive + '\n' +
+    '=== SCORE / DISTANCE ===\n' +
+    '  state.score=' + (state.score || 0) +
+    ' state.distance=' + (state.distance || 0).toFixed(1) +
+    ' state.multiplier=' + (state.multiplier || 1) + '\n' +
+    '=== INTRO TRACE (last 10 writes to state.introActive) ===\n' +
+    fmtTrace(introTrace, 'I') + '\n' +
+    '=== SEQ-MODE TRACE (last 10 writes to state._seqSpawnMode) ===\n' +
+    fmtTrace(seqTrace, 'S')
+  );
+  _invLastDumpAt = performance.now();
 }
 function _checkInvariants() {
   if (state.phase !== 'playing') return;
   const now = performance.now();
 
-  // 1) SPAWN WATCHDOG: in normal play (not in any special mode) cones should have
-  //    spawned by now. >4s with zero spawns means the spawn gate is stuck.
-  if (!_invSpawnFiredThisRun
-      && state.elapsed > 4
-      && (state._invObstaclesSpawned || 0) === 0
-      && !state.introActive       // intro overlay still up, gameplay not started
-      && !state._introLiftActive  // lift animation in progress, pre-cones
-      && !state._tutorialActive
-      && !state._jetLightningMode
-      && !state.zipperActive
-      && !state.l5EndingActive
-      && !state.l5CorridorActive
-      && !state.drCustomPatternActive
-      && !state.angledWallsActive
-      && !state.corridorMode
-      && !state.l4CorridorActive
-      && !state.l5CorridorActive
-      && !state.slalomActive
-      && !state._ringsActive) {
-    _invSpawnFiredThisRun = true;
-    console.warn(
-      '[INVARIANT-FAIL] cones haven\'t spawned in ' + state.elapsed.toFixed(1) + 's of normal play.\n' +
-      'Game appears stuck. Copy this whole block and paste to the agent:\n' +
-      '  introActive='        + !!state.introActive +
-      ' _introLiftActive='    + !!state._introLiftActive +
-      ' _retrySweepActive='   + !!_retrySweepActive +
-      ' _retryPending='       + !!_retryPending +
-      ' _retryIsFromDead='    + !!_retryIsFromDead +
-      ' _seqSpawnMode='       + (state._seqSpawnMode || 'unset') +
-      ' preT4ADone='          + !!state.preT4ADone +
-      ' preT4BDone='          + !!state.preT4BDone +
-      ' l3KnifeDone='         + !!state.l3KnifeDone +
-      ' angledWallsActive='   + !!state.angledWallsActive +
-      ' _ringsActive='        + !!state._ringsActive +
-      ' deathRunRestBeat='    + (state.deathRunRestBeat || 0).toFixed(2) +
-      ' isDeathRun='          + !!state.isDeathRun +
-      ' currentLevelIdx='     + (state.currentLevelIdx | 0) +
-      ' nextSpawnZ='          + (state.nextSpawnZ || 0).toFixed(1) +
-      ' elapsed='             + state.elapsed.toFixed(2) +
-      ' _gameStarting='       + !!window._gameStarting +
-      ' _skipL1Intro='        + !!window._skipL1Intro
-    );
+  // ── COMPREHENSIVE NO-SPAWN WATCHDOG (DIAG) ──
+  // Fires when phase=playing AND _invObstaclesSpawned===0 AND elapsed>4.
+  // No exclusions — if no spawn happened, dump everything, regardless of which
+  // gate is closed. Re-fires every 4s up to 5 dumps so we capture evolution.
+  const noSpawnYet = (state._invObstaclesSpawned || 0) === 0;
+  const sinceLast = now - _invLastDumpAt;
+  if (state.elapsed > 4 && noSpawnYet && _invDumpCount < 5 && (sinceLast > 4000 || _invDumpCount === 0)) {
+    _diagDump('NO-SPAWN @ elapsed=' + state.elapsed.toFixed(1) + 's, dump#' + (_invDumpCount + 1) + '/5');
   }
-
-  // 1b) STUCK-INTRO WATCHDOG: introActive==true blocks score+spawns. If score is
-  //     accumulating elsewhere but introActive somehow latched, this catches it.
-  //     Also fires if introActive stays true >4s with no sweep/lift active.
-  if (!_invIntroFiredThisRun
-      && state.elapsed > 4
-      && state.introActive
-      && !state._introLiftActive
-      && !_retrySweepActive
-      && !_retryPending) {
-    _invIntroFiredThisRun = true;
-    const trace = (window._introTrace || []).slice(-15);
-    console.warn(
-      '[INVARIANT-FAIL] introActive STUCK true after ' + state.elapsed.toFixed(1) + 's.\n' +
-      'Copy this WHOLE block (including trace) and paste to the agent:\n' +
-      '  introActive='        + !!state.introActive +
-      ' _introLiftActive='    + !!state._introLiftActive +
-      ' _retrySweepActive='   + !!_retrySweepActive +
-      ' _retryPending='       + !!_retryPending +
-      ' _retryIsFromDead='    + !!_retryIsFromDead +
-      ' _gameStarting='       + !!window._gameStarting +
-      ' _skipL1Intro='        + !!window._skipL1Intro +
-      ' phase='               + state.phase +
-      ' isDeathRun='          + !!state.isDeathRun +
-      ' currentLevelIdx='     + (state.currentLevelIdx | 0) +
-      ' elapsed='             + state.elapsed.toFixed(2) +
-      '\nintroTrace (last ' + trace.length + ' writes):\n' +
-      trace.map(function(e, i){
-        return '  #' + i + ' t=' + e.t + 'ms v=' + e.v +
-          ' phase=' + e.phase + ' gs=' + e.gs + ' rp=' + e.rp +
-          ' rfd=' + e.rfd + ' skl1=' + e.skl1 + ' rsa=' + e.rsa + ' ila=' + e.ila +
-          '\n     ' + (e.st || []).join(' <- ');
-      }).join('\n')
-    );
+  // Also fire one extra dump when first cone DOES spawn (so we see what unstuck it)
+  if (!_invSpawnFiredThisRun && (state._invObstaclesSpawned || 0) > 0 && _invDumpCount > 0) {
+    _invSpawnFiredThisRun = true;
+    _diagDump('FIRST-SPAWN @ elapsed=' + state.elapsed.toFixed(1) + 's (after ' + _invDumpCount + ' no-spawn dumps)');
   }
 
   // 2) SWEEP WATCHDOG: retry sweep is supposed to last ~1.3s. >3s = stuck.
