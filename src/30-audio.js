@@ -161,6 +161,33 @@ function _playArgonLoop(initialVol) {
   src._jhGain = gain;
   return src;
 }
+// One-shot argon play with a programmable fade-in (Web Audio path).
+// targetVol: peak gain. fadeInSec: linear ramp 0 → targetVol from now.
+// Returns the source node (with _jhGain attached) or null if buffer not ready.
+function _playArgonOnce(targetVol, fadeInSec) {
+  if (!audioCtx || state.muted) return null;
+  _ensureCtxRunning();
+  const buf = _sfxBuffers['argon-ambient'];
+  if (!buf) return null;
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.loop = false;
+  src.playbackRate.value = 1.0;
+  const gain = audioCtx.createGain();
+  const _t0 = audioCtx.currentTime;
+  const _peak = Math.min(1, Math.max(0, targetVol || 0));
+  const _fade = Math.max(0, fadeInSec || 0);
+  try {
+    gain.gain.setValueAtTime(0, _t0);
+    if (_fade > 0) gain.gain.linearRampToValueAtTime(_peak, _t0 + _fade);
+    else gain.gain.setValueAtTime(_peak, _t0);
+  } catch (_) { gain.gain.value = _peak; }
+  src.connect(gain).connect(audioCtx.destination);
+  src.start();
+  src._jhGain = gain;
+  src._jhDuration = buf.duration;
+  return src;
+}
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
 const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx' };
 // Play a pre-decoded buffer with gain + optional pan + playbackRate

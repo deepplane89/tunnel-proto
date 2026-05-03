@@ -72,8 +72,10 @@ function togglePause() {
     if (_roarLP && !_roarLP.paused) _roarLP.pause();
     stopEngineBaseline();
     if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+    if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
     if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
     state._argonPath = null;
+    state._argonPlayCount = 0;
     const _argonP = document.getElementById('argon-ambient-sfx');
     if (_argonP && !_argonP.paused) { try { _argonP.pause(); _argonP.currentTime = 0; _argonP.volume = 0; } catch (_) {} }
     state._argonSteering = false;
@@ -241,8 +243,10 @@ function returnToTitle() {
   if (_roarLR) { _roarLR.pause(); _roarLR.currentTime = 0; }
   stopEngineBaseline({ reset: true });
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+  if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
   state._argonPath = null;
+  state._argonPlayCount = 0;
   const _argonR = document.getElementById('argon-ambient-sfx');
   if (_argonR) { try { _argonR.pause(); _argonR.currentTime = 0; _argonR.volume = 0; } catch (_) {} }
   state._argonSteering = false;

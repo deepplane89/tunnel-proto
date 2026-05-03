@@ -10530,6 +10530,33 @@ function _playArgonLoop(initialVol) {
   src._jhGain = gain;
   return src;
 }
+// One-shot argon play with a programmable fade-in (Web Audio path).
+// targetVol: peak gain. fadeInSec: linear ramp 0 → targetVol from now.
+// Returns the source node (with _jhGain attached) or null if buffer not ready.
+function _playArgonOnce(targetVol, fadeInSec) {
+  if (!audioCtx || state.muted) return null;
+  _ensureCtxRunning();
+  const buf = _sfxBuffers['argon-ambient'];
+  if (!buf) return null;
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.loop = false;
+  src.playbackRate.value = 1.0;
+  const gain = audioCtx.createGain();
+  const _t0 = audioCtx.currentTime;
+  const _peak = Math.min(1, Math.max(0, targetVol || 0));
+  const _fade = Math.max(0, fadeInSec || 0);
+  try {
+    gain.gain.setValueAtTime(0, _t0);
+    if (_fade > 0) gain.gain.linearRampToValueAtTime(_peak, _t0 + _fade);
+    else gain.gain.setValueAtTime(_peak, _t0);
+  } catch (_) { gain.gain.value = _peak; }
+  src.connect(gain).connect(audioCtx.destination);
+  src.start();
+  src._jhGain = gain;
+  src._jhDuration = buf.duration;
+  return src;
+}
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
 const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx' };
 // Play a pre-decoded buffer with gain + optional pan + playbackRate
@@ -13960,8 +13987,10 @@ function togglePause() {
     if (_roarLP && !_roarLP.paused) _roarLP.pause();
     stopEngineBaseline();
     if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+    if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
     if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
     state._argonPath = null;
+    state._argonPlayCount = 0;
     const _argonP = document.getElementById('argon-ambient-sfx');
     if (_argonP && !_argonP.paused) { try { _argonP.pause(); _argonP.currentTime = 0; _argonP.volume = 0; } catch (_) {} }
     state._argonSteering = false;
@@ -14129,8 +14158,10 @@ function returnToTitle() {
   if (_roarLR) { _roarLR.pause(); _roarLR.currentTime = 0; }
   stopEngineBaseline({ reset: true });
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+  if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
   state._argonPath = null;
+  state._argonPlayCount = 0;
   const _argonR = document.getElementById('argon-ambient-sfx');
   if (_argonR) { try { _argonR.pause(); _argonR.currentTime = 0; _argonR.volume = 0; } catch (_) {} }
   state._argonSteering = false;
@@ -18686,8 +18717,10 @@ function killPlayer() {
   if (_roarLD && !_roarLD.paused) { _roarLD.pause(); _roarLD.currentTime = 0; }
   stopEngineBaseline({ reset: true });
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+  if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
   state._argonPath = null;
+  state._argonPlayCount = 0;
   const _argonD = document.getElementById('argon-ambient-sfx');
   if (_argonD && !_argonD.paused) { try { _argonD.pause(); _argonD.currentTime = 0; _argonD.volume = 0; } catch (_) {} }
   state._argonSteering = false;
@@ -19285,58 +19318,73 @@ function update(dt) {
     const _wasSteering = !!state._argonSteering;
     const _argonEl = document.getElementById('argon-ambient-sfx');
     if (!state.muted) {
-      const _volFor = (open) => 0.12 + open * 0.28; // 0.12 floor → 0.40 mid-swerve
+      // Non-looping: play the clip up to 2 times max per steering hold,
+      // fading in over the first play. No per-frame volume modulation.
+      const _PEAK_VOL = 0.40;     // target gain at end of fade-in
+      const _FADE_IN_SEC = 0.6;   // fade-in duration (clip is ~1.25s)
+      const _MAX_PLAYS = 2;
       if (_isSteering && !_wasSteering) {
-        // Rising edge: trigger from start, initial volume scales with current velocity
-        const _v0 = Math.min(1, Math.abs(state.shipVelX) / Math.max(1, MAX_VEL));
-        const _vol = _volFor(_v0);
-        // Cancel any in-flight fade-out from a previous release
+        // Rising edge: cancel any pending fade-out, stop prior source, start play #1
         if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
-        // Stop any prior buffer source still hanging around
+        if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
         if (state._argonSrc) {
           try { state._argonSrc.stop(); } catch (_) {}
           state._argonSrc = null;
         }
-        // Try Web Audio path first
-        const _src = (typeof _playArgonLoop === 'function') ? _playArgonLoop(_vol) : null;
+        state._argonPlayCount = 0;
+        // Web Audio path: one-shot with fade-in
+        const _src = (typeof _playArgonOnce === 'function') ? _playArgonOnce(_PEAK_VOL, _FADE_IN_SEC) : null;
         if (_src) {
           state._argonSrc = _src;
           state._argonPath = 'wa';
-          // Make sure element isn't also playing
+          state._argonPlayCount = 1;
           if (_argonEl) { try { _argonEl.pause(); _argonEl.currentTime = 0; } catch (_) {} }
+          // Schedule a possible second play right at the end of the first.
+          // Picks up the gain at _PEAK_VOL (no second fade-in) so it sounds
+          // continuous, only if user is still steering when it fires.
+          const _dur = (_src._jhDuration || 1.25);
+          state._argonReplayTo = setTimeout(() => {
+            state._argonReplayTo = null;
+            if (!state._argonSteering || state.muted) return;
+            if ((state._argonPlayCount || 0) >= _MAX_PLAYS) return;
+            const _src2 = (typeof _playArgonOnce === 'function') ? _playArgonOnce(_PEAK_VOL, 0) : null;
+            if (_src2) {
+              // Old source has finished naturally; just swap reference
+              state._argonSrc = _src2;
+              state._argonPath = 'wa';
+              state._argonPlayCount = (state._argonPlayCount || 1) + 1;
+            }
+          }, Math.max(50, _dur * 1000 - 30));
         } else if (_argonEl) {
-          // Fallback: element path (e.g. buffer not decoded yet)
+          // Element fallback (buffer not decoded). iOS ignores .volume so play
+          // straight at peak; no fade-in possible on this path.
           try {
+            _argonEl.loop = false;
             _argonEl.currentTime = 0;
-            _argonEl.volume = _vol;
+            _argonEl.volume = _PEAK_VOL;
             _argonEl.playbackRate = 1.0;
             _argonEl.play().catch(()=>{});
           } catch (_) {}
           state._argonPath = 'el';
-        }
-        state._argonOpen = _v0;
-      } else if (_isSteering && _wasSteering) {
-        // Held: smoothly track velocity intensity (attack 10/s, release 5/s)
-        const _vNow = Math.min(1, Math.abs(state.shipVelX) / Math.max(1, MAX_VEL));
-        const _prev = state._argonOpen || 0;
-        const _rate = _vNow > _prev ? 10.0 : 5.0;
-        const _open = _prev + (_vNow - _prev) * Math.min(1, _rate * dt);
-        state._argonOpen = _open;
-        const _vol = _volFor(_open);
-        const _rateMul = 0.97 + _open * 0.08;
-        if (state._argonPath === 'wa' && state._argonSrc && state._argonSrc._jhGain) {
-          try {
-            state._argonSrc._jhGain.gain.value = _vol;
-            state._argonSrc.playbackRate.value = _rateMul;
-          } catch (_) {}
-        } else if (_argonEl) {
-          try { _argonEl.volume = _vol; _argonEl.playbackRate = _rateMul; } catch (_) {}
+          state._argonPlayCount = 1;
+          // Schedule one possible replay
+          state._argonReplayTo = setTimeout(() => {
+            state._argonReplayTo = null;
+            if (!state._argonSteering || state.muted) return;
+            if ((state._argonPlayCount || 0) >= _MAX_PLAYS) return;
+            try {
+              _argonEl.currentTime = 0;
+              _argonEl.volume = _PEAK_VOL;
+              _argonEl.play().catch(()=>{});
+              state._argonPlayCount = (state._argonPlayCount || 1) + 1;
+            } catch (_) {}
+          }, 1220);
         }
       } else if (!_isSteering && _wasSteering) {
-        // Falling edge: ~80ms fast fade then stop
+        // Falling edge: cancel any pending replay, ~80ms fade then stop
+        if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
         if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
         if (state._argonPath === 'wa' && state._argonSrc && state._argonSrc._jhGain && audioCtx) {
-          // Web Audio: linearRampToValueAtTime then stop
           const _src = state._argonSrc;
           const _g = _src._jhGain;
           const _now = audioCtx.currentTime;
@@ -19345,15 +19393,14 @@ function update(dt) {
             _g.gain.setValueAtTime(_g.gain.value, _now);
             _g.gain.linearRampToValueAtTime(0, _now + 0.08);
           } catch (_) {}
-          // Clear our reference immediately so a new rising edge spawns fresh
           state._argonSrc = null;
           state._argonPath = null;
           setTimeout(() => { try { _src.stop(); } catch (_) {} }, 100);
         } else if (_argonEl) {
-          // Element path: setInterval fade
+          // Element fallback fade (desktop only — iOS ignores .volume)
           const _start = _argonEl.volume || 0;
           let _step = 0;
-          const _steps = 5; // 5 × 16ms = 80ms
+          const _steps = 5;
           state._argonCutIv = setInterval(() => {
             _step++;
             const _t = _step / _steps;
@@ -19366,8 +19413,9 @@ function update(dt) {
           }, 16);
           state._argonPath = null;
         }
-        state._argonOpen = 0;
+        state._argonPlayCount = 0;
       }
+      // Held (steering both this frame and last): no-op. Sound plays out naturally.
     }
     if (_isSteering !== _wasSteering) state._argonSteering = _isSteering;
   }
