@@ -9021,7 +9021,14 @@ function _createCanyonWalls() {
         // ~9-10u off from the corridor opening (entrance built off _canyonXAtZ
         // anchored to z=-170 produces non-zero sine at z=-150 while _l4SineAtZ
         // is ~0 there). Match whichever curve the regulars are on.
-        const center   = _canyonTuner._l4Recreation ? _l4SineAtZ(finalZ) : _canyonXAtZ(finalZ);
+        // _l4SineAtZ is anchored to world X=0 (no corridorGapCenter base); on
+        // mobile the player often drifts before trigger and the gate lands
+        // off-ship. Add corridorGapCenter (= state.shipX at trigger time) to
+        // the entrance ONLY — regular slabs walk through the L4 progression
+        // independently and stay world-anchored.
+        const center   = _canyonTuner._l4Recreation
+          ? (_l4SineAtZ(finalZ) + (state.corridorGapCenter || 0))
+          : _canyonXAtZ(finalZ);
         pivot.userData.bakedX    = center + halfX * side;
         pivot.userData.entFinalZ = finalZ; // for trigger check later
         pivot.position.x = pivot.userData.bakedX;
