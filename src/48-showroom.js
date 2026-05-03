@@ -649,6 +649,13 @@
     try {
       const pivot = (typeof titleScene !== 'undefined') ? titleScene.getObjectByName('titleShipPivot') : null;
       const tiltGroup = pivot && pivot.children && pivot.children[0];
+      if (pivot) {
+        _canvasSaved.pivotX = pivot.position.x;
+        _canvasSaved.pivotY = pivot.position.y;
+        // Center the ship horizontally + vertically for showroom preview
+        pivot.position.x = 0;
+        pivot.position.y = 0;
+      }
       if (tiltGroup) {
         _canvasSaved.tiltX = tiltGroup.rotation.x;
         _canvasSaved.tiltY = tiltGroup.rotation.y;
@@ -664,11 +671,15 @@
     const canvas = document.getElementById('title-ship-canvas');
     if (!canvas || !_canvasSaved) return;
     const s = _canvasSaved;
-    canvas.style.width  = s.styleW || '';
-    canvas.style.height = s.styleH || '';
-    canvas.style.transform = s.styleTransform || '';
-    canvas.style.maxWidth = s.styleMaxWidth || '';
-    canvas.style.maxHeight = s.styleMaxHeight || '';
+    // Always restore to title's hardcoded 200x180 box (matches _mountTitleCanvas).
+    // Falling back to saved values can leave stale 100%/100% from showroom.
+    canvas.style.width  = '200px';
+    canvas.style.height = '180px';
+    canvas.style.transform = 'translate(-1px, -14px)';
+    canvas.style.maxWidth = '';
+    canvas.style.maxHeight = '';
+    canvas.style.position = '';
+    canvas.style.inset = '';
     if (s.parent) {
       if (s.nextSibling && s.nextSibling.parentNode === s.parent) {
         s.parent.insertBefore(canvas, s.nextSibling);
@@ -678,18 +689,23 @@
     }
     // Restore renderer + camera to their pre-open dimensions.
     try {
-      if (typeof _titleRenderer !== 'undefined' && _titleRenderer && s.rendererW && s.rendererH) {
-        _titleRenderer.setSize(s.rendererW, s.rendererH, false);
+      if (typeof _titleRenderer !== 'undefined' && _titleRenderer) {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        _titleRenderer.setPixelRatio(dpr);
+        _titleRenderer.setSize(200, 180, false);
       }
-      if (typeof titleCamera !== 'undefined' && titleCamera && s.camAspect) {
-        titleCamera.aspect = s.camAspect;
-        // Restore FOV — showroom may have ramped it for tighter ship framing.
+      if (typeof titleCamera !== 'undefined' && titleCamera) {
+        titleCamera.aspect = 200 / 180;
         if (s.origFov != null) titleCamera.fov = s.origFov;
         titleCamera.updateProjectionMatrix();
       }
-      // Restore ship pose.
+      // Restore ship pose + pivot position.
       const pivot = (typeof titleScene !== 'undefined') ? titleScene.getObjectByName('titleShipPivot') : null;
       const tiltGroup = pivot && pivot.children && pivot.children[0];
+      if (pivot && typeof s.pivotX === 'number') {
+        pivot.position.x = s.pivotX;
+        pivot.position.y = s.pivotY || 0;
+      }
       if (tiltGroup && typeof s.tiltX === 'number') {
         tiltGroup.rotation.x = s.tiltX;
         tiltGroup.rotation.y = s.tiltY || 0;

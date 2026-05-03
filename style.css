@@ -4204,17 +4204,11 @@ html, body {
 }
 
 /* ── Ship showcase area ── */
-.ship-showcase {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  width: 100%;
-  flex: 1 1 auto;
-  min-height: 120px;
-  max-height: 280px;
-  position: relative;
-  z-index: 1;
+/* Title ship showcase hidden — ship selection now lives in the showroom only.
+   Keep the canvas DOM alive (showroom relocates it), just hide the wrapper. */
+.ship-showcase,
+#skin-viewer.skin-viewer {
+  display: none !important;
 }
 
 .ship-showcase-center {
