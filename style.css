@@ -4954,12 +4954,16 @@ body.sr-open #title-leaderboard {
 .sr-stage {
   position: relative !important;
   inset: auto !important;
-  width: 100%;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0;
   min-height: 0;
-  display: block; /* canvas absolutely fills, no flex centering needed */
+  display: block;
   pointer-events: none;
   z-index: 1;
   padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden;
 }
 .sr-stage > canvas {
   display: block;
@@ -5075,10 +5079,12 @@ body.sr-open #title-leaderboard {
  */
 @media (orientation: landscape), (min-width: 900px) {
   .sr-overlay:not(.hidden) {
-    /* Stage column = 1fr (auto-fills), panel column = 240px / multiplier.
-       Slider 100 -> 240px panel; 160 -> 150px panel; 40 -> 600px panel.
-       NOTE: calc() can't multiply fr units, so we keep stage at plain 1fr. */
-    grid-template-columns: 1fr calc(240px / var(--sr-tune-stage, 1));
+    /* Stage takes 1fr; panel width shrinks as STAGE slider goes up.
+       --sr-tune-stage range: 0.4 (slider 40) -> panel ~400px (huge panel)
+                              1.0 (slider 100, default) -> panel 240px
+                              1.6 (slider 160) -> panel ~120px (tiny panel)
+       Formula: 240px - (multiplier - 1) * 200px, clamped 100-400px. */
+    grid-template-columns: 1fr clamp(100px, calc(240px - (var(--sr-tune-stage, 1) - 1) * 200px), 400px);
     grid-template-rows: 1fr auto;
     grid-template-areas:
       "stage  panel"
