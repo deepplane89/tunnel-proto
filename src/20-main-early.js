@@ -5442,12 +5442,12 @@ normal = _dbn;`;
     // Nozzle keeps a normal dark MeshStandard so the exhaust port reads as
     // a real opening rather than a transparent cyan ring.
     {
-      rocket_base: { holo: true, hologramColor: '#00d5ff' },
-      white:       { holo: true, hologramColor: '#00d5ff' },
-      gray:        { holo: true, hologramColor: '#00d5ff' },
+      rocket_base: { holo: true, hologramColor: '#00e0ff' },
+      white:       { holo: true, hologramColor: '#00e0ff' },
+      gray:        { holo: true, hologramColor: '#00e0ff' },
       nozzle:      { color: 0x0a0a0a, metalness: 0.95, roughness: 0.12 },
-      rocket_light:{ holo: true, hologramColor: '#00d5ff' },
-      fallback:    { holo: true, hologramColor: '#00d5ff' },
+      rocket_light:{ holo: true, hologramColor: '#00e0ff' },
+      fallback:    { holo: true, hologramColor: '#00e0ff' },
     },
     // Skin 2: BLACK MAMBA — user-tuned 2026-05-02 (rust hull + cyan trim glow,
     // global Matte 0.32 baked into roughness). HSL conventions: tuner stores
@@ -5501,16 +5501,17 @@ normal = _dbn;`;
       let mat;
       if (def.holo) {
         // Full holographic skin slot — same uniforms as powerup cube.
+        // Ghost holo defaults — user-tuned 2026-05-02 (screenshot).
         mat = new HolographicMaterial({
-          hologramColor:      def.hologramColor || '#00d5ff',
+          hologramColor:      def.hologramColor || '#00e0ff',
           fresnelAmount:      0.70,
-          fresnelOpacity:     1.00,
-          scanlineSize:       3.70,
-          hologramBrightness: 1.60,
-          signalSpeed:        0.01,
+          fresnelOpacity:     0.82,
+          scanlineSize:       5.50,
+          hologramBrightness: 1.94,
+          signalSpeed:        0.00,
           enableBlinking:     true,
           blinkFresnelOnly:   true,
-          hologramOpacity:    0.70,
+          hologramOpacity:    0.31,
           side:               THREE.DoubleSide,
           blendMode:          THREE.NormalBlending,
         });

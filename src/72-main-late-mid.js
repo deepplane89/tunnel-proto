@@ -428,12 +428,12 @@ function buildSkinTunerSliders() {
         for (const m of ghostMats) m.uniforms.hologramColor.value.copy(c);
       }, '#0df'));
 
-      container.appendChild(makeSlider('Fresnel Opacity',  sv('fresnelOpacity', 1.0),     0, 1,    0.01, v => setU('fresnelOpacity', v),     '#0df'));
-      container.appendChild(makeSlider('Fresnel Amount',   sv('fresnelAmount', 0.7),      0, 1,    0.01, v => setU('fresnelAmount', v),      '#0df'));
-      container.appendChild(makeSlider('Scanline Size',    sv('scanlineSize', 3.7),       1, 15,   0.1,  v => setU('scanlineSize', v),       '#0df'));
-      container.appendChild(makeSlider('Brightness',       sv('hologramBrightness', 1.6), 0, 2,    0.01, v => setU('hologramBrightness', v), '#0df'));
-      container.appendChild(makeSlider('Signal Speed',     sv('signalSpeed', 0.01),       0, 2,    0.01, v => setU('signalSpeed', v),        '#0df'));
-      container.appendChild(makeSlider('Hologram Opacity', sv('hologramOpacity', 0.7),    0, 1,    0.01, v => setU('hologramOpacity', v),    '#0df'));
+      container.appendChild(makeSlider('Fresnel Opacity',  sv('fresnelOpacity', 0.82),    0, 1,    0.01, v => setU('fresnelOpacity', v),     '#0df'));
+      container.appendChild(makeSlider('Fresnel Amount',   sv('fresnelAmount', 0.70),     0, 1,    0.01, v => setU('fresnelAmount', v),      '#0df'));
+      container.appendChild(makeSlider('Scanline Size',    sv('scanlineSize', 5.50),      1, 15,   0.1,  v => setU('scanlineSize', v),       '#0df'));
+      container.appendChild(makeSlider('Brightness',       sv('hologramBrightness', 1.94),0, 2,    0.01, v => setU('hologramBrightness', v), '#0df'));
+      container.appendChild(makeSlider('Signal Speed',     sv('signalSpeed', 0.00),       0, 2,    0.01, v => setU('signalSpeed', v),        '#0df'));
+      container.appendChild(makeSlider('Hologram Opacity', sv('hologramOpacity', 0.31),   0, 1,    0.01, v => setU('hologramOpacity', v),    '#0df'));
 
       // Toggles
       const toggleRow = document.createElement('div');
