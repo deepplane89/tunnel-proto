@@ -6408,7 +6408,7 @@ function createThrusterSystem() {
   geo.setAttribute('size',     new THREE.BufferAttribute(sizes,     1));
 
   const mat = new THREE.PointsMaterial({
-    size: 0.07,
+    size: 0.13,
     vertexColors: true,
     transparent: true,
     opacity: 1.0,

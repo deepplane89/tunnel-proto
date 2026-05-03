@@ -1535,7 +1535,7 @@ function buildSkinTunerSliders() {
         miniL: [-0.15, 0.06, 5.10], miniR: [0.16, 0.06, 5.10],
         // Global
         _thrPart_partOpacity: 0.44, _thrPart_miniPartOpacity: 0.44, _thrPart_posPinFrac: 0.12,
-        _thrusterScale: 1.00, _pointMatSize: 0.07, _miniPointMatSize: 0.08,
+        _thrusterScale: 1.00, _pointMatSize: 0.13, _miniPointMatSize: 0.08,
         _nozzleBloomScale: 0.45, _nozzleBloomOpacity: 0.24, _nozzleBloom_whiteMix: 0.00,
         _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
         // Particles
