@@ -13710,6 +13710,9 @@ function updateStreakBadge() {
   // anchors are children of _titleShipModel — their localPosition IS the
   // tuned offset. Drag updates their localPosition; wheel updates scale.
   // 'flip' inverts the exhaust direction (Z velocity sign).
+  // Default-Runner bucket keeps the v7 key so your existing tuned values
+  // are preserved. Alt-GLB ships get their own bucket: SR_TUNER_KEY +
+  // '__' + glbFile (e.g. 'jh_showroom_tuner_v7__spaceship_01.glb').
   const SR_TUNER_KEY = 'jh_showroom_tuner_v7';
   // Z is relative to auto-detected hull back; 0 = visible hull back.
   // pitch/yaw are exhaust direction angles in degrees (0,0 = straight back along -Z).
@@ -13737,9 +13740,20 @@ function updateStreakBadge() {
     panelOpen: true,
   };
   let _tuner = null;
-  function _loadTuner() {
+  // Tracks which ship's bucket _tuner was loaded from — prevents writing
+  // MK Runner pod values into the default Runner bucket and vice versa.
+  let _tunerLoadedKey = SR_TUNER_KEY;
+
+  // Resolve the storage key for the currently-displayed ship.
+  function _currentTunerKey() {
+    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+    const altFile = ship && ship.userData && ship.userData._altGlb;
+    return altFile ? (SR_TUNER_KEY + '__' + altFile) : SR_TUNER_KEY;
+  }
+
+  function _loadTunerFromKey(key) {
     try {
-      const raw = localStorage.getItem(SR_TUNER_KEY);
+      const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
         return Object.assign({}, SR_TUNER_DEFAULT, parsed, {
@@ -13753,8 +13767,27 @@ function updateStreakBadge() {
     } catch(_){}
     return JSON.parse(JSON.stringify(SR_TUNER_DEFAULT));
   }
+
+  function _loadTuner() {
+    const key = _currentTunerKey();
+    _tunerLoadedKey = key;
+    return _loadTunerFromKey(key);
+  }
+
   function _saveTuner() {
-    try { localStorage.setItem(SR_TUNER_KEY, JSON.stringify(_tuner)); } catch(_){}
+    if (!_tuner) return;
+    try { localStorage.setItem(_tunerLoadedKey, JSON.stringify(_tuner)); } catch(_){}
+  }
+
+  // Called from resetThrusterAnchors when the title ship swaps. Persist the
+  // outgoing ship's edits, then load the incoming ship's saved values.
+  function _swapTunerForCurrentShip() {
+    if (_tuner) {
+      try { localStorage.setItem(_tunerLoadedKey, JSON.stringify(_tuner)); } catch(_){}
+    }
+    const key = _currentTunerKey();
+    _tunerLoadedKey = key;
+    _tuner = _loadTunerFromKey(key);
   }
 
   // ── Mission-ladder unlock requirement cache (M3, M7, ...) ────────────
@@ -14209,41 +14242,22 @@ function updateStreakBadge() {
       anchors[k] = a;
       if (ship) ship.add(a); else titleScene.add(a);
     });
-    // Auto-detect the actual hull back-Z in ship-model local space.
-    // "Back" = the side of the ship facing AWAY from the title camera (which
-    // sits at +Z looking at the origin), so back-of-ship is the local-Z value
-    // whose world position has the most-positive Z. This handles models that
-    // bake a rotation into their own transform (e.g. MK Runner with rotY=π,
-    // where its local +Z points toward the camera, not away from it).
+    // Auto-detect hull back-Z in ship-LOCAL space so tuner.z=0 sits at the
+    // visible hull back. Default Runner: simple world-bbox → worldToLocal,
+    // pick more-negative local Z (matches pre-bac0720 behavior the user
+    // confirmed worked). MK Runner / alt-GLB: same, then we let the user
+    // tune separately because their GLB shape lays out differently.
     let hullBackZ = 0;
     if (ship) {
       try {
-        // Compute bbox in ship-LOCAL space by traversing meshes and
-        // accumulating their local-to-ship-space vertex extents. World-space
-        // Box3 won't help us here because we need the local Z of the back.
-        const localBox = new THREE.Box3();
-        const tmp = new THREE.Vector3();
-        const inv = new THREE.Matrix4();
-        ship.updateMatrixWorld(true);
-        inv.copy(ship.matrixWorld).invert();
-        ship.traverse((o) => {
-          if (!o.isMesh || !o.geometry) return;
-          if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
-          const gb = o.geometry.boundingBox;
-          if (!gb) return;
-          // 8 corners of the geometry bbox → mesh world space → ship local space.
-          for (let cx = 0; cx < 2; cx++) for (let cy = 0; cy < 2; cy++) for (let cz = 0; cz < 2; cz++) {
-            tmp.set(cx ? gb.max.x : gb.min.x, cy ? gb.max.y : gb.min.y, cz ? gb.max.z : gb.min.z);
-            o.localToWorld(tmp);
-            tmp.applyMatrix4(inv);
-            localBox.expandByPoint(tmp);
-          }
-        });
-        if (isFinite(localBox.max.z) && isFinite(localBox.min.z)) {
-          // Pick the local Z whose world position has the larger Z (= back).
-          const wMax = new THREE.Vector3(0, 0, localBox.max.z); ship.localToWorld(wMax);
-          const wMin = new THREE.Vector3(0, 0, localBox.min.z); ship.localToWorld(wMin);
-          hullBackZ = (wMax.z >= wMin.z) ? localBox.max.z : localBox.min.z;
+        const bbox = new THREE.Box3().setFromObject(ship);
+        if (bbox && isFinite(bbox.max.z) && isFinite(bbox.min.z)) {
+          ship.updateMatrixWorld(true);
+          const vMax = new THREE.Vector3(0, 0, bbox.max.z);
+          const vMin = new THREE.Vector3(0, 0, bbox.min.z);
+          ship.worldToLocal(vMax);
+          ship.worldToLocal(vMin);
+          hullBackZ = Math.min(vMax.z, vMin.z);
         }
       } catch(_){}
     }
@@ -14842,6 +14856,11 @@ function updateStreakBadge() {
       });
     } catch(_){}
     _thr = null;
+    // Swap the working tuner to the new ship's bucket BEFORE _thrInit so
+    // _applyTunerToAnchors uses the right per-ship pod offsets. Persists
+    // the outgoing ship's edits to its own key, never crosses streams.
+    try { _swapTunerForCurrentShip(); } catch(_){}
+    try { if (typeof _updateTunerHud === 'function') _updateTunerHud(); } catch(_){}
     if (_open) {
       _thrInit();
       try { _forceShipOpaque(); } catch(_){}
