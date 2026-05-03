@@ -13961,6 +13961,111 @@ function updateStreakBadge() {
     _buildSkinOptions(document.getElementById('sr-select-skin'));
     _buildShapeOptions(document.getElementById('sr-select-shape'));
     _buildColorOptions(document.getElementById('sr-select-color'));
+    _populateAddons();
+  }
+
+  // ── ADD-ONS ───────────────────────────────────────────────────────────
+  // Per-GLB add-on registry. Mesh names are HARDCODED from the GLB's actual
+  // node hierarchy (read from the file, not pattern-matched), and looked up
+  // via traverse() so it works regardless of where they sit in the clone.
+  // Default state is OFF; user toggles on. Visibility is applied AFTER the
+  // ship has been placed in the scene so it never affects bbox/hullBackZ.
+  const SR_ADDONS_KEY = 'jh_showroom_addons_v2';
+  const ADDON_REGISTRY = {
+    'spaceship_01.glb': [
+      'Fins 01', 'Fins 02', 'Rings 001',
+      'Turrets 001', 'Turrets 002', 'Turrets 003',
+    ],
+  };
+  function _loadAddonsState() {
+    try { return JSON.parse(localStorage.getItem(SR_ADDONS_KEY) || '{}') || {}; }
+    catch(_) { return {}; }
+  }
+  function _saveAddonsState(s) {
+    try { localStorage.setItem(SR_ADDONS_KEY, JSON.stringify(s || {})); } catch(_){}
+  }
+  function _currentAddonsKey() {
+    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+    return (ship && ship.userData && ship.userData._altGlb) || null;
+  }
+  // Find a named descendant on the title ship clone. MK Runner's hull is
+  // 'Cube.007' and the add-ons are its children, but we traverse so the
+  // lookup works no matter how deeply nested.
+  function _findAddonNode(name) {
+    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+    if (!ship) return null;
+    let hit = null;
+    ship.traverse(o => { if (!hit && o.name === name) hit = o; });
+    return hit;
+  }
+  // Apply persisted visibility state to the current ship's add-on nodes.
+  // Defaults to OFF when no save exists for that ship/part. Called from
+  // _populateAddons (on tab populate) and from resetThrusterAnchors after
+  // a ship swap, so toggles survive a skin change.
+  function _applyAddonsToShip() {
+    const key = _currentAddonsKey();
+    if (!key) return;
+    const names = ADDON_REGISTRY[key];
+    if (!names) return;
+    const map = (_loadAddonsState()[key]) || {};
+    names.forEach(n => {
+      const node = _findAddonNode(n);
+      if (!node) return;
+      const stored = Object.prototype.hasOwnProperty.call(map, n) ? !!map[n] : false;
+      node.visible = stored;
+    });
+  }
+  function _populateAddons() {
+    const list = document.getElementById('sr-addons-list');
+    if (!list) return;
+    const key = _currentAddonsKey();
+    const names = key && ADDON_REGISTRY[key];
+    if (!names || !names.length) {
+      list.innerHTML = '<div class="sr-addon-empty">No add-ons available for this ship</div>';
+      return;
+    }
+    const map = (_loadAddonsState()[key]) || {};
+    let html = '';
+    names.forEach(n => {
+      const node = _findAddonNode(n);
+      const stored = Object.prototype.hasOwnProperty.call(map, n)
+        ? !!map[n]
+        : (node ? !!node.visible : false);
+      // Reflect stored state on the node so checkbox + visual stay in sync.
+      // Defaults newly-loaded ship to OFF for any part the user hasn't saved.
+      if (node) node.visible = stored;
+      const safe = String(n).replace(/"/g, '&quot;');
+      html += '<label class="sr-addon-row">'+
+        '<input type="checkbox" data-addon="'+safe+'" '+(stored?'checked':'')+'>'+
+        '<span>'+safe+'</span>'+
+      '</label>';
+    });
+    list.innerHTML = html;
+    list.querySelectorAll('input[type="checkbox"][data-addon]').forEach(inp => {
+      inp.addEventListener('change', (e) => {
+        const k = _currentAddonsKey();
+        if (!k) return;
+        const n = e.target.dataset.addon;
+        const visible = !!e.target.checked;
+        const node = _findAddonNode(n);
+        if (node) node.visible = visible;
+        const s = _loadAddonsState();
+        if (!s[k]) s[k] = {};
+        s[k][n] = visible;
+        _saveAddonsState(s);
+      });
+    });
+  }
+  // Show the ADD-ONS tab only when the current ship has add-ons registered.
+  // Other ships hide the tab entirely so we never show an empty pane.
+  function _refreshAddonsTabVisibility() {
+    const tab = document.querySelector('.sr-tab[data-tab="addons"]');
+    if (!tab) return;
+    const key = _currentAddonsKey();
+    const has = !!(key && ADDON_REGISTRY[key] && ADDON_REGISTRY[key].length);
+    tab.classList.toggle('sr-hidden', !has);
+    // If the active tab just got hidden, fall back to thrusters.
+    if (!has && _activeTab === 'addons') _switchTab('thrusters');
   }
 
   // ── Wire dropdown change handlers ────────────────────────────────────
@@ -13974,6 +14079,8 @@ function updateStreakBadge() {
     _previewSkin(idx);
     // Skin swap may load a new GLB whose materials default to transparent.
     requestAnimationFrame(() => { try { _forceShipOpaque(); } catch(_){} });
+    // The new ship may or may not have add-ons — refresh the tab + list.
+    try { _refreshAddonsTabVisibility(); _populateAddons(); } catch(_){}
     try { playTitleTap(); } catch(_){}
   }
 
@@ -14833,6 +14940,7 @@ function updateStreakBadge() {
     // firing a skin swap (which would wipe thruster anchors).
     _garagePreviewIdx = _displayedSkinIdx();
     _populateAll();
+    _refreshAddonsTabVisibility();
     // Relocate after the overlay is visible so getBoundingClientRect is right.
     requestAnimationFrame(() => {
       _relocateCanvasToStage();
@@ -14905,6 +15013,8 @@ function updateStreakBadge() {
     // the outgoing ship's edits to its own key, never crosses streams.
     try { _swapTunerForCurrentShip(); } catch(_){}
     try { if (typeof _updateTunerHud === 'function') _updateTunerHud(); } catch(_){}
+    // Apply persisted add-on visibility to the freshly-swapped ship parts.
+    try { _applyAddonsToShip(); } catch(_){}
     if (_open) {
       _thrInit();
       try { _forceShipOpaque(); } catch(_){}
