@@ -324,6 +324,37 @@ const state = {
   wheelEarned: false,
 };
 
+// ── DIAG: introActive write trap (TEMPORARY — strip after stuck-introActive bug fixed) ──
+(function installIntroActiveTrap(){
+  let _backing = false;
+  window._introTrace = window._introTrace || [];
+  function pushTrace(val){
+    try {
+      const stk = (new Error()).stack || '';
+      const lines = stk.split('\n').slice(2, 7).map(s => s.trim());
+      window._introTrace.push({
+        t: (typeof performance !== 'undefined' ? performance.now() : Date.now()).toFixed(1),
+        v: !!val,
+        phase: state.phase,
+        gs: !!window._gameStarting,
+        rp: !!window._retryPending,
+        rfd: !!window._retryIsFromDead,
+        skl1: !!window._skipL1Intro,
+        rsa: !!window._retrySweepActive,
+        ila: !!window._introLiftActive,
+        st: lines
+      });
+      if (window._introTrace.length > 40) window._introTrace.shift();
+    } catch(e) {}
+  }
+  Object.defineProperty(state, 'introActive', {
+    configurable: true,
+    enumerable: true,
+    get(){ return _backing; },
+    set(v){ pushTrace(v); _backing = !!v; }
+  });
+})();
+
 // ── SKIN SYSTEM ─────────────────────────────────────────────
 const SKIN_STORAGE_KEY = 'jh_skins';
 const COIN_STORAGE_KEY = 'jh_coins';

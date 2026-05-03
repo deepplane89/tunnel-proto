@@ -586,6 +586,37 @@ const state = {
   wheelEarned: false,
 };
 
+// ── DIAG: introActive write trap (TEMPORARY — strip after stuck-introActive bug fixed) ──
+(function installIntroActiveTrap(){
+  let _backing = false;
+  window._introTrace = window._introTrace || [];
+  function pushTrace(val){
+    try {
+      const stk = (new Error()).stack || '';
+      const lines = stk.split('\n').slice(2, 7).map(s => s.trim());
+      window._introTrace.push({
+        t: (typeof performance !== 'undefined' ? performance.now() : Date.now()).toFixed(1),
+        v: !!val,
+        phase: state.phase,
+        gs: !!window._gameStarting,
+        rp: !!window._retryPending,
+        rfd: !!window._retryIsFromDead,
+        skl1: !!window._skipL1Intro,
+        rsa: !!window._retrySweepActive,
+        ila: !!window._introLiftActive,
+        st: lines
+      });
+      if (window._introTrace.length > 40) window._introTrace.shift();
+    } catch(e) {}
+  }
+  Object.defineProperty(state, 'introActive', {
+    configurable: true,
+    enumerable: true,
+    get(){ return _backing; },
+    set(v){ pushTrace(v); _backing = !!v; }
+  });
+})();
+
 // ── SKIN SYSTEM ─────────────────────────────────────────────
 const SKIN_STORAGE_KEY = 'jh_skins';
 const COIN_STORAGE_KEY = 'jh_coins';
@@ -19059,6 +19090,8 @@ function _checkInvariants() {
   if (!_invSpawnFiredThisRun
       && state.elapsed > 4
       && (state._invObstaclesSpawned || 0) === 0
+      && !state.introActive       // intro overlay still up, gameplay not started
+      && !state._introLiftActive  // lift animation in progress, pre-cones
       && !state._tutorialActive
       && !state._jetLightningMode
       && !state.zipperActive
@@ -19090,7 +19123,44 @@ function _checkInvariants() {
       ' isDeathRun='          + !!state.isDeathRun +
       ' currentLevelIdx='     + (state.currentLevelIdx | 0) +
       ' nextSpawnZ='          + (state.nextSpawnZ || 0).toFixed(1) +
-      ' elapsed='             + state.elapsed.toFixed(2)
+      ' elapsed='             + state.elapsed.toFixed(2) +
+      ' _gameStarting='       + !!window._gameStarting +
+      ' _skipL1Intro='        + !!window._skipL1Intro
+    );
+  }
+
+  // 1b) STUCK-INTRO WATCHDOG: introActive==true blocks score+spawns. If score is
+  //     accumulating elsewhere but introActive somehow latched, this catches it.
+  //     Also fires if introActive stays true >4s with no sweep/lift active.
+  if (!_invIntroFiredThisRun
+      && state.elapsed > 4
+      && state.introActive
+      && !state._introLiftActive
+      && !_retrySweepActive
+      && !_retryPending) {
+    _invIntroFiredThisRun = true;
+    const trace = (window._introTrace || []).slice(-15);
+    console.warn(
+      '[INVARIANT-FAIL] introActive STUCK true after ' + state.elapsed.toFixed(1) + 's.\n' +
+      'Copy this WHOLE block (including trace) and paste to the agent:\n' +
+      '  introActive='        + !!state.introActive +
+      ' _introLiftActive='    + !!state._introLiftActive +
+      ' _retrySweepActive='   + !!_retrySweepActive +
+      ' _retryPending='       + !!_retryPending +
+      ' _retryIsFromDead='    + !!_retryIsFromDead +
+      ' _gameStarting='       + !!window._gameStarting +
+      ' _skipL1Intro='        + !!window._skipL1Intro +
+      ' phase='               + state.phase +
+      ' isDeathRun='          + !!state.isDeathRun +
+      ' currentLevelIdx='     + (state.currentLevelIdx | 0) +
+      ' elapsed='             + state.elapsed.toFixed(2) +
+      '\nintroTrace (last ' + trace.length + ' writes):\n' +
+      trace.map(function(e, i){
+        return '  #' + i + ' t=' + e.t + 'ms v=' + e.v +
+          ' phase=' + e.phase + ' gs=' + e.gs + ' rp=' + e.rp +
+          ' rfd=' + e.rfd + ' skl1=' + e.skl1 + ' rsa=' + e.rsa + ' ila=' + e.ila +
+          '\n     ' + (e.st || []).join(' <- ');
+      }).join('\n')
     );
   }
 
