@@ -382,6 +382,21 @@ function _broadcastHoloUniform(name, value) {
   }
 }
 
+// ── Reset hook ──
+// Visit ?reset=1 to wipe all localStorage (coins, level, owned skins, owned
+// power-ups, equipped thrusters, leaderboard, daily streak) and reload clean.
+// Runs before any other code reads storage. iPhone-friendly fallback for
+// users without DevTools access.
+try {
+  if (typeof location !== 'undefined' && /[?&]reset=1\b/.test(location.search || '')) {
+    try { localStorage.clear(); } catch(_){}
+    try { sessionStorage.clear(); } catch(_){}
+    // Strip the query string so a manual reload doesn't re-trigger.
+    const cleanUrl = location.pathname + location.hash;
+    location.replace(cleanUrl);
+  }
+} catch(_){}
+
 // ── Mobile-tight tap binding ──
 // Binds to pointerdown for instant response (no 300ms click delay on mobile).
 // Suppresses the synthetic click that follows so handlers don't double-fire,
