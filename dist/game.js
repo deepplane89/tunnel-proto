@@ -14608,8 +14608,12 @@ function updateStreakBadge() {
         titleCamera.updateProjectionMatrix();
       }
     } catch(_){}
-    canvas.style.width  = w + 'px';
-    canvas.style.height = h + 'px';
+    // DO NOT set canvas.style.width/height — the CSS already pins canvas
+    // to width:100% !important, height:100% !important inside .sr-stage.
+    // Inline pixel sizes here used to lock the canvas to a stale rect
+    // taken mid-rotation on iOS, causing the morph glitch. The renderer's
+    // setSize(w, h, false) above updates the drawing buffer only; the
+    // displayed size is controlled by CSS (always fills the stage cell).
   }
 
   // Orientation handling.
