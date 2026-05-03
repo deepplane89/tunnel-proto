@@ -395,7 +395,7 @@ const RUNNER_CONE_CFG = {
 
 const SHIP_SKINS = [
   { name: 'RUNNER',         price: 0,    description: 'Default' },
-  { name: 'GHOST',         price: 400,  description: 'Clean glossy white' },
+  { name: 'GHOST',         price: 400,  description: 'Clean glossy white', holoOverlay: true },
   { name: 'BLACK MAMBA',   price: 800,  description: 'Stealth predator' },
   { name: 'CIPHER',        price: 1400, description: 'Voronoi hull plating' },
   { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
@@ -5437,18 +5437,10 @@ normal = _dbn;`;
   // 'shader' property = GLSL string injected via onBeforeCompile (normal perturbation)
   const SKIN_DEFS = [
     null, // skin 0 = default (already applied)
-    // Skin 1: GHOST — full holographic skin (every slot uses HolographicMaterial).
-    // Uniforms match the latest tuned powerup-cube settings (2026-05-02).
-    // Nozzle keeps a normal dark MeshStandard so the exhaust port reads as
-    // a real opening rather than a transparent cyan ring.
-    {
-      rocket_base: { holo: true, hologramColor: '#00d5ff' },
-      white:       { holo: true, hologramColor: '#00d5ff' },
-      gray:        { holo: true, hologramColor: '#00d5ff' },
-      nozzle:      { color: 0x0a0a0a, metalness: 0.95, roughness: 0.12 },
-      rocket_light:{ holo: true, hologramColor: '#00d5ff' },
-      fallback:    { holo: true, hologramColor: '#00d5ff' },
-    },
+    // Skin 1: GHOST — default Runner materials with a holographic overlay
+    // mesh layered on top in applySkin (see SHIP_SKINS[1].holoOverlay).
+    // No prebuilt materials needed; null tells the loop to reuse defaults.
+    null,
     // Skin 2: BLACK MAMBA — user-tuned 2026-05-02 (rust hull + cyan trim glow,
     // global Matte 0.32 baked into roughness). HSL conventions: tuner stores
     // m.color via setHSL; emissive uses Math.max(s,0.8), Math.max(l,0.5).
@@ -5474,8 +5466,13 @@ normal = _dbn;`;
   // Pre-build each skin's materials per mesh
   _prebuiltSkins = [_defaultMats]; // index 0 = default
   for (let s = 1; s < SKIN_DEFS.length; s++) {
-    const skinMap = new Map();
     const defs = SKIN_DEFS[s];
+    if (!defs) {
+      // Skin reuses default Runner materials (e.g. Ghost = Runner + holo overlay).
+      _prebuiltSkins.push(_defaultMats);
+      continue;
+    }
+    const skinMap = new Map();
     model.traverse(child => {
       if (!child.isMesh) return;
       const name = child.userData._origMatName;
@@ -5906,6 +5903,9 @@ function applyTitleSkin(skinIndex) {
     return srcMat;
   }
 
+  // Strip any prior title-side holo overlay before reapplying.
+  _removeTitleHoloOverlay();
+
   for (const entry of _titleMeshMap) {
     const { mesh, origName } = entry;
     if (origName === 'fire' || origName === 'fire1') {
@@ -5928,9 +5928,103 @@ function applyTitleSkin(skinIndex) {
       }
     }
   }
+
+  // Holo overlay on the title preview when this skin opts in (Ghost).
+  if (!isLocked && SHIP_SKINS[skinIndex] && SHIP_SKINS[skinIndex].holoOverlay) {
+    _addTitleHoloOverlay();
+  }
+}
+
+// Title-side holo overlay (mirror of gameplay overlay, scoped to _titleMeshMap).
+let _titleHoloOverlayMeshes = [];
+function _removeTitleHoloOverlay() {
+  for (const m of _titleHoloOverlayMeshes) {
+    if (m.parent) m.parent.remove(m);
+    if (m.material) {
+      const idx = _holoMaterials.indexOf(m.material);
+      if (idx >= 0) _holoMaterials.splice(idx, 1);
+      m.material.dispose();
+    }
+  }
+  _titleHoloOverlayMeshes.length = 0;
+}
+function _addTitleHoloOverlay() {
+  for (const entry of _titleMeshMap) {
+    const { mesh, origName } = entry;
+    if (origName === 'fire' || origName === 'fire1') continue;
+    if (origName === 'nozzle') continue;
+    const mat = new HolographicMaterial({
+      hologramColor:      '#00d5ff',
+      fresnelAmount:      0.70,
+      fresnelOpacity:     1.00,
+      scanlineSize:       3.70,
+      hologramBrightness: 1.60,
+      signalSpeed:        0.01,
+      enableBlinking:     true,
+      blinkFresnelOnly:   true,
+      hologramOpacity:    0.35,
+      side:               THREE.DoubleSide,
+      blendMode:          THREE.NormalBlending,
+    });
+    mat.depthWrite = false;
+    _registerHoloMaterial(mat);
+    const overlay = new THREE.Mesh(mesh.geometry, mat);
+    overlay.scale.setScalar(1.008);
+    overlay.userData._isHoloOverlay = true;
+    mesh.add(overlay);
+    _titleHoloOverlayMeshes.push(overlay);
+  }
 }
 
 // Engine exhaust glow cones removed — using particle system only
+
+// ── HOLO OVERLAY ──────────────────────────────────────────────────────────────────────────────
+// Adds a translucent HolographicMaterial mesh on top of each ship mesh,
+// preserving the underlying PBR look. One holo material per overlay mesh
+// so the skin tuner can pick them up via _holoMaterials.
+let _shipHoloOverlayMeshes = [];
+function _removeShipHoloOverlay() {
+  for (const m of _shipHoloOverlayMeshes) {
+    if (m.parent) m.parent.remove(m);
+    if (m.material) {
+      const idx = _holoMaterials.indexOf(m.material);
+      if (idx >= 0) _holoMaterials.splice(idx, 1);
+      m.material.dispose();
+    }
+  }
+  _shipHoloOverlayMeshes.length = 0;
+}
+function _addShipHoloOverlay() {
+  if (!window._shipModel) return;
+  window._shipModel.traverse(child => {
+    if (!child.isMesh) return;
+    const name = child.userData._origMatName;
+    // Skip thruster fire meshes — they have their own additive material/animation.
+    if (name === 'fire' || name === 'fire1') return;
+    // Skip the nozzle interior so the exhaust port still reads as an opening.
+    if (name === 'nozzle') return;
+    const mat = new HolographicMaterial({
+      hologramColor:      '#00d5ff',
+      fresnelAmount:      0.70,
+      fresnelOpacity:     1.00,
+      scanlineSize:       3.70,
+      hologramBrightness: 1.60,
+      signalSpeed:        0.01,
+      enableBlinking:     true,
+      blinkFresnelOnly:   true,
+      hologramOpacity:    0.35,
+      side:               THREE.DoubleSide,
+      blendMode:          THREE.NormalBlending,
+    });
+    mat.depthWrite = false; // overlay shouldn't occlude the PBR base underneath
+    _registerHoloMaterial(mat);
+    const overlay = new THREE.Mesh(child.geometry, mat);
+    overlay.scale.setScalar(1.008); // tiny inflate to sit just above the hull
+    overlay.userData._isHoloOverlay = true;
+    child.add(overlay);
+    _shipHoloOverlayMeshes.push(overlay);
+  });
+}
 
 // ── SKIN SYSTEM: applySkin function (uses _prebuiltSkins declared above gltf callback) ───
 function applySkin(skinIndex) {
@@ -5966,6 +6060,9 @@ function applySkin(skinIndex) {
   // re-collection below repopulates for alt-GLB skins.
   shipHullMats.length = 0;
   shipEdgeLines.length = 0;
+
+  // Strip any holo-overlay meshes from the previous skin before re-applying.
+  _removeShipHoloOverlay();
 
   // ── Alt GLB ship handling ──
   // Alt-GLB skins (e.g. RUNNER MK II) take a different path for the MODEL
@@ -6057,6 +6154,14 @@ function applySkin(skinIndex) {
     rimLight.intensity = 0.0; fillLight.intensity = 0.25;
   }
   // else: defaults already applied at top — no-op.
+
+  // ── Holographic overlay opt-in (e.g. Ghost) ──
+  // Layered on top of whatever materials applySkin just assigned, so the
+  // base PBR look shows through the holo shimmer. Only for non-alt-GLB skins;
+  // alt ships have their own material handling.
+  if (!_isAltGlb && SHIP_SKINS[skinIndex] && SHIP_SKINS[skinIndex].holoOverlay) {
+    _addShipHoloOverlay();
+  }
 
   // Fix: ship-light-pop-on bug. applySkin recreates MeshStandardMaterial
   // instances every call (lines ~5868-5881). Those fresh materials have never
