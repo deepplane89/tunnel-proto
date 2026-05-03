@@ -3591,6 +3591,14 @@ function killPlayer() {
         _retrySweepT = 0;
         _retrySweepThrusterFired = false;
         playRetryWhoosh();
+        // Same two-shot SFX chain as the retry sweep:
+        // tech-device one-shot at sweep start, warp one-shot 300ms later.
+        const _saveMeSfx = document.getElementById('retry-tech-sfx');
+        if (_saveMeSfx && !state.muted) { _saveMeSfx.currentTime = 0; _saveMeSfx.volume = 0.55; _saveMeSfx.play().catch(()=>{}); }
+        setTimeout(() => {
+          const _saveMeWarp = document.getElementById('retry-warp-sfx');
+          if (_saveMeWarp && !state.muted) { _saveMeWarp.currentTime = 0; _saveMeWarp.volume = 0.85; _saveMeWarp.play().catch(()=>{}); }
+        }, 300);
         // Re-engage the correct music track for wherever we are in the run
         musicFadeTo(currentGameTrack(), 1500);
         // Fade from black
