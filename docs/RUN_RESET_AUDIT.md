@@ -8,7 +8,24 @@ Audits are in priority order. Highest-leak categories first.
 
 ---
 
-## 1. Post-processing pass uniforms (THIS PASS — doing now)
+## 1. Post-processing pass uniforms (✅ PASS 1 COMPLETE — commit 8c2740e)
+
+**Result: only the `aberration` leak existed; already fixed.**
+
+| Uniform | Status |
+|---|---|
+| `vignettePass.uniforms.aberration` | ✅ Reset in startGame (commit 8c2740e) |
+| `vignettePass.uniforms.darkness` | ✅ Never written during gameplay (dev slider only) |
+| `vignettePass.uniforms.offset` | ✅ Never written during gameplay (dev slider only) |
+| `bloom.strength` | ✅ Forcibly reset by `applyLevelVisuals(LEVELS[0])` in startGame line 344 |
+| `bloom.threshold` / `bloom.radius` | ✅ Never written during gameplay (dev slider only) |
+| `_radialBlurPass.uniforms.*` | ✅ Never written during gameplay (init-only) |
+| `_thrusterHazePass.uniforms.*` | ✅ Tick-driven every frame, re-derived from state |
+| `renderer.toneMappingExposure` | ✅ Init-only |
+
+---
+
+## 1 (original notes)
 
 Pass uniforms persist on the GPU until something writes them. Anything written
 mid-run that has a non-default value will leak across runs.
