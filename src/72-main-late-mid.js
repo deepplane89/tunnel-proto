@@ -1286,15 +1286,15 @@ function buildSkinTunerSliders() {
     // Each preset also pins _handlingDriftOverride so JUICE has a chance to land
     // regardless of player level. drift=0 → no wobble (RAIL); drift=0.8 → loose (WIPEOUT).
     // Manual slider edits + reset clear the override (back to player-level driven).
-    const _PRESETS = {
+    const _FEEL_PRESETS = {
       GLIDE:   { resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.6 },
       RAIL:    { resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.0 },
       WIPEOUT: { resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.8 },
       JET:     { resp: 0.65, latSpd: 0.55, settle: 0.60, bank: 0.50, horizon: 0.50, juice: 0.30, drift: 0.5 },
     };
     if (window._feelMacro._presetName === undefined) window._feelMacro._presetName = null;
-    function _applyPreset(name) {
-      const p = _PRESETS[name];
+    function _applyFeelPreset(name) {
+      const p = _FEEL_PRESETS[name];
       if (!p) return;
       _fm.resp = p.resp; _fm.latSpd = p.latSpd; _fm.settle = p.settle; _fm.bank = p.bank;
       _fm.horizon = p.horizon; _fm.juice = p.juice;
@@ -1325,7 +1325,7 @@ function buildSkinTunerSliders() {
         ';padding:4px 6px;cursor:pointer;font-family:monospace;font-size:10px;' +
         'border-radius:2px;font-weight:' + (isActive ? 'bold' : 'normal') + ';' +
         'box-shadow:' + (isActive ? '0 0 6px ' + color + '88' : 'none') + ';';
-      btn.onclick = () => _applyPreset(name);
+      btn.onclick = () => _applyFeelPreset(name);
       _presetRow.appendChild(btn);
     });
     panel.appendChild(_presetRow);
@@ -1589,173 +1589,95 @@ function buildSkinTunerSliders() {
 
     panel.appendChild(makeHeader('THRUSTERS — GLOBAL'));
 
-    // ── SHORT THRUSTER PRESET (MK Runner) ──
-    // Captured 2026-05-01 from user's tuned MK Runner session. Toggle ON applies
-    // every value below; toggle OFF restores the snapshot taken just before ON.
-    if (typeof window._SHORT_THRUSTER_PRESET === 'undefined') {
-      window._SHORT_THRUSTER_PRESET = {
-        // Nozzle positions (asymmetric per user tuning)
-        nozL: [-0.48, 0.05, 5.16], nozR: [0.50, -0.01, 5.10],
-        miniL: [-0.15, 0.06, 5.10], miniR: [0.16, 0.06, 5.10],
-        // Global
-        _thrPart_partOpacity: 0.44, _thrPart_miniPartOpacity: 0.44, _thrPart_posPinFrac: 0.12,
-        _thrusterScale: 1.00, _pointMatSize: 0.13, _miniPointMatSize: 0.08,
-        _nozzleBloomScale: 0.45, _nozzleBloomOpacity: 0.24, _nozzleBloom_whiteMix: 0.00,
-        _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
-        // Particles
-        _thrPart_bendInherit: 0.15, _thrPart_bendCatchup: 0.00,
-        _thrPart_midEnd: 0.65, _thrPart_midBoost: 0.30,
-        _thrPart_sizeBase: 0.19, _thrPart_sizeSpeed: 0.13,
-        _thrPart_bumpMult: 1.60, _thrPart_bumpEnd: 0.10, _thrPart_sizeJitter: 0.06,
-        _thrPart_lifeMin: 0.18, _thrPart_lifeJit: 0.22,
-        _thrPart_lifeBase: 0.20, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.10,
-        // Flame mesh
-        _thrFlame_coreEnd: 0.10, _thrFlame_coreRGB: 0.85, _thrFlame_midEnd: 0.60,
-        _thrFlame_sizeBase: 0.04, _thrFlame_sizeSpeed: 0.01,
-        _thrFlame_bumpMult: 1.40, _thrFlame_bumpEnd: 0.07,
-        _thrFlame_lifeMin: 0.05, _thrFlame_lifeJit: 0.06, _thrFlame_spawnJit: 0.02,
-      };
-    }
-    window._shortThrusterOn = !!window._shortThrusterOn;
-    const _applyShortPreset = (on) => {
-      const P = window._SHORT_THRUSTER_PRESET;
-      if (on) {
-        // Snapshot current values so OFF can restore them
-        const snap = {};
-        // Numeric keys (window._*)
-        const numKeys = Object.keys(P).filter(k => k.startsWith('_') && k !== '_pointMatSize' && k !== '_miniPointMatSize');
-        numKeys.forEach(k => { snap[k] = window[k]; });
-        // Material sizes (read off three.js objects)
-        try { snap._pointMatSize = thrusterSystems[0].points.material.size; } catch(_){}
-        try { snap._miniPointMatSize = miniThrusterSystems[0].points.material.size; } catch(_){}
-        // Nozzle positions
-        if (typeof NOZZLE_OFFSETS !== 'undefined' && NOZZLE_OFFSETS[0]) {
-          snap.nozL = [NOZZLE_OFFSETS[0].x, NOZZLE_OFFSETS[0].y, NOZZLE_OFFSETS[0].z];
-          snap.nozR = [NOZZLE_OFFSETS[1].x, NOZZLE_OFFSETS[1].y, NOZZLE_OFFSETS[1].z];
-        }
-        if (typeof MINI_NOZZLE_OFFSETS !== 'undefined' && MINI_NOZZLE_OFFSETS[0]) {
-          snap.miniL = [MINI_NOZZLE_OFFSETS[0].x, MINI_NOZZLE_OFFSETS[0].y, MINI_NOZZLE_OFFSETS[0].z];
-          snap.miniR = [MINI_NOZZLE_OFFSETS[1].x, MINI_NOZZLE_OFFSETS[1].y, MINI_NOZZLE_OFFSETS[1].z];
-        }
-        window._shortThrusterPrevSnap = snap;
-        // Apply preset
-        numKeys.forEach(k => { window[k] = P[k]; });
-        try { thrusterSystems.forEach(s => s.points.material.size = P._pointMatSize); } catch(_){}
-        try { miniThrusterSystems.forEach(s => s.points.material.size = P._miniPointMatSize); } catch(_){}
-        if (typeof NOZZLE_OFFSETS !== 'undefined' && NOZZLE_OFFSETS[0]) {
-          NOZZLE_OFFSETS[0].set(P.nozL[0], P.nozL[1], P.nozL[2]);
-          NOZZLE_OFFSETS[1].set(P.nozR[0], P.nozR[1], P.nozR[2]);
-        }
-        if (typeof MINI_NOZZLE_OFFSETS !== 'undefined' && MINI_NOZZLE_OFFSETS[0]) {
-          MINI_NOZZLE_OFFSETS[0].set(P.miniL[0], P.miniL[1], P.miniL[2]);
-          MINI_NOZZLE_OFFSETS[1].set(P.miniR[0], P.miniR[1], P.miniR[2]);
-        }
-        try { _rebuildLocalNozzles(); } catch(_){}
-      } else {
-        // Restore from snapshot if we have one
-        const snap = window._shortThrusterPrevSnap;
-        if (snap) {
-          Object.keys(snap).forEach(k => {
-            if (k === 'nozL' || k === 'nozR' || k === 'miniL' || k === 'miniR' || k === '_pointMatSize' || k === '_miniPointMatSize') return;
-            window[k] = snap[k];
-          });
-          try { if (snap._pointMatSize != null) thrusterSystems.forEach(s => s.points.material.size = snap._pointMatSize); } catch(_){}
-          try { if (snap._miniPointMatSize != null) miniThrusterSystems.forEach(s => s.points.material.size = snap._miniPointMatSize); } catch(_){}
-          if (snap.nozL && typeof NOZZLE_OFFSETS !== 'undefined') {
-            NOZZLE_OFFSETS[0].set(snap.nozL[0], snap.nozL[1], snap.nozL[2]);
-            NOZZLE_OFFSETS[1].set(snap.nozR[0], snap.nozR[1], snap.nozR[2]);
+    // ── Preset engine (data lives in src/05-thruster-presets.js) ──
+    // Mutually exclusive: turning one ON turns all others OFF.
+    // Capture baseline once on first build so 'restore' is always available.
+    const _THR_PRESETS = window._THRUSTER_PRESETS || {};
+    const _captureLiveThrValues = () => {
+      const snap = {};
+      // Sample every key any preset sets (union), so baseline can restore them all.
+      const allKeys = new Set();
+      Object.values(_THR_PRESETS).forEach(p => { if (p) Object.keys(p).forEach(k => allKeys.add(k)); });
+      allKeys.forEach(k => {
+        if (k === 'label') return;
+        if (k === '_pointMatSize') {
+          try { snap[k] = thrusterSystems[0].points.material.size; } catch(_){}
+        } else if (k === '_miniPointMatSize') {
+          try { snap[k] = miniThrusterSystems[0].points.material.size; } catch(_){}
+        } else if (k === 'nozL' || k === 'nozR') {
+          if (typeof NOZZLE_OFFSETS !== 'undefined' && NOZZLE_OFFSETS[0]) {
+            const v = (k === 'nozL') ? NOZZLE_OFFSETS[0] : NOZZLE_OFFSETS[1];
+            snap[k] = [v.x, v.y, v.z];
           }
-          if (snap.miniL && typeof MINI_NOZZLE_OFFSETS !== 'undefined') {
-            MINI_NOZZLE_OFFSETS[0].set(snap.miniL[0], snap.miniL[1], snap.miniL[2]);
-            MINI_NOZZLE_OFFSETS[1].set(snap.miniR[0], snap.miniR[1], snap.miniR[2]);
+        } else if (k === 'miniL' || k === 'miniR') {
+          if (typeof MINI_NOZZLE_OFFSETS !== 'undefined' && MINI_NOZZLE_OFFSETS[0]) {
+            const v = (k === 'miniL') ? MINI_NOZZLE_OFFSETS[0] : MINI_NOZZLE_OFFSETS[1];
+            snap[k] = [v.x, v.y, v.z];
           }
-          try { _rebuildLocalNozzles(); } catch(_){}
+        } else if (k.startsWith('_')) {
+          snap[k] = window[k];
         }
-      }
+      });
+      return snap;
     };
-    const _shortBtn = document.createElement('button');
-    const _renderShortBtn = () => {
-      _shortBtn.textContent = window._shortThrusterOn ? 'short thruster preset: ON' : 'short thruster preset: OFF';
-      _shortBtn.style.cssText = 'background:' + (window._shortThrusterOn ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._shortThrusterOn ? '#0f0' : '#f00') + ';padding:6px 12px;cursor:pointer;font:11px monospace;margin:6px 0 8px 0;display:block;width:100%;font-weight:bold;';
+    const _writeThrValues = (P) => {
+      Object.keys(P).forEach(k => {
+        if (k === 'label') return;
+        const v = P[k];
+        if (v == null) return;
+        if (k === '_pointMatSize') {
+          try { thrusterSystems.forEach(s => s.points.material.size = v); } catch(_){}
+        } else if (k === '_miniPointMatSize') {
+          try { miniThrusterSystems.forEach(s => s.points.material.size = v); } catch(_){}
+        } else if (k === 'nozL' || k === 'nozR') {
+          if (typeof NOZZLE_OFFSETS !== 'undefined' && NOZZLE_OFFSETS[0]) {
+            const t = (k === 'nozL') ? NOZZLE_OFFSETS[0] : NOZZLE_OFFSETS[1];
+            t.set(v[0], v[1], v[2]);
+          }
+        } else if (k === 'miniL' || k === 'miniR') {
+          if (typeof MINI_NOZZLE_OFFSETS !== 'undefined' && MINI_NOZZLE_OFFSETS[0]) {
+            const t = (k === 'miniL') ? MINI_NOZZLE_OFFSETS[0] : MINI_NOZZLE_OFFSETS[1];
+            t.set(v[0], v[1], v[2]);
+          }
+        } else if (k.startsWith('_')) {
+          window[k] = v;
+        }
+      });
+      try { _rebuildLocalNozzles(); } catch(_){}
     };
-    _renderShortBtn();
-    _shortBtn.addEventListener('click', () => {
-      window._shortThrusterOn = !window._shortThrusterOn;
-      // Mutually exclusive with FAT ION
-      if (window._shortThrusterOn && window._fatIonOn) { window._fatIonOn = false; _applyFatIonPreset(false); }
-      _applyShortPreset(window._shortThrusterOn);
-      _renderShortBtn();
-      try { _renderFatIonBtn(); } catch(_){}
-      // Rebuild panel so all sliders reflect the new values
-      try { panel.innerHTML = ''; build(); } catch(_){}
-    });
-    panel.appendChild(_shortBtn);
-
-    // ── FAT ION PRESET ──
-    // Captured 2026-05-02 from user's tuned session. Globals + particles + flame mesh only.
-    if (typeof window._FAT_ION_PRESET === 'undefined') {
-      window._FAT_ION_PRESET = {
-        // Global
-        _thrPart_partOpacity: 0.48, _thrPart_miniPartOpacity: 0.52, _thrPart_posPinFrac: 0.14,
-        _thrusterScale: 0.70, _pointMatSize: 0.12, _miniPointMatSize: 0.06,
-        _nozzleBloomScale: 2.45, _nozzleBloomOpacity: 0.94, _nozzleBloom_whiteMix: 0.00,
-        _nozzleBloomPulse: 0.15,
-        _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
-        // Particles
-        _thrPart_bendInherit: 0.15, _thrPart_bendCatchup: 0.00,
-        _thrPart_midEnd: 0.10, _thrPart_midBoost: 1.02,
-        _thrPart_sizeBase: 0.05, _thrPart_sizeSpeed: 0.00,
-        _thrPart_bumpMult: 1.00, _thrPart_bumpEnd: 0.00, _thrPart_sizeJitter: 0.00,
-        _thrPart_lifeMin: 0.05, _thrPart_lifeJit: 0.08,
-        _thrPart_lifeBase: 1.30, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.09,
-        // Flame mesh
-        _thrFlame_coreEnd: 0.00, _thrFlame_coreRGB: 0.37, _thrFlame_midEnd: 0.35,
-        _thrFlame_sizeBase: 0.06, _thrFlame_sizeSpeed: 0.10,
-        _thrFlame_bumpMult: 3.00, _thrFlame_bumpEnd: 0.30,
-        _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.07,
-      };
+    // Lazy-capture baseline on first panel build (only if not already set).
+    if (!_THR_PRESETS.baseline) {
+      _THR_PRESETS.baseline = Object.assign({ label: 'BASELINE' }, _captureLiveThrValues());
     }
-    window._fatIonOn = !!window._fatIonOn;
-    const _applyFatIonPreset = (on) => {
-      const P = window._FAT_ION_PRESET;
-      if (on) {
-        const snap = {};
-        const numKeys = Object.keys(P).filter(k => k.startsWith('_') && k !== '_pointMatSize' && k !== '_miniPointMatSize');
-        numKeys.forEach(k => { snap[k] = window[k]; });
-        try { snap._pointMatSize = thrusterSystems[0].points.material.size; } catch(_){}
-        try { snap._miniPointMatSize = miniThrusterSystems[0].points.material.size; } catch(_){}
-        window._fatIonPrevSnap = snap;
-        numKeys.forEach(k => { window[k] = P[k]; });
-        try { thrusterSystems.forEach(s => s.points.material.size = P._pointMatSize); } catch(_){}
-        try { miniThrusterSystems.forEach(s => s.points.material.size = P._miniPointMatSize); } catch(_){}
-      } else {
-        const snap = window._fatIonPrevSnap;
-        if (snap) {
-          Object.keys(snap).forEach(k => {
-            if (k === '_pointMatSize' || k === '_miniPointMatSize') return;
-            window[k] = snap[k];
-          });
-          try { if (snap._pointMatSize != null) thrusterSystems.forEach(s => s.points.material.size = snap._pointMatSize); } catch(_){}
-          try { if (snap._miniPointMatSize != null) miniThrusterSystems.forEach(s => s.points.material.size = snap._miniPointMatSize); } catch(_){}
-        }
-      }
+    const _applyThrPreset = (key) => {
+      const P = _THR_PRESETS[key];
+      if (!P) return;
+      _writeThrValues(P);
+      window._activeThrusterPreset = key;
     };
-    const _fatIonBtn = document.createElement('button');
-    const _renderFatIonBtn = () => {
-      _fatIonBtn.textContent = window._fatIonOn ? 'FAT ION: ON' : 'FAT ION: OFF';
-      _fatIonBtn.style.cssText = 'background:' + (window._fatIonOn ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._fatIonOn ? '#0f0' : '#f00') + ';padding:6px 12px;cursor:pointer;font:11px monospace;margin:0 0 8px 0;display:block;width:100%;font-weight:bold;';
+    // Render one button per preset. Active preset is highlighted green.
+    const _thrPresetBtns = {};
+    const _renderThrPresetBtns = () => {
+      Object.keys(_thrPresetBtns).forEach(key => {
+        const btn = _thrPresetBtns[key];
+        const on = window._activeThrusterPreset === key;
+        const label = (_THR_PRESETS[key] && _THR_PRESETS[key].label) || key;
+        btn.textContent = label + (on ? ': ON' : '');
+        btn.style.cssText = 'background:' + (on ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (on ? '#0f0' : '#f00') + ';padding:6px 12px;cursor:pointer;font:11px monospace;margin:0 0 4px 0;display:block;width:100%;font-weight:bold;';
+      });
     };
-    _renderFatIonBtn();
-    _fatIonBtn.addEventListener('click', () => {
-      window._fatIonOn = !window._fatIonOn;
-      // Mutually exclusive with SHORT preset
-      if (window._fatIonOn && window._shortThrusterOn) { window._shortThrusterOn = false; _applyShortPreset(false); }
-      _applyFatIonPreset(window._fatIonOn);
-      _renderFatIonBtn();
-      try { _renderShortBtn(); } catch(_){}
-      try { panel.innerHTML = ''; build(); } catch(_){}
+    Object.keys(_THR_PRESETS).forEach(key => {
+      if (!_THR_PRESETS[key]) return;
+      const btn = document.createElement('button');
+      btn.addEventListener('click', () => {
+        _applyThrPreset(key);
+        _renderThrPresetBtns();
+        try { panel.innerHTML = ''; build(); } catch(_){}
+      });
+      _thrPresetBtns[key] = btn;
+      panel.appendChild(btn);
     });
-    panel.appendChild(_fatIonBtn);
+    _renderThrPresetBtns();
 
     panel.appendChild(makeSlider('nozzle pulse depth', window._nozzleBloomPulse != null ? window._nozzleBloomPulse : 0.15, 0, 0.5, 0.01, v => { window._nozzleBloomPulse = v; }, '#f60'));
 
