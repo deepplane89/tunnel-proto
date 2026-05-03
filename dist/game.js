@@ -14168,30 +14168,80 @@ function updateStreakBadge() {
       window.SciFiSelect.refresh(sColor);
     }
     _populateAddons();
-    _wireZoomSlider();
+    _wireTuneSliders();
   }
 
-  // Zoom slider — idempotent. Reads/writes localStorage 'jh_showroom_zoom'.
-  function _wireZoomSlider() {
-    const slider = document.getElementById('sr-zoom-slider');
-    if (!slider || slider.dataset.wired === '1') {
-      // Still sync value from storage on every populate.
-      if (slider) {
-        try {
-          const v = parseInt(localStorage.getItem('jh_showroom_zoom') || '100', 10);
-          slider.value = isNaN(v) ? 100 : Math.max(40, Math.min(160, v));
-        } catch(_){}
-      }
+  // Tuning sliders — each row has data-tune="key" + matching readout span.
+  // Values are stored PER-ORIENTATION (portrait vs landscape) because the
+  // showroom stage shape changes between the two layouts — a zoom that looks
+  // right in portrait would be wrong in landscape and vice versa.
+  // Storage keys: jh_showroom_<key>_p (portrait) / jh_showroom_<key>_l (landscape).
+  const SR_TUNE_KEYS = {
+    zoom:     { def: 100, min: 40,  max: 160 },
+    shipx:    { def: 0,   min: -50, max: 50  },
+    shipy:    { def: 0,   min: -50, max: 50  },
+    handling: { def: 100, min: 60,  max: 140 },
+    panely:   { def: 0,   min: -100, max: 100 },
+  };
+  function _orient() {
+    return (window.innerWidth > window.innerHeight) ? 'l' : 'p';
+  }
+  function _tuneStorageKey(key) {
+    return 'jh_showroom_' + key + '_' + _orient();
+  }
+  function _readTune(key) {
+    const cfg = SR_TUNE_KEYS[key];
+    if (!cfg) return 0;
+    try {
+      const v = parseInt(localStorage.getItem(_tuneStorageKey(key)) || String(cfg.def), 10);
+      if (isNaN(v)) return cfg.def;
+      return Math.max(cfg.min, Math.min(cfg.max, v));
+    } catch(_) { return cfg.def; }
+  }
+  function _applyTune(key, val) {
+    const overlay = document.getElementById('thruster-overlay');
+    if (!overlay) return;
+    if (key === 'zoom') {
+      _resizeStageCanvas(); // re-reads localStorage for FOV multiplier
       return;
     }
-    slider.dataset.wired = '1';
-    try {
-      const v = parseInt(localStorage.getItem('jh_showroom_zoom') || '100', 10);
-      slider.value = isNaN(v) ? 100 : Math.max(40, Math.min(160, v));
-    } catch(_){}
-    slider.addEventListener('input', () => {
-      try { localStorage.setItem('jh_showroom_zoom', String(slider.value)); } catch(_){}
-      _resizeStageCanvas();
+    if (key === 'shipx')    overlay.style.setProperty('--sr-tune-shipx', val + 'px');
+    if (key === 'shipy')    overlay.style.setProperty('--sr-tune-shipy', val + 'px');
+    if (key === 'handling') overlay.style.setProperty('--sr-tune-handling', String(val / 100));
+    if (key === 'panely')   overlay.style.setProperty('--sr-tune-panely', val + 'px');
+  }
+  function _wireTuneSliders() {
+    const sliders = document.querySelectorAll('[data-tune]');
+    sliders.forEach(slider => {
+      const key = slider.dataset.tune;
+      if (!SR_TUNE_KEYS[key]) return;
+      const val = _readTune(key);
+      slider.value = val;
+      const readout = document.querySelector('[data-tune-val="' + key + '"]');
+      if (readout) readout.textContent = String(val);
+      _applyTune(key, val);
+      if (slider.dataset.wired === '1') return;
+      slider.dataset.wired = '1';
+      slider.addEventListener('input', () => {
+        const v = parseInt(slider.value, 10);
+        try { localStorage.setItem(_tuneStorageKey(key), String(v)); } catch(_){}
+        if (readout) readout.textContent = String(v);
+        _applyTune(key, v);
+      });
+    });
+  }
+  // Re-apply all tune values when orientation changes (slider values + CSS
+  // vars switch to the other orientation's saved settings).
+  function _refreshTunesForOrientation() {
+    const sliders = document.querySelectorAll('[data-tune]');
+    sliders.forEach(slider => {
+      const key = slider.dataset.tune;
+      if (!SR_TUNE_KEYS[key]) return;
+      const val = _readTune(key);
+      slider.value = val;
+      const readout = document.querySelector('[data-tune-val="' + key + '"]');
+      if (readout) readout.textContent = String(val);
+      _applyTune(key, val);
     });
   }
 
@@ -14508,12 +14558,12 @@ function updateStreakBadge() {
           const t = Math.min(1, (aspect - 1.2) / (2.2 - 1.2));
           targetFov = baseFov * (1 - t * 0.55); // 35deg → ~15.75deg at widest
         }
-        // User zoom override: slider 40-160 (100 = baseline). Lower slider =
-        // smaller ship (wider FOV); higher slider = bigger ship (narrower FOV).
-        // Stored as jh_showroom_zoom percent.
+        // User zoom override: slider 40-160 (100 = baseline). Per-orientation
+        // storage so portrait vs landscape have independent zoom settings.
         let zoomPct = 100;
         try {
-          const stored = parseInt(localStorage.getItem('jh_showroom_zoom') || '100', 10);
+          const orient = (window.innerWidth > window.innerHeight) ? 'l' : 'p';
+          const stored = parseInt(localStorage.getItem('jh_showroom_zoom_' + orient) || '100', 10);
           if (!isNaN(stored)) zoomPct = Math.max(40, Math.min(160, stored));
         } catch(_){}
         // Multiplier: pct=100 → 1.0; pct=40 → 1.6 (wider, smaller ship);
@@ -14530,7 +14580,15 @@ function updateStreakBadge() {
 
   function _onResize() {
     if (!_open) return;
-    _resizeStageCanvas();
+    _refreshTunesForOrientation(); // swap to other-orientation tune values
+    // Defer twice: orientationchange on iOS fires BEFORE the CSS grid has
+    // reflowed, so reading getBoundingClientRect() right now returns the
+    // OLD stage rectangle. Two rAFs guarantee layout has settled.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        _resizeStageCanvas();
+      });
+    });
   }
 
   // ─── Showroom thruster preview: build, tick, show/hide ─────────────

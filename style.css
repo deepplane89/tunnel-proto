@@ -4774,6 +4774,30 @@ html, body {
   text-shadow: 0 0 8px var(--sr-accent-glow);
 }
 
+/* TUNING BLOCK — stack of compact slider rows under SKINS tab. */
+.sr-tune-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.sr-tune-row {
+  gap: 8px;
+}
+.sr-tune-row .sr-label {
+  flex: 0 0 56px;
+  font-size: 9px;
+}
+.sr-tune-val {
+  flex: 0 0 32px;
+  text-align: right;
+  font: 600 10px/1 'Orbitron', sans-serif;
+  color: var(--sr-accent);
+  text-shadow: 0 0 6px var(--sr-accent-glow);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* ZOOM SLIDER — subtle range control under SKINS tab to scale ship preview. */
 .sr-zoom-slider {
   -webkit-appearance: none;
@@ -4872,8 +4896,36 @@ body.sr-open #title-leaderboard {
   grid-template-columns: 1fr;
   align-items: stretch;
   justify-items: stretch;
+  /* Uniform outer padding + uniform gap. Every grid child fills its cell
+     edge-to-edge, so stage / handling / panel boxes line up perfectly. */
   padding: 8px;
-  gap: 6px;
+  gap: 8px;
+  /* CSS variables driven by the SKINS tuning sliders. Defaults = no-op. */
+  --sr-tune-shipx: 0px;
+  --sr-tune-shipy: 0px;
+  --sr-tune-handling: 1;
+  --sr-tune-panely: 0px;
+}
+/* Stage gets the same border + radius as the handling bar so its outer
+   rectangle visibly matches its siblings (no "floating" ship anymore). */
+.sr-overlay:not(.hidden) .sr-stage {
+  background: rgba(0, 14, 28, 0.35);
+  border: 1px solid rgba(34, 211, 238, 0.30);
+  border-radius: 6px;
+  overflow: hidden;
+}
+/* Apply ship X/Y to the relocated canvas inside the stage. */
+.sr-overlay:not(.hidden) #title-ship-canvas {
+  transform: translate(var(--sr-tune-shipx, 0), var(--sr-tune-shipy, 0));
+}
+/* Handling bar scale. transform-origin keeps it anchored to its slot. */
+.sr-overlay:not(.hidden) .sr-handling-slot .shop-handling-bar {
+  transform: scale(var(--sr-tune-handling, 1));
+  transform-origin: left center;
+}
+/* Panel Y offset — slides the whole tab/content panel up or down. */
+.sr-overlay:not(.hidden) .sr-panel {
+  transform: translateY(var(--sr-tune-panely, 0));
 }
 .sr-overlay.hidden { display: none !important; }
 .sr-stage {
@@ -4901,12 +4953,18 @@ body.sr-open #title-leaderboard {
   pointer-events: auto;
 }
 .sr-handling-slot:empty { display: none; }
+.sr-handling-slot {
+  /* Slot fills its grid cell so border-radius below matches stage exactly. */
+  display: block;
+}
 .sr-handling-slot .shop-handling-bar {
   margin: 0;
   padding: 6px 12px;
   background: rgba(0, 14, 28, 0.65);
   border: 1px solid rgba(34, 211, 238, 0.30);
   border-radius: 6px;
+  width: 100%;
+  box-sizing: border-box;
 }
 .sr-handling-slot .shop-handling-label { font-size: 9px; letter-spacing: 1.2px; }
 .sr-handling-slot .shop-handling-tier { font-size: 11px; }
@@ -4919,13 +4977,17 @@ body.sr-open #title-leaderboard {
   max-width: none;
   margin: 0;
   /* Panel takes its grid-row-3 50vh slot exactly; never grows. Internal
-     content scrolls inside .sr-body instead of pushing the ship. */
+     content scrolls inside .sr-body instead of pushing the ship.
+     Override v1's notched clip-path with plain border-radius so all three
+     boxes (stage, handling, panel) share the same outer rectangle shape. */
   height: 100%;
   max-height: 50vh;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  clip-path: none;
+  border-radius: 6px;
 }
 .sr-body {
   flex: 1;
@@ -4967,12 +5029,19 @@ body.sr-open #title-leaderboard {
 .sr-pane[data-pane="powerups"] .shop-card-maxed,
 .sr-pane[data-pane="powerups"] .shop-card-lock { font-size: 9px; }
 .sr-pane[data-pane="powerups"] .shop-detail {
-  position: static;
-  background: transparent;
-  padding: 8px 0 0;
-  height: auto;
+  position: absolute;
+  inset: 0;
+  background: var(--sr-panel);
+  padding: 8px;
+  height: 100%;
+  overflow: hidden;
+  z-index: 5;
 }
 .sr-pane[data-pane="powerups"] .shop-detail.hidden { display: none; }
+/* Kill the BACK button — close-X / tap-outside / tab-switch are enough.
+   Frees vertical space so detail tiers fit without cropping. */
+.sr-pane[data-pane="powerups"] .shop-back-btn { display: none; }
+.sr-pane[data-pane="powerups"] #shop-tab-powerups { position: relative; }
 
 /* ───────── LANDSCAPE (orientation:landscape) ─────────
  * Use min-specificity matching .sr-overlay:not(.hidden) so portrait grid
