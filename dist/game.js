@@ -11702,7 +11702,7 @@ const L4_CORRIDOR_DURATION_S = 50;   // longer run — nearly a minute of corrid
 
 // ─── L5 SINE CORRIDOR CONSTANTS ──────────────────────────────────────
 const L5C_CLOSE_ROWS      = 29;   // ~203 world-units of gradual squeeze (29 × 7)
-const L5C_WIDE_X          = 48;   // walls visible as they close — not off-screen
+const L5C_WIDE_X          = 64;   // funnel opening covers full road width so ship can't enter outside it
 const L5C_NARROW_X        = 10;   // final tunnel half-width — wider than L3 (9) since L5 speed is higher
 const L5C_STRAIGHT_ROWS   = 12;   // straight rows after squeeze before sine kicks in
 const L5C_TOTAL_ROWS      = 420;  // full corridor duration
@@ -12644,7 +12644,7 @@ function spawnObstacles() {
       else    clampedCount = 6 + Math.floor(Math.random() * 3);
     }
     else if (_sm === 'lethal')    { _isRingBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
-    else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 2 + Math.floor(Math.random() * 2); } // original count restored
+    else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 4 + Math.floor(Math.random() * 2); } // 4-5 cones spread laterally so holding sideways doesn't escape
     else if (_sm === 'endless')   { _isMixBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
   } else if (state.isDeathRun) {
     for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _obsBandIdx = bi; break; } _obsBandIdx = bi; }
@@ -12672,7 +12672,7 @@ function spawnObstacles() {
     // For rings/walls/mix: enforce minimum lane gap so they don't overlap
     if ((_isRingBand || _isMixBand) && blocked.some(b => Math.abs(b - lane) < 4)) continue;
     if (_isWallBand && blocked.some(b => Math.abs(b - lane) < (window._awRand ? window._awRand.laneGap : 3))) continue;
-    if (_isFatConeBand && blocked.some(b => Math.abs(b - lane) < 8)) continue; // wider gap between fat cones
+    if (_isFatConeBand && blocked.some(b => Math.abs(b - lane) < 6)) continue; // gap between fat cones (lowered from 8 to fit 4 cones across 21 lanes)
     blocked.push(lane);
   }
 
