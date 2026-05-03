@@ -751,11 +751,17 @@
         }
         // User zoom override: slider 40-160 (100 = baseline). Per-orientation
         // storage so portrait vs landscape have independent zoom settings.
-        let zoomPct = 100;
+        // Default zoom by orientation: landscape uses 160 (max zoom-in)
+        // because the wide stage otherwise leaves the ship looking small;
+        // portrait keeps 100 baseline.
+        const orient = _orient();
+        let zoomPct = (orient === 'l') ? 160 : 100;
         try {
-          const orient = _orient();
-          const stored = parseInt(localStorage.getItem('jh_showroom_zoom_' + orient) || '100', 10);
-          if (!isNaN(stored)) zoomPct = Math.max(40, Math.min(160, stored));
+          const raw = localStorage.getItem('jh_showroom_zoom_' + orient);
+          if (raw != null) {
+            const stored = parseInt(raw, 10);
+            if (!isNaN(stored)) zoomPct = Math.max(40, Math.min(160, stored));
+          }
         } catch(_){}
         // Multiplier: pct=100 → 1.0; pct=40 → 1.6 (wider, smaller ship);
         // pct=160 → 0.55 (narrower, bigger ship). Linear inverse.
@@ -1418,7 +1424,9 @@
     const gap = 8;
     // Short viewports (mobile landscape ~390px tall) can't afford an 80px
     // handle bar — it eats 20% of vertical space and squishes the stage.
-    const handleh = H < 500 ? 48 : 80;
+    // Handle bar must fit label + tier + track + next-tier line. 64px min on
+    // short viewports (was 48 — content was clipping at the bottom).
+    const handleh = H < 500 ? 64 : 90;
     // Stage should stay roughly square-ish, not wide/short. Compute the
     // available stage height first, then pick panel width so the stage
     // ends up no wider than ~1.4× its height. On short viewports this

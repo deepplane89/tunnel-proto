@@ -1448,6 +1448,12 @@ html, body {
   }
   .game-title {
     line-height: 0.9;
+    /* Mobile landscape is short — cap font so HORIZON line doesn't clip,
+       and neutralize the inline translateY(40px) that pushes it offscreen. */
+    font-size: clamp(36px, 7.5vw, 72px) !important;
+    transform: none !important;
+    text-align: center;
+    width: 100%;
   }
   .skin-nav {
     transform: translateY(-15px);
