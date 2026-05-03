@@ -5399,11 +5399,11 @@ body.sr-edit-mode #thruster-overlay .sr-panel {
 /* ═══════════════════════════════════════════════════════════════════════ */
 @media (orientation: landscape), (min-width: 900px) {
   .sr-overlay:not(.hidden) {
-    /* Override the earlier landscape grid with explicit pixel sizes from
-       the sliders. Defaults match the slider defaults so behavior is
-       identical when EDIT hasn't been touched. */
-    grid-template-columns: var(--ed-stagew, 1fr) var(--ed-panelw, 240px) !important;
-    grid-template-rows: var(--ed-stageh, 1fr) var(--ed-handleh, auto) !important;
+    /* Stage column flexes (1fr) — never overflows the viewport regardless
+       of saved pixel values. Panel takes a fixed pixel width from the
+       slider. Stage row also flexes (1fr); handle row is fixed pixels. */
+    grid-template-columns: 1fr var(--ed-panelw, 240px) !important;
+    grid-template-rows: 1fr var(--ed-handleh, 60px) !important;
     grid-template-areas:
       "stage  panel"
       "handle panel" !important;
