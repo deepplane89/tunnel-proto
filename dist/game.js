@@ -15251,10 +15251,24 @@ function updateStreakBadge() {
     const H = window.innerHeight;
     const pad = 8;
     const gap = 8;
-    const handleh = 80;
-    const panelw = Math.round(W * 0.30);
-    const stagew = W - panelw - 2 * pad - gap;
+    // Short viewports (mobile landscape ~390px tall) can't afford an 80px
+    // handle bar — it eats 20% of vertical space and squishes the stage.
+    const handleh = H < 500 ? 48 : 80;
+    // Stage should stay roughly square-ish, not wide/short. Compute the
+    // available stage height first, then pick panel width so the stage
+    // ends up no wider than ~1.4× its height. On short viewports this
+    // means the panel takes more horizontal room (which is fine, the
+    // panel content scrolls) and the ship preview stays large.
     const stageh = H - handleh - 2 * pad - gap;
+    const maxStageW = Math.round(stageh * 1.4);
+    const remainingW = W - 2 * pad - gap;
+    let stagew = Math.min(maxStageW, Math.round(remainingW * 0.70));
+    let panelw = remainingW - stagew;
+    // Floor panel width so the slider labels remain readable.
+    if (panelw < 220) {
+      panelw = 220;
+      stagew = remainingW - panelw;
+    }
     const panelh = stageh + handleh + gap; // panel spans both rows
     const next = { stagew, stageh, handleh, panelw, panelh, pad, gap };
     _editSave(next);
