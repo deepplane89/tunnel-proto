@@ -1328,10 +1328,206 @@
     }
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // DESKTOP LAYOUT EDIT MODE
+  // Drag/resize the 3 boxes (stage, handling, panel) freely on desktop.
+  // Each box gets a numeric readout (W×H @ x,y) so screenshots show values.
+  // Position/size persisted to localStorage. Toggle via top-right EDIT btn.
+  // ════════════════════════════════════════════════════════════════════════
+  const EDIT_KEY = 'jh_showroom_layout_v1';
+  const EDIT_BOXES = ['sr-stage', 'sr-handling-slot', 'sr-panel-box'];
+  // .sr-panel doesn't have an id; we'll target it by class.
+
+  function _editLoad() {
+    try { return JSON.parse(localStorage.getItem(EDIT_KEY) || '{}') || {}; }
+    catch(_) { return {}; }
+  }
+  function _editSave(d) {
+    try { localStorage.setItem(EDIT_KEY, JSON.stringify(d)); } catch(_){}
+  }
+
+  function _editGetBox(name) {
+    if (name === 'sr-panel-box') return document.querySelector('#thruster-overlay .sr-panel');
+    return document.getElementById(name);
+  }
+
+  function _editApplyBox(name, rect) {
+    const el = _editGetBox(name);
+    if (!el || !rect) return;
+    el.style.position = 'absolute';
+    el.style.left   = rect.x + 'px';
+    el.style.top    = rect.y + 'px';
+    el.style.width  = rect.w + 'px';
+    el.style.height = rect.h + 'px';
+    el.style.right  = 'auto';
+    el.style.bottom = 'auto';
+    el.style.maxWidth  = 'none';
+    el.style.maxHeight = 'none';
+    el.style.gridArea  = 'auto';
+    _editUpdateReadout(name, rect);
+  }
+
+  function _editClearBox(name) {
+    const el = _editGetBox(name);
+    if (!el) return;
+    el.style.position = '';
+    el.style.left = '';
+    el.style.top = '';
+    el.style.width = '';
+    el.style.height = '';
+    el.style.right = '';
+    el.style.bottom = '';
+    el.style.maxWidth = '';
+    el.style.maxHeight = '';
+    el.style.gridArea = '';
+  }
+
+  function _editEnsureReadout(name) {
+    const el = _editGetBox(name);
+    if (!el) return null;
+    let ro = el.querySelector(':scope > .sr-edit-readout');
+    if (!ro) {
+      ro = document.createElement('div');
+      ro.className = 'sr-edit-readout';
+      el.appendChild(ro);
+    }
+    return ro;
+  }
+  function _editUpdateReadout(name, rect) {
+    const ro = _editEnsureReadout(name);
+    if (!ro) return;
+    ro.textContent = name.replace('sr-','').replace('-slot','').replace('-box','').toUpperCase()
+      + '  ' + rect.w + '×' + rect.h + '  @' + rect.x + ',' + rect.y;
+  }
+
+  function _editGetCurrentRect(name) {
+    const el = _editGetBox(name);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+  }
+
+  function _editAttachHandles(name) {
+    const el = _editGetBox(name);
+    if (!el) return;
+    if (el.querySelector(':scope > .sr-edit-resize')) return; // already attached
+    // Resize handle (bottom-right corner)
+    const rh = document.createElement('div');
+    rh.className = 'sr-edit-resize';
+    el.appendChild(rh);
+    // Drag handle (top-left corner)
+    const dh = document.createElement('div');
+    dh.className = 'sr-edit-drag';
+    dh.textContent = '✥';
+    el.appendChild(dh);
+
+    let mode = null, startX = 0, startY = 0, startRect = null;
+    const onMove = (ev) => {
+      if (!mode || !startRect) return;
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      let r = { ...startRect };
+      if (mode === 'drag') { r.x = startRect.x + dx; r.y = startRect.y + dy; }
+      if (mode === 'resize') { r.w = Math.max(40, startRect.w + dx); r.h = Math.max(40, startRect.h + dy); }
+      _editApplyBox(name, r);
+      const all = _editLoad();
+      all[name] = r;
+      _editSave(all);
+      if (name === 'sr-stage') _resizeStageCanvas();
+    };
+    const onUp = () => {
+      mode = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    dh.addEventListener('mousedown', (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      mode = 'drag'; startX = ev.clientX; startY = ev.clientY;
+      startRect = _editGetCurrentRect(name);
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+    rh.addEventListener('mousedown', (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      mode = 'resize'; startX = ev.clientX; startY = ev.clientY;
+      startRect = _editGetCurrentRect(name);
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+  }
+
+  function _editEnable() {
+    document.body.classList.add('sr-edit-mode');
+    const saved = _editLoad();
+    EDIT_BOXES.forEach(name => {
+      _editAttachHandles(name);
+      _editEnsureReadout(name);
+      const rect = saved[name] || _editGetCurrentRect(name);
+      if (rect) _editApplyBox(name, rect);
+    });
+    if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
+  }
+  function _editDisable() {
+    document.body.classList.remove('sr-edit-mode');
+    EDIT_BOXES.forEach(name => {
+      // Keep saved rect applied even after exiting edit mode — user wants
+      // their layout to PERSIST. Just hide handles via .sr-edit-mode CSS.
+      const saved = _editLoad();
+      if (saved[name]) _editApplyBox(name, saved[name]);
+    });
+    if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
+  }
+  function _editReset() {
+    try { localStorage.removeItem(EDIT_KEY); } catch(_){}
+    EDIT_BOXES.forEach(_editClearBox);
+    document.body.classList.remove('sr-edit-mode');
+    if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
+  }
+
+  function _editApplyOnOpen() {
+    // Re-apply saved layout every time the showroom opens.
+    if (window.innerWidth < 900) return; // desktop only
+    const saved = _editLoad();
+    EDIT_BOXES.forEach(name => {
+      if (saved[name]) _editApplyBox(name, saved[name]);
+    });
+  }
+
+  function _wireEditToggle() {
+    const btn = document.getElementById('sr-edit-toggle');
+    if (!btn || btn.dataset.wired === '1') return;
+    btn.dataset.wired = '1';
+    let on = false;
+    btn.addEventListener('click', () => {
+      on = !on;
+      btn.classList.toggle('active', on);
+      btn.textContent = on ? 'DONE' : 'EDIT';
+      if (on) _editEnable(); else _editDisable();
+    });
+    // Right-click resets layout to default grid.
+    btn.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      _editReset();
+      on = false;
+      btn.classList.remove('active');
+      btn.textContent = 'EDIT';
+    });
+  }
+
+  // Hook into open() via window-level wrapper so we don't have to refactor.
+  const _origOpen = open;
   window.Showroom = {
-    open: open, close: close, refresh: refresh,
+    open: function(tab) {
+      _origOpen(tab);
+      requestAnimationFrame(() => {
+        _wireEditToggle();
+        _editApplyOnOpen();
+      });
+    },
+    close: close, refresh: refresh,
     tick: tick, syncColor: syncColor,
     resetThrusterAnchors: resetThrusterAnchors,
     isOpen: function() { return _open; },
+    resetLayout: _editReset,
   };
 })();

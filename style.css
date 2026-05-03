@@ -5023,16 +5023,22 @@ body.sr-open #title-leaderboard {
   height: 100%;
 }
 .sr-pane[data-pane="powerups"] .shop-cards {
-  grid-template-columns: repeat(2, 1fr);
-  grid-auto-rows: 1fr;
-  gap: 6px;
+  /* Single-column stack so each row gets full width — coin cost no longer
+     gets clipped. Cards are horizontal pills: icon | name | pips | cost. */
+  grid-template-columns: 1fr;
+  grid-auto-rows: minmax(36px, auto);
+  gap: 4px;
   padding: 0;
   height: 100%;
-  align-content: stretch;
+  align-content: start;
+  overflow-y: auto;
 }
 .sr-pane[data-pane="powerups"] .shop-card {
-  padding: 6px 8px;
-  gap: 2px;
+  padding: 4px 8px;
+  gap: 8px;
+  flex-direction: row;
+  align-items: center;
+  text-align: left;
 }
 .sr-pane[data-pane="powerups"] .shop-card-icon { width: 22px; height: 22px; }
 .sr-pane[data-pane="powerups"] .shop-card-name { font-size: 10px; }
@@ -5269,4 +5275,91 @@ body.sr-open #title-leaderboard {
   background: transparent;
   color: var(--sr-text-dim);
   border-left-color: transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════ */
+/* DESKTOP LAYOUT EDIT MODE — drag/resize boxes, live numeric readouts.     */
+/* Hidden on mobile (<900px). Toggle button top-right of overlay.           */
+/* ═══════════════════════════════════════════════════════════════════════ */
+.sr-edit-toggle {
+  display: none;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  padding: 6px 12px;
+  background: rgba(0, 14, 28, 0.85);
+  border: 1px solid rgba(34, 211, 238, 0.5);
+  color: #cffafe;
+  font: 700 11px/1 'Orbitron', sans-serif;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  border-radius: 4px;
+  text-shadow: 0 0 6px rgba(34,211,238,0.6);
+  pointer-events: auto;
+}
+.sr-edit-toggle.active {
+  background: rgba(34, 211, 238, 0.25);
+  border-color: rgba(34, 211, 238, 0.9);
+  color: #fff;
+}
+@media (min-width: 900px) {
+  #thruster-overlay:not(.hidden) .sr-edit-toggle { display: block; }
+}
+
+/* Readouts: visible on every box while edit mode is on. */
+.sr-edit-readout {
+  display: none;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 11;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(34, 211, 238, 0.6);
+  color: #cffafe;
+  font: 700 10px/1.2 'Orbitron', monospace;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.sr-edit-drag,
+.sr-edit-resize {
+  display: none;
+  position: absolute;
+  z-index: 11;
+  background: rgba(34, 211, 238, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  pointer-events: auto;
+}
+.sr-edit-drag {
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  cursor: move;
+  color: #001;
+  font: 700 14px/22px sans-serif;
+  text-align: center;
+  border-radius: 0 0 4px 0;
+}
+.sr-edit-resize {
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  border-radius: 4px 0 0 0;
+}
+body.sr-edit-mode .sr-edit-readout,
+body.sr-edit-mode .sr-edit-drag,
+body.sr-edit-mode .sr-edit-resize { display: block; }
+
+/* In edit mode, mark each box with a clearer outline. */
+body.sr-edit-mode #thruster-overlay .sr-stage,
+body.sr-edit-mode #thruster-overlay .sr-handling-slot,
+body.sr-edit-mode #thruster-overlay .sr-panel {
+  outline: 2px dashed rgba(34, 211, 238, 0.8);
+  outline-offset: -2px;
 }
