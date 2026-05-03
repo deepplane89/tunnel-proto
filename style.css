@@ -4494,159 +4494,277 @@ html, body {
   will-change: transform, opacity;
 }
 
-/* ── SHIP HUB (loadout panel) ───────────────────────────────────────────── */
-.hub-panel {
+
+/* ── SHIP GARAGE / SHOWROOM (sci-fi UI) ────────────────────────────────────
+ * Layered over the live title canvas. Panel docks bottom on portrait,
+ * right side on landscape. Palette: near-black-blue bg, translucent slate
+ * panels, cyan/teal accent (premium-restraint, no rainbow neon).
+ * ──────────────────────────────────────────────────────────────────────── */
+:root {
+  --sr-bg:        #070912;
+  --sr-bg-soft:   rgba(7, 9, 18, 0.55);
+  --sr-panel:     rgba(18, 26, 42, 0.78);
+  --sr-panel-2:   rgba(28, 38, 56, 0.85);
+  --sr-edge:      rgba(34, 211, 238, 0.32);
+  --sr-edge-soft: rgba(34, 211, 238, 0.14);
+  --sr-accent:    #22d3ee;
+  --sr-accent-2:  #67e8f9;
+  --sr-accent-glow: rgba(34, 211, 238, 0.55);
+  --sr-text:      #cfe6ee;
+  --sr-text-dim:  rgba(207, 230, 238, 0.6);
+  --sr-locked:    rgba(207, 230, 238, 0.32);
+}
+
+/* Overlay container: full-screen garage background, panel docked.
+ * Background is a deep radial blue with a soft cyan rim glow. */
+.sr-overlay {
+  position: fixed; inset: 0;
+  pointer-events: none; /* gates pointer to the panel */
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 60%, rgba(34,211,238,0.06) 0%, rgba(7,9,18,0) 70%),
+    radial-gradient(ellipse 100% 80% at 50% 110%, rgba(11,17,32,1) 0%, var(--sr-bg) 60%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  font-family: 'Orbitron', 'Helvetica Neue', sans-serif;
+  overflow: hidden;
+}
+.sr-overlay.hidden { display: none; }
+
+/* STAGE — receives the relocated #title-ship-canvas while open. Sized to
+ * fill the upper portion on portrait, the left portion on landscape. */
+.sr-stage {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 60vh;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+.sr-stage > canvas {
+  /* The canvas is repositioned by JS — these styles are fallbacks. */
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+
+/* Soft vignette to focus the eye on the ship. */
+.sr-vignette {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 35%, rgba(0,0,0,0) 50%, rgba(7,9,18,0.55) 100%);
+  z-index: 2;
+}
+
+/* Subtle grid floor lines — sci-fi hangar suggestion, very low opacity. */
+.sr-grid {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 35vh;
+  pointer-events: none;
+  background-image:
+    linear-gradient(transparent 0%, rgba(34,211,238,0.06) 100%),
+    linear-gradient(90deg, transparent 49.5%, rgba(34,211,238,0.10) 50%, transparent 50.5%),
+    repeating-linear-gradient(90deg, transparent 0, transparent 39px, rgba(34,211,238,0.05) 40px),
+    repeating-linear-gradient(0deg, transparent 0, transparent 39px, rgba(34,211,238,0.05) 40px);
+  /* Apply CSS perspective by transforming the layer for a horizon. */
+  transform: perspective(420px) rotateX(58deg);
+  transform-origin: center bottom;
+  mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 80%, transparent 100%);
+  z-index: 1;
+  opacity: 0.85;
+}
+
+/* PANEL ─ glass slate with cyan accent edge + clipped corners */
+.sr-panel {
+  pointer-events: auto;
   position: relative;
-  width: 92%;
-  max-width: 480px;
-  max-height: 88vh;
-  background: linear-gradient(180deg, rgba(20,12,32,0.96) 0%, rgba(8,6,18,0.98) 100%);
-  border: 1px solid rgba(255,102,187,0.25);
-  border-radius: 14px;
-  box-shadow: 0 0 40px rgba(255,102,187,0.15), inset 0 0 60px rgba(255,102,187,0.04);
+  width: 100%;
+  max-width: 520px;
+  background: var(--sr-panel);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+          backdrop-filter: blur(14px) saturate(1.1);
+  border: 1px solid var(--sr-edge);
+  /* Notched top-right + bottom-left corners — sci-fi panel signature */
+  clip-path: polygon(
+    0 0,
+    calc(100% - 18px) 0,
+    100% 18px,
+    100% 100%,
+    18px 100%,
+    0 calc(100% - 18px)
+  );
+  box-shadow:
+    0 0 0 1px var(--sr-edge-soft) inset,
+    0 0 32px rgba(34,211,238,0.10),
+    0 12px 36px rgba(0,0,0,0.45);
+  padding: 14px 16px 16px;
+  color: var(--sr-text);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  font-family: 'Orbitron', 'Helvetica Neue', sans-serif;
+  gap: 10px;
 }
-.hub-close {
-  position: absolute;
-  top: 10px; right: 10px;
-  width: 32px; height: 32px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 50%;
-  color: #ddd;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  z-index: 2;
-  display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s, color 0.15s;
-}
-.hub-close:hover, .hub-close:active { background: rgba(255,102,187,0.18); color: #fff; }
 
-.hub-tabs {
+/* TABS ── thin accent underline on active */
+.sr-tabs {
   display: flex;
-  gap: 0;
-  padding: 14px 14px 0 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  gap: 2px;
+  border-bottom: 1px solid var(--sr-edge-soft);
+  padding-bottom: 0;
+  margin-right: 36px; /* leave room for close button */
 }
-.hub-tab {
-  flex: 1;
+.sr-tab {
+  flex: 0 1 auto;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  color: rgba(255,255,255,0.45);
-  padding: 10px 6px;
+  color: var(--sr-text-dim);
+  padding: 8px 14px 9px;
   font: 600 11px/1 'Orbitron', sans-serif;
-  letter-spacing: 1.5px;
+  letter-spacing: 1.6px;
   cursor: pointer;
-  transition: color 0.18s, border-color 0.18s;
+  transition: color 0.15s, border-color 0.15s, text-shadow 0.15s;
+  margin-bottom: -1px;
 }
-.hub-tab:hover { color: rgba(255,255,255,0.75); }
-.hub-tab.active { color: #ff66bb; border-bottom-color: #ff66bb; text-shadow: 0 0 10px rgba(255,102,187,0.5); }
-.hub-tab.hidden { display: none; }
+.sr-tab:hover { color: var(--sr-text); }
+.sr-tab.active {
+  color: var(--sr-accent);
+  border-bottom-color: var(--sr-accent);
+  text-shadow: 0 0 10px var(--sr-accent-glow);
+}
+.sr-tab.sr-hidden { display: none; }
 
-.hub-preview {
-  height: 130px;
-  background: radial-gradient(ellipse at center, rgba(40,20,60,0.5) 0%, rgba(0,0,0,0) 70%);
+/* CLOSE button — small notched square top-right */
+.sr-close {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 30px; height: 30px;
+  background: transparent;
+  border: 1px solid var(--sr-edge-soft);
+  color: var(--sr-text-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  margin: 6px 0;
+  clip-path: polygon(
+    0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px)
+  );
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.hub-preview svg { width: 100%; height: 100%; max-width: 320px; }
-
-.hub-equipped {
-  text-align: center;
-  font: 10px/1.4 'Orbitron', monospace;
-  letter-spacing: 1.5px;
-  color: rgba(255,255,255,0.55);
-  padding: 0 14px 12px;
-}
-.hub-equipped .hub-eq-name { color: #ff66bb; font-weight: 700; }
-
-.hub-body {
-  padding: 6px 14px 14px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+.sr-close:hover, .sr-close:active {
+  color: var(--sr-accent);
+  border-color: var(--sr-edge);
+  background: rgba(34,211,238,0.08);
 }
 
-/* SHAPE grid */
-.hub-section-title {
+/* BODY + panes */
+.sr-body { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+.sr-pane { display: flex; flex-direction: column; gap: 10px; }
+.sr-pane.sr-hidden { display: none; }
+
+/* ROW: label + dropdown */
+.sr-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sr-label {
+  flex: 0 0 64px;
   font: 600 10px/1 'Orbitron', sans-serif;
   letter-spacing: 2px;
-  color: rgba(255,255,255,0.4);
-  margin: 14px 0 10px;
-  padding-left: 2px;
-}
-.hub-shape-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-.hub-shape-card {
-  position: relative;
-  aspect-ratio: 1 / 1;
-  background: rgba(255,255,255,0.025);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  overflow: hidden;
-  transition: transform 0.12s, border-color 0.18s, background 0.18s, box-shadow 0.18s;
-  padding: 0;
-}
-.hub-shape-card:hover { border-color: rgba(255,102,187,0.4); }
-.hub-shape-card svg { width: 70%; height: 70%; opacity: 0.85; }
-.hub-shape-card.equipped {
-  border-color: #ff66bb;
-  background: rgba(255,102,187,0.08);
-  box-shadow: 0 0 20px rgba(255,102,187,0.35), inset 0 0 14px rgba(255,102,187,0.12);
-}
-.hub-shape-card.equipped svg { opacity: 1; }
-.hub-shape-card.locked { cursor: default; }
-.hub-shape-card.locked svg { opacity: 0.18; filter: grayscale(1); }
-.hub-shape-card .hub-lock-req {
-  position: absolute;
-  inset: auto 0 6px 0;
-  font: 600 8px/1 'Orbitron', monospace;
-  letter-spacing: 1px;
-  color: rgba(255,255,255,0.5);
-  text-align: center;
+  color: var(--sr-text-dim);
+  -webkit-user-select: none;
+          user-select: none;
 }
 
-/* COLOR row */
-.hub-color-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 2px 0;
-}
-.hub-swatch {
+/* DROPDOWN — restyled native <select>, native option list still works
+ * (mobile gets the OS-native picker, which is what we want). */
+.sr-select-wrap {
   position: relative;
-  width: 34px; height: 34px;
-  border-radius: 50%;
+  flex: 1 1 auto;
+}
+.sr-select {
+  -webkit-appearance: none;
+     -moz-appearance: none;
+          appearance: none;
+  width: 100%;
+  background: var(--sr-panel-2);
+  color: var(--sr-text);
+  border: 1px solid var(--sr-edge-soft);
+  /* notched right edge */
+  clip-path: polygon(
+    0 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% 100%,
+    0 100%
+  );
+  padding: 10px 36px 10px 14px;
+  font: 600 12px/1 'Orbitron', sans-serif;
+  letter-spacing: 1.4px;
   cursor: pointer;
-  border: 2px solid rgba(255,255,255,0.1);
-  transition: transform 0.12s, border-color 0.18s, box-shadow 0.18s;
-  flex: 0 0 auto;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
-.hub-swatch:hover { transform: scale(1.08); }
-.hub-swatch.equipped {
-  border-color: #ff66bb;
-  box-shadow: 0 0 12px rgba(255,102,187,0.6), 0 0 4px var(--swatch-glow, #fff);
-  transform: scale(1.1);
+.sr-select:hover {
+  border-color: var(--sr-edge);
+  background: rgba(38, 50, 72, 0.92);
 }
-.hub-swatch.locked {
-  cursor: default;
-  background: rgba(255,255,255,0.02) !important;
-  border-style: dashed;
-  border-color: rgba(255,255,255,0.15);
+.sr-select:focus {
+  border-color: var(--sr-accent);
+  box-shadow: 0 0 0 1px var(--sr-accent-glow), 0 0 16px var(--sr-accent-glow);
 }
-.hub-swatch.locked::after {
-  content: '?';
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  color: rgba(255,255,255,0.3);
-  font: 600 14px/1 'Orbitron', sans-serif;
+/* Native <option> styling — limited browser support but where it works
+ * (Chrome desktop, Firefox) it matches the panel. Mobile uses OS chrome. */
+.sr-select option {
+  background: #0d1426;
+  color: var(--sr-text);
+  font-family: 'Orbitron', sans-serif;
+}
+.sr-select option:disabled {
+  color: var(--sr-locked);
+  font-style: italic;
+}
+.sr-chevron {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  color: var(--sr-accent);
+  font-size: 10px;
+  pointer-events: none;
+  text-shadow: 0 0 8px var(--sr-accent-glow);
+}
+
+/* While the hub is open: hide title-screen UI chrome (buttons/labels/coin row)
+ * so only the ship + showroom panel are visible. The live ship keeps spinning
+ * and the thruster preview keeps updating because we never stop rendering. */
+body.sr-open #title-screen > *:not(#title-ship-canvas):not(#title-star-canvas) {
+  opacity: 0.0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+body.sr-open #title-ship-canvas {
+  filter: saturate(1.06) contrast(1.02);
+}
+
+/* LANDSCAPE / desktop: dock panel to the right side instead of bottom. */
+@media (min-aspect-ratio: 1/1) and (min-width: 720px) {
+  .sr-overlay {
+    align-items: stretch;
+    justify-content: flex-end;
+    padding: 24px;
+    background: linear-gradient(270deg,
+      rgba(7,9,18,0.55) 0%,
+      rgba(7,9,18,0.0) 50%);
+  }
+  .sr-panel {
+    max-width: 380px;
+    align-self: stretch;
+  }
 }

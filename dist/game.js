@@ -1462,225 +1462,16 @@ function closeMissions() {
 }
 window.closeMissions = closeMissions;
 
-// ── SHIP HUB (loadout panel) ─────────────────────────────────────────
-// V1: Thrusters tab only. Skins / Power-ups tabs wired but hidden until built.
+
+// ── SHIP HUB / SHOWROOM glue ─────────────────────────────────────────────
+// V2: Showroom logic lives in src/48-showroom.js. These thin functions just
+// delegate so all existing call-sites (▲ icon, claim flow, etc.) keep working.
 let _thrusterPanelOpenedFromGameplay = false;
-let _hubActiveTab = 'thrusters';
-
-// Map preset/color keys to their MISSION_LADDER rung index — used to label
-// locked items with where they unlock (e.g. "M3"). Built lazily.
-let _thrusterUnlockReqCache = null;
-function _getThrusterUnlockReqs() {
-  if (_thrusterUnlockReqCache) return _thrusterUnlockReqCache;
-  const presets = {}, colors = {};
-  let missionCount = 0;
-  if (Array.isArray(MISSION_LADDER)) {
-    for (let i = 0; i < MISSION_LADDER.length; i++) {
-      const r = MISSION_LADDER[i];
-      if (r.type === 'mission') { missionCount++; continue; }
-      if (r.type !== 'reward' || !r.reward) continue;
-      // Use mission count as the surface label — "unlocks at M5" is more
-      // meaningful to the player than raw rung index 11.
-      if (r.reward.kind === 'thruster' && r.reward.presetKey) {
-        presets[r.reward.presetKey] = missionCount;
-      } else if (r.reward.kind === 'thrustercolor' && r.reward.colorKey) {
-        colors[r.reward.colorKey] = missionCount;
-      }
-    }
-  }
-  _thrusterUnlockReqCache = { presets, colors };
-  return _thrusterUnlockReqCache;
-}
-
-// SVG cone glyph generator. Each preset maps to width/length/glow params.
-// Color is the equipped swatch hex (or null → fallback white-ish).
-function _hubConeSVG(presetKey, colorHex, size /* 'big'|'small' */) {
-  const big = size === 'big';
-  // Per-preset visual character (width, length, glow). Tuned to feel different
-  // at a glance — not 1:1 with the runtime params.
-  const P = {
-    baseline: { w: 28, l: 70, glow: 14 },
-    short:    { w: 30, l: 44, glow: 10 },
-    light:    { w: 14, l: 78, glow: 6 },
-    fatIon:   { w: 44, l: 60, glow: 28 },
-  }[presetKey] || { w: 26, l: 64, glow: 12 };
-
-  // Big preview is drawn into a 200×120 viewBox; small thumbs into 60×60.
-  const c = colorHex || '#cfd8ff';
-  const id = 'cone-' + presetKey + '-' + (big ? 'b' : 's') + '-' + Math.random().toString(36).slice(2, 7);
-  if (big) {
-    // Cone tapers from a hot core at the nozzle to a soft tip at the right.
-    const cx = 60, cy = 60;       // nozzle center (left)
-    const tipX = cx + P.l;        // cone tip (right)
-    const halfW = P.w / 2;
-    return (
-      '<defs>' +
-        '<linearGradient id="' + id + '-grad" x1="0%" x2="100%" y1="50%" y2="50%">' +
-          '<stop offset="0%"  stop-color="#ffffff" stop-opacity="1"/>' +
-          '<stop offset="15%" stop-color="' + c + '" stop-opacity="1"/>' +
-          '<stop offset="100%" stop-color="' + c + '" stop-opacity="0"/>' +
-        '</linearGradient>' +
-        '<radialGradient id="' + id + '-glow" cx="50%" cy="50%" r="50%">' +
-          '<stop offset="0%"  stop-color="' + c + '" stop-opacity="0.7"/>' +
-          '<stop offset="60%" stop-color="' + c + '" stop-opacity="0.15"/>' +
-          '<stop offset="100%" stop-color="' + c + '" stop-opacity="0"/>' +
-        '</radialGradient>' +
-      '</defs>' +
-      // soft nozzle bloom halo
-      '<circle cx="' + cx + '" cy="' + cy + '" r="' + (P.glow + 6) + '" fill="url(#' + id + '-glow)"/>' +
-      // cone body
-      '<polygon points="' +
-        cx + ',' + (cy - halfW) + ' ' +
-        tipX + ',' + cy + ' ' +
-        cx + ',' + (cy + halfW) +
-      '" fill="url(#' + id + '-grad)"/>' +
-      // hot core dot at nozzle
-      '<circle cx="' + cx + '" cy="' + cy + '" r="' + (halfW * 0.55) + '" fill="#ffffff" opacity="0.9"/>'
-    );
-  } else {
-    // Thumb: scale to fit 60×60 viewBox, cone points right.
-    const scale = 0.55;
-    const cx = 18, cy = 30;
-    const tipX = cx + P.l * scale;
-    const halfW = (P.w * scale) / 2;
-    return (
-      '<defs>' +
-        '<linearGradient id="' + id + '-grad" x1="0%" x2="100%" y1="50%" y2="50%">' +
-          '<stop offset="0%"  stop-color="#ffffff" stop-opacity="1"/>' +
-          '<stop offset="20%" stop-color="' + c + '" stop-opacity="1"/>' +
-          '<stop offset="100%" stop-color="' + c + '" stop-opacity="0"/>' +
-        '</linearGradient>' +
-      '</defs>' +
-      '<polygon points="' +
-        cx + ',' + (cy - halfW) + ' ' +
-        tipX + ',' + cy + ' ' +
-        cx + ',' + (cy + halfW) +
-      '" fill="url(#' + id + '-grad)"/>' +
-      '<circle cx="' + cx + '" cy="' + cy + '" r="' + (halfW * 0.55) + '" fill="#ffffff" opacity="0.9"/>'
-    );
-  }
-}
-
-function renderHubPreview() {
-  const svg = document.getElementById('hub-preview-svg');
-  if (!svg) return;
-  const td = loadThrusterData();
-  const palette = window._THRUSTER_COLOR_PALETTE || {};
-  const colorEntry = palette[td.selectedColor] || palette['default'] || {};
-  const colorHex = colorEntry.hex ? colorEntry.swatch : (colorEntry.swatch || '#cfd8ff');
-  svg.innerHTML = _hubConeSVG(td.selectedPreset, colorHex, 'big');
-
-  // Equipped strip
-  const eq = document.getElementById('hub-equipped');
-  if (eq) {
-    const presets = window._THRUSTER_PRESETS || {};
-    const presetLabel = ((presets[td.selectedPreset] && presets[td.selectedPreset].label) || td.selectedPreset).toUpperCase();
-    const colorLabel = (colorEntry.label || td.selectedColor).toUpperCase();
-    eq.innerHTML = '<span class="hub-eq-name">' + presetLabel + '</span> \u00b7 ' + colorLabel;
-  }
-}
-
-function renderThrustersTab() {
-  const body = document.getElementById('hub-body');
-  if (!body) return;
-  const presets = window._THRUSTER_PRESETS || {};
-  const palette = window._THRUSTER_COLOR_PALETTE || {};
-  const reqs = _getThrusterUnlockReqs();
-  const td = loadThrusterData();
-  const adminAll = (typeof _skinAdminMode !== 'undefined') && _skinAdminMode;
-
-  const isPresetUnlocked = (k) => k === 'baseline' || adminAll || td.unlockedPresets.includes(k);
-  const isColorUnlocked  = (k) => k === 'default'  || adminAll || td.unlockedColors.includes(k);
-
-  // SHAPE grid — chunky cards w/ cone glyph + (if locked) unlock label
-  let html = '<div class="hub-section-title">SHAPE</div><div class="hub-shape-grid">';
-  Object.keys(presets).forEach(key => {
-    const unlocked = isPresetUnlocked(key);
-    const equipped = (td.selectedPreset === key);
-    const colorEntry = palette[td.selectedColor] || {};
-    const c = unlocked ? (colorEntry.swatch || '#cfd8ff') : '#666';
-    const cls = ['hub-shape-card'];
-    if (equipped) cls.push('equipped');
-    if (!unlocked) cls.push('locked');
-    const lockLabel = !unlocked && reqs.presets[key] ? '<div class="hub-lock-req">M' + reqs.presets[key] + '</div>' : '';
-    html += '<button class="' + cls.join(' ') + '" data-key="' + key + '" data-unlocked="' + (unlocked?1:0) + '">' +
-            '<svg viewBox="0 0 60 60" preserveAspectRatio="xMidYMid meet">' + _hubConeSVG(key, c, 'small') + '</svg>' +
-            lockLabel +
-            '</button>';
-  });
-  html += '</div>';
-
-  // COLOR row — horizontal swatches
-  html += '<div class="hub-section-title">COLOR</div><div class="hub-color-row">';
-  Object.keys(palette).forEach(key => {
-    const C = palette[key];
-    const swatch = C.swatch || '#888';
-    const unlocked = isColorUnlocked(key);
-    const equipped = (td.selectedColor === key);
-    const cls = ['hub-swatch'];
-    if (equipped) cls.push('equipped');
-    if (!unlocked) cls.push('locked');
-    const bg = unlocked ? swatch : 'transparent';
-    const style = 'background:' + bg + ';--swatch-glow:' + swatch + ';';
-    html += '<button class="' + cls.join(' ') + '" data-key="' + key + '" data-unlocked="' + (unlocked?1:0) + '" style="' + style + '" aria-label="' + (C.label || key) + '"></button>';
-  });
-  html += '</div>';
-
-  body.innerHTML = html;
-
-  // Wire taps
-  body.querySelectorAll('.hub-shape-card').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (btn.getAttribute('data-unlocked') !== '1') return;
-      const key = btn.getAttribute('data-key');
-      const d = loadThrusterData();
-      if (!d.unlockedPresets.includes(key)) d.unlockedPresets.push(key);
-      d.selectedPreset = key;
-      saveThrusterData(d);
-      try { if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster(); } catch(_){}
-      try { playTitleTap(); } catch(_){}
-      renderThrustersTab();
-      renderHubPreview();
-    });
-  });
-  body.querySelectorAll('.hub-swatch').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (btn.getAttribute('data-unlocked') !== '1') return;
-      const key = btn.getAttribute('data-key');
-      const d = loadThrusterData();
-      if (!d.unlockedColors.includes(key)) d.unlockedColors.push(key);
-      d.selectedColor = key;
-      saveThrusterData(d);
-      try { if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster(); } catch(_){}
-      try { playTitleTap(); } catch(_){}
-      renderThrustersTab();
-      renderHubPreview();
-    });
-  });
-}
-
-function renderHubTab(tab) {
-  _hubActiveTab = tab;
-  // Tab visual state
-  document.querySelectorAll('.hub-tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.tab === tab);
-  });
-  // Body content per tab
-  if (tab === 'thrusters') {
-    renderThrustersTab();
-  } else {
-    // Future tabs: skins, powerups. For V1 they’re hidden so this branch
-    // shouldn’t fire, but leave a graceful fallback.
-    const body = document.getElementById('hub-body');
-    if (body) body.innerHTML = '';
-  }
-}
 
 function openThrusterPanel(targetTab) {
   initAudio();
   try { playTitleTap(); } catch(_){}
-  const overlay = document.getElementById('thruster-overlay');
-  if (!overlay) return;
+  // Pause gameplay if mid-run (mirrors V1 behavior).
   if (state.phase === 'playing') {
     _thrusterPanelOpenedFromGameplay = true;
     state.phase = 'paused';
@@ -1691,32 +1482,28 @@ function openThrusterPanel(targetTab) {
   } else {
     _thrusterPanelOpenedFromGameplay = false;
   }
-  overlay.classList.remove('hidden');
-  // Clear NEW badge once seen
+  // Clear NEW badge once seen.
   window._LS.removeItem('jetslide_thrusters_new');
   const dot = document.getElementById('title-thrusters-new-dot');
   if (dot) dot.style.display = 'none';
-  // Wire tab clicks once
-  document.querySelectorAll('.hub-tab').forEach(t => {
-    if (t._hubBound) return;
-    t._hubBound = true;
-    t.addEventListener('click', () => {
-      if (t.classList.contains('hidden')) return;
-      try { playTitleTap(); } catch(_){}
-      renderHubTab(t.dataset.tab);
-      renderHubPreview();
-    });
-  });
-  renderHubTab(targetTab || 'thrusters');
-  renderHubPreview();
+  // Delegate to showroom module if loaded; otherwise fall back to overlay-only.
+  if (window.Showroom && typeof window.Showroom.open === 'function') {
+    window.Showroom.open(targetTab || 'thrusters');
+  } else {
+    const overlay = document.getElementById('thruster-overlay');
+    if (overlay) overlay.classList.remove('hidden');
+  }
 }
 window.openThrusterPanel = openThrusterPanel;
 
 function closeThrusterPanel() {
   try { playTitleTap(); } catch(_){}
-  const overlay = document.getElementById('thruster-overlay');
-  if (!overlay) return;
-  overlay.classList.add('hidden');
+  if (window.Showroom && typeof window.Showroom.close === 'function') {
+    window.Showroom.close();
+  } else {
+    const overlay = document.getElementById('thruster-overlay');
+    if (overlay) overlay.classList.add('hidden');
+  }
   if (_thrusterPanelOpenedFromGameplay && state.phase === 'paused') {
     state.phase = 'playing';
     _thrusterPanelOpenedFromGameplay = false;
@@ -13792,6 +13579,380 @@ function updateStreakBadge() {
 }
 
 // ═══════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────
+// SHIP GARAGE / SHOWROOM (Path A — reuses live title scene)
+//
+// Layers a sci-fi UI panel over the existing title canvas. The title scene
+// already has a cloned ship + studio lighting + spinGroup for rotation, so
+// the "showroom" is literally the title preview seen through a docked panel.
+//
+// Public API (exposed as window.Showroom):
+//   open(tab)    — show panel, populate dropdowns, reframe camera
+//   close()      — hide panel, restore camera
+//   refresh()    — re-read storage and rebuild dropdowns (e.g. after admin unlock)
+//
+// Coupling:
+//   Reads:   SHIP_SKINS, _THRUSTER_PRESETS, _THRUSTER_COLOR_PALETTE,
+//            loadSkinData, loadThrusterData, isSkinUnlocked, _skinAdminMode,
+//            MISSION_LADDER, titleCamera, titleScene
+//   Writes:  saveSkinData (via navigateToSkin), saveThrusterData
+//   Calls:   navigateToSkin(idx), _applyEquippedThruster(),
+//            _applyThrusterPresetByKey, _applyThrusterColorByKey, playTitleTap
+// ─────────────────────────────────────────────────────────────────────────
+
+(function _installShowroom() {
+  'use strict';
+
+  // ── State ────────────────────────────────────────────────────────────
+  let _open = false;
+  let _activeTab = 'thrusters';
+  let _wired = false;
+  let _resizeBound = false;
+  // Saved canvas placement so we can restore on close.
+  let _canvasSaved = null; // { parent, nextSibling, w, h, transform, dpr, camAspect, rendererW, rendererH }
+
+  // ── Mission-ladder unlock requirement cache (M3, M7, ...) ────────────
+  let _unlockReqCache = null;
+  function _getUnlockReqs() {
+    if (_unlockReqCache) return _unlockReqCache;
+    const presets = {}, colors = {}, skins = {};
+    let missionCount = 0;
+    if (typeof MISSION_LADDER !== 'undefined' && Array.isArray(MISSION_LADDER)) {
+      for (let i = 0; i < MISSION_LADDER.length; i++) {
+        const r = MISSION_LADDER[i];
+        if (r.type === 'mission') { missionCount++; continue; }
+        if (r.type !== 'reward' || !r.reward) continue;
+        if (r.reward.kind === 'thruster' && r.reward.presetKey) {
+          presets[r.reward.presetKey] = missionCount;
+        } else if (r.reward.kind === 'thrustercolor' && r.reward.colorKey) {
+          colors[r.reward.colorKey] = missionCount;
+        } else if (r.reward.kind === 'skin' && typeof r.reward.skinIdx === 'number') {
+          skins[r.reward.skinIdx] = missionCount;
+        }
+      }
+    }
+    _unlockReqCache = { presets, colors, skins };
+    return _unlockReqCache;
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+  function _adminAll() {
+    return (typeof _skinAdminMode !== 'undefined') && _skinAdminMode;
+  }
+
+  function _isPresetUnlocked(key) {
+    if (key === 'baseline' || _adminAll()) return true;
+    try {
+      const td = loadThrusterData();
+      return td.unlockedPresets.includes(key);
+    } catch(_) { return false; }
+  }
+  function _isColorUnlocked(key) {
+    if (key === 'default' || _adminAll()) return true;
+    try {
+      const td = loadThrusterData();
+      return td.unlockedColors.includes(key);
+    } catch(_) { return false; }
+  }
+  function _isSkinUnlockedSafe(idx) {
+    if (idx === 0 || _adminAll()) return true;
+    try {
+      if (typeof isSkinUnlocked === 'function') return isSkinUnlocked(idx);
+    } catch(_){}
+    return false;
+  }
+
+  // ── Build dropdown <option>s ─────────────────────────────────────────
+  function _buildSkinOptions(sel) {
+    if (!sel) return;
+    sel.innerHTML = '';
+    if (typeof SHIP_SKINS === 'undefined') return;
+    const reqs = _getUnlockReqs();
+    let selectedIdx = 0;
+    try { selectedIdx = (loadSkinData() || {}).selected || 0; } catch(_){}
+    SHIP_SKINS.forEach((skin, idx) => {
+      if (skin.hidden) return;
+      const unlocked = _isSkinUnlockedSafe(idx);
+      const opt = document.createElement('option');
+      opt.value = String(idx);
+      let label = (skin.name || ('SKIN ' + idx));
+      if (!unlocked) {
+        const m = reqs.skins[idx];
+        const tag = (m ? ('M' + m) : (skin.price ? (skin.price + 'c') : 'LOCKED'));
+        label += '  · ' + tag;
+        opt.disabled = true;
+      }
+      opt.textContent = label;
+      if (idx === selectedIdx) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  function _buildShapeOptions(sel) {
+    if (!sel) return;
+    sel.innerHTML = '';
+    const presets = window._THRUSTER_PRESETS || {};
+    const reqs = _getUnlockReqs();
+    let selectedKey = 'baseline';
+    try { selectedKey = (loadThrusterData() || {}).selectedPreset || 'baseline'; } catch(_){}
+    Object.keys(presets).forEach(key => {
+      const P = presets[key];
+      const unlocked = _isPresetUnlocked(key);
+      const opt = document.createElement('option');
+      opt.value = key;
+      const baseLabel = (P && P.label) ? P.label.toUpperCase() : key.toUpperCase();
+      let label = baseLabel;
+      if (!unlocked) {
+        const m = reqs.presets[key];
+        label += '  · ' + (m ? ('M' + m) : 'LOCKED');
+        opt.disabled = true;
+      }
+      opt.textContent = label;
+      if (key === selectedKey) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  function _buildColorOptions(sel) {
+    if (!sel) return;
+    sel.innerHTML = '';
+    const palette = window._THRUSTER_COLOR_PALETTE || {};
+    const reqs = _getUnlockReqs();
+    let selectedKey = 'default';
+    try { selectedKey = (loadThrusterData() || {}).selectedColor || 'default'; } catch(_){}
+    Object.keys(palette).forEach(key => {
+      const C = palette[key];
+      const unlocked = _isColorUnlocked(key);
+      const opt = document.createElement('option');
+      opt.value = key;
+      const baseLabel = (C && C.label) ? C.label.toUpperCase() : key.toUpperCase();
+      let label = baseLabel;
+      if (!unlocked) {
+        const m = reqs.colors[key];
+        label += '  · ' + (m ? ('M' + m) : 'LOCKED');
+        opt.disabled = true;
+      }
+      opt.textContent = label;
+      if (key === selectedKey) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  function _populateAll() {
+    _buildSkinOptions(document.getElementById('sr-select-skin'));
+    _buildShapeOptions(document.getElementById('sr-select-shape'));
+    _buildColorOptions(document.getElementById('sr-select-color'));
+  }
+
+  // ── Wire dropdown change handlers ────────────────────────────────────
+  function _onSkinChange(e) {
+    const idx = parseInt(e.target.value, 10);
+    if (isNaN(idx)) return;
+    // Admin mode: pre-mark unlocked so navigateToSkin doesn't bounce back.
+    if (_adminAll()) {
+      try {
+        const d = loadSkinData();
+        if (!d.unlocked.includes(idx)) { d.unlocked.push(idx); saveSkinData(d); }
+      } catch(_){}
+    }
+    if (typeof navigateToSkin === 'function') {
+      try { navigateToSkin(idx); } catch(_){}
+    }
+    try { playTitleTap(); } catch(_){}
+  }
+
+  function _onShapeChange(e) {
+    const key = e.target.value;
+    if (!key) return;
+    try {
+      const d = loadThrusterData();
+      if (!d.unlockedPresets.includes(key)) d.unlockedPresets.push(key);
+      d.selectedPreset = key;
+      saveThrusterData(d);
+      if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster();
+    } catch(_){}
+    try { playTitleTap(); } catch(_){}
+  }
+
+  function _onColorChange(e) {
+    const key = e.target.value;
+    if (!key) return;
+    try {
+      const d = loadThrusterData();
+      if (!d.unlockedColors.includes(key)) d.unlockedColors.push(key);
+      d.selectedColor = key;
+      saveThrusterData(d);
+      if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster();
+    } catch(_){}
+    try { playTitleTap(); } catch(_){}
+  }
+
+  // ── Tab switching ────────────────────────────────────────────────────
+  function _switchTab(tab) {
+    _activeTab = tab;
+    document.querySelectorAll('.sr-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === tab);
+    });
+    document.querySelectorAll('.sr-pane').forEach(p => {
+      p.classList.toggle('sr-hidden', p.dataset.pane !== tab);
+    });
+  }
+
+  function _onTabClick(e) {
+    const t = e.currentTarget;
+    if (t.classList.contains('sr-hidden')) return;
+    try { playTitleTap(); } catch(_){}
+    _switchTab(t.dataset.tab);
+  }
+
+  // ── One-time wiring (idempotent) ─────────────────────────────────────
+  function _wireOnce() {
+    if (_wired) return;
+    _wired = true;
+    document.querySelectorAll('.sr-tab').forEach(t => {
+      t.addEventListener('click', _onTabClick);
+    });
+    const sSkin  = document.getElementById('sr-select-skin');
+    const sShape = document.getElementById('sr-select-shape');
+    const sColor = document.getElementById('sr-select-color');
+    if (sSkin)  sSkin.addEventListener('change', _onSkinChange);
+    if (sShape) sShape.addEventListener('change', _onShapeChange);
+    if (sColor) sColor.addEventListener('change', _onColorChange);
+  }
+
+  // ── Canvas relocation: detach title-ship-canvas to fullscreen stage ──
+  // The render loop in 70-perf-diag.js calls _titleRenderer.render() every
+  // frame regardless of canvas position, so just resizing+reparenting the
+  // canvas + updating the camera aspect = bigger ship preview, no other code.
+  function _relocateCanvasToStage() {
+    const canvas = document.getElementById('title-ship-canvas');
+    const stage  = document.getElementById('sr-stage');
+    if (!canvas || !stage) return;
+    if (_canvasSaved) return; // already relocated
+    _canvasSaved = {
+      parent: canvas.parentNode,
+      nextSibling: canvas.nextSibling,
+      styleW: canvas.style.width,
+      styleH: canvas.style.height,
+      styleTransform: canvas.style.transform,
+      styleMaxWidth: canvas.style.maxWidth,
+      styleMaxHeight: canvas.style.maxHeight,
+      camAspect: (typeof titleCamera !== 'undefined' && titleCamera) ? titleCamera.aspect : null,
+      rendererW: 0, rendererH: 0,
+    };
+    // Capture current renderer drawing-buffer size.
+    try {
+      if (typeof _titleRenderer !== 'undefined' && _titleRenderer) {
+        const sz = new THREE.Vector2();
+        _titleRenderer.getSize(sz);
+        _canvasSaved.rendererW = sz.x;
+        _canvasSaved.rendererH = sz.y;
+      }
+    } catch(_){}
+    // Detach + clear inline transform/size so stage CSS controls layout.
+    canvas.style.transform = '';
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.maxWidth = '';
+    canvas.style.maxHeight = '';
+    stage.appendChild(canvas);
+    _resizeStageCanvas();
+  }
+
+  function _restoreCanvas() {
+    const canvas = document.getElementById('title-ship-canvas');
+    if (!canvas || !_canvasSaved) return;
+    const s = _canvasSaved;
+    canvas.style.width  = s.styleW || '';
+    canvas.style.height = s.styleH || '';
+    canvas.style.transform = s.styleTransform || '';
+    canvas.style.maxWidth = s.styleMaxWidth || '';
+    canvas.style.maxHeight = s.styleMaxHeight || '';
+    if (s.parent) {
+      if (s.nextSibling && s.nextSibling.parentNode === s.parent) {
+        s.parent.insertBefore(canvas, s.nextSibling);
+      } else {
+        s.parent.appendChild(canvas);
+      }
+    }
+    // Restore renderer + camera to their pre-open dimensions.
+    try {
+      if (typeof _titleRenderer !== 'undefined' && _titleRenderer && s.rendererW && s.rendererH) {
+        _titleRenderer.setSize(s.rendererW, s.rendererH, false);
+      }
+      if (typeof titleCamera !== 'undefined' && titleCamera && s.camAspect) {
+        titleCamera.aspect = s.camAspect;
+        titleCamera.updateProjectionMatrix();
+      }
+    } catch(_){}
+    _canvasSaved = null;
+  }
+
+  // Resize the showroom stage canvas to fit the stage element + update camera.
+  function _resizeStageCanvas() {
+    const canvas = document.getElementById('title-ship-canvas');
+    const stage  = document.getElementById('sr-stage');
+    if (!canvas || !stage || !_canvasSaved) return; // only while relocated
+    const r = stage.getBoundingClientRect();
+    const w = Math.max(64, Math.floor(r.width));
+    const h = Math.max(64, Math.floor(r.height));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    try {
+      if (typeof _titleRenderer !== 'undefined' && _titleRenderer) {
+        _titleRenderer.setPixelRatio(dpr);
+        _titleRenderer.setSize(w, h, false);
+      }
+      if (typeof titleCamera !== 'undefined' && titleCamera) {
+        titleCamera.aspect = w / h;
+        titleCamera.updateProjectionMatrix();
+      }
+    } catch(_){}
+    canvas.style.width  = w + 'px';
+    canvas.style.height = h + 'px';
+  }
+
+  function _onResize() {
+    if (!_open) return;
+    _resizeStageCanvas();
+  }
+
+  // ── Public: open / close / refresh ───────────────────────────────────
+  function open(tab) {
+    const overlay = document.getElementById('thruster-overlay');
+    if (!overlay) return;
+    _wireOnce();
+    overlay.classList.remove('hidden');
+    document.body.classList.add('sr-open');
+    _switchTab(tab || 'thrusters');
+    _populateAll();
+    // Relocate after the overlay is visible so getBoundingClientRect is right.
+    requestAnimationFrame(() => {
+      _relocateCanvasToStage();
+      if (!_resizeBound) {
+        _resizeBound = true;
+        window.addEventListener('resize', _onResize);
+        window.addEventListener('orientationchange', _onResize);
+      }
+    });
+    _open = true;
+  }
+
+  function close() {
+    const overlay = document.getElementById('thruster-overlay');
+    _restoreCanvas();
+    if (overlay) overlay.classList.add('hidden');
+    document.body.classList.remove('sr-open');
+    _open = false;
+  }
+
+  function refresh() {
+    if (!_open) return;
+    _unlockReqCache = null; // recompute in case missions changed
+    _populateAll();
+  }
+
+  window.Showroom = { open: open, close: close, refresh: refresh };
+})();
 //  SHOP SYSTEM
 // ═══════════════════════════════════════════════════
 

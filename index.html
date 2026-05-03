@@ -322,18 +322,51 @@
 </div>
 
 <!-- ── DAILY STREAK OVERLAY ─────────────────────── -->
-<!-- ── SHIP HUB (loadout) — V1 hosts Thrusters tab; Skins/Powerups tabs hidden until built ── -->
-<div id="thruster-overlay" class="overlay hidden" style="z-index:500;">
-  <div class="hub-panel">
-    <div class="hub-tabs" id="hub-tabs">
-      <button class="hub-tab hidden" data-tab="skins">SKINS</button>
-      <button class="hub-tab active" data-tab="thrusters">THRUSTERS</button>
-      <button class="hub-tab hidden" data-tab="powerups">POWER-UPS</button>
+<!-- ── SHIP GARAGE / SHOWROOM ── reuses live title canvas, layers UI panel on top ── -->
+<!-- The thruster-overlay id is preserved so existing tap targets keep working. -->
+<div id="thruster-overlay" class="sr-overlay hidden" style="z-index:500;">
+  <!-- Stage receives the relocated title-ship-canvas while showroom is open. -->
+  <div class="sr-stage" id="sr-stage"></div>
+  <div class="sr-vignette" aria-hidden="true"></div>
+  <div class="sr-grid" aria-hidden="true"></div>
+  <div class="sr-panel">
+    <div class="sr-tabs" id="sr-tabs">
+      <button class="sr-tab" data-tab="skins">SKINS</button>
+      <button class="sr-tab active" data-tab="thrusters">THRUSTERS</button>
+      <button class="sr-tab sr-hidden" data-tab="powerups">POWER-UPS</button>
     </div>
-    <div class="hub-preview" id="hub-preview"><svg id="hub-preview-svg" viewBox="0 0 200 120" preserveAspectRatio="xMidYMid meet"></svg></div>
-    <div class="hub-equipped" id="hub-equipped"></div>
-    <div class="hub-body" id="hub-body"></div>
-    <button class="hub-close" onclick="closeThrusterPanel()">✕</button>
+    <div class="sr-body" id="sr-body">
+      <!-- SKINS PANE -->
+      <div class="sr-pane sr-hidden" data-pane="skins">
+        <label class="sr-row">
+          <span class="sr-label">SKIN</span>
+          <div class="sr-select-wrap">
+            <select class="sr-select" id="sr-select-skin"></select>
+            <span class="sr-chevron" aria-hidden="true">▾</span>
+          </div>
+        </label>
+      </div>
+      <!-- THRUSTERS PANE -->
+      <div class="sr-pane" data-pane="thrusters">
+        <label class="sr-row">
+          <span class="sr-label">SHAPE</span>
+          <div class="sr-select-wrap">
+            <select class="sr-select" id="sr-select-shape"></select>
+            <span class="sr-chevron" aria-hidden="true">▾</span>
+          </div>
+        </label>
+        <label class="sr-row">
+          <span class="sr-label">COLOR</span>
+          <div class="sr-select-wrap">
+            <select class="sr-select" id="sr-select-color"></select>
+            <span class="sr-chevron" aria-hidden="true">▾</span>
+          </div>
+        </label>
+      </div>
+      <!-- POWERUPS PANE — placeholder, hidden -->
+      <div class="sr-pane sr-hidden" data-pane="powerups"></div>
+    </div>
+    <button class="sr-close" onclick="closeThrusterPanel()" aria-label="Close">✕</button>
   </div>
 </div>
 
@@ -576,6 +609,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1777742000"></script>
+<script type="module" src="./dist/game.js?v=1777743000"></script>
 </body>
 </html>
