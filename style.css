@@ -4966,7 +4966,6 @@ body.sr-open #title-leaderboard {
   height: 100% !important;
   max-width: none !important;
   max-height: none !important;
-  object-fit: contain;
 }
 .sr-handling-slot {
   position: relative !important;
