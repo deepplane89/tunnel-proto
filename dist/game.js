@@ -5698,14 +5698,17 @@ normal = _dbn;`;
   // 'shader' property = GLSL string injected via onBeforeCompile (normal perturbation)
   const SKIN_DEFS = [
     null, // skin 0 = default (already applied)
-    // Skin 1: GHOST — tuned from skin tuner
+    // Skin 1: GHOST — full holographic skin (every slot uses HolographicMaterial).
+    // Uniforms match the latest tuned powerup-cube settings (2026-05-02).
+    // Nozzle keeps a normal dark MeshStandard so the exhaust port reads as
+    // a real opening rather than a transparent cyan ring.
     {
-      rocket_base: { color: 0xe0e0e0, metalness: 0.05, roughness: 0.33, clearcoat: 1.0, clearcoatRoughness: 0.199, physical: true },
-      white:       { color: 0x00e0ff, metalness: 0.0, roughness: 0.33, emissive: 0x00e0ff, emissiveIntensity: 1.0 },
-      gray:        { color: 0xe0e0e0, metalness: 0.05, roughness: 0.33 },
-      nozzle:      { color: 0x858585, metalness: 0.68, roughness: 0.32, emissive: 0x19e690, emissiveIntensity: 0.1 },
-      rocket_light:{ color: 0x000000, emissive: 0x00e0ff, emissiveIntensity: 10, metalness: 0, roughness: 0.33 },
-      fallback:    { color: 0xe0e0e0, metalness: 0.05, roughness: 0.33, clearcoat: 1.0, clearcoatRoughness: 0.199, physical: true },
+      rocket_base: { holo: true, hologramColor: '#00d5ff' },
+      white:       { holo: true, hologramColor: '#00d5ff' },
+      gray:        { holo: true, hologramColor: '#00d5ff' },
+      nozzle:      { color: 0x0a0a0a, metalness: 0.95, roughness: 0.12 },
+      rocket_light:{ holo: true, hologramColor: '#00d5ff' },
+      fallback:    { holo: true, hologramColor: '#00d5ff' },
     },
     // Skin 2: BLACK MAMBA — user-tuned 2026-05-02 (rust hull + cyan trim glow,
     // global Matte 0.32 baked into roughness). HSL conventions: tuner stores
@@ -5757,7 +5760,24 @@ normal = _dbn;`;
       if (def.emissiveIntensity !== undefined) props.emissiveIntensity = def.emissiveIntensity;
 
       let mat;
-      if (def.physical) {
+      if (def.holo) {
+        // Full holographic skin slot — same uniforms as powerup cube.
+        mat = new HolographicMaterial({
+          hologramColor:      def.hologramColor || '#00d5ff',
+          fresnelAmount:      0.70,
+          fresnelOpacity:     1.00,
+          scanlineSize:       3.70,
+          hologramBrightness: 1.60,
+          signalSpeed:        0.01,
+          enableBlinking:     true,
+          blinkFresnelOnly:   true,
+          hologramOpacity:    0.70,
+          side:               THREE.DoubleSide,
+          blendMode:          THREE.NormalBlending,
+        });
+        mat.depthWrite = true; // occlude sun/skybox like powerup cube
+        _registerHoloMaterial(mat);
+      } else if (def.physical) {
         props.clearcoat = def.clearcoat || 0;
         props.clearcoatRoughness = def.clearcoatRoughness || 0;
         if (def.anisotropy !== undefined) props.anisotropy = def.anisotropy;
