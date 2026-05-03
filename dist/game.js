@@ -5720,12 +5720,12 @@ normal = _dbn;`;
     },
     // Skin 3: CIPHER — diamond plate with emissive edge glow
     {
-      rocket_base: { color: 0x000000, metalness: 0.98, roughness: 0, emissive: 0xf35959, emissiveIntensity: 1, shader: GLSL_DIAMOND, shaderEmissive: GLSL_DIAMOND_EMISSIVE },
-      white:       { color: 0x000000, metalness: 0.98, roughness: 0, emissive: 0xff0000, emissiveIntensity: 1, shader: GLSL_DIAMOND, shaderEmissive: GLSL_DIAMOND_EMISSIVE },
-      gray:        { color: 0x000000, metalness: 0.98, roughness: 0, emissive: 0x88bbff, emissiveIntensity: 0.5, shader: GLSL_DIAMOND, shaderEmissive: GLSL_DIAMOND_EMISSIVE },
+      rocket_base: { color: 0x000000, metalness: 0.98, roughness: 0, emissive: 0x000000, emissiveIntensity: 0, shader: GLSL_DIAMOND, shaderEmissive: GLSL_DIAMOND_EMISSIVE },
+      white:       { color: 0x000000, metalness: 0.98, roughness: 0, emissive: 0x000000, emissiveIntensity: 0, shader: GLSL_DIAMOND, shaderEmissive: GLSL_DIAMOND_EMISSIVE },
+      gray:        { color: 0x000000, metalness: 0.98, roughness: 0, emissive: 0x000000, emissiveIntensity: 0, shader: GLSL_DIAMOND, shaderEmissive: GLSL_DIAMOND_EMISSIVE },
       nozzle:      { color: 0x080808, metalness: 0.95, roughness: 0.10 },
       rocket_light:{ color: 0x000000, emissive: 0x88bbff, emissiveIntensity: 6, metalness: 0, roughness: 0 },
-      fallback:    { color: 0x000000, metalness: 0.98, roughness: 0, emissive: 0xf35959, emissiveIntensity: 1, shader: GLSL_DIAMOND, shaderEmissive: GLSL_DIAMOND_EMISSIVE },
+      fallback:    { color: 0x000000, metalness: 0.98, roughness: 0, emissive: 0x000000, emissiveIntensity: 0, shader: GLSL_DIAMOND, shaderEmissive: GLSL_DIAMOND_EMISSIVE },
     },
   ];
 
