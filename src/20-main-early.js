@@ -5866,12 +5866,10 @@ function applyTitleSkin(skinIndex) {
       let titleClone = _titleAltClones[glbFile];
       if (!titleClone) {
         titleClone = cached.model.clone(true);
-        // Reset transform inherited from gameplay-side clone (rot/pos/scale
-        // were set by _loadAltShip / _applyGlbConfig). We'll compute scale
-        // from bbox so the alt fits the same visual size as runner's title preview.
+        // Match runner's title transform: scale 0.12, centered at origin
         titleClone.position.set(0, 0, 0);
         titleClone.rotation.set(0, 0, 0);
-        titleClone.scale.setScalar(1);
+        titleClone.scale.setScalar(0.12);
         // Hide placeholder slabs (same heuristic as gameplay loader: ≤12 tris)
         titleClone.traverse(c => {
           if (!c.isMesh) return;
@@ -5879,23 +5877,6 @@ function applyTitleSkin(skinIndex) {
           const geoCount = c.geometry ? (c.geometry.index ? c.geometry.index.count / 3 : (c.geometry.attributes.position ? c.geometry.attributes.position.count / 3 : 0)) : 0;
           if (geoCount <= 12) c.visible = false;
         });
-        // Auto-scale to runner's reference size. Runner clone at scale 0.12
-        // has bbox roughly = unit-ship-bbox * 0.12. Compute alt's native bbox
-        // (after hiding slabs), pick scale that gives it equivalent largest
-        // dimension to runner's clone-bbox.
-        const altBox = new THREE.Box3().setFromObject(titleClone);
-        const altSize = altBox.getSize(new THREE.Vector3());
-        const altMax = Math.max(altSize.x, altSize.y, altSize.z) || 1;
-        const refBox = new THREE.Box3().setFromObject(_titleShipModel);
-        const refSize = refBox.getSize(new THREE.Vector3());
-        const refMax = Math.max(refSize.x, refSize.y, refSize.z) || 1;
-        // _titleShipModel already has scale 0.12 baked in, so refMax IS the
-        // target visual size. Compute alt's scale to match: native_scale * x = refMax / altMax * 1.
-        const targetScale = (refMax / altMax);
-        titleClone.scale.setScalar(targetScale);
-        // Center the clone at origin (some GLBs aren't centered around their pivot)
-        const center = altBox.getCenter(new THREE.Vector3());
-        titleClone.position.set(-center.x * targetScale, -center.y * targetScale, -center.z * targetScale);
         if (tiltGroup) tiltGroup.add(titleClone);
         _titleAltClones[glbFile] = titleClone;
       }
