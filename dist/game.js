@@ -13842,13 +13842,23 @@ function updateStreakBadge() {
   }
 
   // ── Build dropdown <option>s ─────────────────────────────────────────
+  // Garage-local preview state — decoupled from the equipped skin saved on
+  // the title screen. Opening the garage shows whatever was last previewed
+  // here; closing the garage restores the equipped skin to the title preview.
+  // Lives only in memory (intentionally not persisted) so a fresh page load
+  // shows the equipped skin first.
+  let _garagePreviewIdx = null;
+  function _equippedSkinIdx() {
+    try { return (loadSkinData() || {}).selected || 0; } catch(_) { return 0; }
+  }
+
   function _buildSkinOptions(sel) {
     if (!sel) return;
     sel.innerHTML = '';
     if (typeof SHIP_SKINS === 'undefined') return;
     const reqs = _getUnlockReqs();
-    let selectedIdx = 0;
-    try { selectedIdx = (loadSkinData() || {}).selected || 0; } catch(_){}
+    // Highlight the GARAGE preview, not the equipped skin — they're separate.
+    const previewIdx = (_garagePreviewIdx != null) ? _garagePreviewIdx : _equippedSkinIdx();
     SHIP_SKINS.forEach((skin, idx) => {
       if (skin.hidden) return;
       const unlocked = _isSkinUnlockedSafe(idx);
@@ -13862,9 +13872,18 @@ function updateStreakBadge() {
         opt.disabled = true;
       }
       opt.textContent = label;
-      if (idx === selectedIdx) opt.selected = true;
+      if (idx === previewIdx) opt.selected = true;
       sel.appendChild(opt);
     });
+  }
+
+  // Preview a skin in the title-ship canvas WITHOUT touching equipped state.
+  // applyTitleSkin only updates the visual clone; navigateToSkin would write
+  // data.selected which we explicitly want to avoid.
+  function _previewSkin(idx) {
+    if (typeof applyTitleSkin === 'function') {
+      try { applyTitleSkin(idx); } catch(_){}
+    }
   }
 
   function _buildShapeOptions(sel) {
@@ -14023,18 +14042,16 @@ function updateStreakBadge() {
   function _onSkinChange(e) {
     const idx = parseInt(e.target.value, 10);
     if (isNaN(idx)) return;
-    // Admin mode: pre-mark unlocked so navigateToSkin doesn't bounce back.
-    if (_adminAll()) {
-      try {
-        const d = loadSkinData();
-        if (!d.unlocked.includes(idx)) { d.unlocked.push(idx); saveSkinData(d); }
-      } catch(_){}
-    }
-    if (typeof navigateToSkin === 'function') {
-      try { navigateToSkin(idx); } catch(_){}
-    }
+    // Garage selection is preview-only — do NOT write data.selected. The
+    // equipped skin only changes when the player explicitly hits USE on the
+    // title screen's skin viewer.
+    _garagePreviewIdx = idx;
+    _previewSkin(idx);
     // Skin swap may load a new GLB whose materials default to transparent.
     requestAnimationFrame(() => { try { _forceShipOpaque(); } catch(_){} });
+    // Refresh add-ons list — the new ship may be an alt-GLB with toggleable
+    // parts (or a default ship with none).
+    try { _populateAddons(); } catch(_){}
     try { playTitleTap(); } catch(_){}
   }
 
@@ -14889,6 +14906,11 @@ function updateStreakBadge() {
     overlay.classList.remove('hidden');
     document.body.classList.add('sr-open');
     _switchTab(tab || 'thrusters');
+    // Sync the title canvas with the garage's preview index BEFORE populating —
+    // _populateAddons reads _titleShipModel.userData._altGlb to decide whether
+    // any add-ons exist. If we populate first, an MK Runner preview shows
+    // "No add-ons available" because the canvas still has the equipped ship.
+    try { _previewSkin((_garagePreviewIdx != null) ? _garagePreviewIdx : _equippedSkinIdx()); } catch(_){}
     _populateAll();
     // Relocate after the overlay is visible so getBoundingClientRect is right.
     requestAnimationFrame(() => {
@@ -14919,6 +14941,9 @@ function updateStreakBadge() {
     _thrShow(false);
     _showTuner(false);
     _showFx(false);
+    // Restore the title canvas to the EQUIPPED skin so the title screen never
+    // shows the garage's preview ship after closing.
+    try { _previewSkin(_equippedSkinIdx()); } catch(_){}
   }
 
   function refresh() {
