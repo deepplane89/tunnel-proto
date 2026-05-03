@@ -215,8 +215,16 @@
     } catch(_){}
     return _equippedSkinIdx();
   }
-  // Preview a skin in the title-ship canvas WITHOUT touching equipped state.
+  // Preview a skin WITHOUT touching equipped state. We call BOTH applySkin
+  // and applyTitleSkin (the same pair navigateToSkin runs) because alt-GLB
+  // ships like MK Runner need applySkin's lighting reset + _showAltShip to
+  // render correctly — applyTitleSkin alone leaves them invisible/black.
+  // What we explicitly skip is the data.selected write that navigateToSkin
+  // performs, since that's the equipped-state mutation we want to avoid.
   function _previewSkin(idx) {
+    if (typeof applySkin === 'function') {
+      try { applySkin(idx); } catch(_){}
+    }
     if (typeof applyTitleSkin === 'function') {
       try { applyTitleSkin(idx); } catch(_){}
     }
