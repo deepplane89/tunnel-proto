@@ -13925,6 +13925,10 @@ function returnToTitle() {
   renderLeaderboard();
   // Clean up any tutorial overlays
   _tutDestroyOverlay();
+  // Clear tutorial flag — settings/tuner overlay can route back to title
+  // without going through the EXIT TUTORIAL button, leaving _tutorialActive
+  // stuck true and gating the next run's spawner. (No-spawn-cones bug.)
+  state._tutorialActive = false;
   // Clear any active banners
   const bc = document.getElementById('banner-container');
   if (bc) bc.innerHTML = '';
