@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Zain:wght@300;400;700&family=Silkscreen&family=Rajdhani:wght@300;400;600;700&family=Permanent+Marker&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=1777798000" />
+  <link rel="stylesheet" href="./style.css?v=1777799000" />
 
   <script type="importmap">
   {
@@ -325,8 +325,46 @@
 <!-- ── SHIP GARAGE / SHOWROOM ── reuses live title canvas, layers UI panel on top ── -->
 <!-- The thruster-overlay id is preserved so existing tap targets keep working. -->
 <div id="thruster-overlay" class="sr-overlay hidden" style="z-index:500;">
-  <!-- Desktop-only LAYOUT EDIT toggle: when ON, the 3 boxes can be dragged/resized. -->
+  <!-- Desktop-only LAYOUT EDIT toggle: when ON, sliders appear to size each box. -->
   <button class="sr-edit-toggle" id="sr-edit-toggle" type="button" aria-label="Toggle layout edit">EDIT</button>
+  <div class="sr-edit-panel" id="sr-edit-panel">
+    <div class="sr-edit-row">
+      <span>STAGE W</span>
+      <input type="range" id="sr-edit-stagew" min="200" max="1600" step="5" value="800" />
+      <span class="sr-edit-num" id="sr-edit-stagew-num">800</span>
+    </div>
+    <div class="sr-edit-row">
+      <span>STAGE H</span>
+      <input type="range" id="sr-edit-stageh" min="100" max="900" step="5" value="400" />
+      <span class="sr-edit-num" id="sr-edit-stageh-num">400</span>
+    </div>
+    <div class="sr-edit-row">
+      <span>HANDLE H</span>
+      <input type="range" id="sr-edit-handleh" min="30" max="160" step="1" value="60" />
+      <span class="sr-edit-num" id="sr-edit-handleh-num">60</span>
+    </div>
+    <div class="sr-edit-row">
+      <span>PANEL W</span>
+      <input type="range" id="sr-edit-panelw" min="180" max="600" step="5" value="320" />
+      <span class="sr-edit-num" id="sr-edit-panelw-num">320</span>
+    </div>
+    <div class="sr-edit-row">
+      <span>PANEL H</span>
+      <input type="range" id="sr-edit-panelh" min="200" max="1000" step="5" value="600" />
+      <span class="sr-edit-num" id="sr-edit-panelh-num">600</span>
+    </div>
+    <div class="sr-edit-row">
+      <span>OUTER PAD</span>
+      <input type="range" id="sr-edit-pad" min="0" max="40" step="1" value="8" />
+      <span class="sr-edit-num" id="sr-edit-pad-num">8</span>
+    </div>
+    <div class="sr-edit-row">
+      <span>GAP</span>
+      <input type="range" id="sr-edit-gap" min="0" max="30" step="1" value="8" />
+      <span class="sr-edit-num" id="sr-edit-gap-num">8</span>
+    </div>
+    <button class="sr-edit-reset" id="sr-edit-reset" type="button">RESET</button>
+  </div>
   <!-- Stage receives the relocated title-ship-canvas while showroom is open. -->
   <div class="sr-stage" id="sr-stage"></div>
   <!-- Handling bar pinned under the ship preview. Shop renders into this slot when garage opens. -->
@@ -633,6 +671,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1777798000"></script>
+<script type="module" src="./dist/game.js?v=1777799000"></script>
 </body>
 </html>

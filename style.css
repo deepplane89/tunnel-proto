@@ -5278,8 +5278,8 @@ body.sr-open #title-leaderboard {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════ */
-/* DESKTOP LAYOUT EDIT MODE — drag/resize boxes, live numeric readouts.     */
-/* Hidden on mobile (<900px). Toggle button top-right of overlay.           */
+/* DESKTOP LAYOUT EDIT MODE — slider panel (drag/resize replaced).         */
+/* Hidden on mobile (<900px). Toggle via top-right EDIT button.            */
 /* ═══════════════════════════════════════════════════════════════════════ */
 .sr-edit-toggle {
   display: none;
@@ -5307,80 +5307,103 @@ body.sr-open #title-leaderboard {
   #thruster-overlay:not(.hidden) .sr-edit-toggle { display: block; }
 }
 
-/* Readouts: visible on every box while edit mode is on. */
-.sr-edit-readout {
+.sr-edit-panel {
   display: none;
   position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 11;
-  padding: 3px 6px;
-  background: rgba(0, 0, 0, 0.85);
-  border: 1px solid rgba(34, 211, 238, 0.6);
-  color: #cffafe;
-  font: 700 10px/1.2 'Orbitron', monospace;
-  letter-spacing: 0.5px;
-  pointer-events: none;
-  border-radius: 3px;
-  white-space: nowrap;
-}
-.sr-edit-drag,
-.sr-edit-resize {
-  display: none;
-  position: absolute;
-  z-index: 11;
-  background: rgba(34, 211, 238, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  top: 44px;
+  right: 8px;
+  z-index: 10;
+  width: 240px;
+  padding: 10px;
+  background: rgba(0, 14, 28, 0.92);
+  border: 1px solid rgba(34, 211, 238, 0.5);
+  border-radius: 6px;
   pointer-events: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
 }
-.sr-edit-drag {
-  top: 0;
-  left: 0;
-  width: 22px;
-  height: 22px;
-  cursor: move;
-  color: #001;
-  font: 700 14px/22px sans-serif;
-  text-align: center;
-  border-radius: 0 0 4px 0;
-}
-.sr-edit-resize {
-  bottom: 0;
-  right: 0;
-  width: 16px;
-  height: 16px;
-  cursor: nwse-resize;
-  border-radius: 4px 0 0 0;
-}
-body.sr-edit-mode .sr-edit-readout,
-body.sr-edit-mode .sr-edit-drag,
-body.sr-edit-mode .sr-edit-resize { display: block; }
+body.sr-edit-mode .sr-edit-panel { display: block; }
 
-/* In edit mode, mark each box with a clearer outline. */
+.sr-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.sr-edit-row > span:first-child {
+  flex: 0 0 60px;
+  font: 700 9px/1 'Orbitron', sans-serif;
+  letter-spacing: 1px;
+  color: #cffafe;
+}
+.sr-edit-row input[type="range"] {
+  flex: 1 1 auto;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: linear-gradient(90deg, rgba(34,211,238,0.2), rgba(34,211,238,0.6));
+  border-radius: 2px;
+  cursor: pointer;
+}
+.sr-edit-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #22d3ee;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.sr-edit-num {
+  flex: 0 0 36px;
+  text-align: right;
+  font: 700 10px/1 'Orbitron', monospace;
+  color: #fff;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(34,211,238,0.4);
+  padding: 3px 4px;
+  border-radius: 3px;
+}
+.sr-edit-reset {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px;
+  background: rgba(220, 38, 38, 0.25);
+  border: 1px solid rgba(220, 38, 38, 0.6);
+  color: #fee;
+  font: 700 10px/1 'Orbitron', sans-serif;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+/* In edit mode, dashed outline on each managed box for visibility. */
 body.sr-edit-mode #thruster-overlay .sr-stage,
 body.sr-edit-mode #thruster-overlay .sr-handling-slot,
 body.sr-edit-mode #thruster-overlay .sr-panel {
-  outline: 2px dashed rgba(34, 211, 238, 0.8);
+  outline: 2px dashed rgba(34, 211, 238, 0.6);
   outline-offset: -2px;
 }
 
-/* Edit mode: drop !important defaults so JS-set inline width/height/left/top apply.
-   Position becomes absolute (relative to .sr-overlay which is position:fixed). */
-body.sr-edit-mode #thruster-overlay .sr-stage,
-body.sr-edit-mode #thruster-overlay .sr-handling-slot,
-body.sr-edit-mode #thruster-overlay .sr-panel {
-  position: absolute !important;
-  width: auto !important;
-  height: auto !important;
-  max-width: none !important;
-  max-height: none !important;
-  inset: auto !important;
-  margin: 0 !important;
-  grid-area: auto !important;
-  align-self: auto !important;
-}
-/* Disable the grid wrapper so children can be absolutely placed without
-   the grid trying to claim them. */
-body.sr-edit-mode #thruster-overlay.sr-overlay:not(.hidden) {
-  display: block !important;
+/* ═══════════════════════════════════════════════════════════════════════ */
+/* Wire the --ed-* variables into the LANDSCAPE grid (desktop ≥900px or    */
+/* any landscape orientation). Variables come from the EDIT sliders.       */
+/* ═══════════════════════════════════════════════════════════════════════ */
+@media (orientation: landscape), (min-width: 900px) {
+  .sr-overlay:not(.hidden) {
+    /* Override the earlier landscape grid with explicit pixel sizes from
+       the sliders. Defaults match the slider defaults so behavior is
+       identical when EDIT hasn't been touched. */
+    grid-template-columns: var(--ed-stagew, 1fr) var(--ed-panelw, 240px) !important;
+    grid-template-rows: var(--ed-stageh, 1fr) var(--ed-handleh, auto) !important;
+    grid-template-areas:
+      "stage  panel"
+      "handle panel" !important;
+    padding: var(--ed-pad, 8px) !important;
+    gap: var(--ed-gap, 8px) !important;
+  }
+  /* Panel spans both rows so total panel height = stageh + handleh + gap. */
+  .sr-overlay:not(.hidden) .sr-panel {
+    grid-row: 1 / span 2 !important;
+  }
 }

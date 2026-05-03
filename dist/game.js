@@ -15166,14 +15166,21 @@ function updateStreakBadge() {
   }
 
   // ════════════════════════════════════════════════════════════════════════
-  // DESKTOP LAYOUT EDIT MODE
-  // Drag/resize the 3 boxes (stage, handling, panel) freely on desktop.
-  // Each box gets a numeric readout (W×H @ x,y) so screenshots show values.
-  // Position/size persisted to localStorage. Toggle via top-right EDIT btn.
+  // DESKTOP LAYOUT EDIT MODE — SLIDER VERSION
+  // Sliders drive CSS variables on the overlay. Grid template uses these
+  // variables, so the boxes resize cleanly without breaking the layout.
+  // All values logged to console + visible in slider readout chips.
   // ════════════════════════════════════════════════════════════════════════
-  const EDIT_KEY = 'jh_showroom_layout_v1';
-  const EDIT_BOXES = ['sr-stage', 'sr-handling-slot', 'sr-panel-box'];
-  // .sr-panel doesn't have an id; we'll target it by class.
+  const EDIT_KEY = 'jh_showroom_layout_v2';
+  const EDIT_DEFS = {
+    stagew:  { def: 800, var: '--ed-stagew',  unit: 'px' },
+    stageh:  { def: 400, var: '--ed-stageh',  unit: 'px' },
+    handleh: { def: 60,  var: '--ed-handleh', unit: 'px' },
+    panelw:  { def: 320, var: '--ed-panelw',  unit: 'px' },
+    panelh:  { def: 600, var: '--ed-panelh',  unit: 'px' },
+    pad:     { def: 8,   var: '--ed-pad',     unit: 'px' },
+    gap:     { def: 8,   var: '--ed-gap',     unit: 'px' },
+  };
 
   function _editLoad() {
     try { return JSON.parse(localStorage.getItem(EDIT_KEY) || '{}') || {}; }
@@ -15183,158 +15190,50 @@ function updateStreakBadge() {
     try { localStorage.setItem(EDIT_KEY, JSON.stringify(d)); } catch(_){}
   }
 
-  function _editGetBox(name) {
-    if (name === 'sr-panel-box') return document.querySelector('#thruster-overlay .sr-panel');
-    return document.getElementById(name);
-  }
-
-  function _editApplyBox(name, rect) {
-    const el = _editGetBox(name);
-    if (!el || !rect) return;
-    el.style.position = 'absolute';
-    el.style.left   = rect.x + 'px';
-    el.style.top    = rect.y + 'px';
-    el.style.width  = rect.w + 'px';
-    el.style.height = rect.h + 'px';
-    el.style.right  = 'auto';
-    el.style.bottom = 'auto';
-    el.style.maxWidth  = 'none';
-    el.style.maxHeight = 'none';
-    el.style.gridArea  = 'auto';
-    _editUpdateReadout(name, rect);
-  }
-
-  function _editClearBox(name) {
-    const el = _editGetBox(name);
-    if (!el) return;
-    el.style.position = '';
-    el.style.left = '';
-    el.style.top = '';
-    el.style.width = '';
-    el.style.height = '';
-    el.style.right = '';
-    el.style.bottom = '';
-    el.style.maxWidth = '';
-    el.style.maxHeight = '';
-    el.style.gridArea = '';
-  }
-
-  function _editEnsureReadout(name) {
-    const el = _editGetBox(name);
-    if (!el) return null;
-    let ro = el.querySelector(':scope > .sr-edit-readout');
-    if (!ro) {
-      ro = document.createElement('div');
-      ro.className = 'sr-edit-readout';
-      el.appendChild(ro);
-    }
-    return ro;
-  }
-  function _editUpdateReadout(name, rect) {
-    const ro = _editEnsureReadout(name);
-    if (!ro) return;
-    ro.textContent = name.replace('sr-','').replace('-slot','').replace('-box','').toUpperCase()
-      + '  ' + rect.w + '×' + rect.h + '  @' + rect.x + ',' + rect.y;
-  }
-
-  function _editGetCurrentRect(name) {
-    const el = _editGetBox(name);
-    if (!el) return null;
-    const r = el.getBoundingClientRect();
-    return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
-  }
-
-  function _editAttachHandles(name) {
-    const el = _editGetBox(name);
-    if (!el) return;
-    if (el.querySelector(':scope > .sr-edit-resize')) return; // already attached
-    // Resize handle (bottom-right corner)
-    const rh = document.createElement('div');
-    rh.className = 'sr-edit-resize';
-    el.appendChild(rh);
-    // Drag handle (top-left corner)
-    const dh = document.createElement('div');
-    dh.className = 'sr-edit-drag';
-    dh.textContent = '✥';
-    el.appendChild(dh);
-
-    let mode = null, startX = 0, startY = 0, startRect = null;
-    const onMove = (ev) => {
-      if (!mode || !startRect) return;
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
-      let r = { ...startRect };
-      if (mode === 'drag') { r.x = startRect.x + dx; r.y = startRect.y + dy; }
-      if (mode === 'resize') { r.w = Math.max(40, startRect.w + dx); r.h = Math.max(40, startRect.h + dy); }
-      _editApplyBox(name, r);
-      const all = _editLoad();
-      all[name] = r;
-      _editSave(all);
-      try { console.log('[showroom-layout]', name, 'w=' + r.w, 'h=' + r.h, 'x=' + r.x, 'y=' + r.y); } catch(_){}
-      if (name === 'sr-stage') _resizeStageCanvas();
-    };
-    const onUp = () => {
-      if (mode) {
-        try {
-          const r = _editGetCurrentRect(name);
-          console.log('[showroom-layout-FINAL]', name, JSON.stringify(r));
-        } catch(_){}
-      }
-      mode = null;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    dh.addEventListener('mousedown', (ev) => {
-      ev.preventDefault(); ev.stopPropagation();
-      mode = 'drag'; startX = ev.clientX; startY = ev.clientY;
-      startRect = _editGetCurrentRect(name);
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    });
-    rh.addEventListener('mousedown', (ev) => {
-      ev.preventDefault(); ev.stopPropagation();
-      mode = 'resize'; startX = ev.clientX; startY = ev.clientY;
-      startRect = _editGetCurrentRect(name);
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    });
-  }
-
-  function _editEnable() {
-    document.body.classList.add('sr-edit-mode');
+  function _editApplyAll() {
+    const overlay = document.getElementById('thruster-overlay');
+    if (!overlay) return;
     const saved = _editLoad();
-    EDIT_BOXES.forEach(name => {
-      _editAttachHandles(name);
-      _editEnsureReadout(name);
-      const rect = saved[name] || _editGetCurrentRect(name);
-      if (rect) _editApplyBox(name, rect);
+    Object.keys(EDIT_DEFS).forEach(k => {
+      const v = (saved[k] != null) ? saved[k] : EDIT_DEFS[k].def;
+      overlay.style.setProperty(EDIT_DEFS[k].var, v + EDIT_DEFS[k].unit);
+      const slider = document.getElementById('sr-edit-' + k);
+      const num    = document.getElementById('sr-edit-' + k + '-num');
+      if (slider) slider.value = v;
+      if (num) num.textContent = String(v);
     });
-    if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
   }
-  function _editDisable() {
-    document.body.classList.remove('sr-edit-mode');
-    EDIT_BOXES.forEach(name => {
-      // Keep saved rect applied even after exiting edit mode — user wants
-      // their layout to PERSIST. Just hide handles via .sr-edit-mode CSS.
-      const saved = _editLoad();
-      if (saved[name]) _editApplyBox(name, saved[name]);
+
+  function _editWireSliders() {
+    Object.keys(EDIT_DEFS).forEach(k => {
+      const slider = document.getElementById('sr-edit-' + k);
+      const num    = document.getElementById('sr-edit-' + k + '-num');
+      if (!slider || slider.dataset.wired === '1') return;
+      slider.dataset.wired = '1';
+      slider.addEventListener('input', () => {
+        const v = parseInt(slider.value, 10);
+        if (num) num.textContent = String(v);
+        const overlay = document.getElementById('thruster-overlay');
+        if (overlay) overlay.style.setProperty(EDIT_DEFS[k].var, v + EDIT_DEFS[k].unit);
+        const saved = _editLoad();
+        saved[k] = v;
+        _editSave(saved);
+        try { console.log('[showroom-layout]', k, '=', v); } catch(_){}
+        if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
+      });
     });
-    if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
+    const reset = document.getElementById('sr-edit-reset');
+    if (reset && reset.dataset.wired !== '1') {
+      reset.dataset.wired = '1';
+      reset.addEventListener('click', () => { _editReset(); });
+    }
   }
+
   function _editReset() {
     try { localStorage.removeItem(EDIT_KEY); } catch(_){}
-    EDIT_BOXES.forEach(_editClearBox);
-    document.body.classList.remove('sr-edit-mode');
+    _editApplyAll();
     if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
-  }
-
-  function _editApplyOnOpen() {
-    // Re-apply saved layout every time the showroom opens.
-    if (window.innerWidth < 900) return; // desktop only
-    const saved = _editLoad();
-    EDIT_BOXES.forEach(name => {
-      if (saved[name]) _editApplyBox(name, saved[name]);
-    });
+    try { console.log('[showroom-layout] RESET'); } catch(_){}
   }
 
   function _wireEditToggle() {
@@ -15346,15 +15245,7 @@ function updateStreakBadge() {
       on = !on;
       btn.classList.toggle('active', on);
       btn.textContent = on ? 'DONE' : 'EDIT';
-      if (on) _editEnable(); else _editDisable();
-    });
-    // Right-click resets layout to default grid.
-    btn.addEventListener('contextmenu', (ev) => {
-      ev.preventDefault();
-      _editReset();
-      on = false;
-      btn.classList.remove('active');
-      btn.textContent = 'EDIT';
+      document.body.classList.toggle('sr-edit-mode', on);
     });
   }
 
@@ -15365,7 +15256,8 @@ function updateStreakBadge() {
       _origOpen(tab);
       requestAnimationFrame(() => {
         _wireEditToggle();
-        _editApplyOnOpen();
+        _editWireSliders();
+        _editApplyAll();
       });
     },
     close: close, refresh: refresh,
