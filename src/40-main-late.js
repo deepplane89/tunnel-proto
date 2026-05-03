@@ -484,7 +484,9 @@ function _startL3KnifeCanyon() {
   // Save originals so _stopL3KnifeCanyon can restore them.
   state._l3SavedSpeed      = state.speed;
   state._l3SavedPhysLevel  = _physLevelOverride;
-  state._l3SavedFOV        = (typeof camera !== 'undefined' && camera) ? camera.fov : 65;
+  // FOV is purely speed-derived in 70-perf-diag.js (targetFOV = _baseFOV +
+  // _fovSpeedBoost * speed/100). No need to save/restore — let the speed-lerp
+  // own FOV across canyon entry/exit. Snapping it back caused a visible pulse.
 
   // Spawn the L4-recreation canyon with the knife-arches preset. Mirrors the
   // K-hotkey handler in 67-main-late.js:5470 but without the manual toggle.
@@ -567,11 +569,7 @@ function _stopL3KnifeCanyon(opts) {
   // holds). Writing _l3SavedSpeed here is just the one-frame bridge.
   if (state._l3SavedSpeed     !== undefined) { _setDRSpeed(state._l3SavedSpeed, 'CANYON_EXIT'); state._l3SavedSpeed = undefined; }
   if (state._l3SavedPhysLevel !== undefined) { _physLevelOverride = state._l3SavedPhysLevel; state._l3SavedPhysLevel = undefined; }
-  if (state._l3SavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
-    camera.fov = state._l3SavedFOV;
-    camera.updateProjectionMatrix();
-    state._l3SavedFOV = undefined;
-  }
+  // FOV restore removed — see comment in _startL3KnifeCanyon. Speed-lerp owns it.
   state.l3KnifeRampPhase = 'off';
   state.l3KnifeRampT     = 0;
   // Clear snap-lock so future entries (no lock) don't inherit it.
@@ -725,7 +723,7 @@ function _startPreT4ACanyon() {
   // Save originals for restore
   state._preT4ASavedSpeed     = state.speed;
   state._preT4ASavedPhysLevel = _physLevelOverride;
-  state._preT4ASavedFOV       = (typeof camera !== 'undefined' && camera) ? camera.fov : 65;
+  // FOV restore removed — speed-lerp owns it (see _startL3KnifeCanyon).
   state._preT4ASavedLT        = window._LT ? Object.assign({}, window._LT) : null;
 
   // Apply canyon tuner (mode 5, NOT _l4Recreation — standard canyon).
@@ -796,11 +794,7 @@ function _stopPreT4ACanyon(opts) {
   // Restore speed/physics
   if (state._preT4ASavedSpeed     !== undefined) { _setDRSpeed(state._preT4ASavedSpeed, 'CANYON_EXIT'); state._preT4ASavedSpeed = undefined; }
   if (state._preT4ASavedPhysLevel !== undefined) { _physLevelOverride = state._preT4ASavedPhysLevel; state._preT4ASavedPhysLevel = undefined; }
-  if (state._preT4ASavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
-    camera.fov = state._preT4ASavedFOV;
-    camera.updateProjectionMatrix();
-    state._preT4ASavedFOV = undefined;
-  }
+  // FOV restore removed — speed-lerp owns it (see _startL3KnifeCanyon).
 }
 
 function _updatePreT4ACanyon(dt) {
@@ -894,7 +888,7 @@ function _startPreT4BCanyon() {
   state.preT4BRampT        = 0;
   state._preT4BSavedSpeed     = state.speed;
   state._preT4BSavedPhysLevel = _physLevelOverride;
-  state._preT4BSavedFOV       = (typeof camera !== 'undefined' && camera) ? camera.fov : 65;
+  // FOV restore removed — speed-lerp owns it (see _startL3KnifeCanyon).
   state._preT4BSavedLT        = window._LT ? Object.assign({}, window._LT) : null;
 
   _canyonMode = 1;
@@ -958,11 +952,7 @@ function _stopPreT4BCanyon(opts) {
   }
   if (state._preT4BSavedSpeed     !== undefined) { _setDRSpeed(state._preT4BSavedSpeed, 'CANYON_EXIT'); state._preT4BSavedSpeed = undefined; }
   if (state._preT4BSavedPhysLevel !== undefined) { _physLevelOverride = state._preT4BSavedPhysLevel; state._preT4BSavedPhysLevel = undefined; }
-  if (state._preT4BSavedFOV       !== undefined && typeof camera !== 'undefined' && camera) {
-    camera.fov = state._preT4BSavedFOV;
-    camera.updateProjectionMatrix();
-    state._preT4BSavedFOV = undefined;
-  }
+  // FOV restore removed — speed-lerp owns it (see _startL3KnifeCanyon).
 }
 
 function _updatePreT4BCanyon(dt) {
