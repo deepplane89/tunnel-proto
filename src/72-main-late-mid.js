@@ -2221,7 +2221,13 @@ function buildSkinTunerSliders() {
     }
   }
   applyDefaults();
-  window.addEventListener('resize', applyDefaults);
+  // Skip applyDefaults while the showroom is open — it shares titleScene's
+  // ship pivot/rotation, and applyDefaults overwriting them on every iOS
+  // rotation event causes the showroom ship preview to misframe.
+  window.addEventListener('resize', () => {
+    if (document.body.classList.contains('sr-open')) return;
+    applyDefaults();
+  });
 
   // Bind sliders
   bind('tune-ship-y', 'val-ship-y', v => { shipY = v; updateShip(); });
