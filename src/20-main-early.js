@@ -5686,15 +5686,61 @@ window._bakeSkin = async function(skinIndex) {
     });
   }
 
+  // ── ISOLATED BAKE SCENE ─────────────────────────────────────────
+  // Don't render the gameplay scene (ship is offscreen of gameplay camera +
+  // tons of geometry would dominate samples). Build a tiny dedicated scene
+  // that hosts ONLY the ship + the gameplay lights we want to measure under.
+  // Materials are shared by reference, so this captures the real per-skin
+  // material appearance under whichever lights we attach.
+  const bakeScene = new THREE.Scene();
+  // Detach ship from gameplay scene temporarily, attach to bakeScene
+  const shipParent = ship.parent;
+  const shipPos = ship.position.clone();
+  const shipRot = ship.rotation.clone();
+  const shipScale = ship.scale.clone();
+  if (shipParent) shipParent.remove(ship);
+  ship.position.set(0, 0, 0);
+  ship.rotation.set(0, 0, 0);
+  ship.scale.setScalar(1);
+  ship.visible = true;
+  bakeScene.add(ship);
+
+  // Frame the ship — compute bbox, place camera to fit
+  const bbox = new THREE.Box3().setFromObject(ship);
+  const size = bbox.getSize(new THREE.Vector3());
+  const center = bbox.getCenter(new THREE.Vector3());
+  const radius = Math.max(size.x, size.y, size.z) * 0.6;
+  const bakeCam = new THREE.PerspectiveCamera(35, 1, 0.01, 100);
+  const camDist = radius / Math.tan(THREE.MathUtils.degToRad(35) / 2) + radius * 0.5;
+  bakeCam.position.set(center.x + camDist * 0.5, center.y + camDist * 0.3, center.z + camDist);
+  bakeCam.lookAt(center);
+
+  // Move gameplay lights into bakeScene for the duration
+  const lightOrigParents = new Map();
+  for (const L of [dirLight, rimLight, fillLight, sunLight, sunLightL]) {
+    if (L && L.parent) {
+      lightOrigParents.set(L, { parent: L.parent });
+      L.parent.remove(L);
+      bakeScene.add(L);
+    }
+  }
+  // Add a black background so transparent reads work cleanly
+  bakeScene.background = null;
+
   function avgLinear() {
+    const prevClearColor = new THREE.Color();
+    const prevClearAlpha = renderer.getClearAlpha();
+    renderer.getClearColor(prevClearColor);
+    renderer.setClearColor(0x000000, 0);
     renderer.setRenderTarget(rt);
-    renderer.clear();
-    renderer.render(scene, camera);
+    renderer.clear(true, true, true);
+    renderer.render(bakeScene, bakeCam);
     renderer.readRenderTargetPixels(rt, 0, 0, W, H, buf);
     renderer.setRenderTarget(null);
+    renderer.setClearColor(prevClearColor, prevClearAlpha);
     let r=0,g=0,b=0,n=0;
     for (let i = 0; i < buf.length; i += 4) {
-      const a = buf[i+3]; if (a < 8) continue;
+      const a = buf[i+3]; if (a < 16) continue;
       // sRGB byte -> linear
       const sr = buf[i]/255, sg = buf[i+1]/255, sb = buf[i+2]/255;
       const lr = sr <= 0.04045 ? sr/12.92 : Math.pow((sr+0.055)/1.055, 2.4);
@@ -5705,7 +5751,7 @@ window._bakeSkin = async function(skinIndex) {
     return n ? [r/n, g/n, b/n, n] : [0,0,0,0];
   }
 
-  // Apply target skin first
+  // Apply target skin first (this also stomps gameplay lights to skin's gameplay rig)
   applySkin(skinIndex);
   await new Promise(r => requestAnimationFrame(r));
 
@@ -5731,7 +5777,16 @@ window._bakeSkin = async function(skinIndex) {
     neutral[slot] = avgLinear();
   }
 
-  // Restore visibility + lighting
+  // Restore: lights back to their original parents, ship back to gameplay scene
+  for (const [L, info] of lightOrigParents) {
+    if (L.parent) L.parent.remove(L);
+    info.parent.add(L);
+  }
+  bakeScene.remove(ship);
+  ship.position.copy(shipPos);
+  ship.rotation.copy(shipRot);
+  ship.scale.copy(shipScale);
+  if (shipParent) shipParent.add(ship);
   ship.traverse(c => { if (c.isMesh && visSnap.has(c.uuid)) c.visible = visSnap.get(c.uuid); });
   dirLight.intensity = lightSnap.dirI; dirLight.position.copy(lightSnap.dirP);
   rimLight.intensity = lightSnap.rimI; fillLight.intensity = lightSnap.fillI;
