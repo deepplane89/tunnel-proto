@@ -642,6 +642,7 @@
     canvas.style.maxWidth = '';
     canvas.style.maxHeight = '';
     stage.appendChild(canvas);
+    _lockStageSize();
     _resizeStageCanvas();
     // Override ship pose for showroom: force horizontal (side-profile) tilt
     // in BOTH portrait and landscape so thrusters are visible. The live title
@@ -670,6 +671,15 @@
   function _restoreCanvas() {
     const canvas = document.getElementById('title-ship-canvas');
     if (!canvas || !_canvasSaved) return;
+    // Clear any inline pixel lock we put on the stage so portrait CSS can
+    // re-take over next open.
+    const stage = document.getElementById('sr-stage');
+    if (stage) {
+      stage.style.width = '';
+      stage.style.height = '';
+      stage.style.maxWidth = '';
+      stage.style.maxHeight = '';
+    }
     const s = _canvasSaved;
     // Always restore to title's hardcoded 200x180 box (matches _mountTitleCanvas).
     // Falling back to saved values can leave stale 100%/100% from showroom.
@@ -798,20 +808,50 @@
       _resizeStageCanvas();
     }, 100);
   }
+  // Force-lock the stage box dimensions per orientation. We compute the
+  // exact pixel size for the current orientation and stamp it on .sr-stage
+  // as inline width/height. The grid layout becomes irrelevant for sizing
+  // — the stage cell is whatever pixel size we say it is. On rotation,
+  // matchMedia fires AFTER viewport settles → we recompute and re-stamp.
+  // No mid-rotation reads of getBoundingClientRect, no morph glitch.
+  function _lockStageSize() {
+    const stage = document.getElementById('sr-stage');
+    if (!stage) return null;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const isLandscape = W >= H;
+    let stageW, stageH;
+    if (isLandscape) {
+      // Match the FIT math: panel ~30%, handle 64-90px, rest is stage.
+      const pad = 8, gap = 8;
+      const handleh = H < 500 ? 64 : 90;
+      const panelw = Math.max(220, Math.round(W * 0.30));
+      stageW = W - panelw - 2 * pad - gap;
+      stageH = H - handleh - 2 * pad - gap;
+    } else {
+      // Portrait: match the CSS portrait grid (45vh stage row).
+      const pad = 8;
+      stageW = W - 2 * pad;
+      stageH = Math.round(H * 0.45);
+    }
+    stage.style.width  = stageW + 'px';
+    stage.style.height = stageH + 'px';
+    stage.style.maxWidth  = stageW + 'px';
+    stage.style.maxHeight = stageH + 'px';
+    return { w: stageW, h: stageH };
+  }
+
   function _onOrientationFlip() {
     if (!_open) return;
-    // Hide canvas during rotation, wait for layout to settle, recompute,
-    // then reveal. matchMedia fires AFTER viewport updates so innerWidth
-    // is already correct here, but iOS Safari sometimes still needs an
-    // extra frame for CSS reflow.
     const canvas = document.getElementById('title-ship-canvas');
     if (canvas) canvas.style.visibility = 'hidden';
     _refreshTunesForOrientation();
     if (typeof _editApplyAll === 'function') _editApplyAll();
-    // Triple rAF: viewport → CSS vars apply → grid reflows → canvas resize.
+    // Triple rAF so iOS finishes the rotation animation before we measure.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          _lockStageSize();
           _resizeStageCanvas();
           if (canvas) canvas.style.visibility = '';
         });
