@@ -15274,8 +15274,26 @@ function updateStreakBadge() {
     const panelh = stageh + handleh + gap; // panel spans both rows
     const next = { stagew, stageh, handleh, panelw, panelh, pad, gap };
     _editSave(next);
-    _editApplyAll();
-    if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
+    // Apply the CSS vars directly here (don't recurse through _editApplyAll,
+    // which would re-trigger fit on auto-fit path) and then resize the canvas
+    // AFTER the browser has reflowed.
+    const overlay = document.getElementById('thruster-overlay');
+    if (overlay) {
+      Object.keys(EDIT_DEFS).forEach(k => {
+        const v = (next[k] != null) ? next[k] : EDIT_DEFS[k].def;
+        overlay.style.setProperty(EDIT_DEFS[k].var, v + EDIT_DEFS[k].unit);
+        const slider = document.getElementById('sr-edit-' + k);
+        const num    = document.getElementById('sr-edit-' + k + '-num');
+        if (slider) slider.value = v;
+        if (num) num.textContent = String(v);
+      });
+    }
+    // Double rAF: wait for CSS vars to apply, grid to recalc, THEN resize canvas.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
+      });
+    });
     try { console.log('[showroom-layout] FIT', JSON.stringify(next)); } catch(_){}
   }
 
