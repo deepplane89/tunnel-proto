@@ -4945,8 +4945,11 @@ body.sr-open #title-leaderboard {
 .sr-stage {
   position: relative !important;
   inset: auto !important;
-  width: 100% !important;
-  height: 100% !important;
+  /* No !important on width/height — JS _lockStageSize() stamps explicit
+     pixel sizes per orientation as inline styles. Default 100% lets the
+     grid drive size when JS hasn't locked yet (e.g. portrait fallback). */
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   display: block;
@@ -4955,6 +4958,7 @@ body.sr-open #title-leaderboard {
   padding: 0 !important;
   margin: 0 !important;
   overflow: hidden;
+  box-sizing: border-box;
 }
 .sr-stage > canvas {
   display: block;
@@ -5405,16 +5409,16 @@ body.sr-edit-mode #thruster-overlay .sr-panel {
 /* ═══════════════════════════════════════════════════════════════════════ */
 @media (orientation: landscape), (min-width: 900px) {
   .sr-overlay:not(.hidden) {
-    /* Stage column flexes (1fr) — never overflows the viewport regardless
-       of saved pixel values. Panel takes a fixed pixel width from the
-       slider. Stage row also flexes (1fr); handle row is fixed pixels. */
-    grid-template-columns: 1fr var(--ed-panelw, 240px) !important;
-    grid-template-rows: 1fr var(--ed-handleh, 60px) !important;
+    /* CSS-only fallback when JS hasn't locked the layout yet. JS
+       _lockStageSize() stamps explicit pixel grid templates inline
+       which override these (no !important here so inline wins). */
+    grid-template-columns: 1fr var(--ed-panelw, 240px);
+    grid-template-rows: 1fr var(--ed-handleh, 60px);
     grid-template-areas:
       "stage  panel"
-      "handle panel" !important;
-    padding: var(--ed-pad, 8px) !important;
-    gap: var(--ed-gap, 8px) !important;
+      "handle panel";
+    padding: var(--ed-pad, 8px);
+    gap: var(--ed-gap, 8px);
   }
   /* Panel spans both rows so total panel height = stageh + handleh + gap. */
   .sr-overlay:not(.hidden) .sr-panel {

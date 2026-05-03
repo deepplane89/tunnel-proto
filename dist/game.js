@@ -14651,31 +14651,44 @@ function updateStreakBadge() {
   // — the stage cell is whatever pixel size we say it is. On rotation,
   // matchMedia fires AFTER viewport settles → we recompute and re-stamp.
   // No mid-rotation reads of getBoundingClientRect, no morph glitch.
+  // Force-lock the entire showroom layout per orientation. Stamps pixel
+  // sizes inline on the overlay grid template AND the stage box, so the
+  // CSS templates can't shift things during rotation. Triggered by
+  // matchMedia AFTER the orientation flip completes.
   function _lockStageSize() {
+    const overlay = document.getElementById('thruster-overlay');
     const stage = document.getElementById('sr-stage');
-    if (!stage) return null;
+    if (!overlay || !stage) return null;
     const W = window.innerWidth;
     const H = window.innerHeight;
     const isLandscape = W >= H;
-    let stageW, stageH;
+    const pad = 8, gap = 8;
     if (isLandscape) {
-      // Match the FIT math: panel ~30%, handle 64-90px, rest is stage.
-      const pad = 8, gap = 8;
       const handleh = H < 500 ? 64 : 90;
       const panelw = Math.max(220, Math.round(W * 0.30));
-      stageW = W - panelw - 2 * pad - gap;
-      stageH = H - handleh - 2 * pad - gap;
+      const stageW = W - panelw - 2 * pad - gap;
+      const stageH = H - handleh - 2 * pad - gap;
+      // Lock overlay grid template explicitly.
+      overlay.style.gridTemplateColumns = stageW + 'px ' + panelw + 'px';
+      overlay.style.gridTemplateRows    = stageH + 'px ' + handleh + 'px';
+      overlay.style.padding = pad + 'px';
+      overlay.style.gap = gap + 'px';
+      // Lock stage box.
+      stage.style.width  = stageW + 'px';
+      stage.style.height = stageH + 'px';
+      return { w: stageW, h: stageH };
     } else {
-      // Portrait: match the CSS portrait grid (45vh stage row).
-      const pad = 8;
-      stageW = W - 2 * pad;
-      stageH = Math.round(H * 0.45);
+      // Portrait: clear locks, let CSS portrait grid (45vh / auto / 50vh) drive.
+      overlay.style.gridTemplateColumns = '';
+      overlay.style.gridTemplateRows = '';
+      overlay.style.padding = '';
+      overlay.style.gap = '';
+      stage.style.width = '';
+      stage.style.height = '';
+      const stageW = W - 2 * pad;
+      const stageH = Math.round(H * 0.45);
+      return { w: stageW, h: stageH };
     }
-    stage.style.width  = stageW + 'px';
-    stage.style.height = stageH + 'px';
-    stage.style.maxWidth  = stageW + 'px';
-    stage.style.maxHeight = stageH + 'px';
-    return { w: stageW, h: stageH };
   }
 
   function _onOrientationFlip() {
