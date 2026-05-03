@@ -5676,8 +5676,8 @@ function applySkin(skinIndex) {
   dirLight.intensity = 2.56; dirLight.position.set(2, 8.8, 8);
   rimLight.intensity = 0.10; fillLight.intensity = 0.25;
   sunLight.intensity = 0.22; sunLightL.intensity = 0.10;
-  window._thrusterScale = 1.0;
-  window._baseThrusterScale = 1.0;
+  window._thrusterScale = 1.6;
+  window._baseThrusterScale = 1.6;
 
   // ── Stale material-ref cleanup ───────────────────────────────────────
   // shipHullMats / shipEdgeLines are mutated per-frame for near-miss flash,
@@ -6368,7 +6368,7 @@ function createThrusterSystem() {
   geo.setAttribute('size',     new THREE.BufferAttribute(sizes,     1));
 
   const mat = new THREE.PointsMaterial({
-    size: 0.18,
+    size: 0.07,
     vertexColors: true,
     transparent: true,
     opacity: 1.0,
@@ -6408,7 +6408,7 @@ function createMiniThrusterSystem() {
   geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
   geo.setAttribute('size',     new THREE.BufferAttribute(sizes,     1));
   const mat = new THREE.PointsMaterial({
-    size: 0.09,
+    size: 0.06,
     vertexColors: true,
     transparent: true,
     opacity: 1.0,
@@ -6796,12 +6796,48 @@ let _jumpPitchMult = 1.0;        // how much pitch tilts with vertical movement
 let _jumpThrusterFlare = 2.0;    // thruster intensity multiplier while thrusting
 
 // ── Tunable thruster shape globals (exposed in G-key panel) ──
+// Defaults locked from tuner export 2026-05-02. All consumers read with
+// `(window._x != null ? window._x : <fallback>)`, so setting once here covers
+// every read site without touching consumers.
 window._thrusterSpreadX = 1.0;   // lateral spread multiplier (wider)
 window._thrusterSpreadY = 1.0;   // vertical spread multiplier (flatter < 1, taller > 1)
 window._thrusterLength  = 1.0;   // exhaust length multiplier
 window._thrusterVisible = true;  // master on/off
-window._nozzleBloomScale = window._nozzleBloomScale || 1.0;
-window._nozzleBloomOpacity = window._nozzleBloomOpacity != null ? window._nozzleBloomOpacity : 0.34;
+// Bloom (nozzle + mini)
+window._nozzleBloomScale    = (window._nozzleBloomScale    != null) ? window._nozzleBloomScale    : 1.0;
+window._nozzleBloomOpacity  = (window._nozzleBloomOpacity  != null) ? window._nozzleBloomOpacity  : 0.78;
+window._miniBloomScale      = (window._miniBloomScale      != null) ? window._miniBloomScale      : 1.0;
+window._miniBloomOpacity    = (window._miniBloomOpacity    != null) ? window._miniBloomOpacity    : 0.15;
+window._miniBloomOpacitySpd = (window._miniBloomOpacitySpd != null) ? window._miniBloomOpacitySpd : 0.15;
+window._nozzleBloom_whiteMix = (window._nozzleBloom_whiteMix != null) ? window._nozzleBloom_whiteMix : 0.0;
+window._miniBloom_whiteMix   = (window._miniBloom_whiteMix   != null) ? window._miniBloom_whiteMix   : 0.0;
+// Particles
+window._thrPart_partOpacity     = (window._thrPart_partOpacity     != null) ? window._thrPart_partOpacity     : 0.48;
+window._thrPart_miniPartOpacity = (window._thrPart_miniPartOpacity != null) ? window._thrPart_miniPartOpacity : 0.48;
+window._thrPart_posPinFrac      = (window._thrPart_posPinFrac      != null) ? window._thrPart_posPinFrac      : 0.14;
+window._thrPart_midEnd       = (window._thrPart_midEnd       != null) ? window._thrPart_midEnd       : 0.10;
+window._thrPart_midBoost     = (window._thrPart_midBoost     != null) ? window._thrPart_midBoost     : 0.00;
+window._thrPart_sizeBase     = (window._thrPart_sizeBase     != null) ? window._thrPart_sizeBase     : 0.05;
+window._thrPart_sizeSpeed    = (window._thrPart_sizeSpeed    != null) ? window._thrPart_sizeSpeed    : 0.00;
+window._thrPart_bumpMult     = (window._thrPart_bumpMult     != null) ? window._thrPart_bumpMult     : 1.00;
+window._thrPart_bumpEnd      = (window._thrPart_bumpEnd      != null) ? window._thrPart_bumpEnd      : 0.00;
+window._thrPart_sizeJitter   = (window._thrPart_sizeJitter   != null) ? window._thrPart_sizeJitter   : 0.00;
+window._thrPart_lifeMin      = (window._thrPart_lifeMin      != null) ? window._thrPart_lifeMin      : 0.34;
+window._thrPart_lifeJit      = (window._thrPart_lifeJit      != null) ? window._thrPart_lifeJit      : 0.05;
+window._thrPart_lifeBase     = (window._thrPart_lifeBase     != null) ? window._thrPart_lifeBase     : 0.20;
+window._thrPart_lifeSpd      = (window._thrPart_lifeSpd      != null) ? window._thrPart_lifeSpd      : 0.00;
+window._thrPart_spawnJit     = (window._thrPart_spawnJit     != null) ? window._thrPart_spawnJit     : 0.00;
+// Flame mesh
+window._thrFlame_coreEnd   = (window._thrFlame_coreEnd   != null) ? window._thrFlame_coreEnd   : 0.08;
+window._thrFlame_coreRGB   = (window._thrFlame_coreRGB   != null) ? window._thrFlame_coreRGB   : 0.37;
+window._thrFlame_midEnd    = (window._thrFlame_midEnd    != null) ? window._thrFlame_midEnd    : 0.35;
+window._thrFlame_sizeBase  = (window._thrFlame_sizeBase  != null) ? window._thrFlame_sizeBase  : 0.06;
+window._thrFlame_sizeSpeed = (window._thrFlame_sizeSpeed != null) ? window._thrFlame_sizeSpeed : 0.10;
+window._thrFlame_bumpMult  = (window._thrFlame_bumpMult  != null) ? window._thrFlame_bumpMult  : 3.00;
+window._thrFlame_bumpEnd   = (window._thrFlame_bumpEnd   != null) ? window._thrFlame_bumpEnd   : 0.30;
+window._thrFlame_lifeMin   = (window._thrFlame_lifeMin   != null) ? window._thrFlame_lifeMin   : 0.01;
+window._thrFlame_lifeJit   = (window._thrFlame_lifeJit   != null) ? window._thrFlame_lifeJit   : 0.00;
+window._thrFlame_spawnJit  = (window._thrFlame_spawnJit  != null) ? window._thrFlame_spawnJit  : 0.075;
 let _jumpLandingBounce = 0.3;    // how much bounce on landing
 let _jumpLandingBounceT = 0;
 let _camYFollow = 0.35;          // 0 = camera stays fixed, 1 = fully tracks ship Y
