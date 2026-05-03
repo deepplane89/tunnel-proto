@@ -1357,12 +1357,13 @@
     const overlay = document.getElementById('thruster-overlay');
     if (!overlay) return;
     let saved = _editLoad();
-    // Auto-fit to viewport on first open (no saved layout) whenever landscape.
-    if (!saved || Object.keys(saved).length === 0) {
-      if (window.innerWidth >= window.innerHeight) {
-        _editFitScreen();
-        return;
-      }
+    // Auto-fit to viewport on every open in landscape, UNLESS the user has
+    // manually adjusted a slider (saved.__manual === true). This way new
+    // builds always start fitted to the current viewport without the user
+    // having to clear storage.
+    if (window.innerWidth >= window.innerHeight && !(saved && saved.__manual)) {
+      _editFitScreen();
+      return;
     }
     Object.keys(EDIT_DEFS).forEach(k => {
       const v = (saved[k] != null) ? saved[k] : EDIT_DEFS[k].def;
@@ -1387,6 +1388,7 @@
         if (overlay) overlay.style.setProperty(EDIT_DEFS[k].var, v + EDIT_DEFS[k].unit);
         const saved = _editLoad();
         saved[k] = v;
+        saved.__manual = true; // user touched a slider; stop auto-fitting
         _editSave(saved);
         try { console.log('[showroom-layout]', k, '=', v); } catch(_){}
         if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
