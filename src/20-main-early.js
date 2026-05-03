@@ -5769,7 +5769,74 @@ function applyTitleSkin(skinIndex) {
   if (!_titleShipModel || !_prebuiltSkins.length) return;
   if (skinIndex < 0 || skinIndex >= _prebuiltSkins.length) skinIndex = 0;
 
+  // ── ALT-GLB SWAP (e.g. RUNNER MK II) ─────────────────────────────────
+  // Default Runner reuses the original cloned mesh and only swaps materials.
+  // Skins with their own GLB file (skinDef.glbFile) need geometry swapped
+  // entirely. We pull from the alt-ship cache (already preloaded behind the
+  // boot gate). Falls back to default Runner clone when no alt is cached or
+  // we're switching back to a non-alt skin.
+  const _skinDef = SHIP_SKINS[skinIndex];
+  const _wantAltGlb = !!(_skinDef && _skinDef.glbFile);
+  const _curAltFile = _titleShipModel.userData && _titleShipModel.userData._altGlb;
+  const _wantFile = _wantAltGlb ? _skinDef.glbFile : null;
+  if (_wantFile !== (_curAltFile || null)) {
+    let _newSrc = null;
+    if (_wantFile) {
+      const _cached = (typeof _altShipCache !== 'undefined') && _altShipCache[_wantFile];
+      if (_cached && _cached.model) _newSrc = _cached.model;
+    } else {
+      _newSrc = window._shipModel || null;
+    }
+    if (_newSrc) {
+      const parent = _titleShipModel.parent;
+      if (parent) parent.remove(_titleShipModel);
+      const fresh = _newSrc.clone(true);
+      // Re-mark mesh slots so material override loop below can find them,
+      // AND deep-clone every material so showroom-only mutations (forced
+      // opaque, depth tweaks, locked silhouette) never leak back into the
+      // shared gameplay alt ship that lives in the alt-ship cache.
+      _titleMeshMap = [];
+      fresh.traverse(child => {
+        if (!child.isMesh) return;
+        if (Array.isArray(child.material)) {
+          child.material = child.material.map(m => m && m.clone ? m.clone() : m);
+        } else if (child.material && child.material.clone) {
+          child.material = child.material.clone();
+        }
+        const srcOrig = child.userData && child.userData._origMatName;
+        const matName = (child.material && child.material.name) ? child.material.name : '';
+        child.userData._origMatName = srcOrig || matName || '';
+        _titleMeshMap.push({ mesh: child, origName: child.userData._origMatName });
+      });
+      fresh.userData._altGlb = _wantFile;
+      fresh.position.set(0, 0, 0);
+      fresh.scale.setScalar(0.12);
+      _titleShipModel = fresh;
+      if (parent) parent.add(_titleShipModel);
+      // Showroom anchors are children of the OLD ship; force them to be
+      // re-created on next open by clearing the lazy-init guard.
+      try {
+        if (window.Showroom && typeof window.Showroom.resetThrusterAnchors === 'function') {
+          window.Showroom.resetThrusterAnchors();
+        }
+      } catch(_){}
+    }
+  }
+
   const isLocked = !_skinAdminMode && !isSkinUnlocked(skinIndex);
+
+  // Alt-GLB skins carry their own gameplay-tuned materials — we already
+  // cloned them above. Just hide exhaust/fire flames on title and (if locked)
+  // dark-silhouette every mesh, then bail before the default-Runner skin map
+  // loop below (which only knows about the default ship's mesh names).
+  if (_wantAltGlb) {
+    for (const entry of _titleMeshMap) {
+      const { mesh, origName } = entry;
+      if (origName === 'fire' || origName === 'fire1') { mesh.visible = false; continue; }
+      if (isLocked) mesh.material = _titleDarkMat;
+    }
+    return;
+  }
 
   // Get source model's meshes to pull materials from (since _prebuiltSkins uses source uuids)
   const srcModel = window._shipModel;

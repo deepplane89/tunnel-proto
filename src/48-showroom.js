@@ -1155,9 +1155,33 @@
   // without needing a full open/close cycle.
   function syncColor() { _thrSyncColor(); }
 
+  // Drop all thruster anchors + systems so the next _thrInit() rebuilds them
+  // against the (possibly swapped) _titleShipModel. Called by applyTitleSkin
+  // when an alt-GLB skin is loaded.
+  function resetThrusterAnchors() {
+    if (!_thr) return;
+    try {
+      Object.values(_thr.groups || {}).forEach(g => {
+        if (g.points && g.points.parent) g.points.parent.remove(g.points);
+        if (g.bloom  && g.bloom.parent)  g.bloom.parent.remove(g.bloom);
+      });
+      Object.values(_thr.anchors || {}).forEach(a => {
+        if (a && a.parent) a.parent.remove(a);
+      });
+    } catch(_){}
+    _thr = null;
+    if (_open) {
+      _thrInit();
+      try { _forceShipOpaque(); } catch(_){}
+      _thrSyncColor();
+      _thrShow(true);
+    }
+  }
+
   window.Showroom = {
     open: open, close: close, refresh: refresh,
     tick: tick, syncColor: syncColor,
+    resetThrusterAnchors: resetThrusterAnchors,
     isOpen: function() { return _open; },
   };
 })();
