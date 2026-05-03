@@ -13975,10 +13975,19 @@ function updateStreakBadge() {
   // Default state is OFF; user toggles on. Visibility is applied AFTER the
   // ship has been placed in the scene so it never affects bbox/hullBackZ.
   const SR_ADDONS_KEY = 'jh_showroom_addons_v2';
+  // GLTFLoader sanitizes node names: spaces → underscore, dots removed
+  // (see three.js issue #27873). The GLB authoring tool stored names like
+  // 'Fins 01' but the runtime scene has 'Fins_01'. Registry uses the
+  // SANITIZED forms so _findAddonNode matches what's actually in the scene.
+  // Display labels keep the spaces for readability.
   const ADDON_REGISTRY = {
     'spaceship_01.glb': [
-      'Fins 01', 'Fins 02', 'Rings 001',
-      'Turrets 001', 'Turrets 002', 'Turrets 003',
+      { node: 'Fins_01',     label: 'Fins 01' },
+      { node: 'Fins_02',     label: 'Fins 02' },
+      { node: 'Rings_001',   label: 'Rings 001' },
+      { node: 'Turrets_001', label: 'Turrets 001' },
+      { node: 'Turrets_002', label: 'Turrets 002' },
+      { node: 'Turrets_003', label: 'Turrets 003' },
     ],
   };
   function _loadAddonsState() {
@@ -14012,23 +14021,20 @@ function updateStreakBadge() {
     const list = document.getElementById('sr-addons-list');
     if (!list) return;
     const key = _currentAddonsKey();
-    const names = key && ADDON_REGISTRY[key];
-    if (!names || !names.length) {
+    const entries = key && ADDON_REGISTRY[key];
+    if (!entries || !entries.length) {
       list.innerHTML = '<div class="sr-addon-empty">No add-ons available for this ship</div>';
       return;
     }
     let html = '';
-    names.forEach(n => {
-      const node = _findAddonNode(n);
-      // Checkbox reflects the part's CURRENT visibility — do NOT mutate it
-      // here. Mutating visibility before _thrInit reads the bbox would shift
-      // hullBackZ and break RST. The user toggles on click; visibility is
-      // ephemeral within a session.
+    entries.forEach(entry => {
+      const node = _findAddonNode(entry.node);
       const checked = node ? !!node.visible : true;
-      const safe = String(n).replace(/"/g, '&quot;');
+      const nodeName = String(entry.node).replace(/"/g, '&quot;');
+      const label = String(entry.label).replace(/</g, '&lt;');
       html += '<label class="sr-addon-row">'+
-        '<input type="checkbox" data-addon="'+safe+'" '+(checked?'checked':'')+'>'+
-        '<span>'+safe+'</span>'+
+        '<input type="checkbox" data-addon="'+nodeName+'" '+(checked?'checked':'')+'>'+
+        '<span>'+label+'</span>'+
       '</label>';
     });
     list.innerHTML = html;
@@ -14053,7 +14059,8 @@ function updateStreakBadge() {
     const tab = document.querySelector('.sr-tab[data-tab="addons"]');
     if (!tab) return;
     const key = _currentAddonsKey();
-    const has = !!(key && ADDON_REGISTRY[key] && ADDON_REGISTRY[key].length);
+    const reg = key && ADDON_REGISTRY[key];
+    const has = !!(reg && reg.length);
     tab.classList.toggle('sr-hidden', !has);
     // If the active tab just got hidden, fall back to thrusters.
     if (!has && _activeTab === 'addons') _switchTab('thrusters');
