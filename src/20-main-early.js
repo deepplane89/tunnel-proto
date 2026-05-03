@@ -1143,6 +1143,9 @@ function renderThrusterPanel() {
       if (btn.getAttribute('data-unlocked') !== '1') return;
       const key = btn.getAttribute('data-key');
       const d = loadThrusterData();
+      // Admin-mode taps unlock items implicitly so loadThrusterData()'s
+      // "selected must be in unlocked" guard doesn't snap us back to baseline.
+      if (!d.unlockedPresets.includes(key)) d.unlockedPresets.push(key);
       d.selectedPreset = key;
       saveThrusterData(d);
       // Live preview on the title ship: apply preset + reapply equipped color
@@ -1156,6 +1159,7 @@ function renderThrusterPanel() {
       if (btn.getAttribute('data-unlocked') !== '1') return;
       const key = btn.getAttribute('data-key');
       const d = loadThrusterData();
+      if (!d.unlockedColors.includes(key)) d.unlockedColors.push(key);
       d.selectedColor = key;
       saveThrusterData(d);
       // Live preview — _applyEquippedThruster handles 'default' as no-op so
