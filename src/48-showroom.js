@@ -405,10 +405,41 @@
     return new THREE.CanvasTexture(c);
   }
 
+  // One-shot: ensure window._THRUSTER_PRESETS.baseline holds a real snapshot
+  // of the current live values so selecting 'baseline' after another preset
+  // actually restores. Mirrors the dev tuner's _captureLiveThrValues but does
+  // not require opening the G-key panel.
+  function _captureBaselineIfMissing() {
+    try {
+      const presets = window._THRUSTER_PRESETS || {};
+      if (presets.baseline) return;
+      const allKeys = new Set();
+      Object.values(presets).forEach(p => { if (p) Object.keys(p).forEach(k => allKeys.add(k)); });
+      const snap = { label: 'BASELINE' };
+      allKeys.forEach(k => {
+        if (k === 'label') return;
+        if (k === '_pointMatSize') {
+          try { if (window.thrusterSystems && window.thrusterSystems[0]) snap[k] = window.thrusterSystems[0].points.material.size; } catch(_){}
+        } else if (k === '_miniPointMatSize') {
+          try { if (window.miniThrusterSystems && window.miniThrusterSystems[0]) snap[k] = window.miniThrusterSystems[0].points.material.size; } catch(_){}
+        } else if (k === 'nozL' || k === 'nozR') {
+          if (typeof NOZZLE_OFFSETS !== 'undefined' && NOZZLE_OFFSETS[0]) {
+            const v = (k === 'nozL') ? NOZZLE_OFFSETS[0] : NOZZLE_OFFSETS[1];
+            snap[k] = [v.x, v.y, v.z];
+          }
+        } else if (k.charAt(0) === '_') {
+          if (window[k] != null) snap[k] = window[k];
+        }
+      });
+      presets.baseline = snap;
+    } catch(_){}
+  }
+
   function _thrInit() {
     if (_thr) return;
     if (typeof titleScene === 'undefined' || !titleScene) return;
     if (typeof NOZZLE_OFFSETS === 'undefined' || !NOZZLE_OFFSETS) return;
+    _captureBaselineIfMissing();
     const N = SR_PARTICLE_COUNT;
     const points = [], geos = [], poses = [], cols = [], szs = [], vels = [], ages = [], lifes = [], blooms = [];
     const tex = _makeBloomTex();
