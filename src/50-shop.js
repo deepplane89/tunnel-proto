@@ -206,8 +206,7 @@ function openShopDetail(id) {
           buyBtn.classList.add('shop-purchase-anim');
           document.getElementById('shop-coin-count').textContent = _totalCoins;
           // SFX
-          playSFX(600, 0.2, 'sine', 0.15);
-          setTimeout(() => playSFX(900, 0.2, 'sine', 0.15), 100);
+          playShopPurchase();
           // Re-render detail after animation
           setTimeout(() => {
             openShopDetail(id);

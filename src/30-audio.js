@@ -138,6 +138,7 @@ function _initSFXBuffers() {
   _loadSFXBuffer('argon-ambient',   './assets/audio/argon-ambient.mp3');
   // Laser machine-gun: one-shot per fire-rate tick instead of looping the whole clip.
   _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
+  _loadSFXBuffer('shop-purchase',   './assets/audio/shop_purchase.mp3');
 }
 
 // ── Argon looping handle (Web Audio path) ──
@@ -161,7 +162,7 @@ function _playArgonLoop(initialVol) {
   return src;
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx' };
+const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx' };
 // Play a pre-decoded buffer with gain + optional pan + playbackRate
 function _playBuffer(name, volume, rate, panVal) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
@@ -240,6 +241,10 @@ function playLevelUp() {
   [440, 550, 660, 880].forEach((f, i) => {
     setTimeout(() => playSFX(f, 0.25, 'triangle', 0.25), i * 80);
   });
+}
+
+function playShopPurchase() {
+  _playBuffer('shop-purchase', 0.6, 1.0, null);
 }
 
 function playCrash() {
