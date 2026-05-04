@@ -5068,7 +5068,7 @@ function update(dt) {
         for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _spawnBand = bi; break; } _spawnBand = bi; }
       }
       const _isFatConeMode = state._seqSpawnMode === 'fat_cones';
-      const _spawnZBase = _isFatConeMode ? -22 : (_spawnBand === 1) ? -30 : (_spawnBand === 2 || _spawnBand >= 5) ? -22 : (state.isDeathRun ? -30 : -50);
+      const _spawnZBase = _isFatConeMode ? -50 : (_spawnBand === 1) ? -30 : (_spawnBand === 2 || _spawnBand >= 5) ? -22 : (state.isDeathRun ? -30 : -50);
       state.nextSpawnZ = _spawnZBase + (Math.random() - 0.5) * 10;
       state.frameCount++;
       const l4PreClear = (!state.isDeathRun && state.currentLevelIdx === 3 && !state.l4CorridorDone &&

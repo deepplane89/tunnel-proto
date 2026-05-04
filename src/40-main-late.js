@@ -2025,7 +2025,7 @@ function spawnObstacles() {
       else    clampedCount = 6 + Math.floor(Math.random() * 3);
     }
     else if (_sm === 'lethal')    { _isRingBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
-    else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 4 + Math.floor(Math.random() * 2); } // 4-5 cones spread laterally so holding sideways doesn't escape
+    else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 2 + Math.floor(Math.random() * 2); } // 2-3 cones; predicted-X spawning provides the lateral punish (rows track ship's projected position)
     else if (_sm === 'endless')   { _isMixBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
   } else if (state.isDeathRun) {
     for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _obsBandIdx = bi; break; } _obsBandIdx = bi; }
@@ -2053,7 +2053,7 @@ function spawnObstacles() {
     // For rings/walls/mix: enforce minimum lane gap so they don't overlap
     if ((_isRingBand || _isMixBand) && blocked.some(b => Math.abs(b - lane) < 4)) continue;
     if (_isWallBand && blocked.some(b => Math.abs(b - lane) < (window._awRand ? window._awRand.laneGap : 3))) continue;
-    if (_isFatConeBand && blocked.some(b => Math.abs(b - lane) < 6)) continue; // gap between fat cones (lowered from 8 to fit 4 cones across 21 lanes)
+    if (_isFatConeBand && blocked.some(b => Math.abs(b - lane) < 8)) continue; // wide gap between fat cones (original)
     blocked.push(lane);
   }
 
