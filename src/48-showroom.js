@@ -1254,7 +1254,7 @@
     overlay.classList.remove('hidden');
     document.body.classList.add('sr-open');
     _mountShopIntoShowroom();
-    _switchTab(tab || 'thrusters');
+    _switchTab(tab || 'skins');
     // Seed the garage preview index from whatever ship is currently on the
     // title canvas. Keeps the dropdown in sync with the visible ship without
     // firing a skin swap (which would wipe thruster anchors).

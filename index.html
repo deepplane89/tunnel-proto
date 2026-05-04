@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Zain:wght@300;400;700&family=Silkscreen&family=Rajdhani:wght@300;400;600;700&family=Permanent+Marker&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=1777831000" />
+  <link rel="stylesheet" href="./style.css?v=1777832000" />
 
   <script type="importmap">
   {
@@ -328,18 +328,18 @@
   <div class="sr-grid" aria-hidden="true"></div>
   <div class="sr-panel">
     <div class="sr-tabs" id="sr-tabs">
-      <button class="sr-tab" data-tab="skins">SKINS</button>
-      <button class="sr-tab active" data-tab="thrusters">THRUSTERS</button>
+      <button class="sr-tab active" data-tab="skins">SKINS</button>
+      <button class="sr-tab" data-tab="thrusters">THRUSTERS</button>
       <button class="sr-tab" data-tab="addons">ADD-ONS</button>
       <button class="sr-tab" data-tab="powerups">POWER-UPS</button>
     </div>
     <div class="sr-body" id="sr-body">
       <!-- SKINS PANE — card grid (powerup-style), with locked state per skin -->
-      <div class="sr-pane sr-hidden" data-pane="skins">
+      <div class="sr-pane" data-pane="skins">
         <div id="sr-skin-grid" class="sr-card-grid"></div>
       </div>
       <!-- THRUSTERS PANE — SHAPE as cards, COLOR remains a dropdown -->
-      <div class="sr-pane" data-pane="thrusters">
+      <div class="sr-pane sr-hidden" data-pane="thrusters">
         <div id="sr-shape-grid" class="sr-card-grid"></div>
         <label class="sr-row">
           <span class="sr-label">COLOR</span>
@@ -605,6 +605,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1777831000"></script>
+<script type="module" src="./dist/game.js?v=1777832000"></script>
 </body>
 </html>
