@@ -6062,19 +6062,17 @@ function applyTitleSkin(skinIndex) {
       const mat = mesh.material;
       if (!mat) continue;
       const slot = origName || '';
+      // Normalize slot name (GLB uses 'rocket base' / 'white ' with spaces).
+      let s = slot;
+      if (s === 'rocket base') s = 'rocket_base';
+      if (s === 'rocket light') s = 'rocket_light';
+      if (s === 'white ') s = 'white';
+      if (s === 'Light') s = 'rocket_light';
       // BLACK MAMBA (idx 2): force hull-color slots to near-black so title
       // reads stealth instead of orange. Cyan emissive on white/rocket_light
       // slots is preserved.
-      if (skinIndex === 2 && (slot === 'rocket_base' || slot === 'gray' || slot === 'fallback')) {
+      if (skinIndex === 2 && (s === 'rocket_base' || s === 'gray' || s === 'fallback')) {
         if (mat.color) mat.color.setHex(0x000000);
-      }
-      // CIPHER (idx 3): nudge diamond-plate base toward cool blue-steel under
-      // bright lights. The shader emissive is already 0x88bbff; the base color
-      // 0x000000 reads pure black on title. A subtle cool-tinted base lifts
-      // the surface so the diamond pattern + edge glow reads as steel rather
-      // than a flat black silhouette.
-      if (skinIndex === 3 && (slot === 'rocket_base' || slot === 'gray' || slot === 'white' || slot === 'fallback')) {
-        if (mat.color) mat.color.setHex(0x1a2230);
       }
     }
     return;
