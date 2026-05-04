@@ -5086,7 +5086,9 @@ body.sr-open #title-leaderboard {
                               1.6 (slider 160) -> panel ~120px (tiny panel)
        Formula: 240px - (multiplier - 1) * 200px, clamped 100-400px. */
     grid-template-columns: 1fr clamp(100px, calc(240px - (var(--sr-tune-stage, 1) - 1) * 200px), 400px);
-    grid-template-rows: 1fr auto;
+    /* Handle row fixed at 60px so its content (label + tier + track +
+       next-tier text) can't get clipped by an undersized auto row. */
+    grid-template-rows: 1fr 60px;
     grid-template-areas:
       "stage  panel"
       "handle panel";
