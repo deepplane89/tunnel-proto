@@ -5218,6 +5218,48 @@ body.sr-open #title-leaderboard {
   .sr-handling-slot .shop-handling-next { font-size: 8px; }
 }
 
+
+/* ───── DESKTOP-ONLY GARAGE TWEAKS ─────────────────────────────────────
+ * Goal: on big monitors the panel was a tiny 240px slice with a giant
+ * blank stage. Cap the overlay to ~1200px and let the panel grow.
+ *
+ * SAFETY — mobile landscape MUST be unaffected. Phones in landscape have
+ * viewport height < 500px (iPhone 14 Pro Max landscape height = 430px).
+ * We require BOTH min-width: 900px AND min-height: 600px. No phone in any
+ * orientation passes both gates simultaneously, so this block is desktop-
+ * only and the mobile-landscape rules above continue to apply unchanged.
+ */
+@media (min-width: 900px) and (min-height: 600px) {
+  .sr-overlay:not(.hidden) {
+    /* Center the cluster and cap its width so it lives in a comfortable
+       middle band instead of sprawling edge-to-edge. Stage : panel ratio
+       ~ 7:3 (was effectively ~7:1 on a 1920px monitor with the 240px
+       fixed panel). */
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
+    grid-template-rows: 1fr 72px;
+    padding: 16px;
+    gap: 14px;
+  }
+  .sr-overlay .sr-tabs { margin-right: 36px; }
+  .sr-overlay .sr-tab {
+    padding: 8px 10px 9px;
+    font-size: 12px;
+    letter-spacing: 1.4px;
+  }
+  .sr-overlay .sr-close {
+    width: 28px; height: 28px;
+    top: 6px; right: 6px;
+    font-size: 13px;
+  }
+  .sr-overlay .sr-card-grid,
+  .sr-overlay .sr-addons-list {
+    gap: 10px;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════ */
 /* SCI-FI SELECT — custom dropdown that replaces native <select> on mobile */
 /* Wraps an existing select.sr-select. The native element is hidden but    */
