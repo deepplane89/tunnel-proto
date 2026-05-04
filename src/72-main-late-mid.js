@@ -2017,7 +2017,28 @@ function buildSkinTunerSliders() {
     e.stopPropagation();
     tapCount++;
     if (tapCount === 1) tapTimer = setTimeout(() => { tapCount = 0; }, 1000);
-    if (tapCount >= 3) { clearTimeout(tapTimer); tapCount = 0; panel.classList.toggle('hidden'); }
+    if (tapCount >= 3) {
+      clearTimeout(tapTimer); tapCount = 0;
+      panel.classList.toggle('hidden');
+      // Toggle skin admin mode + grant cheats
+      _skinAdminMode = !_skinAdminMode;
+      try { updateSkinViewerDisplay(); } catch(_) {}
+      if (_skinAdminMode) {
+        try { saveCoinWallet(loadCoinWallet() + 99999); _totalCoins = loadCoinWallet(); updateTitleCoins(); } catch(_) {}
+        try { saveFuelCells(loadFuelCells() + 9999); updateTitleFuelCells(); } catch(_) {}
+        window._cheatCoins = (amount) => { saveCoinWallet(loadCoinWallet() + (amount || 99999)); _totalCoins = loadCoinWallet(); updateTitleCoins(); };
+        window._cheatFuel = (amount) => { saveFuelCells(loadFuelCells() + (amount || 9999)); updateTitleFuelCells(); };
+        window._cheatLevel = (lvl) => { savePlayerLevel(lvl || 50); savePlayerXP(0); updateTitleLevel(); };
+        window._cheatMaxUpgrades = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 5)); };
+        window._cheatLadder = (pos) => { saveLadderPos(pos || MISSION_LADDER.length); saveMissionFlags({}); updateTitleFuelCells(); };
+        try { localStorage.removeItem(STREAK_KEY_DAY); localStorage.removeItem(STREAK_KEY_LAST); updateStreakBadge(); } catch(_) {}
+        window._cheatReset = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); Object.keys(STAT_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); saveCoinWallet(0); saveFuelCells(0); saveFreeHeadStarts(0); saveLadderPos(0); window._LS.removeItem('jetslide_mission_flags'); window._LS.setItem('jetslide_pu_unlocked', '["shield"]'); savePlayerLevel(1); savePlayerXP(0); _totalCoins = 0; updateTitleCoins(); updateTitleFuelCells(); updateTitleLevel(); };
+      }
+      // Brief yellow flash on title
+      const _origColor = titleEl.style.color;
+      titleEl.style.color = _skinAdminMode ? '#ff0' : '';
+      setTimeout(() => { titleEl.style.color = _origColor; }, 300);
+    }
   }
   titleEl.addEventListener('touchstart', onTap, { passive: true });
   titleEl.addEventListener('click', onTap);

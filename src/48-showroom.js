@@ -464,8 +464,20 @@
     try { localStorage.setItem(SR_ADDONS_KEY, JSON.stringify(s || {})); } catch(_){}
   }
   function _currentAddonsKey() {
+    // Prefer the active title ship's _altGlb (set after applyTitleSkin runs).
+    // Fall back to the SHIP_SKINS entry for the currently-viewed/active skin
+    // so the Addons tab is available even before the alt-GLB cache resolves
+    // on first boot — all 4 main skins now share spaceship_01.glb.
     const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
-    return (ship && ship.userData && ship.userData._altGlb) || null;
+    const fromShip = ship && ship.userData && ship.userData._altGlb;
+    if (fromShip) return fromShip;
+    try {
+      const idx = (typeof skinViewerIdx === 'number') ? skinViewerIdx
+                : (typeof activeSkinIdx === 'number') ? activeSkinIdx : 0;
+      const def = (typeof SHIP_SKINS !== 'undefined') ? SHIP_SKINS[idx] : null;
+      if (def && def.glbFile) return def.glbFile;
+    } catch(_){}
+    return null;
   }
   // Find a named descendant on a given ship root. MK Runner's hull is
   // 'Cube.007' and the add-ons are its children, but we traverse so the

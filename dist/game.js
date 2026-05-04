@@ -13762,9 +13762,10 @@ function initSkinViewer() {
       }
     }, { passive: true });
 
-    // Admin mode: 3 rapid taps on the skin label (only when no handling upgrade pending)
-    let adminTapCount = 0;
-    let adminTapTimer = null;
+    // Admin mode used to live here (3-tap on skin label). It was moved to the
+    // title-screen heading (.game-title) on 2026-05-03 — see setupAdminMode
+    // in 72-main-late-mid.js. The skin label tap now ONLY claims a pending
+    // handling upgrade.
     _tapBind(document.getElementById('skin-viewer-label'), (e) => {
       // If handling upgrade pending, claim it
       const pendingHandling = getPendingHandlingUpgrade();
@@ -13790,37 +13791,8 @@ function initSkinViewer() {
         }
         return;
       }
-      adminTapCount++;
-      if (adminTapTimer) clearTimeout(adminTapTimer);
-      adminTapTimer = setTimeout(() => { adminTapCount = 0; }, 1500);
-      if (adminTapCount >= 3) {
-        _skinAdminMode = !_skinAdminMode;
-        adminTapCount = 0;
-        updateSkinViewerDisplay();
-        if (_skinAdminMode) {
-          // Auto-grant coins + fuel cells for testing
-          saveCoinWallet(loadCoinWallet() + 99999);
-          _totalCoins = loadCoinWallet();
-          updateTitleCoins();
-          saveFuelCells(loadFuelCells() + 9999);
-          updateTitleFuelCells();
-        }
-        // Brief flash feedback
-        const label = document.getElementById('skin-viewer-label');
-        label.style.color = _skinAdminMode ? '#ff0' : '';
-        setTimeout(() => { label.style.color = ''; }, 300);
-        // Admin cheats for testing
-        if (_skinAdminMode) {
-          window._cheatCoins = (amount) => { saveCoinWallet(loadCoinWallet() + (amount || 99999)); _totalCoins = loadCoinWallet(); updateTitleCoins(); };
-          window._cheatFuel = (amount) => { saveFuelCells(loadFuelCells() + (amount || 9999)); updateTitleFuelCells(); };
-          window._cheatLevel = (lvl) => { savePlayerLevel(lvl || 50); savePlayerXP(0); updateTitleLevel(); };
-          window._cheatMaxUpgrades = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 5)); };
-          window._cheatLadder = (pos) => { saveLadderPos(pos || MISSION_LADDER.length); saveMissionFlags({}); updateTitleFuelCells(); };
-          // Auto-reset streak for testing
-          localStorage.removeItem(STREAK_KEY_DAY); localStorage.removeItem(STREAK_KEY_LAST); updateStreakBadge();
-          window._cheatReset = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); Object.keys(STAT_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); saveCoinWallet(0); saveFuelCells(0); saveFreeHeadStarts(0); saveLadderPos(0); window._LS.removeItem('jetslide_mission_flags'); window._LS.setItem('jetslide_pu_unlocked', '["shield"]'); savePlayerLevel(1); savePlayerXP(0); _totalCoins = 0; updateTitleCoins(); updateTitleFuelCells(); updateTitleLevel(); };
-        }
-      }
+      // No admin gesture here anymore — see setupAdminMode in 72-main-late-mid.js
+      // (triple-tap the JET HORIZON title to toggle skin admin + cheats).
     });
   }
 }
@@ -14725,8 +14697,20 @@ function updateStreakBadge() {
     try { localStorage.setItem(SR_ADDONS_KEY, JSON.stringify(s || {})); } catch(_){}
   }
   function _currentAddonsKey() {
+    // Prefer the active title ship's _altGlb (set after applyTitleSkin runs).
+    // Fall back to the SHIP_SKINS entry for the currently-viewed/active skin
+    // so the Addons tab is available even before the alt-GLB cache resolves
+    // on first boot — all 4 main skins now share spaceship_01.glb.
     const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
-    return (ship && ship.userData && ship.userData._altGlb) || null;
+    const fromShip = ship && ship.userData && ship.userData._altGlb;
+    if (fromShip) return fromShip;
+    try {
+      const idx = (typeof skinViewerIdx === 'number') ? skinViewerIdx
+                : (typeof activeSkinIdx === 'number') ? activeSkinIdx : 0;
+      const def = (typeof SHIP_SKINS !== 'undefined') ? SHIP_SKINS[idx] : null;
+      if (def && def.glbFile) return def.glbFile;
+    } catch(_){}
+    return null;
   }
   // Find a named descendant on a given ship root. MK Runner's hull is
   // 'Cube.007' and the add-ons are its children, but we traverse so the
@@ -26946,7 +26930,28 @@ function buildSkinTunerSliders() {
     e.stopPropagation();
     tapCount++;
     if (tapCount === 1) tapTimer = setTimeout(() => { tapCount = 0; }, 1000);
-    if (tapCount >= 3) { clearTimeout(tapTimer); tapCount = 0; panel.classList.toggle('hidden'); }
+    if (tapCount >= 3) {
+      clearTimeout(tapTimer); tapCount = 0;
+      panel.classList.toggle('hidden');
+      // Toggle skin admin mode + grant cheats
+      _skinAdminMode = !_skinAdminMode;
+      try { updateSkinViewerDisplay(); } catch(_) {}
+      if (_skinAdminMode) {
+        try { saveCoinWallet(loadCoinWallet() + 99999); _totalCoins = loadCoinWallet(); updateTitleCoins(); } catch(_) {}
+        try { saveFuelCells(loadFuelCells() + 9999); updateTitleFuelCells(); } catch(_) {}
+        window._cheatCoins = (amount) => { saveCoinWallet(loadCoinWallet() + (amount || 99999)); _totalCoins = loadCoinWallet(); updateTitleCoins(); };
+        window._cheatFuel = (amount) => { saveFuelCells(loadFuelCells() + (amount || 9999)); updateTitleFuelCells(); };
+        window._cheatLevel = (lvl) => { savePlayerLevel(lvl || 50); savePlayerXP(0); updateTitleLevel(); };
+        window._cheatMaxUpgrades = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 5)); };
+        window._cheatLadder = (pos) => { saveLadderPos(pos || MISSION_LADDER.length); saveMissionFlags({}); updateTitleFuelCells(); };
+        try { localStorage.removeItem(STREAK_KEY_DAY); localStorage.removeItem(STREAK_KEY_LAST); updateStreakBadge(); } catch(_) {}
+        window._cheatReset = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); Object.keys(STAT_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); saveCoinWallet(0); saveFuelCells(0); saveFreeHeadStarts(0); saveLadderPos(0); window._LS.removeItem('jetslide_mission_flags'); window._LS.setItem('jetslide_pu_unlocked', '["shield"]'); savePlayerLevel(1); savePlayerXP(0); _totalCoins = 0; updateTitleCoins(); updateTitleFuelCells(); updateTitleLevel(); };
+      }
+      // Brief yellow flash on title
+      const _origColor = titleEl.style.color;
+      titleEl.style.color = _skinAdminMode ? '#ff0' : '';
+      setTimeout(() => { titleEl.style.color = _origColor; }, 300);
+    }
   }
   titleEl.addEventListener('touchstart', onTap, { passive: true });
   titleEl.addEventListener('click', onTap);

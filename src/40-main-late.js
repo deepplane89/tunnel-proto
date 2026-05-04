@@ -2504,9 +2504,10 @@ function initSkinViewer() {
       }
     }, { passive: true });
 
-    // Admin mode: 3 rapid taps on the skin label (only when no handling upgrade pending)
-    let adminTapCount = 0;
-    let adminTapTimer = null;
+    // Admin mode used to live here (3-tap on skin label). It was moved to the
+    // title-screen heading (.game-title) on 2026-05-03 — see setupAdminMode
+    // in 72-main-late-mid.js. The skin label tap now ONLY claims a pending
+    // handling upgrade.
     _tapBind(document.getElementById('skin-viewer-label'), (e) => {
       // If handling upgrade pending, claim it
       const pendingHandling = getPendingHandlingUpgrade();
@@ -2532,37 +2533,8 @@ function initSkinViewer() {
         }
         return;
       }
-      adminTapCount++;
-      if (adminTapTimer) clearTimeout(adminTapTimer);
-      adminTapTimer = setTimeout(() => { adminTapCount = 0; }, 1500);
-      if (adminTapCount >= 3) {
-        _skinAdminMode = !_skinAdminMode;
-        adminTapCount = 0;
-        updateSkinViewerDisplay();
-        if (_skinAdminMode) {
-          // Auto-grant coins + fuel cells for testing
-          saveCoinWallet(loadCoinWallet() + 99999);
-          _totalCoins = loadCoinWallet();
-          updateTitleCoins();
-          saveFuelCells(loadFuelCells() + 9999);
-          updateTitleFuelCells();
-        }
-        // Brief flash feedback
-        const label = document.getElementById('skin-viewer-label');
-        label.style.color = _skinAdminMode ? '#ff0' : '';
-        setTimeout(() => { label.style.color = ''; }, 300);
-        // Admin cheats for testing
-        if (_skinAdminMode) {
-          window._cheatCoins = (amount) => { saveCoinWallet(loadCoinWallet() + (amount || 99999)); _totalCoins = loadCoinWallet(); updateTitleCoins(); };
-          window._cheatFuel = (amount) => { saveFuelCells(loadFuelCells() + (amount || 9999)); updateTitleFuelCells(); };
-          window._cheatLevel = (lvl) => { savePlayerLevel(lvl || 50); savePlayerXP(0); updateTitleLevel(); };
-          window._cheatMaxUpgrades = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 5)); };
-          window._cheatLadder = (pos) => { saveLadderPos(pos || MISSION_LADDER.length); saveMissionFlags({}); updateTitleFuelCells(); };
-          // Auto-reset streak for testing
-          localStorage.removeItem(STREAK_KEY_DAY); localStorage.removeItem(STREAK_KEY_LAST); updateStreakBadge();
-          window._cheatReset = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); Object.keys(STAT_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); saveCoinWallet(0); saveFuelCells(0); saveFreeHeadStarts(0); saveLadderPos(0); window._LS.removeItem('jetslide_mission_flags'); window._LS.setItem('jetslide_pu_unlocked', '["shield"]'); savePlayerLevel(1); savePlayerXP(0); _totalCoins = 0; updateTitleCoins(); updateTitleFuelCells(); updateTitleLevel(); };
-        }
-      }
+      // No admin gesture here anymore — see setupAdminMode in 72-main-late-mid.js
+      // (triple-tap the JET HORIZON title to toggle skin admin + cheats).
     });
   }
 }
