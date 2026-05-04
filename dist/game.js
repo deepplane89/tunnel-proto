@@ -15616,6 +15616,11 @@ function updateStreakBadge() {
     // title canvas. Keeps the dropdown in sync with the visible ship without
     // firing a skin swap (which would wipe thruster anchors).
     _garagePreviewIdx = _displayedSkinIdx();
+    // Re-apply the title skin in case the alt-GLB cache was empty when the
+    // initial title-screen applyTitleSkin ran (cold boot). Without this the
+    // ship can render as the bare default RUNNER (looks grey/locked) on first
+    // garage open. Cache hit at this point = no-op; cache miss = proper swap.
+    try { if (typeof applyTitleSkin === 'function') applyTitleSkin(_garagePreviewIdx); } catch(_){}
     _populateAll();
     _refreshAddonsTabVisibility();
     // Relocate after the overlay is visible so getBoundingClientRect is right.
