@@ -6013,11 +6013,18 @@ function applyTitleSkin(skinIndex) {
       // opaque, depth tweaks, locked silhouette) never leak back into the
       // shared gameplay alt ship that lives in the alt-ship cache.
       _titleMeshMap = [];
+      // Helper: holographic ShaderMaterials must be shared with gameplay so the
+      // _holoMaterials time-uniform tick keeps running on them. Cloning them
+      // produces a static (often near-white) shader instance — which is the
+      // GHOST 'white in garage' bug. Hull/edge MeshStandardMaterials still get
+      // deep-cloned so gameplay mutations (near-miss flash, invincible rainbow)
+      // don't bleed into the showroom preview.
+      const _isHolo = (m) => !!(m && m.uniforms && m.uniforms.hologramColor);
       fresh.traverse(child => {
         if (!child.isMesh) return;
         if (Array.isArray(child.material)) {
-          child.material = child.material.map(m => m && m.clone ? m.clone() : m);
-        } else if (child.material && child.material.clone) {
+          child.material = child.material.map(m => (m && m.clone && !_isHolo(m)) ? m.clone() : m);
+        } else if (child.material && child.material.clone && !_isHolo(child.material)) {
           child.material = child.material.clone();
         }
         const srcOrig = child.userData && child.userData._origMatName;
@@ -6029,6 +6036,9 @@ function applyTitleSkin(skinIndex) {
       fresh.userData._altKey = _wantKey; // 'glb|idx' — cache key for skin-specific clone
       fresh.position.set(0, 0, 0);
       fresh.scale.setScalar(0.12);
+      // Cached alt models live with visible=false (so gameplay can hide them
+      // until _showAltShip flips them on). Title preview must be visible.
+      fresh.visible = true;
       _titleShipModel = fresh;
       if (parent) parent.add(_titleShipModel);
       // Showroom anchors are children of the OLD ship; force them to be
