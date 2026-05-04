@@ -2935,6 +2935,7 @@ html, body {
 .title-icons-bar .missions-icon-btn,
 .title-icons-bar .lb-icon-btn,
 .title-icons-bar .streak-icon-btn,
+.title-icons-bar .thrusters-icon-btn,
 .title-icons-bar .settings-btn {
   position: relative;
   top: auto;
@@ -3675,6 +3676,7 @@ html, body {
 .missions-icon-btn,
 .lb-icon-btn,
 .streak-icon-btn,
+.thrusters-icon-btn,
 .mute-toggle,
 .shop-back-btn,
 .shop-close-btn,
@@ -3696,6 +3698,7 @@ html, body {
 .missions-icon-btn:active,
 .lb-icon-btn:active,
 .streak-icon-btn:active,
+.thrusters-icon-btn:active,
 .mute-toggle:active,
 .shop-back-btn:active,
 .shop-close-btn:active,
@@ -4106,6 +4109,7 @@ html, body {
 .title-icons-bar .streak-icon-btn,
 .title-icons-bar .missions-icon-btn,
 .title-icons-bar .lb-icon-btn,
+.title-icons-bar .thrusters-icon-btn,
 .title-icons-bar .settings-btn {
   position: relative !important;
   top: auto !important;
@@ -4119,6 +4123,7 @@ html, body {
   align-items: center;
   justify-content: center;
   padding: 0;
+  margin: 0;
   cursor: pointer;
   opacity: 0.85;
   box-shadow: none;
@@ -4130,6 +4135,7 @@ html, body {
 .title-icons-bar .streak-icon-btn:active,
 .title-icons-bar .missions-icon-btn:active,
 .title-icons-bar .lb-icon-btn:active,
+.title-icons-bar .thrusters-icon-btn:active,
 .title-icons-bar .settings-btn:active {
   opacity: 1;
   background: rgba(0,0,0,0.5);
