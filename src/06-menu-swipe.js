@@ -80,6 +80,9 @@
     // so the title screen behind shows through as the user drags down.
     const eased = dy < 0 ? 0 : (dy < 300 ? dy : 300 + (dy - 300) * 0.35);
     if (target) {
+      // Cancel the menu-open keyframe animation otherwise its transform
+      // wins over our inline transform (CSS animations beat inline style).
+      target.style.animation  = 'none';
       target.style.transition = 'none';
       target.style.transform  = 'translateY(' + eased + 'px)';
       target.style.opacity    = String(Math.max(0.5, 1 - eased / 800));
@@ -97,15 +100,25 @@
       // transform.
       try { window.closeThrusterPanel(); } catch(_){}
       requestAnimationFrame(() => {
-        if (t) { t.style.transition = ''; t.style.transform = ''; t.style.opacity = ''; }
+        if (!t) return;
+        t.style.transition = '';
+        t.style.transform  = '';
+        t.style.opacity    = '';
+        t.style.animation  = '';
       });
     } else if (t) {
-      // Snap back
+      // Snap back. Keep animation:none so transition runs cleanly, then
+      // restore animation back to stylesheet default after.
       t.style.transition = 'transform 220ms cubic-bezier(0.2,0.7,0.2,1), opacity 220ms ease';
-      t.style.transform  = '';
-      t.style.opacity    = '';
-      // Clear transition after it finishes so it doesn't affect the next open
-      setTimeout(() => { if (t) t.style.transition = ''; }, 260);
+      t.style.transform  = 'translateY(0)';
+      t.style.opacity    = '1';
+      setTimeout(() => {
+        if (!t) return;
+        t.style.transition = '';
+        t.style.transform  = '';
+        t.style.opacity    = '';
+        t.style.animation  = '';
+      }, 260);
     }
     reset();
   }
