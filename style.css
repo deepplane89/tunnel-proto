@@ -5125,6 +5125,27 @@ body.sr-open #a2hs-banner {
   display: none !important;
 }
 body.sr-dragging #title-star-canvas { display: block !important; }
+
+/* Grabber bar at the top of the garage panel — affords swipe-down dismiss
+ * (iOS sheet pattern). Small, cyan-tinted, centered. */
+.sr-grabber {
+  width: 40px;
+  height: 4px;
+  margin: 6px auto 8px;
+  border-radius: 2px;
+  background: rgba(34, 211, 238, 0.55);
+  flex-shrink: 0;
+  cursor: grab;
+  touch-action: none;
+  /* Expand the touch target without changing visual size */
+  position: relative;
+}
+.sr-grabber::before {
+  content: '';
+  position: absolute;
+  inset: -14px -40px;
+}
+.sr-grabber:active { cursor: grabbing; }
 body.sr-open #title-ship-canvas {
   filter: saturate(1.06) contrast(1.02);
 }
