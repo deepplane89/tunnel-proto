@@ -413,6 +413,19 @@ html, body {
   0%   { opacity: 0; transform: translateX(120%); }
   100% { opacity: 1; transform: translateX(0); }
 }
+/* Shared menu open: subtle fade + slight scale-up for showroom, shop,
+ * missions, leaderboard transitions from title screen. */
+@keyframes menuOpen {
+  0%   { opacity: 0; transform: scale(0.96); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.sr-overlay:not(.hidden),
+#shop-overlay:not(.hidden),
+#missions-overlay:not(.hidden),
+.lb-overlay:not(.hidden) {
+  animation: menuOpen 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: 50% 50%;
+}
 .go-anim {
   opacity: 0;
   animation: goReveal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
