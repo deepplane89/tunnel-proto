@@ -1319,7 +1319,11 @@ function _drSequencerTick(dt) {
         _PRE_T4A_CANYON_TUNER.darkRgh  = 0.32;
         _PRE_T4A_CANYON_TUNER.darkEmi  = 1.4;
       }
+      // Pass the stage's declared speed so canyon families don't snap to a
+      // hardcoded value (DR_SEQUENCE table is the source of truth).
+      state._drStageSpeed = stage.speed;
       fam.activate(dummyBand, 'peak');
+      state._drStageSpeed = undefined;
       if (_restoreT4A) Object.assign(_PRE_T4A_CANYON_TUNER, _restoreT4A);
     }
     // If stage has a duration, use time — more reliable than row count at variable speeds
@@ -2023,7 +2027,9 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['build', 'peak'],
     minBand: 3,
     activate(band, role) {
-      _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START'); // match L3 knife canyon speed for slab scroll
+      // Honor stage-declared speed (CG=2.1, CK=2.5 etc); fall back to 2.0 for arc/manual callers.
+      const sm = (typeof state._drStageSpeed === 'number') ? state._drStageSpeed : 2.0;
+      _setDRSpeed(BASE_SPEED * sm, 'STAGE_START');
       try {
         _startPreT4ACanyon();
       } catch (e) {
@@ -2036,7 +2042,9 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['build', 'peak'],
     minBand: 3,
     activate(band, role) {
-      _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START');
+      // Honor stage-declared speed (CA=1.8, CH=2.1, CJ=2.2); fall back to 2.0 for arc/manual callers.
+      const sm = (typeof state._drStageSpeed === 'number') ? state._drStageSpeed : 2.0;
+      _setDRSpeed(BASE_SPEED * sm, 'STAGE_START');
       try {
         _startPreT4BCanyon();
       } catch (e) {
