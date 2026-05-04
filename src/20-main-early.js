@@ -299,7 +299,7 @@ const state = {
   deathRunMechTimer: 0,    // seconds until next mechanic switch
   deathRunMechCooldown: 0, // seconds of random cones before next mechanic can trigger
   deathRunCorridorMaxRows: 0, // max rows for current death run corridor burst
-  deathRunSpeedTier: 0,      // independent speed ramp, infinite (0=L2, 3=L5, 4+=beyond)
+  deathRunSpeedTier: 1,      // physTier floor is 1 (matches DR_SEQUENCE rules); ramps 1→5 over the run
   deathRunMusicPhase: 0,     // 0=bg(L1), 1=l4
   // Wave director state (drives pacing for DeathRun)
   drPhase: 'RELEASE',        // 'RELEASE' | 'BUILD' | 'PEAK' | 'RECOVERY'

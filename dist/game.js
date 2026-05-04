@@ -829,7 +829,7 @@ const state = {
   deathRunMechTimer: 0,    // seconds until next mechanic switch
   deathRunMechCooldown: 0, // seconds of random cones before next mechanic can trigger
   deathRunCorridorMaxRows: 0, // max rows for current death run corridor burst
-  deathRunSpeedTier: 0,      // independent speed ramp, infinite (0=L2, 3=L5, 4+=beyond)
+  deathRunSpeedTier: 1,      // physTier floor is 1 (matches DR_SEQUENCE rules); ramps 1→5 over the run
   deathRunMusicPhase: 0,     // 0=bg(L1), 1=l4
   // Wave director state (drives pacing for DeathRun)
   drPhase: 'RELEASE',        // 'RELEASE' | 'BUILD' | 'PEAK' | 'RECOVERY'
@@ -12401,12 +12401,13 @@ function _drResetCorridorState() {
 
 // Returns the gap center X for the next corridor row in death run.
 function _drNextGapCenter(diffOverride) {
-  const tier = (state.deathRunSpeedTier || 0);
-  const physIdx = Math.min(tier + 1, 4);
-  const _lvlT = physIdx / (LEVELS.length - 1);
+  const tier = (state.deathRunSpeedTier || 1);
+  // Mirror the steering path's tier→5/6 lift; clamp LEVELS lookup at 4.
+  const physIdx = Math.min(tier + 1, 6);
+  const _lvlT = Math.min(physIdx / (LEVELS.length - 1), 1.4);
   const _snap = _lvlT * _lvlT;
   const maxVel = 9 + _snap * 13;
-  const fwdSpeed = state.speed || (BASE_SPEED * LEVELS[physIdx].speedMult);
+  const fwdSpeed = state.speed || (BASE_SPEED * LEVELS[Math.min(physIdx, LEVELS.length - 1)].speedMult);
   const tRow = 7 / fwdSpeed; // time between rows
 
   const diff = diffOverride != null ? diffOverride : DR_CORRIDOR_DIFF[Math.min(tier, 3)];
@@ -18924,7 +18925,7 @@ function startDeathRun() {
   state.deathRunMechTimer      = 0;
   state.deathRunMechCooldown   = 0;
   state.deathRunCorridorMaxRows = 0;
-  state.deathRunSpeedTier      = 0;
+  state.deathRunSpeedTier      = 1; // floor is 1 — sequencer's first stage (S1_CONES) sets this anyway, but defending against the one-frame window
   state.drPatternCooldown      = 0;
 
   clearAllCorridorFlags();
@@ -19329,16 +19330,18 @@ const DR_SEQUENCE = [
   { name: 'S10_ZIPPER',       type: 'zipper_only',   duration: 30, speed: 2.2, vibeIdx: 3, physTier: 3 },
   // Canyon J — CC1 MILD (real)
   { name: 'CJ_CC1_MILD',      type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.2, vibeIdx: 3, physTier: 3 },
-  { name: 'CJ_REST',          type: 'rest', duration: 3, speed: 2.5, vibeIdx: 4, physTier: 3 },
+  // physTier promoted 3→4 starting at the 2.5x speed band: ship handling gets
+  // measurably snappier to match the final-act speed jump.
+  { name: 'CJ_REST',          type: 'rest', duration: 3, speed: 2.5, vibeIdx: 4, physTier: 4 },
 
   // Stage 11 — L5 sine corridor (full 420 rows, ~33s @ 2.5x)
-  { name: 'S11_L5_CORRIDOR',  type: 'corridor', family: 'L5_SINE_CORRIDOR', duration: 60, speed: 2.5, vibeIdx: 4, physTier: 3 },
+  { name: 'S11_L5_CORRIDOR',  type: 'corridor', family: 'L5_SINE_CORRIDOR', duration: 60, speed: 2.5, vibeIdx: 4, physTier: 4 },
   // Canyon K (gate, placeholder = HIGH WALL intense)
-  { name: 'CK_GATE_CANYON',   type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.5, vibeIdx: 4, physTier: 3 },
-  { name: 'CK_REST',          type: 'rest', duration: 3, speed: 2.5, vibeIdx: 4, physTier: 3 },
+  { name: 'CK_GATE_CANYON',   type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.5, vibeIdx: 4, physTier: 4 },
+  { name: 'CK_REST',          type: 'rest', duration: 3, speed: 2.5, vibeIdx: 4, physTier: 4 },
 
-  // Endless mix
-  { name: 'ENDLESS',          type: 'endless_mix',   speed: 2.5, vibeIdx: 4, physTier: 3 },
+  // Endless mix — physTier 5: maxed-out lateral physics for the final endless loop.
+  { name: 'ENDLESS',          type: 'endless_mix',   speed: 2.5, vibeIdx: 4, physTier: 5 },
 ];
 
 // ── Sequencer tick (called each frame during DR) ──
@@ -22020,12 +22023,18 @@ function update(dt) {
   if (_introBlock) { state.shipX = 0; state.shipVelX = 0; shipGroup.position.x = 0; }
   const steerLeft  = !_introBlock && (keys['ArrowLeft']  || keys['a'] || keys['A'] || touch.left);
   const steerRight = !_introBlock && (keys['ArrowRight'] || keys['d'] || keys['D'] || touch.right);
-  // Physics ramp: starts floaty at L1, gradually snappier by L5
-  // Death Run: lateral physics matches independent speed ramp (not vibe)
-  // DR: snappiness ramps L2→L5 but caps at L5 even as speed keeps climbing
+  // Physics ramp: starts floaty at L1, gradually snappier by L5, then a modest
+  // extra snap band for DR physTier 4 / 5 (final-act + ENDLESS).
+  // Death Run: lateral physics tracks state.deathRunSpeedTier (set by sequencer).
+  //   physTier 1 → _physIdx 2 (L3)
+  //   physTier 2 → _physIdx 3 (L4)
+  //   physTier 3 → _physIdx 4 (L5 — baseline ceiling)
+  //   physTier 4 → _physIdx 5 (extra snap, _lvlT = 1.2)
+  //   physTier 5 → _physIdx 6 (max snap, _lvlT capped at 1.4)
   const _physIdx = _physLevelOverride >= 0 ? _physLevelOverride
-    : state.isDeathRun ? Math.min(state.deathRunSpeedTier + 1, 4) : state.currentLevelIdx;
-  const _lvlT   = _physIdx / (LEVELS.length - 1); // 0 at L1, 1 at L5
+    : state.isDeathRun ? Math.min(state.deathRunSpeedTier + 1, 6) : state.currentLevelIdx;
+  // Cap _lvlT at 1.4 so MAX_VEL/ACCEL bonuses stay bounded — no runaway snap.
+  const _lvlT   = Math.min(_physIdx / (LEVELS.length - 1), 1.4); // 0 at L1, 1 at L5, up to 1.4 at physTier 5
   const _snap   = _lvlT * _lvlT;  // ease-in so early levels stay floaty longer
   // Handling tier: 0.0 at max upgrade (crisp), 1.0 at stock (loose)
   const _handlingDrift = getHandlingDrift();
