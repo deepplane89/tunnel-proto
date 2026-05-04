@@ -6051,31 +6051,25 @@ function applyTitleSkin(skinIndex) {
   // dark-silhouette every mesh, then bail before the default-Runner skin map
   // loop below (which only knows about the default ship's mesh names).
   if (_wantAltGlb) {
+    // Paint per-skin materials on the title/garage preview. Without this the
+    // ship inherits whatever materials the swap path produced — which on a
+    // cache miss is the raw GLB (looks white/grey), and even on a cache hit
+    // would skip per-skin overrides for RUNNER. _makeMatForSkinSlot returns a
+    // fresh material from _SKIN_PALETTE[skinIndex] for the slot name.
     for (const entry of _titleMeshMap) {
       const { mesh, origName } = entry;
       if (origName === 'fire' || origName === 'fire1') { mesh.visible = false; continue; }
       if (isLocked) { mesh.material = _titleDarkMat; continue; }
-      // ── TITLE/SHOWROOM-ONLY MATERIAL OVERRIDES (alt-GLB path) ──
-      // Same intent as the override block in the default-ship path below
-      // (now dead post-ship-merge): the bright studio rig in the title /
-      // garage reads BM's rust hull as orange and CIPHER's near-black
-      // diamond plate as washed-out. Mutate the already-deep-cloned
-      // materials so gameplay (which uses its own alt cache key 'glb|idx')
-      // is untouched.
-      const mat = mesh.material;
-      if (!mat) continue;
-      const slot = origName || '';
-      // Normalize slot name (GLB uses 'rocket base' / 'white ' with spaces).
-      let s = slot;
+      const newMat = _makeMatForSkinSlot(skinIndex, origName || '');
+      if (newMat) mesh.material = newMat;
+      // BLACK MAMBA (idx 2) extra darkening: ensures hull reads stealth black
+      // under the title's bright studio rig (palette base color is rust orange
+      // for in-game lighting).
+      let s = origName || '';
       if (s === 'rocket base') s = 'rocket_base';
-      if (s === 'rocket light') s = 'rocket_light';
       if (s === 'white ') s = 'white';
-      if (s === 'Light') s = 'rocket_light';
-      // BLACK MAMBA (idx 2): force hull-color slots to near-black so title
-      // reads stealth instead of orange. Cyan emissive on white/rocket_light
-      // slots is preserved.
       if (skinIndex === 2 && (s === 'rocket_base' || s === 'gray' || s === 'fallback')) {
-        if (mat.color) mat.color.setHex(0x000000);
+        if (mesh.material && mesh.material.color) mesh.material.color.setHex(0x000000);
       }
     }
     return;

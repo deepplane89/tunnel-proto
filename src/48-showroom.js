@@ -211,13 +211,20 @@
   function _displayedSkinIdx() {
     try {
       const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+      // Prefer _altKey ('glb|idx') — it encodes which skin is actually painted.
+      // Falling back to _altGlb alone is wrong when multiple skins share a GLB:
+      // the legacy match-first-by-glbFile loop always returned idx 0.
+      const altKey = ship && ship.userData && ship.userData._altKey;
+      if (altKey && typeof altKey === 'string') {
+        const parts = altKey.split('|');
+        const idx = parseInt(parts[1], 10);
+        if (!Number.isNaN(idx)) return idx;
+      }
       const altFile = ship && ship.userData && ship.userData._altGlb;
-      if (typeof SHIP_SKINS !== 'undefined' && Array.isArray(SHIP_SKINS)) {
+      if (!altFile && typeof SHIP_SKINS !== 'undefined' && Array.isArray(SHIP_SKINS)) {
         for (let i = 0; i < SHIP_SKINS.length; i++) {
           const s = SHIP_SKINS[i];
-          if (!s) continue;
-          if (altFile) { if (s.glbFile === altFile) return i; }
-          else { if (!s.glbFile) return i; }
+          if (s && !s.glbFile) return i;
         }
       }
     } catch(_){}
