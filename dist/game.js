@@ -14717,12 +14717,12 @@ function updateStreakBadge() {
   // Display labels keep the spaces for readability.
   const ADDON_REGISTRY = {
     'spaceship_01.glb': [
-      { node: 'Fins_01',     label: 'Fins 01' },
-      { node: 'Fins_02',     label: 'Fins 02' },
+      { node: 'Fins_01',     label: 'Stabilizer I' },
+      { node: 'Fins_02',     label: 'Stabilizer II' },
       { node: 'Rings_001',   label: 'Warp Drive' },
-      { node: 'Turrets_001', label: 'Turrets 001' },
-      { node: 'Turrets_002', label: 'Turrets 002' },
-      { node: 'Turrets_003', label: 'Turrets 003' },
+      { node: 'Turrets_001', label: 'Laser System I' },
+      { node: 'Turrets_002', label: 'Laser System II' },
+      { node: 'Turrets_003', label: 'Laser System III' },
     ],
   };
   function _loadAddonsState() {
