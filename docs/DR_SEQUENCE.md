@@ -139,8 +139,15 @@ Canyon corridor stages run their natural slab-pool length (~40s) when no `durati
 
 ### Speed-step boundaries (where klaxon countdown fires)
 
-The klaxon countdown plays during the last 1.5s of the rest stage **only when the next stage's speed > current**. Triggers:
+The klaxon countdown plays during the last 1.5s of **any timed stage** when the next stage's speed > current. Implemented in two parallel blocks:
 
+- `67-main-late.js:1271-1289` — fires for rest stages
+- `67-main-late.js:1561-1577` — fires for any other timed stage (`stage.duration` set)
+
+In DR_SEQUENCE this triggers at every speed bump:
+
+- `S1_CONES` (1.5× → CA 1.8×)
+- `S2_CONES_ZIPS` (1.8× → CB 2.0×)
 - `CF_REST` (2.0× → S7 2.1×)
 - `CI_REST` (2.1× → S10 2.2×)
 - `CJ_REST` (2.2× → S11 2.5×)
@@ -242,7 +249,7 @@ Corridor lat/fwd ratios are correspondingly lower than the old audit reported: L
 - `S11_L5_CORRIDOR`: ~33s → **60s**
 
 **New behavior not in old audit:**
-- Klaxon countdown during last 1.5s of rest stages with a speed bump ahead (`CF_REST`, `CI_REST`, `CJ_REST`).
+- Klaxon countdown during last 1.5s of any timed stage with a speed bump ahead. Currently fires at S1→CA, S2→CB, CF_REST→S7, CI_REST→S10, CJ_REST→S11 (every speed bump in DR_SEQUENCE).
 - `S6_RINGS` uses `sunOverride: 2` (L3 crimson) so lethal rings keep their original look despite riding the ELECTRIC HORIZON vibe.
 - `_drStageSpeed` handoff: dispatcher writes the declared speed before `fam.activate()` so canyon families honor stage-declared speed (fixed in d406b46 this session — previously canyons hardcoded 2.0×).
 - Warped-era flag (`uIsL3Warp` forced on from S3 onward for sun shaders 0/1/2).
