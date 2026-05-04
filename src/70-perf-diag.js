@@ -359,17 +359,17 @@ function animate() {
   if (!_retrySweepActive) {
     const _fovSpd = state._jetLightningMode ? _jlVisualSpeed : state.speed;
     // Map state.speed (range BASE..BASE*2.5 = 36..90) into [0,1] linearly,
-    // then sqrt-shape so even small speed bumps at the high end produce a
-    // visible FOV step. With boost=32, the curve gives:
-    //   1.5x (54) → frac 0.33 → sqrt 0.58 → +18.5°
-    //   1.8x (65) → frac 0.54 → sqrt 0.74 → +23.5°
-    //   2.0x (72) → frac 0.67 → sqrt 0.82 → +26.2°
-    //   2.1x (76) → frac 0.74 → sqrt 0.86 → +27.5°
-    //   2.5x (90) → frac 1.00 → sqrt 1.00 → +32.0°
-    // Stage-to-stage steps now move FOV ~2-5° instead of ~1°.
+    // then pow-1.4 shape so low-tier stages start tame and high tiers punch.
+    // With boost=32, the curve gives:
+    //   1.5x (54) → frac 0.33 → ^1.4 0.22 → +7.0°
+    //   1.8x (65) → frac 0.54 → ^1.4 0.43 → +13.7°
+    //   2.0x (72) → frac 0.67 → ^1.4 0.58 → +18.4°
+    //   2.1x (76) → frac 0.74 → ^1.4 0.66 → +21.1°
+    //   2.5x (90) → frac 1.00 → ^1.4 1.00 → +32.0°
+    // Stage-to-stage steps move FOV ~3-7°; launch baseline stays calm.
     const _fovRange = BASE_SPEED * 1.5; // 54 u/s of headroom above BASE
     const _rawFrac = Math.max(0, Math.min(1, (_fovSpd - BASE_SPEED) / _fovRange));
-    const speedFrac = (state.phase === 'playing') ? Math.sqrt(_rawFrac) : 0;
+    const speedFrac = (state.phase === 'playing') ? Math.pow(_rawFrac, 1.4) : 0;
     let targetFOV = _baseFOV + _fovSpeedBoost * speedFrac;
     // Death zoom-out: push FOV wider during explosion (only during dead phase)
     if (_expDeathZoomActive && state.phase === 'dead') targetFOV = _expDeathZoomTarget;
