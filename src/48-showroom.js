@@ -333,14 +333,13 @@
       const unlocked = _isPresetUnlocked(key);
       const isActive = (key === selectedKey) && unlocked;
       const isNew    = unlocked && newSet.indexOf(key) >= 0;
-      const baseLabel = (P && P.label) ? P.label.toUpperCase() : key.toUpperCase();
+      const rawLabel = (P && P.label) ? P.label : (key === 'baseline' ? 'DEFAULT' : key);
+      const baseLabel = String(rawLabel).toUpperCase();
       const name = String(baseLabel).replace(/</g, '&lt;');
-      let stateLabel;
+      let stateLabel = '';
       if (!unlocked) {
         const m = reqs.presets[key];
         stateLabel = m ? ('M' + m) : 'LOCKED';
-      } else {
-        stateLabel = isActive ? 'EQUIPPED' : 'EQUIP';
       }
       const k = String(key).replace(/"/g, '&quot;');
       const cls = 'sr-addon-card'
@@ -350,7 +349,7 @@
       html += '<button type="button" class="' + cls + '" data-shape="' + k + '"' +
         (unlocked ? '' : ' aria-disabled="true"') + '>' +
         '<span class="sr-addon-card-name">' + name + '</span>' +
-        '<span class="sr-addon-card-state">' + stateLabel + '</span>' +
+        (stateLabel ? '<span class="sr-addon-card-state">' + stateLabel + '</span>' : '') +
       '</button>';
     });
     grid.innerHTML = html;
@@ -377,8 +376,9 @@
         grid.querySelectorAll('button.sr-addon-card[data-shape]').forEach(b => {
           const on = (b.dataset.shape === key) && !b.classList.contains('locked');
           b.classList.toggle('active', on);
+          // EQUIPPED/EQUIP text removed — active state shown via .active class only.
           const st = b.querySelector('.sr-addon-card-state');
-          if (st && !b.classList.contains('locked')) st.textContent = on ? 'EQUIPPED' : 'EQUIP';
+          if (st && !b.classList.contains('locked')) st.textContent = '';
         });
         try { playTitleTap(); } catch(_){}
       });

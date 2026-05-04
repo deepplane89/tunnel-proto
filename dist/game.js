@@ -82,7 +82,7 @@ window._THRUSTER_PRESETS = {
   // ── SHORT THRUSTER PRESET (MK Runner) ──
   // Captured 2026-05-01 from user's tuned MK Runner session.
   short: {
-    label: 'short thruster preset',
+    label: 'SHORTY',
     // Nozzle positions (asymmetric per user tuning) — only this preset bakes them
     nozL: [-0.48, 0.05, 5.16], nozR: [0.50, -0.01, 5.10],
     miniL: [-0.15, 0.06, 5.10], miniR: [0.16, 0.06, 5.10],
@@ -1521,23 +1521,35 @@ function applyReward(r) {
   // Thruster preset cosmetic unlock (e.g. 'short', 'light', 'fatIon').
   if (r.kind === 'thruster' && r.presetKey) {
     const td = loadThrusterData();
+    let dirty = false;
     if (!td.unlockedPresets.includes(r.presetKey)) {
       td.unlockedPresets.push(r.presetKey);
-      // Mark as freshly unlocked so the garage can pulse it until selected.
-      if (!Array.isArray(td.newPresets)) td.newPresets = [];
-      if (!td.newPresets.includes(r.presetKey)) td.newPresets.push(r.presetKey);
-      saveThrusterData(td);
+      dirty = true;
     }
+    // Always flag as freshly-unlocked on a thruster reward, even if a prior
+    // partial save already had it in unlockedPresets. Garage clears the flag
+    // on first click so it can't get stuck.
+    if (!Array.isArray(td.newPresets)) td.newPresets = [];
+    if (r.presetKey !== td.selectedPreset && !td.newPresets.includes(r.presetKey)) {
+      td.newPresets.push(r.presetKey);
+      dirty = true;
+    }
+    if (dirty) saveThrusterData(td);
   }
   // Thruster color cosmetic unlock (e.g. 'red', 'green', 'gold').
   if (r.kind === 'thrustercolor' && r.colorKey) {
     const td = loadThrusterData();
+    let dirty = false;
     if (!td.unlockedColors.includes(r.colorKey)) {
       td.unlockedColors.push(r.colorKey);
-      if (!Array.isArray(td.newColors)) td.newColors = [];
-      if (!td.newColors.includes(r.colorKey)) td.newColors.push(r.colorKey);
-      saveThrusterData(td);
+      dirty = true;
     }
+    if (!Array.isArray(td.newColors)) td.newColors = [];
+    if (r.colorKey !== td.selectedColor && !td.newColors.includes(r.colorKey)) {
+      td.newColors.push(r.colorKey);
+      dirty = true;
+    }
+    if (dirty) saveThrusterData(td);
   }
   // stat rewards: value is derived from ladder position, no separate storage
   // XP bonus (added to current XP pool)
@@ -14583,14 +14595,13 @@ function updateStreakBadge() {
       const unlocked = _isPresetUnlocked(key);
       const isActive = (key === selectedKey) && unlocked;
       const isNew    = unlocked && newSet.indexOf(key) >= 0;
-      const baseLabel = (P && P.label) ? P.label.toUpperCase() : key.toUpperCase();
+      const rawLabel = (P && P.label) ? P.label : (key === 'baseline' ? 'DEFAULT' : key);
+      const baseLabel = String(rawLabel).toUpperCase();
       const name = String(baseLabel).replace(/</g, '&lt;');
-      let stateLabel;
+      let stateLabel = '';
       if (!unlocked) {
         const m = reqs.presets[key];
         stateLabel = m ? ('M' + m) : 'LOCKED';
-      } else {
-        stateLabel = isActive ? 'EQUIPPED' : 'EQUIP';
       }
       const k = String(key).replace(/"/g, '&quot;');
       const cls = 'sr-addon-card'
@@ -14600,7 +14611,7 @@ function updateStreakBadge() {
       html += '<button type="button" class="' + cls + '" data-shape="' + k + '"' +
         (unlocked ? '' : ' aria-disabled="true"') + '>' +
         '<span class="sr-addon-card-name">' + name + '</span>' +
-        '<span class="sr-addon-card-state">' + stateLabel + '</span>' +
+        (stateLabel ? '<span class="sr-addon-card-state">' + stateLabel + '</span>' : '') +
       '</button>';
     });
     grid.innerHTML = html;
@@ -14627,8 +14638,9 @@ function updateStreakBadge() {
         grid.querySelectorAll('button.sr-addon-card[data-shape]').forEach(b => {
           const on = (b.dataset.shape === key) && !b.classList.contains('locked');
           b.classList.toggle('active', on);
+          // EQUIPPED/EQUIP text removed — active state shown via .active class only.
           const st = b.querySelector('.sr-addon-card-state');
-          if (st && !b.classList.contains('locked')) st.textContent = on ? 'EQUIPPED' : 'EQUIP';
+          if (st && !b.classList.contains('locked')) st.textContent = '';
         });
         try { playTitleTap(); } catch(_){}
       });

@@ -21,7 +21,7 @@ window._THRUSTER_PRESETS = {
   // ── SHORT THRUSTER PRESET (MK Runner) ──
   // Captured 2026-05-01 from user's tuned MK Runner session.
   short: {
-    label: 'short thruster preset',
+    label: 'SHORTY',
     // Nozzle positions (asymmetric per user tuning) — only this preset bakes them
     nozL: [-0.48, 0.05, 5.16], nozR: [0.50, -0.01, 5.10],
     miniL: [-0.15, 0.06, 5.10], miniR: [0.16, 0.06, 5.10],

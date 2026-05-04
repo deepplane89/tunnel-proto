@@ -991,23 +991,35 @@ function applyReward(r) {
   // Thruster preset cosmetic unlock (e.g. 'short', 'light', 'fatIon').
   if (r.kind === 'thruster' && r.presetKey) {
     const td = loadThrusterData();
+    let dirty = false;
     if (!td.unlockedPresets.includes(r.presetKey)) {
       td.unlockedPresets.push(r.presetKey);
-      // Mark as freshly unlocked so the garage can pulse it until selected.
-      if (!Array.isArray(td.newPresets)) td.newPresets = [];
-      if (!td.newPresets.includes(r.presetKey)) td.newPresets.push(r.presetKey);
-      saveThrusterData(td);
+      dirty = true;
     }
+    // Always flag as freshly-unlocked on a thruster reward, even if a prior
+    // partial save already had it in unlockedPresets. Garage clears the flag
+    // on first click so it can't get stuck.
+    if (!Array.isArray(td.newPresets)) td.newPresets = [];
+    if (r.presetKey !== td.selectedPreset && !td.newPresets.includes(r.presetKey)) {
+      td.newPresets.push(r.presetKey);
+      dirty = true;
+    }
+    if (dirty) saveThrusterData(td);
   }
   // Thruster color cosmetic unlock (e.g. 'red', 'green', 'gold').
   if (r.kind === 'thrustercolor' && r.colorKey) {
     const td = loadThrusterData();
+    let dirty = false;
     if (!td.unlockedColors.includes(r.colorKey)) {
       td.unlockedColors.push(r.colorKey);
-      if (!Array.isArray(td.newColors)) td.newColors = [];
-      if (!td.newColors.includes(r.colorKey)) td.newColors.push(r.colorKey);
-      saveThrusterData(td);
+      dirty = true;
     }
+    if (!Array.isArray(td.newColors)) td.newColors = [];
+    if (r.colorKey !== td.selectedColor && !td.newColors.includes(r.colorKey)) {
+      td.newColors.push(r.colorKey);
+      dirty = true;
+    }
+    if (dirty) saveThrusterData(td);
   }
   // stat rewards: value is derived from ladder position, no separate storage
   // XP bonus (added to current XP pool)
