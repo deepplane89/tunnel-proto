@@ -515,36 +515,8 @@
   }
 
   // ── Wire dropdown change handlers ────────────────────────────────────
-  function _onSkinChange(e) {
-    const idx = parseInt(e.target.value, 10);
-    if (isNaN(idx)) return;
-    // Garage selection is preview-only — do NOT write data.selected. The
-    // equipped skin only changes when the player explicitly hits USE on the
-    // title screen's skin viewer.
-    _garagePreviewIdx = idx;
-    _previewSkin(idx);
-    // Skin swap may load a new GLB whose materials default to transparent.
-    requestAnimationFrame(() => { try { _forceShipOpaque(); } catch(_){} });
-    // The new ship may or may not have add-ons — refresh the tab + list.
-    try { _refreshAddonsTabVisibility(); _populateAddons(); } catch(_){}
-    try { playTitleTap(); } catch(_){}
-  }
-
-  function _onShapeChange(e) {
-    const key = e.target.value;
-    if (!key) return;
-    try {
-      const d = loadThrusterData();
-      if (!d.unlockedPresets.includes(key)) d.unlockedPresets.push(key);
-      d.selectedPreset = key;
-      saveThrusterData(d);
-      if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster();
-    } catch(_){}
-    // Re-sync color (preset apply may have set a new tint) and let the
-    // tick loop pick up the new knobs on the next frame.
-    _thrSyncColor();
-    try { playTitleTap(); } catch(_){}
-  }
+  // SKIN + SHAPE click handlers are wired inline in _buildSkinCards /
+  // _buildShapeCards on every populate. Only COLOR remains a dropdown.
 
   function _onColorChange(e) {
     const key = e.target.value;
