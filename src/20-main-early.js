@@ -5217,11 +5217,24 @@ function pauseGameTrackInPlace(track) {
 }
 function resumeGameTrackInPlace(track) {
   initAudio();
+  _ensureCtxRunning();
+  // iOS interruption belt: if the audio graph was severed by a backgrounding
+  // event, rewire all MediaElementSource nodes before trying to play. Without
+  // this, el.play() succeeds but produces no sound because the gain node is
+  // disconnected from destination.
+  if (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted() &&
+      typeof _rewireTrackGains === 'function') {
+    _rewireTrackGains();
+  }
   if (titleMusic) { titleMusic.pause(); titleMusic.currentTime = 0; setTrackVol('title', 0); }
   const all = allTracks();
   const el = all[track];
   if (el && !state.muted) {
     setTrackVol(track, 0);
+    // Suspenders: hard-reset the element to force a fresh route. Cheap on a
+    // paused element; survives the iOS bug where play() after interruption
+    // returns success but emits silence.
+    try { el.pause(); el.load(); } catch (_) {}
     el.play().catch(() => {});
     musicFadeTo(track, 1200);
   }

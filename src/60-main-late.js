@@ -104,6 +104,14 @@ function togglePause() {
   } else if (state.phase === 'paused') {
     state.phase = 'playing';
     setPauseOverlay(false);
+    // iOS interruption recovery: this branch runs from a user gesture (tap/key)
+    // so it's the right moment to resume the AudioContext and rewire the music
+    // MediaElementSource graph if a backgrounding event severed it.
+    _ensureCtxRunning();
+    if (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted() &&
+        typeof _rewireTrackGains === 'function') {
+      _rewireTrackGains();
+    }
     resumeGameTrackInPlace(currentGameTrack());
     // Resume baseline whir on unpause (smooth fade-in)
     startEngineBaseline(0.5);
@@ -924,23 +932,28 @@ function initTitleAudio() {
 
   if (!state.muted) {
     titleMusic.currentTime = 0;
-    titleMusic.play().then(() => {
-      // Autoplay succeeded — nothing more to do
-    }).catch(() => {
-      // Autoplay blocked — unlock audio on first interaction (no visible overlay)
-      const unlock = () => {
-        if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          engineGain = audioCtx.createGain();
-          engineGain.gain.value = 0.0;
-          engineGain.connect(audioCtx.destination);
-          _initSFXBuffers();
-        }
-        _ensureCtxRunning();
-        if (!state.muted) { titleMusic.currentTime = 0; titleMusic.play().catch(() => {}); }
-      };
-      ['click','keydown','touchstart'].forEach(e => document.addEventListener(e, unlock, {once:true}));
-    });
+    titleMusic.play().catch(() => {});
+    // Always register the gesture-unlock path — even if autoplay's promise
+    // resolves, mobile browsers (especially iOS Safari) can keep the element
+    // muted until a real user gesture, and AudioContext init still needs that
+    // gesture for SFX. Race we're fixing: user taps to start gameplay before
+    // the once-only first-interaction listener has been installed.
+    const unlock = () => {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        engineGain = audioCtx.createGain();
+        engineGain.gain.value = 0.0;
+        engineGain.connect(audioCtx.destination);
+        _initSFXBuffers();
+      }
+      _ensureCtxRunning();
+      // If autoplay was blocked, this is also when title music actually starts.
+      if (!state.muted && titleMusic && titleMusic.paused) {
+        titleMusic.currentTime = 0;
+        titleMusic.play().catch(() => {});
+      }
+    };
+    ['click','keydown','touchstart'].forEach(e => document.addEventListener(e, unlock, {once:true}));
   }
 })();
 

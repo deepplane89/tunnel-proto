@@ -105,6 +105,10 @@ document.addEventListener('visibilitychange', () => {
     const _engV = document.getElementById('engine-start');
     if (_engV && !_engV.paused) _engV.pause();
     if (audioCtx && audioCtx.state === 'running') audioCtx.suspend().catch(() => {});
+    // Mark interrupted so resume paths know to rewire MediaElementSource graph
+    // (iOS Safari severs music routing on background; SFX still work because
+    // they create fresh BufferSourceNodes per call).
+    if (typeof _markAudioInterrupted === 'function') _markAudioInterrupted();
     // If actively playing, trigger a proper game pause
     if (state.phase === 'playing') {
       togglePause();
@@ -114,6 +118,27 @@ document.addEventListener('visibilitychange', () => {
     // 'interrupted' is iOS-specific (phone call, Bluetooth route change)
     if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
       audioCtx.resume().catch(() => {});
+    }
+    // Belt: rewire music graph immediately if we just came back from interruption.
+    // Safari sometimes keeps the context running but with severed media routing.
+    if (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted() &&
+        typeof _rewireTrackGains === 'function') {
+      _rewireTrackGains();
+    }
+    // Suspenders: if context still isn't running, install a one-shot gesture
+    // listener that finishes the resume + rewire after the next user tap.
+    // iOS frequently requires a user gesture to actually resume even after
+    // visibility returns.
+    if (audioCtx && audioCtx.state !== 'running') {
+      const _retryAudio = () => {
+        if (audioCtx && audioCtx.state !== 'running') {
+          audioCtx.resume().catch(() => {});
+        }
+        if (typeof _rewireTrackGains === 'function') _rewireTrackGains();
+      };
+      ['touchstart','click','keydown'].forEach(evt => {
+        document.addEventListener(evt, _retryAudio, { once: true, passive: true });
+      });
     }
     // Restore audio for the current screen
     if (!state.muted) {

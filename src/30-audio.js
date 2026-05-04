@@ -126,6 +126,47 @@ function _ensureCtxRunning() {
     audioCtx.resume().catch(() => {});
   }
 }
+
+// iOS Safari severs MediaElementSource routing when AudioContext goes to
+// 'interrupted' (backgrounded, phone call, audio-route change). resume() returns
+// 'running' but music elements no longer reach destination — silent music while
+// SFX (fresh BufferSourceNodes per call) still work. Flag tracks whether we
+// went through an interruption so resume paths know to rewire the music graph.
+let _audioInterrupted = false;
+function _markAudioInterrupted() { _audioInterrupted = true; }
+function _wasAudioInterrupted() { return _audioInterrupted; }
+function _clearAudioInterrupted() { _audioInterrupted = false; }
+
+// Tear down all music-track MediaElementSource nodes and re-wire them. Call
+// after returning from an interruption. Safe to call multiple times — only
+// rewires tracks whose gain nodes still exist.
+function _rewireTrackGains() {
+  if (!audioCtx || typeof trackGains === 'undefined') return;
+  // Disconnect & drop existing gain nodes — _initTrackGains will rebuild.
+  // We can't reuse MediaElementSource nodes (one-per-element rule), so the
+  // <audio> elements need fresh sources. The browser permits creating a new
+  // source for the same element after the previous one is GC'd / disconnected.
+  Object.keys(trackGains).forEach(k => {
+    try { trackGains[k].disconnect(); } catch (_) {}
+    delete trackGains[k];
+  });
+  // Force fresh MediaElementSource creation. Safari requires the <audio>
+  // element be paused & re-loaded before a new source can route correctly.
+  const tracks = (typeof allTracks === 'function') ? allTracks() : {};
+  Object.values(tracks).forEach(el => {
+    if (!el) return;
+    try {
+      const wasPlaying = !el.paused;
+      const t = el.currentTime;
+      el.pause();
+      el.load();
+      el.currentTime = t || 0;
+      if (wasPlaying && !state.muted) el.play().catch(() => {});
+    } catch (_) {}
+  });
+  if (typeof _initTrackGains === 'function') _initTrackGains();
+  _clearAudioInterrupted();
+}
 function _initSFXBuffers() {
   if (!audioCtx) return;
   _loadSFXBuffer('nearmiss', './assets/audio/nearmiss.mp3');
