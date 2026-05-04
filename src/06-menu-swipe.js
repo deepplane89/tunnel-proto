@@ -96,6 +96,8 @@
     // already scrolled past 0, let normal scroll handle it.
     if (dy <= 0) return;
     if (scroller && scroller.scrollTop > 0) return;
+    // Prevent the browser from claiming this gesture as a scroll.
+    if (e.cancelable) { try { e.preventDefault(); } catch(_){} }
     applyDrag(dy);
   }
 
@@ -153,7 +155,10 @@
   // Bind on document so dynamically-rebuilt overlay still works. Capture
   // false so interactive children get their own tap handling first.
   document.addEventListener('touchstart', onTouchStart, { passive: true });
-  document.addEventListener('touchmove',  onTouchMove,  { passive: true });
+  // touchmove non-passive so we can call preventDefault while dragging
+  // (otherwise iOS will treat the gesture as a scroll and stop sending us
+  // updates).
+  document.addEventListener('touchmove',  onTouchMove,  { passive: false });
   document.addEventListener('touchend',   onTouchEnd,   { passive: true });
   document.addEventListener('touchcancel', onTouchEnd,  { passive: true });
 })();

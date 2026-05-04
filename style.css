@@ -4718,6 +4718,9 @@ html, body {
 .sr-overlay {
   position: fixed; inset: 0;
   pointer-events: none; /* gates pointer to the panel */
+  /* touch-action: none lets our JS swipe handler consume vertical drags
+   * without the browser pre-emptively claiming them as scroll gestures. */
+  touch-action: none;
   background:
     radial-gradient(ellipse 70% 60% at 50% 60%, rgba(34,211,238,0.06) 0%, rgba(7,9,18,0) 70%),
     radial-gradient(ellipse 100% 80% at 50% 110%, rgba(11,17,32,1) 0%, var(--sr-bg) 60%);
