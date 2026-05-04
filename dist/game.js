@@ -6547,6 +6547,31 @@ function applyTitleSkin(skinIndex) {
     } else {
       _newSrc = window._shipModel || null;
     }
+    // CACHE-MISS RETRY: every SHIP_SKINS entry now uses spaceship_01.glb (no
+    // non-alt-GLB skins remain after the RUNNER→MK_RUNNER merge). On cold boot
+    // the GLB preload kicked off behind the load gate may not have populated
+    // _altShipCache yet when this synchronous applyTitleSkin call runs from
+    // module-init (72-main-late-mid.js). Result: bare default geometry shows
+    // grey/locked-looking until the user opens the garage (which re-applies).
+    // Schedule a one-shot retry tied to _loadAltShip's own callback so the moment
+    // the cache populates, we swap in the real ship. Guard against pile-up via
+    // _titleSkinRetryKey so multiple applyTitleSkin calls during the gap don't
+    // queue redundant loads.
+    if (!_newSrc && _wantKey && typeof _loadAltShip === 'function' &&
+        window._titleSkinRetryKey !== _wantKey) {
+      window._titleSkinRetryKey = _wantKey;
+      try {
+        _loadAltShip(_skinDef.glbFile, _skinDef, skinIndex, () => {
+          window._titleSkinRetryKey = null;
+          // Re-call applyTitleSkin only if the user is still on the same skin
+          // (they may have switched mid-load via shop/garage).
+          try {
+            const _curSel = (typeof loadSkinData === 'function') ? loadSkinData().selected : skinIndex;
+            if (_curSel === skinIndex) applyTitleSkin(skinIndex);
+          } catch(_){}
+        });
+      } catch (_) { window._titleSkinRetryKey = null; }
+    }
     if (_newSrc) {
       const parent = _titleShipModel.parent;
       if (parent) parent.remove(_titleShipModel);
@@ -30648,6 +30673,15 @@ function buildSkinTunerSliders() {
   // Resolve when all registered promises settle.
   Promise.all(gate.promises.slice()).then(() => {
     clearTimeout(hardTimeout);
+    // Suspenders for the cold-boot grey-runner bug: alt-GLB cache may have
+    // populated AFTER the synchronous applyTitleSkin() call in 72-main-late-mid.
+    // Re-apply the selected skin now that all GLBs are guaranteed loaded so the
+    // title preview swaps to the proper ship before the loader fades out.
+    try {
+      if (typeof applyTitleSkin === 'function' && typeof loadSkinData === 'function') {
+        applyTitleSkin(loadSkinData().selected);
+      }
+    } catch (_) {}
     // One RAF to let final shader compile + first frame render hidden behind us.
     requestAnimationFrame(() => requestAnimationFrame(() => _hide('READY')));
   }).catch(() => {

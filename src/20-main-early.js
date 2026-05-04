@@ -6017,6 +6017,31 @@ function applyTitleSkin(skinIndex) {
     } else {
       _newSrc = window._shipModel || null;
     }
+    // CACHE-MISS RETRY: every SHIP_SKINS entry now uses spaceship_01.glb (no
+    // non-alt-GLB skins remain after the RUNNER→MK_RUNNER merge). On cold boot
+    // the GLB preload kicked off behind the load gate may not have populated
+    // _altShipCache yet when this synchronous applyTitleSkin call runs from
+    // module-init (72-main-late-mid.js). Result: bare default geometry shows
+    // grey/locked-looking until the user opens the garage (which re-applies).
+    // Schedule a one-shot retry tied to _loadAltShip's own callback so the moment
+    // the cache populates, we swap in the real ship. Guard against pile-up via
+    // _titleSkinRetryKey so multiple applyTitleSkin calls during the gap don't
+    // queue redundant loads.
+    if (!_newSrc && _wantKey && typeof _loadAltShip === 'function' &&
+        window._titleSkinRetryKey !== _wantKey) {
+      window._titleSkinRetryKey = _wantKey;
+      try {
+        _loadAltShip(_skinDef.glbFile, _skinDef, skinIndex, () => {
+          window._titleSkinRetryKey = null;
+          // Re-call applyTitleSkin only if the user is still on the same skin
+          // (they may have switched mid-load via shop/garage).
+          try {
+            const _curSel = (typeof loadSkinData === 'function') ? loadSkinData().selected : skinIndex;
+            if (_curSel === skinIndex) applyTitleSkin(skinIndex);
+          } catch(_){}
+        });
+      } catch (_) { window._titleSkinRetryKey = null; }
+    }
     if (_newSrc) {
       const parent = _titleShipModel.parent;
       if (parent) parent.remove(_titleShipModel);

@@ -75,6 +75,15 @@
   // Resolve when all registered promises settle.
   Promise.all(gate.promises.slice()).then(() => {
     clearTimeout(hardTimeout);
+    // Suspenders for the cold-boot grey-runner bug: alt-GLB cache may have
+    // populated AFTER the synchronous applyTitleSkin() call in 72-main-late-mid.
+    // Re-apply the selected skin now that all GLBs are guaranteed loaded so the
+    // title preview swaps to the proper ship before the loader fades out.
+    try {
+      if (typeof applyTitleSkin === 'function' && typeof loadSkinData === 'function') {
+        applyTitleSkin(loadSkinData().selected);
+      }
+    } catch (_) {}
     // One RAF to let final shader compile + first frame render hidden behind us.
     requestAnimationFrame(() => requestAnimationFrame(() => _hide('READY')));
   }).catch(() => {
