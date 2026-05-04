@@ -3879,18 +3879,18 @@ function update(dt) {
   if (_introBlock) { state.shipX = 0; state.shipVelX = 0; shipGroup.position.x = 0; }
   const steerLeft  = !_introBlock && (keys['ArrowLeft']  || keys['a'] || keys['A'] || touch.left);
   const steerRight = !_introBlock && (keys['ArrowRight'] || keys['d'] || keys['D'] || touch.right);
-  // Physics ramp: starts floaty at L1, gradually snappier by L5, then a modest
-  // extra snap band for DR physTier 4 / 5 (final-act + ENDLESS).
+  // Physics ramp: starts floaty at L1, gradually snappier all the way up. The
+  // ease-in curve (_snap = _lvlT*_lvlT) keeps tier-to-tier ratios consistent:
+  // each step gets ~30-35% more MAX_VEL than the previous one.
   // Death Run: lateral physics tracks state.deathRunSpeedTier (set by sequencer).
-  //   physTier 1 → _physIdx 2 (L3)
-  //   physTier 2 → _physIdx 3 (L4)
-  //   physTier 3 → _physIdx 4 (L5 — baseline ceiling)
-  //   physTier 4 → _physIdx 5 (extra snap, _lvlT = 1.2)
-  //   physTier 5 → _physIdx 6 (max snap, _lvlT capped at 1.4)
+  //   physTier 1 → _physIdx 2 (L3,            _lvlT 0.50)
+  //   physTier 2 → _physIdx 3 (L4,            _lvlT 0.75)
+  //   physTier 3 → _physIdx 4 (L5 baseline,   _lvlT 1.00)
+  //   physTier 4 → _physIdx 5 (final-act,     _lvlT 1.25)
+  //   physTier 5 → _physIdx 6 (ENDLESS peak,  _lvlT 1.50)
   const _physIdx = _physLevelOverride >= 0 ? _physLevelOverride
     : state.isDeathRun ? Math.min(state.deathRunSpeedTier + 1, 6) : state.currentLevelIdx;
-  // Cap _lvlT at 1.4 so MAX_VEL/ACCEL bonuses stay bounded — no runaway snap.
-  const _lvlT   = Math.min(_physIdx / (LEVELS.length - 1), 1.4); // 0 at L1, 1 at L5, up to 1.4 at physTier 5
+  const _lvlT   = _physIdx / (LEVELS.length - 1); // 0 at L1, 1 at L5, up to 1.5 at physTier 5
   const _snap   = _lvlT * _lvlT;  // ease-in so early levels stay floaty longer
   // Handling tier: 0.0 at max upgrade (crisp), 1.0 at stock (loose)
   const _handlingDrift = getHandlingDrift();

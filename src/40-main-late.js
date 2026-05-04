@@ -1122,9 +1122,10 @@ function _drResetCorridorState() {
 // Returns the gap center X for the next corridor row in death run.
 function _drNextGapCenter(diffOverride) {
   const tier = (state.deathRunSpeedTier || 1);
-  // Mirror the steering path's tier→5/6 lift; clamp LEVELS lookup at 4.
+  // Mirror the steering path's tier→5/6 lift; LEVELS lookup is clamped
+  // separately on the read below to avoid OOB at tier 4/5.
   const physIdx = Math.min(tier + 1, 6);
-  const _lvlT = Math.min(physIdx / (LEVELS.length - 1), 1.4);
+  const _lvlT = physIdx / (LEVELS.length - 1);
   const _snap = _lvlT * _lvlT;
   const maxVel = 9 + _snap * 13;
   const fwdSpeed = state.speed || (BASE_SPEED * LEVELS[Math.min(physIdx, LEVELS.length - 1)].speedMult);
