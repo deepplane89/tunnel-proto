@@ -1537,58 +1537,29 @@ html, body {
     padding: 10px 28px;
   }
 
-  /* ── GAME OVER SCREEN — landscape side-stacked layout ──────────────────
-   * Mobile landscape height is ~430-500px. The single-column stack overflows
-   * in this slice, so we split into a 3-column grid:
-   *   LEFT  : title + hero score + best + coins
-   *   CENTER: level bar + handling bar + repair + submit
-   *   RIGHT : (icon mirror or empty for now)
-   * Action buttons pin to the bottom across all three columns.
-   *
-   * Implementation note: rather than fight grid-area overlaps for variable
-   * sibling order, we wrap each column as a flex stack via order + columns
-   * using grid-column auto-flow. Each direct child gets assigned to a
-   * column via grid-column, and they flow vertically inside.
-   */
+  /* ── GAME OVER SCREEN — compact landscape layout ──────── */
   .gameover-content {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-    grid-auto-rows: min-content;
-    column-gap: 24px;
-    row-gap: 4px;
-    width: min(760px, 96vw);
-    max-height: 96vh;
-    align-content: center;
-    justify-items: center;
-    padding: 8px 12px;
+    gap: 4px;
   }
-  /* Hide icon image in landscape — title strip is tight. */
-  .gameover-content > img { display: none; }
-
-  /* LEFT COLUMN: title → hero → best → coins */
-  .gameover-title  { grid-column: 1; font-size: clamp(22px, 5vw, 36px); margin: 0; }
-  .go-hero         { grid-column: 1; margin: 0; }
-  .go-hero-val     { font-size: clamp(40px, 9vw, 64px); }
-  .go-best         { grid-column: 1; padding: 2px 12px; margin: 0; }
-  .go-coins-line   { grid-column: 1; margin: 0; }
-
-  /* RIGHT COLUMN: level → handling → levelup → upgrade → repair → submit */
-  .go-level-section,
-  .go-levelup,
-  .go-handling-section,
-  .go-handling-upgrade,
-  .go-saveme,
-  .score-submit    { grid-column: 2; width: 100%; max-width: 300px; margin: 0; }
-
-  /* Bottom action row spans the full width */
-  .go-actions {
-    grid-column: 1 / -1;
-    width: 100%;
-    justify-content: center;
-    margin-top: 6px;
+  .gameover-title {
+    font-size: clamp(24px, 7vw, 44px);
+    margin-bottom: 0;
   }
-  .gameover-content .btn-space { padding: 8px 24px; }
-  .btn-retry { padding: 10px 28px; }
+  .go-hero { margin-bottom: 0; }
+  .go-hero-val {
+    font-size: clamp(36px, 8vw, 56px);
+  }
+  .go-best {
+    padding: 2px 12px;
+    margin-bottom: 2px;
+  }
+  .go-sub { margin-bottom: 4px; }
+  .gameover-content .btn-space {
+    padding: 8px 24px;
+  }
+  .btn-retry {
+    padding: 10px 28px;
+  }
 
   /* ── A2HS BANNER — landscape adjust ───────────────────── */
   .a2hs-banner {
