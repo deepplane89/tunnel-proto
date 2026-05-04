@@ -404,6 +404,15 @@ html, body {
   60%  { opacity: 1; transform: translateY(-3px) scale(1.02); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
+/* Game over panel slide-in (left/right framed containers in landscape). */
+@keyframes goPanelSlideLeft {
+  0%   { opacity: 0; transform: translateX(-120%); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes goPanelSlideRight {
+  0%   { opacity: 0; transform: translateX(120%); }
+  100% { opacity: 1; transform: translateX(0); }
+}
 .go-anim {
   opacity: 0;
   animation: goReveal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
@@ -1550,7 +1559,6 @@ html, body {
   .gameover-content {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto auto auto auto auto auto auto auto;
     grid-template-areas:
       "title    title"
       "hero     level"
@@ -1560,16 +1568,50 @@ html, body {
       "_blank1  saveme"
       "_blank2  submit"
       "actions  actions";
-    column-gap: 28px;
+    column-gap: 22px;
     row-gap: 4px;
-    width: min(720px, 95vw);
+    width: min(760px, 96vw);
     max-height: 96vh;
     align-content: center;
     justify-items: center;
-    padding: 6px 12px;
+    padding: 8px 14px;
+    position: relative;
   }
   /* Hide icon in landscape — too tight to fit. */
   .gameover-content > img { display: none; }
+
+  /* Pseudo-element panels behind left and right column groups.
+   * Span from the hero row through the submit row (rows 2..7 of the named grid).
+   * Slide in from outside the viewport. */
+  .gameover-content::before,
+  .gameover-content::after {
+    content: "";
+    grid-row: 2 / 8;
+    align-self: stretch;
+    justify-self: stretch;
+    border: 1px solid rgba(34, 211, 238, 0.30);
+    border-radius: 8px;
+    background: linear-gradient(180deg, rgba(0, 20, 40, 0.55), rgba(0, 10, 22, 0.40));
+    box-shadow: 0 0 18px rgba(34, 211, 238, 0.12) inset, 0 0 24px rgba(34, 211, 238, 0.08);
+    z-index: 0;
+    pointer-events: none;
+    margin: -6px -8px;
+  }
+  .gameover-content::before {
+    grid-column: 1;
+    animation: goPanelSlideLeft 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .gameover-content::after {
+    grid-column: 2;
+    animation: goPanelSlideRight 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  /* Lift content above the panel backgrounds. */
+  .gameover-content > .gameover-title,
+  .gameover-content > .go-actions,
+  .gameover-content > .go-anim {
+    position: relative;
+    z-index: 1;
+  }
 
   .gameover-title {
     grid-area: title;
@@ -1598,28 +1640,28 @@ html, body {
   }
   .go-level-section {
     grid-area: level;
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
+    width: calc(100% - 16px);
+    max-width: calc(100% - 16px);
+    margin: 0 8px;
   }
   .go-levelup {
     grid-area: levelup;
-    margin: 0;
+    margin: 0 8px;
   }
   .go-handling-section {
     grid-area: handling;
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
+    width: calc(100% - 16px);
+    max-width: calc(100% - 16px);
+    margin: 0 8px;
   }
   .go-handling-upgrade {
     grid-area: handup;
-    margin: 0;
+    margin: 0 8px;
   }
   .go-saveme {
     grid-area: saveme;
-    margin: 0;
-    width: 100%;
+    margin: 0 8px;
+    width: calc(100% - 16px);
   }
   .btn-saveme {
     max-width: 100%;
@@ -1628,13 +1670,14 @@ html, body {
   }
   .score-submit {
     grid-area: submit;
-    width: 100%;
+    width: calc(100% - 16px);
+    margin: 0 8px;
   }
   .go-actions {
     grid-area: actions;
     width: 100%;
     justify-content: center;
-    margin-top: 4px;
+    margin-top: 6px;
   }
   .gameover-content .btn-space { padding: 7px 22px; font-size: 12px; }
   .btn-retry { padding: 9px 26px; }

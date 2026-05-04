@@ -6012,6 +6012,9 @@ function applySkin(skinIndex) {
           }
         }
       }
+      // Apply persisted add-on visibility (Fins/Warp Drive/Turrets) to the
+      // gameplay alt ship so garage selections carry into the run.
+      try { if (typeof window._applyAddonsToGameplayShip === 'function') window._applyAddonsToGameplayShip(); } catch(_){}
     });
   } else {
     _hideAltShip();

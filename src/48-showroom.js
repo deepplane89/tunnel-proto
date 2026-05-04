@@ -278,6 +278,16 @@
         const idx = parseInt(btn.dataset.skin, 10);
         if (isNaN(idx)) return;
         _garagePreviewIdx = idx;
+        // Persist the selection so the chosen skin (e.g. MK Runner) carries
+        // into gameplay instead of being reverted to the previously-equipped
+        // ship when the garage closes.
+        try {
+          const d = loadSkinData();
+          if (!Array.isArray(d.unlocked)) d.unlocked = [0];
+          if (!d.unlocked.includes(idx)) d.unlocked.push(idx);
+          d.selected = idx;
+          saveSkinData(d);
+        } catch(_){}
         try { _previewSkin(idx); } catch(_){}
         requestAnimationFrame(() => { try { _forceShipOpaque(); } catch(_){} });
         try { _refreshAddonsTabVisibility(); _populateAddons(); } catch(_){}
@@ -427,25 +437,28 @@
     const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
     return (ship && ship.userData && ship.userData._altGlb) || null;
   }
-  // Find a named descendant on the title ship clone. MK Runner's hull is
+  // Find a named descendant on a given ship root. MK Runner's hull is
   // 'Cube.007' and the add-ons are its children, but we traverse so the
-  // lookup works no matter how deeply nested.
-  function _findAddonNode(name) {
-    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
-    if (!ship) return null;
+  // lookup works no matter how deeply nested. Defaults to the title ship.
+  function _findAddonNodeIn(root, name) {
+    if (!root) return null;
     let hit = null;
-    ship.traverse(o => { if (!hit && o.name === name) hit = o; });
+    root.traverse(o => { if (!hit && o.name === name) hit = o; });
     return hit;
   }
-  // Apply persisted add-on visibility to the freshly-swapped title ship.
-  // Earlier versions kept this as a no-op because mutating visibility
-  // before _thrInit measured the bbox shifted hullBackZ. hullBackZ is now
-  // a hardcoded constant (-2.394, see _thrInit) so bbox measurement is no
-  // longer in the loop — we can safely sync visibility here without
-  // affecting thruster anchor placement.
-  function _applyAddonsToShip() {
-    const key = _currentAddonsKey();
-    if (!key) return;
+  function _findAddonNode(name) {
+    const ship = (typeof _titleShipModel !== 'undefined') ? _titleShipModel : null;
+    return _findAddonNodeIn(ship, name);
+  }
+  // Apply persisted add-on visibility to a given ship root. Used for both
+  // the title/showroom ship and the in-game alt ship so toggles in garage
+  // carry into gameplay. Earlier versions kept the title-only call as a
+  // no-op because mutating visibility before _thrInit measured the bbox
+  // shifted hullBackZ. hullBackZ is now a hardcoded constant (-2.394, see
+  // _thrInit) so bbox measurement is no longer in the loop — we can safely
+  // sync visibility here without affecting thruster anchor placement.
+  function _applyAddonsToRoot(root, key) {
+    if (!root || !key) return;
     const entries = ADDON_REGISTRY[key];
     if (!entries || !entries.length) return;
     const saved = _loadAddonsState();
@@ -454,10 +467,25 @@
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
       if (typeof bucket[entry.node] !== 'boolean') continue;
-      const node = _findAddonNode(entry.node);
+      const node = _findAddonNodeIn(root, entry.node);
       if (node) node.visible = !!bucket[entry.node];
     }
   }
+  function _applyAddonsToShip() {
+    _applyAddonsToRoot((typeof _titleShipModel !== 'undefined') ? _titleShipModel : null, _currentAddonsKey());
+  }
+  // Apply addons to whatever alt ship is currently shown in gameplay
+  // (parented under shipGroup). Called when toggling an addon in the
+  // garage and from applySkin after _showAltShip swaps to a new alt model.
+  function _applyAddonsToGameplayShip() {
+    try {
+      const alt = (typeof _altShipModel !== 'undefined') ? _altShipModel : null;
+      const file = (typeof _altShipCurrentFile !== 'undefined') ? _altShipCurrentFile : null;
+      if (alt && file) _applyAddonsToRoot(alt, file);
+    } catch(_){}
+  }
+  // Expose so applySkin (in 20-main-early.js) can call it after _showAltShip.
+  try { window._applyAddonsToGameplayShip = _applyAddonsToGameplayShip; } catch(_){}
   function _populateAddons() {
     const list = document.getElementById('sr-addons-list');
     if (!list) return;
@@ -508,6 +536,15 @@
         _saveAddonsState(s);
         const node = _findAddonNode(n);
         if (node) node.visible = next;
+        // Mirror visibility onto the gameplay alt ship so the add-on
+        // populates into the run, not just the showroom preview.
+        try {
+          const alt = (typeof _altShipModel !== 'undefined') ? _altShipModel : null;
+          if (alt) {
+            const altNode = _findAddonNodeIn(alt, n);
+            if (altNode) altNode.visible = next;
+          }
+        } catch(_){}
         btn.classList.toggle('active', next);
         btn.setAttribute('aria-pressed', next ? 'true' : 'false');
         const stateEl = btn.querySelector('.sr-addon-card-state');
