@@ -125,12 +125,9 @@ const _perfDiag = (function() {
     const ap = (typeof _asteroidActive !== 'undefined') ? _asteroidActive : [];
     const astActive = ap.length;
     const canyonVis = cw ? (cw.left || []).filter(m => m.visible).length : 0;
-    const rampT = (typeof _jlRampTime !== 'undefined') ? _jlRampTime.toFixed(1) : '?';
     const corridor = (typeof _jlCorridor !== 'undefined' && _jlCorridor.active) ? 1 : 0;
     const canyonAct = (typeof _canyonActive !== 'undefined' && _canyonActive) ? 1 : 0;
     return 'phase='+(s.phase||'?')
-      + ' jl='+(s._jetLightningMode?1:0)
-      + ' rampT='+rampT
       + ' corridor='+corridor
       + ' canyonAct='+canyonAct
       + ' chaos='+(window._chaosMode?1:0)
@@ -338,26 +335,11 @@ function animate() {
     accumulator -= FIXED_DT;
   }
 
-  // JL visual speed boost — JL caps state.speed at 54/62 u/s, which makes
-  // FOV/warp/water underperform. Feed a faked higher "visual speed" to
-  // perception-only systems without touching physics. Ramps in over 2.5s
-  // from launch so the handoff from liftoff feels snappy.
-  // Target fake speed: BASE*2.11 = 76 → matches T4c ICE STORM feel.
-  // Canyon segments get an extra +10% on top so they punch harder.
-  const _jlVisualSpeed = (() => {
-    if (!state._jetLightningMode || state.phase !== 'playing') return state.speed;
-    const rampT = Math.min(1, Math.max(0, (_jlRampTime || 0) / 2.5));
-    const base  = state.speed; // 54 open, 62 canyon
-    const targetMult = (_canyonActive || _canyonExiting) ? 1.55 : 1.40;
-    const mult = 1.0 + (targetMult - 1.0) * rampT;
-    return base * mult;
-  })();
-
   // FOV scales with speed — most effective speed perception trick.
   // Lerps toward base+boost during gameplay, back to base on death/title.
   // Skip during retry sweep (sweep controls FOV directly)
   if (!_retrySweepActive) {
-    const _fovSpd = state._jetLightningMode ? _jlVisualSpeed : state.speed;
+    const _fovSpd = state.speed;
     // Map state.speed (range BASE..BASE*2.5 = 36..90) into [0,1] linearly,
     // then pow-1.4 shape so low-tier stages start tame and high tiers punch.
     // With boost=32, the curve gives:
@@ -388,7 +370,7 @@ function animate() {
   mirrorMesh.material.uniforms.time.value += rawDt * 0.5;
   // Forward water flow — scroll normal map along Z proportional to speed
   if (state.phase === 'playing' && state.thrusterPower > 0 && !state.introActive) {
-    const _rawWSpd = state._jetLightningMode ? _jlVisualSpeed : state.speed;
+    const _rawWSpd = state.speed;
     const _wSpd = state.invincibleSpeedActive ? _rawWSpd * 1.8 : _rawWSpd;
     const _wSpdNorm = _wSpd / BASE_SPEED; // 1.0 at T1, 2.5 at T5c
     _waterFlowZ -= _wSpd * _wSpdNorm * rawDt * _waterFlowScale; // squared scaling
@@ -396,23 +378,6 @@ function animate() {
     mirrorMesh.material.uniforms.uFlowZ.value = _waterFlowZ;
   }
 
-  // JL sun warp — Quilez domain warp on sun during Jet Lightning, except
-  // ice (shader 3) and gold (shader 4) which already have builtin warp.
-  // Skip during liftoff/intro so the launch can play clean.
-  if (state._jetLightningMode && state.phase === 'playing'
-      && !state.introActive && !state._introLiftActive
-      && sunMat && sunMat.uniforms) {
-    const _curShader = (typeof _currentSunShader !== 'undefined') ? _currentSunShader : 0;
-    const _builtin = (_curShader === 3 || _curShader === 4);
-    const _wantW = _builtin ? 0.0 : 1.0;
-    const _curW  = sunMat.uniforms.uIsL3Warp.value;
-    if (Math.abs(_curW - _wantW) > 0.01) {
-      sunMat.uniforms.uIsL3Warp.value += (_wantW - _curW) * Math.min(1, rawDt * 2);
-    } else {
-      sunMat.uniforms.uIsL3Warp.value = _wantW;
-    }
-    if (sunCapMat && sunCapMat.uniforms) sunCapMat.uniforms.uIsL3Warp.value = sunMat.uniforms.uIsL3Warp.value;
-  }
   // Sun surface churn
   if (sunMat && sunMat.uniforms) sunMat.uniforms.uTime.value += rawDt;
   // Twinkling sky stars — update uTime uniform each frame

@@ -237,7 +237,6 @@ const state = {
   nextSpawnZ: -50,
   // Tutorial
   _tutorialActive: false,
-  _jetLightningMode: false,  // Jet Lightning arcade mode
   _tutorialStep: 0,       // 0=cones, 1=zipline, 2=endcard, 3=done
   _tutorialTimer: 0,
   _tutorialConesFired: 0, // how many cone rows spawned
@@ -2286,13 +2285,7 @@ function updateGalaxyScroll(dt) {
 
   // Warp streaks — Z-aligned, perspective camera creates radial look.
   // Scale warp count with speed: 200 at BASE_SPEED, up to 1800 at peak.
-  // JL faked visual speed: pretend state.speed is higher to push count/accel up.
-  let _warpSpd = state.speed;
-  if (state._jetLightningMode && state.phase === 'playing') {
-    const rampT = Math.min(1, Math.max(0, (typeof _jlRampTime !== 'undefined' ? _jlRampTime : 0) / 2.5));
-    const targetMult = (_canyonActive || _canyonExiting) ? 1.55 : 1.40;
-    _warpSpd = state.speed * (1.0 + (targetMult - 1.0) * rampT);
-  }
+  const _warpSpd = state.speed;
   const _warpMinCount = 200, _warpMaxCount = 1800;
   const _speedT = Math.min(1, Math.max(0, (_warpSpd - BASE_SPEED) / (BASE_SPEED * 1.1))); // 0…1 over speed range — maxes out at 2.1x (T4c ICE STORM cyan sun)
   const _targetWarpCount = Math.round(_warpMinCount + (_warpMaxCount - _warpMinCount) * _speedT);

@@ -21,8 +21,6 @@ function toggleMute() {
 // ═══════════════════════════════════════════════════
 //  GAME STATE TRANSITIONS
 // ═══════════════════════════════════════════════════
-// Canyon-only test mode — activated by ?canyon=1 URL param, skips normal game flow
-var _canyonTestMode = new URLSearchParams(location.search).get('canyon') === '1';
 let _skipL1Intro = false;  // set by startDeathRun() so startGame() skips L1 cinematic
 let _gameStarting = false; // reentry lock — prevents double-fire from simultaneous inputs
 
@@ -36,25 +34,13 @@ function _triggerRetryWithSweep() {
   const fadeEl = document.getElementById('retry-fade');
   fadeEl.style.opacity = '1'; // fade to black (CSS 0.15s transition)
   const _wasDeathRun = state.isDeathRun;
-  const _wasJetLightning = state._jetLightningMode;
-  // Save JL continuation state before the reset wipes it
-  const _jlDeathX    = _wasJetLightning ? (state.shipX || 0) : 0;
-  const _jlDeathRamp = _wasJetLightning ? (_jlRampTime || 0) : 0;
   if (_retryFadeTimer) { clearTimeout(_retryFadeTimer); _retryFadeTimer = null; }
   _retryFadeTimer = setTimeout(() => {
     _retryFadeTimer = null;
     _retryPending = false;
     // ── During black: reset scene ──
-    if (_wasJetLightning) startJetLightning();
-    else if (_wasDeathRun) startDeathRun();
+    if (_wasDeathRun) startDeathRun();
     else startGame();
-    // JL: restore ramp time + X position so player continues from death spot
-    if (_wasJetLightning) {
-      _jlRampTime   = _jlDeathRamp;
-      state.shipX   = _jlDeathX;
-      state.shipVelX = 0;
-      shipGroup.position.x = _jlDeathX;
-    }
     // Override: skip prologue, ship already at hover, thrusters on
     killThrusterSputter();          // kill any lingering sputter timer
     state.introActive = true;       // blocks obstacle spawning during sweep
@@ -150,7 +136,6 @@ function startGame() {
   state.currentLevelIdx = 0;
   state.startedFromL1  = true;
   state.isDeathRun     = false;
-  state._jetLightningMode = false;
   // Clear JL sun warp — death-run tick will re-apply if applicable
   if (sunMat && sunMat.uniforms) sunMat.uniforms.uIsL3Warp.value = 0;
   if (sunCapMat && sunCapMat.uniforms) sunCapMat.uniforms.uIsL3Warp.value = 0;
@@ -450,7 +435,7 @@ function startGame() {
   // engine hum removed
 
   // ── L1 cinematic intro text (only on fresh game start at level 0, NOT on retry) ──
-  if (state.currentLevelIdx === 0 && !_skipL1Intro && !state._tutorialActive && !state._jetLightningMode && !_retryIsFromDead) {
+  if (state.currentLevelIdx === 0 && !_skipL1Intro && !state._tutorialActive && !_retryIsFromDead) {
     state.introActive = true;   // blocks cone spawning
     state._introStartedAt = performance.now(); // grace window for skip handlers
     state.thrusterPower = 0;    // thrusters off during prologue
@@ -1912,7 +1897,7 @@ function _drEndlessTick(dt) {
       state.deathRunRestBeat = 4.0;
       state.drPhase = 'RELEASE'; state.drPhaseTimer = 0;
       state.drWaveCount++;
-      if (!state._tutorialActive && !state._jetLightningMode && _bonusRings.length === 0) _ringSpawnRow(0);
+      if (!state._tutorialActive && _bonusRings.length === 0) _ringSpawnRow(0);
       // Cycle vibes through the full palette on each endless wave
       const _totalVibes = DEATH_RUN_VIBES.length;
       const _nextVibeIdx = ((state._endlessVibeIdx || 0) + 1) % _totalVibes;
@@ -2419,7 +2404,7 @@ function _ringBuildOne(colorIdx) {
 }
 
 function _ringSpawnRow(xPos, nearSpawn) {
-  if (state._tutorialActive || state._jetLightningMode) return; // never spawn rings during tutorial or Jet Lightning
+  if (state._tutorialActive) return; // never spawn rings during tutorial
   const baseX = (xPos !== undefined) ? xPos : _ringTuner.x;
   const count = Math.max(1, Math.round(_ringTuner.length));
   const spacing = Math.max(0.5, _ringTuner.freq);
@@ -4370,12 +4355,6 @@ function update(dt) {
     if (_lt >= 1) {
       state._introLiftActive = false;
       shipGroup.rotation.x = _shipRotXOffset;
-      // In JL mode, re-lock speed and clear any velocity that built up during prologue
-      if (state._jetLightningMode) {
-        state.shipVelX = 0;
-        state.shipX    = 0;
-        shipGroup.position.x = 0;
-      }
     }
   }
 
@@ -4718,7 +4697,7 @@ function update(dt) {
         }
       );
     }
-    if (!_chaosMode && !state._jetLightningMode) _noSpawnMode = true; // suppress normal spawner during tutorial (chaos/JL override this)
+    if (!_chaosMode) _noSpawnMode = true; // suppress normal spawner during tutorial (chaos overrides this)
   }
 
   // ── T5 scanning beam: fan-ray destruction (runs before obstacle loop)
@@ -5002,7 +4981,7 @@ function update(dt) {
   // Always tick the sequencer — REST stages manage deathRunRestBeat internally
   // to suppress the spawner. Gating the sequencer on restBeat caused REST stages
   // to run ~31x longer than intended (seqStageElapsed only advanced 1 frame per 0.5s).
-  if (state.isDeathRun && !state.introActive && !state._tutorialActive && !state._jetLightningMode) {
+  if (state.isDeathRun && !state.introActive && !state._tutorialActive) {
     if (state.deathRunRestBeat > 0) state.deathRunRestBeat -= dt;
     _drSequencerTick(dt);
   }
@@ -5019,7 +4998,7 @@ function update(dt) {
   // L3 dense corridor (LEGACY cone path — gated off while _L3_KNIFE_ENABLED,
   // because maybeStartGauntlet no longer sets state.corridorMode in that case):
   // spawn wall rows every ~7 world units (ship-relative, cyan tinted)
-  if (state.corridorMode && !state._jetLightningMode) {
+  if (state.corridorMode) {
     if (!state.isDeathRun) maybeStartGauntlet();
     if (state.corridorDelay > 0) {
       state.corridorDelay -= dt;
@@ -5050,7 +5029,7 @@ function update(dt) {
         }
       }
     }
-  } else if (state.currentLevelIdx === 3 && !state.l4CorridorDone && !state.isDeathRun && !state._jetLightningMode) {
+  } else if (state.currentLevelIdx === 3 && !state.l4CorridorDone && !state.isDeathRun) {
     if (!state.l4CorridorActive) {
       if (state.levelElapsed >= L4_CORRIDOR_TRIGGER_S) {
         state.l4CorridorActive = true;
@@ -5229,7 +5208,7 @@ function update(dt) {
   }
 
   // Normal nextSpawnZ-based spawner — suppressed during active zipper, L5 ending, intro, or death run rest beat
-  if (!state._tutorialActive && !state._jetLightningMode && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
+  if (!state._tutorialActive && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
     state.nextSpawnZ += effectiveSpeed * dt;
     if (state.nextSpawnZ >= 0) {
       // Tighter Z spacing for rings (easier to pass through, need more density)

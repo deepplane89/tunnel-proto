@@ -2271,10 +2271,6 @@ function checkLevelUp() {
     // checkDeathRunVibe were vestigial — deleted in Pass 2C cleanup.
     return;
   }
-  // JL mode: frozen at L4 — score must never flip currentLevelIdx to L5
-  // (L5 activates the zipper/corridor campaign system which bleeds into JL)
-  if (state._jetLightningMode) return;
-
   let newIdx = 0;
   for (let i = LEVELS.length - 1; i >= 0; i--) {
     if (state.score >= LEVELS[i].scoreThreshold) { newIdx = i; break; }

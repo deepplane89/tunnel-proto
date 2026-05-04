@@ -1392,32 +1392,6 @@ function buildSkinTunerSliders() {
       }
     }, '#0ff'));
 
-    // JL SEQUENCER
-    panel.appendChild(makeHeader('JL SEQUENCER', '#fa0'));
-    {
-      // Intensity scalar — multiplies into frequency of all active tracks
-      const intRow = makeSlider('intensity', _jlIntensity, 0.1, 3.0, 0.05, v => {
-        _jlIntensity = v;
-      }, '#fa0');
-      panel.appendChild(intRow);
-
-      // Live readout: ramp time + active tracks
-      const seqInfo = document.createElement('div');
-      seqInfo.style.cssText = 'font-family:monospace;font-size:9px;color:#888;margin:3px 0 6px;line-height:1.5;';
-      const _refreshSeqInfo = () => {
-        if (!state._jetLightningMode) { seqInfo.textContent = 'JL not active'; return; }
-        const t = _jlRampTime || 0;
-        const active = _JL_TRACKS
-          .filter(tr => t >= tr.startT && (tr.endT === null || t < tr.endT))
-          .map(tr => tr.id)
-          .join(', ');
-        seqInfo.textContent = 't=' + t.toFixed(1) + 's  intensity=' + _jlIntensity.toFixed(2) + '\nactive: ' + (active || 'none');
-      };
-      setInterval(_refreshSeqInfo, 500);
-      _refreshSeqInfo();
-      panel.appendChild(seqInfo);
-    }
-
     // LIGHTS
     panel.appendChild(makeHeader('LIGHTS'));
     panel.appendChild(makeSlider('dirLight', dirLight.intensity, 0, 5, 0.01, v => dirLight.intensity = v, '#fff'));
@@ -3644,10 +3618,9 @@ function _tickAsteroidSpawner(dt) {
   const T = _asteroidTuner;
 
 
-  // ── Lateral camp punish — asteroid-ONLY. Only fires when the active obstacle is 'asteroid'.
-  // Prevents asteroids from firing during LT-only segments (60-90s) and LT-combined segments.
-  if (T.lateralEnabled && state._jetLightningMode && _jlRampTime >= 4
-      && window._jlActiveObstacleType === 'asteroid') {
+  // ── Lateral camp punish — asteroid spawner that targets sides of ship.
+  // Manually toggled via window._lateralPunishEnabled.
+  if (T.lateralEnabled && window._lateralPunishEnabled) {
     T._lateralTimer -= dt;
     if (T._lateralTimer <= 0) {
       T._lateralTimer = T.lateralFreq * (0.7 + Math.random() * 0.6);
@@ -3661,7 +3634,7 @@ function _tickAsteroidSpawner(dt) {
   }
 
   if (!T.enabled) return;
-  if (_noSpawnMode && !_chaosMode && !state._jetLightningMode) return;
+  if (_noSpawnMode && !_chaosMode) return;
   // Keep chaos params live every tick so slider changes take effect instantly
   if (_chaosMode) {
     const c = _chaosLevel;
@@ -3716,7 +3689,7 @@ function _tickAsteroidSpawner(dt) {
   }
 
   // ── Filler asteroids (decorative, no hit check) ─────────────────────
-  if (T.fillerEnabled && state._jetLightningMode && _jlRampTime >= 4) {
+  if (T.fillerEnabled && window._lateralPunishEnabled) {
     _astFillerTimer -= dt;
     if (_astFillerTimer <= 0) {
       _astFillerTimer = T.fillerFreq * (0.6 + Math.random() * 0.8);
@@ -3842,9 +3815,9 @@ const _origUpdateShockwave = _updateShockwave;
     const now = performance.now();
     const dt = Math.min((now - _lastAstTime) * 0.001, 0.05);
     _lastAstTime = now;
-    // Run during tutorial gameplay, chaos mode, JL mode, OR L3 knife canyon (main mode).
+    // Run during tutorial gameplay, chaos mode, OR L3 knife canyon (main mode).
     if (state.phase === 'playing' && !state.introActive &&
-        (state._tutorialActive || _chaosMode || state._jetLightningMode || state.l3KnifeCanyon)) {
+        (state._tutorialActive || _chaosMode || state.l3KnifeCanyon)) {
       // Corridor takes over — pause all JL obstacle spawning during breather
       // _canyonMode > 0 means slab canyon is active — never use old L3/L4 corridor ticker
       if (_jlCorridor.active && !_canyonActive && !_canyonMode) {
@@ -4315,159 +4288,17 @@ const _origUpdateShockwave = _updateShockwave;
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-
+//  MANUAL LATERAL PUNISH
+//  window._lateralPunishEnabled = true → enables asteroid + lightning lateral
+//  spawners (predictive bolts/asteroids that punish edge camping).
+//  Off by default; enable via dev console when needed.
 // ═══════════════════════════════════════════════════════════════════════════════
-//  JET LIGHTNING MODE
-//  A standalone arcade mode: asteroids → lightning → glacier terrain, ramping
-//  difficulty over time. Physics tuned for high-speed lateral feel.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-let _jlRampTime      = 0;   // seconds elapsed in Jet Lightning mode
+window._lateralPunishEnabled = false;
 
 function startJetLightning() {
-  // ── Flag ──────────────────────────────────────────────────────────────────
-  state._jetLightningMode = true;
-  state._tutorialActive   = false;
-
-  // ── Physics override ──────────────────────────────────────────────────────
-  _accelBase      = 60;
-  _accelSnap      = 100;
-  _maxVelBase     = 13;    // JL_v2 — tighter lateral cap, more intentional feel
-  _maxVelSnap     = 23;
-  _bankMax        = 0.04;  // LEGACY — retained for any code reading the old global; new bank uses _steerBankRadMax
-  _steerBankRadMax = 0.52;  // ~30° hard cap (JET preset default)
-  _bankSmoothing  = 8;
-
-  // ── Reset ramp timer + corridor/canyon state ──────────────────────────────
-  _jlRampTime          = 0;
-  _jlCorridor.active   = false;
-  _canyonActive        = false;
-  _canyonExiting       = false;
-  _canyonMode          = 0;
-  if (_canyonWalls) _destroyCanyonWalls();
-  _jlFatConeTimer      = 99;
-  _jlLrTimer           = 99;
-  // Clear any in-flight lethal rings from a previous session
-  for (const lr of _lethalRingActive) { lr.userData.active = false; lr.visible = false; lr.position.set(0,-9999,0); }
-  _lethalRingActive.length = 0;
-  // Reset track activation state so onActivate fires fresh each run
-  for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
-  // ── Asteroids: disabled at start — track system enables at startT:4 ────────
-  const T = _asteroidTuner;
-  T.enabled      = false;
-  T.pattern      = 'stagger';
-  T.frequency    = 1.4;    // locked from session log (rchouake approved)
-  T.staggerGap   = 0.6;    // locked from session log
-  T.salvoCount   = 1;      // stagger = 1 shot at a time, tracking ship live
-  T.speed        = 200;
-  T.size         = 1.2;    // locked from session log
-  T.sizeVariance = 0.55;   // locked from session log
-  T.skyHeight    = 42;
-  T.leadFactor   = 0.0;    // aim at ship's CURRENT position, not predicted
-  T.staggerDual  = false;  // dual shot unlocks in Phase 3 only
-  T.killRadius   = 2.2;
-  T.laneMin      = -8;
-  T.laneMax      =  8;
-  _astTimer      = 2.0;  // 2s grace period after liftoff before first asteroid
-
-  // ── Lightning: OFF at start — ramp turns it on ────────────────────────────
-  if (window._LT) {
-    window._LT.enabled    = false;
-    window._LT.frequency  = 0.3;   // locked from session log
-    window._LT.count      = 1;
-    window._LT.jaggedness = 1.9;
-    window._LT.glowRadius = 0.25;
-    window._LT.spawnZ     = -83;
-    window._LT.pattern    = 'random';
-    window._LT.laneMin    = -8;
-    window._LT.laneMax    =  8;
-  }
-
-  // ── Terrain: OFF at start — ramp turns it on ─────────────────────────────
-  if (_terrainWalls) {
-    _terrainWalls.strips.forEach(m => { m.visible = false; });
-  }
-
-  // ── noSpawnMode: clear ────────────────────────────────────────────────────
-  _noSpawnMode = false;
-
-  // ── Start the game ────────────────────────────────────────────────────────
-  startGame();
-
-  // ── Re-apply JL flags AFTER startGame() resets them ─────────────────────
-  state._jetLightningMode  = true;
-  // Campaign prologue runs normally (startGame sets introActive=true);
-  // the prologue's own _launchDeathRun() clears introActive & _introLiftActive
-  // when the player taps or the 18.5s auto-launch fires.
-
-  // Re-apply physics — startGame() resets to campaign defaults internally
-  _accelBase      = 60;
-  _accelSnap      = 100;
-  _maxVelBase     = 13;
-  _maxVelSnap     = 23;
-  _bankMax        = 0.04;  // LEGACY — retained for any code reading the old global; new bank uses _steerBankRadMax
-  _steerBankRadMax = 0.52;  // ~30° hard cap (JET preset default)
-  _bankSmoothing  = 8;
-
-  _asteroidTuner.enabled     = false;  // track system enables at startT:4
-  _asteroidTuner.showWarning  = false;
-  _noSpawnMode               = false;
-  _astTimer                = 4.0;  // 4s grace after liftoff
-  state.l4CorridorActive   = false;
-  state.l4CorridorDone     = true;
-  state.score         = 490; // LEVELS[3].scoreThreshold
-  state.currentLevelIdx = 3;
-  currentLevelDef     = LEVELS[3];
-  targetLevelDef      = LEVELS[3];
-  _setDRSpeed(BASE_SPEED * LEVELS[3].speedMult, 'JL'); // 1.5x = L4 (canyon test mode startup)
-
-  // ── Canyon test mode: activate corridor + canyon walls, kill asteroids ──
-  if (_canyonTestMode) {
-    _skipL1Intro            = true;
-    _godMode                = true;
-    _asteroidTuner.enabled  = false;
-    state._drL3MaxRows      = 750;
-    state.corridorRowsDone  = 60; // skip funnel-in, start where curves are active
-    state.corridorSineT     = 0.5028; // pre-seeded to match row 60
-    state.corridorSpawnZ    = -7;
-    state.corridorDelay     = 0;
-    // Prime corridorGapCenter from the seeded sineT so slabs bake non-zero X immediately
-    {
-      const _cr = 60 - (40 + 4);
-      const _ampT = Math.min(1, _cr / 200);
-      const _amp  = 10 + (36 - 10) * (_ampT * _ampT);
-      state.corridorGapCenter = _amp * Math.sin(0.5028);
-    }
-    state.corridorGapDir    = 1;
-    _jlCorridor.active      = true;
-    _jlCorridor.type        = 'l3';
-    _jlCorridor.totalRows   = 750;
-    _canyonActive           = true;
-    if (!_canyonWalls) _createCanyonWalls();
-  }
-
-  // ── Pre-warm canyon textures so first corridor spawn has no stutter ────────
-  if (!_canyonTexCache) {
-    _canyonTexCache = {
-      cyanTex: _makeCanyonCyanTex(1),
-      darkTex: _makeCanyonDarkTex(2),
-    };
-  }
+  // JL mode removed. No-op stub for stale callers from cached HTML.
+  if (typeof console !== 'undefined') console.warn('startJetLightning: JL mode removed');
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  JET LIGHTNING SEQUENCER
-//  Each track activates at startT and deactivates at endT (null = forever).
-//  _jlIntensity is a scalar locked at 1.0 — wire it to a ramp later.
-//  Track types:
-//    'asteroid' — sets _asteroidTuner fields each frame while active
-//    'lightning' — sets _LT fields each frame while active
-//    'fatcone'  — drives its own spawn timer while active
-//    'custom'   — calls onActivate() once on entry, onDeactivate() once on exit
-// ═══════════════════════════════════════════════════════════════════════════════
-
-let _jlIntensity  = 3.0; // frequency scalar — 3.0 default (doubled from 1.5)
-let _jlSizeScalar = 1.0; // size scalar — 1.0 = approved baseline
 let _godMode      = false; // no damage — plays shield-hit sound on hit instead of killing
 
 // ─── JL Corridor — reusable self-contained corridor obstacle ─────────────────
@@ -4668,435 +4499,10 @@ function _jlCanyonStop() {
   if (_canyonSavedDirLight !== null) { dirLight.intensity = _canyonSavedDirLight; _canyonSavedDirLight = null; }
 }
 
-// Jump JL sequencer to any time — shared by panel buttons and number hotkeys
-function _jlJumpToTime(targetT) {
-  if (!state._jetLightningMode) return;
-  for (const k of Object.keys(_jlTrackActive)) _jlTrackActive[k] = false;
-  // Clear corridor state so sequencer starts clean
-  _jlCorridor.active = false;
-  _canyonExiting = false;
-  if (_canyonActive) _jlCanyonStop();
-  _jlRampTime = targetT;
-  // Always clear both — sequencer will re-enable correct ones next frame
-  _asteroidTuner.enabled = false;
-  _astTimer = 0.1;
-  if (window._LT) window._LT.enabled = false;
-  if (window._stopFcLoop) window._stopFcLoop();
-  for (const lr of _lethalRingActive) { lr.userData.active = false; lr.visible = false; lr.position.set(0,-9999,0); }
-  _lethalRingActive.length = 0;
-}
-
-const _JL_TRACKS = [
-
-  // ════════ ACT 1 — ASTEROIDS (0–30s) ══════════════════════════════════════
-  {
-    id: 'ast_stagger_1', label: 'A1 AST Stagger', type: 'asteroid',
-    // freq 1.8 → 1.98 (-10%)
-    startT: 4, endT: 20,
-    settings: {
-      enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 1.98, staggerGap: 0.6, salvoCount: 1,
-      size: 1.0, sizeVariance: 0.45, laneMin: -8, laneMax: 8,
-    },
-  },
-  {
-    id: 'ast_salvo_1', label: 'A1 AST Salvo', type: 'asteroid',
-    startT: 20, endT: 30,
-    settings: {
-      enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 1.21, staggerGap: 0.5, salvoCount: 2,
-      size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
-    },
-  },
-
-  // ════════ CANYON 1 (30–60s) — pure corridor, pauses spawner ══════════════
-  {
-    id: 'canyon_1', label: 'Canyon C1', type: 'custom',
-    startT: 30, endT: 60,
-    onActivate()   { _jlCanyonStart(1); },
-    onDeactivate() { _jlCanyonStop(); },
-  },
-
-  // ════════ ACT 2 — LIGHTNING ONLY (60–90s) ════════════════════════════════
-  {
-    id: 'lt_stagger_1', label: 'A2 LT Stagger', type: 'lightning',
-    startT: 60, endT: 75,
-    settings: {
-      enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 0.5, laneMin: -8, laneMax: 8,
-    },
-    onActivate()   { if (window._asteroidTuner) window._asteroidTuner.enabled = false; },
-    onDeactivate() {},
-  },
-  {
-    id: 'lt_sweep_1', label: 'A2 LT Sweep', type: 'lightning',
-    startT: 75, endT: 90,
-    settings: {
-      enabled: true, pattern: 'sweep', leadFactor: 0.0,
-      frequency: 0.4, sweepSpeed: 0.4, laneMin: -8, laneMax: 8,
-    },
-    onActivate()   { if (window._asteroidTuner) window._asteroidTuner.enabled = false; },
-    onDeactivate() {},
-  },
-
-  // ════════ CANYON 2 (90–120s) — pure corridor, pauses spawner ═════════════
-  {
-    id: 'canyon_2', label: 'Canyon C2', type: 'custom',
-    startT: 90, endT: 120,
-    onActivate()   { _jlCanyonStart(2); },
-    onDeactivate() { _jlCanyonStop(); },
-  },
-
-  // ════════ BREATHER (120–132s) — 12s for canyon 2 scroll-out + pacing ══════
-
-  // ════════ STRAIGHT CANYON + AST + LT PEAK (132–162s) ════════════════════
-  {
-    id: 'canyon_straight', label: 'Straight Canyon', type: 'custom',
-    startT: 132, endT: 162,
-    onActivate()   { _jlCanyonStartOpen(4); },
-    onDeactivate() { _jlCanyonStop(); },
-  },
-  {
-    id: 'ast_straight', label: 'Straight AST', type: 'asteroid',
-    startT: 132, endT: 162,
-    settings: {
-      enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 1.21, staggerGap: 0.5, salvoCount: 2,
-      size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
-    },
-  },
-  {
-    id: 'lt_straight', label: 'Straight LT', type: 'lightning',
-    startT: 132, endT: 162,
-    settings: {
-      enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 0.3, laneMin: -8, laneMax: 8,
-    },
-  },
-
-  // ════════ CORRIDOR 1 + LIGHTNING (162–192s) ═══════════════════════════════
-  {
-    id: 'canyon_1_lt', label: 'Canyon C1+LT', type: 'custom',
-    startT: 162, endT: 192,
-    onActivate()   { _jlCanyonStartOpen(1); },
-    onDeactivate() { _jlCanyonStop(); },
-  },
-  {
-    id: 'lt_canyon_1', label: 'C1 LT', type: 'lightning',
-    startT: 162, endT: 192,
-    settings: {
-      enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 0.3, laneMin: -8, laneMax: 8,
-    },
-  },
-
-  // ════════ CORRIDOR 2 + LIGHTNING (192–222s) ═══════════════════════════════
-  {
-    id: 'canyon_2_lt', label: 'Canyon C2+LT', type: 'custom',
-    startT: 192, endT: 222,
-    onActivate()   { _jlCanyonStartOpen(2); },
-    onDeactivate() { _jlCanyonStop(); },
-  },
-  {
-    id: 'lt_canyon_2', label: 'C2 LT', type: 'lightning',
-    startT: 192, endT: 222,
-    settings: {
-      enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 0.25, laneMin: -8, laneMax: 8,
-    },
-  },
-
-  // ════════ ENDLESS PEAK — AST + LT (222s+) ════════════════════════════════
-  {
-    id: 'ast_peak', label: 'Peak AST', type: 'asteroid',
-    startT: 222, endT: null,
-    settings: {
-      enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 1.21, staggerGap: 0.5, salvoCount: 2,
-      size: 1.2, sizeVariance: 0.55, laneMin: -8, laneMax: 8,
-    },
-  },
-  {
-    id: 'lt_peak', label: 'Peak LT', type: 'lightning',
-    startT: 222, endT: null,
-    settings: {
-      enabled: true, pattern: 'stagger', leadFactor: 0.0,
-      frequency: 0.25, laneMin: -8, laneMax: 8,
-    },
-  },
-];
-
-// Track which custom tracks have been activated (so onActivate fires once)
-const _jlTrackActive = {};
-
-// ── Apply one asteroid track's settings to _asteroidTuner ────────────────────
-// _jlIntensity > 1 = shorter interval = more frequent spawns
-function _jlApplyAsteroidTrack(track) {
-  const T = _asteroidTuner;
-  const s = track.settings;
-  // Preserve user-tunable values that track settings must never overwrite
-  const _keepLateralEnabled = T.lateralEnabled;
-  const _keepLateralFreq    = T.lateralFreq;
-  const _keepLateralMinOff  = T.lateralMinOff;
-  const _keepLateralMaxOff  = T.lateralMaxOff;
-  const _keepLateralTimer   = T._lateralTimer;
-  for (const k of Object.keys(s)) T[k] = s[k];
-  T.lateralEnabled = _keepLateralEnabled;
-  T.lateralFreq    = _keepLateralFreq;
-  T.lateralMinOff  = _keepLateralMinOff;
-  T.lateralMaxOff  = _keepLateralMaxOff;
-  T._lateralTimer  = _keepLateralTimer;
-  if (s.frequency !== undefined) T.frequency = s.frequency / _jlIntensity;
-  if (s.size      !== undefined) T.size      = s.size      * _jlSizeScalar;
-  T.enabled = true; // always re-enable when a track is active
-}
-
-// ── Apply one lightning track's settings to _LT ───────────────────────────────
-function _jlApplyLightningTrack(track) {
-  const LT = window._LT;
-  if (!LT) return;
-  const s = track.settings;
-  for (const k of Object.keys(s)) LT[k] = s[k];
-  if (s.frequency !== undefined) LT.frequency = s.frequency / _jlIntensity;
-}
-
-// ── JL lethal ring row spawner — exact campaign lane-grid algo ──────────────
-function _jlSpawnLethalRingRow() {
-  _initLethalRings();
-  const sx = state.shipX || 0;
-  const spawnCount = 3 + Math.floor(Math.random() * 2); // 3-4 rings per row
-  const lanes  = Array.from({ length: LANE_COUNT }, (_, i) => i);
-  const shuffled = [...lanes].sort(() => Math.random() - 0.5);
-  // Guaranteed 2-wide clear gap
-  const gapStart = Math.floor(Math.random() * (LANE_COUNT - 1));
-  const gapLanes = new Set([gapStart, gapStart + 1]);
-  const blocked = [];
-  for (const lane of shuffled) {
-    if (blocked.length >= spawnCount) break;
-    if (gapLanes.has(lane)) continue;
-    if (blocked.some(b => Math.abs(b - lane) < 4)) continue; // min 4-lane gap between rings
-    blocked.push(lane);
-  }
-  blocked.forEach(lane => {
-    const laneX = sx + (lane - (LANE_COUNT - 1) / 2) * LANE_WIDTH;
-    _spawnLethalRing(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z);
-  });
-}
-
-// ── Main sequencer tick ───────────────────────────────────────────────────────
-let _jlWasInLiftoff = false;
-let _jlFatConeTimer = 99;
-let _jlLrTimer      = 99; // lethal ring row spawn timer
-
-function _tickJetLightningRamp(dt) {
-  if (!state._jetLightningMode || state.phase !== 'playing') return;
-
-  const _inLiftoff = state.introActive || state._introLiftActive;
-
-  if (_jlWasInLiftoff && !_inLiftoff) {
-    _astTimer   = 2.0;
-    _jlRampTime = 0;
-    _setDRSpeed(BASE_SPEED * LEVELS[3].speedMult, 'JL');
-  }
-  _jlWasInLiftoff = _inLiftoff;
-  if (_inLiftoff) return;
-
-  _jlRampTime += dt;
-  const t = _jlRampTime;
-
-  // ── Canyon speed bump: +15% while any canyon (pure or open) is active.
-  // FOV widens automatically (see render loop targetFOV = _baseFOV + _fovSpeedBoost*speedFrac).
-  // Reassign every frame canyon is active/inactive — safe because JL never sets speed
-  // outside the initial liftoff transition at line ~22540.
-  const _jlBaseSpeed   = BASE_SPEED * LEVELS[3].speedMult;        // 54 u/s
-  const _jlCanyonSpeed = _jlBaseSpeed * 1.15;                     // ~62 u/s
-  if (_canyonActive || _canyonExiting) {
-    _setDRSpeed(_jlCanyonSpeed, 'JL');
-  } else {
-    _setDRSpeed(_jlBaseSpeed, 'JL');
-  }
-
-  // ── Corridor breather — pause asteroid/lightning spawning, but still check
-  // custom track deactivation so canyon onDeactivate fires at endT
-  if (_jlCorridor.active) {
-    for (const track of _JL_TRACKS) {
-      if (track.type !== 'custom') continue;
-      const active = t >= track.startT && (track.endT === null || t < track.endT);
-      if (!active && _jlTrackActive[track.id]) {
-        _jlTrackActive[track.id] = false;
-        if (track.onDeactivate) track.onDeactivate();
-      }
-    }
-    return;
-  }
-
-  // ── Iterate tracks ────────────────────────────────────────────────────────
-  // First pass: find which asteroid/lightning tracks are active this frame
-  // (last one wins if ranges overlap — intentional for combined phases)
-  let _activeAst = null;
-  let _activeLt  = null;
-
-  for (const track of _JL_TRACKS) {
-    const active = t >= track.startT && (track.endT === null || t < track.endT);
-
-    if (active) {
-      // Fire onActivate once on entry
-      if (!_jlTrackActive[track.id]) {
-        _jlTrackActive[track.id] = true;
-        if (track.onActivate) track.onActivate();
-        if (track.type === 'fatcone') {
-          _jlFatConeTimer = 1.0; // fire first cone quickly on track entry
-        }
-        if (track.type === 'lethal_rings') {
-          _jlLrTimer = 1.0; // fire first ring row quickly on track entry
-        }
-      }
-
-      if      (track.type === 'asteroid')  { _activeAst = track; window._jlActiveObstacleType = 'asteroid'; }
-      else if (track.type === 'lightning') { _activeLt  = track;  window._jlActiveObstacleType = 'lightning'; }
-      else if (track.type === 'fatcone') {
-        // Fat cone spawner — delegates to _spawnFatCone() which uses FCT settings
-        _jlFatConeTimer -= dt;
-        if (_jlFatConeTimer <= 0) {
-          const _fct = window._FCT || track;
-          _jlFatConeTimer = (_fct.frequency / _jlIntensity) * (0.7 + Math.random() * 0.6);
-          if (typeof window._spawnFatConeRow === 'function') window._spawnFatConeRow();
-        }
-      } else if (track.type === 'lethal_rings') {
-        // Lethal ring row spawner — same cadence as campaign T4B_LETHAL
-        _jlLrTimer -= dt;
-        if (_jlLrTimer <= 0) {
-          const baseInterval = track.settings && track.settings.frequency != null
-            ? track.settings.frequency : 1.1;
-          _jlLrTimer = (baseInterval / _jlIntensity) * (0.7 + Math.random() * 0.6);
-          _jlSpawnLethalRingRow();
-        }
-      }
-      // custom tracks: onActivate already fired above, they manage themselves
-    } else {
-      // Fire onDeactivate once on exit
-      if (_jlTrackActive[track.id]) {
-        _jlTrackActive[track.id] = false;
-        if (track.onDeactivate) track.onDeactivate();
-      }
-    }
-  }
-
-  // ── Apply active asteroid settings each frame ─────────────────────────────
-  if (_activeAst) {
-    _jlApplyAsteroidTrack(_activeAst);
-  } else {
-    // No asteroid track active — disable
-    _asteroidTuner.enabled = false;
-  }
-
-  // ── Apply active lightning settings each frame ────────────────────────────
-  if (_activeLt) {
-    _jlApplyLightningTrack(_activeLt);
-  } else if (window._LT) {
-    window._LT.enabled = false;
-  }
-
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  JL SEQUENCER PANEL  (Q key)
-// ═══════════════════════════════════════════════════════════════════════════════
-(function setupJLSequencerPanel() {
-  const panel = document.createElement('div');
-  panel.id = 'jl-seq-panel';
-  panel.style.cssText = 'display:none;position:fixed;top:0;right:0;width:320px;max-height:100%;background:rgba(0,0,0,0.93);overflow-y:auto;z-index:99999;font-family:monospace;font-size:11px;color:#ccc;padding:10px;box-sizing:border-box;border:1px solid #fa0;border-top:none;border-right:none;';
-  document.body.appendChild(panel);
-
-  function mkH(text, color) {
-    const h = document.createElement('div');
-    h.style.cssText = 'margin:8px 0 4px;font-size:11px;font-weight:bold;color:'+(color||'#fa0')+';border-bottom:1px solid #333;padding-bottom:2px;';
-    h.textContent = text;
-    return h;
-  }
-  function mkS(label, val, min, max, step, fn, color) {
-    const row = document.createElement('div');
-    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;gap:4px;';
-    const lbl = document.createElement('span');
-    lbl.style.cssText = 'width:100px;color:'+(color||'#fa0')+';font-size:10px;flex-shrink:0;';
-    lbl.textContent = label;
-    const inp = document.createElement('input');
-    inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=val;
-    inp.style.cssText = 'flex:1;height:14px;accent-color:'+(color||'#fa0')+';';
-    const vEl = document.createElement('span');
-    vEl.style.cssText = 'width:36px;text-align:right;font-size:10px;color:#fff;';
-    vEl.textContent = (+val).toFixed(2);
-    inp.oninput = () => { const v=+inp.value; vEl.textContent=v.toFixed(2); fn(v); };
-    row.appendChild(lbl); row.appendChild(inp); row.appendChild(vEl);
-    return { row, inp, vEl };
-  }
-  function mkBtn(text, color, fn) {
-    const b = document.createElement('button');
-    b.textContent = text;
-    b.style.cssText = 'background:none;border:1px solid '+color+';color:'+color+';padding:3px 8px;cursor:pointer;font-family:monospace;font-size:10px;border-radius:2px;margin:2px;';
-    b.onclick = fn;
-    return b;
-  }
-
-  function build() {
-    panel.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#fa0;margin-bottom:6px;">GOD MODE (Q)</div>';
-
-    // ── God mode toggle
-    const godBtn = mkBtn(_godMode ? '☑ GOD MODE  (no damage)' : '☐ GOD MODE  (no damage)', _godMode ? '#0f0' : '#555', () => {
-      _godMode = !_godMode;
-      godBtn.textContent = _godMode ? '☑ GOD MODE  (no damage)' : '☐ GOD MODE  (no damage)';
-      godBtn.style.color  = _godMode ? '#0f0' : '#555';
-      godBtn.style.borderColor = _godMode ? '#0f0' : '#555';
-    });
-    godBtn.style.width = '100%';
-    godBtn.style.marginBottom = '6px';
-    panel.appendChild(godBtn);
-  }
-
-  // Q hotkey: toggle GOD MODE panel.
-  let _jlPanelVisible = false;
-  document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'q' || e.key === 'Q') {
-      _jlPanelVisible = !_jlPanelVisible;
-      if (_jlPanelVisible) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
-})();
-
-// Hook ramp into composer chain (safe to call before lightning IIFE since it
-// just calls free-standing functions that exist by then)
-(function _hookJLRamp() {
-  const _jlOrigRender = composer.render.bind(composer);
-  let   _jlLastTime   = performance.now();
-  composer.render = function(...args) {
-    const now = performance.now();
-    const dt  = Math.min((now - _jlLastTime) * 0.001, 0.05);
-    _jlLastTime = now;
-    _tickJetLightningRamp(dt);
-    _jlOrigRender(...args);
-  };
-})();
-
-// Reset JL state when game ends / restarts
-// ---------------------------------------------------------------------------
-// TODO(jl-removal): This startGame override lives in the JL file but ALSO
-// handles non-JL paths (tutorial physics + campaign/DR else-branch defaults).
-// If JL is ever deleted, this override needs to be SPLIT before deletion:
-//   - Keep the tutorial + campaign/DR branches (move them to a non-JL file,
-//     e.g. src/20-main-early.js or a new physics-init file).
-//   - Drop the _jetLightningMode early-return.
-// Otherwise deleting this file will silently break tutorial physics AND
-// reset DR's bank max behavior. DR currently re-applies _bankMax=0.06 in
-// startDeathRun() AFTER startGame() returns, but the campaign-default reset
-// here is what makes that re-apply necessary in the first place.
-// ---------------------------------------------------------------------------
+// startGame override: tutorial + campaign/DR physics defaults.
 const _origStartGame_JL = startGame;
 startGame = function() {
-  if (state._jetLightningMode) {
-    // JL physics applied in startJetLightning re-apply block — don't touch
-  } else if (state._tutorialActive) {
+  if (state._tutorialActive) {
     // Tutorial uses JL_v1 physics as baseline
     const _tp = _PHYSICS_PRESETS['JL_v1'];
     _accelBase     = _tp.accelBase;
@@ -5130,19 +4536,15 @@ startGame = function() {
 // Expose for title button
 window.startJetLightning = startJetLightning;
 
-// Debug probe for stress testing (read/write internal JL state)
+// Debug probe for stress testing (read internal asteroid/lightning state).
+// JL ramp/sequencer accessors removed; only obstacle pool inspectors remain.
 window._jlDebug = {
-  get rampTime()          { return _jlRampTime; },
-  set rampTime(v)         { _jlRampTime = v; },
-  get jlMode()            { return state._jetLightningMode; },
   get phase()             { return state.phase; },
   get score()             { return state.score; },
   get levelIdx()          { return state.currentLevelIdx; },
   get speed()             { return state.speed; },
   get shipX()             { return state.shipX; },
   set shipX(v)            { state.shipX = v; },
-  get l4CorridorActive()  { return state.l4CorridorActive; },
-  get l4CorridorDone()    { return state.l4CorridorDone; },
   get noSpawnMode()       { return _noSpawnMode; },
   get astEnabled()        { return _asteroidTuner.enabled; },
   get astPattern()        { return _asteroidTuner.pattern; },
@@ -5151,25 +4553,20 @@ window._jlDebug = {
   get astStaggerDual()    { return _asteroidTuner.staggerDual; },
   get activeAsteroids()   { return _asteroidActive.length; },
   get activeObstacles()   { return activeObstacles.length; },
-  tick(dt)                { _tickJetLightningRamp(dt); },
   snapshot() {
     return {
-      rampTime:        Math.round(_jlRampTime),
-      jlMode:          state._jetLightningMode,
       phase:           state.phase,
       score:           state.score,
       levelIdx:        state.currentLevelIdx,
       speed:           Math.round(state.speed),
-      l4CorridorActive: state.l4CorridorActive,
-      l4CorridorDone:  state.l4CorridorDone,
       noSpawnMode:     _noSpawnMode,
       astEnabled:      _asteroidTuner.enabled,
       astPattern:      _asteroidTuner.pattern,
       astFreq:         +_asteroidTuner.frequency.toFixed(2),
       astLeadFactor:   _asteroidTuner.leadFactor,
       astStaggerDual:  _asteroidTuner.staggerDual,
-      ltEnabled:       window._LT.enabled,
-      ltFreq:          +window._LT.frequency.toFixed(2),
+      ltEnabled:       window._LT && window._LT.enabled,
+      ltFreq:          window._LT ? +window._LT.frequency.toFixed(2) : 0,
       activeAsteroids: _asteroidActive.length,
       activeObstacles: activeObstacles.length,
     };
@@ -5531,9 +4928,7 @@ window._jlDebug = {
   };
   function _tickLightningLateral(dt) {
     if (!_LT_LATERAL.enabled) return;
-    if (!state || !state._jetLightningMode) return;
-    if (typeof _jlRampTime === 'undefined' || _jlRampTime < 4) return;
-    if (window._jlActiveObstacleType !== 'lightning') return;
+    if (!window._lateralPunishEnabled) return;
     // Walls present — they already hold the ship; no lateral needed.
     if (typeof _canyonActive !== 'undefined' && (_canyonActive || _canyonExiting)) return;
 
@@ -5736,7 +5131,7 @@ window._jlDebug = {
     const dt  = Math.min((now - _ltLastTime)*0.001, 0.05);
     _ltLastTime = now;
     if (state.phase === 'playing' && !state.introActive &&
-        (state._tutorialActive || _chaosMode || state._jetLightningMode || state.preT4ACanyon || state.preT4BCanyon)) {
+        (state._tutorialActive || _chaosMode || state.preT4ACanyon || state.preT4BCanyon)) {
       _updateLightning(dt);
     }
     _ltOrigRender(...args);

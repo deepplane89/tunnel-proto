@@ -136,24 +136,6 @@ function closeSettings() {
     state._tutRocksPassed = 0;
   });
 
-  // Jet Lightning mode button
-  _tapBind(document.getElementById('jet-lightning-btn'), () => {
-    playStartSound();
-    state._jetLightningMode = true;
-    startJetLightning();
-  });
-
-  // ?canyon=1 — auto-fire JL button on first tap/click so mobile audio context unlocks
-  if (_canyonTestMode) {
-    const _canyonAutoStart = () => {
-      document.removeEventListener('click',      _canyonAutoStart);
-      document.removeEventListener('touchstart', _canyonAutoStart);
-      document.getElementById('jet-lightning-btn').click();
-    };
-    document.addEventListener('click',      _canyonAutoStart, { once: true });
-    document.addEventListener('touchstart', _canyonAutoStart, { once: true });
-  }
-
   document.getElementById('settings-overlay').addEventListener('click', (e) => {
     if (e.target.id === 'settings-overlay') closeSettings();
   });
