@@ -313,12 +313,18 @@
     const presets = window._THRUSTER_PRESETS || {};
     const reqs = _getUnlockReqs();
     let selectedKey = 'baseline';
-    try { selectedKey = (loadThrusterData() || {}).selectedPreset || 'baseline'; } catch(_){}
+    let newSet = [];
+    try {
+      const td = loadThrusterData() || {};
+      selectedKey = td.selectedPreset || 'baseline';
+      newSet = Array.isArray(td.newPresets) ? td.newPresets : [];
+    } catch(_){}
     let html = '';
     Object.keys(presets).forEach(key => {
       const P = presets[key];
       const unlocked = _isPresetUnlocked(key);
       const isActive = (key === selectedKey) && unlocked;
+      const isNew    = unlocked && newSet.indexOf(key) >= 0;
       const baseLabel = (P && P.label) ? P.label.toUpperCase() : key.toUpperCase();
       const name = String(baseLabel).replace(/</g, '&lt;');
       let stateLabel;
@@ -329,7 +335,10 @@
         stateLabel = isActive ? 'EQUIPPED' : 'EQUIP';
       }
       const k = String(key).replace(/"/g, '&quot;');
-      const cls = 'sr-addon-card' + (isActive ? ' active' : '') + (unlocked ? '' : ' locked');
+      const cls = 'sr-addon-card'
+        + (isActive ? ' active' : '')
+        + (unlocked ? '' : ' locked')
+        + (isNew    ? ' is-new' : '');
       html += '<button type="button" class="' + cls + '" data-shape="' + k + '"' +
         (unlocked ? '' : ' aria-disabled="true"') + '>' +
         '<span class="sr-addon-card-name">' + name + '</span>' +
@@ -346,9 +355,16 @@
           const d = loadThrusterData();
           if (!d.unlockedPresets.includes(key)) d.unlockedPresets.push(key);
           d.selectedPreset = key;
+          // Clear "new" pulse flag once user selects this preset.
+          if (Array.isArray(d.newPresets)) {
+            d.newPresets = d.newPresets.filter(k => k !== key);
+          }
           saveThrusterData(d);
           if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster();
         } catch(_){}
+        // Drop the pulse class on this card immediately.
+        btn.classList.remove('is-new');
+        try { _refreshTabBadges(); } catch(_){}
         try { _thrSyncColor(); } catch(_){}
         grid.querySelectorAll('button.sr-addon-card[data-shape]').forEach(b => {
           const on = (b.dataset.shape === key) && !b.classList.contains('locked');
@@ -367,7 +383,12 @@
     const palette = window._THRUSTER_COLOR_PALETTE || {};
     const reqs = _getUnlockReqs();
     let selectedKey = 'default';
-    try { selectedKey = (loadThrusterData() || {}).selectedColor || 'default'; } catch(_){}
+    let newSet = [];
+    try {
+      const td = loadThrusterData() || {};
+      selectedKey = td.selectedColor || 'default';
+      newSet = Array.isArray(td.newColors) ? td.newColors : [];
+    } catch(_){}
     Object.keys(palette).forEach(key => {
       const C = palette[key];
       const unlocked = _isColorUnlocked(key);
@@ -382,6 +403,11 @@
       }
       opt.textContent = label;
       if (key === selectedKey) opt.selected = true;
+      // Mark freshly-unlocked colors so the sci-fi-select can mirror the
+      // class onto its custom <li> (47-sci-fi-select picks this up).
+      if (unlocked && newSet.indexOf(key) >= 0) {
+        opt.dataset.isNew = '1';
+      }
       sel.appendChild(opt);
     });
   }
@@ -398,6 +424,7 @@
       window.SciFiSelect.refresh(sColor);
     }
     _populateAddons();
+    try { _refreshTabBadges(); } catch(_){}
   }
 
   // _orient kept as a small helper used elsewhere (zoom localStorage key).
@@ -579,13 +606,32 @@
       const d = loadThrusterData();
       if (!d.unlockedColors.includes(key)) d.unlockedColors.push(key);
       d.selectedColor = key;
+      // Clear "new" pulse flag once the user picks this color.
+      if (Array.isArray(d.newColors)) {
+        d.newColors = d.newColors.filter(k => k !== key);
+      }
       saveThrusterData(d);
       if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster();
     } catch(_){}
     // Sync showroom preview color immediately.
     _thrSyncColor();
+    try { _refreshTabBadges(); } catch(_){}
     try { playTitleTap(); } catch(_){}
   }
+
+  // Refresh the THRUSTERS tab “new” dot indicator. Called whenever any
+  // newPresets/newColors mutate (selection, garage open).
+  function _refreshTabBadges() {
+    try {
+      const td = loadThrusterData() || {};
+      const hasNew = (Array.isArray(td.newPresets) && td.newPresets.length > 0)
+                  || (Array.isArray(td.newColors)  && td.newColors.length  > 0);
+      const tab = document.querySelector('.sr-tab[data-tab="thrusters"]');
+      if (tab) tab.classList.toggle('has-new', !!hasNew);
+    } catch(_){}
+  }
+  // Expose so refresh after open + after wheel rewards can re-trigger.
+  window._srRefreshTabBadges = _refreshTabBadges;
 
   // ── Tab switching ────────────────────────────────────────────────────
   function _switchTab(tab) {

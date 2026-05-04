@@ -65,6 +65,15 @@
     if (e.key === 'Escape') _closeAnyOpen(null);
   });
 
+  // Mirror any data-is-new from the underlying options onto the wrap so the
+  // closed dropdown button can pulse to draw the eye.
+  function _refreshNewMarker(wrap, sel) {
+    const has = Array.from(sel.options || []).some(
+      o => o && o.dataset && o.dataset.isNew === '1' && !o.disabled
+    );
+    wrap.classList.toggle('sf-has-new', !!has);
+  }
+
   function _buildMenuItems(wrap, sel) {
     const menu = wrap.querySelector('.sf-select-menu');
     if (!menu) return;
@@ -75,11 +84,17 @@
       li.className = 'sf-select-item';
       if (opt.disabled) li.classList.add('sf-select-disabled');
       if (opt.value === sel.value) li.classList.add('sf-select-active');
+      // Mirror data-is-new from the underlying <option> so freshly-unlocked
+      // entries can pulse via CSS until selected.
+      if (opt.dataset && opt.dataset.isNew === '1') {
+        li.classList.add('sf-is-new');
+      }
       li.dataset.value = opt.value;
       li.textContent = opt.textContent;
       li.setAttribute('role', 'option');
       menu.appendChild(li);
     });
+    _refreshNewMarker(wrap, sel);
   }
 
   function _syncLabel(wrap, sel) {

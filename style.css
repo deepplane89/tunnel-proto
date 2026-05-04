@@ -5125,6 +5125,65 @@ body.sr-open #a2hs-banner {
   display: none !important;
 }
 body.sr-dragging #title-star-canvas { display: block !important; }
+
+/* ─── “Newly unlocked” pulse: draw the user’s eye to fresh items in the
+   garage until they pick them once. Fires on:
+     - .sr-addon-card.is-new       (shape cards, addon rows)
+     - .sf-select-item.sf-is-new   (dropdown menu items)
+     - .sf-select.sf-has-new       (the closed dropdown button)
+     - .sr-tab.has-new             (the parent tab gets a small dot)
+   Pulse is a soft cyan glow + tiny scale; no color‑fights with the cards. */
+@keyframes srNewPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(34,211,238,0.55) inset,
+                0 0 6px rgba(34,211,238,0.30);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(34,211,238,0.95) inset,
+                0 0 16px rgba(34,211,238,0.65);
+    transform: scale(1.025);
+  }
+}
+.sr-addon-card.is-new:not(.locked),
+.sf-select-item.sf-is-new,
+.sf-select.sf-has-new .sf-select-btn {
+  animation: srNewPulse 1.4s ease-in-out infinite;
+  position: relative;
+}
+.sr-addon-card.is-new:not(.locked)::after,
+.sf-select-item.sf-is-new::after {
+  content: 'NEW';
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font: 700 8px/1 'Orbitron', sans-serif;
+  letter-spacing: 1px;
+  color: rgba(7, 14, 24, 1);
+  background: rgba(34, 211, 238, 0.95);
+  padding: 2px 4px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.sf-select-item.sf-is-new::after {
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+}
+/* Tab indicator dot */
+.sr-tab.has-new::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(34, 211, 238, 1);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.8);
+  animation: srNewPulse 1.4s ease-in-out infinite;
+}
+.sr-tab { position: relative; }
 body.sr-open #title-ship-canvas {
   filter: saturate(1.06) contrast(1.02);
 }

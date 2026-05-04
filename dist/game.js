@@ -1497,6 +1497,9 @@ function applyReward(r) {
     const td = loadThrusterData();
     if (!td.unlockedPresets.includes(r.presetKey)) {
       td.unlockedPresets.push(r.presetKey);
+      // Mark as freshly unlocked so the garage can pulse it until selected.
+      if (!Array.isArray(td.newPresets)) td.newPresets = [];
+      if (!td.newPresets.includes(r.presetKey)) td.newPresets.push(r.presetKey);
       saveThrusterData(td);
     }
   }
@@ -1505,6 +1508,8 @@ function applyReward(r) {
     const td = loadThrusterData();
     if (!td.unlockedColors.includes(r.colorKey)) {
       td.unlockedColors.push(r.colorKey);
+      if (!Array.isArray(td.newColors)) td.newColors = [];
+      if (!td.newColors.includes(r.colorKey)) td.newColors.push(r.colorKey);
       saveThrusterData(td);
     }
   }
@@ -13900,6 +13905,15 @@ function updateStreakBadge() {
     if (e.key === 'Escape') _closeAnyOpen(null);
   });
 
+  // Mirror any data-is-new from the underlying options onto the wrap so the
+  // closed dropdown button can pulse to draw the eye.
+  function _refreshNewMarker(wrap, sel) {
+    const has = Array.from(sel.options || []).some(
+      o => o && o.dataset && o.dataset.isNew === '1' && !o.disabled
+    );
+    wrap.classList.toggle('sf-has-new', !!has);
+  }
+
   function _buildMenuItems(wrap, sel) {
     const menu = wrap.querySelector('.sf-select-menu');
     if (!menu) return;
@@ -13910,11 +13924,17 @@ function updateStreakBadge() {
       li.className = 'sf-select-item';
       if (opt.disabled) li.classList.add('sf-select-disabled');
       if (opt.value === sel.value) li.classList.add('sf-select-active');
+      // Mirror data-is-new from the underlying <option> so freshly-unlocked
+      // entries can pulse via CSS until selected.
+      if (opt.dataset && opt.dataset.isNew === '1') {
+        li.classList.add('sf-is-new');
+      }
       li.dataset.value = opt.value;
       li.textContent = opt.textContent;
       li.setAttribute('role', 'option');
       menu.appendChild(li);
     });
+    _refreshNewMarker(wrap, sel);
   }
 
   function _syncLabel(wrap, sel) {
@@ -14353,12 +14373,18 @@ function updateStreakBadge() {
     const presets = window._THRUSTER_PRESETS || {};
     const reqs = _getUnlockReqs();
     let selectedKey = 'baseline';
-    try { selectedKey = (loadThrusterData() || {}).selectedPreset || 'baseline'; } catch(_){}
+    let newSet = [];
+    try {
+      const td = loadThrusterData() || {};
+      selectedKey = td.selectedPreset || 'baseline';
+      newSet = Array.isArray(td.newPresets) ? td.newPresets : [];
+    } catch(_){}
     let html = '';
     Object.keys(presets).forEach(key => {
       const P = presets[key];
       const unlocked = _isPresetUnlocked(key);
       const isActive = (key === selectedKey) && unlocked;
+      const isNew    = unlocked && newSet.indexOf(key) >= 0;
       const baseLabel = (P && P.label) ? P.label.toUpperCase() : key.toUpperCase();
       const name = String(baseLabel).replace(/</g, '&lt;');
       let stateLabel;
@@ -14369,7 +14395,10 @@ function updateStreakBadge() {
         stateLabel = isActive ? 'EQUIPPED' : 'EQUIP';
       }
       const k = String(key).replace(/"/g, '&quot;');
-      const cls = 'sr-addon-card' + (isActive ? ' active' : '') + (unlocked ? '' : ' locked');
+      const cls = 'sr-addon-card'
+        + (isActive ? ' active' : '')
+        + (unlocked ? '' : ' locked')
+        + (isNew    ? ' is-new' : '');
       html += '<button type="button" class="' + cls + '" data-shape="' + k + '"' +
         (unlocked ? '' : ' aria-disabled="true"') + '>' +
         '<span class="sr-addon-card-name">' + name + '</span>' +
@@ -14386,9 +14415,16 @@ function updateStreakBadge() {
           const d = loadThrusterData();
           if (!d.unlockedPresets.includes(key)) d.unlockedPresets.push(key);
           d.selectedPreset = key;
+          // Clear "new" pulse flag once user selects this preset.
+          if (Array.isArray(d.newPresets)) {
+            d.newPresets = d.newPresets.filter(k => k !== key);
+          }
           saveThrusterData(d);
           if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster();
         } catch(_){}
+        // Drop the pulse class on this card immediately.
+        btn.classList.remove('is-new');
+        try { _refreshTabBadges(); } catch(_){}
         try { _thrSyncColor(); } catch(_){}
         grid.querySelectorAll('button.sr-addon-card[data-shape]').forEach(b => {
           const on = (b.dataset.shape === key) && !b.classList.contains('locked');
@@ -14407,7 +14443,12 @@ function updateStreakBadge() {
     const palette = window._THRUSTER_COLOR_PALETTE || {};
     const reqs = _getUnlockReqs();
     let selectedKey = 'default';
-    try { selectedKey = (loadThrusterData() || {}).selectedColor || 'default'; } catch(_){}
+    let newSet = [];
+    try {
+      const td = loadThrusterData() || {};
+      selectedKey = td.selectedColor || 'default';
+      newSet = Array.isArray(td.newColors) ? td.newColors : [];
+    } catch(_){}
     Object.keys(palette).forEach(key => {
       const C = palette[key];
       const unlocked = _isColorUnlocked(key);
@@ -14422,6 +14463,11 @@ function updateStreakBadge() {
       }
       opt.textContent = label;
       if (key === selectedKey) opt.selected = true;
+      // Mark freshly-unlocked colors so the sci-fi-select can mirror the
+      // class onto its custom <li> (47-sci-fi-select picks this up).
+      if (unlocked && newSet.indexOf(key) >= 0) {
+        opt.dataset.isNew = '1';
+      }
       sel.appendChild(opt);
     });
   }
@@ -14438,6 +14484,7 @@ function updateStreakBadge() {
       window.SciFiSelect.refresh(sColor);
     }
     _populateAddons();
+    try { _refreshTabBadges(); } catch(_){}
   }
 
   // _orient kept as a small helper used elsewhere (zoom localStorage key).
@@ -14619,13 +14666,32 @@ function updateStreakBadge() {
       const d = loadThrusterData();
       if (!d.unlockedColors.includes(key)) d.unlockedColors.push(key);
       d.selectedColor = key;
+      // Clear "new" pulse flag once the user picks this color.
+      if (Array.isArray(d.newColors)) {
+        d.newColors = d.newColors.filter(k => k !== key);
+      }
       saveThrusterData(d);
       if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster();
     } catch(_){}
     // Sync showroom preview color immediately.
     _thrSyncColor();
+    try { _refreshTabBadges(); } catch(_){}
     try { playTitleTap(); } catch(_){}
   }
+
+  // Refresh the THRUSTERS tab “new” dot indicator. Called whenever any
+  // newPresets/newColors mutate (selection, garage open).
+  function _refreshTabBadges() {
+    try {
+      const td = loadThrusterData() || {};
+      const hasNew = (Array.isArray(td.newPresets) && td.newPresets.length > 0)
+                  || (Array.isArray(td.newColors)  && td.newColors.length  > 0);
+      const tab = document.querySelector('.sr-tab[data-tab="thrusters"]');
+      if (tab) tab.classList.toggle('has-new', !!hasNew);
+    } catch(_){}
+  }
+  // Expose so refresh after open + after wheel rewards can re-trigger.
+  window._srRefreshTabBadges = _refreshTabBadges;
 
   // ── Tab switching ────────────────────────────────────────────────────
   function _switchTab(tab) {

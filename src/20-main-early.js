@@ -967,6 +967,9 @@ function applyReward(r) {
     const td = loadThrusterData();
     if (!td.unlockedPresets.includes(r.presetKey)) {
       td.unlockedPresets.push(r.presetKey);
+      // Mark as freshly unlocked so the garage can pulse it until selected.
+      if (!Array.isArray(td.newPresets)) td.newPresets = [];
+      if (!td.newPresets.includes(r.presetKey)) td.newPresets.push(r.presetKey);
       saveThrusterData(td);
     }
   }
@@ -975,6 +978,8 @@ function applyReward(r) {
     const td = loadThrusterData();
     if (!td.unlockedColors.includes(r.colorKey)) {
       td.unlockedColors.push(r.colorKey);
+      if (!Array.isArray(td.newColors)) td.newColors = [];
+      if (!td.newColors.includes(r.colorKey)) td.newColors.push(r.colorKey);
       saveThrusterData(td);
     }
   }
