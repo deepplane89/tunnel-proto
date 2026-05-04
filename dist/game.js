@@ -14288,12 +14288,27 @@ function updateStreakBadge() {
     ship.traverse(o => { if (!hit && o.name === name) hit = o; });
     return hit;
   }
-  // INTENTIONALLY a no-op for now. Earlier versions auto-applied saved
-  // visibility state on ship swap, but mutating add-on visibility right
-  // before _thrInit measures the bbox shifted hullBackZ — which moved RST
-  // landing position. Keeping this empty guarantees the thruster system
-  // never sees a hull with hidden pieces.
-  function _applyAddonsToShip() { /* no-op: see comment */ }
+  // Apply persisted add-on visibility to the freshly-swapped title ship.
+  // Earlier versions kept this as a no-op because mutating visibility
+  // before _thrInit measured the bbox shifted hullBackZ. hullBackZ is now
+  // a hardcoded constant (-2.394, see _thrInit) so bbox measurement is no
+  // longer in the loop — we can safely sync visibility here without
+  // affecting thruster anchor placement.
+  function _applyAddonsToShip() {
+    const key = _currentAddonsKey();
+    if (!key) return;
+    const entries = ADDON_REGISTRY[key];
+    if (!entries || !entries.length) return;
+    const saved = _loadAddonsState();
+    const bucket = saved[key];
+    if (!bucket) return;
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      if (typeof bucket[entry.node] !== 'boolean') continue;
+      const node = _findAddonNode(entry.node);
+      if (node) node.visible = !!bucket[entry.node];
+    }
+  }
   function _populateAddons() {
     const list = document.getElementById('sr-addons-list');
     if (!list) return;
