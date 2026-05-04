@@ -427,8 +427,8 @@ html, body {
   to   { opacity: 1; }
 }
 @keyframes menuPop {
-  from { transform: scale(0.94) translateY(12px); }
-  to   { transform: scale(1) translateY(0); }
+  from { transform: scale(0.85); }
+  to   { transform: scale(1); }
 }
 .sr-overlay:not(.hidden),
 #shop-overlay:not(.hidden),
@@ -437,7 +437,9 @@ html, body {
   animation:
     menuFade 0.16s cubic-bezier(0.05, 0.7, 0.1, 1) both,
     menuPop  0.70s cubic-bezier(0.38, 1.21, 0.22, 1.00) both;
-  transform-origin: 50% 50%;
+  /* origin tracks the last pointer-down (set by 05-menu-origin.js) so the
+     overlay appears to grow out of the button the user tapped. */
+  transform-origin: var(--menu-ox, 50%) var(--menu-oy, 50%);
   will-change: transform, opacity;
 }
 .go-anim {
