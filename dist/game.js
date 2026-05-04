@@ -13373,11 +13373,25 @@ function initSkinViewer() {
       { let _ni = (skinViewerIdx + 1) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni + 1) % SHIP_SKINS.length; navigateToSkin(_ni); }
     });
 
-    // Touch swipe on title screen
+    // Touch swipe on title screen.
+    // Gated to title screen only — the showroom overlay is a sibling and uses
+    // pointer-events:none on its background, so swipes inside the garage pass
+    // through to this element. Bail when the garage is open or gameplay is
+    // active so we don't change the equipped skin behind the user's back.
     let touchStartX = 0;
+    let _swipeArmed = false;
     const titleEl = document.getElementById('title-screen');
-    titleEl.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+    titleEl.addEventListener('touchstart', e => {
+      if (document.body.classList.contains('sr-open')) { _swipeArmed = false; return; }
+      if (titleEl.classList.contains('hidden')) { _swipeArmed = false; return; }
+      _swipeArmed = true;
+      touchStartX = e.touches[0].clientX;
+    }, { passive: true });
     titleEl.addEventListener('touchend', e => {
+      if (!_swipeArmed) return;
+      _swipeArmed = false;
+      if (document.body.classList.contains('sr-open')) return;
+      if (titleEl.classList.contains('hidden')) return;
       const dx = e.changedTouches[0].clientX - touchStartX;
       if (Math.abs(dx) > 50) {
         { let _ni = dx < 0
