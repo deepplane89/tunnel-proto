@@ -180,37 +180,56 @@ window._THRUSTER_COLOR_PALETTE = {
   gold:    { label: 'SOLAR GOLD',hex: 0xffcc33, swatch: '#ffcc33' },
   white:   { label: 'WHITE HOT', hex: 0xffffff, swatch: '#ffffff' },
 };
-// Swipe-down to dismiss the garage overlay (mobile, simple).
+// Swipe-down to dismiss menu overlays (mobile, simple).
+//
+// Generalized over multiple overlays:
+//   - thruster-overlay  (garage)        -> closeThrusterPanel
+//   - missions-overlay  (missions)      -> closeMissions
+//   - settings-overlay  (settings)      -> closeSettings
 //
 // Touch listeners on document; ignore swipes that start on interactive
-// elements (buttons, tabs, cards). Translate the entire #thruster-overlay
+// elements (buttons, tabs, cards, sliders). Translate the active overlay
 // down with the finger; commit dismiss past threshold.
 (function () {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-  const OVERLAY_ID  = 'thruster-overlay';
+  const OVERLAYS = [
+    { id: 'thruster-overlay', close: 'closeThrusterPanel' },
+    { id: 'missions-overlay', close: 'closeMissions'      },
+    { id: 'settings-overlay', close: 'closeSettings'      },
+  ];
+
   const COMMIT_PX   = 100;
   const H_CANCEL    = 60;
-  const INTERACTIVE = 'button, a, select, input, textarea, .sr-card, .sr-tab, .sr-addon-row, .sr-addon-card, .sr-select-wrap';
+  const INTERACTIVE = 'button, a, select, input, textarea, ' +
+    '.sr-card, .sr-tab, .sr-addon-row, .sr-addon-card, .sr-select-wrap, ' +
+    '.settings-row, .settings-slider, [role="slider"]';
 
   let active = false;
   let startX = 0, startY = 0, lastY = 0;
   let target = null;
+  let closeFn = null;
 
-  function getOverlay() {
-    const ov = document.getElementById(OVERLAY_ID);
-    if (!ov || ov.classList.contains('hidden')) return null;
-    return ov;
+  function activeOverlay() {
+    for (let i = 0; i < OVERLAYS.length; i++) {
+      const o = OVERLAYS[i];
+      const el = document.getElementById(o.id);
+      if (el && !el.classList.contains('hidden')) {
+        return { el, close: o.close };
+      }
+    }
+    return null;
   }
 
   function onTouchStart(e) {
     if (!e.touches || e.touches.length !== 1) return;
-    const ov = getOverlay();
-    if (!ov) return;
+    const found = activeOverlay();
+    if (!found) return;
     const tgt = e.target;
     if (tgt && tgt.closest && tgt.closest(INTERACTIVE)) return;
     active = true;
-    target = ov;
+    target = found.el;
+    closeFn = found.close;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     lastY  = startY;
@@ -241,9 +260,12 @@ window._THRUSTER_COLOR_PALETTE = {
   function onTouchEnd() {
     if (!active) return;
     const dy = lastY - startY;
-    const t = target;
+    const t  = target;
+    const fn = closeFn;
     if (dy >= COMMIT_PX) {
-      try { window.closeThrusterPanel && window.closeThrusterPanel(); } catch(_){}
+      try {
+        if (fn && typeof window[fn] === 'function') window[fn]();
+      } catch(_){}
       requestAnimationFrame(() => clearStyles(t));
     } else if (t) {
       t.style.transition = 'transform 220ms cubic-bezier(0.2,0.7,0.2,1), opacity 220ms ease';
@@ -265,6 +287,7 @@ window._THRUSTER_COLOR_PALETTE = {
   function reset() {
     active = false;
     target = null;
+    closeFn = null;
   }
 
   document.addEventListener('touchstart', onTouchStart, { passive: true });
