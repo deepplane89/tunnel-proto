@@ -13868,9 +13868,24 @@ function updateStreakBadge() {
 
   let _openMenu = null; // currently open menu element, or null
 
+  function _clearMenuPos(wrap) {
+    if (!wrap) return;
+    const m = wrap.querySelector('.sf-select-menu');
+    if (!m) return;
+    m.hidden = true;
+    m.style.position = '';
+    m.style.left = '';
+    m.style.top = '';
+    m.style.bottom = '';
+    m.style.width = '';
+    m.style.maxHeight = '';
+    const b = wrap.querySelector('.sf-select-btn');
+    if (b) b.setAttribute('aria-expanded', 'false');
+  }
   function _closeAnyOpen(except) {
     if (_openMenu && _openMenu !== except) {
       _openMenu.classList.remove('sf-open');
+      _clearMenuPos(_openMenu);
       _openMenu = null;
     }
   }
@@ -13952,11 +13967,32 @@ function updateStreakBadge() {
         wrap.classList.add('sf-open');
         menu.hidden = false;
         btn.setAttribute('aria-expanded', 'true');
+        // Position the menu via fixed coords so it escapes panel overflow:
+        // hidden clipping. Pick top/below based on available space.
+        try {
+          const r = btn.getBoundingClientRect();
+          const measured = menu.scrollHeight || 220;
+          const need = Math.min(measured, 220) + 8;
+          const below = window.innerHeight - r.bottom;
+          const above = r.top;
+          const openUp = below < need && above > below;
+          menu.style.position = 'fixed';
+          menu.style.left     = r.left + 'px';
+          menu.style.width    = r.width + 'px';
+          if (openUp) {
+            menu.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+            menu.style.top    = 'auto';
+            menu.style.maxHeight = Math.min(220, above - 8) + 'px';
+          } else {
+            menu.style.top    = (r.bottom + 4) + 'px';
+            menu.style.bottom = 'auto';
+            menu.style.maxHeight = Math.min(220, below - 8) + 'px';
+          }
+        } catch(_){}
         _openMenu = wrap;
       } else {
         wrap.classList.remove('sf-open');
-        menu.hidden = true;
-        btn.setAttribute('aria-expanded', 'false');
+        _clearMenuPos(wrap);
         _openMenu = null;
       }
     });
@@ -13977,8 +14013,7 @@ function updateStreakBadge() {
       li.classList.add('sf-select-active');
       // Close.
       wrap.classList.remove('sf-open');
-      menu.hidden = true;
-      btn.setAttribute('aria-expanded', 'false');
+      _clearMenuPos(wrap);
       _openMenu = null;
     });
 
