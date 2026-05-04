@@ -238,53 +238,114 @@
     }
   }
 
-  function _buildSkinOptions(sel) {
-    if (!sel) return;
-    sel.innerHTML = '';
-    if (typeof SHIP_SKINS === 'undefined') return;
+  // ── Skin card grid (replaces dropdown). Locked cards show LV/M/price tag
+  //    and ignore clicks. Selection is preview-only (no data.selected write).
+  function _buildSkinCards() {
+    const grid = document.getElementById('sr-skin-grid');
+    if (!grid) return;
+    if (typeof SHIP_SKINS === 'undefined') { grid.innerHTML = ''; return; }
     const reqs = _getUnlockReqs();
-    // Highlight the GARAGE preview, not the equipped skin — they're separate.
     const selectedIdx = (_garagePreviewIdx != null) ? _garagePreviewIdx : _equippedSkinIdx();
+    const lvMap = (typeof SKIN_LEVEL_UNLOCKS !== 'undefined') ? SKIN_LEVEL_UNLOCKS : null;
+    let html = '';
     SHIP_SKINS.forEach((skin, idx) => {
       if (skin.hidden) return;
       const unlocked = _isSkinUnlockedSafe(idx);
-      const opt = document.createElement('option');
-      opt.value = String(idx);
-      let label = (skin.name || ('SKIN ' + idx));
+      const isActive = (idx === selectedIdx) && unlocked;
+      const name = String(skin.name || ('SKIN ' + idx)).replace(/</g, '&lt;');
+      let stateLabel;
       if (!unlocked) {
         const m = reqs.skins[idx];
-        const tag = (m ? ('M' + m) : (skin.price ? (skin.price + 'c') : 'LOCKED'));
-        label += '  · ' + tag;
-        opt.disabled = true;
+        const lv = lvMap && lvMap[idx];
+        if (m) stateLabel = 'M' + m;
+        else if (lv && lv > 1) stateLabel = 'LV' + lv;
+        else if (skin.price) stateLabel = skin.price + 'c';
+        else stateLabel = 'LOCKED';
+      } else {
+        stateLabel = isActive ? 'SELECTED' : 'SELECT';
       }
-      opt.textContent = label;
-      if (idx === selectedIdx) opt.selected = true;
-      sel.appendChild(opt);
+      const cls = 'sr-addon-card' + (isActive ? ' active' : '') + (unlocked ? '' : ' locked');
+      html += '<button type="button" class="' + cls + '" data-skin="' + idx + '"' +
+        (unlocked ? '' : ' aria-disabled="true"') + '>' +
+        '<span class="sr-addon-card-name">' + name + '</span>' +
+        '<span class="sr-addon-card-state">' + stateLabel + '</span>' +
+      '</button>';
+    });
+    grid.innerHTML = html;
+    grid.querySelectorAll('button.sr-addon-card[data-skin]').forEach(btn => {
+      if (btn.classList.contains('locked')) return;
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.skin, 10);
+        if (isNaN(idx)) return;
+        _garagePreviewIdx = idx;
+        try { _previewSkin(idx); } catch(_){}
+        requestAnimationFrame(() => { try { _forceShipOpaque(); } catch(_){} });
+        try { _refreshAddonsTabVisibility(); _populateAddons(); } catch(_){}
+        // Update active visual state on the grid without rebuilding (avoids flicker).
+        grid.querySelectorAll('button.sr-addon-card[data-skin]').forEach(b => {
+          const on = (parseInt(b.dataset.skin, 10) === idx) && !b.classList.contains('locked');
+          b.classList.toggle('active', on);
+          const st = b.querySelector('.sr-addon-card-state');
+          if (st && !b.classList.contains('locked')) st.textContent = on ? 'SELECTED' : 'SELECT';
+        });
+        try { playTitleTap(); } catch(_){}
+      });
     });
   }
 
-  function _buildShapeOptions(sel) {
-    if (!sel) return;
-    sel.innerHTML = '';
+  // ── Thruster shape card grid (replaces SHAPE dropdown). Locked cards show
+  //    M-tag and ignore clicks. Selection writes selectedPreset like before.
+  function _buildShapeCards() {
+    const grid = document.getElementById('sr-shape-grid');
+    if (!grid) return;
     const presets = window._THRUSTER_PRESETS || {};
     const reqs = _getUnlockReqs();
     let selectedKey = 'baseline';
     try { selectedKey = (loadThrusterData() || {}).selectedPreset || 'baseline'; } catch(_){}
+    let html = '';
     Object.keys(presets).forEach(key => {
       const P = presets[key];
       const unlocked = _isPresetUnlocked(key);
-      const opt = document.createElement('option');
-      opt.value = key;
+      const isActive = (key === selectedKey) && unlocked;
       const baseLabel = (P && P.label) ? P.label.toUpperCase() : key.toUpperCase();
-      let label = baseLabel;
+      const name = String(baseLabel).replace(/</g, '&lt;');
+      let stateLabel;
       if (!unlocked) {
         const m = reqs.presets[key];
-        label += '  · ' + (m ? ('M' + m) : 'LOCKED');
-        opt.disabled = true;
+        stateLabel = m ? ('M' + m) : 'LOCKED';
+      } else {
+        stateLabel = isActive ? 'EQUIPPED' : 'EQUIP';
       }
-      opt.textContent = label;
-      if (key === selectedKey) opt.selected = true;
-      sel.appendChild(opt);
+      const k = String(key).replace(/"/g, '&quot;');
+      const cls = 'sr-addon-card' + (isActive ? ' active' : '') + (unlocked ? '' : ' locked');
+      html += '<button type="button" class="' + cls + '" data-shape="' + k + '"' +
+        (unlocked ? '' : ' aria-disabled="true"') + '>' +
+        '<span class="sr-addon-card-name">' + name + '</span>' +
+        '<span class="sr-addon-card-state">' + stateLabel + '</span>' +
+      '</button>';
+    });
+    grid.innerHTML = html;
+    grid.querySelectorAll('button.sr-addon-card[data-shape]').forEach(btn => {
+      if (btn.classList.contains('locked')) return;
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.shape;
+        if (!key) return;
+        try {
+          const d = loadThrusterData();
+          if (!d.unlockedPresets.includes(key)) d.unlockedPresets.push(key);
+          d.selectedPreset = key;
+          saveThrusterData(d);
+          if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster();
+        } catch(_){}
+        try { _thrSyncColor(); } catch(_){}
+        grid.querySelectorAll('button.sr-addon-card[data-shape]').forEach(b => {
+          const on = (b.dataset.shape === key) && !b.classList.contains('locked');
+          b.classList.toggle('active', on);
+          const st = b.querySelector('.sr-addon-card-state');
+          if (st && !b.classList.contains('locked')) st.textContent = on ? 'EQUIPPED' : 'EQUIP';
+        });
+        try { playTitleTap(); } catch(_){}
+      });
     });
   }
 
@@ -314,20 +375,14 @@
   }
 
   function _populateAll() {
-    const sSkin  = document.getElementById('sr-select-skin');
-    const sShape = document.getElementById('sr-select-shape');
     const sColor = document.getElementById('sr-select-color');
-    _buildSkinOptions(sSkin);
-    _buildShapeOptions(sShape);
+    _buildSkinCards();
+    _buildShapeCards();
     _buildColorOptions(sColor);
-    // Enhance + refresh the custom sci-fi dropdowns. enhance() is idempotent;
-    // refresh() rebuilds the popup menu items after options change.
+    // Enhance + refresh the custom sci-fi dropdown for COLOR (only remaining
+    // dropdown). enhance() is idempotent; refresh() rebuilds the popup.
     if (window.SciFiSelect) {
-      window.SciFiSelect.enhance(sSkin);
-      window.SciFiSelect.enhance(sShape);
       window.SciFiSelect.enhance(sColor);
-      window.SciFiSelect.refresh(sSkin);
-      window.SciFiSelect.refresh(sShape);
       window.SciFiSelect.refresh(sColor);
     }
     _populateAddons();
@@ -539,11 +594,10 @@
     document.querySelectorAll('.sr-tab').forEach(t => {
       t.addEventListener('click', _onTabClick);
     });
-    const sSkin  = document.getElementById('sr-select-skin');
-    const sShape = document.getElementById('sr-select-shape');
+    // SKIN + SHAPE are now card grids; their click handlers are wired in
+    //   _buildSkinCards / _buildShapeCards on every populate. Only COLOR
+    //   remains a dropdown that needs a one-time change listener.
     const sColor = document.getElementById('sr-select-color');
-    if (sSkin)  sSkin.addEventListener('change', _onSkinChange);
-    if (sShape) sShape.addEventListener('change', _onShapeChange);
     if (sColor) sColor.addEventListener('change', _onColorChange);
   }
 

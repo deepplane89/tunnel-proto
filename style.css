@@ -4701,11 +4701,26 @@ html, body {
 .sr-pane.sr-hidden { display: none; }
 
 /* ADD-ONS — powerup-style card grid. Tap a card to toggle on/off. */
-.sr-addons-list {
+.sr-addons-list,
+.sr-card-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   padding: 4px 0;
+}
+/* Card grid for SKINS / SHAPE — reuses addon-card visual language with
+   an added .locked state for un-purchased / un-unlocked items. */
+.sr-card-grid .sr-addon-card.locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+.sr-card-grid .sr-addon-card.locked:hover {
+  background: rgba(255,255,255,0.04);
+  transform: none;
+}
+.sr-card-grid .sr-addon-card.locked .sr-addon-card-state {
+  color: rgba(255, 180, 80, 0.8);
 }
 .sr-addon-card {
   appearance: none;
