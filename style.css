@@ -413,19 +413,32 @@ html, body {
   0%   { opacity: 0; transform: translateX(120%); }
   100% { opacity: 1; transform: translateX(0); }
 }
-/* Shared menu open: bubble-pop. Tiny start, overshoot past 1.0, spring back. */
-@keyframes menuOpen {
-  0%   { opacity: 0; transform: scale(0.5); }
-  60%  { opacity: 1; transform: scale(1.06); }
-  80%  { transform: scale(0.98); }
-  100% { opacity: 1; transform: scale(1); }
+/* Shared menu open. Two layered animations on the overlay element:
+ *   1) menuFade  — fast opacity fade (140ms, M3 emphasized decelerate)
+ *   2) menuPop   — subtle scale spring with overshoot baked into the
+ *      M3 Expressive default-spatial curve (500ms, cubic-bezier 0.38 1.21
+ *      0.22 1.00). Scale starts at 0.94 — small enough to feel like a
+ *      reveal, big enough that text/icons stay legible the whole way.
+ * The two-layer approach (fade fast + spring slow) is the same trick iOS
+ * uses for sheet presentations: content reads instantly, the spring just
+ * adds character. */
+@keyframes menuFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes menuPop {
+  from { transform: scale(0.94); }
+  to   { transform: scale(1); }
 }
 .sr-overlay:not(.hidden),
 #shop-overlay:not(.hidden),
 #missions-overlay:not(.hidden),
 .lb-overlay:not(.hidden) {
-  animation: menuOpen 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation:
+    menuFade 0.14s cubic-bezier(0.05, 0.7, 0.1, 1) both,
+    menuPop  0.50s cubic-bezier(0.38, 1.21, 0.22, 1.00) both;
   transform-origin: 50% 50%;
+  will-change: transform, opacity;
 }
 .go-anim {
   opacity: 0;
