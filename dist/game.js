@@ -7540,7 +7540,7 @@ let _camLookYOffset = -5.00;     // tuner offset for camera lookAt Y (baked)
 let _camLookZOffset = 30.50;     // tuner offset for camera lookAt Z (baked)
 let _camFOVOffset = 13;          // tuner offset for camera FOV (baked from prior _baseFOV tuning)
 let _baseFOV = 78;               // set per orientation in updateCameraFOV
-let _fovSpeedBoost = 22;         // max FOV increase at top speed — cranked for dramatic speed feel
+let _fovSpeedBoost = 32;         // max FOV increase at top speed — cranked for dramatic speed feel (was 22; bumped because DR stage-to-stage felt flat)
 let _prevSpeed = 0;              // for detecting accel vs decel
 
 function updateThrusterColor(color) {
@@ -7554,7 +7554,11 @@ function updateThrusterColor(color) {
 function updateThrusters(dt, shipX, shipY, shipZ, accel) {
   const playing    = state.phase === 'playing';
   const tp         = state.thrusterPower != null ? state.thrusterPower : 1;
-  const speedScale = Math.min(state.speed / BASE_SPEED, 2.0);
+  // Cap raised 2.0 → 2.6 so thruster response keeps growing through L4/L5
+  // (DR max speed is 2.5x = 90 u/s). Old 2.0 cap meant any stage at ≥2.0x
+  // had identical thruster particle spawn/size/length — no perceived speed
+  // change in the entire mid/late game.
+  const speedScale = Math.min(state.speed / BASE_SPEED, 2.6);
   const spawnRate  = (0.5 + accel * 0.5 + (speedScale - 1.0) * 0.6) * tp;  // scaled by thruster power
 
   // Exhaust cone scale/opacity handled in the main update() animation block
@@ -24257,7 +24261,18 @@ function animate() {
   // Skip during retry sweep (sweep controls FOV directly)
   if (!_retrySweepActive) {
     const _fovSpd = state._jetLightningMode ? _jlVisualSpeed : state.speed;
-    const speedFrac = (state.phase === 'playing') ? Math.min(_fovSpd / 100, 1) : 0;
+    // Map state.speed (range BASE..BASE*2.5 = 36..90) into [0,1] linearly,
+    // then sqrt-shape so even small speed bumps at the high end produce a
+    // visible FOV step. With boost=32, the curve gives:
+    //   1.5x (54) → frac 0.33 → sqrt 0.58 → +18.5°
+    //   1.8x (65) → frac 0.54 → sqrt 0.74 → +23.5°
+    //   2.0x (72) → frac 0.67 → sqrt 0.82 → +26.2°
+    //   2.1x (76) → frac 0.74 → sqrt 0.86 → +27.5°
+    //   2.5x (90) → frac 1.00 → sqrt 1.00 → +32.0°
+    // Stage-to-stage steps now move FOV ~2-5° instead of ~1°.
+    const _fovRange = BASE_SPEED * 1.5; // 54 u/s of headroom above BASE
+    const _rawFrac = Math.max(0, Math.min(1, (_fovSpd - BASE_SPEED) / _fovRange));
+    const speedFrac = (state.phase === 'playing') ? Math.sqrt(_rawFrac) : 0;
     let targetFOV = _baseFOV + _fovSpeedBoost * speedFrac;
     // Death zoom-out: push FOV wider during explosion (only during dead phase)
     if (_expDeathZoomActive && state.phase === 'dead') targetFOV = _expDeathZoomTarget;

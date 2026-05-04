@@ -7157,7 +7157,7 @@ let _camLookYOffset = -5.00;     // tuner offset for camera lookAt Y (baked)
 let _camLookZOffset = 30.50;     // tuner offset for camera lookAt Z (baked)
 let _camFOVOffset = 13;          // tuner offset for camera FOV (baked from prior _baseFOV tuning)
 let _baseFOV = 78;               // set per orientation in updateCameraFOV
-let _fovSpeedBoost = 22;         // max FOV increase at top speed — cranked for dramatic speed feel
+let _fovSpeedBoost = 32;         // max FOV increase at top speed — cranked for dramatic speed feel (was 22; bumped because DR stage-to-stage felt flat)
 let _prevSpeed = 0;              // for detecting accel vs decel
 
 function updateThrusterColor(color) {
@@ -7171,7 +7171,11 @@ function updateThrusterColor(color) {
 function updateThrusters(dt, shipX, shipY, shipZ, accel) {
   const playing    = state.phase === 'playing';
   const tp         = state.thrusterPower != null ? state.thrusterPower : 1;
-  const speedScale = Math.min(state.speed / BASE_SPEED, 2.0);
+  // Cap raised 2.0 → 2.6 so thruster response keeps growing through L4/L5
+  // (DR max speed is 2.5x = 90 u/s). Old 2.0 cap meant any stage at ≥2.0x
+  // had identical thruster particle spawn/size/length — no perceived speed
+  // change in the entire mid/late game.
+  const speedScale = Math.min(state.speed / BASE_SPEED, 2.6);
   const spawnRate  = (0.5 + accel * 0.5 + (speedScale - 1.0) * 0.6) * tp;  // scaled by thruster power
 
   // Exhaust cone scale/opacity handled in the main update() animation block
