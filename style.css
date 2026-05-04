@@ -4694,30 +4694,70 @@ html, body {
 .sr-pane { display: flex; flex-direction: column; gap: 10px; }
 .sr-pane.sr-hidden { display: none; }
 
-/* ADD-ONS list — one row per toggleable mesh */
-.sr-addons-list { display: flex; flex-direction: column; gap: 8px; }
-.sr-addon-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px;
-  background: rgba(0, 20, 40, 0.45);
-  border: 1px solid rgba(60, 180, 255, 0.35);
-  border-radius: 4px;
-  cursor: pointer;
-  user-select: none;
+/* ADD-ONS list — one row per toggleable mesh, matches sr-row look. */
+.sr-addons-list { display: flex; flex-direction: column; gap: 6px; }
+.sr-addon-row { /* inherits .sr-row layout: label left, control right */ }
+/* Override .sr-row .sr-label fixed 64px so addon names can use the full row. */
+.sr-addon-row > .sr-label {
+  flex: 1 1 auto;
+  font-size: 11px;
+  letter-spacing: 1.2px;
   color: var(--sr-text);
-  font: 11px ui-monospace, Menlo, monospace;
-  letter-spacing: 0.5px;
 }
-.sr-addon-row:hover { background: rgba(0, 30, 60, 0.65); border-color: #3af; }
-.sr-addon-row input[type="checkbox"] { accent-color: #3af; cursor: pointer; }
-.sr-addon-row.sr-disabled { opacity: 0.35; cursor: not-allowed; }
 .sr-addon-empty {
   color: rgba(180, 220, 255, 0.55);
   font: 11px ui-monospace, Menlo, monospace;
   text-align: center;
-  padding: 20px 12px;
-  border: 1px dashed rgba(60, 180, 255, 0.25);
-  border-radius: 4px;
+  padding: 16px 12px;
+}
+
+/* Sci-fi toggle switch (used by add-ons rows). Track + sliding knob. */
+.sr-toggle {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+  flex: 0 0 auto;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.sr-toggle input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+.sr-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 14, 28, 0.7);
+  border: 1px solid rgba(60, 180, 255, 0.45);
+  border-radius: 11px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.sr-toggle-knob {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(180, 220, 255, 0.85);
+  box-shadow: 0 0 4px rgba(34, 211, 238, 0.4);
+  transition: left 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.sr-toggle input:checked ~ .sr-toggle-track {
+  background: rgba(34, 211, 238, 0.35);
+  border-color: rgba(34, 211, 238, 0.9);
+}
+.sr-toggle input:checked ~ .sr-toggle-track .sr-toggle-knob {
+  left: 21px;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.9);
 }
 
 /* ROW: label + dropdown */
@@ -4914,20 +4954,13 @@ body.sr-open #title-leaderboard {
    garage would be permanently visible at boot. Use specificity instead. */
 .sr-overlay:not(.hidden) {
   display: grid;
-  /* Stage height = 45vh * stage-multiplier (def 1). Panel = 50vh fixed.
-     Handling = auto. Slider 40 -> 18vh stage, 160 -> 72vh stage. */
-  grid-template-rows: calc(45vh * var(--sr-tune-stage, 1)) auto 50vh;
+  /* Stage = 45vh, panel = 50vh, handling = auto strip between. */
+  grid-template-rows: 45vh auto 50vh;
   grid-template-columns: 1fr;
   align-items: stretch;
   justify-items: stretch;
   padding: 8px;
   gap: 8px;
-  /* CSS variables driven by the SKINS tuning sliders. Defaults = no-op. */
-  --sr-tune-stage: 1;
-  --sr-tune-shipx: 0px;
-  --sr-tune-shipy: 0px;
-  --sr-tune-handling: 1;
-  --sr-tune-panely: 0px;
 }
 /* Stage gets the same border + radius as the handling bar so its outer
    rectangle visibly matches its siblings (no "floating" ship anymore). */
@@ -5080,12 +5113,8 @@ body.sr-open #title-leaderboard {
  */
 @media (orientation: landscape), (min-width: 900px) {
   .sr-overlay:not(.hidden) {
-    /* Stage takes 1fr; panel width shrinks as STAGE slider goes up.
-       --sr-tune-stage range: 0.4 (slider 40) -> panel ~400px (huge panel)
-                              1.0 (slider 100, default) -> panel 240px
-                              1.6 (slider 160) -> panel ~120px (tiny panel)
-       Formula: 240px - (multiplier - 1) * 200px, clamped 100-400px. */
-    grid-template-columns: 1fr clamp(100px, calc(240px - (var(--sr-tune-stage, 1) - 1) * 200px), 400px);
+    /* Stage takes 1fr; panel fixed at 240px. */
+    grid-template-columns: 1fr 240px;
     /* Handle row fixed at 60px so its content (label + tier + track +
        next-tier text) can't get clipped by an undersized auto row. */
     grid-template-rows: 1fr 60px;
@@ -5292,141 +5321,3 @@ body.sr-open #title-leaderboard {
   border-left-color: transparent;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════ */
-/* DESKTOP LAYOUT EDIT MODE — slider panel (drag/resize replaced).         */
-/* Hidden on mobile (<900px). Toggle via top-right EDIT button.            */
-/* ═══════════════════════════════════════════════════════════════════════ */
-.sr-edit-toggle {
-  display: none;
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 10;
-  padding: 6px 12px;
-  background: rgba(0, 14, 28, 0.85);
-  border: 1px solid rgba(34, 211, 238, 0.5);
-  color: #cffafe;
-  font: 700 11px/1 'Orbitron', sans-serif;
-  letter-spacing: 1.5px;
-  cursor: pointer;
-  border-radius: 4px;
-  text-shadow: 0 0 6px rgba(34,211,238,0.6);
-  pointer-events: auto;
-}
-.sr-edit-toggle.active {
-  background: rgba(34, 211, 238, 0.25);
-  border-color: rgba(34, 211, 238, 0.9);
-  color: #fff;
-}
-@media (min-width: 900px) {
-  #thruster-overlay:not(.hidden) .sr-edit-toggle { display: block; }
-}
-
-.sr-edit-panel {
-  display: none;
-  position: absolute;
-  top: 44px;
-  right: 8px;
-  z-index: 10;
-  width: 300px;
-  padding: 10px;
-  background: rgba(0, 14, 28, 0.92);
-  border: 1px solid rgba(34, 211, 238, 0.5);
-  border-radius: 6px;
-  pointer-events: auto;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-}
-body.sr-edit-mode .sr-edit-panel { display: block; }
-
-.sr-edit-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-.sr-edit-row > span:first-child {
-  flex: 0 0 130px;
-  font: 700 9px/1.1 'Orbitron', sans-serif;
-  letter-spacing: 0.5px;
-  color: #cffafe;
-}
-.sr-edit-row input[type="range"] {
-  flex: 1 1 auto;
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  background: linear-gradient(90deg, rgba(34,211,238,0.2), rgba(34,211,238,0.6));
-  border-radius: 2px;
-  cursor: pointer;
-}
-.sr-edit-row input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  background: #22d3ee;
-  border: 1px solid #fff;
-  border-radius: 50%;
-  cursor: pointer;
-}
-.sr-edit-num {
-  flex: 0 0 36px;
-  text-align: right;
-  font: 700 10px/1 'Orbitron', monospace;
-  color: #fff;
-  background: rgba(0,0,0,0.6);
-  border: 1px solid rgba(34,211,238,0.4);
-  padding: 3px 4px;
-  border-radius: 3px;
-}
-.sr-edit-fit,
-.sr-edit-reset {
-  width: 100%;
-  margin-top: 4px;
-  padding: 6px;
-  font: 700 10px/1 'Orbitron', sans-serif;
-  letter-spacing: 1.5px;
-  cursor: pointer;
-  border-radius: 3px;
-}
-.sr-edit-fit {
-  background: rgba(34, 211, 238, 0.25);
-  border: 1px solid rgba(34, 211, 238, 0.6);
-  color: #cffafe;
-}
-.sr-edit-reset {
-  background: rgba(220, 38, 38, 0.25);
-  border: 1px solid rgba(220, 38, 38, 0.6);
-  color: #fee;
-}
-
-/* In edit mode, dashed outline on each managed box for visibility. */
-body.sr-edit-mode #thruster-overlay .sr-stage,
-body.sr-edit-mode #thruster-overlay .sr-handling-slot,
-body.sr-edit-mode #thruster-overlay .sr-panel {
-  outline: 2px dashed rgba(34, 211, 238, 0.6);
-  outline-offset: -2px;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════ */
-/* Wire the --ed-* variables into the LANDSCAPE grid (desktop ≥900px or    */
-/* any landscape orientation). Variables come from the EDIT sliders.       */
-/* ═══════════════════════════════════════════════════════════════════════ */
-@media (orientation: landscape), (min-width: 900px) {
-  .sr-overlay:not(.hidden) {
-    /* CSS-only fallback when JS hasn't locked the layout yet. JS
-       _lockStageSize() stamps explicit pixel grid templates inline
-       which override these (no !important here so inline wins). */
-    grid-template-columns: 1fr var(--ed-panelw, 240px);
-    grid-template-rows: 1fr var(--ed-handleh, 60px);
-    grid-template-areas:
-      "stage  panel"
-      "handle panel";
-    padding: var(--ed-pad, 8px);
-    gap: var(--ed-gap, 8px);
-  }
-  /* Panel spans both rows so total panel height = stageh + handleh + gap. */
-  .sr-overlay:not(.hidden) .sr-panel {
-    grid-row: 1 / span 2 !important;
-  }
-}

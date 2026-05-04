@@ -14168,93 +14168,12 @@ function updateStreakBadge() {
       window.SciFiSelect.refresh(sColor);
     }
     _populateAddons();
-    _wireTuneSliders();
   }
 
-  // Tuning sliders — each row has data-tune="key" + matching readout span.
-  // Values are stored PER-ORIENTATION (portrait vs landscape) because the
-  // showroom stage shape changes between the two layouts — a zoom that looks
-  // right in portrait would be wrong in landscape and vice versa.
-  // Storage keys: jh_showroom_<key>_p (portrait) / jh_showroom_<key>_l (landscape).
-  const SR_TUNE_KEYS = {
-    stage:    { def: 100, min: 40,  max: 160 },
-    zoom:     { def: 100, min: 40,  max: 160 },
-    shipx:    { def: 0,   min: -50, max: 50  },
-    shipy:    { def: 0,   min: -50, max: 50  },
-    handling: { def: 100, min: 60,  max: 140 },
-    panely:   { def: 0,   min: -100, max: 100 },
-  };
+  // _orient kept as a small helper used elsewhere (zoom localStorage key).
   function _orient() {
-    // Treat any wide viewport (>=900px) as landscape so desktop uses the
-    // side-by-side layout regardless of strict portrait/landscape ratio.
     if (window.innerWidth >= 900) return 'l';
     return (window.innerWidth > window.innerHeight) ? 'l' : 'p';
-  }
-  function _tuneStorageKey(key) {
-    return 'jh_showroom_' + key + '_' + _orient();
-  }
-  function _readTune(key) {
-    const cfg = SR_TUNE_KEYS[key];
-    if (!cfg) return 0;
-    try {
-      const v = parseInt(localStorage.getItem(_tuneStorageKey(key)) || String(cfg.def), 10);
-      if (isNaN(v)) return cfg.def;
-      return Math.max(cfg.min, Math.min(cfg.max, v));
-    } catch(_) { return cfg.def; }
-  }
-  function _applyTune(key, val) {
-    const overlay = document.getElementById('thruster-overlay');
-    if (!overlay) return;
-    if (key === 'zoom') {
-      _resizeStageCanvas(); // re-reads localStorage for FOV multiplier
-      return;
-    }
-    if (key === 'stage') {
-      // Drive a unitless multiplier; portrait CSS uses it to scale stage
-      // row, landscape uses it to scale stage column. Then re-resize canvas.
-      overlay.style.setProperty('--sr-tune-stage', String(val / 100));
-      // double rAF so grid reflows before canvas resize reads new rect
-      requestAnimationFrame(() => requestAnimationFrame(() => _resizeStageCanvas()));
-      return;
-    }
-    if (key === 'shipx')    overlay.style.setProperty('--sr-tune-shipx', val + 'px');
-    if (key === 'shipy')    overlay.style.setProperty('--sr-tune-shipy', val + 'px');
-    if (key === 'handling') overlay.style.setProperty('--sr-tune-handling', String(val / 100));
-    if (key === 'panely')   overlay.style.setProperty('--sr-tune-panely', val + 'px');
-  }
-  function _wireTuneSliders() {
-    const sliders = document.querySelectorAll('[data-tune]');
-    sliders.forEach(slider => {
-      const key = slider.dataset.tune;
-      if (!SR_TUNE_KEYS[key]) return;
-      const val = _readTune(key);
-      slider.value = val;
-      const readout = document.querySelector('[data-tune-val="' + key + '"]');
-      if (readout) readout.textContent = String(val);
-      _applyTune(key, val);
-      if (slider.dataset.wired === '1') return;
-      slider.dataset.wired = '1';
-      slider.addEventListener('input', () => {
-        const v = parseInt(slider.value, 10);
-        try { localStorage.setItem(_tuneStorageKey(key), String(v)); } catch(_){}
-        if (readout) readout.textContent = String(v);
-        _applyTune(key, v);
-      });
-    });
-  }
-  // Re-apply all tune values when orientation changes (slider values + CSS
-  // vars switch to the other orientation's saved settings).
-  function _refreshTunesForOrientation() {
-    const sliders = document.querySelectorAll('[data-tune]');
-    sliders.forEach(slider => {
-      const key = slider.dataset.tune;
-      if (!SR_TUNE_KEYS[key]) return;
-      const val = _readTune(key);
-      slider.value = val;
-      const readout = document.querySelector('[data-tune-val="' + key + '"]');
-      if (readout) readout.textContent = String(val);
-      _applyTune(key, val);
-    });
   }
 
   // ── ADD-ONS ───────────────────────────────────────────────────────────
@@ -14315,16 +14234,36 @@ function updateStreakBadge() {
       list.innerHTML = '<div class="sr-addon-empty">No add-ons available for this ship</div>';
       return;
     }
+    // Default-OFF for new users. Existing saved state wins. If no saved
+    // value for this addon, write OFF immediately so next open is consistent.
+    const saved = _loadAddonsState();
+    const bucket = saved[key] = saved[key] || {};
+    let dirty = false;
+    entries.forEach(entry => {
+      if (typeof bucket[entry.node] !== 'boolean') {
+        bucket[entry.node] = false;
+        dirty = true;
+      }
+      // Sync the live node visibility to match storage.
+      const n = _findAddonNode(entry.node);
+      if (n) n.visible = !!bucket[entry.node];
+    });
+    if (dirty) _saveAddonsState(saved);
+
     let html = '';
     entries.forEach(entry => {
-      const node = _findAddonNode(entry.node);
-      const checked = node ? !!node.visible : true;
+      const checked = !!bucket[entry.node];
       const nodeName = String(entry.node).replace(/"/g, '&quot;');
       const label = String(entry.label).replace(/</g, '&lt;');
-      html += '<label class="sr-addon-row">'+
-        '<input type="checkbox" data-addon="'+nodeName+'" '+(checked?'checked':'')+'>'+
-        '<span>'+label+'</span>'+
-      '</label>';
+      // Match the rest of the garage's sr-row pattern: label on left,
+      // control flush right. No bordered "clickable box" wrapper.
+      html += '<div class="sr-row sr-addon-row">'+
+        '<span class="sr-label">'+label+'</span>'+
+        '<label class="sr-toggle">'+
+          '<input type="checkbox" data-addon="'+nodeName+'" '+(checked?'checked':'')+'>'+
+          '<span class="sr-toggle-track"><span class="sr-toggle-knob"></span></span>'+
+        '</label>'+
+      '</div>';
     });
     list.innerHTML = html;
     list.querySelectorAll('input[type="checkbox"][data-addon]').forEach(inp => {
@@ -15205,189 +15144,23 @@ function updateStreakBadge() {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════
-  // DESKTOP LAYOUT EDIT MODE — SLIDER VERSION
-  // Sliders drive CSS variables on the overlay. Grid template uses these
-  // variables, so the boxes resize cleanly without breaking the layout.
-  // All values logged to console + visible in slider readout chips.
-  // ════════════════════════════════════════════════════════════════════════
-  // Per-orientation layout storage. Title screen uses the same
-  // pattern (PORTRAIT/LANDSCAPE/DESKTOP presets, re-applied every
-  // resize). Showroom now stores landscape and portrait layouts
-  // independently so rotating the phone snaps cleanly instead of
-  // carrying stale pixel sizes from the other orientation.
-  const EDIT_KEY_BASE = 'jh_showroom_layout_v2';
-  function _editKey() {
-    return EDIT_KEY_BASE + '_' + (window.innerWidth >= window.innerHeight ? 'l' : 'p');
-  }
-  const EDIT_DEFS = {
-    stagew:  { def: 800, var: '--ed-stagew',  unit: 'px' },
-    stageh:  { def: 400, var: '--ed-stageh',  unit: 'px' },
-    handleh: { def: 60,  var: '--ed-handleh', unit: 'px' },
-    panelw:  { def: 320, var: '--ed-panelw',  unit: 'px' },
-    panelh:  { def: 600, var: '--ed-panelh',  unit: 'px' },
-    pad:     { def: 8,   var: '--ed-pad',     unit: 'px' },
-    gap:     { def: 8,   var: '--ed-gap',     unit: 'px' },
-  };
+  // EDIT mode (tuner sliders) removed — layout is CSS-driven only.
+  // Clean up any legacy localStorage keys from the old EDIT panel so they
+  // don't linger in dev consoles.
+  try {
+    localStorage.removeItem('jh_showroom_layout_v2_l');
+    localStorage.removeItem('jh_showroom_layout_v2_p');
+    localStorage.removeItem('jh_showroom_layout_v2');
+  } catch(_){}
 
-  function _editLoad() {
-    try { return JSON.parse(localStorage.getItem(_editKey()) || '{}') || {}; }
-    catch(_) { return {}; }
-  }
-  function _editSave(d) {
-    try { localStorage.setItem(_editKey(), JSON.stringify(d)); } catch(_){}
-  }
-
-  function _editApplyAll() {
-    const overlay = document.getElementById('thruster-overlay');
-    if (!overlay) return;
-    let saved = _editLoad();
-    // Auto-fit to viewport on every open in landscape, UNLESS the user has
-    // manually adjusted a slider (saved.__manual === true). This way new
-    // builds always start fitted to the current viewport without the user
-    // having to clear storage.
-    if (window.innerWidth >= window.innerHeight && !(saved && saved.__manual)) {
-      _editFitScreen();
-      return;
-    }
-    Object.keys(EDIT_DEFS).forEach(k => {
-      const v = (saved[k] != null) ? saved[k] : EDIT_DEFS[k].def;
-      overlay.style.setProperty(EDIT_DEFS[k].var, v + EDIT_DEFS[k].unit);
-      const slider = document.getElementById('sr-edit-' + k);
-      const num    = document.getElementById('sr-edit-' + k + '-num');
-      if (slider) slider.value = v;
-      if (num) num.textContent = String(v);
-    });
-  }
-
-  function _editWireSliders() {
-    Object.keys(EDIT_DEFS).forEach(k => {
-      const slider = document.getElementById('sr-edit-' + k);
-      const num    = document.getElementById('sr-edit-' + k + '-num');
-      if (!slider || slider.dataset.wired === '1') return;
-      slider.dataset.wired = '1';
-      slider.addEventListener('input', () => {
-        const v = parseInt(slider.value, 10);
-        if (num) num.textContent = String(v);
-        const overlay = document.getElementById('thruster-overlay');
-        if (overlay) overlay.style.setProperty(EDIT_DEFS[k].var, v + EDIT_DEFS[k].unit);
-        const saved = _editLoad();
-        saved[k] = v;
-        saved.__manual = true; // user touched a slider; stop auto-fitting
-        _editSave(saved);
-        try { console.log('[showroom-layout]', k, '=', v); } catch(_){}
-        if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
-      });
-    });
-    const reset = document.getElementById('sr-edit-reset');
-    if (reset && reset.dataset.wired !== '1') {
-      reset.dataset.wired = '1';
-      reset.addEventListener('click', () => { _editReset(); });
-    }
-    const fit = document.getElementById('sr-edit-fit');
-    if (fit && fit.dataset.wired !== '1') {
-      fit.dataset.wired = '1';
-      fit.addEventListener('click', () => { _editFitScreen(); });
-    }
-  }
-
-  // FIT SCREEN: snap slider values so total layout = full viewport.
-  // Layout math: outer pad on all sides + gap between cols/rows.
-  //   stagew + panelw + 2*pad + gap = innerWidth
-  //   stageh + handleh + 2*pad + gap = innerHeight
-  // Default ratio: panel = 30% of width, handle = 80px, rest goes to stage.
-  function _editFitScreen() {
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-    const pad = 8;
-    const gap = 8;
-    // Short viewports (mobile landscape ~390px tall) can't afford an 80px
-    // handle bar — it eats 20% of vertical space and squishes the stage.
-    // Handle bar must fit label + tier + track + next-tier line. 64px min on
-    // short viewports (was 48 — content was clipping at the bottom).
-    const handleh = H < 500 ? 64 : 90;
-    // Stage should stay roughly square-ish, not wide/short. Compute the
-    // available stage height first, then pick panel width so the stage
-    // ends up no wider than ~1.4× its height. On short viewports this
-    // means the panel takes more horizontal room (which is fine, the
-    // panel content scrolls) and the ship preview stays large.
-    const stageh = H - handleh - 2 * pad - gap;
-    const maxStageW = Math.round(stageh * 1.4);
-    const remainingW = W - 2 * pad - gap;
-    let stagew = Math.min(maxStageW, Math.round(remainingW * 0.70));
-    let panelw = remainingW - stagew;
-    // Floor panel width so the slider labels remain readable.
-    if (panelw < 220) {
-      panelw = 220;
-      stagew = remainingW - panelw;
-    }
-    const panelh = stageh + handleh + gap; // panel spans both rows
-    const next = { stagew, stageh, handleh, panelw, panelh, pad, gap };
-    _editSave(next);
-    // Apply the CSS vars directly here (don't recurse through _editApplyAll,
-    // which would re-trigger fit on auto-fit path) and then resize the canvas
-    // AFTER the browser has reflowed.
-    const overlay = document.getElementById('thruster-overlay');
-    if (overlay) {
-      Object.keys(EDIT_DEFS).forEach(k => {
-        const v = (next[k] != null) ? next[k] : EDIT_DEFS[k].def;
-        overlay.style.setProperty(EDIT_DEFS[k].var, v + EDIT_DEFS[k].unit);
-        const slider = document.getElementById('sr-edit-' + k);
-        const num    = document.getElementById('sr-edit-' + k + '-num');
-        if (slider) slider.value = v;
-        if (num) num.textContent = String(v);
-      });
-    }
-    // Double rAF: wait for CSS vars to apply, grid to recalc, THEN resize canvas.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
-      });
-    });
-    try { console.log('[showroom-layout] FIT', JSON.stringify(next)); } catch(_){}
-  }
-
-  function _editReset() {
-    try {
-      // Reset BOTH orientations so the user gets a clean re-fit on rotate.
-      localStorage.removeItem(EDIT_KEY_BASE + '_l');
-      localStorage.removeItem(EDIT_KEY_BASE + '_p');
-      localStorage.removeItem(EDIT_KEY_BASE); // legacy single-key cleanup
-    } catch(_){}
-    _editApplyAll();
-    if (typeof _resizeStageCanvas === 'function') _resizeStageCanvas();
-    try { console.log('[showroom-layout] RESET'); } catch(_){}
-  }
-
-  function _wireEditToggle() {
-    const btn = document.getElementById('sr-edit-toggle');
-    if (!btn || btn.dataset.wired === '1') return;
-    btn.dataset.wired = '1';
-    let on = false;
-    btn.addEventListener('click', () => {
-      on = !on;
-      btn.classList.toggle('active', on);
-      btn.textContent = on ? 'DONE' : 'EDIT';
-      document.body.classList.toggle('sr-edit-mode', on);
-    });
-  }
-
-  // Hook into open() via window-level wrapper so we don't have to refactor.
-  const _origOpen = open;
   window.Showroom = {
-    open: function(tab) {
-      _origOpen(tab);
-      requestAnimationFrame(() => {
-        _wireEditToggle();
-        _editWireSliders();
-        _editApplyAll();
-      });
-    },
-    close: close, refresh: refresh,
-    tick: tick, syncColor: syncColor,
+    open: open,
+    close: close,
+    refresh: refresh,
+    tick: tick,
+    syncColor: syncColor,
     resetThrusterAnchors: resetThrusterAnchors,
     isOpen: function() { return _open; },
-    resetLayout: _editReset,
   };
 })();
 // ── TUNER + FX HUDs (showroom-only) ─────────────────────────────────────
