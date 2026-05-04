@@ -14267,7 +14267,9 @@ function updateStreakBadge() {
         else if (skin.price) stateLabel = skin.price + 'c';
         else stateLabel = 'LOCKED';
       } else {
-        stateLabel = isActive ? 'SELECTED' : 'SELECT';
+        // No SELECTED/SELECT label when unlocked — the active highlight
+        // already communicates state (per user UX feedback).
+        stateLabel = '';
       }
       const cls = 'sr-addon-card' + (isActive ? ' active' : '') + (unlocked ? '' : ' locked');
       html += '<button type="button" class="' + cls + '" data-skin="' + idx + '"' +
@@ -14301,7 +14303,7 @@ function updateStreakBadge() {
           const on = (parseInt(b.dataset.skin, 10) === idx) && !b.classList.contains('locked');
           b.classList.toggle('active', on);
           const st = b.querySelector('.sr-addon-card-state');
-          if (st && !b.classList.contains('locked')) st.textContent = on ? 'SELECTED' : 'SELECT';
+          if (st && !b.classList.contains('locked')) st.textContent = '';
         });
         try { playTitleTap(); } catch(_){}
       });
