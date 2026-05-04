@@ -252,7 +252,8 @@
       if (skin.hidden) return;
       const unlocked = _isSkinUnlockedSafe(idx);
       const isActive = (idx === selectedIdx) && unlocked;
-      const name = String(skin.name || ('SKIN ' + idx)).replace(/</g, '&lt;');
+      const _rawName = (typeof window._displayedSkinName === 'function') ? window._displayedSkinName(idx) : (skin.name || ('SKIN ' + idx));
+      const name = String(_rawName).replace(/</g, '&lt;');
       let stateLabel;
       if (!unlocked) {
         const m = reqs.skins[idx];
@@ -578,6 +579,10 @@
         btn.setAttribute('aria-pressed', next ? 'true' : 'false');
         const stateEl = btn.querySelector('.sr-addon-card-state');
         if (stateEl) stateEl.textContent = next ? 'ON' : 'OFF';
+        // RUNNER's displayed name flips between 'RUNNER' and 'RUNNER MK II'
+        // depending on whether every addon is on. Refresh the skin cards so
+        // the label updates without reopening the garage.
+        try { _buildSkinCards(); } catch(_){}
         try { playTitleTap(); } catch(_){}
       });
     });

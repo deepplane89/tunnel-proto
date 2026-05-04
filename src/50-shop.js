@@ -262,16 +262,18 @@ function updateSkinViewerDisplay() {
   const isUnlocked = _skinAdminMode || isSkinUnlocked(skinViewerIdx);
   const requiredLevel = SKIN_LEVEL_UNLOCKS[skinViewerIdx] || 1;
 
-  // Label: skin name + checkmark/USE/lock inline
+  // Label: skin name + checkmark/USE/lock inline (uses _displayedSkinName so
+  // RUNNER flips to 'RUNNER MK II' when all addons are on)
+  const _shopName = (typeof window._displayedSkinName === 'function') ? window._displayedSkinName(skinViewerIdx) : skin.name;
   if (skinViewerIdx === 0 || isUnlocked) {
     if (isSelected) {
-      labelEl.innerHTML = skin.name + ' <span class="skin-check">&check;</span>';
+      labelEl.innerHTML = _shopName + ' <span class="skin-check">&check;</span>';
     } else {
-      labelEl.innerHTML = skin.name + ' <button class="skin-use-btn" onclick="selectSkin(' + skinViewerIdx + ')">USE</button>';
+      labelEl.innerHTML = _shopName + ' <button class="skin-use-btn" onclick="selectSkin(' + skinViewerIdx + ')">USE</button>';
     }
     labelEl.classList.remove('skin-locked');
   } else {
-    labelEl.innerHTML = skin.name + ' <span class="skin-lock-tag">\u{1F512} LV' + requiredLevel + '</span>';
+    labelEl.innerHTML = _shopName + ' <span class="skin-lock-tag">\u{1F512} LV' + requiredLevel + '</span>';
     labelEl.classList.add('skin-locked');
   }
 

@@ -368,48 +368,59 @@ const RUNNER_CONE_CFG = {
   offRX:  0.02, offRY: 0.02, offRZ: 0,
 };
 
+// All 4 skins share spaceship_01.glb (formerly the MK II hull, geometrically
+// identical to default_ship.glb but with addon nodes Fins_01/Fins_02/Rings_001/
+// Turrets_001-003). Each skin gets recolored via _SKIN_PALETTE[idx] inside the
+// _loadAltShip matchDefault path. Addons are keyed by glbFile so they're shared
+// across all 4 skins (toggling Fins on RUNNER also shows on GHOST/MAMBA/CIPHER).
+// When activeSkinIdx===0 AND every spaceship_01.glb addon is enabled, the UI
+// flips the displayed name to 'RUNNER MK II' (text only — see _displayedSkinName).
+const _SHIP_GLB_CONFIG = {
+  posX: 0, posY: -0.590, posZ: 0, rotX: 0, rotY: 3.142, rotZ: 0, scale: 1.0,
+  nozzleL: [-0.480, 0.050, 5.100], nozzleR: [0.480, 0.050, 5.100],
+  miniL:   [-0.150, 0.060, 5.100], miniR:   [0.160, 0.060, 5.100], thrusterScale: 1.0,
+  portraitNozzleL: [-0.480, 0.050, 5.100], portraitNozzleR: [0.480, 0.050, 5.100],
+  portraitMiniL:   [-0.150, 0.060, 5.100], portraitMiniR:   [0.160, 0.060, 5.100],
+  coneCfg: {
+    length: 3.30, radius: 0.29,
+    rotX: 0, rotY: 0, rotZ: 0,
+    offX: 0, offY: 0, offZ: 0,
+    offLX: -0.02, offLY: 0.03, offLZ: 0,
+    offRX:  0.02, offRY: 0.02, offRZ: 0,
+  },
+  matchDefault: true,
+};
+const _SHIP_LASER_CONFIG = { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 };
 const SHIP_SKINS = [
-  { name: 'RUNNER',         price: 0,    description: 'Default' },
-  { name: 'GHOST',         price: 400,  description: 'Clean glossy white' },
-  { name: 'BLACK MAMBA',   price: 800,  description: 'Stealth predator' },
-  { name: 'CIPHER',        price: 1400, description: 'Voronoi hull plating' },
-  { name: 'RUNNER MK II',    price: 0,    description: 'Upgraded Runner',   glbFile: 'spaceship_01.glb',
-    // Cone thrusters disabled for MK II per user request (2026-04-29) — particles only.
-    // To re-enable: set `coneThrusters: true`. The cone shader, shipGroup parenting,
-    // baseline rotX=π/2 auto-orient, and L-panel sliders are all still wired up.
-    // Last-tuned _coneThruster values (window._coneThruster defaults):
-    //   length:3.4, radius:0.14, rotX/Y/Z:0 (additive offsets atop π/2 baseline),
-    //   offX/Y/Z:0, neonPower:1.5, noiseSpeed:0.8, noiseStrength:0.13,
-    //   fresnelPower:6.0, opacity:1.0. Position uses _localNozzles[idx] per frame.
-    // coneThrusters: true,
-    glbConfig: { posX:0, posY:-0.590, posZ:0, rotX:0, rotY:3.142, rotZ:0, scale:1.0,
-      // MK II hull is identical to default RUNNER in Z-extent (rear face exit at world Z≈5.08)
-      // and engine bay width — derived from spaceship_01.glb geometry (2026-04-27).
-      // posY -0.590 vs default -0.500 → y-offset = -0.027 world (0.09 × 0.30 shipGroup scale).
-      // 2026-05-01: official MK Runner thruster coordinates per user (set in T-tuner
-      // and locked in). Stored as ship-local offsets via _rebuildLocalNozzles() so
-      // they track the GLB through any ship position/rotation/banking.
-      nozzleL:[-0.480, 0.050, 5.100], nozzleR:[0.480, 0.050, 5.100],
-      miniL:[-0.150, 0.060, 5.100], miniR:[0.160, 0.060, 5.100], thrusterScale:1.0,
-      portraitNozzleL:[-0.480, 0.050, 5.100], portraitNozzleR:[0.480, 0.050, 5.100],
-      portraitMiniL:[-0.150, 0.060, 5.100], portraitMiniR:[0.160, 0.060, 5.100],
-      // Cone thruster per-ship offsets (world units, applied on top of NOZZLE_OFFSETS).
-      // 2026-05-01: tuned by user. Stored ship-local via shipGroup parent so cones
-      // track ship rotation (xwing/barrel-roll) intrinsically.
-      coneCfg: {
-        length: 3.30, radius: 0.29,
-        rotX: 0, rotY: 0, rotZ: 0,
-        offX: 0, offY: 0, offZ: 0,
-        offLX: -0.02, offLY: 0.00, offLZ: 0,
-        offRX:  0.02, offRY: 0.00, offRZ: 0,
-      },
-      matchDefault: true },
-    laserConfig: { lanes:2, spread:0.35, yOff:0.45, zOff:-2.50, len:10.00, glowLen:7.50, fireRate:8.50 } },
+  { name: 'RUNNER',       price: 0,    description: 'Default',                glbFile: 'spaceship_01.glb', glbConfig: _SHIP_GLB_CONFIG, laserConfig: _SHIP_LASER_CONFIG },
+  { name: 'GHOST',        price: 400,  description: 'Clean glossy white',     glbFile: 'spaceship_01.glb', glbConfig: _SHIP_GLB_CONFIG, laserConfig: _SHIP_LASER_CONFIG },
+  { name: 'BLACK MAMBA',  price: 800,  description: 'Stealth predator',       glbFile: 'spaceship_01.glb', glbConfig: _SHIP_GLB_CONFIG, laserConfig: _SHIP_LASER_CONFIG },
+  { name: 'CIPHER',       price: 1400, description: 'Voronoi hull plating',   glbFile: 'spaceship_01.glb', glbConfig: _SHIP_GLB_CONFIG, laserConfig: _SHIP_LASER_CONFIG },
 ];
 
 let activeSkinIdx = 0;
 let skinViewerIdx = 0;
 let _skinAdminMode = false; // secret admin: 5-tap skin label to toggle
+
+// Returns the displayed name for a skin index. Skin 0 is RUNNER by default,
+// but flips to 'RUNNER MK II' when every spaceship_01.glb addon is enabled
+// (Fins_01, Fins_02, Rings_001, Turrets_001-003). Other skins return their
+// raw SHIP_SKINS name unchanged. Used by garage cards, shop labels, tuner HUD.
+function _displayedSkinName(idx) {
+  const s = SHIP_SKINS[idx];
+  if (!s) return 'SKIN ' + idx;
+  if (idx !== 0) return s.name;
+  try {
+    const raw = window._LS && window._LS.getItem('jh_showroom_addons_v2');
+    if (!raw) return s.name;
+    const all = JSON.parse(raw) || {};
+    const bucket = all['spaceship_01.glb'] || {};
+    const REQ = ['Fins_01','Fins_02','Rings_001','Turrets_001','Turrets_002','Turrets_003'];
+    for (let i = 0; i < REQ.length; i++) if (bucket[REQ[i]] !== true) return s.name;
+    return 'RUNNER MK II';
+  } catch(_) { return s.name; }
+}
+try { window._displayedSkinName = _displayedSkinName; } catch(_){}
 
 function loadSkinData() {
   const raw = window._LS.getItem(SKIN_STORAGE_KEY);
@@ -418,6 +429,22 @@ function loadSkinData() {
   try {
     const d = JSON.parse(raw);
     if (!Array.isArray(d.unlocked)) d.unlocked = [0];
+    // 2026-05-03: RUNNER MK II merged into RUNNER. Anyone who had idx 4
+    // selected gets bounced to idx 0 and all spaceship_01.glb addons enabled
+    // (preserves the upgraded look). Then drop idx 4 from unlocked.
+    let _wantMk2Migration = (d.selected === 4) || d.unlocked.includes(4);
+    if (_wantMk2Migration) {
+      try {
+        const _addonsRaw = window._LS.getItem('jh_showroom_addons_v2');
+        const _addons = _addonsRaw ? JSON.parse(_addonsRaw) : {};
+        const _key = 'spaceship_01.glb';
+        if (!_addons[_key]) _addons[_key] = {};
+        ['Fins_01','Fins_02','Rings_001','Turrets_001','Turrets_002','Turrets_003']
+          .forEach(n => { _addons[_key][n] = true; });
+        window._LS.setItem('jh_showroom_addons_v2', JSON.stringify(_addons));
+      } catch(_){}
+      if (d.selected === 4) d.selected = 0;
+    }
     // Migration: drop any unlocked indices that no longer exist (e.g. removed skins)
     d.unlocked = d.unlocked.filter(i => i >= 0 && i < SHIP_SKINS.length);
     if (!d.unlocked.includes(0)) d.unlocked.push(0);
@@ -5390,6 +5417,171 @@ const shipHullMats  = [];  // MeshStandardMaterial refs — for emissive pulse a
 const shipFireMeshes = []; // 'fire' and 'fire1' GLTF meshes (engine exhaust geometry)
 // _prebuiltSkins: populated inside gltfLoader.load callback; declared here so applySkin can access it
 let _prebuiltSkins = [];
+
+// ── HOISTED SKIN MATERIAL TOOLKIT ─────────────────────────────────────────
+// Constants and a factory for building per-skin materials at runtime, used
+// both by the default-ship _prebuiltSkins build (skin 0/1/2/3 on default_ship.glb)
+// AND by the alt-GLB matchDefault path (where skins 0/1/2/3 share spaceship_01.glb
+// so addons can attach). Hoisted to module scope so _loadAltShip can reach them.
+const _SHADER_VERT_PRE = 'varying vec3 vWorldPos;\n';
+const _SHADER_VERT_INJ = `#include <begin_vertex>
+vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`;
+window._diamondUniforms = {
+  dScale:     { value: 0.5 },
+  dBump:      { value: 0.6 },
+  dEdgeMin:   { value: 0.45 },
+  dEdgeMax:   { value: 0.80 },
+  dGlowR:     { value: 0.2 },
+  dGlowG:     { value: 0.76 },
+  dGlowB:     { value: 1.0 },
+  dGlowMul:   { value: 0.9 },
+  dGlowEdgeMin: { value: 0.10 },
+  dGlowEdgeMax: { value: 0.50 },
+};
+const _GLSL_DIAMOND = `#include <normal_fragment_maps>
+float _dSc = dScale;
+vec2 _uvXZ = vWorldPos.xz * _dSc;
+vec2 _uvXY = vWorldPos.xy * _dSc;
+vec2 _dUVxz = vec2(_uvXZ.x + _uvXZ.y, _uvXZ.x - _uvXZ.y) * 0.707;
+vec2 _dUVxy = vec2(_uvXY.x + _uvXY.y, _uvXY.x - _uvXY.y) * 0.707;
+vec2 _dcXZ = abs(fract(_dUVxz) - 0.5);
+float _ddXZ = max(_dcXZ.x, _dcXZ.y);
+float _deXZ = 1.0 - smoothstep(dEdgeMin, dEdgeMax, _ddXZ);
+vec2 _dcXY = abs(fract(_dUVxy) - 0.5);
+float _ddXY = max(_dcXY.x, _dcXY.y);
+float _deXY = 1.0 - smoothstep(dEdgeMin, dEdgeMax, _ddXY);
+float _blY = abs(normal.y);
+float _dEdge = mix(_deXY, _deXZ, _blY);
+vec2 _dUV = mix(_dUVxy, _dUVxz, _blY);
+float _dBumpV = dBump;
+vec2 _dEps = vec2(0.01, 0.0);
+vec2 _dUVdx = _dUV + _dEps.xy; vec2 _ddcDx = abs(fract(_dUVdx)-0.5);
+float _deDx = 1.0 - smoothstep(dEdgeMin,dEdgeMax, max(_ddcDx.x,_ddcDx.y));
+vec2 _dUVdy = _dUV + _dEps.yx; vec2 _ddcDy = abs(fract(_dUVdy)-0.5);
+float _deDy = 1.0 - smoothstep(dEdgeMin,dEdgeMax, max(_ddcDy.x,_ddcDy.y));
+vec3 _dbn = normalize(normal + vec3((_deDx-_dEdge)*_dBumpV, (_deDy-_dEdge)*_dBumpV, 0.0));
+normal = _dbn;`;
+const _GLSL_DIAMOND_EMISSIVE = `#include <emissivemap_fragment>
+{
+  float _deSc = dScale;
+  vec2 _deUVxz = vWorldPos.xz * _deSc;
+  vec2 _deUVxy = vWorldPos.xy * _deSc;
+  vec2 _deDUVxz = vec2(_deUVxz.x + _deUVxz.y, _deUVxz.x - _deUVxz.y) * 0.707;
+  vec2 _deDUVxy = vec2(_deUVxy.x + _deUVxy.y, _deUVxy.x - _deUVxy.y) * 0.707;
+  float _deBlY = abs(normal.y);
+  vec2 _deDUV = mix(_deDUVxy, _deDUVxz, _deBlY);
+  vec2 _deFr = abs(fract(_deDUV) - 0.5);
+  float _deD = max(_deFr.x, _deFr.y);
+  float _deEdge = 1.0 - smoothstep(dGlowEdgeMin, dGlowEdgeMax, _deD);
+  totalEmissiveRadiance += vec3(dGlowR, dGlowG, dGlowB) * _deEdge * dGlowMul;
+}`;
+
+// Per-skin slot palette. slotName matches GLB material name. Idx 0 mirrors
+// the default RUNNER colors (lines ~5420-5471). Idx 1/2/3 mirror SKIN_DEFS
+// so the default-ship _prebuiltSkins path and the alt-GLB matchDefault path
+// produce visually identical materials. Edit one place, both paths follow.
+const _SKIN_PALETTE = [
+  // 0 — RUNNER (default)
+  {
+    nozzle:       { color: 0x0a0a0a, metalness: 0.95, roughness: 0.12 },
+    gray:         { color: 0x888899, metalness: 0.6,  roughness: 0.32 },
+    rocket_light: { color: 0x0044ff, metalness: 0.0,  roughness: 0.05, emissive: 0x0033cc, emissiveIntensity: 2.5 },
+    rocket_base:  { color: 0x0e1014, metalness: 0.90, roughness: 0.30, hexBump: true },
+    white:        { color: 0xddeeff, metalness: 0.5,  roughness: 0.08, emissive: 0x2255ff, emissiveIntensity: 0.6 },
+    fallback:     { color: 0x141820, metalness: 0.88, roughness: 0.25, hexBump: true },
+  },
+  // 1 — GHOST: holographic except nozzle
+  {
+    nozzle:       { color: 0x0a0a0a, metalness: 0.95, roughness: 0.12 },
+    gray:         { holo: true, hologramColor: '#00e0ff' },
+    rocket_light: { holo: true, hologramColor: '#00e0ff' },
+    rocket_base:  { holo: true, hologramColor: '#00e0ff' },
+    white:        { holo: true, hologramColor: '#00e0ff' },
+    fallback:     { holo: true, hologramColor: '#00e0ff' },
+  },
+  // 2 — BLACK MAMBA
+  {
+    nozzle:       { color: 0x000000, metalness: 0.00, roughness: 0.32, emissive: 0x000000, emissiveIntensity: 0 },
+    gray:         { color: 0xd36b4a, metalness: 1.00, roughness: 0.32 },
+    rocket_light: { color: 0x000000, metalness: 0.0,  roughness: 0.32, emissive: 0x19d9e6, emissiveIntensity: 11 },
+    rocket_base:  { color: 0xd36b4a, metalness: 1.00, roughness: 0.32 },
+    white:        { color: 0x797234, metalness: 0.00, roughness: 0.32, emissive: 0x19d9e6, emissiveIntensity: 5.0 },
+    fallback:     { color: 0xd36b4a, metalness: 1.00, roughness: 0.32 },
+  },
+  // 3 — CIPHER (diamond plate)
+  {
+    nozzle:       { color: 0x080808, metalness: 0.95, roughness: 0.10 },
+    gray:         { color: 0x000000, metalness: 0.98, roughness: 0,    emissive: 0x000000, emissiveIntensity: 0, diamond: true },
+    rocket_light: { color: 0x000000, metalness: 0.0,  roughness: 0,    emissive: 0x88bbff, emissiveIntensity: 6 },
+    rocket_base:  { color: 0x000000, metalness: 0.98, roughness: 0,    emissive: 0x000000, emissiveIntensity: 0, diamond: true },
+    white:        { color: 0x000000, metalness: 0.98, roughness: 0,    emissive: 0x000000, emissiveIntensity: 0, diamond: true },
+    fallback:     { color: 0x000000, metalness: 0.98, roughness: 0,    emissive: 0x000000, emissiveIntensity: 0, diamond: true },
+  },
+];
+
+// Build a fresh material for a given (skinIdx, slotName). Returns null for
+// fire/fire1 slots — caller handles those (push to shipFireMeshes, leave mat alone).
+function _makeMatForSkinSlot(skinIdx, slotName) {
+  if (slotName === 'fire' || slotName === 'fire1') return null;
+  const palette = _SKIN_PALETTE[skinIdx] || _SKIN_PALETTE[0];
+  let key = slotName;
+  if (key === 'rocket light') key = 'rocket_light';
+  if (key === 'rocket base') key = 'rocket_base';
+  if (key === 'white ') key = 'white';
+  if (key === 'Light') key = 'rocket_light'; // alt-GLB sometimes labels emissive as Light
+  if (!palette[key]) key = 'fallback';
+  const def = palette[key];
+  let mat;
+  if (def.holo) {
+    mat = new HolographicMaterial({
+      hologramColor:      def.hologramColor || '#00e0ff',
+      fresnelAmount:      0.70,
+      fresnelOpacity:     0.82,
+      scanlineSize:       5.50,
+      hologramBrightness: 1.94,
+      signalSpeed:        0.00,
+      enableBlinking:     true,
+      blinkFresnelOnly:   true,
+      hologramOpacity:    0.31,
+      side:               THREE.DoubleSide,
+      blendMode:          THREE.NormalBlending,
+    });
+    mat.depthWrite = true;
+    _registerHoloMaterial(mat);
+    return mat;
+  }
+  const props = {
+    color: def.color,
+    metalness: def.metalness !== undefined ? def.metalness : 0,
+    roughness: def.roughness !== undefined ? def.roughness : 0.5,
+    transparent: false, depthWrite: true,
+  };
+  if (def.emissive !== undefined) props.emissive = def.emissive;
+  if (def.emissiveIntensity !== undefined) props.emissiveIntensity = def.emissiveIntensity;
+  mat = new THREE.MeshStandardMaterial(props);
+  if (def.diamond) {
+    mat.onBeforeCompile = (shader) => {
+      const du = window._diamondUniforms;
+      if (du) for (const k in du) shader.uniforms[k] = du[k];
+      const _uniDecl = 'varying vec3 vWorldPos;\n' +
+        'uniform float dScale;\nuniform float dBump;\n' +
+        'uniform float dEdgeMin;\nuniform float dEdgeMax;\n' +
+        'uniform float dGlowR;\nuniform float dGlowG;\nuniform float dGlowB;\n' +
+        'uniform float dGlowMul;\nuniform float dGlowEdgeMin;\nuniform float dGlowEdgeMax;\n';
+      shader.vertexShader = _SHADER_VERT_PRE + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', _SHADER_VERT_INJ);
+      shader.fragmentShader = _uniDecl + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', _GLSL_DIAMOND);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', _GLSL_DIAMOND_EMISSIVE);
+    };
+    mat.needsUpdate = true;
+  } else if (def.hexBump) {
+    mat.onBeforeCompile = _hexBumpShaderPatch;
+    mat.needsUpdate = true;
+  }
+  return mat;
+}
+
 const gltfLoader = new GLTFLoader();
 // Track default ship load for boot gate
 let _shipLoadResolve = null;
@@ -5694,7 +5886,7 @@ normal = _dbn;`;
         // Hard timeout so a missing/broken alt GLB never blocks boot.
         const _to = setTimeout(() => res(), 12000);
         try {
-          _loadAltShip(skinDef.glbFile, skinDef, () => {
+          _loadAltShip(skinDef.glbFile, skinDef, idx, () => {
             clearTimeout(_to);
             res();
           });
@@ -5801,12 +5993,13 @@ function applyTitleSkin(skinIndex) {
   // we're switching back to a non-alt skin.
   const _skinDef = SHIP_SKINS[skinIndex];
   const _wantAltGlb = !!(_skinDef && _skinDef.glbFile);
-  const _curAltFile = _titleShipModel.userData && _titleShipModel.userData._altGlb;
+  const _curAltKey = _titleShipModel.userData && _titleShipModel.userData._altKey; // 'glb|idx' or null
   const _wantFile = _wantAltGlb ? _skinDef.glbFile : null;
-  if (_wantFile !== (_curAltFile || null)) {
+  const _wantKey = _wantAltGlb ? (_skinDef.glbFile + '|' + skinIndex) : null;
+  if (_wantKey !== (_curAltKey || null)) {
     let _newSrc = null;
-    if (_wantFile) {
-      const _cached = (typeof _altShipCache !== 'undefined') && _altShipCache[_wantFile];
+    if (_wantKey) {
+      const _cached = (typeof _altShipCache !== 'undefined') && _altShipCache[_wantKey];
       if (_cached && _cached.model) _newSrc = _cached.model;
     } else {
       _newSrc = window._shipModel || null;
@@ -5833,6 +6026,7 @@ function applyTitleSkin(skinIndex) {
         _titleMeshMap.push({ mesh: child, origName: child.userData._origMatName });
       });
       fresh.userData._altGlb = _wantFile;
+      fresh.userData._altKey = _wantKey; // 'glb|idx' — cache key for skin-specific clone
       fresh.position.set(0, 0, 0);
       fresh.scale.setScalar(0.12);
       _titleShipModel = fresh;
@@ -5996,7 +6190,7 @@ function applySkin(skinIndex) {
   window._hideOldThrusters     = _wantCones;
 
   if (_isAltGlb) {
-    _loadAltShip(skinDef.glbFile, skinDef, () => {
+    _loadAltShip(skinDef.glbFile, skinDef, skinIndex, () => {
       _showAltShip();
       // Re-collect hull/edge material refs from the now-visible alt model
       // (cache-hit path skips the traverse in _loadAltShip itself).
@@ -6176,10 +6370,21 @@ function _applyGlbConfig(cfg) {
   _snapshotNozzleBaseline();
 }
 
-function _loadAltShip(glbFile, skinDef, callback) {
+function _loadAltShip(glbFile, skinDef, skinIdx, callback) {
+  // Backwards-compat: old call sites passed (glbFile, skinDef, callback). If
+  // a function was passed in skinIdx position, treat it as the callback and
+  // derive skinIdx from SHIP_SKINS lookup.
+  if (typeof skinIdx === 'function') { callback = skinIdx; skinIdx = SHIP_SKINS.indexOf(skinDef); }
+  if (typeof skinIdx !== 'number' || skinIdx < 0) skinIdx = SHIP_SKINS.indexOf(skinDef);
+  if (skinIdx < 0) skinIdx = 0;
+  // Cache key includes skinIdx because multiple skins (RUNNER/GHOST/MAMBA/CIPHER)
+  // share the same glbFile but have different per-skin materials. Each gets its
+  // own cloned model + materials. Addons still key off glbFile (see _currentAddonsKey)
+  // so toggling Fins on RUNNER also shows on GHOST.
+  const cacheKey = glbFile + '|' + skinIdx;
   // If already cached, just switch to it
-  if (_altShipCache[glbFile]) {
-    const cached = _altShipCache[glbFile];
+  if (_altShipCache[cacheKey]) {
+    const cached = _altShipCache[cacheKey];
     _altShipModel = cached.model;
     _altShipMixer = cached.mixer || null;
     _altShipClips = cached.clips || {};
@@ -6189,6 +6394,7 @@ function _loadAltShip(glbFile, skinDef, callback) {
     if (callback) callback();
     return;
   }
+  const _skinIdxForLoad = skinIdx;
   const loader = new GLTFLoader();
   loader.load('./assets/ships/' + glbFile, (gltf) => {
     const model = gltf.scene;
@@ -6218,33 +6424,28 @@ function _loadAltShip(glbFile, skinDef, callback) {
           child.material.onBeforeCompile = _hexBumpShaderPatch;
           child.material.needsUpdate = true;
         } else if (_matchDefault) {
-          // Apply same materials as the default ship based on GLB material names
+          // Apply per-skin materials based on activeSkinIdx (set by caller before _loadAltShip).
+          // 4 main skins (RUNNER/GHOST/MAMBA/CIPHER) all share spaceship_01.glb so addons attach;
+          // each gets recolored via _SKIN_PALETTE so they keep their distinct looks.
           const matName = (child.material && child.material.name) ? child.material.name : '';
           child.userData._origMatName = matName;
-          if (matName === 'nozzle') {
-            child.material = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.95, roughness: 0.12 });
-          } else if (matName === 'gray') {
-            child.material = new THREE.MeshStandardMaterial({ color: 0x888899, metalness: 0.6, roughness: 0.32 });
-          } else if (matName === 'rocket_light' || matName === 'rocket light') {
-            child.material = new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0033cc, emissiveIntensity: 2.5, metalness: 0.0, roughness: 0.05 });
-          } else if (matName === 'rocket_base' || matName === 'rocket base') {
-            const _rbMat = new THREE.MeshStandardMaterial({ color: 0x0e1014, metalness: 0.90, roughness: 0.30 });
-            _rbMat.onBeforeCompile = _hexBumpShaderPatch;
-            _rbMat.needsUpdate = true;
-            child.material = _rbMat;
-            shipHullMats.push(child.material);
-          } else if (matName === 'fire' || matName === 'fire1') {
+          if (matName === 'fire' || matName === 'fire1') {
             shipFireMeshes.push(child);
-          } else if (matName === 'white' || matName === 'white ') {
-            child.material = new THREE.MeshStandardMaterial({ color: 0xddeeff, metalness: 0.5, roughness: 0.08, emissive: 0x2255ff, emissiveIntensity: 0.6 });
-          } else if (matName === 'Light') {
-            child.material = new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0033cc, emissiveIntensity: 2.5, metalness: 0.0, roughness: 0.05 });
           } else {
-            const _hMat = new THREE.MeshStandardMaterial({ color: 0x141820, metalness: 0.88, roughness: 0.25 });
-            _hMat.onBeforeCompile = _hexBumpShaderPatch;
-            _hMat.needsUpdate = true;
-            child.material = _hMat;
-            shipHullMats.push(child.material);
+            const newMat = _makeMatForSkinSlot(_skinIdxForLoad, matName);
+            if (newMat) {
+              child.material = newMat;
+              if (matName === 'rocket_base' || matName === 'rocket base' ||
+                  (matName !== 'white' && matName !== 'white ' && matName !== 'gray' &&
+                   matName !== 'nozzle' && matName !== 'rocket_light' && matName !== 'rocket light' &&
+                   matName !== 'Light')) {
+                shipHullMats.push(child.material);
+              }
+              if (matName === 'rocket_light' || matName === 'rocket light' ||
+                  matName === 'white' || matName === 'white ' || matName === 'Light') {
+                shipEdgeLines.push(child.material);
+              }
+            }
           }
         } else if (_stripTex) {
           // Synthwave procedural material — dark hull + neon trim
@@ -6374,7 +6575,7 @@ function _loadAltShip(glbFile, skinDef, callback) {
       // Tick mixer once at dt=0 to apply the closed poses
       if (mixer) mixer.update(0);
     }
-    _altShipCache[glbFile] = { model, mixer, clips };
+    _altShipCache[cacheKey] = { model, mixer, clips };
     _altShipModel = model;
     _altShipMixer = mixer;
     _altShipClips = clips;
