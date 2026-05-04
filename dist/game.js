@@ -14192,7 +14192,7 @@ function updateStreakBadge() {
     'spaceship_01.glb': [
       { node: 'Fins_01',     label: 'Fins 01' },
       { node: 'Fins_02',     label: 'Fins 02' },
-      { node: 'Rings_001',   label: 'Rings 001' },
+      { node: 'Rings_001',   label: 'Warp Drive' },
       { node: 'Turrets_001', label: 'Turrets 001' },
       { node: 'Turrets_002', label: 'Turrets 002' },
       { node: 'Turrets_003', label: 'Turrets 003' },
@@ -14250,34 +14250,36 @@ function updateStreakBadge() {
     });
     if (dirty) _saveAddonsState(saved);
 
+    // Powerup-style cards: tap a card to toggle on/off. Active = highlighted.
     let html = '';
     entries.forEach(entry => {
-      const checked = !!bucket[entry.node];
+      const on = !!bucket[entry.node];
       const nodeName = String(entry.node).replace(/"/g, '&quot;');
       const label = String(entry.label).replace(/</g, '&lt;');
-      // Match the rest of the garage's sr-row pattern: label on left,
-      // control flush right. No bordered "clickable box" wrapper.
-      html += '<div class="sr-row sr-addon-row">'+
-        '<span class="sr-label">'+label+'</span>'+
-        '<label class="sr-toggle">'+
-          '<input type="checkbox" data-addon="'+nodeName+'" '+(checked?'checked':'')+'>'+
-          '<span class="sr-toggle-track"><span class="sr-toggle-knob"></span></span>'+
-        '</label>'+
-      '</div>';
+      html += '<button type="button" class="sr-addon-card'+(on?' active':'')+'" '+
+        'data-addon="'+nodeName+'" aria-pressed="'+(on?'true':'false')+'">'+
+        '<span class="sr-addon-card-name">'+label+'</span>'+
+        '<span class="sr-addon-card-state">'+(on?'ON':'OFF')+'</span>'+
+      '</button>';
     });
     list.innerHTML = html;
-    list.querySelectorAll('input[type="checkbox"][data-addon]').forEach(inp => {
-      inp.addEventListener('change', (e) => {
+    list.querySelectorAll('button.sr-addon-card[data-addon]').forEach(btn => {
+      btn.addEventListener('click', () => {
         const k = _currentAddonsKey();
         if (!k) return;
-        const n = e.target.dataset.addon;
-        const visible = !!e.target.checked;
-        const node = _findAddonNode(n);
-        if (node) node.visible = visible;
+        const n = btn.dataset.addon;
         const s = _loadAddonsState();
         if (!s[k]) s[k] = {};
-        s[k][n] = visible;
+        const next = !s[k][n];
+        s[k][n] = next;
         _saveAddonsState(s);
+        const node = _findAddonNode(n);
+        if (node) node.visible = next;
+        btn.classList.toggle('active', next);
+        btn.setAttribute('aria-pressed', next ? 'true' : 'false');
+        const stateEl = btn.querySelector('.sr-addon-card-state');
+        if (stateEl) stateEl.textContent = next ? 'ON' : 'OFF';
+        try { playTitleTap(); } catch(_){}
       });
     });
   }
