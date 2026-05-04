@@ -5230,19 +5230,24 @@ body.sr-open #title-leaderboard {
  * only and the mobile-landscape rules above continue to apply unchanged.
  */
 @media (min-width: 900px) and (min-height: 600px) {
+  /* .sr-overlay is position:fixed inset:0 so max-width + margin:auto can't
+     center it. Instead we keep it full-screen for backdrop coverage, and
+     center the CONTENT cluster by adding empty 1fr gutter columns on each
+     side. The stage and panel sit in the middle two tracks; named grid
+     areas leave the gutters blank so the visual cluster is capped at
+     ~1180px and centered horizontally. */
   .sr-overlay:not(.hidden) {
-    /* Center the cluster and cap its width so it lives in a comfortable
-       middle band instead of sprawling edge-to-edge. Stage : panel ratio
-       ~ 7:3 (was effectively ~7:1 on a 1920px monitor with the 240px
-       fixed panel). */
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
-    grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
+    grid-template-columns: 1fr minmax(0, 820px) minmax(320px, 360px) 1fr;
     grid-template-rows: 1fr 72px;
+    grid-template-areas:
+      "lgut stage  panel rgut"
+      "lgut handle panel rgut";
     padding: 16px;
     gap: 14px;
   }
+  .sr-overlay:not(.hidden) .sr-stage         { grid-area: stage; }
+  .sr-overlay:not(.hidden) .sr-handling-slot { grid-area: handle; }
+  .sr-overlay:not(.hidden) .sr-panel         { grid-area: panel; }
   .sr-overlay .sr-tabs { margin-right: 36px; }
   .sr-overlay .sr-tab {
     padding: 8px 10px 9px;

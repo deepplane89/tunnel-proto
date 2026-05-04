@@ -1503,7 +1503,7 @@ function openThrusterPanel(targetTab) {
   if (dot) dot.style.display = 'none';
   // Delegate to showroom module if loaded; otherwise fall back to overlay-only.
   if (window.Showroom && typeof window.Showroom.open === 'function') {
-    window.Showroom.open(targetTab || 'thrusters');
+    window.Showroom.open(targetTab || 'skins');
   } else {
     const overlay = document.getElementById('thruster-overlay');
     if (overlay) overlay.classList.remove('hidden');
