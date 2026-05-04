@@ -1127,9 +1127,8 @@ const DR_SEQUENCE = [
   { name: 'S4_WALLS_RAND',    type: 'angled_walls',  duration: 30, speed: 2.0, vibeIdx: 2, physTier: 2 },
   // Canyon D — L3 knife canyon variant w/ snap LOCKED at 0.1 (no oscillation,
   // max-jagged the whole 40s). Distinct feel from CC's oscillating knife.
-  // CD_CANYON: was L3_KNIFE_LOCKED (snap=0.1) but the locked-snap entrance had
-  // alignment issues. Reverted to PRE_T4A_CANYON (working canyon family).
-  // L3_KNIFE_LOCKED family code is preserved below for future re-enable.
+  // CD_CANYON: PRE_T4A_CANYON (the snap-locked L3 knife variant was tried
+  // here but had alignment issues, so it was removed).
   { name: 'CD_CANYON',        type: 'corridor', family: 'PRE_T4A_CANYON', speed: 2.0, vibeIdx: 2, physTier: 2 },
   { name: 'CD_REST',          type: 'rest', duration: 3, speed: 2.0, vibeIdx: 2, physTier: 2 },
 
@@ -1999,29 +1998,6 @@ const DR_MECHANIC_FAMILIES = {
     // DR sequencer polls this to decide when to advance. Knife canyon counts
     // as active until _stopL3KnifeCanyon flips l3KnifeDone=true (after 40s).
     isActive() { return state.corridorMode || (state.l3KnifeCanyon === true); }
-  },
-  // Snap-locked variant of L3 knife canyon. Used by CD_CANYON slot to give
-  // a different feel from the original CC_L3_KNIFE (oscillating snap).
-  // Locks slab snap at 0.1 (max-jagged) for the full 40s duration.
-  L3_KNIFE_LOCKED: {
-    roles: ['peak'],
-    minBand: 3,
-    activate(band, role) {
-      // Set lock BEFORE _startL3KnifeCanyon so the initial bake uses 0.1
-      // (start fn reads state._l3KnifeSnapLocked when picking slabH/snap preset).
-      state._l3KnifeSnapLocked = 0.1;
-      // Re-arm: this slot fires after the original L3 knife already ran,
-      // so l3KnifeDone is true. Clear it so the start fn proceeds.
-      state.l3KnifeDone     = false;
-      state._l3EntryLogged  = false;
-      _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START');
-      try {
-        _startL3KnifeCanyon();
-      } catch (e) {
-        console.error('[L3-KNIFE-LOCKED] _startL3KnifeCanyon threw:', e);
-      }
-    },
-    isActive() { return state.l3KnifeCanyon === true; }
   },
   PRE_T4A_CANYON: {
     roles: ['build', 'peak'],

@@ -143,20 +143,15 @@ const DR_SPEED_TRIGGERS = Object.freeze({
   // Lifecycle
   INIT:            'state initialization (BASE_SPEED default)',
   RUN_START:       'startGame() reset',
-  RETRY_RESET:     'retry/respawn back to start of run',
   // Sequencer
   STAGE_START:     'DR_SEQUENCE advanced to a new stage',
   STAGE_RAMP:      'in-stage speed ramp (e.g. canyon arc easing)',
-  ENDLESS_TICK:    '_drEndlessTick periodic adjustment',
   // User / debug
   TUNER_OVERRIDE:  'scene tuner speed slider',
-  TUNER_PRESET:    'tuner preset applied (e.g. L4 button)',
   KONAMI:          'Konami / dev menu speed jump',
   // Mechanics that legitimately re-write speed
-  CANYON_ENTER:    'corridor entry speed transition',
   CANYON_EXIT:     'corridor exit speed restore',
   RING_PAUSE:      'ring tuner freeze (sets to 0 / restores prior)',
-  L5_RATCHET:      'L5 corridor speed-floor ratchet enforcement',
   WARP:            'L3 warp transition',
   PENDING_APPLY:   '_pendingSpeed deferred apply (post safe window)',
   // Legacy / to be retired
