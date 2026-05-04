@@ -242,6 +242,26 @@ window._THRUSTER_COLOR_PALETTE = {
     scrollerStart = scroller ? scroller.scrollTop : 0;
   }
 
+  function applyDrag(dy) {
+    if (!target) return;
+    // iOS-app-close feel: as you drag, the surface translates AND scales
+    // down with corners rounding. Numbers tuned so a ~250px drag lands
+    // around scale 0.86 with 18px border-radius (matches iPhone home
+    // gesture).
+    const norm  = Math.min(1, dy / 320);          // 0..1 over the drag
+    const scale = 1 - 0.16 * norm;                // 1 → 0.84
+    const radius = 18 * norm;                     // 0 → 18px
+    const eased  = dy < 300 ? dy : 300 + (dy - 300) * 0.35;
+    target.style.animation       = 'none';
+    target.style.transition      = 'none';
+    target.style.transformOrigin = '50% 50%';
+    target.style.transform       = 'translateY(' + eased + 'px) scale(' + scale + ')';
+    target.style.borderRadius    = radius + 'px';
+    target.style.overflow        = 'hidden';
+    target.style.opacity         = '1';
+    if (document.body) document.body.classList.add('sr-dragging');
+  }
+
   function onTouchMove(e) {
     if (!active) return;
     const t = e.touches && e.touches[0];
@@ -258,17 +278,7 @@ window._THRUSTER_COLOR_PALETTE = {
     // already scrolled past 0, let normal scroll handle it.
     if (dy <= 0) return;
     if (scroller && scroller.scrollTop > 0) return;
-    // Live drag: translate the whole overlay by dy with mild rubber-band
-    // so the title screen behind shows through as the user drags down.
-    const eased = dy < 0 ? 0 : (dy < 300 ? dy : 300 + (dy - 300) * 0.35);
-    if (target) {
-      // Cancel the menu-open keyframe animation otherwise its transform
-      // wins over our inline transform (CSS animations beat inline style).
-      target.style.animation  = 'none';
-      target.style.transition = 'none';
-      target.style.transform  = 'translateY(' + eased + 'px)';
-      target.style.opacity    = String(Math.max(0.5, 1 - eased / 800));
-    }
+    applyDrag(dy);
   }
 
   function onTouchEnd() {
@@ -289,18 +299,25 @@ window._THRUSTER_COLOR_PALETTE = {
         t.style.animation  = '';
       });
     } else if (t) {
-      // Snap back. Keep animation:none so transition runs cleanly, then
-      // restore animation back to stylesheet default after.
-      t.style.transition = 'transform 220ms cubic-bezier(0.2,0.7,0.2,1), opacity 220ms ease';
-      t.style.transform  = 'translateY(0)';
-      t.style.opacity    = '1';
+      // Snap back to scale(1), translate(0), no border-radius.
+      t.style.transition   = 'transform 240ms cubic-bezier(0.2,0.7,0.2,1), border-radius 240ms ease';
+      t.style.transform    = 'translateY(0) scale(1)';
+      t.style.borderRadius = '0px';
       setTimeout(() => {
         if (!t) return;
-        t.style.transition = '';
-        t.style.transform  = '';
-        t.style.opacity    = '';
-        t.style.animation  = '';
-      }, 260);
+        t.style.transition    = '';
+        t.style.transform     = '';
+        t.style.opacity       = '';
+        t.style.animation     = '';
+        t.style.borderRadius  = '';
+        t.style.overflow      = '';
+        t.style.transformOrigin = '';
+        if (document.body) document.body.classList.remove('sr-dragging');
+      }, 280);
+    }
+    if (commit && document.body) {
+      // remove drag class on next frame so close transition reads clean
+      requestAnimationFrame(() => document.body.classList.remove('sr-dragging'));
     }
     reset();
   }
@@ -309,6 +326,10 @@ window._THRUSTER_COLOR_PALETTE = {
     active   = false;
     target   = null;
     scroller = null;
+    if (document.body && document.body.classList.contains('sr-dragging')) {
+      // Only remove if no inline transform is present (avoid race with snap).
+      // The snap-back / commit branches handle their own cleanup.
+    }
   }
 
   // Bind on document so dynamically-rebuilt overlay still works. Capture

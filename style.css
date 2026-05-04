@@ -5110,11 +5110,18 @@ body.sr-open #title-screen > *:not(#title-ship-canvas) {
   pointer-events: none;
   transition: opacity 0.18s ease;
 }
+/* While the user is dragging the garage down (iOS app-close gesture), reveal
+ * the title screen behind so they can see what they're swiping back to. */
+body.sr-dragging #title-screen > *:not(#title-ship-canvas) {
+  opacity: 1;
+  transition: none;
+}
 body.sr-open #title-star-canvas,
 body.sr-open #title-leaderboard,
 body.sr-open #a2hs-banner {
   display: none !important;
 }
+body.sr-dragging #title-star-canvas { display: block !important; }
 body.sr-open #title-ship-canvas {
   filter: saturate(1.06) contrast(1.02);
 }
