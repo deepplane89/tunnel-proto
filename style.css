@@ -5153,9 +5153,12 @@ body.sr-open #title-leaderboard {
   .sr-pane[data-pane="powerups"] .shop-card-desc {
     display: none;
   }
-  /* Compact handling bar in landscape. */
+  /* Compact handling bar in landscape. Border + radius removed so a
+     bottom clip from the fixed 60px row isn't visible as a cut-off edge. */
   .sr-handling-slot .shop-handling-bar {
     padding: 4px 10px;
+    border: none;
+    border-radius: 0;
   }
   .sr-handling-slot .shop-handling-label { font-size: 8px; }
   .sr-handling-slot .shop-handling-tier { font-size: 10px; }
