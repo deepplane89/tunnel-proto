@@ -6051,7 +6051,31 @@ function applyTitleSkin(skinIndex) {
     for (const entry of _titleMeshMap) {
       const { mesh, origName } = entry;
       if (origName === 'fire' || origName === 'fire1') { mesh.visible = false; continue; }
-      if (isLocked) mesh.material = _titleDarkMat;
+      if (isLocked) { mesh.material = _titleDarkMat; continue; }
+      // ── TITLE/SHOWROOM-ONLY MATERIAL OVERRIDES (alt-GLB path) ──
+      // Same intent as the override block in the default-ship path below
+      // (now dead post-ship-merge): the bright studio rig in the title /
+      // garage reads BM's rust hull as orange and CIPHER's near-black
+      // diamond plate as washed-out. Mutate the already-deep-cloned
+      // materials so gameplay (which uses its own alt cache key 'glb|idx')
+      // is untouched.
+      const mat = mesh.material;
+      if (!mat) continue;
+      const slot = origName || '';
+      // BLACK MAMBA (idx 2): force hull-color slots to near-black so title
+      // reads stealth instead of orange. Cyan emissive on white/rocket_light
+      // slots is preserved.
+      if (skinIndex === 2 && (slot === 'rocket_base' || slot === 'gray' || slot === 'fallback')) {
+        if (mat.color) mat.color.setHex(0x000000);
+      }
+      // CIPHER (idx 3): nudge diamond-plate base toward cool blue-steel under
+      // bright lights. The shader emissive is already 0x88bbff; the base color
+      // 0x000000 reads pure black on title. A subtle cool-tinted base lifts
+      // the surface so the diamond pattern + edge glow reads as steel rather
+      // than a flat black silhouette.
+      if (skinIndex === 3 && (slot === 'rocket_base' || slot === 'gray' || slot === 'white' || slot === 'fallback')) {
+        if (mat.color) mat.color.setHex(0x1a2230);
+      }
     }
     return;
   }
