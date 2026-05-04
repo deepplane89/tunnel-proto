@@ -1556,18 +1556,22 @@ html, body {
    * Each child has its own grid-area; widths are constrained to the column
    * (max-width: 100%) so base rules with width:100% don't blow out cells.
    */
+  /* Two framed panels side by side. LEFT: title + action buttons.
+   * RIGHT: all run stats (score, best, coins, level bar, handling bar,
+   * repair, name submit). Each panel slides in from its respective edge. */
   .gameover-content {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
-      "title    title"
-      "hero     level"
-      "hero     levelup"
-      "best     handling"
-      "coins    handup"
-      "_blank1  saveme"
-      "_blank2  submit"
-      "actions  actions";
+      "title    hero"
+      "title    best"
+      "saveme   coins"
+      "saveme   level"
+      "actions  levelup"
+      "actions  handling"
+      "actions  handup"
+      "actions  submit"
+      "actions  submit2";
     column-gap: 22px;
     row-gap: 4px;
     width: min(760px, 96vw);
@@ -1580,13 +1584,12 @@ html, body {
   /* Hide icon in landscape — too tight to fit. */
   .gameover-content > img { display: none; }
 
-  /* Pseudo-element panels behind left and right column groups.
-   * Span from the hero row through the submit row (rows 2..7 of the named grid).
-   * Slide in from outside the viewport. */
+  /* Pseudo-element panels behind left and right column groups. Each panel
+   * spans every row so it frames its full column. Slide in from the edges. */
   .gameover-content::before,
   .gameover-content::after {
     content: "";
-    grid-row: 2 / 8;
+    grid-row: 1 / -1;
     align-self: stretch;
     justify-self: stretch;
     border: 1px solid rgba(34, 211, 238, 0.30);
@@ -1613,18 +1616,43 @@ html, body {
     z-index: 1;
   }
 
+  /* LEFT PANEL: title up top, action buttons stacked below. */
   .gameover-title {
     grid-area: title;
-    font-size: clamp(20px, 4.5vw, 32px);
-    margin: 0 0 2px;
+    font-size: clamp(22px, 5vw, 36px);
+    margin: 0;
+    align-self: end;
+    padding-top: 14px;
   }
+  .go-actions {
+    grid-area: actions;
+    width: calc(100% - 16px);
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    gap: 10px;
+    margin: 0 8px;
+    padding-bottom: 14px;
+    align-self: stretch;
+  }
+  .go-actions .btn-space { width: 100%; }
+  .go-saveme {
+    grid-area: saveme;
+    margin: 0 8px;
+    width: calc(100% - 16px);
+    align-self: center;
+    padding-top: 6px;
+  }
+
+  /* RIGHT PANEL: all run stats. */
   .go-hero {
     grid-area: hero;
     margin: 0;
     align-self: center;
+    padding-top: 8px;
   }
   .go-hero-val {
-    font-size: clamp(38px, 8vw, 56px);
+    font-size: clamp(34px, 7vw, 48px);
   }
   .go-best {
     grid-area: best;
@@ -1636,7 +1664,7 @@ html, body {
     grid-area: coins;
     margin: 0;
     font-size: 15px;
-    align-self: start;
+    align-self: center;
   }
   .go-level-section {
     grid-area: level;
@@ -1658,11 +1686,6 @@ html, body {
     grid-area: handup;
     margin: 0 8px;
   }
-  .go-saveme {
-    grid-area: saveme;
-    margin: 0 8px;
-    width: calc(100% - 16px);
-  }
   .btn-saveme {
     max-width: 100%;
     padding: 7px 12px;
@@ -1672,15 +1695,10 @@ html, body {
     grid-area: submit;
     width: calc(100% - 16px);
     margin: 0 8px;
+    padding-bottom: 8px;
   }
-  .go-actions {
-    grid-area: actions;
-    width: 100%;
-    justify-content: center;
-    margin-top: 6px;
-  }
-  .gameover-content .btn-space { padding: 7px 22px; font-size: 12px; }
-  .btn-retry { padding: 9px 26px; }
+  .gameover-content .btn-space { padding: 9px 22px; font-size: 12px; }
+  .btn-retry { padding: 10px 26px; }
 
   /* ── A2HS BANNER — landscape adjust ───────────────────── */
   .a2hs-banner {
