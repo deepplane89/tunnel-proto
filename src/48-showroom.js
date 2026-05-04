@@ -817,11 +817,15 @@
     // resize canvas AND reclaim ship pose (title screen's applyDefaults
     // also fires on resize and overwrites pivot/rotation).
     if (_resizeT) clearTimeout(_resizeT);
+    // 300ms covers iOS Safari's full rotation animation (~250ms). Reading
+    // stage.getBoundingClientRect earlier returns the pre-rotation rect,
+    // which makes the renderer set the wrong aspect and CSS then stretches
+    // the buffer (ship looks tall/narrow on portrait→landscape).
     _resizeT = setTimeout(() => {
       _resizeT = null;
       _reapplyShowroomPose();
       _resizeStageCanvas();
-    }, 100);
+    }, 300);
   }
   // ─── Showroom thruster preview: build, tick, show/hide ─────────────
   // Builds 2 particle systems + 2 bloom sprites in titleScene, mirroring the
