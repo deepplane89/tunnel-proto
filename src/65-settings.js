@@ -108,6 +108,13 @@ function closeSettings() {
 
   _tapBind(document.getElementById('settings-close'), closeSettings);
 
+  // Leaderboard button — closes settings, then opens leaderboard.
+  const lbBtn = document.getElementById('settings-leaderboard-btn');
+  if (lbBtn) _tapBind(lbBtn, () => {
+    closeSettings();
+    if (typeof toggleLeaderboard === 'function') toggleLeaderboard();
+  });
+
   // Replay tutorial button
   _tapBind(document.getElementById('replay-tutorial-btn'), () => {
     window._LS.removeItem('jh_tutorial_done');

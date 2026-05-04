@@ -380,7 +380,7 @@ function startGame() {
   document.getElementById('hud').classList.remove('hidden');
   setPauseOverlay(false);
   document.getElementById('settings-btn').style.display = 'none'; // hide gear during gameplay
-  document.getElementById('lb-icon-btn').style.display = 'none'; // hide trophy during gameplay
+  { const _lb = document.getElementById('lb-icon-btn'); if (_lb) _lb.style.display = 'none'; } // legacy: trophy moved to Settings
   document.getElementById('lb-overlay').classList.add('hidden');
   // Show touch controls on mobile (any touch-capable device)
   if (navigator.maxTouchPoints > 0) {

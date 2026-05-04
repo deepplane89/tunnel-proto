@@ -239,7 +239,8 @@ function returnToTitle() {
   setPauseOverlay(false);
   document.getElementById('touch-controls').classList.add('hidden');
   document.getElementById('settings-btn').style.display = ''; // show gear on title/gameover
-  document.getElementById('lb-icon-btn').style.display = ''; // show trophy on title
+  // Trophy icon was moved into Settings panel; element no longer exists.
+  { const _lb = document.getElementById('lb-icon-btn'); if (_lb) _lb.style.display = ''; }
   document.getElementById('lb-overlay').classList.add('hidden'); // close leaderboard overlay
   // Stop all gameplay music, reset to start, clear crossfade timer, restart title music
   if (activeFadeIv) { clearInterval(activeFadeIv); activeFadeIv = null; }

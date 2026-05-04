@@ -16262,7 +16262,8 @@ function returnToTitle() {
   setPauseOverlay(false);
   document.getElementById('touch-controls').classList.add('hidden');
   document.getElementById('settings-btn').style.display = ''; // show gear on title/gameover
-  document.getElementById('lb-icon-btn').style.display = ''; // show trophy on title
+  // Trophy icon was moved into Settings panel; element no longer exists.
+  { const _lb = document.getElementById('lb-icon-btn'); if (_lb) _lb.style.display = ''; }
   document.getElementById('lb-overlay').classList.add('hidden'); // close leaderboard overlay
   // Stop all gameplay music, reset to start, clear crossfade timer, restart title music
   if (activeFadeIv) { clearInterval(activeFadeIv); activeFadeIv = null; }
@@ -17440,6 +17441,13 @@ function closeSettings() {
 
   _tapBind(document.getElementById('settings-close'), closeSettings);
 
+  // Leaderboard button — closes settings, then opens leaderboard.
+  const lbBtn = document.getElementById('settings-leaderboard-btn');
+  if (lbBtn) _tapBind(lbBtn, () => {
+    closeSettings();
+    if (typeof toggleLeaderboard === 'function') toggleLeaderboard();
+  });
+
   // Replay tutorial button
   _tapBind(document.getElementById('replay-tutorial-btn'), () => {
     window._LS.removeItem('jh_tutorial_done');
@@ -17947,7 +17955,7 @@ function startGame() {
   document.getElementById('hud').classList.remove('hidden');
   setPauseOverlay(false);
   document.getElementById('settings-btn').style.display = 'none'; // hide gear during gameplay
-  document.getElementById('lb-icon-btn').style.display = 'none'; // hide trophy during gameplay
+  { const _lb = document.getElementById('lb-icon-btn'); if (_lb) _lb.style.display = 'none'; } // legacy: trophy moved to Settings
   document.getElementById('lb-overlay').classList.add('hidden');
   // Show touch controls on mobile (any touch-capable device)
   if (navigator.maxTouchPoints > 0) {
