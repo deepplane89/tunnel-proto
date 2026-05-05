@@ -819,7 +819,12 @@ function _updatePreT4ACanyon(dt) {
     const t = Math.min(1, state.preT4ARampT / _PRE_T4A_RAMP_DURATION);
     const e = 1 - Math.pow(1 - t, 3);
     const startSpeed  = state._preT4ASavedSpeed || (BASE_SPEED * 2.0);
-    const targetSpeed = BASE_SPEED * _PRE_T4A_TARGET_SPEED_MULT;
+    // Target = current stage's declared speed (canyon should NOT add an extra
+    // FOV/speed bump above the gameplay loop). Falls back to legacy 2.2× if
+    // sequencer state unavailable.
+    const _stg = (typeof DR_SEQUENCE !== 'undefined') ? DR_SEQUENCE[state.seqStageIdx] : null;
+    const _stgMult = (_stg && typeof _stg.speed === 'number') ? _stg.speed : _PRE_T4A_TARGET_SPEED_MULT;
+    const targetSpeed = BASE_SPEED * _stgMult;
     _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4ARampPhase = 'active';
@@ -975,7 +980,9 @@ function _updatePreT4BCanyon(dt) {
     const t = Math.min(1, state.preT4BRampT / _PRE_T4B_RAMP_DURATION);
     const e = 1 - Math.pow(1 - t, 3);
     const startSpeed  = state._preT4BSavedSpeed || (BASE_SPEED * 2.0);
-    const targetSpeed = BASE_SPEED * _PRE_T4B_TARGET_SPEED_MULT;
+    const _stgB = (typeof DR_SEQUENCE !== 'undefined') ? DR_SEQUENCE[state.seqStageIdx] : null;
+    const _stgMultB = (_stgB && typeof _stgB.speed === 'number') ? _stgB.speed : _PRE_T4B_TARGET_SPEED_MULT;
+    const targetSpeed = BASE_SPEED * _stgMultB;
     _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4BRampPhase = 'active';
