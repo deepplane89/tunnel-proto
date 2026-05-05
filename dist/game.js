@@ -19897,7 +19897,12 @@ function _drSequencerTick(dt) {
   }
 
   // ─── TIME-BASED STAGES ───
-  state.seqStageElapsed += dt;
+  // Invincible speed boost (1.8×) shortens time-based stage durations to match
+  // the spatial speedup — you actually get through obstacle stages faster, not
+  // just look-faster-while-the-clock-still-ticks. Rests and corridors handle
+  // their own pacing above and aren't affected.
+  const _seqDt = state.invincibleSpeedActive ? dt * 1.8 : dt;
+  state.seqStageElapsed += _seqDt;
 
   if (tp === 'random_cones') {
     // Density control: sparse | dense | normal | ramp.
