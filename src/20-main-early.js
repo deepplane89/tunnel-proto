@@ -6891,22 +6891,18 @@ window._nozPoseUp = [
 // own working values. Indexed by activeSkinIdx. Default Runner uses its most-recent
 // Down-direction tune; MK Runner uses the 558bfb5 values (verified visually correct).
 window._conePoseRoll = {};
-window._conePoseRoll[4] = [
-  new THREE.Vector3(-0.09, 0.01,  0.00),  // L — MK+Warp Up tuned 2026-05-05
-  new THREE.Vector3( 0.01, 0.00, -0.18),  // R — MK+Warp Up tuned 2026-05-05
-];
 // Default Runner (and its recolors GHOST/BLACK MAMBA/CIPHER) use a per-direction
 // Up/Down split because the user tuned distinct targets for each. Captured
 // 2026-05-02 from raw-slider build (b6c6b82 — no blend, slider drives cone 1:1).
 window._conePoseUp = {};
 window._conePoseDown = {};
 window._conePoseUp[0] = [
-  new THREE.Vector3(-0.02, 0.03, -0.09),  // L — Default Runner ArrowUp full roll
-  new THREE.Vector3( 0.03, 0.02, -0.14),  // R — Default Runner ArrowUp full roll
+  new THREE.Vector3(-0.06, 0.00, -0.08),  // L — Default Up tuned 2026-05-05
+  new THREE.Vector3(-0.12, 0.01,  0.00),  // R — Default Up tuned 2026-05-05
 ];
 window._conePoseDown[0] = [
-  new THREE.Vector3(-0.04, 0.02, -0.12),  // L — Default Runner ArrowDown full roll
-  new THREE.Vector3(-0.04, 0.02, -0.17),  // R — Default Runner ArrowDown full roll
+  new THREE.Vector3( 0.00, 0.00, -0.08),  // L — Default Down tuned 2026-05-05
+  new THREE.Vector3( 0.06, 0.01,  0.00),  // R — Default Down tuned 2026-05-05
 ];
 // Recolors share Default's banks.
 window._conePoseUp[1]   = window._conePoseUp[0];
@@ -6915,6 +6911,15 @@ window._conePoseUp[3]   = window._conePoseUp[0];
 window._conePoseDown[1] = window._conePoseDown[0];
 window._conePoseDown[2] = window._conePoseDown[0];
 window._conePoseDown[3] = window._conePoseDown[0];
+// MK+Warp (skin 0 + Warp Drive addon, routed via _isMkWarpActive). Tuned 2026-05-05.
+window._conePoseUp[4] = [
+  new THREE.Vector3(-0.09, 0.01,  0.00),  // L — MK+Warp Up
+  new THREE.Vector3( 0.01, 0.00, -0.18),  // R — MK+Warp Up
+];
+window._conePoseDown[4] = [
+  new THREE.Vector3( 0.05, 0.00,  0.00),  // L — MK+Warp Down
+  new THREE.Vector3(-0.03, 0.00, -0.17),  // R — MK+Warp Down
+];
 // ── Steering pose targets (drive cone offsets based on left/right turn magnitude) ──
 // Indexed by activeSkinIdx, then by side (0=L, 1=R). Per-side entry = {x, y, z}
 // where ONLY defined axes blend; missing axes (or null entries) leave the slider value alone.
@@ -7861,8 +7866,8 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
           // _isMkWarpActive() lives in 72-main-late-mid.js (cached, hot-path-safe).
           let _tgt = null;
           const _mkWarp = (typeof window._isMkWarpActive === 'function') && window._isMkWarpActive();
-          if (_mkWarp && window._conePoseRoll) {
-            const _bank = window._conePoseRoll[4];
+          if (_mkWarp && window._conePoseUp && window._conePoseDown) {
+            const _bank = (_ra < 0) ? window._conePoseUp[4] : window._conePoseDown[4];
             _tgt = _bank && _bank[idx];
           } else if (activeSkinIdx <= 3 && window._conePoseUp && window._conePoseDown) {
             const _bank = (_ra < 0) ? window._conePoseUp[activeSkinIdx] : window._conePoseDown[activeSkinIdx];
