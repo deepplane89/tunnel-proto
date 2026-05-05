@@ -1461,18 +1461,6 @@ function _ringShowTuner() {
       _crBtn.style.borderColor = window._coneTuneRaw ? '#0f0' : '#f00';
     });
     panel.appendChild(_crBtn);
-    const _gvBtn = document.createElement('button');
-    const _gvLbl = () => 'gameplay-view T (no reposition): ' + (window._tunerInGameplayView ? 'ON' : 'OFF');
-    _gvBtn.textContent = _gvLbl();
-    _gvBtn.style.cssText = 'background:' + (window._tunerInGameplayView ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._tunerInGameplayView ? '#0f0' : '#f00') + ';padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 4px 4px 0;display:block;';
-    _gvBtn.addEventListener('click', () => {
-      window._tunerInGameplayView = !window._tunerInGameplayView;
-      try { localStorage.setItem('jh_tuner_gameplay_view', window._tunerInGameplayView ? '1' : '0'); } catch(e) {}
-      _gvBtn.textContent = _gvLbl();
-      _gvBtn.style.background = window._tunerInGameplayView ? '#040' : '#400';
-      _gvBtn.style.borderColor = window._tunerInGameplayView ? '#0f0' : '#f00';
-    });
-    panel.appendChild(_gvBtn);
 
     // CONE PARENT (experimental: parent cones to GLB fire-plane meshes)
     panel.appendChild(makeHeader('CONE PARENT (fire mesh)'));

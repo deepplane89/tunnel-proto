@@ -24851,28 +24851,7 @@ function toggleSkinTuner() {
   _skinTunerOpen = !_skinTunerOpen;
   document.getElementById('skin-tuner').style.display = _skinTunerOpen ? 'block' : 'none';
   if (_skinTunerOpen) {
-    // Save ship + camera state
-    _tunerSavedShipPos = shipGroup.position.clone();
-    _tunerSavedShipRot = shipGroup.rotation.clone();
-    _tunerSavedCamPivot = cameraPivot.position.clone();
-    _tunerSavedCamPos = camera.position.clone();
-
-    // window._tunerInGameplayView === true: skip the ship reposition so the
-    // ship stays where gameplay puts it (with real gameplay FOV/distance).
-    // Use this when tuning visuals (e.g. cone thrusters) that must look right
-    // during actual flight, not the close-up showroom-style preview.
-    if (!window._tunerInGameplayView) {
-      // Position ship right in front of camera, centered, facing camera (no spin)
-      cameraPivot.position.set(0, 2.8, 9);
-      camera.position.set(0, 0, 0);
-      shipGroup.position.set(0, 1.8, 4.5);
-      shipGroup.rotation.set(0, Math.PI, 0);
-
-      // Hide the entire title-screen overlay so the 3D canvas is fully visible
-      const titleEl = document.getElementById('title-screen');
-      if (titleEl) titleEl.style.display = 'none';
-    }
-
+    // Tuner stays at gameplay pose — no ship/camera reposition.
     // Orbit drag — click & drag on canvas to rotate ship
     if (!window._tunerDragBound) {
       window._tunerDragBound = true;
@@ -24893,19 +24872,6 @@ function toggleSkinTuner() {
     }
 
     buildSkinTunerSliders();
-  } else {
-    // Restore ship + camera (only if we actually moved them — gameplay-view
-    // skips the move, so skip the restore too to avoid stomping live state).
-    if (!window._tunerInGameplayView) {
-      if (_tunerSavedShipPos) shipGroup.position.copy(_tunerSavedShipPos);
-      if (_tunerSavedShipRot) shipGroup.rotation.copy(_tunerSavedShipRot);
-      if (_tunerSavedCamPivot) cameraPivot.position.copy(_tunerSavedCamPivot);
-      if (_tunerSavedCamPos) camera.position.copy(_tunerSavedCamPos);
-
-      // Restore title screen
-      const titleEl = document.getElementById('title-screen');
-      if (titleEl) titleEl.style.display = '';
-    }
   }
 }
 window.toggleSkinTuner = toggleSkinTuner;
@@ -29897,18 +29863,6 @@ function _ringShowTuner() {
       _crBtn.style.borderColor = window._coneTuneRaw ? '#0f0' : '#f00';
     });
     panel.appendChild(_crBtn);
-    const _gvBtn = document.createElement('button');
-    const _gvLbl = () => 'gameplay-view T (no reposition): ' + (window._tunerInGameplayView ? 'ON' : 'OFF');
-    _gvBtn.textContent = _gvLbl();
-    _gvBtn.style.cssText = 'background:' + (window._tunerInGameplayView ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._tunerInGameplayView ? '#0f0' : '#f00') + ';padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 4px 4px 0;display:block;';
-    _gvBtn.addEventListener('click', () => {
-      window._tunerInGameplayView = !window._tunerInGameplayView;
-      try { localStorage.setItem('jh_tuner_gameplay_view', window._tunerInGameplayView ? '1' : '0'); } catch(e) {}
-      _gvBtn.textContent = _gvLbl();
-      _gvBtn.style.background = window._tunerInGameplayView ? '#040' : '#400';
-      _gvBtn.style.borderColor = window._tunerInGameplayView ? '#0f0' : '#f00';
-    });
-    panel.appendChild(_gvBtn);
 
     // CONE PARENT (experimental: parent cones to GLB fire-plane meshes)
     panel.appendChild(makeHeader('CONE PARENT (fire mesh)'));
