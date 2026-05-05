@@ -867,7 +867,7 @@ const _PRE_T4B_CANYON_TUNER = {
   sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1,
   halfXOverride:34,
   entranceThick:700, entranceSlabs:1, spawnDepth:-250,
-  scrollSpeed:1.0,
+  scrollSpeed:2.0,
   _allCyan:true, _allDark:false,
 };
 

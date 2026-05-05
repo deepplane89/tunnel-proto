@@ -9311,7 +9311,7 @@ const _CANYON_PRESETS = {
   // updated via Object.assign, so an omitted key inherits the previous preset's
   // value — e.g. mode 2 (_allDark:true) bleeding into mode 4 made the straight
   // canyon render all-dark instead of alternating cyan/dark.
-  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:2.0, _allCyan:true,  _allDark:false },
+  1: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:true,  _allDark:false },
   2: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.47, sineAmp:146, sinePeriod:530, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false, _allDark:true, darkRgh:0.32, darkEmi:1.4 },
   3: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.28, sineAmp:120, sinePeriod:265, sineSpeed:1, halfXOverride:34, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:1.0, _allCyan:false, _allDark:false },
   4: { slabH:55, slabW:20, slabThick:60, sineIntensity:0.0,  sineAmp:0,   sinePeriod:265, sineSpeed:1, halfXOverride:68, entranceThick:700, entranceSlabs:1, spawnDepth:-250, scrollSpeed:2.6, _allCyan:false, _allDark:false },
@@ -12365,7 +12365,7 @@ const _PRE_T4B_CANYON_TUNER = {
   sineIntensity:0.28, sineAmp:120, sinePeriod:330, sineSpeed:1,
   halfXOverride:34,
   entranceThick:700, entranceSlabs:1, spawnDepth:-250,
-  scrollSpeed:1.0,
+  scrollSpeed:2.0,
   _allCyan:true, _allDark:false,
 };
 
