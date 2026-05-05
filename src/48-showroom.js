@@ -573,7 +573,6 @@
       html += '<button type="button" class="sr-addon-card'+(on?' active':'')+'" '+
         'data-addon="'+nodeName+'" aria-pressed="'+(on?'true':'false')+'">'+
         '<span class="sr-addon-card-name">'+label+'</span>'+
-        '<span class="sr-addon-card-state">'+(on?'ON':'OFF')+'</span>'+
       '</button>';
     });
     list.innerHTML = html;

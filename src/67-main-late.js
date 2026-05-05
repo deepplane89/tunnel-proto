@@ -908,6 +908,9 @@ function startDeathRun() {
 
     function _launchDeathRun(e) {
       if (!state.introActive) return; // already launched
+      // Don't swallow taps that land on the pause button (z-index 202 sits below
+      // the prologue overlay at z-index 500, so touches on it route here first).
+      if (e && e.target && e.target.closest && e.target.closest('#touch-pause')) return;
       if (e) { e.preventDefault(); e.stopPropagation(); }
       overlay.removeEventListener('touchstart', _launchDeathRun);
       overlay.removeEventListener('click', _launchDeathRun);

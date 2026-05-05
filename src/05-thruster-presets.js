@@ -77,7 +77,7 @@ window._THRUSTER_PRESETS = {
   // Per-skin barrel-roll merge values (window._conePoseUp / _conePoseDown /
   // _conePoseRoll / _conePoseSteer*) wrap over these base offsets at runtime.
   coneThrust: {
-    label: 'CONE THRUST',
+    label: 'PYLON',
     // Force cones ON, hide the legacy particle thrusters. Preset apply runs
     // AFTER applySkin (see _applyEquippedThruster) so these win over skin defaults.
     _coneThrustersEnabled: true,

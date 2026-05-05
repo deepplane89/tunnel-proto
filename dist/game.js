@@ -138,7 +138,7 @@ window._THRUSTER_PRESETS = {
   // Per-skin barrel-roll merge values (window._conePoseUp / _conePoseDown /
   // _conePoseRoll / _conePoseSteer*) wrap over these base offsets at runtime.
   coneThrust: {
-    label: 'CONE THRUST',
+    label: 'PYLON',
     // Force cones ON, hide the legacy particle thrusters. Preset apply runs
     // AFTER applySkin (see _applyEquippedThruster) so these win over skin defaults.
     _coneThrustersEnabled: true,
@@ -14897,7 +14897,6 @@ function updateStreakBadge() {
       html += '<button type="button" class="sr-addon-card'+(on?' active':'')+'" '+
         'data-addon="'+nodeName+'" aria-pressed="'+(on?'true':'false')+'">'+
         '<span class="sr-addon-card-name">'+label+'</span>'+
-        '<span class="sr-addon-card-state">'+(on?'ON':'OFF')+'</span>'+
       '</button>';
     });
     list.innerHTML = html;
@@ -19224,6 +19223,9 @@ function startDeathRun() {
 
     function _launchDeathRun(e) {
       if (!state.introActive) return; // already launched
+      // Don't swallow taps that land on the pause button (z-index 202 sits below
+      // the prologue overlay at z-index 500, so touches on it route here first).
+      if (e && e.target && e.target.closest && e.target.closest('#touch-pause')) return;
       if (e) { e.preventDefault(); e.stopPropagation(); }
       overlay.removeEventListener('touchstart', _launchDeathRun);
       overlay.removeEventListener('click', _launchDeathRun);
