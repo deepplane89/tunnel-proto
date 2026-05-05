@@ -2025,7 +2025,7 @@ function spawnObstacles() {
       else    clampedCount = 6 + Math.floor(Math.random() * 3);
     }
     else if (_sm === 'lethal')    { _isRingBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
-    else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 2 + Math.floor(Math.random() * 2); } // 2-3 cones; predicted-X spawning provides the lateral punish (rows track ship's projected position)
+    else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); } // 3-4 cones (cranked 2026-05-05); predicted-X spawning provides the lateral punish (rows track ship's projected position)
     else if (_sm === 'endless')   { _isMixBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
   } else if (state.isDeathRun) {
     for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _obsBandIdx = bi; break; } _obsBandIdx = bi; }

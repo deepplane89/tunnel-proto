@@ -13523,7 +13523,7 @@ function spawnObstacles() {
       else    clampedCount = 6 + Math.floor(Math.random() * 3);
     }
     else if (_sm === 'lethal')    { _isRingBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
-    else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 2 + Math.floor(Math.random() * 2); } // 2-3 cones; predicted-X spawning provides the lateral punish (rows track ship's projected position)
+    else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); } // 3-4 cones (cranked 2026-05-05); predicted-X spawning provides the lateral punish (rows track ship's projected position)
     else if (_sm === 'endless')   { _isMixBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
   } else if (state.isDeathRun) {
     for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _obsBandIdx = bi; break; } _obsBandIdx = bi; }
@@ -23540,7 +23540,7 @@ function update(dt) {
         for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _spawnBand = bi; break; } _spawnBand = bi; }
       }
       const _isFatConeMode = state._seqSpawnMode === 'fat_cones';
-      const _spawnZBase = _isFatConeMode ? -50 : (_spawnBand === 1) ? -30 : (_spawnBand === 2 || _spawnBand >= 5) ? -22 : (state.isDeathRun ? -30 : -50);
+      const _spawnZBase = _isFatConeMode ? -28 : (_spawnBand === 1) ? -30 : (_spawnBand === 2 || _spawnBand >= 5) ? -22 : (state.isDeathRun ? -30 : -50);
       state.nextSpawnZ = _spawnZBase + (Math.random() - 0.5) * 10;
       state.frameCount++;
       const l4PreClear = (!state.isDeathRun && state.currentLevelIdx === 3 && !state.l4CorridorDone &&
