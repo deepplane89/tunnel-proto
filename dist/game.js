@@ -7875,7 +7875,10 @@ const _thrusterCones = NOZZLE_OFFSETS.map(() => {
     },
     transparent: true,
     depthWrite: false,
-    depthTest: false,
+    // depthTest ON so the ship hull occludes the cone where they overlap.
+    // With depthTest off + AdditiveBlending the cone bled through the hull and
+    // made the ship look semi-transparent in front of the cone.
+    depthTest:  true,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
   });
@@ -15394,7 +15397,8 @@ function updateStreakBadge() {
           },
           transparent: true,
           depthWrite:  false,
-          depthTest:   false,
+          // depthTest ON so hull occludes cone (prevents false transparency through ship)
+          depthTest:   true,
           blending:    THREE.AdditiveBlending,
           side:        THREE.DoubleSide,
         });

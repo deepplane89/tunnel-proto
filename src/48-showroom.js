@@ -1076,7 +1076,8 @@
           },
           transparent: true,
           depthWrite:  false,
-          depthTest:   false,
+          // depthTest ON so hull occludes cone (prevents false transparency through ship)
+          depthTest:   true,
           blending:    THREE.AdditiveBlending,
           side:        THREE.DoubleSide,
         });
