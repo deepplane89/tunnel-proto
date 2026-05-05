@@ -1447,6 +1447,33 @@ function _ringShowTuner() {
       panel.appendChild(makeSlider('cone opacity', _ct.opacity, 0, 1, 0.01, v => { _ct.opacity = v; }, '#f60'));
     }
 
+    // CONE TUNE MODE (raw slider, no blend) — gameplay-FOV ship pose, sliders
+    // drive cone directly during held roll. Press C to capture, paste numbers.
+    panel.appendChild(makeHeader('CONE TUNE MODE'));
+    const _crBtn = document.createElement('button');
+    const _crLbl = () => 'raw slider (no blend): ' + (window._coneTuneRaw ? 'ON' : 'OFF');
+    _crBtn.textContent = _crLbl();
+    _crBtn.style.cssText = 'background:' + (window._coneTuneRaw ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._coneTuneRaw ? '#0f0' : '#f00') + ';padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 4px 4px 0;display:block;';
+    _crBtn.addEventListener('click', () => {
+      window._coneTuneRaw = !window._coneTuneRaw;
+      _crBtn.textContent = _crLbl();
+      _crBtn.style.background = window._coneTuneRaw ? '#040' : '#400';
+      _crBtn.style.borderColor = window._coneTuneRaw ? '#0f0' : '#f00';
+    });
+    panel.appendChild(_crBtn);
+    const _gvBtn = document.createElement('button');
+    const _gvLbl = () => 'gameplay-view T (no reposition): ' + (window._tunerInGameplayView ? 'ON' : 'OFF');
+    _gvBtn.textContent = _gvLbl();
+    _gvBtn.style.cssText = 'background:' + (window._tunerInGameplayView ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._tunerInGameplayView ? '#0f0' : '#f00') + ';padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 4px 4px 0;display:block;';
+    _gvBtn.addEventListener('click', () => {
+      window._tunerInGameplayView = !window._tunerInGameplayView;
+      try { localStorage.setItem('jh_tuner_gameplay_view', window._tunerInGameplayView ? '1' : '0'); } catch(e) {}
+      _gvBtn.textContent = _gvLbl();
+      _gvBtn.style.background = window._tunerInGameplayView ? '#040' : '#400';
+      _gvBtn.style.borderColor = window._tunerInGameplayView ? '#0f0' : '#f00';
+    });
+    panel.appendChild(_gvBtn);
+
     // CONE PARENT (experimental: parent cones to GLB fire-plane meshes)
     panel.appendChild(makeHeader('CONE PARENT (fire mesh)'));
     const _cpBtn = document.createElement('button');

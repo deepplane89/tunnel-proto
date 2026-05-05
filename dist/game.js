@@ -7820,6 +7820,10 @@ window._coneFireOffset = {
   R: { x: 0, y: 0, z: 0 },
 };
 
+// Tuner gameplay-view: when ON, pressing T does NOT reposition camera/ship.
+// Persisted across reloads via localStorage. Toggle via tuner panel button.
+try { window._tunerInGameplayView = (localStorage.getItem('jh_tuner_gameplay_view') === '1'); } catch(e) { window._tunerInGameplayView = false; }
+
 const _coneVertSrc = /* glsl */`
   varying float vHeight;  // 0 = nozzle base, 1 = tip
   varying vec3 vNormal;
@@ -8403,7 +8407,10 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // User-tuned per-pose values for full barrel roll (±pi/2) — same target for both
       // directions, so blend uses |state.rollAngle| / (pi/2). Disable via
       // window._conePoseEnabled = false. Targets are stored in window._conePoseRoll.
-      if (window._conePoseEnabled !== false && typeof state !== 'undefined' && state) {
+      // window._coneTuneRaw === true: skip both roll and steering blends so the
+      // raw slider value drives the cone directly. Use this during a tuning
+      // session — tune at full roll, capture with C key, bake into banks, off.
+      if (window._coneTuneRaw !== true && window._conePoseEnabled !== false && typeof state !== 'undefined' && state) {
         const _ra = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
         const _t = Math.max(0, Math.min(1, Math.abs(_ra) / (Math.PI * 0.5)));
         if (_t > 0.001) {
@@ -8433,12 +8440,13 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
           }
         }
       }
+      // Steering blend also gated by raw-tune flag.
       // ── Cone-offset pose-blend (steering-magnitude driven) ──
       // Mirrors the barrel-roll blend above but driven by window._steerNorm ∈ [-1, +1].
       // Sign picks left/right pose table; magnitude drives blend factor. Per-side null entries
       // mean "don't blend this side" — the cone stays at its slider/zero value. Disable via
       // window._coneSteerEnabled = false. _steerNorm is already zeroed during barrel roll.
-      if (window._coneSteerEnabled !== false) {
+      if (window._coneTuneRaw !== true && window._coneSteerEnabled !== false) {
         const _sNorm = (typeof window._steerNorm === 'number') ? window._steerNorm : 0;
         const _sT = Math.max(0, Math.min(1, Math.abs(_sNorm)));
         if (_sT > 0.001) {
@@ -24849,15 +24857,21 @@ function toggleSkinTuner() {
     _tunerSavedCamPivot = cameraPivot.position.clone();
     _tunerSavedCamPos = camera.position.clone();
 
-    // Position ship right in front of camera, centered, facing camera (no spin)
-    cameraPivot.position.set(0, 2.8, 9);
-    camera.position.set(0, 0, 0);
-    shipGroup.position.set(0, 1.8, 4.5);
-    shipGroup.rotation.set(0, Math.PI, 0);
+    // window._tunerInGameplayView === true: skip the ship reposition so the
+    // ship stays where gameplay puts it (with real gameplay FOV/distance).
+    // Use this when tuning visuals (e.g. cone thrusters) that must look right
+    // during actual flight, not the close-up showroom-style preview.
+    if (!window._tunerInGameplayView) {
+      // Position ship right in front of camera, centered, facing camera (no spin)
+      cameraPivot.position.set(0, 2.8, 9);
+      camera.position.set(0, 0, 0);
+      shipGroup.position.set(0, 1.8, 4.5);
+      shipGroup.rotation.set(0, Math.PI, 0);
 
-    // Hide the entire title-screen overlay so the 3D canvas is fully visible
-    const titleEl = document.getElementById('title-screen');
-    if (titleEl) titleEl.style.display = 'none';
+      // Hide the entire title-screen overlay so the 3D canvas is fully visible
+      const titleEl = document.getElementById('title-screen');
+      if (titleEl) titleEl.style.display = 'none';
+    }
 
     // Orbit drag — click & drag on canvas to rotate ship
     if (!window._tunerDragBound) {
@@ -24880,15 +24894,18 @@ function toggleSkinTuner() {
 
     buildSkinTunerSliders();
   } else {
-    // Restore ship + camera
-    if (_tunerSavedShipPos) shipGroup.position.copy(_tunerSavedShipPos);
-    if (_tunerSavedShipRot) shipGroup.rotation.copy(_tunerSavedShipRot);
-    if (_tunerSavedCamPivot) cameraPivot.position.copy(_tunerSavedCamPivot);
-    if (_tunerSavedCamPos) camera.position.copy(_tunerSavedCamPos);
+    // Restore ship + camera (only if we actually moved them — gameplay-view
+    // skips the move, so skip the restore too to avoid stomping live state).
+    if (!window._tunerInGameplayView) {
+      if (_tunerSavedShipPos) shipGroup.position.copy(_tunerSavedShipPos);
+      if (_tunerSavedShipRot) shipGroup.rotation.copy(_tunerSavedShipRot);
+      if (_tunerSavedCamPivot) cameraPivot.position.copy(_tunerSavedCamPivot);
+      if (_tunerSavedCamPos) camera.position.copy(_tunerSavedCamPos);
 
-    // Restore title screen
-    const titleEl = document.getElementById('title-screen');
-    if (titleEl) titleEl.style.display = '';
+      // Restore title screen
+      const titleEl = document.getElementById('title-screen');
+      if (titleEl) titleEl.style.display = '';
+    }
   }
 }
 window.toggleSkinTuner = toggleSkinTuner;
@@ -29865,6 +29882,33 @@ function _ringShowTuner() {
       panel.appendChild(makeSlider('fresnel power', _ct.fresnelPower, 0.5, 6, 0.1, v => { _ct.fresnelPower = v; }, '#f60'));
       panel.appendChild(makeSlider('cone opacity', _ct.opacity, 0, 1, 0.01, v => { _ct.opacity = v; }, '#f60'));
     }
+
+    // CONE TUNE MODE (raw slider, no blend) — gameplay-FOV ship pose, sliders
+    // drive cone directly during held roll. Press C to capture, paste numbers.
+    panel.appendChild(makeHeader('CONE TUNE MODE'));
+    const _crBtn = document.createElement('button');
+    const _crLbl = () => 'raw slider (no blend): ' + (window._coneTuneRaw ? 'ON' : 'OFF');
+    _crBtn.textContent = _crLbl();
+    _crBtn.style.cssText = 'background:' + (window._coneTuneRaw ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._coneTuneRaw ? '#0f0' : '#f00') + ';padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 4px 4px 0;display:block;';
+    _crBtn.addEventListener('click', () => {
+      window._coneTuneRaw = !window._coneTuneRaw;
+      _crBtn.textContent = _crLbl();
+      _crBtn.style.background = window._coneTuneRaw ? '#040' : '#400';
+      _crBtn.style.borderColor = window._coneTuneRaw ? '#0f0' : '#f00';
+    });
+    panel.appendChild(_crBtn);
+    const _gvBtn = document.createElement('button');
+    const _gvLbl = () => 'gameplay-view T (no reposition): ' + (window._tunerInGameplayView ? 'ON' : 'OFF');
+    _gvBtn.textContent = _gvLbl();
+    _gvBtn.style.cssText = 'background:' + (window._tunerInGameplayView ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._tunerInGameplayView ? '#0f0' : '#f00') + ';padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 4px 4px 0;display:block;';
+    _gvBtn.addEventListener('click', () => {
+      window._tunerInGameplayView = !window._tunerInGameplayView;
+      try { localStorage.setItem('jh_tuner_gameplay_view', window._tunerInGameplayView ? '1' : '0'); } catch(e) {}
+      _gvBtn.textContent = _gvLbl();
+      _gvBtn.style.background = window._tunerInGameplayView ? '#040' : '#400';
+      _gvBtn.style.borderColor = window._tunerInGameplayView ? '#0f0' : '#f00';
+    });
+    panel.appendChild(_gvBtn);
 
     // CONE PARENT (experimental: parent cones to GLB fire-plane meshes)
     panel.appendChild(makeHeader('CONE PARENT (fire mesh)'));

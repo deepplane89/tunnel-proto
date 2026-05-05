@@ -215,15 +215,21 @@ function toggleSkinTuner() {
     _tunerSavedCamPivot = cameraPivot.position.clone();
     _tunerSavedCamPos = camera.position.clone();
 
-    // Position ship right in front of camera, centered, facing camera (no spin)
-    cameraPivot.position.set(0, 2.8, 9);
-    camera.position.set(0, 0, 0);
-    shipGroup.position.set(0, 1.8, 4.5);
-    shipGroup.rotation.set(0, Math.PI, 0);
+    // window._tunerInGameplayView === true: skip the ship reposition so the
+    // ship stays where gameplay puts it (with real gameplay FOV/distance).
+    // Use this when tuning visuals (e.g. cone thrusters) that must look right
+    // during actual flight, not the close-up showroom-style preview.
+    if (!window._tunerInGameplayView) {
+      // Position ship right in front of camera, centered, facing camera (no spin)
+      cameraPivot.position.set(0, 2.8, 9);
+      camera.position.set(0, 0, 0);
+      shipGroup.position.set(0, 1.8, 4.5);
+      shipGroup.rotation.set(0, Math.PI, 0);
 
-    // Hide the entire title-screen overlay so the 3D canvas is fully visible
-    const titleEl = document.getElementById('title-screen');
-    if (titleEl) titleEl.style.display = 'none';
+      // Hide the entire title-screen overlay so the 3D canvas is fully visible
+      const titleEl = document.getElementById('title-screen');
+      if (titleEl) titleEl.style.display = 'none';
+    }
 
     // Orbit drag — click & drag on canvas to rotate ship
     if (!window._tunerDragBound) {
@@ -246,15 +252,18 @@ function toggleSkinTuner() {
 
     buildSkinTunerSliders();
   } else {
-    // Restore ship + camera
-    if (_tunerSavedShipPos) shipGroup.position.copy(_tunerSavedShipPos);
-    if (_tunerSavedShipRot) shipGroup.rotation.copy(_tunerSavedShipRot);
-    if (_tunerSavedCamPivot) cameraPivot.position.copy(_tunerSavedCamPivot);
-    if (_tunerSavedCamPos) camera.position.copy(_tunerSavedCamPos);
+    // Restore ship + camera (only if we actually moved them — gameplay-view
+    // skips the move, so skip the restore too to avoid stomping live state).
+    if (!window._tunerInGameplayView) {
+      if (_tunerSavedShipPos) shipGroup.position.copy(_tunerSavedShipPos);
+      if (_tunerSavedShipRot) shipGroup.rotation.copy(_tunerSavedShipRot);
+      if (_tunerSavedCamPivot) cameraPivot.position.copy(_tunerSavedCamPivot);
+      if (_tunerSavedCamPos) camera.position.copy(_tunerSavedCamPos);
 
-    // Restore title screen
-    const titleEl = document.getElementById('title-screen');
-    if (titleEl) titleEl.style.display = '';
+      // Restore title screen
+      const titleEl = document.getElementById('title-screen');
+      if (titleEl) titleEl.style.display = '';
+    }
   }
 }
 window.toggleSkinTuner = toggleSkinTuner;

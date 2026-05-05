@@ -7258,6 +7258,10 @@ window._coneFireOffset = {
   R: { x: 0, y: 0, z: 0 },
 };
 
+// Tuner gameplay-view: when ON, pressing T does NOT reposition camera/ship.
+// Persisted across reloads via localStorage. Toggle via tuner panel button.
+try { window._tunerInGameplayView = (localStorage.getItem('jh_tuner_gameplay_view') === '1'); } catch(e) { window._tunerInGameplayView = false; }
+
 const _coneVertSrc = /* glsl */`
   varying float vHeight;  // 0 = nozzle base, 1 = tip
   varying vec3 vNormal;
@@ -7841,7 +7845,10 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
       // User-tuned per-pose values for full barrel roll (±pi/2) — same target for both
       // directions, so blend uses |state.rollAngle| / (pi/2). Disable via
       // window._conePoseEnabled = false. Targets are stored in window._conePoseRoll.
-      if (window._conePoseEnabled !== false && typeof state !== 'undefined' && state) {
+      // window._coneTuneRaw === true: skip both roll and steering blends so the
+      // raw slider value drives the cone directly. Use this during a tuning
+      // session — tune at full roll, capture with C key, bake into banks, off.
+      if (window._coneTuneRaw !== true && window._conePoseEnabled !== false && typeof state !== 'undefined' && state) {
         const _ra = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
         const _t = Math.max(0, Math.min(1, Math.abs(_ra) / (Math.PI * 0.5)));
         if (_t > 0.001) {
@@ -7871,12 +7878,13 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
           }
         }
       }
+      // Steering blend also gated by raw-tune flag.
       // ── Cone-offset pose-blend (steering-magnitude driven) ──
       // Mirrors the barrel-roll blend above but driven by window._steerNorm ∈ [-1, +1].
       // Sign picks left/right pose table; magnitude drives blend factor. Per-side null entries
       // mean "don't blend this side" — the cone stays at its slider/zero value. Disable via
       // window._coneSteerEnabled = false. _steerNorm is already zeroed during barrel roll.
-      if (window._coneSteerEnabled !== false) {
+      if (window._coneTuneRaw !== true && window._coneSteerEnabled !== false) {
         const _sNorm = (typeof window._steerNorm === 'number') ? window._steerNorm : 0;
         const _sT = Math.max(0, Math.min(1, Math.abs(_sNorm)));
         if (_sT > 0.001) {
