@@ -7294,6 +7294,12 @@ const _coneFragSrc = /* glsl */`
   }
 `;
 
+// Expose shader sources for the showroom preview (48-showroom.js builds its own
+// cone meshes parented to the title ship using the exact same shader so the
+// preview matches in-game).
+window._coneVertSrc = _coneVertSrc;
+window._coneFragSrc = _coneFragSrc;
+
 const _thrusterCones = NOZZLE_OFFSETS.map(() => {
   const _ct = window._coneThruster;
   // Unit cone: radius=1, height=1 — scaled at runtime via cone.scale

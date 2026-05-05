@@ -1051,9 +1051,49 @@
     // user-confirmed working value for the default Runner is -2.394, and
     // the same tuner reproduces correctly on MK Runner with the same value.
     const hullBackZ = -2.394;
+    // Build cone meshes (L/R only — minis stay particles in both modes).
+    // Same shader/geometry as gameplay (window._coneVertSrc/_coneFragSrc set
+    // by 20-main-early.js). Each cone is parented to its L/R anchor; the cone
+    // base sits at anchor origin and tip aligns with anchor's local -Z direction
+    // (which is the exhaust direction the particles already use).
+    const cones = {};
+    if (window._coneVertSrc && window._coneFragSrc) {
+      const _ct0 = window._coneThruster || { neonPower:0.9, noiseSpeed:0.8, noiseStrength:0.13, fresnelPower:6.0, opacity:1.0 };
+      ['L','R'].forEach(k => {
+        const geo = new THREE.ConeGeometry(1, 1, 16, 1, true);
+        geo.translate(0, 0.5, 0); // base at y=0, tip at y=1
+        const mat = new THREE.ShaderMaterial({
+          vertexShader:   window._coneVertSrc,
+          fragmentShader: window._coneFragSrc,
+          uniforms: {
+            uTime:          { value: 0 },
+            uColor:         { value: new THREE.Color(0x66ccff) },
+            uNeonPower:     { value: _ct0.neonPower },
+            uNoiseSpeed:    { value: _ct0.noiseSpeed },
+            uNoiseStrength: { value: _ct0.noiseStrength },
+            uFresnelPower:  { value: _ct0.fresnelPower },
+            uOpacity:       { value: _ct0.opacity },
+          },
+          transparent: true,
+          depthWrite:  false,
+          depthTest:   false,
+          blending:    THREE.AdditiveBlending,
+          side:        THREE.DoubleSide,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.frustumCulled = false;
+        mesh.renderOrder   = 9;
+        mesh.visible       = false;
+        // Rotate so the cone's +Y (tip) axis aligns with anchor's -Z (exhaust dir).
+        mesh.rotation.x = -Math.PI / 2;
+        anchors[k].add(mesh);
+        cones[k] = mesh;
+      });
+    }
     _thr = {
       groups,           // { L, R, mL, mR }
       anchors,          // { L, R, mL, mR }
+      cones,            // { L, R } — cone meshes for CONE THRUST preset
       color: new THREE.Color(0x66ccff),
       _v: new THREE.Vector3(),
       hullBackZ,
@@ -1195,6 +1235,43 @@
     const flipSign = _tuner.flip ? 1 : -1;  // -1 = exhaust into anchor -Z (default)
     const _exhDir = new THREE.Vector3();
 
+    // ── Cone preview: when the CONE THRUST preset is equipped, render the
+    // shader cones in place of the L/R particle pods. Mini pods (mL/mR) stay
+    // as particles either way. _coneThrustersEnabled is set by the preset's
+    // _writeThrPresetValues path, so we just mirror it here.
+    const _coneOn = !!window._coneThrustersEnabled && !!_thr.cones && !!_thr.cones.L;
+    if (_thr.cones) {
+      ['L','R'].forEach(k => {
+        const cm = _thr.cones[k];
+        if (!cm) return;
+        if (!_coneOn) { cm.visible = false; return; }
+        cm.visible = true;
+        const ct = window._coneThruster || {};
+        // Position: cone base at anchor origin, plus per-side offsets matching
+        // gameplay (offX/Y/Z legacy + offLX/Y/Z or offRX/Y/Z). Anchor scale is 1
+        // here (no shipGroup divide) since the cone is anchor-local.
+        const oX = (ct.offX || 0) + (k === 'L' ? (ct.offLX || 0) : (ct.offRX || 0));
+        const oY = (ct.offY || 0) + (k === 'L' ? (ct.offLY || 0) : (ct.offRY || 0));
+        const oZ = (ct.offZ || 0) + (k === 'L' ? (ct.offLZ || 0) : (ct.offRZ || 0));
+        cm.position.set(oX, oY, oZ);
+        // Scale + shape — same as gameplay: (radius, length, radius). Cone +Y is
+        // tip (geo translated), so length scales the local Y axis. We rotated
+        // mesh.rotation.x = -PI/2 in init, so geo +Y already points down anchor -Z.
+        const length = (ct.length != null ? ct.length : 3.30) * tp;
+        const radius = (ct.radius != null ? ct.radius : 0.29);
+        cm.scale.set(radius, length, radius);
+        // Uniforms — mirror gameplay updateThrusters cone block.
+        const u = cm.material.uniforms;
+        u.uTime.value          = performance.now() * 0.001;
+        u.uColor.value.copy(tCol);
+        u.uNeonPower.value     = (ct.neonPower     != null) ? ct.neonPower     : 0.90;
+        u.uNoiseSpeed.value    = (ct.noiseSpeed    != null) ? ct.noiseSpeed    : 0.80;
+        u.uNoiseStrength.value = (ct.noiseStrength != null) ? ct.noiseStrength : 0.13;
+        u.uFresnelPower.value  = (ct.fresnelPower  != null) ? ct.fresnelPower  : 6.0;
+        u.uOpacity.value       = ((ct.opacity != null) ? ct.opacity : 1.0) * tp;
+      });
+    }
+
     const KEYS = ['L','R','mL','mR'];
     for (let ki = 0; ki < KEYS.length; ki++) {
       const k = KEYS[ki];
@@ -1204,6 +1281,13 @@
       if (!g || !a || !tu) continue;
       const isMini = !!g.isMini;
       const N = g.positions.length / 3 | 0;
+
+      // When CONE THRUST preset is active, hide the main L/R particle pods +
+      // their bloom sprites (cones replace them). Mini pods (mL/mR) stay on.
+      const _hideThisAsParticle = _coneOn && !isMini;
+      if (g.points && g.points.visible !== !_hideThisAsParticle) g.points.visible = !_hideThisAsParticle;
+      if (g.bloom && g.bloom.visible  !== !_hideThisAsParticle) g.bloom.visible  = !_hideThisAsParticle;
+      if (_hideThisAsParticle) continue;
 
       // World position of the nozzle anchor.
       a.getWorldPosition(_thr._v);
@@ -1389,6 +1473,11 @@
       // Init thruster preview lazily on first open + show it.
       _thrInit();
       _forceShipOpaque();
+      // Re-apply the equipped thruster preset so cone-related globals
+      // (_coneThrustersEnabled, _coneThruster offsets, _hideOldThrusters)
+      // are populated for the preview — _applyEquippedThruster otherwise
+      // only fires on game start (67-main-late.js).
+      try { if (typeof window._applyEquippedThruster === 'function') window._applyEquippedThruster(); } catch(_){}
       _thrSyncColor();
       _thrShow(true);
       // Tuner + FX HUDs are dev-only. Toggle on by setting
