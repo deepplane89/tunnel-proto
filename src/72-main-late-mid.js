@@ -114,8 +114,8 @@ document.addEventListener('visibilitychange', () => {
       togglePause();
     }
   } else {
-    // Tab/app regained focus — resume AudioContext so sounds work again
-    // 'interrupted' is iOS-specific (phone call, Bluetooth route change)
+    // Tab/app regained focus — resume AudioContext so sounds work again.
+    // 'interrupted' is iOS-specific (phone call, Bluetooth route change).
     if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
       audioCtx.resume().catch(() => {});
     }
@@ -128,21 +128,33 @@ document.addEventListener('visibilitychange', () => {
         typeof _rewireTrackGains === 'function') {
       try { _rewireTrackGains(); } catch (_) {}
     }
-    // No document-wide retry listener — the next real button tap (start-btn,
-    // death-run-btn, pause overlay) calls initAudio() which resumes the ctx
-    // from a proper user gesture. Stacking document-wide touchstart listeners
-    // across multiple visibility cycles caused the first tap after returning
-    // from background to run heavy audio work (el.load() per track) before
-    // the tap reached the actual button handler, making the start button feel
-    // unresponsive.
-    // Restore audio for the current screen
+    // iOS sample-rate renegotiation hack (Jam3 / PixiJS / Howler pattern):
+    // After an interruption, iOS Safari may return the AudioContext at a
+    // mismatched sample rate, audible as a pitch warp on the next playback.
+    // Playing a 1-sample silent buffer through the context forces the audio
+    // engine to renegotiate its output rate before our real audio starts.
+    // See: https://github.com/Experience-Monks/ios-safe-audio-context
+    if (audioCtx) {
+      try {
+        const _silent = audioCtx.createBuffer(1, 1, 22050);
+        const _src = audioCtx.createBufferSource();
+        _src.buffer = _silent;
+        _src.connect(audioCtx.destination);
+        _src.start(0);
+      } catch (_) {}
+    }
+    // Restore audio for the current screen, with a one-frame defer so the
+    // AudioContext has time to renegotiate output sample rate post-resume.
+    // Calling el.play() in the same tick as audioCtx.resume() on iOS is what
+    // produces the brief pitch-up artifact on re-entry.
     if (!state.muted) {
-      if (state.phase === 'title' || state.phase === 'dead' || state.phase === 'paused') {
-        // Title/gameover/paused all play title music
-        if (titleMusic) titleMusic.play().catch(() => {});
-      }
-      // Paused: also resume lake ambience (was playing during gameplay)
-      if (state.phase === 'paused' && lakeMusic) lakeMusic.play().catch(() => {});
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (state.phase === 'title' || state.phase === 'dead' || state.phase === 'paused') {
+          if (titleMusic) titleMusic.play().catch(() => {});
+        }
+        // Paused: also resume lake ambience (was playing during gameplay)
+        if (state.phase === 'paused' && lakeMusic) lakeMusic.play().catch(() => {});
+      }));
     }
   }
 });
