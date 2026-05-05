@@ -1960,9 +1960,15 @@ window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: nul
             const t = (k === 'miniL') ? MINI_NOZZLE_OFFSETS[0] : MINI_NOZZLE_OFFSETS[1];
             t.set(v[0], v[1], v[2]);
           }
-        } else if (k === 'coneThrusterCfg') {
-          // Cone shader fields + per-side offsets written onto window._coneThruster.
-          // Tuned for spaceship_01.glb (the hull every skin renders post-240eea0).
+        } else if (k === 'coneThrusterCfg' || k === 'coneThrusterCfgMkWarp') {
+          // coneThrusterCfg: base cone shader fields + offsets written to
+          // window._coneThruster. coneThrusterCfgMkWarp: override block applied
+          // ONLY when MK Runner has Warp Drive (Rings_001) equipped — the original
+          // 7d69344 MK Runner cone tune was always done with Warp Drive on, so the
+          // tuned values represent that combo. coneThrusterCfg writes first, then
+          // coneThrusterCfgMkWarp merges on top so we only override the keys that
+          // actually differ. Detection: skin idx 0 + Rings_001 enabled in addons store.
+          if (k === 'coneThrusterCfgMkWarp' && !window._isMkWarpActive()) return;
           if (window._coneThruster && v && typeof v === 'object') {
             Object.keys(v).forEach(ck => {
               if (v[ck] != null) window._coneThruster[ck] = v[ck];

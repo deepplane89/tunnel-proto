@@ -131,26 +131,33 @@ window._THRUSTER_PRESETS = {
 
   // ── CONE THRUST PRESET ──
   // Switches the ship from particle exhaust to the shader cone exhaust.
-  // Cone offsets are tuned for spaceship_01.glb (the hull every skin renders
-  // post-commit 240eea0). Warp Drive (Rings_001) is a decorative addon mesh
-  // that doesn't move the thruster anchor, so the same offsets apply with or
-  // without Warp equipped. Per-skin barrel-roll merge values (_conePoseUp /
-  // _conePoseDown / _conePoseRoll / _conePoseSteer*) wrap over at runtime.
+  // Default cone offsets/shape match RUNNER_CONE_CFG (Runner + GHOST/MAMBA/CIPHER
+  // recolors + MK Runner without Warp Drive — same hull size). When MK Runner has
+  // Warp Drive (Rings_001 addon) equipped, coneThrusterCfgMkWarp overrides — these
+  // are the original 7d69344 MK Runner values (always tuned with Warp Drive on).
+  // Per-skin barrel-roll merge values (window._conePoseUp / _conePoseDown /
+  // _conePoseRoll / _conePoseSteer*) wrap over these base offsets at runtime.
   coneThrust: {
     label: 'CONE THRUST',
     // Force cones ON, hide the legacy particle thrusters. Preset apply runs
     // AFTER applySkin (see _applyEquippedThruster) so these win over skin defaults.
     _coneThrustersEnabled: true,
     _hideOldThrusters: true,
-    // Cone cfg — RUNNER_CONE_CFG values (src/20-main-early.js:358).
+    // Default cone cfg — RUNNER_CONE_CFG values (src/20-main-early.js:357).
     coneThrusterCfg: {
       length: 3.30, radius: 0.29,
       rotX: 0, rotY: 0, rotZ: 0,
       offX: 0, offY: 0, offZ: 0,
-      offLX: -0.02, offLY: 0.00, offLZ: 0,
-      offRX:  0.02, offRY: 0.00, offRZ: 0,
+      offLX: -0.02, offLY: 0.03, offLZ: 0,
+      offRX:  0.02, offRY: 0.02, offRZ: 0,
       neonPower: 0.90, noiseSpeed: 0.80, noiseStrength: 0.13,
       fresnelPower: 6.0, opacity: 1.0,
+    },
+    // MK Runner + Warp Drive override — original 7d69344 MK values (offLY/offRY = 0).
+    // Apply engine checks _isMkWarpActive() at write-time and merges this on top.
+    coneThrusterCfgMkWarp: {
+      offLX: -0.02, offLY: 0.00, offLZ: 0,
+      offRX:  0.02, offRY: 0.00, offRZ: 0,
     },
   },
 
@@ -905,17 +912,16 @@ function saveLevelBeaten(levelIdx) {
 }
 function updateTitleBadges() { /* badges removed from UI */ }
 
-// Cone offsets for spaceship_01.glb (the hull every skin renders post-240eea0).
-// Pre-merge these were 0.03/0.02 tuned for the old default_ship.glb hull, but
-// after the GLB consolidation those values mis-anchored the cone on the new
-// hull — restoring the original spaceship_01 tune (offLY/offRY = 0) which
-// was always tuned on this exact mesh regardless of Warp Drive visibility.
+// RUNNER (default ship) cone offsets — user-tuned 2026-05-01.
+// Applied via _applyConeConfig() whenever the active ship is RUNNER (incl. on
+// MK→Runner switch via _hideAltShip). Stored ship-local via shipGroup parent so
+// cones track ship rotation (xwing/barrel-roll) intrinsically.
 const RUNNER_CONE_CFG = {
   length: 3.30, radius: 0.29,
   rotX: 0, rotY: 0, rotZ: 0,
   offX: 0, offY: 0, offZ: 0,
-  offLX: -0.02, offLY: 0.00, offLZ: 0,
-  offRX:  0.02, offRY: 0.00, offRZ: 0,
+  offLX: -0.02, offLY: 0.03, offLZ: 0,
+  offRX:  0.02, offRY: 0.02, offRZ: 0,
 };
 
 // All 4 skins share spaceship_01.glb (formerly the MK II hull, geometrically
@@ -935,8 +941,8 @@ const _SHIP_GLB_CONFIG = {
     length: 3.30, radius: 0.29,
     rotX: 0, rotY: 0, rotZ: 0,
     offX: 0, offY: 0, offZ: 0,
-    offLX: -0.02, offLY: 0.00, offLZ: 0,
-    offRX:  0.02, offRY: 0.00, offRZ: 0,
+    offLX: -0.02, offLY: 0.03, offLZ: 0,
+    offRX:  0.02, offRY: 0.02, offRZ: 0,
   },
   matchDefault: true,
 };
@@ -26445,9 +26451,15 @@ window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: nul
             const t = (k === 'miniL') ? MINI_NOZZLE_OFFSETS[0] : MINI_NOZZLE_OFFSETS[1];
             t.set(v[0], v[1], v[2]);
           }
-        } else if (k === 'coneThrusterCfg') {
-          // Cone shader fields + per-side offsets written onto window._coneThruster.
-          // Tuned for spaceship_01.glb (the hull every skin renders post-240eea0).
+        } else if (k === 'coneThrusterCfg' || k === 'coneThrusterCfgMkWarp') {
+          // coneThrusterCfg: base cone shader fields + offsets written to
+          // window._coneThruster. coneThrusterCfgMkWarp: override block applied
+          // ONLY when MK Runner has Warp Drive (Rings_001) equipped — the original
+          // 7d69344 MK Runner cone tune was always done with Warp Drive on, so the
+          // tuned values represent that combo. coneThrusterCfg writes first, then
+          // coneThrusterCfgMkWarp merges on top so we only override the keys that
+          // actually differ. Detection: skin idx 0 + Rings_001 enabled in addons store.
+          if (k === 'coneThrusterCfgMkWarp' && !window._isMkWarpActive()) return;
           if (window._coneThruster && v && typeof v === 'object') {
             Object.keys(v).forEach(ck => {
               if (v[ck] != null) window._coneThruster[ck] = v[ck];

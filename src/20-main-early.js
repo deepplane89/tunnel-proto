@@ -350,17 +350,16 @@ function saveLevelBeaten(levelIdx) {
 }
 function updateTitleBadges() { /* badges removed from UI */ }
 
-// Cone offsets for spaceship_01.glb (the hull every skin renders post-240eea0).
-// Pre-merge these were 0.03/0.02 tuned for the old default_ship.glb hull, but
-// after the GLB consolidation those values mis-anchored the cone on the new
-// hull — restoring the original spaceship_01 tune (offLY/offRY = 0) which
-// was always tuned on this exact mesh regardless of Warp Drive visibility.
+// RUNNER (default ship) cone offsets — user-tuned 2026-05-01.
+// Applied via _applyConeConfig() whenever the active ship is RUNNER (incl. on
+// MK→Runner switch via _hideAltShip). Stored ship-local via shipGroup parent so
+// cones track ship rotation (xwing/barrel-roll) intrinsically.
 const RUNNER_CONE_CFG = {
   length: 3.30, radius: 0.29,
   rotX: 0, rotY: 0, rotZ: 0,
   offX: 0, offY: 0, offZ: 0,
-  offLX: -0.02, offLY: 0.00, offLZ: 0,
-  offRX:  0.02, offRY: 0.00, offRZ: 0,
+  offLX: -0.02, offLY: 0.03, offLZ: 0,
+  offRX:  0.02, offRY: 0.02, offRZ: 0,
 };
 
 // All 4 skins share spaceship_01.glb (formerly the MK II hull, geometrically
@@ -380,8 +379,8 @@ const _SHIP_GLB_CONFIG = {
     length: 3.30, radius: 0.29,
     rotX: 0, rotY: 0, rotZ: 0,
     offX: 0, offY: 0, offZ: 0,
-    offLX: -0.02, offLY: 0.00, offLZ: 0,
-    offRX:  0.02, offRY: 0.00, offRZ: 0,
+    offLX: -0.02, offLY: 0.03, offLZ: 0,
+    offRX:  0.02, offRY: 0.02, offRZ: 0,
   },
   matchDefault: true,
 };
