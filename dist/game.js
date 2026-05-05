@@ -9221,7 +9221,7 @@ const _canyonTuner = {
   darkClearcoat: 0.40,   // clearcoat layer strength
   darkEmi:       0.9,    // dark slab emissive intensity
   // Canyon lights
-  lightIntensity: 1.0,   // master multiplier for all 4 canyon lights
+  lightIntensity: 0.75,  // master multiplier for all 4 canyon lights (was 1.0; reduced to ease ship reflection in canyon)
   // Corridor width override — half-gap between walls (wall foot lands at center ± halfXOverride)
   halfXOverride: 40,
   // Entrance: first N slabs get entranceThick — extends the slab outward while staying flush
