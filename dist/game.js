@@ -17448,6 +17448,12 @@ window.addEventListener('keydown', e => {
     setTimeout(() => { _nsEl.style.opacity = '0'; setTimeout(() => _nsEl.remove(), 1000); }, 500);
   }
 
+  // Shift+H — toggle on-screen speed HUD readout (top-right)
+  if (e.shiftKey && (e.key === 'H' || e.key === 'h')) {
+    const _hs = document.getElementById('hud-speed');
+    if (_hs) _hs.style.display = (_hs.style.display === 'none' || !_hs.style.display) ? 'block' : 'none';
+  }
+
   // In-game powerup hotkeys (playing only, >1s in): L=laser S=shield I=invincible M=magnet
   if (state.phase === 'playing' && (state.elapsed || 0) > 1.0) {
     if (e.key === 'l' || e.key === 'L') applyPowerup(1); // laser
