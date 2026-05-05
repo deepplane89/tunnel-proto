@@ -68,6 +68,38 @@ window._THRUSTER_PRESETS = {
     _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.08,
   },
 
+  // ── CONE THRUST PRESET ──
+  // Switches the ship from particle exhaust to the shader cone exhaust.
+  // Default cone offsets/shape match RUNNER_CONE_CFG (Runner + GHOST/MAMBA/CIPHER
+  // recolors + MK Runner without Warp Drive — same hull size). When MK Runner has
+  // Warp Drive (Rings_001 addon) equipped, coneThrusterCfgMkWarp overrides — these
+  // are the original 7d69344 MK Runner values (always tuned with Warp Drive on).
+  // Per-skin barrel-roll merge values (window._conePoseUp / _conePoseDown /
+  // _conePoseRoll / _conePoseSteer*) wrap over these base offsets at runtime.
+  coneThrust: {
+    label: 'CONE THRUST',
+    // Force cones ON, hide the legacy particle thrusters. Preset apply runs
+    // AFTER applySkin (see _applyEquippedThruster) so these win over skin defaults.
+    _coneThrustersEnabled: true,
+    _hideOldThrusters: true,
+    // Default cone cfg — RUNNER_CONE_CFG values (src/20-main-early.js:357).
+    coneThrusterCfg: {
+      length: 3.30, radius: 0.29,
+      rotX: 0, rotY: 0, rotZ: 0,
+      offX: 0, offY: 0, offZ: 0,
+      offLX: -0.02, offLY: 0.03, offLZ: 0,
+      offRX:  0.02, offRY: 0.02, offRZ: 0,
+      neonPower: 0.90, noiseSpeed: 0.80, noiseStrength: 0.13,
+      fresnelPower: 6.0, opacity: 1.0,
+    },
+    // MK Runner + Warp Drive override — original 7d69344 MK values (offLY/offRY = 0).
+    // Apply engine checks _isMkWarpActive() at write-time and merges this on top.
+    coneThrusterCfgMkWarp: {
+      offLX: -0.02, offLY: 0.00, offLZ: 0,
+      offRX:  0.02, offRY: 0.00, offRZ: 0,
+    },
+  },
+
   // ── FAT ION PRESET ──
   // Captured 2026-05-02 from user screenshots. Globals + particles + flame mesh only.
   // Does NOT touch nozzle positions.

@@ -460,10 +460,12 @@ function saveSkinData(data) {
 // 'baseline' preset and 'default' color are always unlocked.
 const THRUSTER_STORAGE_KEY = 'jh_thrusters';
 function loadThrusterData() {
+  // 'coneThrust' is currently auto-unlocked for testing (no MISSION_LADDER gate).
+  // Remove from defaults + the force-push below to re-gate it behind a mission.
   const defaults = {
     selectedPreset: 'baseline',
     selectedColor:  'default',
-    unlockedPresets: ['baseline'],
+    unlockedPresets: ['baseline', 'coneThrust'],
     unlockedColors:  ['default'],
   };
   const raw = window._LS.getItem(THRUSTER_STORAGE_KEY);
@@ -473,6 +475,7 @@ function loadThrusterData() {
     if (!Array.isArray(d.unlockedPresets)) d.unlockedPresets = ['baseline'];
     if (!Array.isArray(d.unlockedColors))  d.unlockedColors  = ['default'];
     if (!d.unlockedPresets.includes('baseline')) d.unlockedPresets.push('baseline');
+    if (!d.unlockedPresets.includes('coneThrust')) d.unlockedPresets.push('coneThrust');
     if (!d.unlockedColors.includes('default'))   d.unlockedColors.push('default');
     // Migration: drop unlocked entries that no longer exist in data tables
     try {

@@ -1914,6 +1914,24 @@ window._clearAllAsteroids = _clearAllAsteroids;
 // window._applyEquippedThruster() right after applySkin(), then sets
 // window._thrusterColorLocked = true.
 (function _installThrusterApply(){
+  // Returns true when MK Runner + Warp Drive is the active loadout: skin idx 0
+  // with Rings_001 enabled in the showroom addons store. (Rings_001 was renamed
+  // to 'Warp Drive' in 70c32e2; the underlying mesh node name didn't change.)
+  function _isMkWarpActive() {
+    try {
+      if (typeof activeSkinIdx !== 'undefined' && activeSkinIdx !== 0) return false;
+      if (typeof loadSkinData === 'function') {
+        const sd = loadSkinData();
+        if (sd && typeof sd.selected === 'number' && sd.selected !== 0) return false;
+      }
+      const raw = (window._LS || localStorage).getItem('jh_showroom_addons_v2');
+      if (!raw) return false;
+      const all = JSON.parse(raw) || {};
+      const bucket = all['spaceship_01.glb'] || {};
+      return bucket['Rings_001'] === true;
+    } catch(_) { return false; }
+  }
+
   function _writeThrPresetValues(P) {
     if (!P) return;
     Object.keys(P).forEach(k => {
@@ -1934,6 +1952,20 @@ window._clearAllAsteroids = _clearAllAsteroids;
           if (typeof MINI_NOZZLE_OFFSETS !== 'undefined' && MINI_NOZZLE_OFFSETS[0]) {
             const t = (k === 'miniL') ? MINI_NOZZLE_OFFSETS[0] : MINI_NOZZLE_OFFSETS[1];
             t.set(v[0], v[1], v[2]);
+          }
+        } else if (k === 'coneThrusterCfg' || k === 'coneThrusterCfgMkWarp') {
+          // coneThrusterCfg: base cone shader fields + offsets written to
+          // window._coneThruster. coneThrusterCfgMkWarp: override block applied
+          // ONLY when MK Runner has Warp Drive (Rings_001) equipped — the original
+          // 7d69344 MK Runner cone tune was always done with Warp Drive on, so the
+          // tuned values represent that combo. coneThrusterCfg writes first, then
+          // coneThrusterCfgMkWarp merges on top so we only override the keys that
+          // actually differ. Detection: skin idx 0 + Rings_001 enabled in addons store.
+          if (k === 'coneThrusterCfgMkWarp' && !_isMkWarpActive()) return;
+          if (window._coneThruster && v && typeof v === 'object') {
+            Object.keys(v).forEach(ck => {
+              if (v[ck] != null) window._coneThruster[ck] = v[ck];
+            });
           }
         } else if (k.charAt(0) === '_') {
           window[k] = v;

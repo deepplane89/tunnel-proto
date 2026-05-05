@@ -129,6 +129,38 @@ window._THRUSTER_PRESETS = {
     _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.08,
   },
 
+  // ── CONE THRUST PRESET ──
+  // Switches the ship from particle exhaust to the shader cone exhaust.
+  // Default cone offsets/shape match RUNNER_CONE_CFG (Runner + GHOST/MAMBA/CIPHER
+  // recolors + MK Runner without Warp Drive — same hull size). When MK Runner has
+  // Warp Drive (Rings_001 addon) equipped, coneThrusterCfgMkWarp overrides — these
+  // are the original 7d69344 MK Runner values (always tuned with Warp Drive on).
+  // Per-skin barrel-roll merge values (window._conePoseUp / _conePoseDown /
+  // _conePoseRoll / _conePoseSteer*) wrap over these base offsets at runtime.
+  coneThrust: {
+    label: 'CONE THRUST',
+    // Force cones ON, hide the legacy particle thrusters. Preset apply runs
+    // AFTER applySkin (see _applyEquippedThruster) so these win over skin defaults.
+    _coneThrustersEnabled: true,
+    _hideOldThrusters: true,
+    // Default cone cfg — RUNNER_CONE_CFG values (src/20-main-early.js:357).
+    coneThrusterCfg: {
+      length: 3.30, radius: 0.29,
+      rotX: 0, rotY: 0, rotZ: 0,
+      offX: 0, offY: 0, offZ: 0,
+      offLX: -0.02, offLY: 0.03, offLZ: 0,
+      offRX:  0.02, offRY: 0.02, offRZ: 0,
+      neonPower: 0.90, noiseSpeed: 0.80, noiseStrength: 0.13,
+      fresnelPower: 6.0, opacity: 1.0,
+    },
+    // MK Runner + Warp Drive override — original 7d69344 MK values (offLY/offRY = 0).
+    // Apply engine checks _isMkWarpActive() at write-time and merges this on top.
+    coneThrusterCfgMkWarp: {
+      offLX: -0.02, offLY: 0.00, offLZ: 0,
+      offRX:  0.02, offRY: 0.00, offRZ: 0,
+    },
+  },
+
   // ── FAT ION PRESET ──
   // Captured 2026-05-02 from user screenshots. Globals + particles + flame mesh only.
   // Does NOT touch nozzle positions.
@@ -990,10 +1022,12 @@ function saveSkinData(data) {
 // 'baseline' preset and 'default' color are always unlocked.
 const THRUSTER_STORAGE_KEY = 'jh_thrusters';
 function loadThrusterData() {
+  // 'coneThrust' is currently auto-unlocked for testing (no MISSION_LADDER gate).
+  // Remove from defaults + the force-push below to re-gate it behind a mission.
   const defaults = {
     selectedPreset: 'baseline',
     selectedColor:  'default',
-    unlockedPresets: ['baseline'],
+    unlockedPresets: ['baseline', 'coneThrust'],
     unlockedColors:  ['default'],
   };
   const raw = window._LS.getItem(THRUSTER_STORAGE_KEY);
@@ -1003,6 +1037,7 @@ function loadThrusterData() {
     if (!Array.isArray(d.unlockedPresets)) d.unlockedPresets = ['baseline'];
     if (!Array.isArray(d.unlockedColors))  d.unlockedColors  = ['default'];
     if (!d.unlockedPresets.includes('baseline')) d.unlockedPresets.push('baseline');
+    if (!d.unlockedPresets.includes('coneThrust')) d.unlockedPresets.push('coneThrust');
     if (!d.unlockedColors.includes('default'))   d.unlockedColors.push('default');
     // Migration: drop unlocked entries that no longer exist in data tables
     try {
@@ -15752,6 +15787,24 @@ function updateStreakBadge() {
     resetThrusterAnchors: resetThrusterAnchors,
     isOpen: function() { return _open; },
   };
+
+  // ── P hotkey: toggle the thruster-positioner panel (mouse-drag adjust) ────
+  // Only fires when the garage/showroom is open. The panel itself is owned by
+  // window.TunerHud (src/49-tuner-hud.js) — we just flip its visibility. Tracks
+  // local state since showTuner is a setter, not a toggle.
+  let _posPanelOpen = false;
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'p' && e.key !== 'P') return;
+    if (!_open) return;
+    // Don't hijack typing in input/textarea elements.
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    _ensureTunerHudInit();
+    _posPanelOpen = !_posPanelOpen;
+    if (window.TunerHud && typeof window.TunerHud.showTuner === 'function') {
+      window.TunerHud.showTuner(_posPanelOpen);
+    }
+  });
 })();
 // ── TUNER + FX HUDs (showroom-only) ─────────────────────────────────────
 //
@@ -26236,6 +26289,24 @@ window._clearAllAsteroids = _clearAllAsteroids;
 // window._applyEquippedThruster() right after applySkin(), then sets
 // window._thrusterColorLocked = true.
 (function _installThrusterApply(){
+  // Returns true when MK Runner + Warp Drive is the active loadout: skin idx 0
+  // with Rings_001 enabled in the showroom addons store. (Rings_001 was renamed
+  // to 'Warp Drive' in 70c32e2; the underlying mesh node name didn't change.)
+  function _isMkWarpActive() {
+    try {
+      if (typeof activeSkinIdx !== 'undefined' && activeSkinIdx !== 0) return false;
+      if (typeof loadSkinData === 'function') {
+        const sd = loadSkinData();
+        if (sd && typeof sd.selected === 'number' && sd.selected !== 0) return false;
+      }
+      const raw = (window._LS || localStorage).getItem('jh_showroom_addons_v2');
+      if (!raw) return false;
+      const all = JSON.parse(raw) || {};
+      const bucket = all['spaceship_01.glb'] || {};
+      return bucket['Rings_001'] === true;
+    } catch(_) { return false; }
+  }
+
   function _writeThrPresetValues(P) {
     if (!P) return;
     Object.keys(P).forEach(k => {
@@ -26256,6 +26327,20 @@ window._clearAllAsteroids = _clearAllAsteroids;
           if (typeof MINI_NOZZLE_OFFSETS !== 'undefined' && MINI_NOZZLE_OFFSETS[0]) {
             const t = (k === 'miniL') ? MINI_NOZZLE_OFFSETS[0] : MINI_NOZZLE_OFFSETS[1];
             t.set(v[0], v[1], v[2]);
+          }
+        } else if (k === 'coneThrusterCfg' || k === 'coneThrusterCfgMkWarp') {
+          // coneThrusterCfg: base cone shader fields + offsets written to
+          // window._coneThruster. coneThrusterCfgMkWarp: override block applied
+          // ONLY when MK Runner has Warp Drive (Rings_001) equipped — the original
+          // 7d69344 MK Runner cone tune was always done with Warp Drive on, so the
+          // tuned values represent that combo. coneThrusterCfg writes first, then
+          // coneThrusterCfgMkWarp merges on top so we only override the keys that
+          // actually differ. Detection: skin idx 0 + Rings_001 enabled in addons store.
+          if (k === 'coneThrusterCfgMkWarp' && !_isMkWarpActive()) return;
+          if (window._coneThruster && v && typeof v === 'object') {
+            Object.keys(v).forEach(ck => {
+              if (v[ck] != null) window._coneThruster[ck] = v[ck];
+            });
           }
         } else if (k.charAt(0) === '_') {
           window[k] = v;
