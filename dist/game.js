@@ -19755,23 +19755,37 @@ function _drSequencerTick(dt) {
     // Bump-rest = this rest's speed > previous stage's speed. Klaxon + thruster
     // impact already wired around `_drSeqAdvance` for the punch.
     const _prvStg = DR_SEQUENCE[state.seqStageIdx - 1];
-    if (_prvStg && stage.speed > _prvStg.speed && !state.invincibleSpeedActive &&
-        !state.l3KnifeCanyon && !state.preT4ACanyon && !state.preT4BCanyon) {
-      // Snap down over ~0.5s, hold at BASE for the rest of the stage.
-      // Override the per-tick stage-speed setter above by writing directly.
+    const _isDipRest = !!(_prvStg && stage.speed > _prvStg.speed);
+    if (_isDipRest && !state.invincibleSpeedActive) {
+      // Kill any pending speed bump so the rest's higher declared speed
+      // doesn't punch in mid-dip. _drSeqAdvance set this to rest.speed*BASE
+      // when entering the rest from a slower canyon; we want the bump to
+      // happen on the NEXT advance (rest→stage), not now.
+      state._pendingSpeed = undefined;
+      state._pendingSpeedObstacles = null;
+      state._pendingSpeedDeadline = 0;
+      // Force-clear lingering canyon-owns-speed flags so other systems don't
+      // fight the dip during REST. Canyon visuals are torn down by
+      // _stopPreT4ACanyon/_stopPreT4BCanyon already; flags can sometimes lag.
+      state.preT4ACanyon = false;
+      state.preT4BCanyon = false;
+      state._drSpeedFloor = 0;
+      // Lerp down to BASE_SPEED (1.0×) over ~0.8s, hold for the rest of the
+      // stage. Rate dt*4 → ~63% drop in 0.25s, ~95% in 0.75s — visible dip
+      // without a jarring snap. FOV (speed-derived) follows automatically.
       const _dipTarget = BASE_SPEED;
       if (state.speed > _dipTarget + 0.5) {
-        // Lerp rate ~6/s gives ~0.5s to ramp from 2.5× down to 1.0×.
-        state.speed = Math.max(_dipTarget, state.speed - (state.speed - _dipTarget) * Math.min(1, dt * 6));
+        state.speed = Math.max(_dipTarget, state.speed - (state.speed - _dipTarget) * Math.min(1, dt * 4));
       } else {
         state.speed = _dipTarget;
       }
-      // Block the per-tick STAGE_RAMP setter from clobbering the dip.
-      state._drSpeedFloor = 0;
     }
-    // Fire warning beeps 1.5s before REST ends if next stage has higher speed
+    // Fire warning beeps 1.5s before REST ends. Triggers on bump-rests (where
+    // we just dipped to BASE → next stage punches to rest.speed) OR rests
+    // that lead into a faster next stage. Skip when speed is genuinely flat.
     const _nextStage = DR_SEQUENCE[state.seqStageIdx + 1];
-    if (_nextStage && _nextStage.speed > stage.speed && !state._restBeepFired &&
+    const _willPunch = _isDipRest || (_nextStage && _nextStage.speed > stage.speed);
+    if (_willPunch && !state._restBeepFired &&
         state.seqStageElapsed >= stage.duration - 1.5) {
       state._restBeepFired = true;
       if (!state.muted) {
