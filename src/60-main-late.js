@@ -878,33 +878,36 @@ window.addEventListener('keyup', e => {
 // ── LEVEL CHOOSER (mobile title screen) ─────────────────────────────────────
 (function setupLevelChooser() {
   const btns = document.querySelectorAll('.level-btn');
+  let _lvlPickFiredAt = 0;
+  const _pickLevel = (btn, e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    // Debounce so touchstart + synthesized click don't double-fire on mobile
+    const _now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+    if (_now - _lvlPickFiredAt < 400) return;
+    _lvlPickFiredAt = _now;
+    btns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const levelIdx = parseInt(btn.dataset.level);
+    startGame();
+    requestAnimationFrame(() => {
+      if (levelIdx === 0) return;
+      state.startedFromL1 = false;
+      clearAllCorridorFlags();
+      state.currentLevelIdx = levelIdx;
+      state.score           = LEVELS[levelIdx].scoreThreshold;
+      currentLevelDef  = LEVELS[levelIdx];
+      targetLevelDef   = LEVELS[levelIdx];
+      transitionT      = 1;
+      applyLevelVisuals(LEVELS[levelIdx]);
+      updateHUDLevel();
+      if (levelIdx <= 1)     setActiveMusic('bg');
+      else if (levelIdx === 2) setActiveMusic('l3');
+      else                   setActiveMusic('l4');
+    });
+  };
   btns.forEach(btn => {
-    btn.addEventListener('touchstart', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      // Highlight selected
-      btns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const levelIdx = parseInt(btn.dataset.level);
-      // Start the game then immediately jump to the chosen level
-      startGame();
-      // Apply level jump after a brief tick so game state is initialised
-      requestAnimationFrame(() => {
-        if (levelIdx === 0) return; // L1 is default, nothing to do
-        state.startedFromL1 = false; // not eligible for leaderboard
-        clearAllCorridorFlags();
-        state.currentLevelIdx = levelIdx;
-        state.score           = LEVELS[levelIdx].scoreThreshold;
-        currentLevelDef  = LEVELS[levelIdx];
-        targetLevelDef   = LEVELS[levelIdx];
-        transitionT      = 1;
-        applyLevelVisuals(LEVELS[levelIdx]);
-        updateHUDLevel();
-        if (levelIdx <= 1)     setActiveMusic('bg');
-        else if (levelIdx === 2) setActiveMusic('l3');
-        else                   setActiveMusic('l4');
-      });
-    }, { passive: false });
+    btn.addEventListener('touchstart', e => _pickLevel(btn, e), { passive: false });
+    btn.addEventListener('click',      e => _pickLevel(btn, e));
   });
 })();
 
