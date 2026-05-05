@@ -119,27 +119,22 @@ document.addEventListener('visibilitychange', () => {
     if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
       audioCtx.resume().catch(() => {});
     }
-    // Belt: rewire music graph immediately if we just came back from interruption.
-    // Safari sometimes keeps the context running but with severed media routing.
+    // Belt: rewire music graph if we just came back from an iOS interruption.
+    // Wrap in try/catch — Safari throws InvalidStateError if a track's
+    // <audio> element already has a MediaElementSource, and we don't want
+    // that exception to abort the rest of this visibilitychange handler
+    // (which restores screen music below).
     if (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted() &&
         typeof _rewireTrackGains === 'function') {
-      _rewireTrackGains();
+      try { _rewireTrackGains(); } catch (_) {}
     }
-    // Suspenders: if context still isn't running, install a one-shot gesture
-    // listener that finishes the resume + rewire after the next user tap.
-    // iOS frequently requires a user gesture to actually resume even after
-    // visibility returns.
-    if (audioCtx && audioCtx.state !== 'running') {
-      const _retryAudio = () => {
-        if (audioCtx && audioCtx.state !== 'running') {
-          audioCtx.resume().catch(() => {});
-        }
-        if (typeof _rewireTrackGains === 'function') _rewireTrackGains();
-      };
-      ['touchstart','click','keydown'].forEach(evt => {
-        document.addEventListener(evt, _retryAudio, { once: true, passive: true });
-      });
-    }
+    // No document-wide retry listener — the next real button tap (start-btn,
+    // death-run-btn, pause overlay) calls initAudio() which resumes the ctx
+    // from a proper user gesture. Stacking document-wide touchstart listeners
+    // across multiple visibility cycles caused the first tap after returning
+    // from background to run heavy audio work (el.load() per track) before
+    // the tap reached the actual button handler, making the start button feel
+    // unresponsive.
     // Restore audio for the current screen
     if (!state.muted) {
       if (state.phase === 'title' || state.phase === 'dead' || state.phase === 'paused') {

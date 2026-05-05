@@ -5147,7 +5147,14 @@ function _initTrackGains() {
   const tracks = allTracks();
   Object.entries(tracks).forEach(([k, el]) => {
     if (!el || trackGains[k]) return; // skip missing or already-wired tracks
-    const src  = audioCtx.createMediaElementSource(el);
+    // Safari throws InvalidStateError if this <audio> element already had a
+    // MediaElementSource attached earlier in the session. We can't detect that
+    // ahead of time, so guard the call. On failure, leave the element on its
+    // native HTMLAudioElement.volume path — music still plays, just without
+    // GainNode-level control until a future rewire succeeds.
+    let src;
+    try { src = audioCtx.createMediaElementSource(el); }
+    catch (_) { return; }
     const gain = audioCtx.createGain();
     gain.gain.value = el.volume; // inherit current volume (e.g. title already playing)
     src.connect(gain).connect(audioCtx.destination);
