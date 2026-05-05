@@ -469,6 +469,8 @@ window.addEventListener('keydown', e => {
     };
     const _shiftDigitNameMap = {
       '1': 'S11_L5_CORRIDOR', '2': 'ENDLESS',
+      // Pre-dip canyons (the canyon right before each bump-rest)
+      '6': 'CF_HIGH_WALL', '9': 'CI_CANYON', '0': 'CJ_CC1_MILD',
     };
     const _hotkeyJumpByName = (stageName) => {
       const idx = DR_SEQUENCE.findIndex(s => s.name === stageName);
