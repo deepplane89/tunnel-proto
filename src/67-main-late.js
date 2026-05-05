@@ -1288,6 +1288,21 @@ function _drSequencerTick(dt) {
     const _prvStg = DR_SEQUENCE[state.seqStageIdx - 1];
     const _isDipRest = !!(_prvStg && stage.speed > _prvStg.speed);
     if (_isDipRest && !state.invincibleSpeedActive) {
+      // Play the invincible-end "power-down" warble (segment starting at 20.0s)
+      // once on dip entry. Fire-flag cleared on advance.
+      if (!state._dipSfxFired && !state.muted) {
+        state._dipSfxFired = true;
+        const _dipSfx = document.getElementById('speed-dip-sfx');
+        if (_dipSfx) {
+          try {
+            _dipSfx.pause();
+            _dipSfx.currentTime = 20.0;
+            _dipSfx.volume = 0.6;
+            _dipSfx.loop = false;
+            _dipSfx.play().catch(() => {});
+          } catch (_) {}
+        }
+      }
       // Kill any pending speed bump so the rest's higher declared speed
       // doesn't punch in mid-dip. _drSeqAdvance set this to rest.speed*BASE
       // when entering the rest from a slower canyon; we want the bump to
@@ -1340,7 +1355,11 @@ function _drSequencerTick(dt) {
     }
     if (state.seqStageElapsed >= stage.duration) {
       state._restBeepFired = false;
+      state._dipSfxFired = false;
       state._drFovDipBias = 0; // clear FOV pull-back so punch reads full
+      // Stop dip sfx if still ringing out as the punch hits
+      const _dipSfxStop = document.getElementById('speed-dip-sfx');
+      if (_dipSfxStop) { try { _dipSfxStop.pause(); _dipSfxStop.currentTime = 0; } catch (_) {} }
       _drSeqAdvance();
     }
     return;
