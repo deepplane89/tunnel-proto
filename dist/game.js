@@ -19781,6 +19781,11 @@ function _drSequencerTick(dt) {
       } else {
         state.speed = _dipTarget;
       }
+      // Extra FOV pull-back below baseline so the dip reads as a real slowdown
+      // (state.speed already clamps to BASE so the speed-derived FOV bottoms out).
+      // -14° — roughly the same magnitude as the 2.0× → BASE drop, doubling
+      // the felt swing. Cleared on advance below.
+      state._drFovDipBias = -14;
     }
     // Fire warning beeps 1.5s before REST ends. Triggers on bump-rests (where
     // we just dipped to BASE → next stage punches to rest.speed) OR rests
@@ -19806,6 +19811,7 @@ function _drSequencerTick(dt) {
     }
     if (state.seqStageElapsed >= stage.duration) {
       state._restBeepFired = false;
+      state._drFovDipBias = 0; // clear FOV pull-back so punch reads full
       _drSeqAdvance();
     }
     return;
@@ -24575,6 +24581,10 @@ function animate() {
     const _rawFrac = Math.max(0, Math.min(1, (_fovSpd - BASE_SPEED) / _fovRange));
     const speedFrac = (state.phase === 'playing') ? Math.pow(_rawFrac, 1.4) : 0;
     let targetFOV = _baseFOV + _fovSpeedBoost * speedFrac;
+    // Bump-rest dip bias — pulls FOV below baseline during REST dip so the
+    // punch back up to stage speed feels dramatic. Set/cleared in the rest
+    // handler (src/67-main-late.js). Negative number, e.g. -10°.
+    if (state._drFovDipBias) targetFOV += state._drFovDipBias;
     // Death zoom-out: push FOV wider during explosion (only during dead phase)
     if (_expDeathZoomActive && state.phase === 'dead') targetFOV = _expDeathZoomTarget;
     // Launch snap in first 0.5s, then moderate accel / gentle decel
