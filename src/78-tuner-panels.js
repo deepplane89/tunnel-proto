@@ -1447,6 +1447,28 @@ function _ringShowTuner() {
       panel.appendChild(makeSlider('cone opacity', _ct.opacity, 0, 1, 0.01, v => { _ct.opacity = v; }, '#f60'));
     }
 
+    // CONE PARENT (experimental: parent cones to GLB fire-plane meshes)
+    panel.appendChild(makeHeader('CONE PARENT (fire mesh)'));
+    const _cpBtn = document.createElement('button');
+    const _cpLbl = () => 'parent→fire: ' + (window._coneParentToFire ? 'ON' : 'OFF');
+    _cpBtn.textContent = _cpLbl();
+    _cpBtn.style.cssText = 'background:' + (window._coneParentToFire ? '#040' : '#400') + ';color:#fff;border:1px solid ' + (window._coneParentToFire ? '#0f0' : '#f00') + ';padding:4px 12px;cursor:pointer;font:11px monospace;margin:4px 4px 4px 0;display:block;';
+    _cpBtn.addEventListener('click', () => {
+      window._coneParentToFire = !window._coneParentToFire;
+      _cpBtn.textContent = _cpLbl();
+      _cpBtn.style.background = window._coneParentToFire ? '#040' : '#400';
+      _cpBtn.style.borderColor = window._coneParentToFire ? '#0f0' : '#f00';
+    });
+    panel.appendChild(_cpBtn);
+    if (!window._coneFireOffset) window._coneFireOffset = { L:{x:0,y:0,z:0}, R:{x:0,y:0,z:0} };
+    const _cfo = window._coneFireOffset;
+    panel.appendChild(makeSlider('fire L x', _cfo.L.x, -2, 2, 0.005, v => { _cfo.L.x = v; }, '#fa0'));
+    panel.appendChild(makeSlider('fire L y', _cfo.L.y, -2, 2, 0.005, v => { _cfo.L.y = v; }, '#fa0'));
+    panel.appendChild(makeSlider('fire L z', _cfo.L.z, -2, 2, 0.005, v => { _cfo.L.z = v; }, '#fa0'));
+    panel.appendChild(makeSlider('fire R x', _cfo.R.x, -2, 2, 0.005, v => { _cfo.R.x = v; }, '#fa0'));
+    panel.appendChild(makeSlider('fire R y', _cfo.R.y, -2, 2, 0.005, v => { _cfo.R.y = v; }, '#fa0'));
+    panel.appendChild(makeSlider('fire R z', _cfo.R.z, -2, 2, 0.005, v => { _cfo.R.z = v; }, '#fa0'));
+
     // HOVER BOB
     panel.appendChild(makeHeader('HOVER BOB'));
     panel.appendChild(makeSlider('ship Y', _hoverBaseY, -1.0, 3.0, 0.01, v => { _hoverBaseY = v; shipGroup.position.y = v; }, '#0ff'));

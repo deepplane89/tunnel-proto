@@ -5594,6 +5594,10 @@ window.addEventListener('keydown', (e) => {
     dbgVisible = !dbgVisible;
     dbgEl.classList.toggle('visible', dbgVisible);
   }
+  // C — cone↔GLB diagnostic snapshot (logs + clipboard)
+  if (e.key === 'c' || e.key === 'C') {
+    if (typeof window._coneDiag === 'function') window._coneDiag();
+  }
   // V — toggle canyon on/off
   // V key is handled by the canyon tuner panel listener below
 });

@@ -6652,6 +6652,11 @@ function _loadAltShip(glbFile, skinDef, skinIdx, callback) {
     // hidden GLB-internal transform we haven't found via grep.
     let _bestPodNode = null;
     let _bestPodCentroidZ = -Infinity;
+    // Capture fire-plane meshes (Object_42 = L, Object_43 = R) for cone parenting.
+    // These are hidden in gameplay (visible=false at line ~6167) but their transforms
+    // remain valid — attaching cones to them locks the cone to the GLB nozzle exit.
+    let _fireMeshL = null;
+    let _fireMeshR = null;
     model.traverse(child => {
       if (!child.isMesh || !child.geometry) return;
       if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
@@ -6662,8 +6667,16 @@ function _loadAltShip(glbFile, skinDef, skinIdx, callback) {
         _bestPodCentroidZ = cz;
         _bestPodNode = child;
       }
+      // Capture fire-plane meshes by name OR original material name (applySkin
+      // may rename child.material but child.userData._origMatName is preserved
+      // from the load-time capture at line ~5666).
+      const _origMat = (child.userData && child.userData._origMatName) || (child.material && child.material.name) || '';
+      if (child.name === 'Object_42' || /^fire$/i.test(_origMat)) _fireMeshL = child;
+      else if (child.name === 'Object_43' || /^fire1$/i.test(_origMat)) _fireMeshR = child;
     });
     window._mkPodAnchor = _bestPodNode;
+    window._fireMeshL = _fireMeshL;
+    window._fireMeshR = _fireMeshR;
     model.visible = false; // hidden until skin is applied
     shipGroup.add(model);
     // Set up AnimationMixer if GLB has animations
@@ -7235,6 +7248,16 @@ window._coneThruster = {
   opacity:      1.0,
 };
 
+// Fire-mesh parenting (experimental). Toggle window._coneParentToFire to enable;
+// L/R offsets are LOCAL to the fire-plane mesh (Object_42 / Object_43). Tune via
+// the CONE PARENT panel in the tuner. When enabled, cones are re-parented to the
+// fire mesh and their position is set to these offsets (no roll/steer blend).
+window._coneParentToFire = false;
+window._coneFireOffset = {
+  L: { x: 0, y: 0, z: 0 },
+  R: { x: 0, y: 0, z: 0 },
+};
+
 const _coneVertSrc = /* glsl */`
   varying float vHeight;  // 0 = nozzle base, 1 = tip
   varying vec3 vNormal;
@@ -7371,6 +7394,51 @@ const _thrusterCones = NOZZLE_OFFSETS.map(() => {
   shipGroup.add(mesh);
   return mesh;
 });
+
+// ── Cone↔GLB diagnostic snapshot (bound to 'C' key in 67-main-late.js) ──
+// Hold a roll, press C. Output includes cone hull-local position (where it lives
+// after slider+blend math), and the GLB fire-plane mesh hull-local positions
+// (Object_42=L, Object_43=R). Compare → these are the parenting anchors.
+window._coneDiag = function() {
+  try {
+    const _v3 = (v) => ({ x: +v.x.toFixed(4), y: +v.y.toFixed(4), z: +v.z.toFixed(4) });
+    const _scene = (typeof shipGroup !== 'undefined') ? shipGroup : null;
+    if (_scene) _scene.updateMatrixWorld(true);
+    const _coneL = _thrusterCones[0] ? _thrusterCones[0].position : null;
+    const _coneR = _thrusterCones[1] ? _thrusterCones[1].position : null;
+    const ct = window._coneThruster || {};
+    const _ra = (typeof state !== 'undefined' && state) ? state.rollAngle : 0;
+    const _mkWarp = (typeof window._isMkWarpActive === 'function') ? window._isMkWarpActive() : false;
+    const _fires = [];
+    const _m = window._shipModel || (_scene && _scene.children && _scene.children[0]);
+    if (_m && _m.traverse) {
+      _m.traverse(o => {
+        if (!o || !o.isMesh) return;
+        const _origMat = (o.userData && o.userData._origMatName) || (o.material && o.material.name) || '';
+        if (!/^Object_(42|43)$/.test(o.name) && !/^fire1?$/i.test(_origMat)) return;
+        o.geometry && o.geometry.computeBoundingBox && o.geometry.computeBoundingBox();
+        const bb = o.geometry && o.geometry.boundingBox;
+        const _cLocal = bb ? new THREE.Vector3((bb.min.x+bb.max.x)*0.5, (bb.min.y+bb.max.y)*0.5, (bb.min.z+bb.max.z)*0.5) : new THREE.Vector3();
+        const _cWorld = _cLocal.clone(); o.localToWorld(_cWorld);
+        const _cHullLocal = _scene ? _scene.worldToLocal(_cWorld.clone()) : _cWorld;
+        _fires.push({ name: o.name, mat: _origMat, hullLocal: _v3(_cHullLocal) });
+      });
+    }
+    const out = {
+      skin: (typeof activeSkinIdx !== 'undefined') ? activeSkinIdx : -1,
+      mkWarp: _mkWarp,
+      rollAngle: +_ra.toFixed(4),
+      slider: { offLX: ct.offLX, offLY: ct.offLY, offLZ: ct.offLZ, offRX: ct.offRX, offRY: ct.offRY, offRZ: ct.offRZ },
+      coneLocal: { L: _coneL ? _v3(_coneL) : null, R: _coneR ? _v3(_coneR) : null },
+      fires: _fires,
+      parentMode: !!window._coneParentToFire,
+      fireOffset: window._coneFireOffset || null,
+    };
+    console.log('CONE_DIAG ' + JSON.stringify(out));
+    try { navigator.clipboard && navigator.clipboard.writeText(JSON.stringify(out)); } catch(_){}
+    return out;
+  } catch(e) { console.error('CONE_DIAG error', e); return { error: String(e) }; }
+};
 
 // Thruster FX excluded from water reflection via onBeforeRender patch on mirrorMesh (see Water section).
 
@@ -7811,11 +7879,25 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
           }
         }
       }
-      cone.position.set(
-        localNoz.x + (ct.offX + sideOX) / _coneScale,
-        localNoz.y + (ct.offY + sideOY) / _coneScale,
-        localNoz.z + (ct.offZ + sideOZ) / _coneScale
-      );
+      // ── Fire-mesh parenting (experimental) ──
+      // When window._coneParentToFire === true, re-parent each cone to the GLB's
+      // fire-plane mesh (Object_42=L, Object_43=R, both .visible=false). The cone's
+      // position becomes a small local-space offset from the fire-plane origin, so
+      // FOV / ship transforms apply uniformly to both the GLB nozzle and the cone.
+      const _fireMesh = idx === 0 ? window._fireMeshL : window._fireMeshR;
+      if (window._coneParentToFire && _fireMesh) {
+        if (cone.parent !== _fireMesh) _fireMesh.attach(cone);
+        const _fc = window._coneFireOffset || { L: { x:0, y:0, z:0 }, R: { x:0, y:0, z:0 } };
+        const _o = idx === 0 ? _fc.L : _fc.R;
+        cone.position.set(_o.x || 0, _o.y || 0, _o.z || 0);
+      } else {
+        if (cone.parent !== shipGroup) shipGroup.attach(cone);
+        cone.position.set(
+          localNoz.x + (ct.offX + sideOX) / _coneScale,
+          localNoz.y + (ct.offY + sideOY) / _coneScale,
+          localNoz.z + (ct.offZ + sideOZ) / _coneScale
+        );
+      }
       // ── Cone↔GLB diagnostic logging (throttled) ──
       // Log the live cone world position vs the GLB-derived true thruster anchor so the
       // cone-to-GLB spatial relationship is observable regardless of how shipGroup transforms.
