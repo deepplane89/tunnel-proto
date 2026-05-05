@@ -7454,8 +7454,8 @@ window._nozPoseUp = [
 // Down-direction tune; MK Runner uses the 558bfb5 values (verified visually correct).
 window._conePoseRoll = {};
 window._conePoseRoll[4] = [
-  new THREE.Vector3(-0.04, 0.00, -0.10),  // L — MK Runner full roll (558bfb5)
-  new THREE.Vector3( 0.00, 0.00, -0.11),  // R — MK Runner full roll (558bfb5)
+  new THREE.Vector3(-0.09, 0.01,  0.00),  // L — MK+Warp Up tuned 2026-05-05
+  new THREE.Vector3( 0.01, 0.00, -0.18),  // R — MK+Warp Up tuned 2026-05-05
 ];
 // Default Runner (and its recolors GHOST/BLACK MAMBA/CIPHER) use a per-direction
 // Up/Down split because the user tuned distinct targets for each. Captured
