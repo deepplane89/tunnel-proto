@@ -7410,18 +7410,34 @@ window._coneDiag = function() {
     const _ra = (typeof state !== 'undefined' && state) ? state.rollAngle : 0;
     const _mkWarp = (typeof window._isMkWarpActive === 'function') ? window._isMkWarpActive() : false;
     const _fires = [];
+    // Dump ALL meshes — we need to find which has hullLocal X near ±1.6 to use as nozzle anchor.
+    const _allMeshes = [];
     const _m = window._shipModel || (_scene && _scene.children && _scene.children[0]);
     if (_m && _m.traverse) {
       _m.traverse(o => {
         if (!o || !o.isMesh) return;
         const _origMat = (o.userData && o.userData._origMatName) || (o.material && o.material.name) || '';
-        if (!/^Object_(42|43)$/.test(o.name) && !/^fire1?$/i.test(_origMat)) return;
         o.geometry && o.geometry.computeBoundingBox && o.geometry.computeBoundingBox();
         const bb = o.geometry && o.geometry.boundingBox;
-        const _cLocal = bb ? new THREE.Vector3((bb.min.x+bb.max.x)*0.5, (bb.min.y+bb.max.y)*0.5, (bb.min.z+bb.max.z)*0.5) : new THREE.Vector3();
+        if (!bb) return;
+        const _cLocal = new THREE.Vector3((bb.min.x+bb.max.x)*0.5, (bb.min.y+bb.max.y)*0.5, (bb.min.z+bb.max.z)*0.5);
         const _cWorld = _cLocal.clone(); o.localToWorld(_cWorld);
-        const _cHullLocal = _scene ? _scene.worldToLocal(_cWorld.clone()) : _cWorld;
-        _fires.push({ name: o.name, mat: _origMat, hullLocal: _v3(_cHullLocal) });
+        const _cHullLocal = _scene ? _scene.worldToLocal(_cWorld.clone()) : _cWorld.clone();
+        _allMeshes.push({
+          name: o.name,
+          mat: _origMat,
+          hullLocal: _v3(_cHullLocal),
+          bbox: { minX: +bb.min.x.toFixed(3), maxX: +bb.max.x.toFixed(3), minY: +bb.min.y.toFixed(3), maxY: +bb.max.y.toFixed(3), minZ: +bb.min.z.toFixed(3), maxZ: +bb.max.z.toFixed(3) },
+        });
+        if (/^Object_(42|43)$/.test(o.name) || /^fire1?$/i.test(_origMat)) {
+          _fires.push({ name: o.name, mat: _origMat, hullLocal: _v3(_cHullLocal) });
+        }
+      });
+      // Sort: meshes with hullLocal X near ±1.6 (where nozzles should be) first.
+      _allMeshes.sort((a, b) => {
+        const _da = Math.min(Math.abs(Math.abs(a.hullLocal.x) - 1.6), 5);
+        const _db = Math.min(Math.abs(Math.abs(b.hullLocal.x) - 1.6), 5);
+        return _da - _db;
       });
     }
     const out = {
@@ -7431,6 +7447,7 @@ window._coneDiag = function() {
       slider: { offLX: ct.offLX, offLY: ct.offLY, offLZ: ct.offLZ, offRX: ct.offRX, offRY: ct.offRY, offRZ: ct.offRZ },
       coneLocal: { L: _coneL ? _v3(_coneL) : null, R: _coneR ? _v3(_coneR) : null },
       fires: _fires,
+      allMeshes: _allMeshes,
       parentMode: !!window._coneParentToFire,
       fireOffset: window._coneFireOffset || null,
     };
