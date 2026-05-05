@@ -901,6 +901,10 @@ window.addEventListener('keyup', e => {
 })();
 
 // Start title music on very first user interaction with the page
+// Exposed on window so the boot loader's ACCESS GRANTED tap (mobile) can
+// trigger it inside the gesture handler — iOS Safari blocks AudioContext
+// resume + <audio> playback unless they're invoked synchronously from a tap.
+window.initTitleAudio = initTitleAudio;
 function initTitleAudio() {
   if (audioCtx) { _ensureCtxRunning(); return; }  // already initialized
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();

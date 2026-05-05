@@ -57,20 +57,52 @@
     gate.add('fonts', document.fonts.ready);
   }
 
+  // Mobile detection: iOS Safari blocks AudioContext until a real user gesture,
+  // so we present an ACCESS GRANTED button between loader-ready and title-show.
+  // The button tap doubles as the audio unlock gesture (initTitleAudio).
+  const _isMobile = (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
   // Hard fallback: never block the user more than 10s even if a promise stalls.
   let _hidden = false;
   function _hide(label) {
     if (_hidden) return;
     _hidden = true;
-    gate.setStatus(label || 'READY', 100);
+    gate.setStatus(label || 'CONNECTION ESTABLISHED', 100);
     // Brief beat at 100% so the bar visibly completes, then fade.
     setTimeout(() => {
       loader.classList.add('hide');
-      setTimeout(() => { if (loader.parentNode) loader.parentNode.removeChild(loader); }, 700);
+      setTimeout(() => {
+        if (loader.parentNode) loader.parentNode.removeChild(loader);
+        // On mobile, show ACCESS GRANTED gate. Desktop falls through to title.
+        if (_isMobile) _showAccessGate();
+      }, 700);
     }, 220);
   }
 
-  const hardTimeout = setTimeout(() => _hide('READY'), 10000);
+  function _showAccessGate() {
+    const gateEl = document.getElementById('access-gate');
+    const btn = document.getElementById('access-gate-btn');
+    if (!gateEl || !btn) return;
+    gateEl.classList.add('show');
+    const _onTap = (e) => {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      btn.removeEventListener('click', _onTap);
+      btn.removeEventListener('touchstart', _onTap);
+      // Initialize audio inside the gesture handler so iOS Safari unlocks the
+      // AudioContext + lets background <audio> tags play. initTitleAudio is
+      // wired up in 60-main-late.js and idempotent if already called.
+      try {
+        if (typeof window.initTitleAudio === 'function') window.initTitleAudio();
+      } catch (_) {}
+      gateEl.classList.add('hide');
+      setTimeout(() => { if (gateEl.parentNode) gateEl.parentNode.removeChild(gateEl); }, 600);
+    };
+    btn.addEventListener('click', _onTap, { passive: false });
+    btn.addEventListener('touchstart', _onTap, { passive: false });
+  }
+
+  const hardTimeout = setTimeout(() => _hide('CONNECTION ESTABLISHED'), 10000);
 
   // Resolve when all registered promises settle.
   Promise.all(gate.promises.slice()).then(() => {
@@ -85,9 +117,9 @@
       }
     } catch (_) {}
     // One RAF to let final shader compile + first frame render hidden behind us.
-    requestAnimationFrame(() => requestAnimationFrame(() => _hide('READY')));
+    requestAnimationFrame(() => requestAnimationFrame(() => _hide('CONNECTION ESTABLISHED')));
   }).catch(() => {
     clearTimeout(hardTimeout);
-    _hide('READY');
+    _hide('CONNECTION ESTABLISHED');
   });
 })();

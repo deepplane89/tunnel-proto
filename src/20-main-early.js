@@ -1443,7 +1443,7 @@ const scene  = new THREE.Scene();
 // Uses same NDC passthrough as star shader so it fills the screen independent of camera
 const _skyQuadGeo = new THREE.PlaneGeometry(2, 2);
 const _skyPanoTex = new THREE.TextureLoader().load('assets/images/milkyway-pano.jpg', () => {
-  if (window.__loadGate) window.__loadGate.setStatus('SKYBOX', 30);
+  if (window.__loadGate) window.__loadGate.setStatus('SIGNAL RECEIVED', 30);
 });
 _skyPanoTex.colorSpace = THREE.SRGBColorSpace;
 // Mobile anisotropy clamp — GPU max can be wasteful (e.g. 16x). 4x is plenty for skybox.
@@ -2439,7 +2439,7 @@ scene.add(floorMesh);
 const waterNormals = new THREE.TextureLoader().load('assets/images/waternormals.jpg', tex => {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   if (_mobAA) tex.anisotropy = 4; // mobile aniso clamp — 4x is plenty for tiled normals
-  if (window.__loadGate) window.__loadGate.setStatus('WATER', 50);
+  if (window.__loadGate) window.__loadGate.setStatus('DECODING TRANSMISSION', 50);
 });
 if (window.__loadGate) {
   window.__loadGate.add('waternormals', new Promise(res => {
@@ -5615,7 +5615,7 @@ if (window.__loadGate) {
   }));
 }
 gltfLoader.load('./assets/ships/default_ship.glb', (gltf) => {
-  if (window.__loadGate) window.__loadGate.setStatus('SHIP', 70);
+  if (window.__loadGate) window.__loadGate.setStatus('SYNCHRONIZING CHANNEL', 70);
   const model = gltf.scene;
   // New ship GLB: Sketchfab export — root matrices handle Y->Z-up conversion.
   // Ship nose points toward +X in model space; rotate so it faces -Z (away from camera).
