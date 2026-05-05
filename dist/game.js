@@ -8278,10 +8278,19 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         const _ra = (typeof state.rollAngle === 'number') ? state.rollAngle : 0;
         const _t = Math.max(0, Math.min(1, Math.abs(_ra) / (Math.PI * 0.5)));
         if (_t > 0.001) {
-          // Default Runner + recolors (idx 0–3): direction-split Up/Down banks.
-          // MK Runner (idx 4): single magnitude bank (_conePoseRoll), 558bfb5 formula.
+          // 2026-05-04: MK Runner was merged into skin 0 (commit 240eea0), so the
+          // _conePoseRoll[4] bank with the 558bfb5 MK values became unreachable.
+          // Now we route based on Warp Drive equipped state (Rings_001 addon):
+          //   - Skin 0 + Warp Drive   → MK bank (_conePoseRoll[4], magnitude formula)
+          //   - Skin 0 (no Warp Drive)→ Default Runner Up/Down banks (skins 0–3)
+          //   - Skins 1–3 (recolors)  → Default Runner Up/Down banks (always)
+          // _isMkWarpActive() lives in 72-main-late-mid.js (cached, hot-path-safe).
           let _tgt = null;
-          if (activeSkinIdx <= 3 && window._conePoseUp && window._conePoseDown) {
+          const _mkWarp = (typeof window._isMkWarpActive === 'function') && window._isMkWarpActive();
+          if (_mkWarp && window._conePoseRoll) {
+            const _bank = window._conePoseRoll[4];
+            _tgt = _bank && _bank[idx];
+          } else if (activeSkinIdx <= 3 && window._conePoseUp && window._conePoseDown) {
             const _bank = (_ra < 0) ? window._conePoseUp[activeSkinIdx] : window._conePoseDown[activeSkinIdx];
             _tgt = _bank && _bank[idx];
           } else if (window._conePoseRoll) {
@@ -8304,8 +8313,12 @@ function updateThrusters(dt, shipX, shipY, shipZ, accel) {
         const _sNorm = (typeof window._steerNorm === 'number') ? window._steerNorm : 0;
         const _sT = Math.max(0, Math.min(1, Math.abs(_sNorm)));
         if (_sT > 0.001) {
+          // 2026-05-04: same MK-merge re-route as the roll blend above. Skin 0 +
+          // Warp Drive uses the MK Runner steering bank (_conePoseSteerLeft/Right[4]);
+          // otherwise the Default Runner bank ([activeSkinIdx]).
           const _sBank = (_sNorm < 0) ? window._conePoseSteerLeft : window._conePoseSteerRight;
-          const _sSide = _sBank && _sBank[activeSkinIdx];
+          const _sMkWarp = (typeof window._isMkWarpActive === 'function') && window._isMkWarpActive();
+          const _sSide = _sBank && _sBank[_sMkWarp ? 4 : activeSkinIdx];
           const _sTgt  = _sSide && _sSide[idx];
           if (_sTgt) {
             // Only blend axes that are explicitly defined on the target.
@@ -14774,6 +14787,10 @@ function updateStreakBadge() {
   }
   function _saveAddonsState(s) {
     try { localStorage.setItem(SR_ADDONS_KEY, JSON.stringify(s || {})); } catch(_){}
+    // Invalidate the MK+Warp cone-pose cache (Rings_001/Warp Drive may have just
+    // been toggled — cone roll-blend lookup needs to re-route between
+    // _conePoseRoll[4] and _conePoseUp/Down[0] on the next frame).
+    try { if (typeof window._invalidateMkWarpCache === 'function') window._invalidateMkWarpCache(); } catch(_){}
   }
   function _currentAddonsKey() {
     // Prefer the active title ship's _altGlb (set after applyTitleSkin runs).
@@ -26288,25 +26305,32 @@ window._clearAllAsteroids = _clearAllAsteroids;
 // This is the run-start hook: 67-main-late.js startGame() calls
 // window._applyEquippedThruster() right after applySkin(), then sets
 // window._thrusterColorLocked = true.
-(function _installThrusterApply(){
-  // Returns true when MK Runner + Warp Drive is the active loadout: skin idx 0
-  // with Rings_001 enabled in the showroom addons store. (Rings_001 was renamed
-  // to 'Warp Drive' in 70c32e2; the underlying mesh node name didn't change.)
-  function _isMkWarpActive() {
-    try {
-      if (typeof activeSkinIdx !== 'undefined' && activeSkinIdx !== 0) return false;
-      if (typeof loadSkinData === 'function') {
-        const sd = loadSkinData();
-        if (sd && typeof sd.selected === 'number' && sd.selected !== 0) return false;
-      }
-      const raw = (window._LS || localStorage).getItem('jh_showroom_addons_v2');
-      if (!raw) return false;
+// Returns true when MK Runner + Warp Drive is the active loadout: skin idx 0
+// with Rings_001 enabled in the showroom addons store. (Rings_001 was renamed
+// to 'Warp Drive' in 70c32e2; the underlying mesh node name didn't change.)
+// Hot path — called per-frame per-cone in updateThrusters() — the JSON.parse hit
+// is guarded by an in-memory cache that invalidates only when the addons store
+// or active skin changes (showroom calls _invalidateMkWarpCache() on toggle).
+let _mkWarpCache = { v: false, raw: null, idx: -1 };
+window._isMkWarpActive = function _isMkWarpActive() {
+  try {
+    const idx = (typeof activeSkinIdx !== 'undefined') ? activeSkinIdx : 0;
+    if (idx !== 0) { _mkWarpCache = { v: false, raw: null, idx }; return false; }
+    const raw = (window._LS || localStorage).getItem('jh_showroom_addons_v2');
+    if (_mkWarpCache.raw === raw && _mkWarpCache.idx === idx) return _mkWarpCache.v;
+    let v = false;
+    if (raw) {
       const all = JSON.parse(raw) || {};
       const bucket = all['spaceship_01.glb'] || {};
-      return bucket['Rings_001'] === true;
-    } catch(_) { return false; }
-  }
+      v = bucket['Rings_001'] === true;
+    }
+    _mkWarpCache = { v, raw, idx };
+    return v;
+  } catch(_) { return false; }
+};
+window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: null, idx: -1 }; };
 
+(function _installThrusterApply(){
   function _writeThrPresetValues(P) {
     if (!P) return;
     Object.keys(P).forEach(k => {
@@ -26336,7 +26360,7 @@ window._clearAllAsteroids = _clearAllAsteroids;
           // tuned values represent that combo. coneThrusterCfg writes first, then
           // coneThrusterCfgMkWarp merges on top so we only override the keys that
           // actually differ. Detection: skin idx 0 + Rings_001 enabled in addons store.
-          if (k === 'coneThrusterCfgMkWarp' && !_isMkWarpActive()) return;
+          if (k === 'coneThrusterCfgMkWarp' && !window._isMkWarpActive()) return;
           if (window._coneThruster && v && typeof v === 'object') {
             Object.keys(v).forEach(ck => {
               if (v[ck] != null) window._coneThruster[ck] = v[ck];

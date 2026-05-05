@@ -1913,25 +1913,32 @@ window._clearAllAsteroids = _clearAllAsteroids;
 // This is the run-start hook: 67-main-late.js startGame() calls
 // window._applyEquippedThruster() right after applySkin(), then sets
 // window._thrusterColorLocked = true.
-(function _installThrusterApply(){
-  // Returns true when MK Runner + Warp Drive is the active loadout: skin idx 0
-  // with Rings_001 enabled in the showroom addons store. (Rings_001 was renamed
-  // to 'Warp Drive' in 70c32e2; the underlying mesh node name didn't change.)
-  function _isMkWarpActive() {
-    try {
-      if (typeof activeSkinIdx !== 'undefined' && activeSkinIdx !== 0) return false;
-      if (typeof loadSkinData === 'function') {
-        const sd = loadSkinData();
-        if (sd && typeof sd.selected === 'number' && sd.selected !== 0) return false;
-      }
-      const raw = (window._LS || localStorage).getItem('jh_showroom_addons_v2');
-      if (!raw) return false;
+// Returns true when MK Runner + Warp Drive is the active loadout: skin idx 0
+// with Rings_001 enabled in the showroom addons store. (Rings_001 was renamed
+// to 'Warp Drive' in 70c32e2; the underlying mesh node name didn't change.)
+// Hot path — called per-frame per-cone in updateThrusters() — the JSON.parse hit
+// is guarded by an in-memory cache that invalidates only when the addons store
+// or active skin changes (showroom calls _invalidateMkWarpCache() on toggle).
+let _mkWarpCache = { v: false, raw: null, idx: -1 };
+window._isMkWarpActive = function _isMkWarpActive() {
+  try {
+    const idx = (typeof activeSkinIdx !== 'undefined') ? activeSkinIdx : 0;
+    if (idx !== 0) { _mkWarpCache = { v: false, raw: null, idx }; return false; }
+    const raw = (window._LS || localStorage).getItem('jh_showroom_addons_v2');
+    if (_mkWarpCache.raw === raw && _mkWarpCache.idx === idx) return _mkWarpCache.v;
+    let v = false;
+    if (raw) {
       const all = JSON.parse(raw) || {};
       const bucket = all['spaceship_01.glb'] || {};
-      return bucket['Rings_001'] === true;
-    } catch(_) { return false; }
-  }
+      v = bucket['Rings_001'] === true;
+    }
+    _mkWarpCache = { v, raw, idx };
+    return v;
+  } catch(_) { return false; }
+};
+window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: null, idx: -1 }; };
 
+(function _installThrusterApply(){
   function _writeThrPresetValues(P) {
     if (!P) return;
     Object.keys(P).forEach(k => {
@@ -1961,7 +1968,7 @@ window._clearAllAsteroids = _clearAllAsteroids;
           // tuned values represent that combo. coneThrusterCfg writes first, then
           // coneThrusterCfgMkWarp merges on top so we only override the keys that
           // actually differ. Detection: skin idx 0 + Rings_001 enabled in addons store.
-          if (k === 'coneThrusterCfgMkWarp' && !_isMkWarpActive()) return;
+          if (k === 'coneThrusterCfgMkWarp' && !window._isMkWarpActive()) return;
           if (window._coneThruster && v && typeof v === 'object') {
             Object.keys(v).forEach(ck => {
               if (v[ck] != null) window._coneThruster[ck] = v[ck];

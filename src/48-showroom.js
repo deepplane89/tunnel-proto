@@ -469,6 +469,10 @@
   }
   function _saveAddonsState(s) {
     try { localStorage.setItem(SR_ADDONS_KEY, JSON.stringify(s || {})); } catch(_){}
+    // Invalidate the MK+Warp cone-pose cache (Rings_001/Warp Drive may have just
+    // been toggled — cone roll-blend lookup needs to re-route between
+    // _conePoseRoll[4] and _conePoseUp/Down[0] on the next frame).
+    try { if (typeof window._invalidateMkWarpCache === 'function') window._invalidateMkWarpCache(); } catch(_){}
   }
   function _currentAddonsKey() {
     // Prefer the active title ship's _altGlb (set after applyTitleSkin runs).
