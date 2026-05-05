@@ -1229,12 +1229,14 @@ function _drSequencerTick(dt) {
   // Skip the per-tick stage-speed setter while a pending speed bump is
   // queued — _drApplyPendingSpeed() owns state.speed until the in-flight
   // obstacle field clears, so don't fight it here.
-  // Bump-rest dip: when this is a rest stage and the NEXT stage has a higher
-  // speed, the rest handler below pulls speed down to BASE_SPEED for dramatic
-  // FOV/speed punch on advance. Skip STAGE_RAMP so it doesn't fight the dip.
+  // Bump-rest dip: a rest stage whose declared speed is HIGHER than the prior
+  // stage's. The rest handler pulls speed down to BASE_SPEED during the rest;
+  // when the rest ends, _drSeqAdvance lets speed punch back up to the next
+  // stage's tier (== this rest's declared speed). Skip STAGE_RAMP so it
+  // doesn't drag speed up to the rest's declared value during the dip.
   const _isBumpRest = (stage.type === 'rest') && (() => {
-    const _ns = DR_SEQUENCE[state.seqStageIdx + 1];
-    return !!(_ns && _ns.speed > stage.speed);
+    const _prv = DR_SEQUENCE[state.seqStageIdx - 1];
+    return !!(_prv && stage.speed > _prv.speed);
   })();
   if (state._pendingSpeed === undefined && !_isBumpRest &&
       !state.invincibleSpeedActive && !state.l3KnifeCanyon && !state.preT4ACanyon && !state.preT4BCanyon &&
@@ -1280,11 +1282,11 @@ function _drSequencerTick(dt) {
     state.deathRunRestBeat = 0.5; // suppress spawning
 
     // ── Speed-dip on bump-rests: drop to BASE_SPEED (1.0×) during rest so the
-    // following stage's higher tier punches FOV/speed back up dramatically.
-    // Only fires on rests where next stage has a higher speed; rest end
-    // (`_drSeqAdvance` below) restores the new tier with klaxon + thruster impact.
-    const _nextStg = DR_SEQUENCE[state.seqStageIdx + 1];
-    if (_nextStg && _nextStg.speed > stage.speed && !state.invincibleSpeedActive &&
+    // rest's declared (already-bumped) speed punches FOV/speed back up at advance.
+    // Bump-rest = this rest's speed > previous stage's speed. Klaxon + thruster
+    // impact already wired around `_drSeqAdvance` for the punch.
+    const _prvStg = DR_SEQUENCE[state.seqStageIdx - 1];
+    if (_prvStg && stage.speed > _prvStg.speed && !state.invincibleSpeedActive &&
         !state.l3KnifeCanyon && !state.preT4ACanyon && !state.preT4BCanyon) {
       // Snap down over ~0.5s, hold at BASE for the rest of the stage.
       // Override the per-tick stage-speed setter above by writing directly.
@@ -1614,13 +1616,13 @@ function _drSequencerTick(dt) {
 
 // Advance to next sequencer stage
 function _drSeqAdvance() {
-  // If leaving a bump-rest (next stage has higher speed than current),
+  // If leaving a bump-rest (a rest whose declared speed > the previous stage),
   // hold spawn for ~0.4s so the FOV/speed punch reads visually before the
   // first obstacle of the new stage appears. Implemented via deathRunRestBeat.
   const _curStage = DR_SEQUENCE[state.seqStageIdx];
-  const _nextStg  = DR_SEQUENCE[state.seqStageIdx + 1];
+  const _prvStage = DR_SEQUENCE[state.seqStageIdx - 1];
   const _leavingBumpRest = _curStage && _curStage.type === 'rest' &&
-                            _nextStg && _nextStg.speed > _curStage.speed;
+                            _prvStage && _curStage.speed > _prvStage.speed;
 
   // Clean up any active mechanics from current stage
   clearAllCorridorFlags();
