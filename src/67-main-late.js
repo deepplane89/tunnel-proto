@@ -1229,7 +1229,14 @@ function _drSequencerTick(dt) {
   // Skip the per-tick stage-speed setter while a pending speed bump is
   // queued — _drApplyPendingSpeed() owns state.speed until the in-flight
   // obstacle field clears, so don't fight it here.
-  if (state._pendingSpeed === undefined &&
+  // Bump-rest dip: when this is a rest stage and the NEXT stage has a higher
+  // speed, the rest handler below pulls speed down to BASE_SPEED for dramatic
+  // FOV/speed punch on advance. Skip STAGE_RAMP so it doesn't fight the dip.
+  const _isBumpRest = (stage.type === 'rest') && (() => {
+    const _ns = DR_SEQUENCE[state.seqStageIdx + 1];
+    return !!(_ns && _ns.speed > stage.speed);
+  })();
+  if (state._pendingSpeed === undefined && !_isBumpRest &&
       !state.invincibleSpeedActive && !state.l3KnifeCanyon && !state.preT4ACanyon && !state.preT4BCanyon &&
       Math.abs(state.speed - targetSpeed) > 0.5) _setDRSpeed(targetSpeed, 'STAGE_RAMP');
   if (stage.physTier !== undefined) state.deathRunSpeedTier = stage.physTier;
@@ -1271,6 +1278,26 @@ function _drSequencerTick(dt) {
     }
     state.seqStageElapsed += dt;
     state.deathRunRestBeat = 0.5; // suppress spawning
+
+    // ── Speed-dip on bump-rests: drop to BASE_SPEED (1.0×) during rest so the
+    // following stage's higher tier punches FOV/speed back up dramatically.
+    // Only fires on rests where next stage has a higher speed; rest end
+    // (`_drSeqAdvance` below) restores the new tier with klaxon + thruster impact.
+    const _nextStg = DR_SEQUENCE[state.seqStageIdx + 1];
+    if (_nextStg && _nextStg.speed > stage.speed && !state.invincibleSpeedActive &&
+        !state.l3KnifeCanyon && !state.preT4ACanyon && !state.preT4BCanyon) {
+      // Snap down over ~0.5s, hold at BASE for the rest of the stage.
+      // Override the per-tick stage-speed setter above by writing directly.
+      const _dipTarget = BASE_SPEED;
+      if (state.speed > _dipTarget + 0.5) {
+        // Lerp rate ~6/s gives ~0.5s to ramp from 2.5× down to 1.0×.
+        state.speed = Math.max(_dipTarget, state.speed - (state.speed - _dipTarget) * Math.min(1, dt * 6));
+      } else {
+        state.speed = _dipTarget;
+      }
+      // Block the per-tick STAGE_RAMP setter from clobbering the dip.
+      state._drSpeedFloor = 0;
+    }
     // Fire warning beeps 1.5s before REST ends if next stage has higher speed
     const _nextStage = DR_SEQUENCE[state.seqStageIdx + 1];
     if (_nextStage && _nextStage.speed > stage.speed && !state._restBeepFired &&
@@ -1587,13 +1614,21 @@ function _drSequencerTick(dt) {
 
 // Advance to next sequencer stage
 function _drSeqAdvance() {
+  // If leaving a bump-rest (next stage has higher speed than current),
+  // hold spawn for ~0.4s so the FOV/speed punch reads visually before the
+  // first obstacle of the new stage appears. Implemented via deathRunRestBeat.
+  const _curStage = DR_SEQUENCE[state.seqStageIdx];
+  const _nextStg  = DR_SEQUENCE[state.seqStageIdx + 1];
+  const _leavingBumpRest = _curStage && _curStage.type === 'rest' &&
+                            _nextStg && _nextStg.speed > _curStage.speed;
+
   // Clean up any active mechanics from current stage
   clearAllCorridorFlags();
   state.zipperActive = false;
   state.slalomActive = false;
   state.angledWallsActive = false;
   state._ringsActive = false;
-  state.deathRunRestBeat = 0;
+  state.deathRunRestBeat = _leavingBumpRest ? 0.4 : 0;
 
   state.seqStageIdx++;
   state.seqStageElapsed = 0;
@@ -5061,8 +5096,23 @@ function update(dt) {
     }
   }
 
+  // Pre-bump-rest drain: last 2s of any timed stage whose NEXT stage is a
+  // bump-rest (rest leading into a higher speed) suppresses spawning so the
+  // current obstacle field z-scrolls past the player before the dip kicks in.
+  let _preBumpRestDrain = false;
+  if (state.isDeathRun) {
+    const _curStg = DR_SEQUENCE[state.seqStageIdx];
+    if (_curStg && _curStg.duration && _curStg.type !== 'rest') {
+      const _nxt = DR_SEQUENCE[state.seqStageIdx + 1];
+      const _afterNxt = DR_SEQUENCE[state.seqStageIdx + 2];
+      const _nextIsBumpRest = _nxt && _nxt.type === 'rest' && _afterNxt && _afterNxt.speed > _nxt.speed;
+      if (_nextIsBumpRest && state.seqStageElapsed >= _curStg.duration - 2.0) {
+        _preBumpRestDrain = true;
+      }
+    }
+  }
   // Normal nextSpawnZ-based spawner — suppressed during active zipper, L5 ending, intro, or death run rest beat
-  if (!state._tutorialActive && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
+  if (!_preBumpRestDrain && !state._tutorialActive && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
     state.nextSpawnZ += effectiveSpeed * dt;
     if (state.nextSpawnZ >= 0) {
       // Tighter Z spacing for rings (easier to pass through, need more density)
