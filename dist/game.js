@@ -6454,11 +6454,24 @@ function initTitleShipPreview(sourceModel) {
   // Deep clone so title and gameplay models are fully independent
   _titleShipModel = sourceModel.clone(true);
 
-  // Build mesh map: name → mesh (for skin switching by name, not uuid)
+  // Build mesh map: name → mesh (for skin switching by name, not uuid).
+  // _origMatName is the slot key _makeMatForSkinSlot uses to pick per-slot
+  // colors. The default ship's meshes don't have _origMatName stamped (only
+  // _loadAltShip sets it), so on cold boot fall back to the mesh's actual
+  // material.name. Without this, every slot keys to '' → _SKIN_PALETTE
+  // returns the fallback material for hull AND edges AND lights, and the
+  // title ship renders as a uniform grey blob until the alt-GLB cache
+  // populates and the load-gate retry swaps in a properly-named model.
   _titleMeshMap = [];
   _titleShipModel.traverse(child => {
     if (!child.isMesh) return;
-    _titleMeshMap.push({ mesh: child, origName: child.userData._origMatName || '' });
+    let _slotName = child.userData._origMatName || '';
+    if (!_slotName && child.material) {
+      _slotName = (Array.isArray(child.material) ? child.material[0]?.name : child.material.name) || '';
+      // Stamp it so the swap path's clone keeps the slot key on the cloned mesh.
+      if (_slotName) child.userData._origMatName = _slotName;
+    }
+    _titleMeshMap.push({ mesh: child, origName: _slotName });
   });
 
   // Apply current skin materials to clone (copy refs from source by name)
