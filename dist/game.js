@@ -13331,8 +13331,11 @@ function spawnObstacles() {
     blocked.push(lane);
   }
 
+  // Fat cones use a wider lateral spread so the row covers more of the road —
+  // makes lateral camping more punishing without changing density.
+  const _laneSpreadMul = _isFatConeBand ? 1.5 : 1.0;
   blocked.forEach(lane => {
-    const laneX = shipX + (lane - (_spawnLaneCount - 1) / 2) * LANE_WIDTH;
+    const laneX = shipX + (lane - (_spawnLaneCount - 1) / 2) * LANE_WIDTH * _laneSpreadMul;
     // Skip if cone would land inside a bonus ring
     let inRing = false;
     for (const br of _bonusRings) {
