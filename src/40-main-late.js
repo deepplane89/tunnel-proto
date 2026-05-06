@@ -636,7 +636,8 @@ function _updateL3KnifeCanyon(dt) {
     // Ease-out cubic so the push-in decelerates at the end.
     const e = 1 - Math.pow(1 - t, 3);
     const startSpeed  = state._l3SavedSpeed || (BASE_SPEED * 2.0);
-    const targetSpeed = BASE_SPEED * _L3_KNIFE_TARGET_SPEED_MULT;
+    // Floor-aware: tier 7 (floor 2.30) shouldn't drop to 2.20 entering knife canyon.
+    const targetSpeed = BASE_SPEED * Math.max(_L3_KNIFE_TARGET_SPEED_MULT, state._drSpeedFloor || 0);
     _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     // FOV follows naturally via the global speed-to-FOV lerp in perf-diag.js
     // (targetFOV = _baseFOV + _fovSpeedBoost * speed/80) — matching the rest
@@ -823,10 +824,13 @@ function _updatePreT4ACanyon(dt) {
     const startSpeed  = state._preT4ASavedSpeed || (BASE_SPEED * 2.0);
     // Target = current stage's declared speed (canyon should NOT add an extra
     // FOV/speed bump above the gameplay loop). Falls back to legacy 2.2× if
-    // sequencer state unavailable.
+    // sequencer state unavailable. Math.max with _drSpeedFloor so handling-tier
+    // launches (1.8/2.1/2.3) never regress when entering canyons whose stage
+    // speed is below the floor.
     const _stg = (typeof DR_SEQUENCE !== 'undefined') ? DR_SEQUENCE[state.seqStageIdx] : null;
     const _stgMult = (_stg && typeof _stg.speed === 'number') ? _stg.speed : _PRE_T4A_TARGET_SPEED_MULT;
-    const targetSpeed = BASE_SPEED * _stgMult;
+    const _floorMult = state._drSpeedFloor || 0;
+    const targetSpeed = BASE_SPEED * Math.max(_stgMult, _floorMult);
     _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4ARampPhase = 'active';
@@ -984,7 +988,9 @@ function _updatePreT4BCanyon(dt) {
     const startSpeed  = state._preT4BSavedSpeed || (BASE_SPEED * 2.0);
     const _stgB = (typeof DR_SEQUENCE !== 'undefined') ? DR_SEQUENCE[state.seqStageIdx] : null;
     const _stgMultB = (_stgB && typeof _stgB.speed === 'number') ? _stgB.speed : _PRE_T4B_TARGET_SPEED_MULT;
-    const targetSpeed = BASE_SPEED * _stgMultB;
+    // Floor-aware: handling-tier launches never regress mid-canyon.
+    const _floorMultB = state._drSpeedFloor || 0;
+    const targetSpeed = BASE_SPEED * Math.max(_stgMultB, _floorMultB);
     _setDRSpeed(startSpeed + (targetSpeed - startSpeed) * e, 'STAGE_RAMP');
     if (t >= 1) {
       state.preT4BRampPhase = 'active';

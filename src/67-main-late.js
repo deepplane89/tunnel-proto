@@ -1341,50 +1341,15 @@ function _drSequencerTick(dt) {
     // impact already wired around `_drSeqAdvance` for the punch.
     const _prvStg = DR_SEQUENCE[state.seqStageIdx - 1];
     const _isDipRest = !!(_prvStg && stage.speed > _prvStg.speed);
-    if (_isDipRest && !state.invincibleSpeedActive) {
-      // Play the invincible-end "power-down" warble (segment starting at 20.0s)
-      // once on dip entry. Fire-flag cleared on advance.
-      if (!state._dipSfxFired && !state.muted) {
-        state._dipSfxFired = true;
-        const _dipSfx = document.getElementById('speed-dip-sfx');
-        if (_dipSfx) {
-          try {
-            _dipSfx.pause();
-            _dipSfx.currentTime = 20.0;
-            _dipSfx.volume = 0.6;
-            _dipSfx.loop = false;
-            _dipSfx.play().catch(() => {});
-          } catch (_) {}
-        }
-      }
-      // Kill any pending speed bump so the rest's higher declared speed
-      // doesn't punch in mid-dip. _drSeqAdvance set this to rest.speed*BASE
-      // when entering the rest from a slower canyon; we want the bump to
-      // happen on the NEXT advance (rest→stage), not now.
-      state._pendingSpeed = undefined;
-      state._pendingSpeedObstacles = null;
-      state._pendingSpeedDeadline = 0;
-      // Force-clear lingering canyon-owns-speed flags so other systems don't
-      // fight the dip during REST. Canyon visuals are torn down by
-      // _stopPreT4ACanyon/_stopPreT4BCanyon already; flags can sometimes lag.
-      state.preT4ACanyon = false;
-      state.preT4BCanyon = false;
-      state._drSpeedFloor = 0;
-      // Lerp down to BASE_SPEED (1.0×) over ~0.8s, hold for the rest of the
-      // stage. Rate dt*4 → ~63% drop in 0.25s, ~95% in 0.75s — visible dip
-      // without a jarring snap. FOV (speed-derived) follows automatically.
-      const _dipTarget = BASE_SPEED;
-      if (state.speed > _dipTarget + 0.5) {
-        state.speed = Math.max(_dipTarget, state.speed - (state.speed - _dipTarget) * Math.min(1, dt * 4));
-      } else {
-        state.speed = _dipTarget;
-      }
-      // Extra FOV pull-back below baseline so the dip reads as a real slowdown
-      // (state.speed already clamps to BASE so the speed-derived FOV bottoms out).
-      // -14° — roughly the same magnitude as the 2.0× → BASE drop, doubling
-      // the felt swing. Cleared on advance below.
-      state._drFovDipBias = -14;
-    }
+    // Bump-rest speed dip removed 2026-05-06. Handling-tier startBoost lets
+    // players launch at 1.8x / 2.1x ("L4 feel") / 2.3x; the previous dip
+    // pulled state.speed all the way back to BASE_SPEED at every rest, then
+    // wiped _drSpeedFloor=0 to allow the dip — wrecking the handling floor
+    // and creating mid-run regressions. Now speed climbs monotonically per
+    // docs/DR_SEQUENCE.md (the doc's invariant: "speed is never supposed to
+    // decrease during a normal Death Run"). Klaxon countdown still fires
+    // (block below) at speed-up boundaries to telegraph the punch.
+    void _isDipRest; // referenced below for _willPunch klaxon trigger
     // Fire warning beeps 1.5s before REST ends. Triggers on bump-rests (where
     // we just dipped to BASE → next stage punches to rest.speed) OR rests
     // that lead into a faster next stage. Skip when speed is genuinely flat.
@@ -1410,12 +1375,13 @@ function _drSequencerTick(dt) {
     if (state.seqStageElapsed >= stage.duration) {
       state._restBeepFired = false;
       state._dipSfxFired = false;
-      state._drFovDipBias = 0; // clear FOV pull-back so punch reads full
-      // FOV punch pulse: tells the FOV lerp (in 70-perf-diag.js) to use a
-      // snappier rate for the dip→peak transition so it reads as a pulse
-      // instead of a slow drift up. Decays toward 0 over ~0.4s; while >0
-      // the lerp uses an accelerated rate.
-      state._drFovPunchPulse = 1.0;
+      // FOV dip + punch removed 2026-05-06: handling-tier startBoost makes
+      // launches start at higher speeds (1.8x/2.1x/2.3x), and the dip would
+      // pull speed all the way back to BASE every rest stage — fighting the
+      // floor and reading as a regression. Replaced with monotone speed
+      // climbing per docs/DR_SEQUENCE.md.
+      state._drFovDipBias = 0;
+      state._drFovPunchPulse = 0;
       // Stop dip sfx if still ringing out as the punch hits
       const _dipSfxStop = document.getElementById('speed-dip-sfx');
       if (_dipSfxStop) { try { _dipSfxStop.pause(); _dipSfxStop.currentTime = 0; } catch (_) {} }
@@ -2133,7 +2099,8 @@ const DR_MECHANIC_FAMILIES = {
       // sequencer's isActive() returns false and advances to the next stage.
       // Flip _L3_KNIFE_ENABLED to false to restore the legacy cone corridor.
       if (_L3_KNIFE_ENABLED) {
-        _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START'); // match corridor speed for canyon scroll
+        // Honor handling-tier _drSpeedFloor so launch speeds never regress.
+        _setDRSpeed(BASE_SPEED * Math.max(2.0, state._drSpeedFloor || 0), 'STAGE_START'); // match corridor speed for canyon scroll
         try {
           _startL3KnifeCanyon();
         } catch (e) {
@@ -2151,7 +2118,7 @@ const DR_MECHANIC_FAMILIES = {
       state.corridorGapDir    = 1;
       state.corridorDelay     = 1.5;
       state._drL3MaxRows      = rows;
-      _setDRSpeed(BASE_SPEED * 2.0, 'STAGE_START'); // L3 corridor speed
+      _setDRSpeed(BASE_SPEED * Math.max(2.0, state._drSpeedFloor || 0), 'STAGE_START'); // L3 corridor speed (floor-aware)
     },
     // DR sequencer polls this to decide when to advance. Knife canyon counts
     // as active until _stopL3KnifeCanyon flips l3KnifeDone=true (after 40s).
@@ -2162,8 +2129,10 @@ const DR_MECHANIC_FAMILIES = {
     minBand: 3,
     activate(band, role) {
       // Honor stage-declared speed (CG=2.1, CK=2.5 etc); fall back to 2.0 for arc/manual callers.
+      // Math.max with _drSpeedFloor so a tier 3 player (floor 2.1) entering
+      // CA_CANYON (1.8) doesn't get pulled DOWN to 1.8 — stay at 2.1.
       const sm = (typeof state._drStageSpeed === 'number') ? state._drStageSpeed : 2.0;
-      _setDRSpeed(BASE_SPEED * sm, 'STAGE_START');
+      _setDRSpeed(BASE_SPEED * Math.max(sm, state._drSpeedFloor || 0), 'STAGE_START');
       try {
         _startPreT4ACanyon();
       } catch (e) {
@@ -2177,8 +2146,9 @@ const DR_MECHANIC_FAMILIES = {
     minBand: 3,
     activate(band, role) {
       // Honor stage-declared speed (CA=1.8, CH=2.1, CJ=2.2); fall back to 2.0 for arc/manual callers.
+      // Math.max with _drSpeedFloor so handling-tier launches never regress.
       const sm = (typeof state._drStageSpeed === 'number') ? state._drStageSpeed : 2.0;
-      _setDRSpeed(BASE_SPEED * sm, 'STAGE_START');
+      _setDRSpeed(BASE_SPEED * Math.max(sm, state._drSpeedFloor || 0), 'STAGE_START');
       try {
         _startPreT4BCanyon();
       } catch (e) {
@@ -2203,7 +2173,7 @@ const DR_MECHANIC_FAMILIES = {
       // forms around the player instead of world origin. Sine sweep then
       // oscillates relative to this anchor (see spawnL4CorridorRow).
       state._l4CenterAnchor  = state.shipX || 0;
-      _setDRSpeed(BASE_SPEED * 2.1, 'STAGE_START'); // L4 corridor speed
+      _setDRSpeed(BASE_SPEED * Math.max(2.1, state._drSpeedFloor || 0), 'STAGE_START'); // L4 corridor speed (floor-aware)
     },
     isActive() { return state.l4CorridorActive; }
   },
@@ -2221,8 +2191,10 @@ const DR_MECHANIC_FAMILIES = {
       // Anchor corridor center on the ship's X at activation so the squeeze
       // forms around the player instead of world origin (matches L4 behaviour).
       state._l5CenterAnchor     = state.shipX || 0;
-      _setDRSpeed(BASE_SPEED * 2.5, 'STAGE_START'); // L5 corridor speed
-      state._drSpeedFloor = 2.5; // lock floor — speed never drops below this after L5
+      _setDRSpeed(BASE_SPEED * 2.5, 'STAGE_START'); // L5 corridor speed (terminal max)
+      // Math.max so a handling tier > 2.5 (none currently exist; ceiling is
+      // 2.30) couldn't undercut the L5 ratchet. Defensive only.
+      state._drSpeedFloor = Math.max(2.5, state._drSpeedFloor || 0); // lock floor — speed never drops below this after L5
     },
     isActive() { return state.l5CorridorActive; }
   },
