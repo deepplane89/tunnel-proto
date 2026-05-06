@@ -1214,8 +1214,9 @@ let _thrusterPanelOpenedFromGameplay = false;
 
 function openThrusterPanel(targetTab) {
   initAudio();
-  // No playTitleTap here — Showroom.open() plays the dedicated garage-open
-  // sound; layering the menu-cycle pip on top of it was doubling the cue.
+  // VR clicker on title-screen garage open (no dedicated garage-open sound
+  // anymore — user wants the title-tap cue here).
+  playTitleTap();
 
   // Pause gameplay if mid-run (mirrors V1 behavior).
   if (state.phase === 'playing') {
@@ -1243,7 +1244,8 @@ function openThrusterPanel(targetTab) {
 window.openThrusterPanel = openThrusterPanel;
 
 function closeThrusterPanel() {
-  // No playTitleTap — Showroom.close() plays the dedicated garage-close sound.
+  // VR clicker on garage close (matches the open cue).
+  playTitleTap();
 
   if (window.Showroom && typeof window.Showroom.close === 'function') {
     window.Showroom.close();

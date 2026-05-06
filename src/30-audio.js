@@ -182,8 +182,10 @@ function _initSFXBuffers() {
   _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
   _loadSFXBuffer('shop-purchase',   './assets/audio/shop_purchase.mp3');
   _loadSFXBuffer('reject',          './assets/audio/reject.mp3');
-  // Cycling between cards/options in the garage menus + title menu taps + exit.
+  // Title-screen menu taps + Exit/Resume + Garage open/close on title.
   _loadSFXBuffer('menu-cycle',      './assets/audio/vr-transform-clicker.mp3');
+  // Garage card cycling (skin / preset / color / addon) — pinball pip.
+  _loadSFXBuffer('garage-cycle',    './assets/audio/menu-cycle.wav');
   // Title-screen "death run" button (the ENTER moment from the loading screen).
   _loadSFXBuffer('start-interference', './assets/audio/start-interference.mp3');
   // Garage open/close audio removed — no sample needed.
@@ -362,9 +364,13 @@ function playGarageClose() { /* no-op */ }
 window.playGarageOpen  = playGarageOpen;
 window.playGarageClose = playGarageClose;
 
-// Garage card cycling (skin / preset / color / addon).
-function playMenuCycle() { _playBuffer('menu-cycle', 0.5, 1.0, null); }
+// Title-screen menu taps, Exit/Resume, garage open/close on title — VR clicker.
+function playMenuCycle() { _playBuffer('menu-cycle', 0.6, 1.0, null); }
 window.playMenuCycle = playMenuCycle;
+
+// Garage card cycling (Showroom internal nav) — pinball pip.
+function playGarageCycle() { _playBuffer('garage-cycle', 0.5, 1.0, null); }
+window.playGarageCycle = playGarageCycle;
 
 // Title-screen "start death run" press.
 function playStartInterference() { _playBuffer('start-interference', 0.7, 1.0, null); }

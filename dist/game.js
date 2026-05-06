@@ -1866,8 +1866,9 @@ let _thrusterPanelOpenedFromGameplay = false;
 
 function openThrusterPanel(targetTab) {
   initAudio();
-  // No playTitleTap here — Showroom.open() plays the dedicated garage-open
-  // sound; layering the menu-cycle pip on top of it was doubling the cue.
+  // VR clicker on title-screen garage open (no dedicated garage-open sound
+  // anymore — user wants the title-tap cue here).
+  playTitleTap();
 
   // Pause gameplay if mid-run (mirrors V1 behavior).
   if (state.phase === 'playing') {
@@ -1895,7 +1896,8 @@ function openThrusterPanel(targetTab) {
 window.openThrusterPanel = openThrusterPanel;
 
 function closeThrusterPanel() {
-  // No playTitleTap — Showroom.close() plays the dedicated garage-close sound.
+  // VR clicker on garage close (matches the open cue).
+  playTitleTap();
 
   if (window.Showroom && typeof window.Showroom.close === 'function') {
     window.Showroom.close();
@@ -11538,8 +11540,10 @@ function _initSFXBuffers() {
   _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
   _loadSFXBuffer('shop-purchase',   './assets/audio/shop_purchase.mp3');
   _loadSFXBuffer('reject',          './assets/audio/reject.mp3');
-  // Cycling between cards/options in the garage menus + title menu taps + exit.
+  // Title-screen menu taps + Exit/Resume + Garage open/close on title.
   _loadSFXBuffer('menu-cycle',      './assets/audio/vr-transform-clicker.mp3');
+  // Garage card cycling (skin / preset / color / addon) — pinball pip.
+  _loadSFXBuffer('garage-cycle',    './assets/audio/menu-cycle.wav');
   // Title-screen "death run" button (the ENTER moment from the loading screen).
   _loadSFXBuffer('start-interference', './assets/audio/start-interference.mp3');
   // Garage open/close audio removed — no sample needed.
@@ -11718,9 +11722,13 @@ function playGarageClose() { /* no-op */ }
 window.playGarageOpen  = playGarageOpen;
 window.playGarageClose = playGarageClose;
 
-// Garage card cycling (skin / preset / color / addon).
-function playMenuCycle() { _playBuffer('menu-cycle', 0.5, 1.0, null); }
+// Title-screen menu taps, Exit/Resume, garage open/close on title — VR clicker.
+function playMenuCycle() { _playBuffer('menu-cycle', 0.6, 1.0, null); }
 window.playMenuCycle = playMenuCycle;
+
+// Garage card cycling (Showroom internal nav) — pinball pip.
+function playGarageCycle() { _playBuffer('garage-cycle', 0.5, 1.0, null); }
+window.playGarageCycle = playGarageCycle;
 
 // Title-screen "start death run" press.
 function playStartInterference() { _playBuffer('start-interference', 0.7, 1.0, null); }
@@ -15045,7 +15053,7 @@ function updateStreakBadge() {
           const st = b.querySelector('.sr-addon-card-state');
           if (st && !b.classList.contains('locked')) st.textContent = '';
         });
-        try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
+        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
       });
     });
   }
@@ -15120,7 +15128,7 @@ function updateStreakBadge() {
           const st = b.querySelector('.sr-addon-card-state');
           if (st && !b.classList.contains('locked')) st.textContent = '';
         });
-        try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
+        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
       });
     });
   }
@@ -15345,7 +15353,7 @@ function updateStreakBadge() {
         // depending on whether every addon is on. Refresh the skin cards so
         // the label updates without reopening the garage.
         try { _buildSkinCards(); } catch(_){}
-        try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
+        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
       });
     });
   }
@@ -15383,7 +15391,7 @@ function updateStreakBadge() {
     // Sync showroom preview color immediately.
     _thrSyncColor();
     try { _refreshTabBadges(); } catch(_){}
-    try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
+    try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
   }
 
   // Refresh the THRUSTERS tab “new” dot indicator. Called whenever any
@@ -15422,7 +15430,7 @@ function updateStreakBadge() {
   function _onTabClick(e) {
     const t = e.currentTarget;
     if (t.classList.contains('sr-hidden')) return;
-    try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
+    try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
     _switchTab(t.dataset.tab);
   }
 
@@ -18418,15 +18426,15 @@ function playStartSound() {
   if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.85 * _sM); sfx.play().catch(() => {}); }
 }
 function playResumeSound() {
-  // CONTINUE from pause — light nav cue (pinball pip).
+  // CONTINUE from pause — VR clicker (title-tap cue).
   try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 function playExitSound()   {
-  // EXIT from pause / return-to-title — light nav cue.
+  // EXIT from pause / return-to-title — VR clicker (title-tap cue).
   try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 function playTitleTap()    {
-  // Generic title/menu tap — light nav cue.
+  // Generic title-screen menu tap — VR clicker (title-tap cue).
   try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 

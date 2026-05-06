@@ -1015,15 +1015,15 @@ function playStartSound() {
   if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.85 * _sM); sfx.play().catch(() => {}); }
 }
 function playResumeSound() {
-  // CONTINUE from pause — light nav cue (pinball pip).
+  // CONTINUE from pause — VR clicker (title-tap cue).
   try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 function playExitSound()   {
-  // EXIT from pause / return-to-title — light nav cue.
+  // EXIT from pause / return-to-title — VR clicker (title-tap cue).
   try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 function playTitleTap()    {
-  // Generic title/menu tap — light nav cue.
+  // Generic title-screen menu tap — VR clicker (title-tap cue).
   try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 

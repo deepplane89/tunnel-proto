@@ -311,7 +311,7 @@
           const st = b.querySelector('.sr-addon-card-state');
           if (st && !b.classList.contains('locked')) st.textContent = '';
         });
-        try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
+        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
       });
     });
   }
@@ -386,7 +386,7 @@
           const st = b.querySelector('.sr-addon-card-state');
           if (st && !b.classList.contains('locked')) st.textContent = '';
         });
-        try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
+        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
       });
     });
   }
@@ -611,7 +611,7 @@
         // depending on whether every addon is on. Refresh the skin cards so
         // the label updates without reopening the garage.
         try { _buildSkinCards(); } catch(_){}
-        try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
+        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
       });
     });
   }
@@ -649,7 +649,7 @@
     // Sync showroom preview color immediately.
     _thrSyncColor();
     try { _refreshTabBadges(); } catch(_){}
-    try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
+    try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
   }
 
   // Refresh the THRUSTERS tab “new” dot indicator. Called whenever any
@@ -688,7 +688,7 @@
   function _onTabClick(e) {
     const t = e.currentTarget;
     if (t.classList.contains('sr-hidden')) return;
-    try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
+    try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
     _switchTab(t.dataset.tab);
   }
 
