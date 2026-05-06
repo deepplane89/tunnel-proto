@@ -20624,6 +20624,11 @@ function _drSequencerTick(dt) {
       state._restBeepFired = false;
       state._dipSfxFired = false;
       state._drFovDipBias = 0; // clear FOV pull-back so punch reads full
+      // FOV punch pulse: tells the FOV lerp (in 70-perf-diag.js) to use a
+      // snappier rate for the dip→peak transition so it reads as a pulse
+      // instead of a slow drift up. Decays toward 0 over ~0.4s; while >0
+      // the lerp uses an accelerated rate.
+      state._drFovPunchPulse = 1.0;
       // Stop dip sfx if still ringing out as the punch hits
       const _dipSfxStop = document.getElementById('speed-dip-sfx');
       if (_dipSfxStop) { try { _dipSfxStop.pause(); _dipSfxStop.currentTime = 0; } catch (_) {} }
@@ -25453,7 +25458,21 @@ function animate() {
     // Launch snap in first 0.5s, then moderate accel / gentle decel
     const fovDiff = targetFOV - camera.fov;
     const isLaunch = state.phase === 'playing' && (state.elapsed || 0) < 0.5;
-    const fovLerpRate = isLaunch ? 12 : (_expDeathZoomActive ? 0.8 : (fovDiff > 0.5 ? 5 : 3));
+    // Stage-punch pulse: when the rest stage advances out of a dip, it
+    // sets state._drFovPunchPulse=1.0. Decay it here and use a much
+    // snappier lerp rate while the pulse is active so the dip→peak
+    // transition reads as a punchy beat instead of a slow drift up.
+    if (state._drFovPunchPulse && state._drFovPunchPulse > 0) {
+      // ~0.4s decay at typical 60fps (rate 2.5 → ~63% drop in 0.4s)
+      state._drFovPunchPulse = Math.max(0, state._drFovPunchPulse - rawDt * 2.5);
+    }
+    const _punchActive = (state._drFovPunchPulse || 0) > 0.05 && fovDiff > 0;
+    // Punch rate 18 vs default 5 — ~3.6x faster, makes the dip→peak land
+    // in ~80ms instead of ~250ms.
+    const fovLerpRate = isLaunch ? 12
+                      : (_expDeathZoomActive ? 0.8
+                      : (_punchActive ? 18
+                      : (fovDiff > 0.5 ? 5 : 3)));
     camera.fov = THREE.MathUtils.lerp(camera.fov, targetFOV, fovLerpRate * rawDt);
     camera.updateProjectionMatrix();
   }

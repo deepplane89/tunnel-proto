@@ -1388,6 +1388,11 @@ function _drSequencerTick(dt) {
       state._restBeepFired = false;
       state._dipSfxFired = false;
       state._drFovDipBias = 0; // clear FOV pull-back so punch reads full
+      // FOV punch pulse: tells the FOV lerp (in 70-perf-diag.js) to use a
+      // snappier rate for the dip→peak transition so it reads as a pulse
+      // instead of a slow drift up. Decays toward 0 over ~0.4s; while >0
+      // the lerp uses an accelerated rate.
+      state._drFovPunchPulse = 1.0;
       // Stop dip sfx if still ringing out as the punch hits
       const _dipSfxStop = document.getElementById('speed-dip-sfx');
       if (_dipSfxStop) { try { _dipSfxStop.pause(); _dipSfxStop.currentTime = 0; } catch (_) {} }
