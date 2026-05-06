@@ -2297,6 +2297,7 @@ function checkLevelUp() {
 
   if (newIdx !== state.currentLevelIdx) {
     state.currentLevelIdx = newIdx;
+    if ((newIdx + 1) > (state.sessionMaxLevel || 1)) state.sessionMaxLevel = newIdx + 1;
     state.levelElapsed     = 0;   // reset time-in-level clock
     state.l4CorridorDone   = false; // allow L4 corridor to retrigger on new entry
     // Arm the L3 knife canyon for the NEXT L3 entry. Cleared so it fires once

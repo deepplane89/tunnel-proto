@@ -293,6 +293,7 @@ function startGame() {
   state.sessionShields = 0;
   state.sessionLasers = 0;
   state.sessionInvincibles = 0;
+  state.sessionMaxLevel = 1;
   state._missionCheckTimer = 0;
   state._missionToasted = false;
   state.saveMeCount     = 0;
@@ -3338,6 +3339,7 @@ function killPlayer() {
     invincibles: state.sessionInvincibles || 0,
     isDR: state.isDeathRun,
     drTier: state.deathRunSpeedTier || 0,
+    level: Math.max(state.sessionMaxLevel || 1, (state.currentLevelIdx || 0) + 1),
   };
   // Update lifetime stats
   const lt = loadLifetimeStats();
@@ -4399,6 +4401,7 @@ function update(dt) {
           powerups: state.sessionPowerups || 0, shields: state.sessionShields || 0,
           lasers: state.sessionLasers || 0, invincibles: state.sessionInvincibles || 0,
           isDR: state.isDeathRun, drTier: state.deathRunSpeedTier || 0,
+          level: Math.max(state.sessionMaxLevel || 1, (state.currentLevelIdx || 0) + 1),
         };
         const _lt = loadLifetimeStats();
         const _tmpLt = { coins: _lt.coins + _rs.coins, score: _lt.score + _rs.score, runs: _lt.runs + 1, powerups: _lt.powerups + _rs.powerups };

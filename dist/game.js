@@ -868,6 +868,7 @@ const state = {
   sessionShields: 0,     // shields collected this run
   sessionLasers: 0,      // lasers collected this run
   sessionInvincibles: 0, // invincibles collected this run
+  sessionMaxLevel: 1,    // peak level reached this run (1-5)
   _missionCheckTimer: 0, // timer for in-run mission checks
   _missionToasted: false, // tracks if current mission already toasted this run
   saveMeCount: 0,     // how many times Save Me used this run
@@ -1549,6 +1550,7 @@ const MISSION_LADDER = [
   { type:'mission', id:'coins25', desc:'Collect 25 coins in one run', check:(r)=>r.coins>=25 },
   { type:'reward', reward:{ kind:'fuelcells', amount:50, label:'50 Fuel Cells', xp:100 } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'red', label:'Unlock CRIMSON Thruster Color' } },
+  { type:'mission', id:'level2', desc:'Reach Level 2 in one run', check:(r)=>r.level>=2 },
   { type:'mission', id:'runs5', desc:'Complete 5 runs', check:(r,lt)=>lt.runs>=5 },
   { type:'mission', id:'score7k', desc:'Score 7,000+ in one run', check:(r)=>r.score>=7000 },
   { type:'reward', reward:{ kind:'unlock', powerup:'laser', label:'Unlock LASER', coins:250 } },
@@ -1558,6 +1560,7 @@ const MISSION_LADDER = [
   { type:'reward', reward:{ kind:'fuelcells', amount:75, label:'75 Fuel Cells', xp:150 } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'green', label:'Unlock TOXIC Thruster Color' } },
   { type:'mission', id:'score15k', desc:'Score 15,000+ in one run', check:(r)=>r.score>=15000 },
+  { type:'mission', id:'level3', desc:'Reach Level 3 in one run', check:(r)=>r.level>=3 },
   { type:'mission', id:'coins100', desc:'Collect 100 coins in one run', check:(r)=>r.coins>=100 },
   { type:'reward', reward:{ kind:'stat', stat:'spawnrate', value:0.10, label:'Pickup Spawn +10%' } },
   { type:'mission', id:'shield2', desc:'Use shield 2 times in one run', check:(r)=>r.shields>=2 },
@@ -1581,6 +1584,7 @@ const MISSION_LADDER = [
   { type:'mission', id:'runs30', desc:'Complete 30 runs', check:(r,lt)=>lt.runs>=30 },
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:1, label:'Score Mult +1x' } },
   { type:'mission', id:'score40k', desc:'Score 40,000+ in one run', check:(r)=>r.score>=40000 },
+  { type:'mission', id:'level4', desc:'Reach Level 4 in one run', check:(r)=>r.level>=4 },
   { type:'mission', id:'drtier3', desc:'Reach speed tier 3 in DR', check:(r)=>r.isDR&&r.drTier>=3 },
   { type:'reward', reward:{ kind:'fuelcells', amount:200, label:'200 Fuel Cells', xp:250 } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'gold', label:'Unlock SOLAR GOLD Thruster Color' } },
@@ -1599,6 +1603,7 @@ const MISSION_LADDER = [
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:2, label:'Score Mult +2x' } },
   { type:'reward', reward:{ kind:'unlock', powerup:'powermeter', label:'Unlock POWER METER', fuelcells:200 } },
   { type:'mission', id:'score80k', desc:'Score 80,000+ in one run', check:(r)=>r.score>=80000 },
+  { type:'mission', id:'level5', desc:'Reach Level 5 in one run', check:(r)=>r.level>=5 },
   { type:'reward', reward:{ kind:'thruster', presetKey:'plasma', label:'Unlock PLASMA Thruster' } },
   { type:'mission', id:'drtier4', desc:'Reach speed tier 4 in DR', check:(r)=>r.isDR&&r.drTier>=4 },
   { type:'reward', reward:{ kind:'fuelcells', amount:300, label:'300 Fuel Cells', coins:1500, xp:400 } },
@@ -14021,6 +14026,7 @@ function checkLevelUp() {
 
   if (newIdx !== state.currentLevelIdx) {
     state.currentLevelIdx = newIdx;
+    if ((newIdx + 1) > (state.sessionMaxLevel || 1)) state.sessionMaxLevel = newIdx + 1;
     state.levelElapsed     = 0;   // reset time-in-level clock
     state.l4CorridorDone   = false; // allow L4 corridor to retrigger on new entry
     // Arm the L3 knife canyon for the NEXT L3 entry. Cleared so it fires once
@@ -19299,6 +19305,7 @@ function startGame() {
   state.sessionShields = 0;
   state.sessionLasers = 0;
   state.sessionInvincibles = 0;
+  state.sessionMaxLevel = 1;
   state._missionCheckTimer = 0;
   state._missionToasted = false;
   state.saveMeCount     = 0;
@@ -22344,6 +22351,7 @@ function killPlayer() {
     invincibles: state.sessionInvincibles || 0,
     isDR: state.isDeathRun,
     drTier: state.deathRunSpeedTier || 0,
+    level: Math.max(state.sessionMaxLevel || 1, (state.currentLevelIdx || 0) + 1),
   };
   // Update lifetime stats
   const lt = loadLifetimeStats();
@@ -23405,6 +23413,7 @@ function update(dt) {
           powerups: state.sessionPowerups || 0, shields: state.sessionShields || 0,
           lasers: state.sessionLasers || 0, invincibles: state.sessionInvincibles || 0,
           isDR: state.isDeathRun, drTier: state.deathRunSpeedTier || 0,
+          level: Math.max(state.sessionMaxLevel || 1, (state.currentLevelIdx || 0) + 1),
         };
         const _lt = loadLifetimeStats();
         const _tmpLt = { coins: _lt.coins + _rs.coins, score: _lt.score + _rs.score, runs: _lt.runs + 1, powerups: _lt.powerups + _rs.powerups };
