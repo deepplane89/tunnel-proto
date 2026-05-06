@@ -928,11 +928,11 @@ function _ringShowTuner() {
     // regardless of player level. drift=0 → no wobble (RAIL); drift=0.8 → loose (WIPEOUT).
     // Manual slider edits + reset clear the override (back to player-level driven).
     const _FEEL_PRESETS = {
-      DEFAULT: { resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: -1 },
-      GLIDE:   { resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.6 },
-      RAIL:    { resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.0 },
-      WIPEOUT: { resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.8 },
-      JET:     { resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.5 },
+      DEFAULT: { resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
+      GLIDE:   { resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
+      JET:     { resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
+      RAIL:    { resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },
+      WIPEOUT: { resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
     };
     if (window._feelMacro._presetName === undefined) window._feelMacro._presetName = null;
     function _applyFeelPreset(name) {
@@ -947,14 +947,26 @@ function _ringShowTuner() {
       _handlingDriftOverride = p.drift;
       build(); panel.style.display = 'block';
     }
+    // Expose for game-start application of equipped flight model.
+    // Silent variant: applies values without forcing the tuner panel open.
+    window._applyFeelPresetByName = function(name) {
+      const p = _FEEL_PRESETS[name];
+      if (!p) return;
+      _fm.resp = p.resp; _fm.latSpd = p.latSpd; _fm.settle = p.settle; _fm.bank = p.bank;
+      _fm.horizon = p.horizon; _fm.juice = p.juice;
+      _fm._presetName = name;
+      _applyResponsiveness(p.resp); _applyLateralSpeed(p.latSpd); _applySettle(p.settle);
+      _applyBankIntensity(p.bank); _applyHorizonCoupling(p.horizon); _applyJuice(p.juice);
+      _handlingDriftOverride = p.drift;
+    };
     const _presetRow = document.createElement('div');
     _presetRow.style.cssText = 'display:flex;gap:4px;margin:4px 0 8px 0;';
     const _presetMeta = [
-      ['DEFAULT', '#aaa', 'all macros 0.5, drift = player level'],
-      ['GLIDE',   '#7bf', 'low-g arcade flight'],
-      ['RAIL',    '#ff7', 'surgical shmup, rigid horizon'],
-      ['WIPEOUT', '#f7a', 'heavy racer, dramatic coupling'],
+      ['DEFAULT', '#aaa', 'balanced baseline'],
+      ['GLIDE',   '#7bf', 'low-g arcade flight, drifty'],
       ['JET',     '#0fa', 'Jet Horizon house style'],
+      ['RAIL',    '#ff7', 'surgical shmup, locked horizon'],
+      ['WIPEOUT', '#f7a', 'heavy racer, dramatic coupling'],
     ];
     _presetMeta.forEach(([name, color, tip]) => {
       const btn = document.createElement('button');

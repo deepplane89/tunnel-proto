@@ -2675,6 +2675,123 @@ html, body {
   margin-top: 4px;
 }
 
+/* ── FLIGHT MODEL dropdown (lives inside .shop-handling-bar) ───────────── */
+.shop-handling-bar { padding: 0; background: transparent; }
+.shop-handling-bar .fm-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(0, 14, 28, 0.55);
+  border: 1px solid rgba(34, 211, 238, 0.30);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, background 0.15s;
+}
+.shop-handling-bar .fm-head:hover,
+.shop-handling-bar.open .fm-head {
+  border-color: rgba(34, 211, 238, 0.65);
+  background: rgba(34, 211, 238, 0.07);
+}
+.shop-handling-bar .fm-head-l { flex: 1; min-width: 0; }
+.shop-handling-bar .fm-head-r { flex: 1; min-width: 0; }
+.shop-handling-bar .fm-caret {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  transition: transform 0.18s ease;
+}
+.shop-handling-bar.open .fm-caret { transform: rotate(180deg); }
+
+.shop-handling-bar .fm-menu {
+  display: none;
+  margin-top: 6px;
+  padding: 4px;
+  background: rgba(0, 14, 28, 0.65);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  border-radius: 6px;
+}
+.shop-handling-bar.open .fm-menu { display: block; }
+
+.shop-handling-bar .fm-row {
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, border-color 0.12s;
+}
+.shop-handling-bar .fm-row + .fm-row { margin-top: 2px; }
+.shop-handling-bar .fm-row:hover { background: rgba(255,255,255,0.04); }
+.shop-handling-bar .fm-row.equipped {
+  background: rgba(34, 211, 238, 0.12);
+  border-color: rgba(34, 211, 238, 0.55);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.18) inset;
+}
+.shop-handling-bar .fm-row.locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.shop-handling-bar .fm-row.locked:hover { background: transparent; }
+
+.shop-handling-bar .fm-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.shop-handling-bar .fm-name {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 1.2px;
+}
+.shop-handling-bar .fm-lock {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 10px;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.05em;
+}
+.shop-handling-bar .fm-stats {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.shop-handling-bar .fm-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+}
+.shop-handling-bar .fm-stat-lbl {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.55);
+  min-width: 36px;
+}
+.shop-handling-bar .fm-pips {
+  display: inline-flex;
+  gap: 2px;
+}
+.shop-handling-bar .fm-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: rgba(255,255,255,0.12);
+}
+.shop-handling-bar .fm-pip.on {
+  background: #0ff;
+  box-shadow: 0 0 4px rgba(0, 255, 255, 0.5);
+}
+
 /* Tabs */
 .shop-tabs {
   display: flex;
@@ -5277,17 +5394,16 @@ body.sr-open #title-leaderboard {
 }
 .sr-handling-slot .shop-handling-bar {
   margin: 0;
-  padding: 6px 12px;
-  background: rgba(0, 14, 28, 0.65);
-  border: 1px solid rgba(34, 211, 238, 0.30);
-  border-radius: 6px;
   width: 100%;
   box-sizing: border-box;
 }
+.sr-handling-slot .shop-handling-bar .fm-head { padding: 6px 12px; }
 .sr-handling-slot .shop-handling-label { font-size: 9px; letter-spacing: 1.2px; }
 .sr-handling-slot .shop-handling-tier { font-size: 11px; }
 .sr-handling-slot .shop-handling-track { height: 4px; margin: 4px 0; }
 .sr-handling-slot .shop-handling-next { font-size: 9px; }
+.sr-handling-slot .shop-handling-bar .fm-name { font-size: 11px; }
+.sr-handling-slot .shop-handling-bar .fm-stat-lbl { font-size: 8px; min-width: 32px; }
 
 .sr-overlay .sr-panel {
   position: relative;

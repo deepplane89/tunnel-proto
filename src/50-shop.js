@@ -40,34 +40,109 @@ function openShop() {
 }
 window.openShop = openShop;
 
+// ── FLIGHT MODEL bar ────────────────────────────────────────────────────────
+// Closed state shows the equipped flight model + progress to next unlock.
+// Tapping toggles a dropdown with all 5 models; locked entries are visible but
+// can't be equipped. Stat pips use raw macro values (RESP / SETTLE / DRIFT) per
+// user spec ("give them the technical ones"). Equipped row is highlighted; no
+// ✓ / EQUIPPED text per user request ("if somethign is highlighted its equiped
+// dont need equped text or anything").
+function _fmStatPips(value) {
+  // Map [0..1] to 0–5 filled pips. Always renders 5 cells so columns line up.
+  const filled = Math.max(0, Math.min(5, Math.round(value * 5)));
+  let html = '<span class="fm-pips">';
+  for (let i = 0; i < 5; i++) {
+    html += '<span class="fm-pip' + (i < filled ? ' on' : '') + '"></span>';
+  }
+  html += '</span>';
+  return html;
+}
+
 function _renderShopHandlingBar() {
   const bar = document.getElementById('shop-handling-bar');
   if (!bar) return;
+  const FM = window._FLIGHT_MODELS;
+  if (!FM) return;
   const level = loadPlayerLevel();
-  // Find current and next tier
-  let currentTier = HANDLING_TIERS[0];
-  let nextTier = null;
-  for (let i = 0; i < HANDLING_TIERS.length; i++) {
-    if (level >= HANDLING_TIERS[i].level) currentTier = HANDLING_TIERS[i];
-    else { nextTier = HANDLING_TIERS[i]; break; }
+  const equippedName = (typeof loadEquippedFlightModel === 'function') ? loadEquippedFlightModel() : 'DEFAULT';
+  const equipped = FM[equippedName] || FM.DEFAULT;
+
+  // Find next-unlocked model for the closed-state progress hint.
+  let nextEntry = null;
+  for (const [name, m] of Object.entries(FM)) {
+    if (m.unlock > level) {
+      if (!nextEntry || m.unlock < nextEntry.m.unlock) nextEntry = { name, m };
+    }
   }
-  const tierLabel = currentTier.label || 'Stock';
-  const handlingPct = Math.round((1 - currentTier.drift) * 100);
-  // Progress toward next tier
   let fillPct = 100;
-  let nextText = 'MAX HANDLING';
-  if (nextTier) {
-    const prevLevel = currentTier.level;
-    const needed = nextTier.level - prevLevel;
-    const progress = level - prevLevel;
+  let nextText = 'ALL UNLOCKED';
+  if (nextEntry) {
+    // Progress from previous unlock threshold to next.
+    let prevUnlock = 1;
+    for (const m of Object.values(FM)) {
+      if (m.unlock <= level && m.unlock > prevUnlock) prevUnlock = m.unlock;
+    }
+    const needed = Math.max(1, nextEntry.m.unlock - prevUnlock);
+    const progress = Math.max(0, level - prevUnlock);
     fillPct = Math.min(100, Math.round((progress / needed) * 100));
-    nextText = 'Next: ' + nextTier.label + ' (Lv ' + nextTier.level + ')';
+    nextText = 'Next: ' + nextEntry.name + ' (Lv ' + nextEntry.m.unlock + ')';
   }
+
+  // Build menu rows.
+  let menuHTML = '';
+  for (const [name, m] of Object.entries(FM)) {
+    const unlocked = level >= m.unlock;
+    const isEq = (name === equippedName) && unlocked;
+    const cls = 'fm-row' + (isEq ? ' equipped' : '') + (unlocked ? '' : ' locked');
+    const lockBadge = unlocked ? '' : '<span class="fm-lock">L' + m.unlock + ' \uD83D\uDD12</span>';
+    menuHTML +=
+      '<div class="' + cls + '" data-fm="' + name + '">' +
+        '<div class="fm-row-head">' +
+          '<span class="fm-name" style="color:' + m.color + '">' + name + '</span>' +
+          lockBadge +
+        '</div>' +
+        '<div class="fm-stats">' +
+          '<span class="fm-stat"><span class="fm-stat-lbl">RESP</span>' + _fmStatPips(m.resp) + '</span>' +
+          '<span class="fm-stat"><span class="fm-stat-lbl">SETTLE</span>' + _fmStatPips(m.settle) + '</span>' +
+          '<span class="fm-stat"><span class="fm-stat-lbl">DRIFT</span>' + _fmStatPips(m.drift) + '</span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // Preserve open/closed state across re-renders so equipping doesn't slam it shut.
+  const wasOpen = bar.classList.contains('open');
+  bar.classList.toggle('open', wasOpen);
   bar.innerHTML =
-    '<div class="shop-handling-label">SHIP HANDLING</div>' +
-    '<div class="shop-handling-tier">' + tierLabel + ' \u2022 ' + handlingPct + '% Control</div>' +
-    '<div class="shop-handling-track"><div class="shop-handling-fill" style="width:' + fillPct + '%"></div></div>' +
-    '<div class="shop-handling-next">' + nextText + '</div>';
+    '<button type="button" class="fm-head" aria-expanded="' + (wasOpen ? 'true' : 'false') + '">' +
+      '<div class="fm-head-l">' +
+        '<div class="shop-handling-label">FLIGHT MODEL</div>' +
+        '<div class="shop-handling-tier" style="color:' + equipped.color + '">' + equippedName + ' <span class="fm-caret">\u25BE</span></div>' +
+      '</div>' +
+      '<div class="fm-head-r">' +
+        '<div class="shop-handling-track"><div class="shop-handling-fill" style="width:' + fillPct + '%"></div></div>' +
+        '<div class="shop-handling-next">' + nextText + '</div>' +
+      '</div>' +
+    '</button>' +
+    '<div class="fm-menu">' + menuHTML + '</div>';
+
+  // Wire toggle.
+  const head = bar.querySelector('.fm-head');
+  if (head) {
+    _tapBind(head, () => {
+      const open = bar.classList.toggle('open');
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  }
+  // Wire row clicks (equip if unlocked).
+  bar.querySelectorAll('.fm-row').forEach(row => {
+    if (row.classList.contains('locked')) return;
+    _tapBind(row, () => {
+      const name = row.getAttribute('data-fm');
+      if (!name || !FM[name]) return;
+      if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(name);
+      _renderShopHandlingBar();
+    });
+  });
 }
 
 function closeShop() {

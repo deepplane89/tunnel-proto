@@ -107,6 +107,16 @@ function startGame() {
     }
   } catch(_){}
   window._thrusterColorLocked = true;
+  // ── FLIGHT MODEL: apply equipped preset (or fall back to DEFAULT) ──
+  // Player picks one in the garage; choice persists in localStorage. Locked
+  // models silently downgrade to DEFAULT (defensive — UI shouldn't allow it).
+  try {
+    if (typeof loadEquippedFlightModel === 'function' && typeof window._applyFeelPresetByName === 'function') {
+      const _eqFM = loadEquippedFlightModel();
+      const _useFM = (typeof isFlightModelUnlocked === 'function' && !isFlightModelUnlocked(_eqFM)) ? 'DEFAULT' : _eqFM;
+      window._applyFeelPresetByName(_useFM);
+    }
+  } catch(_){}
   state.phase          = 'playing';
   shipGroup.visible    = true;
   _killExplosion();
@@ -3404,7 +3414,21 @@ function killPlayer() {
         _levelUpWrap.querySelector('.go-levelup-text').textContent = 'LEVEL ' + xpResult.level;
         const unlockedSkin = Object.entries(SKIN_LEVEL_UNLOCKS).find(([idx, lvl]) => lvl === xpResult.level);
         const unlockEl = _levelUpWrap.querySelector('.go-levelup-unlock');
-        if (unlockedSkin && unlockEl) {
+        // Flight model unlock takes precedence in the toast — it's a bigger
+        // change to gameplay than a cosmetic skin. Skin unlock still claims
+        // its dot via existing path.
+        let _fmUnlockedAtThisLevel = null;
+        if (window._FLIGHT_MODELS) {
+          for (const [name, m] of Object.entries(window._FLIGHT_MODELS)) {
+            if (m.unlock === xpResult.level) { _fmUnlockedAtThisLevel = { name, m }; break; }
+          }
+        }
+        if (_fmUnlockedAtThisLevel && unlockEl) {
+          unlockEl.textContent = '\u{1F513} ' + _fmUnlockedAtThisLevel.name + ' flight model unlocked!';
+          unlockEl.classList.remove('hidden');
+          // Mark claimed so the garage "new" dot clears next time it opens.
+          try { if (typeof claimFlightModelUnlock === 'function') claimFlightModelUnlock(); } catch(_){}
+        } else if (unlockedSkin && unlockEl) {
           const skinName = SHIP_SKINS[parseInt(unlockedSkin[0])].name;
           unlockEl.textContent = '\u{1F513} ' + skinName + ' unlocked!';
           unlockEl.classList.remove('hidden');

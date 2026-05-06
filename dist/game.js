@@ -1228,6 +1228,55 @@ function claimHandlingUpgrade() {
   return pending;
 }
 
+// ── FLIGHT MODELS (preset feel — unlocked via player level) ─────────────
+// Each model is a snapshot of the 6 macro feel values (resp/latSpd/settle/bank/
+// horizon/juice) plus a pinned drift coefficient. Player picks one in the
+// garage; choice persists in localStorage and applies on run start. Levels
+// gate which models the player can equip. Stats shown in the dropdown use the
+// raw macro values (RESP / SETTLE / DRIFT) since the user requested technical
+// labels rather than vibey ones.
+window._FLIGHT_MODELS = {
+  DEFAULT: { unlock: 1,  color: '#aaaaaa', resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
+  GLIDE:   { unlock: 4,  color: '#7bbbff', resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
+  JET:     { unlock: 8,  color: '#00ffaa', resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
+  RAIL:    { unlock: 14, color: '#ffff77', resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },
+  WIPEOUT: { unlock: 22, color: '#ff77aa', resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
+};
+const FLIGHT_MODEL_KEY = 'jetslide_flight_model';
+const FLIGHT_MODEL_CLAIMED_KEY = 'jetslide_flight_model_claimed'; // tracks highest unlock level user has "seen"
+function loadEquippedFlightModel() {
+  const v = window._LS.getItem(FLIGHT_MODEL_KEY);
+  if (v && window._FLIGHT_MODELS[v]) return v;
+  return 'DEFAULT';
+}
+function saveEquippedFlightModel(name) {
+  if (!window._FLIGHT_MODELS[name]) return;
+  window._LS.setItem(FLIGHT_MODEL_KEY, name);
+}
+function isFlightModelUnlocked(name) {
+  const m = window._FLIGHT_MODELS[name];
+  if (!m) return false;
+  return loadPlayerLevel() >= m.unlock;
+}
+function getPendingFlightModelUnlock() {
+  // Return the next unclaimed unlock the player has crossed, or null.
+  const level = loadPlayerLevel();
+  const claimed = parseInt(window._LS.getItem(FLIGHT_MODEL_CLAIMED_KEY) || '1', 10);
+  let best = null;
+  for (const [name, m] of Object.entries(window._FLIGHT_MODELS)) {
+    if (m.unlock > claimed && m.unlock <= level) {
+      if (!best || m.unlock < best.unlock) best = { name, unlock: m.unlock };
+    }
+  }
+  return best;
+}
+function claimFlightModelUnlock() {
+  const pending = getPendingFlightModelUnlock();
+  if (!pending) return null;
+  window._LS.setItem(FLIGHT_MODEL_CLAIMED_KEY, String(pending.unlock));
+  return pending;
+}
+
 function isSkinUnlocked(skinIdx) {
   const requiredLevel = SKIN_LEVEL_UNLOCKS[skinIdx] || 1;
   return loadPlayerLevel() >= requiredLevel;
@@ -16496,34 +16545,109 @@ function openShop() {
 }
 window.openShop = openShop;
 
+// ── FLIGHT MODEL bar ────────────────────────────────────────────────────────
+// Closed state shows the equipped flight model + progress to next unlock.
+// Tapping toggles a dropdown with all 5 models; locked entries are visible but
+// can't be equipped. Stat pips use raw macro values (RESP / SETTLE / DRIFT) per
+// user spec ("give them the technical ones"). Equipped row is highlighted; no
+// ✓ / EQUIPPED text per user request ("if somethign is highlighted its equiped
+// dont need equped text or anything").
+function _fmStatPips(value) {
+  // Map [0..1] to 0–5 filled pips. Always renders 5 cells so columns line up.
+  const filled = Math.max(0, Math.min(5, Math.round(value * 5)));
+  let html = '<span class="fm-pips">';
+  for (let i = 0; i < 5; i++) {
+    html += '<span class="fm-pip' + (i < filled ? ' on' : '') + '"></span>';
+  }
+  html += '</span>';
+  return html;
+}
+
 function _renderShopHandlingBar() {
   const bar = document.getElementById('shop-handling-bar');
   if (!bar) return;
+  const FM = window._FLIGHT_MODELS;
+  if (!FM) return;
   const level = loadPlayerLevel();
-  // Find current and next tier
-  let currentTier = HANDLING_TIERS[0];
-  let nextTier = null;
-  for (let i = 0; i < HANDLING_TIERS.length; i++) {
-    if (level >= HANDLING_TIERS[i].level) currentTier = HANDLING_TIERS[i];
-    else { nextTier = HANDLING_TIERS[i]; break; }
+  const equippedName = (typeof loadEquippedFlightModel === 'function') ? loadEquippedFlightModel() : 'DEFAULT';
+  const equipped = FM[equippedName] || FM.DEFAULT;
+
+  // Find next-unlocked model for the closed-state progress hint.
+  let nextEntry = null;
+  for (const [name, m] of Object.entries(FM)) {
+    if (m.unlock > level) {
+      if (!nextEntry || m.unlock < nextEntry.m.unlock) nextEntry = { name, m };
+    }
   }
-  const tierLabel = currentTier.label || 'Stock';
-  const handlingPct = Math.round((1 - currentTier.drift) * 100);
-  // Progress toward next tier
   let fillPct = 100;
-  let nextText = 'MAX HANDLING';
-  if (nextTier) {
-    const prevLevel = currentTier.level;
-    const needed = nextTier.level - prevLevel;
-    const progress = level - prevLevel;
+  let nextText = 'ALL UNLOCKED';
+  if (nextEntry) {
+    // Progress from previous unlock threshold to next.
+    let prevUnlock = 1;
+    for (const m of Object.values(FM)) {
+      if (m.unlock <= level && m.unlock > prevUnlock) prevUnlock = m.unlock;
+    }
+    const needed = Math.max(1, nextEntry.m.unlock - prevUnlock);
+    const progress = Math.max(0, level - prevUnlock);
     fillPct = Math.min(100, Math.round((progress / needed) * 100));
-    nextText = 'Next: ' + nextTier.label + ' (Lv ' + nextTier.level + ')';
+    nextText = 'Next: ' + nextEntry.name + ' (Lv ' + nextEntry.m.unlock + ')';
   }
+
+  // Build menu rows.
+  let menuHTML = '';
+  for (const [name, m] of Object.entries(FM)) {
+    const unlocked = level >= m.unlock;
+    const isEq = (name === equippedName) && unlocked;
+    const cls = 'fm-row' + (isEq ? ' equipped' : '') + (unlocked ? '' : ' locked');
+    const lockBadge = unlocked ? '' : '<span class="fm-lock">L' + m.unlock + ' \uD83D\uDD12</span>';
+    menuHTML +=
+      '<div class="' + cls + '" data-fm="' + name + '">' +
+        '<div class="fm-row-head">' +
+          '<span class="fm-name" style="color:' + m.color + '">' + name + '</span>' +
+          lockBadge +
+        '</div>' +
+        '<div class="fm-stats">' +
+          '<span class="fm-stat"><span class="fm-stat-lbl">RESP</span>' + _fmStatPips(m.resp) + '</span>' +
+          '<span class="fm-stat"><span class="fm-stat-lbl">SETTLE</span>' + _fmStatPips(m.settle) + '</span>' +
+          '<span class="fm-stat"><span class="fm-stat-lbl">DRIFT</span>' + _fmStatPips(m.drift) + '</span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // Preserve open/closed state across re-renders so equipping doesn't slam it shut.
+  const wasOpen = bar.classList.contains('open');
+  bar.classList.toggle('open', wasOpen);
   bar.innerHTML =
-    '<div class="shop-handling-label">SHIP HANDLING</div>' +
-    '<div class="shop-handling-tier">' + tierLabel + ' \u2022 ' + handlingPct + '% Control</div>' +
-    '<div class="shop-handling-track"><div class="shop-handling-fill" style="width:' + fillPct + '%"></div></div>' +
-    '<div class="shop-handling-next">' + nextText + '</div>';
+    '<button type="button" class="fm-head" aria-expanded="' + (wasOpen ? 'true' : 'false') + '">' +
+      '<div class="fm-head-l">' +
+        '<div class="shop-handling-label">FLIGHT MODEL</div>' +
+        '<div class="shop-handling-tier" style="color:' + equipped.color + '">' + equippedName + ' <span class="fm-caret">\u25BE</span></div>' +
+      '</div>' +
+      '<div class="fm-head-r">' +
+        '<div class="shop-handling-track"><div class="shop-handling-fill" style="width:' + fillPct + '%"></div></div>' +
+        '<div class="shop-handling-next">' + nextText + '</div>' +
+      '</div>' +
+    '</button>' +
+    '<div class="fm-menu">' + menuHTML + '</div>';
+
+  // Wire toggle.
+  const head = bar.querySelector('.fm-head');
+  if (head) {
+    _tapBind(head, () => {
+      const open = bar.classList.toggle('open');
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  }
+  // Wire row clicks (equip if unlocked).
+  bar.querySelectorAll('.fm-row').forEach(row => {
+    if (row.classList.contains('locked')) return;
+    _tapBind(row, () => {
+      const name = row.getAttribute('data-fm');
+      if (!name || !FM[name]) return;
+      if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(name);
+      _renderShopHandlingBar();
+    });
+  });
 }
 
 function closeShop() {
@@ -18624,6 +18748,16 @@ function startGame() {
     }
   } catch(_){}
   window._thrusterColorLocked = true;
+  // ── FLIGHT MODEL: apply equipped preset (or fall back to DEFAULT) ──
+  // Player picks one in the garage; choice persists in localStorage. Locked
+  // models silently downgrade to DEFAULT (defensive — UI shouldn't allow it).
+  try {
+    if (typeof loadEquippedFlightModel === 'function' && typeof window._applyFeelPresetByName === 'function') {
+      const _eqFM = loadEquippedFlightModel();
+      const _useFM = (typeof isFlightModelUnlocked === 'function' && !isFlightModelUnlocked(_eqFM)) ? 'DEFAULT' : _eqFM;
+      window._applyFeelPresetByName(_useFM);
+    }
+  } catch(_){}
   state.phase          = 'playing';
   shipGroup.visible    = true;
   _killExplosion();
@@ -21921,7 +22055,21 @@ function killPlayer() {
         _levelUpWrap.querySelector('.go-levelup-text').textContent = 'LEVEL ' + xpResult.level;
         const unlockedSkin = Object.entries(SKIN_LEVEL_UNLOCKS).find(([idx, lvl]) => lvl === xpResult.level);
         const unlockEl = _levelUpWrap.querySelector('.go-levelup-unlock');
-        if (unlockedSkin && unlockEl) {
+        // Flight model unlock takes precedence in the toast — it's a bigger
+        // change to gameplay than a cosmetic skin. Skin unlock still claims
+        // its dot via existing path.
+        let _fmUnlockedAtThisLevel = null;
+        if (window._FLIGHT_MODELS) {
+          for (const [name, m] of Object.entries(window._FLIGHT_MODELS)) {
+            if (m.unlock === xpResult.level) { _fmUnlockedAtThisLevel = { name, m }; break; }
+          }
+        }
+        if (_fmUnlockedAtThisLevel && unlockEl) {
+          unlockEl.textContent = '\u{1F513} ' + _fmUnlockedAtThisLevel.name + ' flight model unlocked!';
+          unlockEl.classList.remove('hidden');
+          // Mark claimed so the garage "new" dot clears next time it opens.
+          try { if (typeof claimFlightModelUnlock === 'function') claimFlightModelUnlock(); } catch(_){}
+        } else if (unlockedSkin && unlockEl) {
           const skinName = SHIP_SKINS[parseInt(unlockedSkin[0])].name;
           unlockEl.textContent = '\u{1F513} ' + skinName + ' unlocked!';
           unlockEl.classList.remove('hidden');
@@ -29497,11 +29645,11 @@ function _ringShowTuner() {
     // regardless of player level. drift=0 → no wobble (RAIL); drift=0.8 → loose (WIPEOUT).
     // Manual slider edits + reset clear the override (back to player-level driven).
     const _FEEL_PRESETS = {
-      DEFAULT: { resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: -1 },
-      GLIDE:   { resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.6 },
-      RAIL:    { resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.0 },
-      WIPEOUT: { resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.8 },
-      JET:     { resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.5 },
+      DEFAULT: { resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
+      GLIDE:   { resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
+      JET:     { resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
+      RAIL:    { resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },
+      WIPEOUT: { resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
     };
     if (window._feelMacro._presetName === undefined) window._feelMacro._presetName = null;
     function _applyFeelPreset(name) {
@@ -29516,14 +29664,26 @@ function _ringShowTuner() {
       _handlingDriftOverride = p.drift;
       build(); panel.style.display = 'block';
     }
+    // Expose for game-start application of equipped flight model.
+    // Silent variant: applies values without forcing the tuner panel open.
+    window._applyFeelPresetByName = function(name) {
+      const p = _FEEL_PRESETS[name];
+      if (!p) return;
+      _fm.resp = p.resp; _fm.latSpd = p.latSpd; _fm.settle = p.settle; _fm.bank = p.bank;
+      _fm.horizon = p.horizon; _fm.juice = p.juice;
+      _fm._presetName = name;
+      _applyResponsiveness(p.resp); _applyLateralSpeed(p.latSpd); _applySettle(p.settle);
+      _applyBankIntensity(p.bank); _applyHorizonCoupling(p.horizon); _applyJuice(p.juice);
+      _handlingDriftOverride = p.drift;
+    };
     const _presetRow = document.createElement('div');
     _presetRow.style.cssText = 'display:flex;gap:4px;margin:4px 0 8px 0;';
     const _presetMeta = [
-      ['DEFAULT', '#aaa', 'all macros 0.5, drift = player level'],
-      ['GLIDE',   '#7bf', 'low-g arcade flight'],
-      ['RAIL',    '#ff7', 'surgical shmup, rigid horizon'],
-      ['WIPEOUT', '#f7a', 'heavy racer, dramatic coupling'],
+      ['DEFAULT', '#aaa', 'balanced baseline'],
+      ['GLIDE',   '#7bf', 'low-g arcade flight, drifty'],
       ['JET',     '#0fa', 'Jet Horizon house style'],
+      ['RAIL',    '#ff7', 'surgical shmup, locked horizon'],
+      ['WIPEOUT', '#f7a', 'heavy racer, dramatic coupling'],
     ];
     _presetMeta.forEach(([name, color, tip]) => {
       const btn = document.createElement('button');

@@ -666,6 +666,55 @@ function claimHandlingUpgrade() {
   return pending;
 }
 
+// ── FLIGHT MODELS (preset feel — unlocked via player level) ─────────────
+// Each model is a snapshot of the 6 macro feel values (resp/latSpd/settle/bank/
+// horizon/juice) plus a pinned drift coefficient. Player picks one in the
+// garage; choice persists in localStorage and applies on run start. Levels
+// gate which models the player can equip. Stats shown in the dropdown use the
+// raw macro values (RESP / SETTLE / DRIFT) since the user requested technical
+// labels rather than vibey ones.
+window._FLIGHT_MODELS = {
+  DEFAULT: { unlock: 1,  color: '#aaaaaa', resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
+  GLIDE:   { unlock: 4,  color: '#7bbbff', resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
+  JET:     { unlock: 8,  color: '#00ffaa', resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
+  RAIL:    { unlock: 14, color: '#ffff77', resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },
+  WIPEOUT: { unlock: 22, color: '#ff77aa', resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
+};
+const FLIGHT_MODEL_KEY = 'jetslide_flight_model';
+const FLIGHT_MODEL_CLAIMED_KEY = 'jetslide_flight_model_claimed'; // tracks highest unlock level user has "seen"
+function loadEquippedFlightModel() {
+  const v = window._LS.getItem(FLIGHT_MODEL_KEY);
+  if (v && window._FLIGHT_MODELS[v]) return v;
+  return 'DEFAULT';
+}
+function saveEquippedFlightModel(name) {
+  if (!window._FLIGHT_MODELS[name]) return;
+  window._LS.setItem(FLIGHT_MODEL_KEY, name);
+}
+function isFlightModelUnlocked(name) {
+  const m = window._FLIGHT_MODELS[name];
+  if (!m) return false;
+  return loadPlayerLevel() >= m.unlock;
+}
+function getPendingFlightModelUnlock() {
+  // Return the next unclaimed unlock the player has crossed, or null.
+  const level = loadPlayerLevel();
+  const claimed = parseInt(window._LS.getItem(FLIGHT_MODEL_CLAIMED_KEY) || '1', 10);
+  let best = null;
+  for (const [name, m] of Object.entries(window._FLIGHT_MODELS)) {
+    if (m.unlock > claimed && m.unlock <= level) {
+      if (!best || m.unlock < best.unlock) best = { name, unlock: m.unlock };
+    }
+  }
+  return best;
+}
+function claimFlightModelUnlock() {
+  const pending = getPendingFlightModelUnlock();
+  if (!pending) return null;
+  window._LS.setItem(FLIGHT_MODEL_CLAIMED_KEY, String(pending.unlock));
+  return pending;
+}
+
 function isSkinUnlocked(skinIdx) {
   const requiredLevel = SKIN_LEVEL_UNLOCKS[skinIdx] || 1;
   return loadPlayerLevel() >= requiredLevel;
