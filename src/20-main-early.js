@@ -5409,14 +5409,14 @@ function pauseGameTrackInPlace(track) {
 function resumeGameTrackInPlace(track) {
   initAudio();
   _ensureCtxRunning();
-  // iOS interruption belt: if the audio graph was severed by a backgrounding
-  // event, rewire all MediaElementSource nodes before trying to play. Without
-  // this, el.play() succeeds but produces no sound because the gain node is
-  // disconnected from destination. Track whether we just came back from one
-  // so we know to do the heavier el.load() reset (which causes a brief decode
-  // hiccup we don't want on a normal pause/resume).
-  const wasInterrupted = (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted());
-  if (wasInterrupted && typeof _rewireTrackGains === 'function') {
+  // iOS interruption belt: if we came back from a backgrounding event,
+  // _rewireTrackGains plays the silent-buffer sample-rate kick. It does NOT
+  // recreate MediaElementSource nodes (one-per-element rule — recreating
+  // throws InvalidStateError and silently breaks routing forever). The
+  // existing source→gain→destination graph survives the interruption fine;
+  // the elements just need a play() kick.
+  if (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted() &&
+      typeof _rewireTrackGains === 'function') {
     _rewireTrackGains();
   }
   // Fade title down (don't slam pause) — same anti-glitch logic as pauseGameTrack.
@@ -5433,14 +5433,9 @@ function resumeGameTrackInPlace(track) {
   const el = all[track];
   if (el && !state.muted) {
     setTrackVol(track, 0);
-    // Heavy el.load() ONLY when we know the audio graph was severed. On a
-    // normal pause/resume the element kept its buffer and resumes cleanly.
-    // Important: don't write playbackRate here — wavesurfer.js confirmed
-    // Safari has a bug where any playbackRate write to a MediaElementSource
-    // causes audible lag/glitch.
-    if (wasInterrupted) {
-      try { el.pause(); el.load(); } catch (_) {}
-    }
+    // No el.load() — that detaches the source from any pending decode and
+    // on iOS can re-trigger the InvalidStateError path. Plain play() is
+    // enough; the source/gain graph is intact.
     el.play().catch(() => {});
     musicFadeTo(track, 1200);
   }

@@ -6061,14 +6061,14 @@ function pauseGameTrackInPlace(track) {
 function resumeGameTrackInPlace(track) {
   initAudio();
   _ensureCtxRunning();
-  // iOS interruption belt: if the audio graph was severed by a backgrounding
-  // event, rewire all MediaElementSource nodes before trying to play. Without
-  // this, el.play() succeeds but produces no sound because the gain node is
-  // disconnected from destination. Track whether we just came back from one
-  // so we know to do the heavier el.load() reset (which causes a brief decode
-  // hiccup we don't want on a normal pause/resume).
-  const wasInterrupted = (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted());
-  if (wasInterrupted && typeof _rewireTrackGains === 'function') {
+  // iOS interruption belt: if we came back from a backgrounding event,
+  // _rewireTrackGains plays the silent-buffer sample-rate kick. It does NOT
+  // recreate MediaElementSource nodes (one-per-element rule — recreating
+  // throws InvalidStateError and silently breaks routing forever). The
+  // existing source→gain→destination graph survives the interruption fine;
+  // the elements just need a play() kick.
+  if (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted() &&
+      typeof _rewireTrackGains === 'function') {
     _rewireTrackGains();
   }
   // Fade title down (don't slam pause) — same anti-glitch logic as pauseGameTrack.
@@ -6085,14 +6085,9 @@ function resumeGameTrackInPlace(track) {
   const el = all[track];
   if (el && !state.muted) {
     setTrackVol(track, 0);
-    // Heavy el.load() ONLY when we know the audio graph was severed. On a
-    // normal pause/resume the element kept its buffer and resumes cleanly.
-    // Important: don't write playbackRate here — wavesurfer.js confirmed
-    // Safari has a bug where any playbackRate write to a MediaElementSource
-    // causes audible lag/glitch.
-    if (wasInterrupted) {
-      try { el.pause(); el.load(); } catch (_) {}
-    }
+    // No el.load() — that detaches the source from any pending decode and
+    // on iOS can re-trigger the InvalidStateError path. Plain play() is
+    // enough; the source/gain graph is intact.
     el.play().catch(() => {});
     musicFadeTo(track, 1200);
   }
@@ -11557,45 +11552,89 @@ function _ensureCtxRunning() {
   }
 }
 
-// iOS Safari severs MediaElementSource routing when AudioContext goes to
-// 'interrupted' (backgrounded, phone call, audio-route change). resume() returns
-// 'running' but music elements no longer reach destination — silent music while
-// SFX (fresh BufferSourceNodes per call) still work. Flag tracks whether we
-// went through an interruption so resume paths know to rewire the music graph.
+// iOS Safari can interrupt audio playback when the AudioContext enters
+// 'interrupted' state (backgrounding, phone call, audio-route change). After
+// the context resumes to 'running', the existing MediaElementSource nodes
+// remain validly connected to destination — what's actually broken is that
+// the <audio> elements themselves stalled and need a play() kick.
+//
+// IMPORTANT: per W3C spec (and Safari's strict enforcement), an <audio>
+// element can only ever have ONE MediaElementSource attached for its entire
+// lifetime. Calling createMediaElementSource() a second time throws
+// InvalidStateError, even after disconnecting the original. We previously
+// tried to "rewire" by tearing down and rebuilding sources, which silently
+// failed in the catch and left music permanently disconnected. The fix is
+// to NEVER recreate sources — leave the original graph intact, just
+// re-kick the <audio> elements that were playing.
 let _audioInterrupted = false;
-function _markAudioInterrupted() { _audioInterrupted = true; }
+// Snapshot of which tracks were playing when we got interrupted, so the
+// resume path can re-kick exactly those (and not start tracks that were
+// intentionally paused at interrupt time).
+let _interruptedPlayingSnapshot = null;
+function _markAudioInterrupted() {
+  _audioInterrupted = true;
+  // Snapshot which tracks were mid-playback before we paused them.
+  if (typeof allTracks === 'function') {
+    const snap = {};
+    const t = allTracks();
+    Object.keys(t).forEach(k => {
+      const el = t[k];
+      if (el && !el.paused) snap[k] = (el.currentTime || 0);
+    });
+    _interruptedPlayingSnapshot = snap;
+  }
+}
 function _wasAudioInterrupted() { return _audioInterrupted; }
-function _clearAudioInterrupted() { _audioInterrupted = false; }
+function _clearAudioInterrupted() {
+  _audioInterrupted = false;
+  _interruptedPlayingSnapshot = null;
+}
 
-// Tear down all music-track MediaElementSource nodes and re-wire them. Call
-// after returning from an interruption. Safe to call multiple times — only
-// rewires tracks whose gain nodes still exist.
+// Re-kick music after an iOS interruption. Does NOT recreate MediaElementSource
+// nodes — the original graph (source → gain → destination) is still wired.
+// Just plays a 1-sample silent buffer to nudge the audio engine and re-issues
+// play() on the elements that were playing when the interruption hit.
 function _rewireTrackGains() {
-  if (!audioCtx || typeof trackGains === 'undefined') return;
-  // Disconnect & drop existing gain nodes — _initTrackGains will rebuild.
-  // We can't reuse MediaElementSource nodes (one-per-element rule), so the
-  // <audio> elements need fresh sources. The browser permits creating a new
-  // source for the same element after the previous one is GC'd / disconnected.
-  Object.keys(trackGains).forEach(k => {
-    try { trackGains[k].disconnect(); } catch (_) {}
-    delete trackGains[k];
-  });
-  // Force fresh MediaElementSource creation. Safari requires the <audio>
-  // element be paused & re-loaded before a new source can route correctly.
+  if (!audioCtx) return;
+  // Make sure context is actually running before we kick the elements.
+  if (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted') {
+    audioCtx.resume().catch(() => {});
+  }
+  // iOS sample-rate renegotiation: 1-sample silent buffer through destination.
+  try {
+    const _silent = audioCtx.createBuffer(1, 1, 22050);
+    const _src = audioCtx.createBufferSource();
+    _src.buffer = _silent;
+    _src.connect(audioCtx.destination);
+    _src.start(0);
+  } catch (_) {}
+  // Wire trackGains lazily if for some reason init() never reached it (first
+  // resume after a deep interruption can race with initAudio on cold start).
+  if (typeof _initTrackGains === 'function') {
+    try { _initTrackGains(); } catch (_) {}
+  }
+  // Re-kick the elements that were playing pre-interrupt. Two RAFs to give
+  // Safari time to renegotiate output sample rate post-resume — calling
+  // play() in the same tick as resume() produces a brief pitch-up artifact.
+  const snap = _interruptedPlayingSnapshot || {};
   const tracks = (typeof allTracks === 'function') ? allTracks() : {};
-  Object.values(tracks).forEach(el => {
-    if (!el) return;
-    try {
-      const wasPlaying = !el.paused;
-      const t = el.currentTime;
-      el.pause();
-      el.load();
-      el.currentTime = t || 0;
-      if (wasPlaying && !state.muted) el.play().catch(() => {});
-    } catch (_) {}
-  });
-  if (typeof _initTrackGains === 'function') _initTrackGains();
-  _clearAudioInterrupted();
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (state.muted) { _clearAudioInterrupted(); return; }
+    Object.keys(snap).forEach(k => {
+      const el = tracks[k];
+      if (!el) return;
+      try {
+        // currentTime is preserved by Safari across pause/resume, but we
+        // restore from the snapshot defensively in case the element got
+        // bumped (e.g. an .ended fired during background).
+        if (typeof snap[k] === 'number' && Math.abs((el.currentTime || 0) - snap[k]) > 1.5) {
+          el.currentTime = snap[k];
+        }
+        el.play().catch(() => {});
+      } catch (_) {}
+    });
+    _clearAudioInterrupted();
+  }));
 }
 function _initSFXBuffers() {
   if (!audioCtx) return;
@@ -25594,35 +25633,18 @@ document.addEventListener('visibilitychange', () => {
     if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
       audioCtx.resume().catch(() => {});
     }
-    // Belt: rewire music graph if we just came back from an iOS interruption.
-    // Wrap in try/catch — Safari throws InvalidStateError if a track's
-    // <audio> element already has a MediaElementSource, and we don't want
-    // that exception to abort the rest of this visibilitychange handler
-    // (which restores screen music below).
-    if (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted() &&
-        typeof _rewireTrackGains === 'function') {
+    // If we came back from an iOS interruption, _rewireTrackGains handles
+    // the silent-buffer sample-rate kick AND re-issues play() on tracks
+    // that were playing pre-interrupt (using the snapshot captured in
+    // _markAudioInterrupted). Don't double-up the play() calls below.
+    const _wasInterrupt = (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted());
+    if (_wasInterrupt && typeof _rewireTrackGains === 'function') {
       try { _rewireTrackGains(); } catch (_) {}
     }
-    // iOS sample-rate renegotiation hack (Jam3 / PixiJS / Howler pattern):
-    // After an interruption, iOS Safari may return the AudioContext at a
-    // mismatched sample rate, audible as a pitch warp on the next playback.
-    // Playing a 1-sample silent buffer through the context forces the audio
-    // engine to renegotiate its output rate before our real audio starts.
-    // See: https://github.com/Experience-Monks/ios-safe-audio-context
-    if (audioCtx) {
-      try {
-        const _silent = audioCtx.createBuffer(1, 1, 22050);
-        const _src = audioCtx.createBufferSource();
-        _src.buffer = _silent;
-        _src.connect(audioCtx.destination);
-        _src.start(0);
-      } catch (_) {}
-    }
-    // Restore audio for the current screen, with a one-frame defer so the
-    // AudioContext has time to renegotiate output sample rate post-resume.
-    // Calling el.play() in the same tick as audioCtx.resume() on iOS is what
-    // produces the brief pitch-up artifact on re-entry.
-    if (!state.muted) {
+    // Normal (non-interrupt) tab-focus restore: re-kick screen music. After
+    // an interruption, _rewireTrackGains already kicks the snapshot tracks,
+    // so skip this branch to avoid racing two play() calls on the same el.
+    if (!_wasInterrupt && !state.muted) {
       requestAnimationFrame(() => requestAnimationFrame(() => {
         if (state.phase === 'title' || state.phase === 'dead' || state.phase === 'paused') {
           if (titleMusic) titleMusic.play().catch(() => {});

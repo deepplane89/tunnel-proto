@@ -119,35 +119,18 @@ document.addEventListener('visibilitychange', () => {
     if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
       audioCtx.resume().catch(() => {});
     }
-    // Belt: rewire music graph if we just came back from an iOS interruption.
-    // Wrap in try/catch — Safari throws InvalidStateError if a track's
-    // <audio> element already has a MediaElementSource, and we don't want
-    // that exception to abort the rest of this visibilitychange handler
-    // (which restores screen music below).
-    if (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted() &&
-        typeof _rewireTrackGains === 'function') {
+    // If we came back from an iOS interruption, _rewireTrackGains handles
+    // the silent-buffer sample-rate kick AND re-issues play() on tracks
+    // that were playing pre-interrupt (using the snapshot captured in
+    // _markAudioInterrupted). Don't double-up the play() calls below.
+    const _wasInterrupt = (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted());
+    if (_wasInterrupt && typeof _rewireTrackGains === 'function') {
       try { _rewireTrackGains(); } catch (_) {}
     }
-    // iOS sample-rate renegotiation hack (Jam3 / PixiJS / Howler pattern):
-    // After an interruption, iOS Safari may return the AudioContext at a
-    // mismatched sample rate, audible as a pitch warp on the next playback.
-    // Playing a 1-sample silent buffer through the context forces the audio
-    // engine to renegotiate its output rate before our real audio starts.
-    // See: https://github.com/Experience-Monks/ios-safe-audio-context
-    if (audioCtx) {
-      try {
-        const _silent = audioCtx.createBuffer(1, 1, 22050);
-        const _src = audioCtx.createBufferSource();
-        _src.buffer = _silent;
-        _src.connect(audioCtx.destination);
-        _src.start(0);
-      } catch (_) {}
-    }
-    // Restore audio for the current screen, with a one-frame defer so the
-    // AudioContext has time to renegotiate output sample rate post-resume.
-    // Calling el.play() in the same tick as audioCtx.resume() on iOS is what
-    // produces the brief pitch-up artifact on re-entry.
-    if (!state.muted) {
+    // Normal (non-interrupt) tab-focus restore: re-kick screen music. After
+    // an interruption, _rewireTrackGains already kicks the snapshot tracks,
+    // so skip this branch to avoid racing two play() calls on the same el.
+    if (!_wasInterrupt && !state.muted) {
       requestAnimationFrame(() => requestAnimationFrame(() => {
         if (state.phase === 'title' || state.phase === 'dead' || state.phase === 'paused') {
           if (titleMusic) titleMusic.play().catch(() => {});
