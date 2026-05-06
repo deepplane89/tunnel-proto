@@ -421,7 +421,7 @@ window.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight') { let _ni = (skinViewerIdx + 1) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni + 1) % SHIP_SKINS.length; navigateToSkin(_ni); }
     return;
   }
-  if (isSpace && phaseAtEvent === 'title')   { try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}; startGame(); }
+  if (isSpace && phaseAtEvent === 'title')   { startGame(); }
   // if (isSpace && phaseAtEvent === 'playing') triggerJump(); // JUMP QUARANTINED
   if (e.key === 'Escape' && phaseAtEvent === 'playing') togglePause();
   if (e.key === 'Escape' && phaseAtEvent === 'paused')  togglePause();
@@ -993,38 +993,23 @@ initSkinViewer();
 // Fetch leaderboard on initial load
 fetchLeaderboard();
 
-function playStartSound() {
-  if (state.muted) return;
-  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (_sM <= 0) return;
-  _ensureCtxRunning();
-  const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.85 * _sM); sfx.play().catch(() => {}); }
-}
-
+// ── Snap-sound family REMOVED per user ("remove the snap sound entirely").
+// All UI navigation now uses dedicated cues: playMenuCycle (pinball) for
+// menu/panel transitions, playGarageOpen/Close for garage, playReject for
+// locked taps, playStartInterference for ACCESS GRANTED. These wrappers are
+// kept as no-ops so any stray callers don't throw — and so the inline
+// onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
+function playStartSound()  { /* removed — see _ note above */ }
 function playResumeSound() {
-  if (state.muted) return;
-  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (_sM <= 0) return;
-  _ensureCtxRunning();
-  const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.7 * _sM); sfx.play().catch(() => {}); }
+  // CONTINUE from pause — light nav cue (pinball pip).
+  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
-
-function playExitSound() {
-  if (state.muted) return;
-  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (_sM <= 0) return;
-  _ensureCtxRunning();
-  const sfx = document.getElementById('exit-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.9 * _sM); sfx.playbackRate = 1.0; sfx.play().catch(() => {}); }
+function playExitSound()   {
+  // EXIT from pause / return-to-title — light nav cue.
+  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
-function playTitleTap() {
-  if (state.muted) return;
-  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (_sM <= 0) return;
-  _ensureCtxRunning();
-  const sfx = document.getElementById('exit-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.7 * _sM); sfx.playbackRate = 0.85 + Math.random() * 0.5; sfx.play().catch(() => {}); }
+function playTitleTap()    {
+  // Generic title/menu tap — light nav cue.
+  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 

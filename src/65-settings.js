@@ -8,12 +8,13 @@ let _settings = {
   musicMuted: false,
   sfxMuted: false,
   hapticsOn: true,
-  // Graphics quality → DPR clamp. 'balanced' is mobile default.
+  // Graphics quality → DPR clamp. Defaults to 'sharp'; first-time-ever load
+  // shows a picker (see _showGfxPicker below) so the player can choose.
   // 'performance' = 1.0, 'balanced' = 1.5, 'sharp' = min(devicePixelRatio, 2)
   // SHARP capped at 2 (not 3) because higher DPR causes additive-blend points
   // (stars, thruster particles) to oversaturate via bloom — 1.5→3 is 4x the
   // framebuffer pixels and the visible glow grows beyond what looks crisp.
-  graphicsQuality: 'balanced',
+  graphicsQuality: 'sharp',
 };
 
 // Returns the DPR cap for the current graphics quality setting.
@@ -217,4 +218,54 @@ function closeSettings() {
   });
 
 })();
+
+// ── First-time-ever graphics-quality picker ──
+// Shown on the very first ACCESS GRANTED tap. Stores 'jh_gfx_picked' = '1'
+// in localStorage so it never appears again. Player picks Performance /
+// Balanced / Sharp; choice is persisted to _settings.graphicsQuality.
+// Visual style mirrors the access-gate UI (cyan tech aesthetic) so it
+// reads as part of the boot sequence, not a settings dialog.
+window._showGfxPicker = function _showGfxPicker(onDone) {
+  let pick = document.getElementById('gfx-picker');
+  if (!pick) {
+    pick = document.createElement('div');
+    pick.id = 'gfx-picker';
+    pick.innerHTML = [
+      '<div class="gfxp-msg">SELECT RENDER MODE</div>',
+      '<div class="gfxp-row">',
+        '<button type="button" class="gfxp-btn" data-q="performance">',
+          '<span class="gfxp-name">PERFORMANCE</span>',
+          '<span class="gfxp-sub">SMOOTHEST</span>',
+        '</button>',
+        '<button type="button" class="gfxp-btn" data-q="balanced">',
+          '<span class="gfxp-name">BALANCED</span>',
+          '<span class="gfxp-sub">RECOMMENDED</span>',
+        '</button>',
+        '<button type="button" class="gfxp-btn primary" data-q="sharp">',
+          '<span class="gfxp-name">SHARP</span>',
+          '<span class="gfxp-sub">CRISPEST</span>',
+        '</button>',
+      '</div>',
+      '<div class="gfxp-hint">CHANGE ANYTIME IN SETTINGS</div>',
+    ].join('');
+    document.body.appendChild(pick);
+  }
+  pick.classList.add('show');
+  const _pickFn = (q) => {
+    _settings.graphicsQuality = q;
+    saveSettings();
+    try { window._LS.setItem('jh_gfx_picked', '1'); } catch (_) {}
+    try { applyGraphicsQuality(); } catch (_) {}
+    pick.classList.add('hide');
+    setTimeout(() => { if (pick.parentNode) pick.parentNode.removeChild(pick); }, 500);
+    if (typeof onDone === 'function') onDone();
+  };
+  pick.querySelectorAll('.gfxp-btn').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch (_) {}
+      _pickFn(b.getAttribute('data-q'));
+    }, { once: true, passive: false });
+  });
+};
 

@@ -17826,7 +17826,7 @@ window.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight') { let _ni = (skinViewerIdx + 1) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni + 1) % SHIP_SKINS.length; navigateToSkin(_ni); }
     return;
   }
-  if (isSpace && phaseAtEvent === 'title')   { try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}; startGame(); }
+  if (isSpace && phaseAtEvent === 'title')   { startGame(); }
   // if (isSpace && phaseAtEvent === 'playing') triggerJump(); // JUMP QUARANTINED
   if (e.key === 'Escape' && phaseAtEvent === 'playing') togglePause();
   if (e.key === 'Escape' && phaseAtEvent === 'paused')  togglePause();
@@ -18398,39 +18398,24 @@ initSkinViewer();
 // Fetch leaderboard on initial load
 fetchLeaderboard();
 
-function playStartSound() {
-  if (state.muted) return;
-  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (_sM <= 0) return;
-  _ensureCtxRunning();
-  const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.85 * _sM); sfx.play().catch(() => {}); }
-}
-
+// ── Snap-sound family REMOVED per user ("remove the snap sound entirely").
+// All UI navigation now uses dedicated cues: playMenuCycle (pinball) for
+// menu/panel transitions, playGarageOpen/Close for garage, playReject for
+// locked taps, playStartInterference for ACCESS GRANTED. These wrappers are
+// kept as no-ops so any stray callers don't throw — and so the inline
+// onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
+function playStartSound()  { /* removed — see _ note above */ }
 function playResumeSound() {
-  if (state.muted) return;
-  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (_sM <= 0) return;
-  _ensureCtxRunning();
-  const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.7 * _sM); sfx.play().catch(() => {}); }
+  // CONTINUE from pause — light nav cue (pinball pip).
+  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
-
-function playExitSound() {
-  if (state.muted) return;
-  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (_sM <= 0) return;
-  _ensureCtxRunning();
-  const sfx = document.getElementById('exit-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.9 * _sM); sfx.playbackRate = 1.0; sfx.play().catch(() => {}); }
+function playExitSound()   {
+  // EXIT from pause / return-to-title — light nav cue.
+  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
-function playTitleTap() {
-  if (state.muted) return;
-  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (_sM <= 0) return;
-  _ensureCtxRunning();
-  const sfx = document.getElementById('exit-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.7 * _sM); sfx.playbackRate = 0.85 + Math.random() * 0.5; sfx.play().catch(() => {}); }
+function playTitleTap()    {
+  // Generic title/menu tap — light nav cue.
+  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 
 // ═══════════════════════════════════════════════════════
@@ -18717,9 +18702,9 @@ _tapBind(document.getElementById('death-run-btn'), () => {
   const _ewRoar = document.getElementById('engine-roar');
   if (_ewEng) { _ewEng.load(); }
   if (_ewRoar) { _ewRoar.load(); }
-  // ENTER from title: short "computer interference" cue (replaces the
-  // generic start-snap that played here previously).
-  try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}
+  // No SFX here — the interference cue plays earlier on the ACCESS GRANTED
+  // tap (the audio-unlock gesture). TAP TO PLAY uses CSS press-in feedback
+  // since iOS sometimes can't trigger a fresh sample synchronously here.
   startDeathRun();
 });
 _tapBind(document.getElementById('restart-btn'), () => {
@@ -18744,12 +18729,13 @@ let _settings = {
   musicMuted: false,
   sfxMuted: false,
   hapticsOn: true,
-  // Graphics quality → DPR clamp. 'balanced' is mobile default.
+  // Graphics quality → DPR clamp. Defaults to 'sharp'; first-time-ever load
+  // shows a picker (see _showGfxPicker below) so the player can choose.
   // 'performance' = 1.0, 'balanced' = 1.5, 'sharp' = min(devicePixelRatio, 2)
   // SHARP capped at 2 (not 3) because higher DPR causes additive-blend points
   // (stars, thruster particles) to oversaturate via bloom — 1.5→3 is 4x the
   // framebuffer pixels and the visible glow grows beyond what looks crisp.
-  graphicsQuality: 'balanced',
+  graphicsQuality: 'sharp',
 };
 
 // Returns the DPR cap for the current graphics quality setting.
@@ -18953,6 +18939,56 @@ function closeSettings() {
   });
 
 })();
+
+// ── First-time-ever graphics-quality picker ──
+// Shown on the very first ACCESS GRANTED tap. Stores 'jh_gfx_picked' = '1'
+// in localStorage so it never appears again. Player picks Performance /
+// Balanced / Sharp; choice is persisted to _settings.graphicsQuality.
+// Visual style mirrors the access-gate UI (cyan tech aesthetic) so it
+// reads as part of the boot sequence, not a settings dialog.
+window._showGfxPicker = function _showGfxPicker(onDone) {
+  let pick = document.getElementById('gfx-picker');
+  if (!pick) {
+    pick = document.createElement('div');
+    pick.id = 'gfx-picker';
+    pick.innerHTML = [
+      '<div class="gfxp-msg">SELECT RENDER MODE</div>',
+      '<div class="gfxp-row">',
+        '<button type="button" class="gfxp-btn" data-q="performance">',
+          '<span class="gfxp-name">PERFORMANCE</span>',
+          '<span class="gfxp-sub">SMOOTHEST</span>',
+        '</button>',
+        '<button type="button" class="gfxp-btn" data-q="balanced">',
+          '<span class="gfxp-name">BALANCED</span>',
+          '<span class="gfxp-sub">RECOMMENDED</span>',
+        '</button>',
+        '<button type="button" class="gfxp-btn primary" data-q="sharp">',
+          '<span class="gfxp-name">SHARP</span>',
+          '<span class="gfxp-sub">CRISPEST</span>',
+        '</button>',
+      '</div>',
+      '<div class="gfxp-hint">CHANGE ANYTIME IN SETTINGS</div>',
+    ].join('');
+    document.body.appendChild(pick);
+  }
+  pick.classList.add('show');
+  const _pickFn = (q) => {
+    _settings.graphicsQuality = q;
+    saveSettings();
+    try { window._LS.setItem('jh_gfx_picked', '1'); } catch (_) {}
+    try { applyGraphicsQuality(); } catch (_) {}
+    pick.classList.add('hide');
+    setTimeout(() => { if (pick.parentNode) pick.parentNode.removeChild(pick); }, 500);
+    if (typeof onDone === 'function') onDone();
+  };
+  pick.querySelectorAll('.gfxp-btn').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch (_) {}
+      _pickFn(b.getAttribute('data-q'));
+    }, { once: true, passive: false });
+  });
+};
 
 // ═══════════════════════════════════════════════════════
 //  HAPTIC FEEDBACK
@@ -31758,6 +31794,23 @@ function buildSkinTunerSliders() {
       try {
         if (typeof window.initTitleAudio === 'function') window.initTitleAudio();
       } catch (_) {}
+      // Computer-interference cue plays here (the actual audio-unlock gesture).
+      // Previously fired on TAP TO PLAY, but iOS sometimes can't decode/play a
+      // fresh sample synchronously on a *second* gesture; the unlock tap is the
+      // most reliable place. Defer one tick so the AudioContext has resumed.
+      setTimeout(() => {
+        try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch (_) {}
+      }, 30);
+      // First-time-ever load: show the graphics-quality picker before fading
+      // the gate. The picker handles its own dismissal + gate hide.
+      const _firstLoad = !window._LS.getItem('jh_gfx_picked');
+      if (_firstLoad && typeof window._showGfxPicker === 'function') {
+        window._showGfxPicker(() => {
+          gateEl.classList.add('hide');
+          setTimeout(() => { if (gateEl.parentNode) gateEl.parentNode.removeChild(gateEl); }, 600);
+        });
+        return;
+      }
       gateEl.classList.add('hide');
       setTimeout(() => { if (gateEl.parentNode) gateEl.parentNode.removeChild(gateEl); }, 600);
     };

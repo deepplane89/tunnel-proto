@@ -8,9 +8,9 @@ _tapBind(document.getElementById('death-run-btn'), () => {
   const _ewRoar = document.getElementById('engine-roar');
   if (_ewEng) { _ewEng.load(); }
   if (_ewRoar) { _ewRoar.load(); }
-  // ENTER from title: short "computer interference" cue (replaces the
-  // generic start-snap that played here previously).
-  try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}
+  // No SFX here — the interference cue plays earlier on the ACCESS GRANTED
+  // tap (the audio-unlock gesture). TAP TO PLAY uses CSS press-in feedback
+  // since iOS sometimes can't trigger a fresh sample synchronously here.
   startDeathRun();
 });
 _tapBind(document.getElementById('restart-btn'), () => {

@@ -4711,6 +4711,21 @@ html, body {
   border-color: #ff1a8c;
   color: #ff1a8c;
   box-shadow: inset 0 0 14px rgba(255,26,140,0.10), 0 0 12px rgba(255,26,140,0.10);
+  transition: transform .08s ease, box-shadow .08s ease, background .08s ease, border-color .08s ease, color .08s ease;
+  will-change: transform;
+}
+/* Press-in feedback — SFX is hard to trigger reliably here on iOS, so the
+   button itself gives a strong tactile/visual cue: scale-down + deeper inset
+   glow + brighter pink wash. Matches the magenta DEATH RUN palette. */
+.btn-deathrun:active {
+  transform: translateY(1px) scale(0.965);
+  background: rgba(255,26,140,0.22);
+  border-color: #ff5fb0;
+  color: #ffd7ec;
+  box-shadow:
+    inset 0 0 28px rgba(255,26,140,0.55),
+    inset 0 2px 8px rgba(0,0,0,0.45),
+    0 0 22px rgba(255,26,140,0.45);
 }
 .btn-wormhole {
   border-color: #00ffcc;
@@ -5855,3 +5870,56 @@ body.sr-open #title-leaderboard {
   border-left-color: transparent;
 }
 
+
+/* ── First-load graphics-quality picker ──
+   Shown once after ACCESS GRANTED. Same boot-sequence aesthetic as the
+   access gate (cyan tech / monospace) so it reads as part of the boot,
+   not a settings dialog. */
+#gfx-picker {
+  position: fixed; inset: 0; z-index: 99997;
+  background: radial-gradient(ellipse at center,#001a24 0%,#000810 70%,#000406 100%);
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+  font-family: monospace; color: #00f0ff;
+  transition: opacity .5s ease;
+  padding: 24px;
+}
+#gfx-picker.show { display: flex; }
+#gfx-picker.hide { opacity: 0; pointer-events: none; }
+.gfxp-msg {
+  font-size: 11px; letter-spacing: 3px; opacity: .7;
+  text-transform: uppercase; margin-bottom: 28px;
+}
+.gfxp-row {
+  display: flex; flex-direction: column; gap: 14px;
+  width: 100%; max-width: 320px;
+}
+.gfxp-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  width: 100%; padding: 16px 24px;
+  font-family: monospace; color: #7ff5ff;
+  background: rgba(0,240,255,.08);
+  border: 1px solid rgba(0,240,255,.5);
+  text-transform: uppercase; cursor: pointer;
+  text-shadow: 0 0 10px #00f0ff;
+  box-shadow: 0 0 20px rgba(0,240,255,.18), inset 0 0 14px rgba(0,240,255,.06);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform .08s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.gfxp-btn:active {
+  transform: scale(0.97);
+  background: rgba(0,240,255,.22);
+  box-shadow: 0 0 32px rgba(0,240,255,.5), inset 0 0 22px rgba(0,240,255,.18);
+}
+.gfxp-btn.primary {
+  border-color: rgba(0,240,255,.85);
+  background: rgba(0,240,255,.14);
+}
+.gfxp-name { font-size: 16px; letter-spacing: 4px; }
+.gfxp-sub  { font-size: 9px; letter-spacing: 2px; opacity: .55; }
+.gfxp-hint {
+  margin-top: 22px;
+  font-size: 9px; letter-spacing: 2px;
+  opacity: .4; text-transform: uppercase;
+}
