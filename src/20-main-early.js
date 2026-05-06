@@ -6359,12 +6359,15 @@ function applyTitleSkin(skinIndex) {
     // cache miss is the raw GLB (looks white/grey), and even on a cache hit
     // would skip per-skin overrides for RUNNER. _makeMatForSkinSlot returns a
     // fresh material from _SKIN_PALETTE[skinIndex] for the slot name.
+    let _diagPainted = 0; let _diagSkipped = 0; const _diagSlots = [];
     for (const entry of _titleMeshMap) {
       const { mesh, origName } = entry;
       if (origName === 'fire' || origName === 'fire1') { mesh.visible = false; continue; }
       if (isLocked) { mesh.material = _titleDarkMat; continue; }
       const newMat = _makeMatForSkinSlot(skinIndex, origName || '');
-      if (newMat) mesh.material = newMat;
+      if (newMat) { mesh.material = newMat; _diagPainted++; if (_diagSlots.length < 6) _diagSlots.push(origName + (newMat.uniforms && newMat.uniforms.hologramColor ? ':holo' : ':pbr')); }
+      else { _diagSkipped++; }
+      void _diagPainted; void _diagSkipped;
       // BLACK MAMBA (idx 2) extra darkening: ensures hull reads stealth black
       // under the title's bright studio rig (palette base color is rust orange
       // for in-game lighting).
@@ -6375,6 +6378,11 @@ function applyTitleSkin(skinIndex) {
         if (mesh.material && mesh.material.color) mesh.material.color.setHex(0x000000);
       }
     }
+    try {
+      let _postHolo = 0; let _postMesh = 0;
+      _titleShipModel.traverse(c => { if (c.isMesh) { _postMesh++; if (c.material && c.material.uniforms && c.material.uniforms.hologramColor) _postHolo++; } });
+      console.log('[HOLO_DIAG] PAINTED skin=' + skinIndex, 'mapEntries=' + _titleMeshMap.length, 'painted=' + _diagPainted, 'skipped=' + _diagSkipped, 'post titleMesh=' + _postMesh + '(' + _postHolo + 'holo)', 'slots=', _diagSlots.join(','));
+    } catch(_){}
     return;
   }
 
