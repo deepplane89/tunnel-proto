@@ -1445,8 +1445,19 @@ function _drSequencerTick(dt) {
     state._seqSpawnMode = 'cones';
     const _density = stage.density || 'normal';
     state._seqConeDensity = _density;
+    // Clear-out window: stop spawning new cones for the final stretch of
+    // the stage so the field can scroll past the ship before the next
+    // stage's mechanics (canyon walls, lightning) activate. Cones spawn
+    // at z=-160 and travel ~144 units to reach the ship; at S1's 1.5x
+    // base speed that's ~2.5s of flight time. Use 3s for safety so even
+    // the last spawned cone is past the ship before transition.
+    const _dur = stage.duration || 30;
+    const _clearWindow = 3;
+    if (state.seqStageElapsed >= _dur - _clearWindow) {
+      state._seqSpawnMode = 'none';
+    }
     if (_density === 'ramp') {
-      const _dur = stage.duration || 30;
+      // Hold t01 at 1.0 during the clear window so it doesn't roll back.
       state._seqRampT01 = Math.min(1, state.seqStageElapsed / _dur);
     } else {
       state._seqRampT01 = 0;
