@@ -8807,12 +8807,10 @@ const _CANYON_LIGHT_RAMP_S = 0.60;    // 600ms ease in/out (long enough to be in
 // are non-null, _updateCanyonWalls ramps dirLight = lerp(From, Target, eased(_canyonLightT)).
 let _canyonDirLightFrom = null;
 let _canyonDirLightTarget = null;
-// Per-user request 2026-05-05: "there are light changes that happen in the
-// canyons. id like for them to be turned off now." The dirLight modulation
-// during L3-knife / Pre-T4A / Pre-T4B is what's being noticed. Canyon entry
-// fill-lights (the cyan ramp) stay on — they ARE the canyon's identity.
-// Both setters are now no-ops; dirLight stays at whatever the global level
-// transition / day-night cycle puts it at, with no canyon-driven dimming.
+// Per-user request 2026-05-05: canyon-specific lights are turned off entirely.
+// Both the cyan fill ramp (see _updateCanyonWalls) and the dirLight dim are
+// disabled so canyons render with the same lighting as the surrounding tunnel
+// — no brighter, no darker, no color shift on entry/exit.
 window._setCanyonDirLightTarget = function(target) { /* disabled */ };
 window._clearCanyonDirLightTarget = function() { /* disabled */ };
 let _canyonActive = false;
@@ -9658,10 +9656,16 @@ function _updateCanyonWalls(dt, speed) {
   else if (_canyonLightT > _ltTarget) _canyonLightT = Math.max(_ltTarget, _canyonLightT - _ltStep);
   // smoothstep ease for an imperceptible perceived blend
   const e = _canyonLightT * _canyonLightT * (3 - 2 * _canyonLightT);
-  const fill = _CANYON_LIGHT_FILL * e;
+  // Per-user request 2026-05-05: "id like for [the canyon-specific lights]
+  // to be turned off now". Force fill to 0 so the 4 cyan canyon point-lights
+  // stay invisible. dirLight modulation is preserved (canyons still dim the
+  // global directional during L3-knife/Pre-T4A/Pre-T4B, since that's what
+  // makes the player feel they're inside something).
+  const fill = 0;
   for (let _i = 0; _i < _CANYON_PERSISTENT_LIGHTS.length; _i++) {
-    _CANYON_PERSISTENT_LIGHTS[_i].intensity = _CANYON_LIGHT_DEFS[_i].intensity * fill;
+    _CANYON_PERSISTENT_LIGHTS[_i].intensity = 0;
   }
+  void e; // silence unused
   // dirLight ramp — only active for L3-knife/Pre-T4A/Pre-T4B (which call
   // _setCanyonDirLightTarget on entry). At t=0 we read From, at t=1 we hit Target.
   // When _canyonDirLightTarget is null but From is non-null, we're heading home.
