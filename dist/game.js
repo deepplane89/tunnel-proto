@@ -29497,6 +29497,7 @@ function _ringShowTuner() {
     // regardless of player level. drift=0 → no wobble (RAIL); drift=0.8 → loose (WIPEOUT).
     // Manual slider edits + reset clear the override (back to player-level driven).
     const _FEEL_PRESETS = {
+      DEFAULT: { resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: -1 },
       GLIDE:   { resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.6 },
       RAIL:    { resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.0 },
       WIPEOUT: { resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.8 },
@@ -29518,6 +29519,7 @@ function _ringShowTuner() {
     const _presetRow = document.createElement('div');
     _presetRow.style.cssText = 'display:flex;gap:4px;margin:4px 0 8px 0;';
     const _presetMeta = [
+      ['DEFAULT', '#aaa', 'all macros 0.5, drift = player level'],
       ['GLIDE',   '#7bf', 'low-g arcade flight'],
       ['RAIL',    '#ff7', 'surgical shmup, rigid horizon'],
       ['WIPEOUT', '#f7a', 'heavy racer, dramatic coupling'],
