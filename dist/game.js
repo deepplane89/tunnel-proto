@@ -13905,6 +13905,14 @@ function spawnObstacles() {
   const gapStart  = Math.floor(Math.random() * (_spawnLaneCount - 1));
   const gapLanes  = new Set([gapStart, gapStart + 1]);
 
+  // S1 ramp anti-bunch rule: enforce a minimum lane gap so cones in the
+  // same row never sit shoulder-to-shoulder. Multi-cone rows are fine —
+  // they just have to be spread laterally instead of clumping.
+  const _isRampBand = state.isDeathRun && state._seqConeDensity === 'ramp';
+  // 3 lanes between cones ≈ ~10 units — wide enough to thread, narrow
+  // enough that the row still feels dense as the stage intensifies.
+  const _rampMinGap = 3;
+
   const blocked = [];
   for (const lane of shuffled) {
     if (blocked.length >= clampedCount) break;
@@ -13913,6 +13921,7 @@ function spawnObstacles() {
     if ((_isRingBand || _isMixBand) && blocked.some(b => Math.abs(b - lane) < 4)) continue;
     if (_isWallBand && blocked.some(b => Math.abs(b - lane) < (window._awRand ? window._awRand.laneGap : 3))) continue;
     if (_isFatConeBand && blocked.some(b => Math.abs(b - lane) < 8)) continue; // wide gap between fat cones (original)
+    if (_isRampBand && blocked.some(b => Math.abs(b - lane) < _rampMinGap)) continue;
     blocked.push(lane);
   }
 
