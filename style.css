@@ -5548,49 +5548,64 @@ body.sr-open #title-leaderboard {
     font-size: 11px;
   }
   /* Single-column power-up cards in narrow landscape panel — horizontal rows.
-     All 5 cards must FIT (no scroll); rows share available space equally. */
+     All 5 cards share available space equally so MAGNET/COIN VALUE never get
+     pushed off the bottom. Portrait values are kept (we only override the
+     ones that differ in landscape). */
   .sr-pane[data-pane="powerups"] .shop-cards {
     grid-template-columns: 1fr;
     grid-template-rows: repeat(5, minmax(0, 1fr));
     grid-auto-rows: minmax(0, 1fr);
-    gap: 3px;
+    gap: 4px;
     height: 100%;
     overflow: hidden;
     align-content: stretch;
   }
   .sr-pane[data-pane="powerups"] .shop-card {
-    padding: 2px 6px;
-    flex-direction: row;
-    text-align: left;
-    gap: 6px;
-    align-items: center;
     min-height: 0;
     overflow: hidden;
   }
-  .sr-pane[data-pane="powerups"] .shop-card-icon {
-    width: 18px; height: 18px;
-    flex-shrink: 0;
-  }
   .sr-pane[data-pane="powerups"] .shop-card-name {
-    font-size: 9px;
-    flex: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .sr-pane[data-pane="powerups"] .shop-card-pips {
-    margin: 0;
-    flex-shrink: 0;
+
+  /* Detail panel (UPGRADE screen) on landscape: tiers scroll inside, header
+     and UPGRADE button stay pinned so the button is never clipped on narrow
+     landscape phones (where the panel grid cell is short). */
+  .sr-pane[data-pane="powerups"] .shop-detail {
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
   }
-  .sr-pane[data-pane="powerups"] .shop-pip {
-    width: 5px; height: 5px;
+  .sr-pane[data-pane="powerups"] .shop-detail-header,
+  .sr-pane[data-pane="powerups"] .shop-detail-pips {
+    flex: 0 0 auto;
   }
-  .sr-pane[data-pane="powerups"] .shop-card-cost {
-    font-size: 10px;
-    flex-shrink: 0;
+  .sr-pane[data-pane="powerups"] .shop-detail-tiers {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 4px;
   }
-  .sr-pane[data-pane="powerups"] .shop-card-desc {
-    display: none;
+  .sr-pane[data-pane="powerups"] .shop-detail-tier {
+    padding: 4px 8px;
+  }
+  .sr-pane[data-pane="powerups"] .shop-detail-tier-desc { font-size: 10px; }
+  .sr-pane[data-pane="powerups"] .shop-detail-tier-num  { font-size: 10px; min-width: 18px; }
+  .sr-pane[data-pane="powerups"] .shop-detail-tier-cost { font-size: 10px; }
+  .sr-pane[data-pane="powerups"] .shop-upgrade-btn,
+  .sr-pane[data-pane="powerups"] .btn-upgrade {
+    flex: 0 0 auto;
+    padding: 6px 12px;
+    font-size: 12px;
+    margin-top: 6px;
+  }
+  .sr-pane[data-pane="powerups"] .shop-detail-maxed {
+    flex: 0 0 auto;
+    padding: 6px 0;
+    font-size: 12px;
   }
   /* Compact handling bar in landscape. Border + radius removed so a
      bottom clip from the fixed 60px row isn't visible as a cut-off edge. */
@@ -5648,6 +5663,47 @@ body.sr-open #title-leaderboard {
   .sr-overlay .sr-card-grid,
   .sr-overlay .sr-addons-list {
     gap: 10px;
+  }
+
+  /* ── Desktop POWERUPS: way more breathing room ─────────────────────────
+   * On the 1180px-wide cluster the panel is ~340px and the cards stack
+   * vertically with tons of empty horizontal real estate. Scale up icons,
+   * names, pip dots, costs and detail tiers so the eye actually has
+   * something to land on. */
+  .sr-pane[data-pane="powerups"] .shop-cards {
+    gap: 8px;
+  }
+  .sr-pane[data-pane="powerups"] .shop-card {
+    padding: 10px 14px;
+    gap: 14px;
+  }
+  .sr-pane[data-pane="powerups"] .shop-card-icon {
+    width: 36px; height: 36px;
+  }
+  .sr-pane[data-pane="powerups"] .shop-card-name {
+    font-size: 15px;
+    letter-spacing: 0.5px;
+  }
+  .sr-pane[data-pane="powerups"] .shop-card-pips { gap: 5px; }
+  .sr-pane[data-pane="powerups"] .shop-pip { width: 10px; height: 10px; }
+  .sr-pane[data-pane="powerups"] .shop-card-cost { font-size: 16px; }
+  .sr-pane[data-pane="powerups"] .shop-card-maxed,
+  .sr-pane[data-pane="powerups"] .shop-card-lock { font-size: 13px; }
+  /* Detail (UPGRADE) screen: scale up too */
+  .sr-pane[data-pane="powerups"] .shop-detail { padding: 12px; }
+  .sr-pane[data-pane="powerups"] .shop-detail-tier { padding: 8px 12px; }
+  .sr-pane[data-pane="powerups"] .shop-detail-tier-desc { font-size: 13px; }
+  .sr-pane[data-pane="powerups"] .shop-detail-tier-num  { font-size: 13px; min-width: 24px; }
+  .sr-pane[data-pane="powerups"] .shop-detail-tier-cost { font-size: 13px; }
+  .sr-pane[data-pane="powerups"] .shop-upgrade-btn,
+  .sr-pane[data-pane="powerups"] .btn-upgrade {
+    padding: 10px 18px;
+    font-size: 15px;
+    margin-top: 10px;
+  }
+  .sr-pane[data-pane="powerups"] .shop-detail-maxed {
+    padding: 10px 0;
+    font-size: 15px;
   }
 }
 

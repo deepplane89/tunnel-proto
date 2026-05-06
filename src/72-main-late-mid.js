@@ -1975,6 +1975,18 @@ window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: nul
   window._applyThrusterPresetByKey = function(key) {
     const P = (window._THRUSTER_PRESETS || {})[key];
     if (!P) return false;
+    // Cone-mode flags are sticky: the cone preset (PYLON) sets
+    // _coneThrustersEnabled=true and _hideOldThrusters=true, but particle
+    // presets (FLOURISH/PLASMA/etc.) don't set them. Without this reset,
+    // switching from PYLON to a particle preset leaves cones on top and the
+    // old thrusters hidden, so the preview never visibly changes — it just
+    // looks like baseline. Clear flags first; the new preset re-sets them if
+    // needed.
+    const setsCones = ('_coneThrustersEnabled' in P) || ('_hideOldThrusters' in P);
+    if (!setsCones) {
+      try { window._coneThrustersEnabled = false; } catch(_){}
+      try { window._hideOldThrusters = false; } catch(_){}
+    }
     _writeThrPresetValues(P);
     window._activeThrusterPreset = key;
     return true;

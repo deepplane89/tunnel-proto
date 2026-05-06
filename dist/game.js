@@ -1583,6 +1583,7 @@ const MISSION_LADDER = [
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:2, label:'Score Mult +2x' } },
   { type:'reward', reward:{ kind:'unlock', powerup:'powermeter', label:'Unlock POWER METER', fuelcells:200 } },
   { type:'mission', id:'score80k', desc:'Score 80,000+ in one run', check:(r)=>r.score>=80000 },
+  { type:'reward', reward:{ kind:'thruster', presetKey:'plasma', label:'Unlock PLASMA Thruster' } },
   { type:'mission', id:'drtier4', desc:'Reach speed tier 4 in DR', check:(r)=>r.isDR&&r.drTier>=4 },
   { type:'reward', reward:{ kind:'fuelcells', amount:300, label:'300 Fuel Cells', coins:1500, xp:400 } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'violet', label:'Unlock VIOLET Thruster Color' } },
@@ -16730,6 +16731,7 @@ function _renderShopHandlingBar() {
   // anchored to the bar, picking up vs down based on available space.
   const head = bar.querySelector('.fm-head');
   const menu = bar.querySelector('.fm-menu');
+  let _fmOpenedAt = 0;
   function _fmCloseMenu() {
     bar.classList.remove('open', 'open-up');
     if (menu) {
@@ -16742,9 +16744,14 @@ function _renderShopHandlingBar() {
     window.removeEventListener('resize', _fmCloseMenu);
   }
   function _fmOutside(e) {
+    // Ignore any pointerdown that arrives within ~250ms of opening — iOS
+    // can fire a trailing pointerdown from the same tap (or from synthetic
+    // mouse events) that targets the body and would otherwise close us.
+    if (performance.now() - _fmOpenedAt < 250) return;
     if (!bar.contains(e.target)) _fmCloseMenu();
   }
   function _fmOpenMenu() {
+    _fmOpenedAt = performance.now();
     bar.classList.add('open');
     if (head) head.setAttribute('aria-expanded', 'true');
     if (!menu) return;
@@ -27065,6 +27072,18 @@ window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: nul
   window._applyThrusterPresetByKey = function(key) {
     const P = (window._THRUSTER_PRESETS || {})[key];
     if (!P) return false;
+    // Cone-mode flags are sticky: the cone preset (PYLON) sets
+    // _coneThrustersEnabled=true and _hideOldThrusters=true, but particle
+    // presets (FLOURISH/PLASMA/etc.) don't set them. Without this reset,
+    // switching from PYLON to a particle preset leaves cones on top and the
+    // old thrusters hidden, so the preview never visibly changes — it just
+    // looks like baseline. Clear flags first; the new preset re-sets them if
+    // needed.
+    const setsCones = ('_coneThrustersEnabled' in P) || ('_hideOldThrusters' in P);
+    if (!setsCones) {
+      try { window._coneThrustersEnabled = false; } catch(_){}
+      try { window._hideOldThrusters = false; } catch(_){}
+    }
     _writeThrPresetValues(P);
     window._activeThrusterPreset = key;
     return true;

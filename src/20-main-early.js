@@ -947,6 +947,7 @@ const MISSION_LADDER = [
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:2, label:'Score Mult +2x' } },
   { type:'reward', reward:{ kind:'unlock', powerup:'powermeter', label:'Unlock POWER METER', fuelcells:200 } },
   { type:'mission', id:'score80k', desc:'Score 80,000+ in one run', check:(r)=>r.score>=80000 },
+  { type:'reward', reward:{ kind:'thruster', presetKey:'plasma', label:'Unlock PLASMA Thruster' } },
   { type:'mission', id:'drtier4', desc:'Reach speed tier 4 in DR', check:(r)=>r.isDR&&r.drTier>=4 },
   { type:'reward', reward:{ kind:'fuelcells', amount:300, label:'300 Fuel Cells', coins:1500, xp:400 } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'violet', label:'Unlock VIOLET Thruster Color' } },

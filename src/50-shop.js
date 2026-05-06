@@ -131,6 +131,7 @@ function _renderShopHandlingBar() {
   // anchored to the bar, picking up vs down based on available space.
   const head = bar.querySelector('.fm-head');
   const menu = bar.querySelector('.fm-menu');
+  let _fmOpenedAt = 0;
   function _fmCloseMenu() {
     bar.classList.remove('open', 'open-up');
     if (menu) {
@@ -143,9 +144,14 @@ function _renderShopHandlingBar() {
     window.removeEventListener('resize', _fmCloseMenu);
   }
   function _fmOutside(e) {
+    // Ignore any pointerdown that arrives within ~250ms of opening — iOS
+    // can fire a trailing pointerdown from the same tap (or from synthetic
+    // mouse events) that targets the body and would otherwise close us.
+    if (performance.now() - _fmOpenedAt < 250) return;
     if (!bar.contains(e.target)) _fmCloseMenu();
   }
   function _fmOpenMenu() {
+    _fmOpenedAt = performance.now();
     bar.classList.add('open');
     if (head) head.setAttribute('aria-expanded', 'true');
     if (!menu) return;
