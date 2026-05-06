@@ -521,13 +521,19 @@
     const entries = ADDON_REGISTRY[key];
     if (!entries || !entries.length) return;
     const saved = _loadAddonsState();
-    const bucket = saved[key];
-    if (!bucket) return;
+    const bucket = saved[key] || {};
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
-      if (typeof bucket[entry.node] !== 'boolean') continue;
       const node = _findAddonNodeIn(root, entry.node);
-      if (node) node.visible = !!bucket[entry.node];
+      if (!node) continue;
+      // Locked turrets: force hidden regardless of saved state (so a stale
+      // pre-gate save can't leave a locked turret visible on the ship).
+      const isTurret = /^Turrets_/.test(entry.node);
+      const locked = isTurret && (typeof window.isAddonUnlocked === 'function')
+                      && !window.isAddonUnlocked(entry.node);
+      if (locked) { node.visible = false; continue; }
+      if (typeof bucket[entry.node] !== 'boolean') continue;
+      node.visible = !!bucket[entry.node];
     }
   }
   function _applyAddonsToShip() {
@@ -570,15 +576,46 @@
     });
     if (dirty) _saveAddonsState(saved);
 
+    // Turret addons require an unlock from the mission ladder. Other addons
+    // (Stabilizers, Warp Drive) have no gate and are always unlocked.
+    function _addonUnlockedFor(nodeName) {
+      if (!/^Turrets_/.test(nodeName)) return true;
+      try { return typeof window.isAddonUnlocked === 'function' ? !!window.isAddonUnlocked(nodeName) : false; }
+      catch(_) { return false; }
+    }
+    function _isNewAddon(nodeName) {
+      try {
+        const arr = JSON.parse(localStorage.getItem('jh_new_addons') || '[]') || [];
+        return arr.indexOf(nodeName) >= 0;
+      } catch(_) { return false; }
+    }
+    function _clearNewAddon(nodeName) {
+      try {
+        const arr = JSON.parse(localStorage.getItem('jh_new_addons') || '[]') || [];
+        const next = arr.filter(n => n !== nodeName);
+        localStorage.setItem('jh_new_addons', JSON.stringify(next));
+      } catch(_) {}
+    }
+
     // Powerup-style cards: tap a card to toggle on/off. Active = highlighted.
+    // Locked cards (turrets not yet unlocked) show a LOCKED label and play
+    // the reject blip on tap.
     let html = '';
     entries.forEach(entry => {
       const on = !!bucket[entry.node];
+      const unlocked = _addonUnlockedFor(entry.node);
+      const isNew = unlocked && _isNewAddon(entry.node);
       const nodeName = String(entry.node).replace(/"/g, '&quot;');
       const label = String(entry.label).replace(/</g, '&lt;');
-      html += '<button type="button" class="sr-addon-card'+(on?' active':'')+'" '+
-        'data-addon="'+nodeName+'" aria-pressed="'+(on?'true':'false')+'">'+
+      const cls = 'sr-addon-card'
+        + (on && unlocked ? ' active' : '')
+        + (unlocked ? '' : ' locked')
+        + (isNew ? ' is-new' : '');
+      html += '<button type="button" class="'+cls+'" '+
+        'data-addon="'+nodeName+'" aria-pressed="'+(on && unlocked ?'true':'false')+'"'+
+        (unlocked ? '' : ' aria-disabled="true"')+'>'+
         '<span class="sr-addon-card-name">'+label+'</span>'+
+        (unlocked ? '' : '<span class="sr-addon-card-state">LOCKED</span>')+
       '</button>';
     });
     list.innerHTML = html;
@@ -587,6 +624,13 @@
         const k = _currentAddonsKey();
         if (!k) return;
         const n = btn.dataset.addon;
+        if (btn.classList.contains('locked')) {
+          try { if (typeof window.playReject === 'function') window.playReject(); } catch(_){}
+          return;
+        }
+        // Clear NEW flag the first time the player taps the card.
+        _clearNewAddon(n);
+        btn.classList.remove('is-new');
         const s = _loadAddonsState();
         if (!s[k]) s[k] = {};
         const next = !s[k][n];

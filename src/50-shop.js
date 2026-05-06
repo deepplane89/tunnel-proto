@@ -377,6 +377,11 @@ function openShopDetail(id) {
   const maxed = tier >= (up.maxTier || 5);
   const canAfford = cost !== null && _totalCoins >= cost;
   const color = isPowerup ? up.color : '#0af';
+  // Laser tier gate — next tier locked unless required turret addon is unlocked.
+  const _laserGateNode = (id === 'laser' && typeof window.laserTierAddonGate === 'function')
+    ? window.laserTierAddonGate(tier) : null;
+  const _laserGateLocked = !!(_laserGateNode && typeof window.isAddonUnlocked === 'function' && !window.isAddonUnlocked(_laserGateNode));
+  const _laserGateLabel = (_laserGateLocked && window.ADDON_LABELS) ? (window.ADDON_LABELS[_laserGateNode] || _laserGateNode) : null;
 
   let tiersHTML = '';
   const tiers = isPowerup ? up.tiers : up.tiers.map((t, i) => ({ desc: t }));
@@ -400,6 +405,11 @@ function openShopDetail(id) {
     <div class="shop-detail-pips">${renderPips(tier, color)}</div>
     <div class="shop-detail-tiers">${tiersHTML}</div>
     ${maxed ? '<div class="shop-detail-maxed">FULLY UPGRADED</div>' :
+      _laserGateLocked ?
+        `<button class="btn-space btn-upgrade shop-upgrade-btn disabled" id="shop-buy-btn" style="--up-color:${color}" aria-disabled="true">
+          LOCKED — EQUIP ${_laserGateLabel}
+        </button>
+        <div class="shop-detail-gate-hint">Unlock <b>${_laserGateLabel}</b> in the mission ladder to upgrade further.</div>` :
       `<button class="btn-space btn-upgrade shop-upgrade-btn${canAfford ? '' : ' disabled'}" id="shop-buy-btn" style="--up-color:${color}">
         UPGRADE <img src="assets/images/single-coin-icon.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> ${cost}
       </button>`}
@@ -411,6 +421,11 @@ function openShopDetail(id) {
   if (!maxed) {
     const buyBtn = document.getElementById('shop-buy-btn');
     if (buyBtn) {
+      if (_laserGateLocked) {
+        _tapBind(buyBtn, () => {
+          try { if (typeof window.playReject === 'function') window.playReject(); } catch(_){}
+        });
+      } else
       _tapBind(buyBtn, () => {
         if (purchaseUpgrade(id)) {
           // Animate purchase

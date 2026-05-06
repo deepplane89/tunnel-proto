@@ -833,6 +833,12 @@ function purchaseUpgrade(id) {
   const tier = loadUpgradeTier(id);
   const maxTier = (POWERUP_UPGRADES[id] && POWERUP_UPGRADES[id].maxTier) || 5;
   if (tier >= maxTier) return false;
+  // Laser tier upgrades are gated on having unlocked the corresponding
+  // turret addon. Without the turret, the next tier is locked.
+  if (id === 'laser') {
+    const gateNode = laserTierAddonGate(tier);
+    if (gateNode && !isAddonUnlocked(gateNode)) return false;
+  }
   const cost = getUpgradeCost(id, tier);
   if (!cost) return false;
   const wallet = loadCoinWallet();
@@ -864,6 +870,52 @@ function saveMissionFlags(flags) {
 }
 function loadFuelCells() { return parseInt(window._LS.getItem(FUELCELL_KEY) || '0', 10); }
 function saveFuelCells(n) { window._LS.setItem(FUELCELL_KEY, String(n)); }
+
+// ── Addon unlocks (turrets etc) ──
+// Tracks which ship-addon mesh nodes the player has unlocked via the mission
+// ladder. Locked addons appear greyed-out in Showroom and cannot be toggled
+// on. Laser tier upgrades in the shop are gated on the corresponding turret
+// addon being unlocked (T1→T2 needs Turrets_001, T3→T4 needs Turrets_002,
+// T5 needs Turrets_003).
+const UNLOCKED_ADDONS_KEY = 'jh_unlocked_addons';
+const NEW_ADDONS_KEY      = 'jh_new_addons';
+function loadUnlockedAddons() {
+  try { return JSON.parse(window._LS.getItem(UNLOCKED_ADDONS_KEY) || '[]') || []; }
+  catch(_) { return []; }
+}
+function saveUnlockedAddons(arr) {
+  try { window._LS.setItem(UNLOCKED_ADDONS_KEY, JSON.stringify(arr || [])); } catch(_){}
+}
+function isAddonUnlocked(node) {
+  return loadUnlockedAddons().indexOf(node) >= 0;
+}
+window.isAddonUnlocked = isAddonUnlocked;
+function loadNewAddons() {
+  try { return JSON.parse(window._LS.getItem(NEW_ADDONS_KEY) || '[]') || []; }
+  catch(_) { return []; }
+}
+function saveNewAddons(arr) {
+  try { window._LS.setItem(NEW_ADDONS_KEY, JSON.stringify(arr || [])); } catch(_){}
+}
+
+// Returns the turret addon node required to upgrade laser past `currentTier`,
+// or null if no gate applies.
+//   Tier 1 → Tier 2 : needs Turrets_001 (Laser System I)
+//   Tier 3 → Tier 4 : needs Turrets_002 (Laser System II)
+//   Tier 4 → Tier 5 : needs Turrets_003 (Laser System III)
+function laserTierAddonGate(currentTier) {
+  if (currentTier === 1) return 'Turrets_001';
+  if (currentTier === 3) return 'Turrets_002';
+  if (currentTier === 4) return 'Turrets_003';
+  return null;
+}
+window.laserTierAddonGate = laserTierAddonGate;
+const ADDON_LABELS = {
+  'Turrets_001': 'LASER SYSTEM I',
+  'Turrets_002': 'LASER SYSTEM II',
+  'Turrets_003': 'LASER SYSTEM III',
+};
+window.ADDON_LABELS = ADDON_LABELS;
 
 // ── HEAD START ──
 const FREE_HS_KEY = 'jetslide_free_headstarts';
@@ -902,6 +954,7 @@ const MISSION_LADDER = [
   { type:'mission', id:'runs5', desc:'Complete 5 runs', check:(r,lt)=>lt.runs>=5 },
   { type:'mission', id:'score7k', desc:'Score 7,000+ in one run', check:(r)=>r.score>=7000 },
   { type:'reward', reward:{ kind:'unlock', powerup:'laser', label:'Unlock LASER', coins:250 } },
+  { type:'reward', reward:{ kind:'addon', node:'Turrets_001', label:'Unlock LASER SYSTEM I (T2)' } },
   { type:'reward', reward:{ kind:'thruster', presetKey:'short', label:'Unlock SHORT Thruster' } },
   { type:'mission', id:'coins50', desc:'Collect 50 coins in one run', check:(r)=>r.coins>=50 },
   { type:'mission', id:'pu3', desc:'Collect 3 powerups in one run', check:(r)=>r.powerups>=3 },
@@ -926,6 +979,7 @@ const MISSION_LADDER = [
   { type:'mission', id:'laser3', desc:'Use laser 3 times in one run', check:(r)=>r.lasers>=3 },
   { type:'mission', id:'coins150', desc:'Collect 150 coins in one run', check:(r)=>r.coins>=150 },
   { type:'reward', reward:{ kind:'unlock', powerup:'magnet', label:'Unlock MAGNET', fuelcells:150 } },
+  { type:'reward', reward:{ kind:'addon', node:'Turrets_002', label:'Unlock LASER SYSTEM II (T4)' } },
   { type:'reward', reward:{ kind:'thruster', presetKey:'fatIon', label:'Unlock FAT ION Thruster' } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'orange', label:'Unlock EMBER Thruster Color' } },
   { type:'mission', id:'ltcoins2k', desc:'Collect 2,000 total coins', check:(r,lt)=>lt.coins>=2000 },
@@ -953,6 +1007,7 @@ const MISSION_LADDER = [
   { type:'mission', id:'score80k', desc:'Score 80,000+ in one run', check:(r)=>r.score>=80000 },
   { type:'mission', id:'level15', desc:'Reach Level 15 in one run', check:(r)=>r.level>=15 },
   { type:'reward', reward:{ kind:'thruster', presetKey:'plasma', label:'Unlock PLASMA Thruster' } },
+  { type:'reward', reward:{ kind:'addon', node:'Turrets_003', label:'Unlock LASER SYSTEM III (T5)' } },
   { type:'mission', id:'drtier4', desc:'Reach speed tier 4 in DR', check:(r)=>r.isDR&&r.drTier>=4 },
   { type:'reward', reward:{ kind:'fuelcells', amount:300, label:'300 Fuel Cells', coins:1500, xp:400 } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'violet', label:'Unlock VIOLET Thruster Color' } },
@@ -983,7 +1038,7 @@ const MISSION_LADDER = [
   { type:'reward', reward:{ kind:'fuelcells', amount:1000, label:'1,000 Fuel Cells', coins:5000, xp:1000 } },
 ];
 
-const REWARD_COLORS = { fuelcells:'#4488ff', coins:'#ffcc00', stat:'#00eeff', unlock:'#44ff88', thruster:'#ff66bb', thrustercolor:'#ff66bb' };
+const REWARD_COLORS = { fuelcells:'#4488ff', coins:'#ffcc00', stat:'#00eeff', unlock:'#44ff88', addon:'#44ff88', thruster:'#ff66bb', thrustercolor:'#ff66bb' };
 
 // ═══════════════════════════════════════════════════
 //  BANNER TOAST SYSTEM
@@ -1054,6 +1109,19 @@ function applyReward(r) {
     const unlocked = JSON.parse(window._LS.getItem('jetslide_pu_unlocked') || '["shield"]');
     if (!unlocked.includes(r.powerup)) unlocked.push(r.powerup);
     window._LS.setItem('jetslide_pu_unlocked', JSON.stringify(unlocked));
+    if (r.fuelcells) saveFuelCells(loadFuelCells() + r.fuelcells);
+    if (r.coins) { saveCoinWallet(loadCoinWallet() + r.coins); _totalCoins = loadCoinWallet(); updateTitleCoins(); }
+  }
+  // Ship add-on (turret) unlock — adds the mesh node to the unlocked-addons
+  // set so it can be toggled in the Showroom and unlocks the corresponding
+  // laser tier upgrade in the shop.
+  if (r.kind === 'addon' && r.node) {
+    const ua = loadUnlockedAddons();
+    if (ua.indexOf(r.node) < 0) ua.push(r.node);
+    saveUnlockedAddons(ua);
+    const na = loadNewAddons();
+    if (na.indexOf(r.node) < 0) na.push(r.node);
+    saveNewAddons(na);
     if (r.fuelcells) saveFuelCells(loadFuelCells() + r.fuelcells);
     if (r.coins) { saveCoinWallet(loadCoinWallet() + r.coins); _totalCoins = loadCoinWallet(); updateTitleCoins(); }
   }
@@ -1365,6 +1433,10 @@ function claimReward(rungIndex, clickEvent) {
   } else if (r.kind === 'unlock') {
     color = REWARD_COLORS.unlock; icon = '\uD83D\uDD13'; dest = '#shop-btn'; count = 20;
     window._LS.setItem('jetslide_shop_new', '1'); // flag for shop NEW badge
+  } else if (r.kind === 'addon') {
+    color = REWARD_COLORS.unlock; icon = '\uD83D\uDD13'; dest = '#title-thrusters-btn'; count = 20;
+    window._LS.setItem('jetslide_thrusters_new', '1'); // flag for garage NEW badge
+    window._LS.setItem('jetslide_shop_new', '1');     // flag for shop NEW badge (laser tier unblocked)
   } else if (r.kind === 'stat') {
     color = '#00eeff'; icon = '\u2605'; dest = '#missions-fuel-count'; count = 14;
   } else if (r.kind === 'thruster' || r.kind === 'thrustercolor') {
@@ -1446,7 +1518,7 @@ function renderLadder() {
       const isNext = !earned && !claimable && (i > 0 && MISSION_LADDER[i - 1].type === 'mission' && i - 1 === pos);
       const cls = earned ? 'earned' : claimable ? 'claimable' : isNext ? 'next' : 'locked';
       const color = REWARD_COLORS[rung.reward.kind] || '#fff';
-      const icon = rung.reward.kind === 'fuelcells' ? _FUEL_SVG : rung.reward.kind === 'coins' ? '\u2B21' : rung.reward.kind === 'unlock' ? '\uD83D\uDD13' : (rung.reward.kind === 'thruster' || rung.reward.kind === 'thrustercolor') ? '\u25B2' : '\u2605';
+      const icon = rung.reward.kind === 'fuelcells' ? _FUEL_SVG : rung.reward.kind === 'coins' ? '\u2B21' : (rung.reward.kind === 'unlock' || rung.reward.kind === 'addon') ? '\uD83D\uDD13' : (rung.reward.kind === 'thruster' || rung.reward.kind === 'thrustercolor') ? '\u25B2' : '\u2605';
       return `<div class="ladder-rung reward ${cls}" data-rung="${i}" style="--reward-color:${color}">
         ${icon} ${rung.reward.label}
         ${claimable ? '<span class="claim-tap">TAP TO COLLECT</span>' : ''}
