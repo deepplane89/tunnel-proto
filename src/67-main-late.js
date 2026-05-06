@@ -1403,6 +1403,10 @@ function _drSequencerTick(dt) {
 
   // ─── CORRIDOR BOSS: activate family, advance by time (if duration set) or row completion ───
   if (tp === 'corridor') {
+    // Stop random/structured spawning for the entire corridor stage — prior
+    // stage's spawn mode (e.g. 'cones' from S1) carries over by default and
+    // would keep spawning cones DURING the lightning canyon if not cleared.
+    state._seqSpawnMode = 'none';
     if (!state._seqCorridorStarted) {
       state._seqCorridorStarted = true;
       clearAllCorridorFlags();
