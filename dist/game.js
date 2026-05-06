@@ -11538,7 +11538,8 @@ function _initSFXBuffers() {
   _loadSFXBuffer('argon-ambient',   './assets/audio/argon-ambient.mp3');
   // Laser machine-gun: one-shot per fire-rate tick instead of looping the whole clip.
   _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
-  _loadSFXBuffer('shop-purchase',   './assets/audio/shop_purchase.mp3');
+  // Shop tier-upgrade SFX — VR transform sweep (replaces the VR_compute beep).
+  _loadSFXBuffer('shop-purchase',   './assets/audio/vr-transform-powerup.mp3');
   _loadSFXBuffer('reject',          './assets/audio/reject.mp3');
   // Title-screen menu taps + Exit/Resume + Garage open/close on title.
   _loadSFXBuffer('menu-cycle',      './assets/audio/vr-transform-clicker.mp3');
@@ -11911,11 +11912,13 @@ function _playAsteroidImpact() {
 
 function playPickup(typeIdx) {
   if (!audioCtx || state.muted) return;
-  // Smash-through powerup sound — single VR transform clip. Synth tone layer
-  // and old powerup-burst layer are muted per design (only this clip plays).
+  const freqs = [880, 1100, 660, 990, 770, 660];
+  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.45);
+  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.35), 80);
+  // Quiet electron-burst layer on power-up smash.
   const _pb = document.getElementById('powerup-burst-sfx');
   if (_pb) {
-    try { _pb.currentTime = 0; _pb.volume = 0.85; _pb.play().catch(() => {}); } catch (_) {}
+    try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {}
   }
 }
 

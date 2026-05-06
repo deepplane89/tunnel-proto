@@ -180,7 +180,8 @@ function _initSFXBuffers() {
   _loadSFXBuffer('argon-ambient',   './assets/audio/argon-ambient.mp3');
   // Laser machine-gun: one-shot per fire-rate tick instead of looping the whole clip.
   _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
-  _loadSFXBuffer('shop-purchase',   './assets/audio/shop_purchase.mp3');
+  // Shop tier-upgrade SFX — VR transform sweep (replaces the VR_compute beep).
+  _loadSFXBuffer('shop-purchase',   './assets/audio/vr-transform-powerup.mp3');
   _loadSFXBuffer('reject',          './assets/audio/reject.mp3');
   // Title-screen menu taps + Exit/Resume + Garage open/close on title.
   _loadSFXBuffer('menu-cycle',      './assets/audio/vr-transform-clicker.mp3');
