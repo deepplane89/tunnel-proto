@@ -6826,6 +6826,44 @@ normal = _dbn;`;
   // ── TITLE SHIP PREVIEW: clone into separate titleScene ──────────────
   initTitleShipPreview(model);
 
+  // ── PREWARM cone obstacle shaders ─────────────────────────
+  // iOS Safari can stall 0.5–3s on first-render shader compile + texture
+  // upload (Metal translation, no warm cache after page reload). Cones
+  // use a custom ShaderMaterial (3 color variants) and pool meshes stay
+  // .visible=false until first spawnObstacles(), so the compile lands
+  // mid-gameplay at S1_CONES launch — manifests as "massive delay before
+  // first random cone spawn, eventually they all flood in". Pre-render
+  // each variant once here (after pool is built, before title interactive)
+  // so the compile cost is paid during the loading screen instead.
+  // Pattern mirrors _canyonPrewarm() / _drPrewarm at 67-main-late.js:1006.
+  try {
+    if (typeof renderer !== 'undefined' && typeof obstaclePool !== 'undefined' && obstaclePool.length > 0) {
+      const _coneWarmScene = new THREE.Scene();
+      const _coneWarmCam   = new THREE.PerspectiveCamera();
+      const _seenMats = new Set();
+      // Walk pool, sample ONE mesh per unique material (3 cone color variants).
+      // ShaderMaterial cache key is the program; one proxy per material is
+      // sufficient to force the compile.
+      for (const grp of obstaclePool) {
+        if (!grp || !grp.userData || !grp.userData._meshes) continue;
+        for (const m of grp.userData._meshes) {
+          if (!m.material || _seenMats.has(m.material)) continue;
+          _seenMats.add(m.material);
+          _coneWarmScene.add(new THREE.Mesh(m.geometry, m.material));
+        }
+      }
+      renderer.compile(_coneWarmScene, _coneWarmCam);
+      // Don't dispose proxy geos/mats — they reference the live pool's
+      // geometry/material instances still in active use.
+      if (window._perfDiag && typeof window._perfDiag.tag === 'function') {
+        window._perfDiag.tag('cone_prewarm', _seenMats.size + 'mats');
+      }
+      console.log('[CONE-PREWARM] compiled', _seenMats.size, 'cone material variants');
+    }
+  } catch (err) {
+    console.warn('[CONE-PREWARM] failed:', err && err.message);
+  }
+
   // Boot gate: ship is the gating asset — resolve last
   if (typeof _shipLoadResolve === 'function') _shipLoadResolve();
 });
