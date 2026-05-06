@@ -18183,6 +18183,8 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
+  // Release the screen wake lock — not needed on title/garage.
+  try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Release the thruster color lock so the title vibe (and the title
   // thruster panel preview) can repaint the thruster color again.
   window._thrusterColorLocked = false;
@@ -20365,6 +20367,9 @@ const DEATH_RUN_VIBES = [
 
 function startDeathRun() {
   clearMusicTimers();
+  // Keep iOS from dimming/sleeping the screen during the run. Released on death
+  // / return-to-title; re-acquired automatically on visibilitychange resume.
+  try { window._jhWakeLock && window._jhWakeLock.acquire(); } catch(_) {}
   // Tell startGame() to skip the L1 cinematic — death run has its own prologue
   _skipL1Intro = true;
   startGame();
@@ -22863,6 +22868,8 @@ function killPlayer() {
                            : null;
 
   state.phase = 'dead';
+  // Release the screen wake lock on death — game-over screen doesn't need it.
+  try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Defensive: release transition reentry locks so an in-flight startGame /
   // retry sweep doesn't keep them latched if death races the transition.
   _gameStarting = false;
@@ -26211,6 +26218,9 @@ document.addEventListener('visibilitychange', () => {
     if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
       audioCtx.resume().catch(() => {});
     }
+    // Re-acquire screen wake lock if we were mid-run when the tab went hidden
+    // (browser auto-releases on hidden; iOS Safari requires re-request on visible).
+    try { window._jhWakeLock && window._jhWakeLock.reacquireIfWanted(); } catch(_) {}
     // Long-background resume: iOS may have evicted the WebGL program cache
     // even without firing webglcontextlost. Reprewarm under a tiny overlay
     // so the user doesn't see first-render shader stalls (first cone delay,
@@ -32579,6 +32589,49 @@ window._jhResumeOverlay = (function _resumeOverlayFactory() {
       el.style.opacity = '0';
       el.style.pointerEvents = 'none';
     }
+  };
+})();
+
+// ── SCREEN WAKE LOCK ──
+// Prevent iOS from dimming/sleeping the screen during gameplay. Safari 16.4+
+// supports the standard Wake Lock API. The lock is auto-released when the
+// tab goes hidden, so we re-acquire on visibilitychange. We only hold the
+// lock during active runs — not on title/garage — to avoid wasting battery
+// while the user browses menus.
+window._jhWakeLock = (function _wakeLockFactory() {
+  let sentinel = null;
+  let wantLock = false; // user-intent: are we mid-run and want the screen on?
+  const supported = (typeof navigator !== 'undefined' && 'wakeLock' in navigator);
+  async function _request() {
+    if (!supported) return;
+    if (document.hidden) return; // request will reject NotAllowedError when hidden
+    if (sentinel && !sentinel.released) return; // already held
+    try {
+      sentinel = await navigator.wakeLock.request('screen');
+      sentinel.addEventListener('release', () => {
+        // Browser auto-released (tab hidden, low battery, etc.). Clear the
+        // sentinel so the next visibilitychange/visible can re-request.
+        sentinel = null;
+      });
+    } catch (err) {
+      // NotAllowedError: page hidden, no user gesture yet, low battery.
+      // Non-fatal — visibilitychange will retry on next foreground.
+      sentinel = null;
+    }
+  }
+  async function _release() {
+    if (sentinel && !sentinel.released) {
+      try { await sentinel.release(); } catch (_) {}
+    }
+    sentinel = null;
+  }
+  return {
+    acquire() { wantLock = true; _request(); },
+    release() { wantLock = false; _release(); },
+    // Called from visibilitychange resume — re-acquires only if user-intent
+    // is still set (i.e. we were mid-run when the tab went hidden).
+    reacquireIfWanted() { if (wantLock) _request(); },
+    isWanted() { return wantLock; }
   };
 })();
 

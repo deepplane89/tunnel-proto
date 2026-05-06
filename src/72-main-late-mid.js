@@ -122,6 +122,9 @@ document.addEventListener('visibilitychange', () => {
     if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
       audioCtx.resume().catch(() => {});
     }
+    // Re-acquire screen wake lock if we were mid-run when the tab went hidden
+    // (browser auto-releases on hidden; iOS Safari requires re-request on visible).
+    try { window._jhWakeLock && window._jhWakeLock.reacquireIfWanted(); } catch(_) {}
     // Long-background resume: iOS may have evicted the WebGL program cache
     // even without firing webglcontextlost. Reprewarm under a tiny overlay
     // so the user doesn't see first-render shader stalls (first cone delay,

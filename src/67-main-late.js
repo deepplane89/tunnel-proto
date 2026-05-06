@@ -711,6 +711,9 @@ const DEATH_RUN_VIBES = [
 
 function startDeathRun() {
   clearMusicTimers();
+  // Keep iOS from dimming/sleeping the screen during the run. Released on death
+  // / return-to-title; re-acquired automatically on visibilitychange resume.
+  try { window._jhWakeLock && window._jhWakeLock.acquire(); } catch(_) {}
   // Tell startGame() to skip the L1 cinematic — death run has its own prologue
   _skipL1Intro = true;
   startGame();
@@ -3209,6 +3212,8 @@ function killPlayer() {
                            : null;
 
   state.phase = 'dead';
+  // Release the screen wake lock on death — game-over screen doesn't need it.
+  try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Defensive: release transition reentry locks so an in-flight startGame /
   // retry sweep doesn't keep them latched if death races the transition.
   _gameStarting = false;

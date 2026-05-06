@@ -84,6 +84,49 @@ window._jhResumeOverlay = (function _resumeOverlayFactory() {
   };
 })();
 
+// ── SCREEN WAKE LOCK ──
+// Prevent iOS from dimming/sleeping the screen during gameplay. Safari 16.4+
+// supports the standard Wake Lock API. The lock is auto-released when the
+// tab goes hidden, so we re-acquire on visibilitychange. We only hold the
+// lock during active runs — not on title/garage — to avoid wasting battery
+// while the user browses menus.
+window._jhWakeLock = (function _wakeLockFactory() {
+  let sentinel = null;
+  let wantLock = false; // user-intent: are we mid-run and want the screen on?
+  const supported = (typeof navigator !== 'undefined' && 'wakeLock' in navigator);
+  async function _request() {
+    if (!supported) return;
+    if (document.hidden) return; // request will reject NotAllowedError when hidden
+    if (sentinel && !sentinel.released) return; // already held
+    try {
+      sentinel = await navigator.wakeLock.request('screen');
+      sentinel.addEventListener('release', () => {
+        // Browser auto-released (tab hidden, low battery, etc.). Clear the
+        // sentinel so the next visibilitychange/visible can re-request.
+        sentinel = null;
+      });
+    } catch (err) {
+      // NotAllowedError: page hidden, no user gesture yet, low battery.
+      // Non-fatal — visibilitychange will retry on next foreground.
+      sentinel = null;
+    }
+  }
+  async function _release() {
+    if (sentinel && !sentinel.released) {
+      try { await sentinel.release(); } catch (_) {}
+    }
+    sentinel = null;
+  }
+  return {
+    acquire() { wantLock = true; _request(); },
+    release() { wantLock = false; _release(); },
+    // Called from visibilitychange resume — re-acquires only if user-intent
+    // is still set (i.e. we were mid-run when the tab went hidden).
+    reacquireIfWanted() { if (wantLock) _request(); },
+    isWanted() { return wantLock; }
+  };
+})();
+
 // ── WEBGL CONTEXT LOSS RECOVERY ──
 // iOS Safari can drop the GL context after long backgrounding, OS memory
 // pressure, or thermal events. When that happens every compiled shader is

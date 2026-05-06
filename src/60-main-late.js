@@ -136,6 +136,8 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
+  // Release the screen wake lock — not needed on title/garage.
+  try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Release the thruster color lock so the title vibe (and the title
   // thruster panel preview) can repaint the thruster color again.
   window._thrusterColorLocked = false;
