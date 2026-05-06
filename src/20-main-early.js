@@ -6645,7 +6645,15 @@ function applyTitleSkin(skinIndex) {
 
 // ── SKIN SYSTEM: applySkin function (uses _prebuiltSkins declared above gltf callback) ───
 function applySkin(skinIndex) {
-  if (!window._shipModel || !_prebuiltSkins.length) return;
+  try {
+    const _stack = (new Error()).stack ? (new Error()).stack.split('\n').slice(2,6).map(s=>s.trim().replace(/^at\s+/,'').replace(/\s*\(.*$/,'')).join(' ← ') : '?';
+    const _selStored = (typeof loadSkinData === 'function') ? loadSkinData().selected : '?';
+    const _altKeyNow = (typeof _altShipModel !== 'undefined' && _altShipModel && _altShipModel.userData) ? _altShipModel.userData._cacheKey : 'unknown';
+    const _cacheKeys = (typeof _altShipCache !== 'undefined') ? Object.keys(_altShipCache).join(',') : '?';
+    console.log('[DIAG-PLAY] applySkin(' + skinIndex + ') stored=' + _selStored + ' activeSkinIdxBefore=' + (typeof activeSkinIdx !== 'undefined' ? activeSkinIdx : '?') + ' _altShipModelKey=' + _altKeyNow + ' cache=[' + _cacheKeys + '] phase=' + ((typeof state !== 'undefined' && state) ? state.phase : '?'));
+    console.log('[DIAG-PLAY]   stack: ' + _stack);
+  } catch(_){}
+  if (!window._shipModel || !_prebuiltSkins.length) { try { console.log('[DIAG-PLAY] applySkin EARLY-RETURN ship=' + !!window._shipModel + ' prebuilt=' + (_prebuiltSkins ? _prebuiltSkins.length : 'undef')); } catch(_){} return; }
   if (skinIndex < 0 || skinIndex >= SHIP_SKINS.length) skinIndex = 0;
   activeSkinIdx = skinIndex;
 
@@ -6895,14 +6903,17 @@ function _loadAltShip(glbFile, skinDef, skinIdx, callback) {
   if (_altShipCache[cacheKey]) {
     const cached = _altShipCache[cacheKey];
     _altShipModel = cached.model;
+    try { _altShipModel.userData._cacheKey = cacheKey; } catch(_){}
     _altShipMixer = cached.mixer || null;
     _altShipClips = cached.clips || {};
     _altShipCurrentFile = glbFile;
     _applyGlbConfig(skinDef && skinDef.glbConfig);
     _updateAltShipTransform();
+    try { console.log('[DIAG-PLAY] _loadAltShip CACHE-HIT key=' + cacheKey + ' model=' + (cached.model.uuid||'?').slice(0,8)); } catch(_){}
     if (callback) callback();
     return;
   }
+  try { console.log('[DIAG-PLAY] _loadAltShip CACHE-MISS key=' + cacheKey + ' starting GLTFLoader'); } catch(_){}
   const _skinIdxForLoad = skinIdx;
   const loader = new GLTFLoader();
   loader.load('./assets/ships/' + glbFile, (gltf) => {
@@ -7098,6 +7109,7 @@ function _loadAltShip(glbFile, skinDef, skinIdx, callback) {
       if (mixer) mixer.update(0);
     }
     _altShipCache[cacheKey] = { model, mixer, clips };
+    try { model.userData._cacheKey = cacheKey; } catch(_){}
     try {
       let _h = 0; let _p = 0; const _slots = [];
       model.traverse(c => { if (!c.isMesh) return; const isHolo = !!(c.material && c.material.uniforms && c.material.uniforms.hologramColor); if (isHolo) _h++; else _p++; if (_slots.length < 8) _slots.push(((c.userData && c.userData._origMatName) || '?') + ':' + (isHolo ? 'H' : 'P')); });
@@ -7143,14 +7155,18 @@ function _applyOrientationNozzles() {
 }
 
 function _showAltShip() {
-  if (!_altShipModel) return;
+  if (!_altShipModel) { try { console.log('[DIAG-PLAY] _showAltShip NO-MODEL'); } catch(_){} return; }
   // Hide default model
   if (window._shipModel) window._shipModel.visible = false;
   // Hide all other cached alt models
+  let _showKey = 'unknown';
+  const _hidKeys = [];
   for (const key in _altShipCache) {
-    if (_altShipCache[key].model !== _altShipModel) _altShipCache[key].model.visible = false;
+    if (_altShipCache[key].model !== _altShipModel) { _altShipCache[key].model.visible = false; _hidKeys.push(key); }
+    else _showKey = key;
   }
   _altShipModel.visible = true;
+  try { console.log('[DIAG-PLAY] _showAltShip showing=' + _showKey + ' hid=[' + _hidKeys.join(',') + '] activeSkinIdx=' + activeSkinIdx); } catch(_){}
   _altShipActive = true;
   // Override nozzle offsets for thrusters
   NOZZLE_OFFSETS[0].copy(_altShip.nozzleL);
