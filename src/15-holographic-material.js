@@ -140,11 +140,15 @@ function _registerHoloMaterial(mat) {
 // Remove a holo material from the registry + dispose its GPU resources.
 // Used by the title-ship swap path so orphan holos from previous skins
 // don't keep ticking + don't leave stale uniforms attached to anything.
+// Remove a holo material from the tick registry. We intentionally do NOT
+// call mat.dispose() here — in this codebase holo materials get cloned and
+// shared between the title-scene preview and gameplay alt-ship cache, so
+// disposing one can break a still-rendering instance. Removing from the
+// registry is enough to stop the orphan tick + tuner broadcasts.
 function _unregisterHoloMaterial(mat) {
   if (!mat) return;
   const i = _holoMaterials.indexOf(mat);
   if (i !== -1) _holoMaterials.splice(i, 1);
-  try { if (typeof mat.dispose === 'function') mat.dispose(); } catch(_){}
 }
 function _tickHoloMaterials(t) {
   for (let i = 0; i < _holoMaterials.length; i++) {

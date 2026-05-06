@@ -649,11 +649,15 @@ function _registerHoloMaterial(mat) {
 // Remove a holo material from the registry + dispose its GPU resources.
 // Used by the title-ship swap path so orphan holos from previous skins
 // don't keep ticking + don't leave stale uniforms attached to anything.
+// Remove a holo material from the tick registry. We intentionally do NOT
+// call mat.dispose() here — in this codebase holo materials get cloned and
+// shared between the title-scene preview and gameplay alt-ship cache, so
+// disposing one can break a still-rendering instance. Removing from the
+// registry is enough to stop the orphan tick + tuner broadcasts.
 function _unregisterHoloMaterial(mat) {
   if (!mat) return;
   const i = _holoMaterials.indexOf(mat);
   if (i !== -1) _holoMaterials.splice(i, 1);
-  try { if (typeof mat.dispose === 'function') mat.dispose(); } catch(_){}
 }
 function _tickHoloMaterials(t) {
   for (let i = 0; i < _holoMaterials.length; i++) {
@@ -7106,23 +7110,18 @@ function applyTitleSkin(skinIndex) {
           if (Array.isArray(c.material)) c.material.forEach(_collect);
           else _collect(c.material);
         });
-        let _sweptHolo = 0; let _disposedMat = 0; let _skippedShared = 0;
+        // Holos only: unregister from the tick loop so orphans stop running
+        // and stop receiving tuner broadcasts. Do NOT dispose materials,
+        // geometries, or textures — they're potentially shared with the
+        // gameplay alt-ship cache and disposing them breaks the cached source.
+        let _sweptHolo = 0;
         for (const m of _mats) {
-          // Only dispose session-owned materials. Materials without _jhSession
-          // are cache-shared (Material.clone() refs textures from the cache;
-          // disposing the material itself is technically safe but leaves
-          // ambiguity — skip to be safe).
-          const _session = !!(m.userData && m.userData._jhSession);
-          const _isHolo = !!(m.uniforms && m.uniforms.hologramColor);
-          if (!_session && !_isHolo) { _skippedShared++; continue; }
-          if (_isHolo && typeof _unregisterHoloMaterial === 'function') {
-            _unregisterHoloMaterial(m); _sweptHolo++; // also disposes
-          } else {
-            try { if (typeof m.dispose === 'function') { m.dispose(); _disposedMat++; } } catch(_){}
+          if (m.uniforms && m.uniforms.hologramColor && typeof _unregisterHoloMaterial === 'function') {
+            _unregisterHoloMaterial(m); _sweptHolo++;
           }
         }
         const _regAfter = (typeof _holoMaterials !== 'undefined') ? _holoMaterials.length : '?';
-        try { console.log('[DIAG]   ORPHAN-SWEEP holo=' + _sweptHolo + ' mat=' + _disposedMat + ' shared=' + _skippedShared + ' regAfter=' + _regAfter); } catch(_){}
+        try { console.log('[DIAG]   ORPHAN-SWEEP holo=' + _sweptHolo + ' regAfter=' + _regAfter); } catch(_){}
       } catch(e){ try { console.warn('[DIAG] orphan sweep error', e); } catch(_){} }
       const fresh = _newSrc.clone(true);
       // Re-mark mesh slots so material override loop below can find them,
@@ -7196,25 +7195,14 @@ function applyTitleSkin(skinIndex) {
         if (newMat) { mesh.material = newMat; _diagPainted++; if (_diagSlots.length < 6) _diagSlots.push(origName + (newMat.uniforms && newMat.uniforms.hologramColor ? ':holo' : ':pbr')); }
         else { _diagSkipped++; }
       }
-      // If we replaced the old material with a different instance, dispose
-      // the old one. Holos also unregister from the tick registry. The
-      // first paint after a SWAP sees cache-shared materials here — those
-      // are NOT session-owned, so guard with a userData flag set on every
-      // session-created material below. Without that guard, we'd dispose
-      // the cached source's materials and break future swaps to that skin.
-      if (_oldMat && _oldMat !== mesh.material && _oldMat.userData && _oldMat.userData._jhSession) {
-        if (_oldMat.uniforms && _oldMat.uniforms.hologramColor) {
-          if (typeof _unregisterHoloMaterial === 'function') {
-            _unregisterHoloMaterial(_oldMat); _paintReplacedHolos++;
-          }
-        } else {
-          try { _oldMat.dispose(); _paintReplacedHolos++; } catch(_){}
+      // If the OLD mat was a holo and we replaced it with a different
+      // material, unregister it from the tick loop. We do NOT dispose:
+      // the holo may still be referenced by the cached gameplay alt-ship
+      // (Material.clone() in the SWAP path skips holos so they're shared).
+      if (_oldMat && _oldMat !== mesh.material && _oldMat.uniforms && _oldMat.uniforms.hologramColor) {
+        if (typeof _unregisterHoloMaterial === 'function') {
+          _unregisterHoloMaterial(_oldMat); _paintReplacedHolos++;
         }
-      }
-      // Tag this freshly-painted material as session-owned so the next paint
-      // knows it's safe to dispose (vs. a cache-shared material from clone).
-      if (mesh.material && mesh.material !== _oldMat) {
-        try { (mesh.material.userData = mesh.material.userData || {})._jhSession = true; } catch(_){}
       }
       void _diagPainted; void _diagSkipped; void _paintReplacedHolos;
       // BLACK MAMBA (idx 2) extra darkening: ensures hull reads stealth black
