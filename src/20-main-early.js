@@ -6212,6 +6212,26 @@ let _titleSkinOverrides = null;
 // Apply a skin to the title ship clone — maps by mesh name, not uuid
 function applyTitleSkin(skinIndex) {
   if (!_titleShipModel || !_prebuiltSkins.length) return;
+  // ── HOLO GLITCH DIAG ─────────────────────────────────────────────────
+  // Logs every applyTitleSkin entry/exit + holo registry size + ship-tree
+  // mesh count under _titleShipModel. If the glitch correlates with a
+  // double-call within <1 frame, or registry growing every call, or two
+  // ship meshes alive at the same time, we'll see it here.
+  try {
+    const _hcount = (typeof _holoMaterials !== 'undefined' && _holoMaterials.length) | 0;
+    let _meshCount = 0; let _holoMeshCount = 0;
+    if (_titleShipModel) _titleShipModel.traverse(c => {
+      if (c.isMesh) { _meshCount++; if (c.material && c.material.uniforms && c.material.uniforms.hologramColor) _holoMeshCount++; }
+    });
+    let _altMeshCount = 0; let _altHoloMeshCount = 0;
+    if (typeof _altShipModel !== 'undefined' && _altShipModel) _altShipModel.traverse(c => {
+      if (c.isMesh) { _altMeshCount++; if (c.material && c.material.uniforms && c.material.uniforms.hologramColor) _altHoloMeshCount++; }
+    });
+    const _altVis = (typeof _altShipModel !== 'undefined' && _altShipModel) ? _altShipModel.visible : 'n/a';
+    console.log('[HOLO_DIAG] applyTitleSkin', skinIndex, 't=' + performance.now().toFixed(0),
+      'holoReg=' + _hcount, 'titleMesh=' + _meshCount + '(' + _holoMeshCount + 'holo)',
+      'altMesh=' + _altMeshCount + '(' + _altHoloMeshCount + 'holo,vis=' + _altVis + ')');
+  } catch(_){}
   // Clamp out-of-range to default — BUT only when the skin is also missing
   // from SHIP_SKINS. Alt-GLB skins (e.g. MK Runner at idx 4) are valid even
   // though _prebuiltSkins doesn't have an entry for them: their materials
