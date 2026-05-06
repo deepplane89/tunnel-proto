@@ -13790,12 +13790,8 @@ function spawnObstacles() {
     } else if (_density === 'dense') {
       obs = 6; maxObs = 8; gap = 1.0;
     } else if (_density === 'ramp') {
-      // Stage 1 ramp: ONE cone per spawn call (no rows). Intensity comes
-      // entirely from spawn FREQUENCY — the spawner Z-loop tightens
-      // _spawnZBase as _seqRampT01 climbs 0→1, dropping a single staggered
-      // cone on the horizon every few units instead of N at the same Z.
-      // User feedback: rows of 4-5 cones look 'bunched'; single cones at
-      // tight Z spacing read as 'more spawn on the horizon, staggered'.
+      // Stage 1 ramp uses the fast-path block earlier in this function;
+      // these values are unused but kept to satisfy the if/else assignment.
       obs = 1;
       maxObs = 1;
       gap = 1.0;
@@ -13864,14 +13860,45 @@ function spawnObstacles() {
     return; // no power-ups during funnel — stay focused
   }
 
+  // ── S1 RAMP FAST PATH: single-cone staggered scatter ──
+  // Skip ALL the row/predictedX/gap-lane machinery below — it's designed
+  // for multi-cone rows and was making single cones cluster (predictedX
+  // anchored to ship + Array.sort shuffle bias was picking similar lanes
+  // repeatedly, so cones appeared in a vertical column following the
+  // player). Just drop one cone at an absolute-random lane on the full
+  // road, decoupled from the ship's position. The S1 spawner Z-loop
+  // handles cadence (frequency ramp -10 → -3 over the stage).
+  if (state.isDeathRun && state._seqConeDensity === 'ramp') {
+    const _laneIdx = Math.floor(Math.random() * LANE_COUNT);
+    const _laneX = (_laneIdx - (LANE_COUNT - 1) / 2) * LANE_WIDTH;
+    // Skip if cone would land inside an active bonus ring
+    let _inRing = false;
+    for (const br of _bonusRings) {
+      if (br.collected) continue;
+      const dz = Math.abs(br.mesh.position.z - SPAWN_Z);
+      if (dz < _ringTuner.freq * 0.7) {
+        const dx = Math.abs(br.mesh.position.x - _laneX);
+        if (dx < _ringTuner.radius + 0.8) { _inRing = true; break; }
+      }
+    }
+    if (!_inRing) {
+      const _coneType = Math.floor(Math.random() * 3);
+      const _cone = getPooledObstacle(_coneType);
+      if (_cone) {
+        _cone.position.set(_laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
+        _cone.userData.velX = 0;
+        activeObstacles.push(_cone);
+        _spawnLateralEchoes(_laneX, SPAWN_Z, 'cone');
+      }
+    }
+    framesSinceLastPowerup++;
+    return;
+  }
+
   // ── Normal random spawn ──
   // Density ramps with score: starts at base, slowly grows toward a hard cap
   const scoreFactor  = Math.min(state.score / 200, 1.0);
-  const _isRampDensity = state.isDeathRun && state._seqConeDensity === 'ramp';
-  // Don't add the +1 'extraRandom' bump when in ramp mode — ramp explicitly
-  // wants exactly 1 cone per spawn call so the staggered single-cone scatter
-  // reads cleanly. Adding +1 here would give 2-cone rows that look bunched.
-  const extraRandom  = _isRampDensity ? 0 : (Math.random() < (0.5 + scoreFactor * 0.3) ? 1 : 0);
+  const extraRandom  = Math.random() < (0.5 + scoreFactor * 0.3) ? 1 : 0;
   let count          = lvl.obstaclesPerSpawn + extraRandom;
   let clampedCount   = Math.min(count, lvl.maxObstaclesPerSpawn);
 
