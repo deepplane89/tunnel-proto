@@ -27298,6 +27298,22 @@ function startJetLightning() {
 }
 let _godMode      = false; // no damage — plays shield-hit sound on hit instead of killing
 
+// Q hotkey — toggle god mode (no damage; shield-hit sound on impact instead of death)
+(function _setupGodModeHotkey() {
+  document.addEventListener('keydown', e => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (e.key !== 'q' && e.key !== 'Q') return;
+    if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    _godMode = !_godMode;
+    // Brief toast in top-center
+    const _t = document.createElement('div');
+    _t.textContent = _godMode ? 'GOD MODE: ON' : 'GOD MODE: OFF';
+    _t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font:700 18px monospace;color:' + (_godMode ? '#0f8' : '#f88') + ';text-shadow:0 0 8px ' + (_godMode ? '#0f8' : '#f44') + ';background:rgba(0,0,0,0.75);padding:10px 18px;border:1px solid ' + (_godMode ? '#0f8' : '#f88') + ';border-radius:4px;z-index:99999;pointer-events:none;transition:opacity .4s;';
+    document.body.appendChild(_t);
+    setTimeout(() => { _t.style.opacity = '0'; setTimeout(() => _t.remove(), 400); }, 900);
+  });
+})();
+
 // ─── JL Corridor — reusable self-contained corridor obstacle ─────────────────
 // Drives the existing spawnCorridorRow / spawnL4CorridorRow functions
 // independent of level/trigger system. Call _jlStartCorridor('l3' or 'l4').
@@ -31211,11 +31227,12 @@ function buildSkinTunerSliders() {
     gate.setStatus(label || 'CONNECTION ESTABLISHED', 100);
     // Brief beat at 100% so the bar visibly completes, then fade.
     setTimeout(() => {
+      // On mobile, show ACCESS GRANTED gate UNDER the loader before it fades
+      // out so the title screen never becomes visible — the gate covers it.
+      if (_isMobile) _showAccessGate();
       loader.classList.add('hide');
       setTimeout(() => {
         if (loader.parentNode) loader.parentNode.removeChild(loader);
-        // On mobile, show ACCESS GRANTED gate. Desktop falls through to title.
-        if (_isMobile) _showAccessGate();
       }, 700);
     }, 220);
   }

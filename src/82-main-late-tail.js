@@ -71,11 +71,12 @@
     gate.setStatus(label || 'CONNECTION ESTABLISHED', 100);
     // Brief beat at 100% so the bar visibly completes, then fade.
     setTimeout(() => {
+      // On mobile, show ACCESS GRANTED gate UNDER the loader before it fades
+      // out so the title screen never becomes visible — the gate covers it.
+      if (_isMobile) _showAccessGate();
       loader.classList.add('hide');
       setTimeout(() => {
         if (loader.parentNode) loader.parentNode.removeChild(loader);
-        // On mobile, show ACCESS GRANTED gate. Desktop falls through to title.
-        if (_isMobile) _showAccessGate();
       }, 700);
     }, 220);
   }

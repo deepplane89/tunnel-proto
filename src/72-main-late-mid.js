@@ -2515,6 +2515,22 @@ function startJetLightning() {
 }
 let _godMode      = false; // no damage — plays shield-hit sound on hit instead of killing
 
+// Q hotkey — toggle god mode (no damage; shield-hit sound on impact instead of death)
+(function _setupGodModeHotkey() {
+  document.addEventListener('keydown', e => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (e.key !== 'q' && e.key !== 'Q') return;
+    if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    _godMode = !_godMode;
+    // Brief toast in top-center
+    const _t = document.createElement('div');
+    _t.textContent = _godMode ? 'GOD MODE: ON' : 'GOD MODE: OFF';
+    _t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font:700 18px monospace;color:' + (_godMode ? '#0f8' : '#f88') + ';text-shadow:0 0 8px ' + (_godMode ? '#0f8' : '#f44') + ';background:rgba(0,0,0,0.75);padding:10px 18px;border:1px solid ' + (_godMode ? '#0f8' : '#f88') + ';border-radius:4px;z-index:99999;pointer-events:none;transition:opacity .4s;';
+    document.body.appendChild(_t);
+    setTimeout(() => { _t.style.opacity = '0'; setTimeout(() => _t.remove(), 400); }, 900);
+  });
+})();
+
 // ─── JL Corridor — reusable self-contained corridor obstacle ─────────────────
 // Drives the existing spawnCorridorRow / spawnL4CorridorRow functions
 // independent of level/trigger system. Call _jlStartCorridor('l3' or 'l4').
