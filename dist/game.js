@@ -1256,14 +1256,20 @@ const SKIN_LEVEL_UNLOCKS = {
 };
 
 // Ship handling upgrades — drift reduces as player levels up
+// HANDLING_TIERS: player-level reward track. As of 2026-05-06 these tiers no
+// longer affect drift (FLIGHT MODEL presets own drift); they instead grant a
+// startBoost multiplier that increases the run's starting speed. Score ticks
+// scale with live speed, so a higher startBoost = faster score climb too.
+// drift field is kept at 1.0 (stock) on every tier as a defensive default in
+// case any code reads it; getHandlingDrift() now ignores tier.drift entirely.
 const HANDLING_TIERS = [
-  { level: 1,  drift: 1.0,  label: null },              // stock
-  { level: 2,  drift: 0.70, label: 'Hull Stabilized' },
-  { level: 3,  drift: 0.50, label: 'Thrusters Aligned' },
-  { level: 5,  drift: 0.30, label: 'Flight Control Online' },
-  { level: 8,  drift: 0.15, label: 'Advanced Handling' },
-  { level: 14, drift: 0.05, label: 'Precision Flight' },
-  { level: 22, drift: 0.0,  label: 'Full Control' },
+  { level: 1,  drift: 1.0, startBoost: 1.00, label: null },              // stock
+  { level: 2,  drift: 1.0, startBoost: 1.05, label: 'Hull Stabilized' },
+  { level: 3,  drift: 1.0, startBoost: 1.10, label: 'Thrusters Aligned' },
+  { level: 5,  drift: 1.0, startBoost: 1.18, label: 'Flight Control Online' },
+  { level: 8,  drift: 1.0, startBoost: 1.28, label: 'Advanced Handling' },
+  { level: 14, drift: 1.0, startBoost: 1.40, label: 'Precision Flight' },
+  { level: 22, drift: 1.0, startBoost: 1.55, label: 'Full Control' },
 ];
 const HANDLING_UPGRADE_KEY = 'jetslide_handling_claimed';
 
@@ -1322,13 +1328,25 @@ let _maxVelSnap      = 13;   // extra cap added at max level (total = _maxVelBas
 let _funFloorSpeed     = 1.0;  // speed multiplier applied at game start (1.0 = BASE_SPEED, 1.85 = L5)
 let _funFloorIntensity = 0.0;  // 0→1: scales asteroid + lightning frequency down at spawn (0=tuner defaults, 1=max chaos)
 function getHandlingDrift() {
+  // Tier-based drift was decoupled from player handling tiers on 2026-05-06.
+  // Drift is now controlled exclusively by FLIGHT MODEL presets (which pin
+  // _handlingDriftOverride). When no preset is active, drift is fixed at 1.0
+  // (stock) regardless of player level.
   if (_handlingDriftOverride >= 0) return _handlingDriftOverride;
+  return 1.0;
+}
+
+// Returns the starting-speed multiplier granted by the player's current
+// handling tier. Stock = 1.00, Full Control (lvl 22) = 1.55. Applied at
+// _setDRSpeed() in startGame() — also feeds the score tick (which scales with
+// live speed), so higher tiers = faster opening AND faster score climb.
+function getHandlingStartBoost() {
   const level = loadPlayerLevel();
-  let drift = 1.0;
+  let boost = 1.0;
   for (const t of HANDLING_TIERS) {
-    if (level >= t.level) drift = t.drift;
+    if (level >= t.level) boost = t.startBoost;
   }
-  return drift;
+  return boost;
 }
 
 function getPendingHandlingUpgrade() {
@@ -14717,11 +14735,12 @@ function initSkinViewer() {
           // Particle burst toward ship preview
           spawnRewardParticles(labelEl, '#skin-viewer', '#00eeff', '\u2699', 12);
           playRewardSFX();
-          // Show +% handling popup
-          const pctGain = Math.round((1 - tier.drift) * 100);
+          // Show +% start-speed popup (handling tiers grant startBoost as of
+          // 2026-05-06; drift is now flight-model-controlled)
+          const pctGain = Math.round((tier.startBoost - 1) * 100);
           const popup = document.createElement('div');
           popup.className = 'handling-popup';
-          popup.textContent = tier.label + ' \u2022 +' + pctGain + '% HANDLING';
+          popup.textContent = tier.label + ' \u2022 +' + pctGain + '% START SPEED';
           const rect = labelEl.getBoundingClientRect();
           popup.style.left = rect.left + rect.width / 2 + 'px';
           popup.style.top = rect.top - 10 + 'px';
@@ -20362,7 +20381,10 @@ function startDeathRun() {
     state._tutorialStep = 0;
   } else {
     state._tutorialStep = -1; // -1 = waiting for first frame before showing box
-    _setDRSpeed(BASE_SPEED * _funFloorSpeed, 'RUN_START');
+    // Handling tier startBoost (1.00–1.55) applied on top of fun-floor speed.
+    // Higher player handling tier = faster opening + faster score climb (score
+    // tick at line ~4432 multiplies by live speed/BASE_SPEED).
+    _setDRSpeed(BASE_SPEED * _funFloorSpeed * getHandlingStartBoost(), 'RUN_START');
     setTimeout(() => { state._tutorialStep = -0.5; }, 100); // start with rock mounds
   }
   state._tutorialTimer       = 0;
@@ -20527,7 +20549,10 @@ function startDeathRun() {
 
       const firstVibe = DEATH_RUN_VIBES[0];
       const speedIdx = Math.min(firstVibe.speedTier, 4);
-      _setDRSpeed(BASE_SPEED * LEVELS[speedIdx].speedMult, 'RUN_START');
+      // Handling tier startBoost (1.00–1.55 by player level) multiplies the
+      // launch speed. Higher tier = punchier opening + faster score climb
+      // (score tick scales with state.speed/BASE_SPEED).
+      _setDRSpeed(BASE_SPEED * LEVELS[speedIdx].speedMult * getHandlingStartBoost(), 'RUN_START');
       // Opening bonus rings — right in front of ship, fly into them before cones
       _ringRemoveAll();
       _ringSpawnRow(0, true); // spawn close to ship for immediate action
@@ -23992,7 +24017,12 @@ function update(dt) {
   if (!state.introActive) scoreTick += dt;
   if (scoreTick > 0.4) {
     scoreTick = 0;
-    state.score += state.multiplier + getStatValue('scoremult');
+    // Score climb scales with live speed: faster ship = faster counter.
+    // This makes handling-tier startBoost feel rewarding from frame 1, and
+    // also pays out for sequencer speed ramps mid-run. Floor at 1x so a
+    // dipped/slowed ship never tickrates below baseline.
+    const _scoreSpeedMult = Math.max(1.0, state.speed / BASE_SPEED);
+    state.score += (state.multiplier + getStatValue('scoremult')) * _scoreSpeedMult;
     document.getElementById('hud-speed').textContent = `${(effectiveSpeed / BASE_SPEED).toFixed(1)}x`;
     checkLevelUp();
   }
@@ -31250,8 +31280,10 @@ function _ringShowTuner() {
         _handlingLabel.textContent = 'Player level (live)';
       } else {
         const t = HANDLING_TIERS[idx - 1];
+        // tier.drift is fixed at 1.0 since 2026-05-06 (drift now owned by
+        // FLIGHT MODEL presets); this slider still pins it for live preview.
         _handlingDriftOverride = t.drift;
-        _handlingLabel.textContent = (t.label || 'Stock') + ' — drift=' + t.drift;
+        _handlingLabel.textContent = (t.label || 'Stock') + ' — start=' + t.startBoost.toFixed(2) + 'x';
       }
     }, '#0ff'));
 

@@ -1541,8 +1541,10 @@ function _ringShowTuner() {
         _handlingLabel.textContent = 'Player level (live)';
       } else {
         const t = HANDLING_TIERS[idx - 1];
+        // tier.drift is fixed at 1.0 since 2026-05-06 (drift now owned by
+        // FLIGHT MODEL presets); this slider still pins it for live preview.
         _handlingDriftOverride = t.drift;
-        _handlingLabel.textContent = (t.label || 'Stock') + ' — drift=' + t.drift;
+        _handlingLabel.textContent = (t.label || 'Stock') + ' — start=' + t.startBoost.toFixed(2) + 'x';
       }
     }, '#0ff'));
 

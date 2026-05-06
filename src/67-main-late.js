@@ -799,7 +799,10 @@ function startDeathRun() {
     state._tutorialStep = 0;
   } else {
     state._tutorialStep = -1; // -1 = waiting for first frame before showing box
-    _setDRSpeed(BASE_SPEED * _funFloorSpeed, 'RUN_START');
+    // Handling tier startBoost (1.00–1.55) applied on top of fun-floor speed.
+    // Higher player handling tier = faster opening + faster score climb (score
+    // tick at line ~4432 multiplies by live speed/BASE_SPEED).
+    _setDRSpeed(BASE_SPEED * _funFloorSpeed * getHandlingStartBoost(), 'RUN_START');
     setTimeout(() => { state._tutorialStep = -0.5; }, 100); // start with rock mounds
   }
   state._tutorialTimer       = 0;
@@ -964,7 +967,10 @@ function startDeathRun() {
 
       const firstVibe = DEATH_RUN_VIBES[0];
       const speedIdx = Math.min(firstVibe.speedTier, 4);
-      _setDRSpeed(BASE_SPEED * LEVELS[speedIdx].speedMult, 'RUN_START');
+      // Handling tier startBoost (1.00–1.55 by player level) multiplies the
+      // launch speed. Higher tier = punchier opening + faster score climb
+      // (score tick scales with state.speed/BASE_SPEED).
+      _setDRSpeed(BASE_SPEED * LEVELS[speedIdx].speedMult * getHandlingStartBoost(), 'RUN_START');
       // Opening bonus rings — right in front of ship, fly into them before cones
       _ringRemoveAll();
       _ringSpawnRow(0, true); // spawn close to ship for immediate action
@@ -4429,7 +4435,12 @@ function update(dt) {
   if (!state.introActive) scoreTick += dt;
   if (scoreTick > 0.4) {
     scoreTick = 0;
-    state.score += state.multiplier + getStatValue('scoremult');
+    // Score climb scales with live speed: faster ship = faster counter.
+    // This makes handling-tier startBoost feel rewarding from frame 1, and
+    // also pays out for sequencer speed ramps mid-run. Floor at 1x so a
+    // dipped/slowed ship never tickrates below baseline.
+    const _scoreSpeedMult = Math.max(1.0, state.speed / BASE_SPEED);
+    state.score += (state.multiplier + getStatValue('scoremult')) * _scoreSpeedMult;
     document.getElementById('hud-speed').textContent = `${(effectiveSpeed / BASE_SPEED).toFixed(1)}x`;
     checkLevelUp();
   }

@@ -576,14 +576,20 @@ const SKIN_LEVEL_UNLOCKS = {
 };
 
 // Ship handling upgrades — drift reduces as player levels up
+// HANDLING_TIERS: player-level reward track. As of 2026-05-06 these tiers no
+// longer affect drift (FLIGHT MODEL presets own drift); they instead grant a
+// startBoost multiplier that increases the run's starting speed. Score ticks
+// scale with live speed, so a higher startBoost = faster score climb too.
+// drift field is kept at 1.0 (stock) on every tier as a defensive default in
+// case any code reads it; getHandlingDrift() now ignores tier.drift entirely.
 const HANDLING_TIERS = [
-  { level: 1,  drift: 1.0,  label: null },              // stock
-  { level: 2,  drift: 0.70, label: 'Hull Stabilized' },
-  { level: 3,  drift: 0.50, label: 'Thrusters Aligned' },
-  { level: 5,  drift: 0.30, label: 'Flight Control Online' },
-  { level: 8,  drift: 0.15, label: 'Advanced Handling' },
-  { level: 14, drift: 0.05, label: 'Precision Flight' },
-  { level: 22, drift: 0.0,  label: 'Full Control' },
+  { level: 1,  drift: 1.0, startBoost: 1.00, label: null },              // stock
+  { level: 2,  drift: 1.0, startBoost: 1.05, label: 'Hull Stabilized' },
+  { level: 3,  drift: 1.0, startBoost: 1.10, label: 'Thrusters Aligned' },
+  { level: 5,  drift: 1.0, startBoost: 1.18, label: 'Flight Control Online' },
+  { level: 8,  drift: 1.0, startBoost: 1.28, label: 'Advanced Handling' },
+  { level: 14, drift: 1.0, startBoost: 1.40, label: 'Precision Flight' },
+  { level: 22, drift: 1.0, startBoost: 1.55, label: 'Full Control' },
 ];
 const HANDLING_UPGRADE_KEY = 'jetslide_handling_claimed';
 
@@ -642,13 +648,25 @@ let _maxVelSnap      = 13;   // extra cap added at max level (total = _maxVelBas
 let _funFloorSpeed     = 1.0;  // speed multiplier applied at game start (1.0 = BASE_SPEED, 1.85 = L5)
 let _funFloorIntensity = 0.0;  // 0→1: scales asteroid + lightning frequency down at spawn (0=tuner defaults, 1=max chaos)
 function getHandlingDrift() {
+  // Tier-based drift was decoupled from player handling tiers on 2026-05-06.
+  // Drift is now controlled exclusively by FLIGHT MODEL presets (which pin
+  // _handlingDriftOverride). When no preset is active, drift is fixed at 1.0
+  // (stock) regardless of player level.
   if (_handlingDriftOverride >= 0) return _handlingDriftOverride;
+  return 1.0;
+}
+
+// Returns the starting-speed multiplier granted by the player's current
+// handling tier. Stock = 1.00, Full Control (lvl 22) = 1.55. Applied at
+// _setDRSpeed() in startGame() — also feeds the score tick (which scales with
+// live speed), so higher tiers = faster opening AND faster score climb.
+function getHandlingStartBoost() {
   const level = loadPlayerLevel();
-  let drift = 1.0;
+  let boost = 1.0;
   for (const t of HANDLING_TIERS) {
-    if (level >= t.level) drift = t.drift;
+    if (level >= t.level) boost = t.startBoost;
   }
-  return drift;
+  return boost;
 }
 
 function getPendingHandlingUpgrade() {

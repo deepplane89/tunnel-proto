@@ -2539,11 +2539,12 @@ function initSkinViewer() {
           // Particle burst toward ship preview
           spawnRewardParticles(labelEl, '#skin-viewer', '#00eeff', '\u2699', 12);
           playRewardSFX();
-          // Show +% handling popup
-          const pctGain = Math.round((1 - tier.drift) * 100);
+          // Show +% start-speed popup (handling tiers grant startBoost as of
+          // 2026-05-06; drift is now flight-model-controlled)
+          const pctGain = Math.round((tier.startBoost - 1) * 100);
           const popup = document.createElement('div');
           popup.className = 'handling-popup';
-          popup.textContent = tier.label + ' \u2022 +' + pctGain + '% HANDLING';
+          popup.textContent = tier.label + ' \u2022 +' + pctGain + '% START SPEED';
           const rect = labelEl.getBoundingClientRect();
           popup.style.left = rect.left + rect.width / 2 + 'px';
           popup.style.top = rect.top - 10 + 'px';
