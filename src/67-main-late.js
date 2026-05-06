@@ -4102,21 +4102,20 @@ function update(dt) {
     // it ever reached the visible rotation. Diagnosis confirmed via runtime
     // logging: source wobble ±0.018 rad survived as ~±0.005 rad on rot.z.
     const _rollTargetNoWobble = targetRoll + _shipRotZOffset;
-    // Track bank in a wobble-free state var. Lerping shipGroup.rotation.z directly
-    // would carry forward the previous frame's wobble residue (added at the end of
-    // the previous frame), and the camera-roll capture would inherit that residue
-    // → horizon tilts with wobble even though we capture "pre-wobble". Fix: keep
-    // bank pure in _shipBankNoWobble; render = bank + wobble; horizon = bank only.
-    if (typeof state._shipBankNoWobble !== 'number') state._shipBankNoWobble = 0;
-    const _crossingZero = (state._shipBankNoWobble > 0.01 && _rollTargetNoWobble < -0.01) || (state._shipBankNoWobble < -0.01 && _rollTargetNoWobble > 0.01);
+    const _crossingZero = (shipGroup.rotation.z > 0.01 && _rollTargetNoWobble < -0.01) || (shipGroup.rotation.z < -0.01 && _rollTargetNoWobble > 0.01);
     // Use _bankSmoothing while steering, _bankReturnSmoothing when releasing — decoupled into/out of bank.
     const _baseSmooth = isSteering ? _bankSmoothing : _bankReturnSmoothing;
     const _lerpSpeed = _crossingZero ? _baseSmooth * 3 : _baseSmooth;
+    shipGroup.rotation.z = THREE.MathUtils.lerp(shipGroup.rotation.z, _rollTargetNoWobble, Math.min(1, _lerpSpeed * dt));
+    // Parallel pure-bank track for horizon. Same lerp math, but wobble never
+    // touches it — so the camera roll mirrors deliberate bank only and never
+    // inherits the wobble residue that the visible shipGroup.rotation.z carries
+    // forward each frame from the wobble add below.
+    if (typeof state._shipBankNoWobble !== 'number') state._shipBankNoWobble = 0;
     state._shipBankNoWobble = THREE.MathUtils.lerp(state._shipBankNoWobble, _rollTargetNoWobble, Math.min(1, _lerpSpeed * dt));
-    // Horizon = pure bank × _camRollAmt. No wobble path into the camera ever.
     cameraRoll = state._shipBankNoWobble * _camRollAmt;
-    // Visual = pure bank + wobble. Wobble lives only on the ship model.
-    shipGroup.rotation.z = state._shipBankNoWobble + wobbleOffset;
+    // Wobble is added AFTER capturing camera roll — lives only on the ship.
+    shipGroup.rotation.z += wobbleOffset;
     // Hard-clamp the result. Headroom = 1.15× bank cap PLUS the current
     // wobble amplitude, so a release-wobble peak (≈0.14 rad at JUICE=1) can
     // ride on top of a maxed bank without being decapitated.
