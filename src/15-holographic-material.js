@@ -137,6 +137,15 @@ function _registerHoloMaterial(mat) {
   _holoMaterials.push(mat);
   return mat;
 }
+// Remove a holo material from the registry + dispose its GPU resources.
+// Used by the title-ship swap path so orphan holos from previous skins
+// don't keep ticking + don't leave stale uniforms attached to anything.
+function _unregisterHoloMaterial(mat) {
+  if (!mat) return;
+  const i = _holoMaterials.indexOf(mat);
+  if (i !== -1) _holoMaterials.splice(i, 1);
+  try { if (typeof mat.dispose === 'function') mat.dispose(); } catch(_){}
+}
 function _tickHoloMaterials(t) {
   for (let i = 0; i < _holoMaterials.length; i++) {
     _holoMaterials[i].setTime(t);

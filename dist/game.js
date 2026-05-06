@@ -646,6 +646,15 @@ function _registerHoloMaterial(mat) {
   _holoMaterials.push(mat);
   return mat;
 }
+// Remove a holo material from the registry + dispose its GPU resources.
+// Used by the title-ship swap path so orphan holos from previous skins
+// don't keep ticking + don't leave stale uniforms attached to anything.
+function _unregisterHoloMaterial(mat) {
+  if (!mat) return;
+  const i = _holoMaterials.indexOf(mat);
+  if (i !== -1) _holoMaterials.splice(i, 1);
+  try { if (typeof mat.dispose === 'function') mat.dispose(); } catch(_){}
+}
 function _tickHoloMaterials(t) {
   for (let i = 0; i < _holoMaterials.length; i++) {
     _holoMaterials[i].setTime(t);
@@ -7061,6 +7070,36 @@ function applyTitleSkin(skinIndex) {
       try { console.log('[DIAG]   SWAP entering: from ' + (_titleShipModel.userData && _titleShipModel.userData._altKey || 'none') + ' to ' + _wantKey); } catch(_){}
       const parent = _titleShipModel.parent;
       if (parent) parent.remove(_titleShipModel);
+      // ── ORPHAN HOLO SWEEP ─────────────────────────────────────────────
+      // The outgoing _titleShipModel is about to be discarded. Any HOLO
+      // ShaderMaterials applied to its meshes (or any orphaned holos parked
+      // on cached _SKIN_PALETTE entries that we created via _makeMatForSkinSlot
+      // earlier in this session) keep ticking forever in _holoMaterials and,
+      // worse, can re-render if any of those meshes flash visible during the
+      // swap. Walk the OLD ship, collect every holo material in use, and
+      // unregister + dispose them. The cached gameplay alt ship + the fresh
+      // clone we're about to install own their own materials and won't be
+      // touched.
+      try {
+        const _orphans = [];
+        const _seen = new Set();
+        const _collect = (m) => {
+          if (m && m.uniforms && m.uniforms.hologramColor && !_seen.has(m)) {
+            _seen.add(m); _orphans.push(m);
+          }
+        };
+        _titleShipModel.traverse(c => {
+          if (!c.isMesh || !c.material) return;
+          if (Array.isArray(c.material)) c.material.forEach(_collect);
+          else _collect(c.material);
+        });
+        let _swept = 0;
+        if (typeof _unregisterHoloMaterial === 'function') {
+          for (const h of _orphans) { _unregisterHoloMaterial(h); _swept++; }
+        }
+        const _regAfter = (typeof _holoMaterials !== 'undefined') ? _holoMaterials.length : '?';
+        try { console.log('[DIAG]   ORPHAN-SWEEP swept=' + _swept + ' regAfter=' + _regAfter); } catch(_){}
+      } catch(e){ try { console.warn('[DIAG] orphan sweep error', e); } catch(_){} }
       const fresh = _newSrc.clone(true);
       // Re-mark mesh slots so material override loop below can find them,
       // AND deep-clone every material so showroom-only mutations (forced
@@ -7118,14 +7157,30 @@ function applyTitleSkin(skinIndex) {
     // would skip per-skin overrides for RUNNER. _makeMatForSkinSlot returns a
     // fresh material from _SKIN_PALETTE[skinIndex] for the slot name.
     let _diagPainted = 0; let _diagSkipped = 0; const _diagSlots = [];
+    let _paintReplacedHolos = 0;
     for (const entry of _titleMeshMap) {
       const { mesh, origName } = entry;
       if (origName === 'fire' || origName === 'fire1') { mesh.visible = false; continue; }
-      if (isLocked) { mesh.material = _titleDarkMat; continue; }
-      const newMat = _makeMatForSkinSlot(skinIndex, origName || '');
-      if (newMat) { mesh.material = newMat; _diagPainted++; if (_diagSlots.length < 6) _diagSlots.push(origName + (newMat.uniforms && newMat.uniforms.hologramColor ? ':holo' : ':pbr')); }
-      else { _diagSkipped++; }
-      void _diagPainted; void _diagSkipped;
+      // Capture the OLD material so we can dispose any holo about to be
+      // orphaned by this paint. Without this, switching GHOST→RUNNER replaces
+      // 11 holo mats with PBR but the holos remain in _holoMaterials, ticking
+      // and (per the captured log) sometimes still rendering as ghost flicker.
+      const _oldMat = mesh.material;
+      if (isLocked) { mesh.material = _titleDarkMat; }
+      else {
+        const newMat = _makeMatForSkinSlot(skinIndex, origName || '');
+        if (newMat) { mesh.material = newMat; _diagPainted++; if (_diagSlots.length < 6) _diagSlots.push(origName + (newMat.uniforms && newMat.uniforms.hologramColor ? ':holo' : ':pbr')); }
+        else { _diagSkipped++; }
+      }
+      // If the old material was a HOLO and we just replaced it with a
+      // different material, unregister + dispose it. (Identity check: don't
+      // sweep if paint somehow returned the same instance.)
+      if (_oldMat && _oldMat !== mesh.material && _oldMat.uniforms && _oldMat.uniforms.hologramColor) {
+        if (typeof _unregisterHoloMaterial === 'function') {
+          _unregisterHoloMaterial(_oldMat); _paintReplacedHolos++;
+        }
+      }
+      void _diagPainted; void _diagSkipped; void _paintReplacedHolos;
       // BLACK MAMBA (idx 2) extra darkening: ensures hull reads stealth black
       // under the title's bright studio rig (palette base color is rust orange
       // for in-game lighting).
@@ -7152,7 +7207,8 @@ function applyTitleSkin(skinIndex) {
           _postMeshes.push(slot + ':' + (m.type ? m.type.replace('Material','') : 'PBR') + '#' + (m.color ? m.color.getHexString() : '?'));
         }
       });
-      console.log('[DIAG] <<< PAINTED skin=' + skinIndex + ' mapEntries=' + _titleMeshMap.length + ' painted=' + _diagPainted + ' skipped=' + _diagSkipped + ' postHolo=' + _postHolo + ' postPbr=' + _postPbr);
+      const _regNow = (typeof _holoMaterials !== 'undefined') ? _holoMaterials.length : '?';
+      console.log('[DIAG] <<< PAINTED skin=' + skinIndex + ' mapEntries=' + _titleMeshMap.length + ' painted=' + _diagPainted + ' skipped=' + _diagSkipped + ' postHolo=' + _postHolo + ' postPbr=' + _postPbr + ' replacedHolos=' + _paintReplacedHolos + ' reg=' + _regNow);
       console.log('[DIAG]   postPaint: ' + _postMeshes.join(' | '));
     } catch(_){}
     return;
