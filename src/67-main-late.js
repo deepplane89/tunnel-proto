@@ -745,6 +745,12 @@ function startDeathRun() {
   const _hsB = (typeof getHandlingStartBoost === 'function') ? getHandlingStartBoost() : 1.0;
   state._drSpeedFloor = (_hsB > 1.0) ? _hsB : 0;
 
+  // DIAG: reset spawn-delay logger every run so we capture fresh data on retry
+  window._spawnDiagDone = false;
+  window._spawnDiagT = 0;
+  window._spawnDiagFirst = undefined;
+  console.log('[SPAWN-DIAG] RUN_START', { handlingBoost: _hsB, drSpeedFloor: state._drSpeedFloor });
+
   // Wave director state (kept for endless mix fallback)
   DR2_RUN_BANDS = _drGetRunBands();
   state.drPhase           = 'RELEASE';
@@ -5232,9 +5238,74 @@ function update(dt) {
     }
   }
   // Normal nextSpawnZ-based spawner — suppressed during active zipper, L5 ending, intro, or death run rest beat
+  // ── DIAG (spawn-delay): log gate state every 0.5s during S1_CONES until first cone spawns. ──
+  // Captures EVERY block reason + sequencer/speed/timing state so a recurrence is fully diagnosable.
+  if (state.isDeathRun && state.phase === 'playing' && !window._spawnDiagDone) {
+    window._spawnDiagT = (window._spawnDiagT || 0) + dt;
+    if (window._spawnDiagT >= 0.5 || window._spawnDiagFirst === undefined) {
+      window._spawnDiagT = 0;
+      window._spawnDiagFirst = false;
+      const _stg = (typeof DR_SEQUENCE !== 'undefined' && DR_SEQUENCE[state.seqStageIdx]) || {};
+      const _gate = {
+        preBumpRestDrain: !!_preBumpRestDrain,
+        tutorialActive: !!state._tutorialActive,
+        zipperActive: !!state.zipperActive,
+        l5EndingActive: !!state.l5EndingActive,
+        l5CorridorActive: !!state.l5CorridorActive,
+        drCustomPatternActive: !!state.drCustomPatternActive,
+        angledWallsActive: !!state.angledWallsActive,
+        introActive: !!state.introActive,
+        introLiftActive: !!state._introLiftActive,
+        isDeathRun: !!state.isDeathRun,
+        deathRunRestBeat: state.deathRunRestBeat,
+        awTunerPaused: !!_awTunerPaused,
+        ringsActive: !!state._ringsActive,
+        bonusRingCount: (typeof _bonusRings !== 'undefined') ? _bonusRings.length : -1,
+        corridorMode: !!state.corridorMode,
+        l4CorridorActive: !!state.l4CorridorActive,
+        slalomActive: !!state.slalomActive,
+        corridorDelay: state.corridorDelay,
+        noSpawnMode: (typeof _noSpawnMode !== 'undefined') ? _noSpawnMode : 'undef',
+      };
+      const _open = !_gate.preBumpRestDrain && !_gate.tutorialActive && !_gate.zipperActive && !_gate.l5EndingActive && !_gate.l5CorridorActive && !_gate.drCustomPatternActive && !_gate.angledWallsActive && !_gate.introActive && !(_gate.isDeathRun && _gate.deathRunRestBeat > 0) && !_gate.awTunerPaused && !_gate.ringsActive;
+      console.log('[SPAWN-DIAG]', {
+        elapsed: state.elapsed?.toFixed(2),
+        seqStageIdx: state.seqStageIdx,
+        seqStageName: _stg.name || _stg.id || 'unk',
+        seqStageType: _stg.type,
+        seqStageElapsed: state.seqStageElapsed?.toFixed(2),
+        seqStageDur: _stg.duration,
+        seqRampT01: state._seqRampT01,
+        seqSpawnMode: state._seqSpawnMode,
+        seqConeDensity: state._seqConeDensity,
+        speed: state.speed?.toFixed(1),
+        speedMult: (state.speed / BASE_SPEED).toFixed(2),
+        effectiveSpeed: effectiveSpeed?.toFixed(1),
+        nextSpawnZ: state.nextSpawnZ?.toFixed(2),
+        drSpeedFloor: state._drSpeedFloor,
+        activeObstacles: (typeof activeObstacles !== 'undefined') ? activeObstacles.length : -1,
+        gateOpen: _open,
+        blockedBy: _open ? null : Object.keys(_gate).filter(k => {
+          if (k === 'deathRunRestBeat' || k === 'bonusRingCount' || k === 'corridorDelay' || k === 'noSpawnMode') return false;
+          return _gate[k] === true;
+        }).concat(_gate.deathRunRestBeat > 0 ? ['restBeat>0'] : []),
+      });
+    }
+  }
   if (!_preBumpRestDrain && !state._tutorialActive && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
     state.nextSpawnZ += effectiveSpeed * dt;
     if (state.nextSpawnZ >= 0) {
+      // DIAG: mark first successful spawn so logging stops
+      if (state.isDeathRun && !window._spawnDiagDone) {
+        console.log('[SPAWN-DIAG] FIRST_SPAWN_FIRED', {
+          elapsed: state.elapsed?.toFixed(2),
+          seqStageElapsed: state.seqStageElapsed?.toFixed(2),
+          seqStageIdx: state.seqStageIdx,
+          nextSpawnZ: state.nextSpawnZ?.toFixed(2),
+          speed: state.speed?.toFixed(1),
+        });
+        window._spawnDiagDone = true;
+      }
       // Tighter Z spacing for rings (easier to pass through, need more density)
       let _spawnBand = 0;
       if (state.isDeathRun) {

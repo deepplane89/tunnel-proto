@@ -93,6 +93,19 @@
 - EnvMap for Phoenix, terrain walls brightness, motion blur, speed vignette, MK II mesh toggling
 - 3D artist contact: "tkkjee" (Serbian, tkkjee@gmail.com, +381 62 961 9583)
 
+## Glitch Fixes (root causes + resolutions)
+
+### Garage skin mismatch / orphan-ship grey RUNNER (FIXED 2026-05-06, commit `3f6f34c`)
+- **Symptom:** Wrong skin shown in gameplay vs garage; sometimes a grey RUNNER (orphan ship) appeared.
+- **Root cause:** Concurrent `_loadAltShip` calls for the same `cacheKey` raced — two paint passes on the same ship produced an orphan mesh + holo material registry mismatch. Cache-shared materials were also being disposed by one caller while still in use by another.
+- **Fix:** Dedupe concurrent `_loadAltShip` invocations per `cacheKey` (in-flight promise map). Combined with prior `46ee984` (session-owned material tagging + safe dispose skip on cache-shared mats) and `139debf` (sweep orphan holo materials on title-ship swap).
+- **Confirmed working:** User verified 2026-05-06.
+
+### No-cone-spawn after exiting tutorial via overlay (FIXED 2026-05-03, commit `0e2202d`)
+- **Symptom:** Cones never spawned in next death run after exiting tutorial via settings/tuner overlay (instead of the EXIT TUTORIAL button).
+- **Root cause:** `state._tutorialActive` stuck true when overlay routed back to title without clearing the flag. The update loop's `_noSpawnMode` re-asserted, closing both spawn gates.
+- **Fix:** One-line `state._tutorialActive = false;` in `returnToTitle()`.
+
 ## Critical User Instructions
 - DO NOT touch ice (T4) or gold (T5) sun warp effects
 - NEVER read lines 16-17 of game.js
