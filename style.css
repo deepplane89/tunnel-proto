@@ -5435,6 +5435,25 @@ body.sr-open #title-leaderboard {
 }
 .sr-pane { flex: 1; min-height: 0; overflow: hidden; }
 
+/* THRUSTERS pane: SHAPE grid scrolls; COLOR row pinned at bottom and fully
+   visible/clickable. Without this, .sr-pane overflow:hidden silently clips
+   the COLOR row off the bottom on desktop where many SHAPE cards render. */
+.sr-pane[data-pane="thrusters"] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+.sr-pane[data-pane="thrusters"] #sr-shape-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.sr-pane[data-pane="thrusters"] > .sr-row {
+  flex: 0 0 auto;
+}
+
 /* Power-ups pane fills width. Cards in 2-col grid (portrait), sized to
    fit the fixed 50vh panel without scroll: 5 cards → 3 rows, ~60px each. */
 .sr-pane[data-pane="powerups"] {
