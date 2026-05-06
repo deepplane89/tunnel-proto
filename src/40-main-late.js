@@ -118,6 +118,23 @@ function _playLightningStrike() {
   // While a thunder clip is playing, _playThunderRotating() returns silently,
   // so mid-clip strikes get the synth boom only — the long clip plays out in full.
   _playThunderRotating();
+  // Crackly electric impact layer on top of the boom — sits in mid/high band
+  // where the synth boom (sub) and thunder (low rumble) leave room. Allowed to
+  // overlap on rapid strikes for a chaotic crackle stack.
+  {
+    const _impactBuf = (typeof _sfxBuffers !== 'undefined') ? _sfxBuffers['lightning-impact'] : null;
+    if (_impactBuf) {
+      const _impVol = 0.45 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+      if (_impVol > 0) {
+        const _impSrc = audioCtx.createBufferSource();
+        _impSrc.buffer = _impactBuf;
+        const _impGain = audioCtx.createGain();
+        _impGain.gain.value = Math.min(1, _impVol);
+        _impSrc.connect(_impGain).connect(audioCtx.destination);
+        _impSrc.start();
+      }
+    }
+  }
   // Synth boom — raided up from 0.32 -> 0.42 for more punch under the thunder mp3.
   const vol = 0.42 * (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (vol <= 0) return;

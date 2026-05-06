@@ -174,6 +174,7 @@ function _initSFXBuffers() {
   _loadSFXBuffer('whoosh-release', './assets/audio/whoosh-release.mp3');
   _loadSFXBuffer('thunder1', './assets/audio/thunder1.mp3');
   _loadSFXBuffer('thunder2', './assets/audio/thunder2.mp3');
+  _loadSFXBuffer('lightning-impact', './assets/audio/lightning-impact.mp3');
   _loadSFXBuffer('klaxon',   './assets/audio/klaxon.mp3');
   // Argon ambient: looped via dedicated _playArgonLoop (volume modulated each frame)
   _loadSFXBuffer('argon-ambient',   './assets/audio/argon-ambient.mp3');
