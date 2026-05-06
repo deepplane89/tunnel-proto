@@ -35,7 +35,9 @@
 
   function _clearMenuPos(wrap) {
     if (!wrap) return;
-    const m = wrap.querySelector('.sf-select-menu');
+    // The menu may have been portaled to <body> while open. Find it via the
+    // wrap's stored ref OR walk the DOM (safety fallback).
+    let m = wrap._sfMenu || wrap.querySelector('.sf-select-menu');
     if (!m) return;
     m.hidden = true;
     m.style.position = '';
@@ -44,6 +46,11 @@
     m.style.bottom = '';
     m.style.width = '';
     m.style.maxHeight = '';
+    m.style.zIndex = '';
+    // Restore menu back to its wrap (portal-out).
+    if (m.parentNode !== wrap) {
+      try { wrap.appendChild(m); } catch(_){}
+    }
     const b = wrap.querySelector('.sf-select-btn');
     if (b) b.setAttribute('aria-expanded', 'false');
   }
@@ -55,10 +62,13 @@
     }
   }
 
-  // Close on outside tap or Escape.
+  // Close on outside tap or Escape. The menu may be portaled to <body> while
+  // open, so check both the wrap and its stored menu ref before closing.
   document.addEventListener('pointerdown', function(e) {
     if (!_openMenu) return;
     if (_openMenu.contains(e.target)) return;
+    const m = _openMenu._sfMenu;
+    if (m && m.contains(e.target)) return;
     _closeAnyOpen(null);
   }, true);
   document.addEventListener('keydown', function(e) {
@@ -148,8 +158,15 @@
         menu.hidden = false;
         btn.setAttribute('aria-expanded', 'true');
         // Position the menu via fixed coords so it escapes panel overflow:
-        // hidden clipping. Pick top/below based on available space.
+        // hidden clipping. Also portal the menu to <body> so the panel's
+        // clip-path (notched corners on .sr-panel) doesn't visually clip the
+        // menu when it renders below the panel's polygon.
         try {
+          // Portal to body if not already there.
+          if (menu.parentNode !== document.body) {
+            document.body.appendChild(menu);
+          }
+          wrap._sfMenu = menu; // remember for _clearMenuPos
           const r = btn.getBoundingClientRect();
           const measured = menu.scrollHeight || 220;
           const need = Math.min(measured, 220) + 8;
@@ -159,6 +176,7 @@
           menu.style.position = 'fixed';
           menu.style.left     = r.left + 'px';
           menu.style.width    = r.width + 'px';
+          menu.style.zIndex   = '10000';
           if (openUp) {
             menu.style.bottom = (window.innerHeight - r.top + 4) + 'px';
             menu.style.top    = 'auto';

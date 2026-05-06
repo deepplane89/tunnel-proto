@@ -5435,26 +5435,18 @@ body.sr-open #title-leaderboard {
 }
 .sr-pane { flex: 1; min-height: 0; overflow: hidden; }
 
-/* THRUSTERS pane: SHAPE grid scrolls; COLOR row pinned at bottom and fully
-   visible/clickable. Without this, .sr-pane overflow:hidden silently clips
-   the COLOR row off the bottom on desktop where many SHAPE cards render.
+/* THRUSTERS pane: whole pane scrolls (SHAPE grid + COLOR row scroll together)
+   so adding more presets later doesn't push COLOR off the bottom on mobile.
    :not(.sr-hidden) gate keeps display:none winning when the pane is hidden
    (otherwise this later rule overrides .sr-pane.sr-hidden and the thrusters
    pane bleeds into other tabs). */
 .sr-pane[data-pane="thrusters"]:not(.sr-hidden) {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow: hidden;
-}
-.sr-pane[data-pane="thrusters"] #sr-shape-grid {
-  flex: 1 1 auto;
-  min-height: 0;
+  display: block;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
-.sr-pane[data-pane="thrusters"] > .sr-row {
-  flex: 0 0 auto;
+.sr-pane[data-pane="thrusters"] #sr-shape-grid {
+  margin-bottom: 10px;
 }
 
 /* Power-ups pane fills width. Cards in 2-col grid (portrait), sized to
@@ -5555,30 +5547,47 @@ body.sr-open #title-leaderboard {
     top: 4px; right: 4px;
     font-size: 11px;
   }
-  /* Single-column power-up cards in narrow landscape panel — horizontal rows. */
+  /* Single-column power-up cards in narrow landscape panel — horizontal rows.
+     All 5 cards must FIT (no scroll); rows share available space equally. */
   .sr-pane[data-pane="powerups"] .shop-cards {
     grid-template-columns: 1fr;
-    grid-auto-rows: 1fr;
-    gap: 4px;
+    grid-template-rows: repeat(5, minmax(0, 1fr));
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 3px;
     height: 100%;
+    overflow: hidden;
+    align-content: stretch;
   }
   .sr-pane[data-pane="powerups"] .shop-card {
-    padding: 4px 8px;
+    padding: 2px 6px;
     flex-direction: row;
     text-align: left;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
+    min-height: 0;
+    overflow: hidden;
   }
   .sr-pane[data-pane="powerups"] .shop-card-icon {
-    width: 20px; height: 20px;
+    width: 18px; height: 18px;
     flex-shrink: 0;
   }
   .sr-pane[data-pane="powerups"] .shop-card-name {
-    font-size: 10px;
+    font-size: 9px;
     flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .sr-pane[data-pane="powerups"] .shop-card-pips {
     margin: 0;
+    flex-shrink: 0;
+  }
+  .sr-pane[data-pane="powerups"] .shop-pip {
+    width: 5px; height: 5px;
+  }
+  .sr-pane[data-pane="powerups"] .shop-card-cost {
+    font-size: 10px;
+    flex-shrink: 0;
   }
   .sr-pane[data-pane="powerups"] .shop-card-desc {
     display: none;

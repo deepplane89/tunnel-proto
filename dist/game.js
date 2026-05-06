@@ -14451,7 +14451,9 @@ function updateStreakBadge() {
 
   function _clearMenuPos(wrap) {
     if (!wrap) return;
-    const m = wrap.querySelector('.sf-select-menu');
+    // The menu may have been portaled to <body> while open. Find it via the
+    // wrap's stored ref OR walk the DOM (safety fallback).
+    let m = wrap._sfMenu || wrap.querySelector('.sf-select-menu');
     if (!m) return;
     m.hidden = true;
     m.style.position = '';
@@ -14460,6 +14462,11 @@ function updateStreakBadge() {
     m.style.bottom = '';
     m.style.width = '';
     m.style.maxHeight = '';
+    m.style.zIndex = '';
+    // Restore menu back to its wrap (portal-out).
+    if (m.parentNode !== wrap) {
+      try { wrap.appendChild(m); } catch(_){}
+    }
     const b = wrap.querySelector('.sf-select-btn');
     if (b) b.setAttribute('aria-expanded', 'false');
   }
@@ -14471,10 +14478,13 @@ function updateStreakBadge() {
     }
   }
 
-  // Close on outside tap or Escape.
+  // Close on outside tap or Escape. The menu may be portaled to <body> while
+  // open, so check both the wrap and its stored menu ref before closing.
   document.addEventListener('pointerdown', function(e) {
     if (!_openMenu) return;
     if (_openMenu.contains(e.target)) return;
+    const m = _openMenu._sfMenu;
+    if (m && m.contains(e.target)) return;
     _closeAnyOpen(null);
   }, true);
   document.addEventListener('keydown', function(e) {
@@ -14564,8 +14574,15 @@ function updateStreakBadge() {
         menu.hidden = false;
         btn.setAttribute('aria-expanded', 'true');
         // Position the menu via fixed coords so it escapes panel overflow:
-        // hidden clipping. Pick top/below based on available space.
+        // hidden clipping. Also portal the menu to <body> so the panel's
+        // clip-path (notched corners on .sr-panel) doesn't visually clip the
+        // menu when it renders below the panel's polygon.
         try {
+          // Portal to body if not already there.
+          if (menu.parentNode !== document.body) {
+            document.body.appendChild(menu);
+          }
+          wrap._sfMenu = menu; // remember for _clearMenuPos
           const r = btn.getBoundingClientRect();
           const measured = menu.scrollHeight || 220;
           const need = Math.min(measured, 220) + 8;
@@ -14575,6 +14592,7 @@ function updateStreakBadge() {
           menu.style.position = 'fixed';
           menu.style.left     = r.left + 'px';
           menu.style.width    = r.width + 'px';
+          menu.style.zIndex   = '10000';
           if (openUp) {
             menu.style.bottom = (window.innerHeight - r.top + 4) + 'px';
             menu.style.top    = 'auto';
@@ -16722,7 +16740,6 @@ function _renderShopHandlingBar() {
     if (head) head.setAttribute('aria-expanded', 'false');
     document.removeEventListener('pointerdown', _fmOutside, true);
     window.removeEventListener('resize', _fmCloseMenu);
-    window.removeEventListener('scroll', _fmCloseMenu, true);
   }
   function _fmOutside(e) {
     if (!bar.contains(e.target)) _fmCloseMenu();
@@ -16755,10 +16772,12 @@ function _renderShopHandlingBar() {
       }
     } catch(_){}
     // Defer outside-click bind to next tick so the opening tap doesn't close.
+    // NOTE: deliberately no scroll-close listener — the menu is position:fixed
+    // so it stays anchored on parent scroll, and on mobile any incidental
+    // scroll bubble from the THRUSTERS pane was instantly closing the menu.
     setTimeout(() => {
       document.addEventListener('pointerdown', _fmOutside, true);
       window.addEventListener('resize', _fmCloseMenu);
-      window.addEventListener('scroll', _fmCloseMenu, true);
     }, 0);
   }
   if (head) {
