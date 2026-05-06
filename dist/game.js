@@ -7593,6 +7593,34 @@ function _loadAltShip(glbFile, skinDef, skinIdx, callback) {
     if (callback) callback();
     return;
   }
+  // ── IN-FLIGHT DEDUP ───────────────────────────────────────────────────
+  // Without this, the boot-time gate preload (4 parallel _loadAltShip calls
+  // for spaceship_01.glb idx 0..3) racing with applySkin's own immediate
+  // _loadAltShip call can produce duplicate concurrent loads for the SAME
+  // cacheKey. Each finisher does:
+  //   shipGroup.add(model);                 // adds to scene graph
+  //   _altShipCache[cacheKey] = { model };  // overwrites cache
+  //   _altShipModel = model;
+  //   callback();
+  // The earlier finisher's model becomes ORPHANED in the scene graph: still
+  // parented under shipGroup, no longer in the cache, so _showAltShip's
+  // "hide all OTHER cached models" sweep can't see it. If _showAltShip
+  // already made it visible (because applySkin's cb fired on the first
+  // finisher), it stays visible forever. Subsequent skin swaps make BOTH
+  // the orphan and the new model visible — the orphan looks like a stale
+  // wrong-skin overlay, which matches the user's report ("started a game,
+  // ended up on Cipher even though Runner was equipped").
+  // Fix: queue duplicate-key callbacks behind the first in-flight load.
+  if (!window.__altLoadInflight) window.__altLoadInflight = {};
+  if (window.__altLoadInflight[cacheKey]) {
+    try { console.log('[DIAG-PLAY] _loadAltShip IN-FLIGHT-DEDUP key=' + cacheKey + ' queueing cb'); } catch(_){}
+    window.__altLoadInflight[cacheKey].push(() => {
+      // Re-enter to take the cache-hit path now that the load resolved.
+      try { _loadAltShip(glbFile, skinDef, skinIdx, callback); } catch(_){}
+    });
+    return;
+  }
+  window.__altLoadInflight[cacheKey] = [];
   try { console.log('[DIAG-PLAY] _loadAltShip CACHE-MISS key=' + cacheKey + ' starting GLTFLoader'); } catch(_){}
   const _skinIdxForLoad = skinIdx;
   const loader = new GLTFLoader();
@@ -7790,6 +7818,16 @@ function _loadAltShip(glbFile, skinDef, skinIdx, callback) {
     }
     _altShipCache[cacheKey] = { model, mixer, clips };
     try { model.userData._cacheKey = cacheKey; } catch(_){}
+    // Drain any callbacks queued while this load was in-flight. They'll
+    // re-enter _loadAltShip and take the cache-hit path.
+    try {
+      const _q = window.__altLoadInflight && window.__altLoadInflight[cacheKey];
+      delete window.__altLoadInflight[cacheKey];
+      if (Array.isArray(_q)) {
+        try { console.log('[DIAG-PLAY]   draining ' + _q.length + ' queued cb(s) for ' + cacheKey); } catch(_){}
+        for (const fn of _q) { try { fn(); } catch(_){} }
+      }
+    } catch(_){}
     try {
       let _h = 0; let _p = 0; const _slots = [];
       model.traverse(c => { if (!c.isMesh) return; const isHolo = !!(c.material && c.material.uniforms && c.material.uniforms.hologramColor); if (isHolo) _h++; else _p++; if (_slots.length < 8) _slots.push(((c.userData && c.userData._origMatName) || '?') + ':' + (isHolo ? 'H' : 'P')); });
