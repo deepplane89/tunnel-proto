@@ -432,10 +432,14 @@ async function fetchLeaderboard() {
     cachedLeaderboard = JSON.parse(window._LS.getItem('jet-horizon-scores') || '[]');
   }
   renderLeaderboard();
-  // Show on title screen if we're on title
+  // Show on title screen if we're on title — but never in mobile landscape
+  // (overlaps TAP TO PLAY).
   if (state.phase === 'title') {
     const _tlb = document.getElementById('title-leaderboard');
-    if (_tlb) {
+    const _isMobLand = window.innerWidth > window.innerHeight && window.innerWidth < 1024;
+    if (_tlb && _isMobLand) {
+      _tlb.classList.add('hidden');
+    } else if (_tlb) {
       _tlb.classList.remove('hidden');
       // Block touch events from bubbling to the canvas so scrolling
       // the leaderboard doesn't trigger tap-to-play
@@ -1855,7 +1859,9 @@ let _thrusterPanelOpenedFromGameplay = false;
 
 function openThrusterPanel(targetTab) {
   initAudio();
-  try { playTitleTap(); } catch(_){}
+  // No playTitleTap here — Showroom.open() plays the dedicated garage-open
+  // sound; layering the menu-cycle pip on top of it was doubling the cue.
+
   // Pause gameplay if mid-run (mirrors V1 behavior).
   if (state.phase === 'playing') {
     _thrusterPanelOpenedFromGameplay = true;
@@ -1882,7 +1888,8 @@ function openThrusterPanel(targetTab) {
 window.openThrusterPanel = openThrusterPanel;
 
 function closeThrusterPanel() {
-  try { playTitleTap(); } catch(_){}
+  // No playTitleTap — Showroom.close() plays the dedicated garage-close sound.
+
   if (window.Showroom && typeof window.Showroom.close === 'function') {
     window.Showroom.close();
   } else {
@@ -9452,16 +9459,14 @@ const _CANYON_LIGHT_RAMP_S = 0.60;    // 600ms ease in/out (long enough to be in
 // are non-null, _updateCanyonWalls ramps dirLight = lerp(From, Target, eased(_canyonLightT)).
 let _canyonDirLightFrom = null;
 let _canyonDirLightTarget = null;
-window._setCanyonDirLightTarget = function(target) {
-  if (typeof dirLight === 'undefined' || !dirLight) return;
-  if (_canyonDirLightFrom === null) _canyonDirLightFrom = dirLight.intensity;
-  _canyonDirLightTarget = target;
-};
-window._clearCanyonDirLightTarget = function() {
-  // Called by canyon-exit logic. Ramp will drive dirLight back toward From
-  // as _canyonLightT eases to 0; once fully eased, we restore + clear state.
-  _canyonDirLightTarget = null; // tells ramp to head home
-};
+// Per-user request 2026-05-05: "there are light changes that happen in the
+// canyons. id like for them to be turned off now." The dirLight modulation
+// during L3-knife / Pre-T4A / Pre-T4B is what's being noticed. Canyon entry
+// fill-lights (the cyan ramp) stay on — they ARE the canyon's identity.
+// Both setters are now no-ops; dirLight stays at whatever the global level
+// transition / day-night cycle puts it at, with no canyon-driven dimming.
+window._setCanyonDirLightTarget = function(target) { /* disabled */ };
+window._clearCanyonDirLightTarget = function() { /* disabled */ };
 let _canyonActive = false;
 let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)
@@ -11833,23 +11838,8 @@ function _playLightningStrike() {
   // While a thunder clip is playing, _playThunderRotating() returns silently,
   // so mid-clip strikes get the synth boom only — the long clip plays out in full.
   _playThunderRotating();
-  // Crackly electric impact layer on top of the boom — sits in mid/high band
-  // where the synth boom (sub) and thunder (low rumble) leave room. Allowed to
-  // overlap on rapid strikes for a chaotic crackle stack.
-  {
-    const _impactBuf = (typeof _sfxBuffers !== 'undefined') ? _sfxBuffers['lightning-impact'] : null;
-    if (_impactBuf) {
-      const _impVol = 0.45 * (typeof sfxMult === 'function' ? sfxMult() : 1);
-      if (_impVol > 0) {
-        const _impSrc = audioCtx.createBufferSource();
-        _impSrc.buffer = _impactBuf;
-        const _impGain = audioCtx.createGain();
-        _impGain.gain.value = Math.min(1, _impVol);
-        _impSrc.connect(_impGain).connect(audioCtx.destination);
-        _impSrc.start();
-      }
-    }
-  }
+  // (Crackle electric-impact layer removed per user 2026-05-05 — didn't like
+  // the layer over the synth boost. Reverts to thunder + synth-boom only.)
   // Synth boom — raided up from 0.32 -> 0.42 for more punch under the thunder mp3.
   const vol = 0.42 * (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (vol <= 0) return;
@@ -17565,9 +17555,16 @@ function returnToTitle() {
   if (_titleFadeTimer) { clearTimeout(_titleFadeTimer); _titleFadeTimer = null; }
   if (state._lakeFadeIv) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
   clearMusicTimers();
-  // Show inline leaderboard on title
+  // Show inline leaderboard on title — but never in mobile landscape, where
+  // it overlaps TAP TO PLAY at the bottom of the screen. Updater in 72 will
+  // also re-hide on next resize, but we must gate here too because some flows
+  // (return-to-title without a resize event) would leave it visible.
   const _tlb = document.getElementById('title-leaderboard');
-  if (_tlb) _tlb.classList.remove('hidden');
+  const _isMobLand = window.innerWidth > window.innerHeight && window.innerWidth < 1024;
+  if (_tlb) {
+    if (_isMobLand) _tlb.classList.add('hidden');
+    else            _tlb.classList.remove('hidden');
+  }
   renderLeaderboard();
   // Clean up any tutorial overlays
   _tutDestroyOverlay();

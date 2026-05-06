@@ -17,10 +17,14 @@ async function fetchLeaderboard() {
     cachedLeaderboard = JSON.parse(window._LS.getItem('jet-horizon-scores') || '[]');
   }
   renderLeaderboard();
-  // Show on title screen if we're on title
+  // Show on title screen if we're on title — but never in mobile landscape
+  // (overlaps TAP TO PLAY).
   if (state.phase === 'title') {
     const _tlb = document.getElementById('title-leaderboard');
-    if (_tlb) {
+    const _isMobLand = window.innerWidth > window.innerHeight && window.innerWidth < 1024;
+    if (_tlb && _isMobLand) {
+      _tlb.classList.add('hidden');
+    } else if (_tlb) {
       _tlb.classList.remove('hidden');
       // Block touch events from bubbling to the canvas so scrolling
       // the leaderboard doesn't trigger tap-to-play

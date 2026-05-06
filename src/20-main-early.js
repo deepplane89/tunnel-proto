@@ -1207,7 +1207,9 @@ let _thrusterPanelOpenedFromGameplay = false;
 
 function openThrusterPanel(targetTab) {
   initAudio();
-  try { playTitleTap(); } catch(_){}
+  // No playTitleTap here — Showroom.open() plays the dedicated garage-open
+  // sound; layering the menu-cycle pip on top of it was doubling the cue.
+
   // Pause gameplay if mid-run (mirrors V1 behavior).
   if (state.phase === 'playing') {
     _thrusterPanelOpenedFromGameplay = true;
@@ -1234,7 +1236,8 @@ function openThrusterPanel(targetTab) {
 window.openThrusterPanel = openThrusterPanel;
 
 function closeThrusterPanel() {
-  try { playTitleTap(); } catch(_){}
+  // No playTitleTap — Showroom.close() plays the dedicated garage-close sound.
+
   if (window.Showroom && typeof window.Showroom.close === 'function') {
     window.Showroom.close();
   } else {
@@ -8804,16 +8807,14 @@ const _CANYON_LIGHT_RAMP_S = 0.60;    // 600ms ease in/out (long enough to be in
 // are non-null, _updateCanyonWalls ramps dirLight = lerp(From, Target, eased(_canyonLightT)).
 let _canyonDirLightFrom = null;
 let _canyonDirLightTarget = null;
-window._setCanyonDirLightTarget = function(target) {
-  if (typeof dirLight === 'undefined' || !dirLight) return;
-  if (_canyonDirLightFrom === null) _canyonDirLightFrom = dirLight.intensity;
-  _canyonDirLightTarget = target;
-};
-window._clearCanyonDirLightTarget = function() {
-  // Called by canyon-exit logic. Ramp will drive dirLight back toward From
-  // as _canyonLightT eases to 0; once fully eased, we restore + clear state.
-  _canyonDirLightTarget = null; // tells ramp to head home
-};
+// Per-user request 2026-05-05: "there are light changes that happen in the
+// canyons. id like for them to be turned off now." The dirLight modulation
+// during L3-knife / Pre-T4A / Pre-T4B is what's being noticed. Canyon entry
+// fill-lights (the cyan ramp) stay on — they ARE the canyon's identity.
+// Both setters are now no-ops; dirLight stays at whatever the global level
+// transition / day-night cycle puts it at, with no canyon-driven dimming.
+window._setCanyonDirLightTarget = function(target) { /* disabled */ };
+window._clearCanyonDirLightTarget = function() { /* disabled */ };
 let _canyonActive = false;
 let _canyonManual = false; // true when triggered by V key — bypasses sequencer row counting
 let _canyonMode   = 0;    // 0=off, 1=Corridor1 (cyan+sine), 2=Regular (alt+sine), 3=Straight (cyan+no sine)

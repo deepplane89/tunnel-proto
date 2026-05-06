@@ -2529,6 +2529,17 @@ html, body {
 #title-leaderboard-list {
   pointer-events: auto;
 }
+/* Mobile landscape safety net: even if JS misses a hide call, never block
+   the bottom-anchored TAP TO PLAY button. Force the whole leaderboard
+   click-through and keep it hidden. */
+@media (orientation: landscape) and (max-width: 1023px) {
+  .title-leaderboard,
+  #title-leaderboard,
+  #title-leaderboard-list {
+    display: none !important;
+    pointer-events: none !important;
+  }
+}
 .title-lb-header {
   font-family: monospace;
   font-size: 11px;

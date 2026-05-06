@@ -160,9 +160,16 @@ function returnToTitle() {
   if (_titleFadeTimer) { clearTimeout(_titleFadeTimer); _titleFadeTimer = null; }
   if (state._lakeFadeIv) { clearInterval(state._lakeFadeIv); state._lakeFadeIv = null; }
   clearMusicTimers();
-  // Show inline leaderboard on title
+  // Show inline leaderboard on title — but never in mobile landscape, where
+  // it overlaps TAP TO PLAY at the bottom of the screen. Updater in 72 will
+  // also re-hide on next resize, but we must gate here too because some flows
+  // (return-to-title without a resize event) would leave it visible.
   const _tlb = document.getElementById('title-leaderboard');
-  if (_tlb) _tlb.classList.remove('hidden');
+  const _isMobLand = window.innerWidth > window.innerHeight && window.innerWidth < 1024;
+  if (_tlb) {
+    if (_isMobLand) _tlb.classList.add('hidden');
+    else            _tlb.classList.remove('hidden');
+  }
   renderLeaderboard();
   // Clean up any tutorial overlays
   _tutDestroyOverlay();
