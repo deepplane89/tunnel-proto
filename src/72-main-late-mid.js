@@ -117,6 +117,14 @@ document.addEventListener('visibilitychange', () => {
       togglePause();
     }
   } else {
+    // FIRST: compute hidden duration and show the resume overlay synchronously
+    // before anything else paints. iOS otherwise flashes a stale game frame.
+    const _hiddenMs = _jhHiddenAt ? (((typeof performance !== 'undefined') ? performance.now() : Date.now()) - _jhHiddenAt) : 0;
+    _jhHiddenAt = 0;
+    const _needsReprewarm = (_hiddenMs > _JH_LONG_HIDE_MS && typeof window._reprewarmShaders === 'function');
+    if (_needsReprewarm) {
+      try { window._jhResumeOverlay && window._jhResumeOverlay.show('RESUMING…'); } catch(_) {}
+    }
     // Tab/app regained focus — resume AudioContext so sounds work again.
     // 'interrupted' is iOS-specific (phone call, Bluetooth route change).
     if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
@@ -125,14 +133,10 @@ document.addEventListener('visibilitychange', () => {
     // Re-acquire screen wake lock if we were mid-run when the tab went hidden
     // (browser auto-releases on hidden; iOS Safari requires re-request on visible).
     try { window._jhWakeLock && window._jhWakeLock.reacquireIfWanted(); } catch(_) {}
-    // Long-background resume: iOS may have evicted the WebGL program cache
-    // even without firing webglcontextlost. Reprewarm under a tiny overlay
-    // so the user doesn't see first-render shader stalls (first cone delay,
-    // first lightning hitch, etc.) when returning from a backgrounded tab.
-    const _hiddenMs = _jhHiddenAt ? (((typeof performance !== 'undefined') ? performance.now() : Date.now()) - _jhHiddenAt) : 0;
-    _jhHiddenAt = 0;
-    if (_hiddenMs > _JH_LONG_HIDE_MS && typeof window._reprewarmShaders === 'function') {
-      try { window._jhResumeOverlay && window._jhResumeOverlay.show('RESUMING…'); } catch(_) {}
+    // Long-background reprewarm: iOS may have evicted the WebGL program cache
+    // even without firing webglcontextlost. Reprewarm under the overlay so
+    // the user doesn't see first-render shader stalls.
+    if (_needsReprewarm) {
       // Defer one rAF so the overlay paints before the (potentially blocking) compile.
       requestAnimationFrame(() => {
         try { window._reprewarmShaders('long-hide ' + (_hiddenMs/1000).toFixed(1) + 's'); } catch(_) {}
@@ -152,13 +156,18 @@ document.addEventListener('visibilitychange', () => {
     // Normal (non-interrupt) tab-focus restore: re-kick screen music. After
     // an interruption, _rewireTrackGains already kicks the snapshot tracks,
     // so skip this branch to avoid racing two play() calls on the same el.
+    // IMPORTANT: do NOT play titleMusic when state.phase === 'paused' — the
+    // gameplay was force-paused by the hide handler above, and the user will
+    // tap to unpause; togglePause() restarts the proper game track. Playing
+    // titleMusic here causes a music loop (title music keeps running on top
+    // of the gameplay track after unpause).
     if (!_wasInterrupt && !state.muted) {
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (state.phase === 'title' || state.phase === 'dead' || state.phase === 'paused') {
+        if (state.phase === 'title' || state.phase === 'dead') {
           if (titleMusic) titleMusic.play().catch(() => {});
         }
-        // Paused: also resume lake ambience (was playing during gameplay)
-        if (state.phase === 'paused' && lakeMusic) lakeMusic.play().catch(() => {});
+        // Paused: gameplay tracks stay paused until the user unpauses. Don't
+        // resurrect titleMusic or lakeMusic here — togglePause handles it.
       }));
     }
   }

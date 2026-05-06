@@ -57,29 +57,44 @@ window._reprewarmShaders = function _reprewarmShaders(reason) {
 // so the user sees a brief "RESUMING" instead of a stalled black frame while
 // shaders recompile.
 window._jhResumeOverlay = (function _resumeOverlayFactory() {
+  // Build the overlay eagerly at module load and attach it pre-hidden so the
+  // first show() is a synchronous style flip — no fade-in, no async paint.
+  // This avoids the bug where the game frame flashes before the overlay
+  // appears on resume from background.
   let el = null;
-  function _build() {
+  function _ensure() {
     if (el) return el;
+    if (typeof document === 'undefined' || !document.body) return null;
     el = document.createElement('div');
     el.id = 'jh-resume-overlay';
-    el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;color:#3ff;font-family:Silkscreen,monospace;font-size:14px;letter-spacing:2px;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .15s ease;';
+    // visibility:hidden + opacity:1 means "shown" requires only flipping
+    // visibility (instant), no opacity transition delay. We still fade out
+    // on hide for a softer disappearance.
+    el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;color:#3ff;font-family:Silkscreen,monospace;font-size:14px;letter-spacing:2px;display:flex;align-items:center;justify-content:center;opacity:1;visibility:hidden;pointer-events:none;transition:opacity .25s ease;';
     el.textContent = 'RESUMING…';
     document.body.appendChild(el);
     return el;
   }
+  // Pre-build now so first show() is instant.
+  if (typeof document !== 'undefined') {
+    if (document.body) _ensure();
+    else document.addEventListener('DOMContentLoaded', _ensure, { once: true });
+  }
   return {
     show(label) {
-      const e = _build();
+      const e = _ensure();
+      if (!e) return;
       e.textContent = label || 'RESUMING…';
-      e.style.pointerEvents = 'auto';
-      // Force reflow then fade in
-      void e.offsetWidth;
       e.style.opacity = '1';
+      e.style.visibility = 'visible';
+      e.style.pointerEvents = 'auto';
     },
     hide() {
       if (!el) return;
       el.style.opacity = '0';
       el.style.pointerEvents = 'none';
+      // After fade, hide via visibility so it doesn't intercept clicks.
+      setTimeout(() => { if (el && el.style.opacity === '0') el.style.visibility = 'hidden'; }, 280);
     }
   };
 })();
