@@ -674,12 +674,14 @@ function claimHandlingUpgrade() {
 // gate which models the player can equip. Stats shown in the dropdown use the
 // raw macro values (RESP / SETTLE / DRIFT) since the user requested technical
 // labels rather than vibey ones.
+// Order: Glide → Wipeout → Rail → Jet. Jet is the final unlock around
+// 3/4 through the handling-level ladder (handling tops at L22, jet at L20).
 window._FLIGHT_MODELS = {
   DEFAULT: { unlock: 1,  color: '#aaaaaa', resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
   GLIDE:   { unlock: 4,  color: '#7bbbff', resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
-  JET:     { unlock: 8,  color: '#00ffaa', resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
+  WIPEOUT: { unlock: 8,  color: '#ff77aa', resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
   RAIL:    { unlock: 14, color: '#ffff77', resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },
-  WIPEOUT: { unlock: 22, color: '#ff77aa', resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
+  JET:     { unlock: 20, color: '#00ffaa', resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
 };
 const FLIGHT_MODEL_KEY = 'jetslide_flight_model';
 const FLIGHT_MODEL_CLAIMED_KEY = 'jetslide_flight_model_claimed'; // tracks highest unlock level user has "seen"

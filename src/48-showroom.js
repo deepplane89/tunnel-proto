@@ -526,12 +526,25 @@
       const entry = entries[i];
       const node = _findAddonNodeIn(root, entry.node);
       if (!node) continue;
-      // Locked turrets: force hidden regardless of saved state (so a stale
-      // pre-gate save can't leave a locked turret visible on the ship).
-      const isTurret = /^Turrets_/.test(entry.node);
-      const locked = isTurret && (typeof window.isAddonUnlocked === 'function')
-                      && !window.isAddonUnlocked(entry.node);
-      if (locked) { node.visible = false; continue; }
+      // Locked addons: force hidden regardless of saved state so a stale
+      // pre-gate save can't leave a locked mod visible on the ship.
+      // Admin override (triple-tap title) treats everything as unlocked.
+      let _adminAll = false;
+      try { _adminAll = !!window._adminUnlockAll; } catch(_){}
+      let _locked = false;
+      if (!_adminAll) {
+        if (/^Turrets_/.test(entry.node)) {
+          _locked = (typeof window.isAddonUnlocked === 'function')
+                    && !window.isAddonUnlocked(entry.node);
+        } else if (entry.node === 'Fins_01' || entry.node === 'Fins_02' || entry.node === 'Rings_001') {
+          const _gates = { 'Fins_01': 2, 'Fins_02': 5, 'Rings_001': 14 };
+          try {
+            const _lvl = (typeof loadPlayerLevel === 'function') ? loadPlayerLevel() : 1;
+            _locked = _lvl < _gates[entry.node];
+          } catch(_){ _locked = true; }
+        }
+      }
+      if (_locked) { node.visible = false; continue; }
       if (typeof bucket[entry.node] !== 'boolean') continue;
       node.visible = !!bucket[entry.node];
     }
@@ -576,12 +589,32 @@
     });
     if (dirty) _saveAddonsState(saved);
 
-    // Turret addons require an unlock from the mission ladder. Other addons
-    // (Stabilizers, Warp Drive) have no gate and are always unlocked.
+    // Per-addon unlock rules:
+    //  Turrets    → mission-ladder unlock (gates laser tier upgrades)
+    //  Fins_01    → Stabilizer I  unlocks at player level 2  (HANDLING_TIERS[1])
+    //  Fins_02    → Stabilizer II unlocks at player level 5  (HANDLING_TIERS[3])
+    //  Rings_001  → Warp Drive    unlocks at player level 14 (HANDLING_TIERS[5])
+    //  Anything else → unlocked by default
+    // Triple-tap admin cheat (sets window._adminUnlockAll) bypasses every gate
+    // so the dev can preview all mods regardless of level/ladder progress.
     function _addonUnlockedFor(nodeName) {
-      if (!/^Turrets_/.test(nodeName)) return true;
-      try { return typeof window.isAddonUnlocked === 'function' ? !!window.isAddonUnlocked(nodeName) : false; }
-      catch(_) { return false; }
+      try { if (window._adminUnlockAll) return true; } catch(_){}
+      if (/^Turrets_/.test(nodeName)) {
+        try { return typeof window.isAddonUnlocked === 'function' ? !!window.isAddonUnlocked(nodeName) : false; }
+        catch(_) { return false; }
+      }
+      const _levelGates = {
+        'Fins_01':   2,
+        'Fins_02':   5,
+        'Rings_001': 14,
+      };
+      if (Object.prototype.hasOwnProperty.call(_levelGates, nodeName)) {
+        try {
+          const lvl = (typeof loadPlayerLevel === 'function') ? loadPlayerLevel() : 1;
+          return lvl >= _levelGates[nodeName];
+        } catch(_) { return false; }
+      }
+      return true;
     }
     function _isNewAddon(nodeName) {
       try {

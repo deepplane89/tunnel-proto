@@ -1326,12 +1326,14 @@ function claimHandlingUpgrade() {
 // gate which models the player can equip. Stats shown in the dropdown use the
 // raw macro values (RESP / SETTLE / DRIFT) since the user requested technical
 // labels rather than vibey ones.
+// Order: Glide → Wipeout → Rail → Jet. Jet is the final unlock around
+// 3/4 through the handling-level ladder (handling tops at L22, jet at L20).
 window._FLIGHT_MODELS = {
   DEFAULT: { unlock: 1,  color: '#aaaaaa', resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
   GLIDE:   { unlock: 4,  color: '#7bbbff', resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
-  JET:     { unlock: 8,  color: '#00ffaa', resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
+  WIPEOUT: { unlock: 8,  color: '#ff77aa', resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
   RAIL:    { unlock: 14, color: '#ffff77', resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },
-  WIPEOUT: { unlock: 22, color: '#ff77aa', resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
+  JET:     { unlock: 20, color: '#00ffaa', resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
 };
 const FLIGHT_MODEL_KEY = 'jetslide_flight_model';
 const FLIGHT_MODEL_CLAIMED_KEY = 'jetslide_flight_model_claimed'; // tracks highest unlock level user has "seen"
@@ -15392,12 +15394,25 @@ function updateStreakBadge() {
       const entry = entries[i];
       const node = _findAddonNodeIn(root, entry.node);
       if (!node) continue;
-      // Locked turrets: force hidden regardless of saved state (so a stale
-      // pre-gate save can't leave a locked turret visible on the ship).
-      const isTurret = /^Turrets_/.test(entry.node);
-      const locked = isTurret && (typeof window.isAddonUnlocked === 'function')
-                      && !window.isAddonUnlocked(entry.node);
-      if (locked) { node.visible = false; continue; }
+      // Locked addons: force hidden regardless of saved state so a stale
+      // pre-gate save can't leave a locked mod visible on the ship.
+      // Admin override (triple-tap title) treats everything as unlocked.
+      let _adminAll = false;
+      try { _adminAll = !!window._adminUnlockAll; } catch(_){}
+      let _locked = false;
+      if (!_adminAll) {
+        if (/^Turrets_/.test(entry.node)) {
+          _locked = (typeof window.isAddonUnlocked === 'function')
+                    && !window.isAddonUnlocked(entry.node);
+        } else if (entry.node === 'Fins_01' || entry.node === 'Fins_02' || entry.node === 'Rings_001') {
+          const _gates = { 'Fins_01': 2, 'Fins_02': 5, 'Rings_001': 14 };
+          try {
+            const _lvl = (typeof loadPlayerLevel === 'function') ? loadPlayerLevel() : 1;
+            _locked = _lvl < _gates[entry.node];
+          } catch(_){ _locked = true; }
+        }
+      }
+      if (_locked) { node.visible = false; continue; }
       if (typeof bucket[entry.node] !== 'boolean') continue;
       node.visible = !!bucket[entry.node];
     }
@@ -15442,12 +15457,32 @@ function updateStreakBadge() {
     });
     if (dirty) _saveAddonsState(saved);
 
-    // Turret addons require an unlock from the mission ladder. Other addons
-    // (Stabilizers, Warp Drive) have no gate and are always unlocked.
+    // Per-addon unlock rules:
+    //  Turrets    → mission-ladder unlock (gates laser tier upgrades)
+    //  Fins_01    → Stabilizer I  unlocks at player level 2  (HANDLING_TIERS[1])
+    //  Fins_02    → Stabilizer II unlocks at player level 5  (HANDLING_TIERS[3])
+    //  Rings_001  → Warp Drive    unlocks at player level 14 (HANDLING_TIERS[5])
+    //  Anything else → unlocked by default
+    // Triple-tap admin cheat (sets window._adminUnlockAll) bypasses every gate
+    // so the dev can preview all mods regardless of level/ladder progress.
     function _addonUnlockedFor(nodeName) {
-      if (!/^Turrets_/.test(nodeName)) return true;
-      try { return typeof window.isAddonUnlocked === 'function' ? !!window.isAddonUnlocked(nodeName) : false; }
-      catch(_) { return false; }
+      try { if (window._adminUnlockAll) return true; } catch(_){}
+      if (/^Turrets_/.test(nodeName)) {
+        try { return typeof window.isAddonUnlocked === 'function' ? !!window.isAddonUnlocked(nodeName) : false; }
+        catch(_) { return false; }
+      }
+      const _levelGates = {
+        'Fins_01':   2,
+        'Fins_02':   5,
+        'Rings_001': 14,
+      };
+      if (Object.prototype.hasOwnProperty.call(_levelGates, nodeName)) {
+        try {
+          const lvl = (typeof loadPlayerLevel === 'function') ? loadPlayerLevel() : 1;
+          return lvl >= _levelGates[nodeName];
+        } catch(_) { return false; }
+      }
+      return true;
     }
     function _isNewAddon(nodeName) {
       try {
@@ -31869,8 +31904,39 @@ function buildSkinTunerSliders() {
         window._cheatLevel = (lvl) => { savePlayerLevel(lvl || 50); savePlayerXP(0); updateTitleLevel(); };
         window._cheatMaxUpgrades = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 5)); };
         window._cheatLadder = (pos) => { saveLadderPos(pos || MISSION_LADDER.length); saveMissionFlags({}); updateTitleFuelCells(); };
+        // Cheat: bypass every garage gate so all mods (Stabilizers,
+        // Warp Drive, Turrets) and every thruster preset/color are
+        // selectable regardless of player level or ladder progress.
+        // Read by _addonUnlockedFor in 48-showroom.js and the thruster
+        // unlock checks. Persisted unlocks for turrets/thrusters get
+        // written too so the state survives a tab refresh in admin mode.
+        window._adminUnlockAll = true;
+        try {
+          // Unlock all turret addons via the regular storage helper so
+          // shop laser-tier gates also see them.
+          if (typeof loadUnlockedAddons === 'function' && typeof saveUnlockedAddons === 'function') {
+            const _allTurrets = ['Turrets_001','Turrets_002','Turrets_003'];
+            const _ua = loadUnlockedAddons();
+            for (const t of _allTurrets) if (_ua.indexOf(t) < 0) _ua.push(t);
+            saveUnlockedAddons(_ua);
+          }
+        } catch(_){}
+        try {
+          // Unlock every thruster preset (incl. plasma) and every color.
+          if (typeof loadThrusterData === 'function' && typeof saveThrusterData === 'function') {
+            const _td = loadThrusterData();
+            const _allPresets = Object.keys(window._THRUSTER_PRESETS || {});
+            const _allColors  = Object.keys(window._THRUSTER_COLOR_PALETTE || {});
+            for (const k of _allPresets) if (_td.unlockedPresets.indexOf(k) < 0) _td.unlockedPresets.push(k);
+            for (const k of _allColors)  if (_td.unlockedColors.indexOf(k)  < 0) _td.unlockedColors.push(k);
+            saveThrusterData(_td);
+          }
+        } catch(_){}
         try { localStorage.removeItem(STREAK_KEY_DAY); localStorage.removeItem(STREAK_KEY_LAST); updateStreakBadge(); } catch(_) {}
-        window._cheatReset = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); Object.keys(STAT_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); saveCoinWallet(0); saveFuelCells(0); saveFreeHeadStarts(0); saveLadderPos(0); window._LS.removeItem('jetslide_mission_flags'); window._LS.setItem('jetslide_pu_unlocked', '["shield"]'); savePlayerLevel(1); savePlayerXP(0); _totalCoins = 0; updateTitleCoins(); updateTitleFuelCells(); updateTitleLevel(); };
+        window._cheatReset = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); Object.keys(STAT_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); saveCoinWallet(0); saveFuelCells(0); saveFreeHeadStarts(0); saveLadderPos(0); window._LS.removeItem('jetslide_mission_flags'); window._LS.setItem('jetslide_pu_unlocked', '["shield"]'); savePlayerLevel(1); savePlayerXP(0); _totalCoins = 0; updateTitleCoins(); updateTitleFuelCells(); updateTitleLevel(); window._adminUnlockAll = false; };
+      } else {
+        // Toggling admin OFF clears the global gate-bypass flag.
+        window._adminUnlockAll = false;
       }
       // Brief yellow flash on title
       const _origColor = titleEl.style.color;

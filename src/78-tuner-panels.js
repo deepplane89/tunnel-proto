@@ -2545,8 +2545,39 @@ function buildSkinTunerSliders() {
         window._cheatLevel = (lvl) => { savePlayerLevel(lvl || 50); savePlayerXP(0); updateTitleLevel(); };
         window._cheatMaxUpgrades = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 5)); };
         window._cheatLadder = (pos) => { saveLadderPos(pos || MISSION_LADDER.length); saveMissionFlags({}); updateTitleFuelCells(); };
+        // Cheat: bypass every garage gate so all mods (Stabilizers,
+        // Warp Drive, Turrets) and every thruster preset/color are
+        // selectable regardless of player level or ladder progress.
+        // Read by _addonUnlockedFor in 48-showroom.js and the thruster
+        // unlock checks. Persisted unlocks for turrets/thrusters get
+        // written too so the state survives a tab refresh in admin mode.
+        window._adminUnlockAll = true;
+        try {
+          // Unlock all turret addons via the regular storage helper so
+          // shop laser-tier gates also see them.
+          if (typeof loadUnlockedAddons === 'function' && typeof saveUnlockedAddons === 'function') {
+            const _allTurrets = ['Turrets_001','Turrets_002','Turrets_003'];
+            const _ua = loadUnlockedAddons();
+            for (const t of _allTurrets) if (_ua.indexOf(t) < 0) _ua.push(t);
+            saveUnlockedAddons(_ua);
+          }
+        } catch(_){}
+        try {
+          // Unlock every thruster preset (incl. plasma) and every color.
+          if (typeof loadThrusterData === 'function' && typeof saveThrusterData === 'function') {
+            const _td = loadThrusterData();
+            const _allPresets = Object.keys(window._THRUSTER_PRESETS || {});
+            const _allColors  = Object.keys(window._THRUSTER_COLOR_PALETTE || {});
+            for (const k of _allPresets) if (_td.unlockedPresets.indexOf(k) < 0) _td.unlockedPresets.push(k);
+            for (const k of _allColors)  if (_td.unlockedColors.indexOf(k)  < 0) _td.unlockedColors.push(k);
+            saveThrusterData(_td);
+          }
+        } catch(_){}
         try { localStorage.removeItem(STREAK_KEY_DAY); localStorage.removeItem(STREAK_KEY_LAST); updateStreakBadge(); } catch(_) {}
-        window._cheatReset = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); Object.keys(STAT_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); saveCoinWallet(0); saveFuelCells(0); saveFreeHeadStarts(0); saveLadderPos(0); window._LS.removeItem('jetslide_mission_flags'); window._LS.setItem('jetslide_pu_unlocked', '["shield"]'); savePlayerLevel(1); savePlayerXP(0); _totalCoins = 0; updateTitleCoins(); updateTitleFuelCells(); updateTitleLevel(); };
+        window._cheatReset = () => { Object.keys(POWERUP_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); Object.keys(STAT_UPGRADES).forEach(id => saveUpgradeTier(id, 1)); saveCoinWallet(0); saveFuelCells(0); saveFreeHeadStarts(0); saveLadderPos(0); window._LS.removeItem('jetslide_mission_flags'); window._LS.setItem('jetslide_pu_unlocked', '["shield"]'); savePlayerLevel(1); savePlayerXP(0); _totalCoins = 0; updateTitleCoins(); updateTitleFuelCells(); updateTitleLevel(); window._adminUnlockAll = false; };
+      } else {
+        // Toggling admin OFF clears the global gate-bypass flag.
+        window._adminUnlockAll = false;
       }
       // Brief yellow flash on title
       const _origColor = titleEl.style.color;
