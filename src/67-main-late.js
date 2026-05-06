@@ -5202,7 +5202,16 @@ function update(dt) {
         for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _spawnBand = bi; break; } _spawnBand = bi; }
       }
       const _isFatConeMode = state._seqSpawnMode === 'fat_cones';
-      const _spawnZBase = _isFatConeMode ? -28 : (_spawnBand === 1) ? -30 : (_spawnBand === 2 || _spawnBand >= 5) ? -22 : (state.isDeathRun ? -30 : -50);
+      let _spawnZBase = _isFatConeMode ? -28 : (_spawnBand === 1) ? -30 : (_spawnBand === 2 || _spawnBand >= 5) ? -22 : (state.isDeathRun ? -30 : -50);
+      // Stage 1 cone ramp: tighten row spacing as the stage progresses so
+      // the cones come faster instead of arriving in dense bunched rows.
+      // _seqConeDensity === 'ramp' is set by the S1_CONES sequencer stage.
+      // Was a fixed -30 unit gap; ramp from -36 (sparse, easy entry) down
+      // to -16 (cones rolling in fast) as t01 goes 0→1.
+      if (state._seqConeDensity === 'ramp') {
+        const _t01 = state._seqRampT01 || 0;
+        _spawnZBase = -36 + 20 * _t01; // -36 → -16
+      }
       state.nextSpawnZ = _spawnZBase + (Math.random() - 0.5) * 10;
       state.frameCount++;
       const l4PreClear = (!state.isDeathRun && state.currentLevelIdx === 3 && !state.l4CorridorDone &&

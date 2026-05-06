@@ -1941,11 +1941,12 @@ function spawnObstacles() {
     } else if (_density === 'dense') {
       obs = 6; maxObs = 8; gap = 1.0;
     } else if (_density === 'ramp') {
-      // Linear ramp 5→7 over the stage. _seqRampT01 set by sequencer tick.
-      // (Was 5→9; end of tier 1 felt like a wall.)
-      const t = state._seqRampT01 || 0;
-      obs = Math.round(5 + 2 * t);
-      maxObs = obs + 2;
+      // Stage 1 ramp: keep per-row count steady (no walls of cones bunched in
+      // a single row), let intensity come from spawn FREQUENCY instead. The
+      // row spacing is shrunk down by _drStageSpawnZScale() (driven by
+      // _seqRampT01) so cones arrive faster as the stage progresses.
+      obs = 4;
+      maxObs = 5;
       gap = 1.0;
     } else if (_density === 'normal') {
       // Sequencer 'normal' = moderate scatter, not the brutal endless-mode count
