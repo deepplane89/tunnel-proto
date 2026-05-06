@@ -140,8 +140,6 @@
     <!-- Mode buttons -->
     <div class="title-mode-buttons">
       <button id="death-run-btn" class="btn-mode btn-deathrun">TAP TO PLAY</button>
-      <button id="wormhole-btn" class="btn-mode btn-wormhole" style="display:none;">WORMHOLE</button>
-
     </div>
 
     <!-- Layout tuner (triple-tap RUNNER label to toggle) -->
@@ -372,11 +370,6 @@
 <!-- ── IN-RUN MISSION TOAST ───────────────────────── -->
 <div id="mission-toast" class="mission-toast"></div>
 
-<!-- ── LEVEL BANNER ──────────────────────────────── -->
-<div id="level-banner" class="level-banner hidden">
-  <span id="level-banner-text">LEVEL 2 — ULTRAVIOLET</span>
-</div>
-
 <!-- ── HUD ──────────────────────────────────────── -->
 <div id="fps-overlay" class="fps-overlay hidden">0 FPS</div>
 <div id="hud" class="hud hidden">
@@ -523,7 +516,6 @@
 <audio id="crash-sound" src="./assets/audio/crash.mp3" preload="auto"></audio>
 <audio id="crash-layer-sound" src="./assets/audio/crash-layer.mp3" preload="auto"></audio>
 
-<audio id="exit-sound" src="./assets/audio/exit.mp3" preload="auto"></audio>
 
 <audio id="title-music" src="./assets/audio/title.mp3" loop preload="auto"></audio>
 <audio id="l3-music" src="./assets/audio/l3music.mp3" loop preload="auto"></audio>
@@ -560,9 +552,6 @@
   <div class="touch-left" id="touch-left"></div>
   <!-- Right zone: steer right -->
   <div class="touch-right" id="touch-right"></div>
-  <!-- Joystick removed — steer zones only -->
-  <div id="joystick-zone" style="display:none">
-  </div>
   <!-- Pause button -->
   <div class="touch-pause" id="touch-pause">❚❚</div>
 </div>
@@ -607,6 +596,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1778097804"></script>
+<script type="module" src="./dist/game.js?v=1778098659"></script>
 </body>
 </html>

@@ -65,7 +65,16 @@ class HolographicMaterial extends THREE.ShaderMaterial {
         float g = random(vUv.y * 20.2, vUv.y * 0.2);
         float b = random(vUv.y * 0.9, vUv.y * 0.2);
 
-        holoCol += vec4(r * scanlines, b * scanlines, r, 1.0) / 84.0;
+        // Gate scanline/noise contribution on signalSpeed. When signalSpeed=0
+        // the time-driven animation is already silenced, but a STATIC screen-
+        // space banding pattern still remains in scanlines + noise. As the
+        // ship rotates/banks/pitches, the screen-locked pattern crawls across
+        // the rotating surface UVs, reading as a flickering 'hex texture' on
+        // the body. Fading by signalSpeed keeps powerup cubes (signalSpeed>0)
+        // looking exactly as before, while the ghost ship (signalSpeed=0) gets
+        // a clean holo: color tint + fresnel only.
+        float _signalGate = clamp(signalSpeed * 50.0, 0.0, 1.0);
+        holoCol += (vec4(r * scanlines, b * scanlines, r, 1.0) / 84.0) * _signalGate;
         vec4 scanlineMix = mix(vec4(0.0), holoCol, holoCol.a);
 
         vec3 viewDirectionW = normalize(cameraPosition - vPositionW);
