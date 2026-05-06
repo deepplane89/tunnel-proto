@@ -421,7 +421,7 @@ window.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight') { let _ni = (skinViewerIdx + 1) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni + 1) % SHIP_SKINS.length; navigateToSkin(_ni); }
     return;
   }
-  if (isSpace && phaseAtEvent === 'title')   { try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}; startGame(); }
+  if (isSpace && phaseAtEvent === 'title')   { playStartSound(); startGame(); }
   // if (isSpace && phaseAtEvent === 'playing') triggerJump(); // JUMP QUARANTINED
   if (e.key === 'Escape' && phaseAtEvent === 'playing') togglePause();
   if (e.key === 'Escape' && phaseAtEvent === 'paused')  togglePause();
@@ -999,7 +999,14 @@ fetchLeaderboard();
 // locked taps, playStartInterference for ACCESS GRANTED. These wrappers are
 // kept as no-ops so any stray callers don't throw — and so the inline
 // onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
-function playStartSound()  { /* removed — see _ note above */ }
+function playStartSound() {
+  if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
+  _ensureCtxRunning();
+  const sfx = document.getElementById('start-sound');
+  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.85 * _sM); sfx.play().catch(() => {}); }
+}
 function playResumeSound() {
   // CONTINUE from pause — light nav cue (pinball pip).
   try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}

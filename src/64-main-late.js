@@ -8,8 +8,8 @@ _tapBind(document.getElementById('death-run-btn'), () => {
   const _ewRoar = document.getElementById('engine-roar');
   if (_ewEng) { _ewEng.load(); }
   if (_ewRoar) { _ewRoar.load(); }
-  // ENTER from title: short "computer interference" cue.
-  try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}
+  // ENTER from title: original start cue.
+  playStartSound();
   startDeathRun();
 });
 _tapBind(document.getElementById('restart-btn'), () => {
