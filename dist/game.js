@@ -10147,10 +10147,10 @@ function _createCanyonWalls() {
       // Entrance: X frozen at FINAL resting Z (-150/-170/-190), not spawn Z (-500/-520/-540).
       // This way the gate visually sits where it would end up, flying at the ship as a stable shape.
       if (pivot.userData.isEntrance) {
-        // Entrance-only pad: mouth is 10u wider each side than corridor proper.
-        // Only applied at INIT — recycled entrance slabs (line ~8030) snap back
-        // to halfXOverride so the corridor behind doesn't inherit extra width.
-        const ENTRANCE_PAD = 10;
+        // Entrance halfX must match regular slabs exactly — any pad makes the
+        // long wall behind appear to stick out past the entrance face (entrance
+        // looks recessed/set-back). Was 10u outward; flush is correct.
+        const ENTRANCE_PAD = 0;
         // Mode 5 entrance matches the near-end (start Z) squeeze value.
         const _baseHalf = (_canyonMode === 5) ? _canyonHalfXAtZ(SAFE_Z) : (T.halfXOverride || 34);
         const halfX    = _baseHalf + ENTRANCE_PAD;
