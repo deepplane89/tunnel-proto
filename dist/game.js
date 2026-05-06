@@ -13861,15 +13861,21 @@ function spawnObstacles() {
   }
 
   // ── S1 RAMP FAST PATH: single-cone staggered scatter ──
-  // Skip ALL the row/predictedX/gap-lane machinery below — it's designed
-  // for multi-cone rows and was making single cones cluster (predictedX
-  // anchored to ship + Array.sort shuffle bias was picking similar lanes
-  // repeatedly, so cones appeared in a vertical column following the
-  // player). Just drop one cone at an absolute-random lane on the full
-  // road, decoupled from the ship's position. The S1 spawner Z-loop
-  // handles cadence (frequency ramp -10 → -3 over the stage).
+  // Skip the row/predictedX/gap-lane machinery below (designed for
+  // multi-cone rows). Spawn ONE cone per call. Lateral logic:
+  //  - The spawn REGION drifts with shipX (so cones stay in the player's
+  //    general vicinity — lateral camping doesn't trivialize the stage).
+  //  - Inside the region the cone's lane is uniform-random across a wide
+  //    band, so individual cones don't track the ship's exact X.
+  // Region width ±8 lanes (≈16 lanes / 51 units of road) centered on
+  // shipX — wide enough that you can dodge by drifting laterally, narrow
+  // enough that you can't park on one edge and watch them miss.
   if (state.isDeathRun && state._seqConeDensity === 'ramp') {
-    const _laneIdx = Math.floor(Math.random() * LANE_COUNT);
+    const _shipLaneIdx = Math.round(state.shipX / LANE_WIDTH + (LANE_COUNT - 1) / 2);
+    const _regionHalfLanes = 8;
+    const _regionLo = Math.max(0, _shipLaneIdx - _regionHalfLanes);
+    const _regionHi = Math.min(LANE_COUNT - 1, _shipLaneIdx + _regionHalfLanes);
+    const _laneIdx = _regionLo + Math.floor(Math.random() * (_regionHi - _regionLo + 1));
     const _laneX = (_laneIdx - (LANE_COUNT - 1) / 2) * LANE_WIDTH;
     // Skip if cone would land inside an active bonus ring
     let _inRing = false;
