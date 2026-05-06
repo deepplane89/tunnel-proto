@@ -590,6 +590,18 @@ let _handlingDriftOverride = -1; // -1 = use player level, 0-1 = tuner override
 // ── Named physics presets ───────────────────────────────────────────────────
 // Restore these via the physics tuner "RESTORE PRESET" button
 const _PHYSICS_PRESETS = {
+  'Default': {
+    label:        'Default — startup values',
+    accelBase:    22,
+    accelSnap:    52,
+    maxVelBase:   9,
+    maxVelSnap:   13,
+    bankMax:      0.03,
+    bankSmoothing:8,
+    decelBasePct: 0.02,
+    decelFullPct: 0.05,
+    // No speed field — don't snap to L4
+  },
   'JL_v1': {
     label:        'Jet Lightning v1 (rchouake approved)',
     accelBase:    60,

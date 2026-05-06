@@ -3182,6 +3182,7 @@ function killPlayer() {
   state.rollHeld = false;
   state.rollAngle = 0;
   state.rollDir = 0;
+  state._shipBankNoWobble = 0;
   shipGroup.rotation.z = 0;
 
   // ── Ship explosion: hide ship + thrusters, spawn particles ──
@@ -4101,23 +4102,21 @@ function update(dt) {
     // it ever reached the visible rotation. Diagnosis confirmed via runtime
     // logging: source wobble ±0.018 rad survived as ~±0.005 rad on rot.z.
     const _rollTargetNoWobble = targetRoll + _shipRotZOffset;
-    const _crossingZero = (shipGroup.rotation.z > 0.01 && _rollTargetNoWobble < -0.01) || (shipGroup.rotation.z < -0.01 && _rollTargetNoWobble > 0.01);
+    // Track bank in a wobble-free state var. Lerping shipGroup.rotation.z directly
+    // would carry forward the previous frame's wobble residue (added at the end of
+    // the previous frame), and the camera-roll capture would inherit that residue
+    // → horizon tilts with wobble even though we capture "pre-wobble". Fix: keep
+    // bank pure in _shipBankNoWobble; render = bank + wobble; horizon = bank only.
+    if (typeof state._shipBankNoWobble !== 'number') state._shipBankNoWobble = 0;
+    const _crossingZero = (state._shipBankNoWobble > 0.01 && _rollTargetNoWobble < -0.01) || (state._shipBankNoWobble < -0.01 && _rollTargetNoWobble > 0.01);
     // Use _bankSmoothing while steering, _bankReturnSmoothing when releasing — decoupled into/out of bank.
     const _baseSmooth = isSteering ? _bankSmoothing : _bankReturnSmoothing;
     const _lerpSpeed = _crossingZero ? _baseSmooth * 3 : _baseSmooth;
-    shipGroup.rotation.z = THREE.MathUtils.lerp(shipGroup.rotation.z, _rollTargetNoWobble, Math.min(1, _lerpSpeed * dt));
-    // ── Camera roll: horizon = ship BANK (pre-wobble) × _camRollAmt.
-    // Captured here, between the bank lerp and the wobble-add, so the horizon
-    // mirrors the deliberate bank only and never inherits the release-wobble
-    // overlay. Direct linear coupling — the bank itself is already smoothed by
-    // the lerp above, so the horizon inherits that smoothness for free.
-    //   _camRollAmt = 0 → rigid horizon (Star Fox SNES)
-    //   _camRollAmt = 1 → full coupling (Wipeout)
-    cameraRoll = shipGroup.rotation.z * _camRollAmt;
-    // Wobble is added AFTER capturing camera roll — bypasses the smoothing
-    // filter so JUICE amplitudes survive at full strength on the ship, while
-    // leaving the horizon untouched.
-    shipGroup.rotation.z += wobbleOffset;
+    state._shipBankNoWobble = THREE.MathUtils.lerp(state._shipBankNoWobble, _rollTargetNoWobble, Math.min(1, _lerpSpeed * dt));
+    // Horizon = pure bank × _camRollAmt. No wobble path into the camera ever.
+    cameraRoll = state._shipBankNoWobble * _camRollAmt;
+    // Visual = pure bank + wobble. Wobble lives only on the ship model.
+    shipGroup.rotation.z = state._shipBankNoWobble + wobbleOffset;
     // Hard-clamp the result. Headroom = 1.15× bank cap PLUS the current
     // wobble amplitude, so a release-wobble peak (≈0.14 rad at JUICE=1) can
     // ride on top of a maxed bank without being decapitated.
