@@ -31992,55 +31992,30 @@ function buildSkinTunerSliders() {
   titleEl.addEventListener('click', onTap);
 })();
 
-// Ship Z tuner slider (syncs admin panel + settings panel)
+// Ship Z tuner slider (settings panel only — admin version was removed)
 (function setupShipZSlider() {
-  const sliders = [
-    { slider: document.getElementById('ship-z-slider'), label: document.getElementById('ship-z-val') },
-    { slider: document.getElementById('ship-z-settings'), label: document.getElementById('ship-z-settings-val') },
-  ];
-  sliders.forEach(({ slider, label }) => {
-    if (!slider || !label) return;
-    slider.addEventListener('input', () => {
-      const v = parseFloat(slider.value);
-      shipGroup.position.z = v;
-      // Sync both sliders
-      sliders.forEach(s => {
-        if (s.slider) s.slider.value = v;
-        if (s.label) s.label.textContent = v.toFixed(1);
-      });
-    });
-  });
-})();
-
-// Camera Pitch slider (admin panel)
-(function setupCamPitchSlider() {
-  const slider = document.getElementById('cam-pitch-slider');
-  const label = document.getElementById('cam-pitch-val');
+  const slider = document.getElementById('ship-z-settings');
+  const label = document.getElementById('ship-z-settings-val');
   if (!slider || !label) return;
   slider.addEventListener('input', () => {
     const v = parseFloat(slider.value);
-    cameraPivot.position.y = v;
+    shipGroup.position.z = v;
+    slider.value = v;
     label.textContent = v.toFixed(1);
   });
 })();
 
-// Ship Y (hover height) slider — syncs admin panel + settings panel
+// Ship Y (hover height) slider — settings panel only (admin version removed)
 (function setupShipYSlider() {
-  const sliders = [
-    { slider: document.getElementById('ship-y-slider'), label: document.getElementById('ship-y-val') },
-    { slider: document.getElementById('ship-y-settings'), label: document.getElementById('ship-y-settings-val') },
-  ];
-  sliders.forEach(({ slider, label }) => {
-    if (!slider || !label) return;
-    slider.addEventListener('input', () => {
-      const v = parseFloat(slider.value);
-      _hoverBaseY = v;
-      shipGroup.position.y = v;
-      sliders.forEach(s => {
-        if (s.slider) s.slider.value = v;
-        if (s.label) s.label.textContent = v.toFixed(2);
-      });
-    });
+  const slider = document.getElementById('ship-y-settings');
+  const label = document.getElementById('ship-y-settings-val');
+  if (!slider || !label) return;
+  slider.addEventListener('input', () => {
+    const v = parseFloat(slider.value);
+    _hoverBaseY = v;
+    shipGroup.position.y = v;
+    slider.value = v;
+    label.textContent = v.toFixed(2);
   });
 })();
 // cache bust 1777249800
