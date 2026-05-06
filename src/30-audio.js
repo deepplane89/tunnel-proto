@@ -182,14 +182,11 @@ function _initSFXBuffers() {
   _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
   _loadSFXBuffer('shop-purchase',   './assets/audio/shop_purchase.mp3');
   _loadSFXBuffer('reject',          './assets/audio/reject.mp3');
-  // Cycling between cards/options in the garage menus.
-  _loadSFXBuffer('menu-cycle',      './assets/audio/menu-cycle.wav');
+  // Cycling between cards/options in the garage menus + title menu taps + exit.
+  _loadSFXBuffer('menu-cycle',      './assets/audio/vr-transform-clicker.mp3');
   // Title-screen "death run" button (the ENTER moment from the loading screen).
   _loadSFXBuffer('start-interference', './assets/audio/start-interference.mp3');
-  // Garage open/close share one source file. The close variant is the
-  // forward sample played in reverse via a sample-flipped clone built at
-  // decode time (see _loadSFXBufferWithReverse).
-  _loadSFXBufferWithReverse('garage-open', 'garage-close', './assets/audio/garage-open.mp3');
+  // Garage open/close audio removed — no sample needed.
 }
 
 // Decode a sample, then build a sample-reversed clone under another name.
@@ -358,9 +355,10 @@ function playReject() {
 }
 window.playReject = playReject;
 
-// Garage entry: forward power-up sweep. Garage exit: same sample reversed.
-function playGarageOpen()  { _playBuffer('garage-open',  0.6, 1.0, null); }
-function playGarageClose() { _playBuffer('garage-close', 0.6, 1.0, null); }
+// Garage open/close sounds removed per design — silent now. Stubs kept so
+// existing callers (Showroom.open/close) don't need to change.
+function playGarageOpen()  { /* no-op */ }
+function playGarageClose() { /* no-op */ }
 window.playGarageOpen  = playGarageOpen;
 window.playGarageClose = playGarageClose;
 

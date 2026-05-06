@@ -1550,7 +1550,7 @@ const MISSION_LADDER = [
   { type:'mission', id:'coins25', desc:'Collect 25 coins in one run', check:(r)=>r.coins>=25 },
   { type:'reward', reward:{ kind:'fuelcells', amount:50, label:'50 Fuel Cells', xp:100 } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'red', label:'Unlock CRIMSON Thruster Color' } },
-  { type:'mission', id:'level2', desc:'Reach Level 2 in one run', check:(r)=>r.level>=2 },
+  { type:'mission', id:'level3', desc:'Reach Level 3 in one run', check:(r)=>r.level>=3 },
   { type:'mission', id:'runs5', desc:'Complete 5 runs', check:(r,lt)=>lt.runs>=5 },
   { type:'mission', id:'score7k', desc:'Score 7,000+ in one run', check:(r)=>r.score>=7000 },
   { type:'reward', reward:{ kind:'unlock', powerup:'laser', label:'Unlock LASER', coins:250 } },
@@ -1560,7 +1560,7 @@ const MISSION_LADDER = [
   { type:'reward', reward:{ kind:'fuelcells', amount:75, label:'75 Fuel Cells', xp:150 } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'green', label:'Unlock TOXIC Thruster Color' } },
   { type:'mission', id:'score15k', desc:'Score 15,000+ in one run', check:(r)=>r.score>=15000 },
-  { type:'mission', id:'level3', desc:'Reach Level 3 in one run', check:(r)=>r.level>=3 },
+  { type:'mission', id:'level6', desc:'Reach Level 6 in one run', check:(r)=>r.level>=6 },
   { type:'mission', id:'coins100', desc:'Collect 100 coins in one run', check:(r)=>r.coins>=100 },
   { type:'reward', reward:{ kind:'stat', stat:'spawnrate', value:0.10, label:'Pickup Spawn +10%' } },
   { type:'mission', id:'shield2', desc:'Use shield 2 times in one run', check:(r)=>r.shields>=2 },
@@ -1584,7 +1584,7 @@ const MISSION_LADDER = [
   { type:'mission', id:'runs30', desc:'Complete 30 runs', check:(r,lt)=>lt.runs>=30 },
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:1, label:'Score Mult +1x' } },
   { type:'mission', id:'score40k', desc:'Score 40,000+ in one run', check:(r)=>r.score>=40000 },
-  { type:'mission', id:'level4', desc:'Reach Level 4 in one run', check:(r)=>r.level>=4 },
+  { type:'mission', id:'level10', desc:'Reach Level 10 in one run', check:(r)=>r.level>=10 },
   { type:'mission', id:'drtier3', desc:'Reach speed tier 3 in DR', check:(r)=>r.isDR&&r.drTier>=3 },
   { type:'reward', reward:{ kind:'fuelcells', amount:200, label:'200 Fuel Cells', xp:250 } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'gold', label:'Unlock SOLAR GOLD Thruster Color' } },
@@ -1603,7 +1603,7 @@ const MISSION_LADDER = [
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:2, label:'Score Mult +2x' } },
   { type:'reward', reward:{ kind:'unlock', powerup:'powermeter', label:'Unlock POWER METER', fuelcells:200 } },
   { type:'mission', id:'score80k', desc:'Score 80,000+ in one run', check:(r)=>r.score>=80000 },
-  { type:'mission', id:'level5', desc:'Reach Level 5 in one run', check:(r)=>r.level>=5 },
+  { type:'mission', id:'level15', desc:'Reach Level 15 in one run', check:(r)=>r.level>=15 },
   { type:'reward', reward:{ kind:'thruster', presetKey:'plasma', label:'Unlock PLASMA Thruster' } },
   { type:'mission', id:'drtier4', desc:'Reach speed tier 4 in DR', check:(r)=>r.isDR&&r.drTier>=4 },
   { type:'reward', reward:{ kind:'fuelcells', amount:300, label:'300 Fuel Cells', coins:1500, xp:400 } },
@@ -1631,6 +1631,8 @@ const MISSION_LADDER = [
   { type:'mission', id:'ltcoins25k', desc:'Collect 25,000 total coins', check:(r,lt)=>lt.coins>=25000 },
   { type:'mission', id:'ltscore500k', desc:'Score 500,000 total points', check:(r,lt)=>lt.score>=500000 },
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:5, label:'Score Mult +5x', coins:3000 } },
+  { type:'mission', id:'level20', desc:'Reach Level 20 (Endgame) in one run', check:(r)=>r.level>=20 },
+  { type:'reward', reward:{ kind:'fuelcells', amount:1000, label:'1,000 Fuel Cells', coins:5000, xp:1000 } },
 ];
 
 const REWARD_COLORS = { fuelcells:'#4488ff', coins:'#ffcc00', stat:'#00eeff', unlock:'#44ff88', thruster:'#ff66bb', thrustercolor:'#ff66bb' };
@@ -11536,14 +11538,11 @@ function _initSFXBuffers() {
   _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
   _loadSFXBuffer('shop-purchase',   './assets/audio/shop_purchase.mp3');
   _loadSFXBuffer('reject',          './assets/audio/reject.mp3');
-  // Cycling between cards/options in the garage menus.
-  _loadSFXBuffer('menu-cycle',      './assets/audio/menu-cycle.wav');
+  // Cycling between cards/options in the garage menus + title menu taps + exit.
+  _loadSFXBuffer('menu-cycle',      './assets/audio/vr-transform-clicker.mp3');
   // Title-screen "death run" button (the ENTER moment from the loading screen).
   _loadSFXBuffer('start-interference', './assets/audio/start-interference.mp3');
-  // Garage open/close share one source file. The close variant is the
-  // forward sample played in reverse via a sample-flipped clone built at
-  // decode time (see _loadSFXBufferWithReverse).
-  _loadSFXBufferWithReverse('garage-open', 'garage-close', './assets/audio/garage-open.mp3');
+  // Garage open/close audio removed — no sample needed.
 }
 
 // Decode a sample, then build a sample-reversed clone under another name.
@@ -11712,9 +11711,10 @@ function playReject() {
 }
 window.playReject = playReject;
 
-// Garage entry: forward power-up sweep. Garage exit: same sample reversed.
-function playGarageOpen()  { _playBuffer('garage-open',  0.6, 1.0, null); }
-function playGarageClose() { _playBuffer('garage-close', 0.6, 1.0, null); }
+// Garage open/close sounds removed per design — silent now. Stubs kept so
+// existing callers (Showroom.open/close) don't need to change.
+function playGarageOpen()  { /* no-op */ }
+function playGarageClose() { /* no-op */ }
 window.playGarageOpen  = playGarageOpen;
 window.playGarageClose = playGarageClose;
 
@@ -11903,13 +11903,11 @@ function _playAsteroidImpact() {
 
 function playPickup(typeIdx) {
   if (!audioCtx || state.muted) return;
-  const freqs = [880, 1100, 660, 990, 770, 660];
-  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.45);
-  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.35), 80);
-  // Quiet electron-burst layer on power-up smash.
+  // Smash-through powerup sound — single VR transform clip. Synth tone layer
+  // and old powerup-burst layer are muted per design (only this clip plays).
   const _pb = document.getElementById('powerup-burst-sfx');
   if (_pb) {
-    try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {}
+    try { _pb.currentTime = 0; _pb.volume = 0.85; _pb.play().catch(() => {}); } catch (_) {}
   }
 }
 
@@ -20229,6 +20227,7 @@ function _drSequencerTick(dt) {
         const toVibe   = DEATH_RUN_VIBES[stage.vibeIdx];
         state.deathRunVibeIdx = stage.vibeIdx;
         state.currentLevelIdx = toVibe.sunShader;
+        if ((stage.vibeIdx + 1) > (state.sessionMaxLevel || 1)) state.sessionMaxLevel = stage.vibeIdx + 1;
         _pendingVibeIdx = -1;
         applyDeathRunVibeTransition(fromVibe, toVibe);
       } else {
@@ -21737,6 +21736,7 @@ function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
   const fromVibe = DEATH_RUN_VIBES[state.deathRunVibeIdx];
   const toVibe   = DEATH_RUN_VIBES[targetVibeIdx];
   state.deathRunVibeIdx = targetVibeIdx;
+  if ((targetVibeIdx + 1) > (state.sessionMaxLevel || 1)) state.sessionMaxLevel = targetVibeIdx + 1;
   _pendingVibeIdx = -1;
   state.levelElapsed    = 0;
   clearAllCorridorFlags();
@@ -22351,7 +22351,12 @@ function killPlayer() {
     invincibles: state.sessionInvincibles || 0,
     isDR: state.isDeathRun,
     drTier: state.deathRunSpeedTier || 0,
-    level: Math.max(state.sessionMaxLevel || 1, (state.currentLevelIdx || 0) + 1),
+    // Player-facing level (HUD shows deathRunVibeIdx+1, 1–20). Falls back
+    // to currentLevelIdx+1 for non-DR contexts.
+    level: Math.max(
+      state.sessionMaxLevel || 1,
+      state.isDeathRun ? ((state.deathRunVibeIdx || 0) + 1) : ((state.currentLevelIdx || 0) + 1)
+    ),
   };
   // Update lifetime stats
   const lt = loadLifetimeStats();
@@ -23413,7 +23418,10 @@ function update(dt) {
           powerups: state.sessionPowerups || 0, shields: state.sessionShields || 0,
           lasers: state.sessionLasers || 0, invincibles: state.sessionInvincibles || 0,
           isDR: state.isDeathRun, drTier: state.deathRunSpeedTier || 0,
-          level: Math.max(state.sessionMaxLevel || 1, (state.currentLevelIdx || 0) + 1),
+          level: Math.max(
+            state.sessionMaxLevel || 1,
+            state.isDeathRun ? ((state.deathRunVibeIdx || 0) + 1) : ((state.currentLevelIdx || 0) + 1)
+          ),
         };
         const _lt = loadLifetimeStats();
         const _tmpLt = { coins: _lt.coins + _rs.coins, score: _lt.score + _rs.score, runs: _lt.runs + 1, powerups: _lt.powerups + _rs.powerups };

@@ -1217,6 +1217,7 @@ function _drSequencerTick(dt) {
         const toVibe   = DEATH_RUN_VIBES[stage.vibeIdx];
         state.deathRunVibeIdx = stage.vibeIdx;
         state.currentLevelIdx = toVibe.sunShader;
+        if ((stage.vibeIdx + 1) > (state.sessionMaxLevel || 1)) state.sessionMaxLevel = stage.vibeIdx + 1;
         _pendingVibeIdx = -1;
         applyDeathRunVibeTransition(fromVibe, toVibe);
       } else {
@@ -2725,6 +2726,7 @@ function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
   const fromVibe = DEATH_RUN_VIBES[state.deathRunVibeIdx];
   const toVibe   = DEATH_RUN_VIBES[targetVibeIdx];
   state.deathRunVibeIdx = targetVibeIdx;
+  if ((targetVibeIdx + 1) > (state.sessionMaxLevel || 1)) state.sessionMaxLevel = targetVibeIdx + 1;
   _pendingVibeIdx = -1;
   state.levelElapsed    = 0;
   clearAllCorridorFlags();
@@ -3339,7 +3341,12 @@ function killPlayer() {
     invincibles: state.sessionInvincibles || 0,
     isDR: state.isDeathRun,
     drTier: state.deathRunSpeedTier || 0,
-    level: Math.max(state.sessionMaxLevel || 1, (state.currentLevelIdx || 0) + 1),
+    // Player-facing level (HUD shows deathRunVibeIdx+1, 1–20). Falls back
+    // to currentLevelIdx+1 for non-DR contexts.
+    level: Math.max(
+      state.sessionMaxLevel || 1,
+      state.isDeathRun ? ((state.deathRunVibeIdx || 0) + 1) : ((state.currentLevelIdx || 0) + 1)
+    ),
   };
   // Update lifetime stats
   const lt = loadLifetimeStats();
@@ -4401,7 +4408,10 @@ function update(dt) {
           powerups: state.sessionPowerups || 0, shields: state.sessionShields || 0,
           lasers: state.sessionLasers || 0, invincibles: state.sessionInvincibles || 0,
           isDR: state.isDeathRun, drTier: state.deathRunSpeedTier || 0,
-          level: Math.max(state.sessionMaxLevel || 1, (state.currentLevelIdx || 0) + 1),
+          level: Math.max(
+            state.sessionMaxLevel || 1,
+            state.isDeathRun ? ((state.deathRunVibeIdx || 0) + 1) : ((state.currentLevelIdx || 0) + 1)
+          ),
         };
         const _lt = loadLifetimeStats();
         const _tmpLt = { coins: _lt.coins + _rs.coins, score: _lt.score + _rs.score, runs: _lt.runs + 1, powerups: _lt.powerups + _rs.powerups };
