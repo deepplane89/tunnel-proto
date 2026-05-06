@@ -9,7 +9,10 @@ let _settings = {
   sfxMuted: false,
   hapticsOn: true,
   // Graphics quality → DPR clamp. 'balanced' is mobile default.
-  // 'performance' = 1.0, 'balanced' = 1.5, 'sharp' = min(devicePixelRatio, 3)
+  // 'performance' = 1.0, 'balanced' = 1.5, 'sharp' = min(devicePixelRatio, 2)
+  // SHARP capped at 2 (not 3) because higher DPR causes additive-blend points
+  // (stars, thruster particles) to oversaturate via bloom — 1.5→3 is 4x the
+  // framebuffer pixels and the visible glow grows beyond what looks crisp.
   graphicsQuality: 'balanced',
 };
 
@@ -19,7 +22,7 @@ function _targetDPR() {
   const native = window.devicePixelRatio || 1;
   switch (_settings.graphicsQuality) {
     case 'performance': return 1.0;
-    case 'sharp':       return Math.min(native, 3);
+    case 'sharp':       return Math.min(native, 2);
     case 'balanced':
     default:            return Math.min(native, 1.5);
   }

@@ -4747,15 +4747,17 @@ let skyConstellLines = null;  // constellation LineSegments
 
         gl_Position = vec4(position.xy, 0.999, 1.0);
 
-        // gl_PointSize is in DEVICE pixels. To keep stars the same CSS size
-        // across quality tiers AND get sharper edges on SHARP (more device
-        // pixels resolving the radial falloff), scale by uPixelRatio. The
-        // BALANCED tier (uPixelRatio = 1.5) is the canonical look — that's
-        // why the historical multiplier was 1.5. Multiplying by uPixelRatio
-        // keeps CSS size constant: at SHARP (uPixelRatio = 3) we get 2x
-        // device pixels, which sub-samples the alpha falloff more finely
-        // (sharper antialiased edges) without growing the visible disc.
-        float coreSize = aSize * uSizeMult * (0.7 + 0.3 * twinkle) * uPixelRatio;
+        // gl_PointSize is in DEVICE pixels. We deliberately use a fixed
+        // multiplier (1.5) instead of uPixelRatio so SHARP gives a smaller,
+        // crisper star (more framebuffer pixels resolving the radial alpha
+        // falloff). Multiplying by the runtime uPixelRatio keeps CSS size
+        // constant but the halo discard threshold lets more outer ring
+        // pixels survive at higher DPR — the disc visibly grows. Locking the
+        // size factor to 1.5 instead means: PERFORMANCE = chunkier stars,
+        // BALANCED = reference look, SHARP = the same device-pixel size
+        // resolved at higher framebuffer resolution → visibly smaller +
+        // sharper antialiased edges. That is the "sharper" the user wants.
+        float coreSize = aSize * uSizeMult * (0.7 + 0.3 * twinkle) * 1.5;
         float glowMul  = aSize > 2.5 ? 1.6 : 1.0;
         gl_PointSize = coreSize * glowMul;
       }
