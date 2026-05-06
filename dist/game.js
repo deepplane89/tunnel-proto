@@ -26186,8 +26186,11 @@ window.advanceTime = (ms) => {
 // ═══════════════════════════════════════════════════
 //  VISIBILITY CHANGE — auto-pause when app loses focus (mobile)
 // ═══════════════════════════════════════════════════
+let _jhHiddenAt = 0;
+const _JH_LONG_HIDE_MS = 30000; // >30s hidden → reprewarm shaders on resume (iOS evicts program cache)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
+    _jhHiddenAt = (typeof performance !== 'undefined') ? performance.now() : Date.now();
     // Pause all audio immediately regardless of game state
     const tracks = allTracks();
     Object.values(tracks).forEach(el => { if (el && !el.paused) el.pause(); });
@@ -26207,6 +26210,22 @@ document.addEventListener('visibilitychange', () => {
     // 'interrupted' is iOS-specific (phone call, Bluetooth route change).
     if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
       audioCtx.resume().catch(() => {});
+    }
+    // Long-background resume: iOS may have evicted the WebGL program cache
+    // even without firing webglcontextlost. Reprewarm under a tiny overlay
+    // so the user doesn't see first-render shader stalls (first cone delay,
+    // first lightning hitch, etc.) when returning from a backgrounded tab.
+    const _hiddenMs = _jhHiddenAt ? (((typeof performance !== 'undefined') ? performance.now() : Date.now()) - _jhHiddenAt) : 0;
+    _jhHiddenAt = 0;
+    if (_hiddenMs > _JH_LONG_HIDE_MS && typeof window._reprewarmShaders === 'function') {
+      try { window._jhResumeOverlay && window._jhResumeOverlay.show('RESUMING…'); } catch(_) {}
+      // Defer one rAF so the overlay paints before the (potentially blocking) compile.
+      requestAnimationFrame(() => {
+        try { window._reprewarmShaders('long-hide ' + (_hiddenMs/1000).toFixed(1) + 's'); } catch(_) {}
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          try { window._jhResumeOverlay && window._jhResumeOverlay.hide(); } catch(_) {}
+        }));
+      });
     }
     // If we came back from an iOS interruption, _rewireTrackGains handles
     // the silent-buffer sample-rate kick AND re-issues play() on tracks
@@ -32492,9 +32511,27 @@ function buildSkinTunerSliders() {
 // every dependency is defined). The boot load gate below waits 2 frames after
 // all promises settle for any final pipeline state to flush, which is the
 // safety net if anything still compiles lazily.
+// Reusable: compile every material in the scene graphs NOW. Called at boot
+// and again on resume from long backgrounding / WebGL context restore.
+window._reprewarmShaders = function _reprewarmShaders(reason) {
+  if (typeof renderer === 'undefined') return;
+  const t0 = (typeof performance !== 'undefined') ? performance.now() : 0;
+  try {
+    if (typeof scene !== 'undefined' && typeof camera !== 'undefined') {
+      renderer.compile(scene, camera);
+    }
+    if (typeof titleScene !== 'undefined' && titleScene && typeof camera !== 'undefined') {
+      renderer.compile(titleScene, camera);
+    }
+    const dt = ((typeof performance !== 'undefined') ? performance.now() : 0) - t0;
+    if (window._perfDiag) try { window._perfDiag.tag('reprewarm', (reason||'?') + ' ' + dt.toFixed(0) + 'ms'); } catch(_) {}
+  } catch (err) {
+    console.warn('[PREWARM] reprewarm failed (non-fatal):', err && err.message);
+  }
+};
+
 (function _globalShaderPrewarm() {
   if (typeof window === 'undefined' || typeof renderer === 'undefined') return;
-  const t0 = (typeof performance !== 'undefined') ? performance.now() : 0;
   const status = (label, pct) => { try { window.__loadGate && window.__loadGate.setStatus(label, pct); } catch(e) {} };
   try {
     status('PREWARM', 85);
@@ -32505,22 +32542,70 @@ function buildSkinTunerSliders() {
     if (typeof window._initLethalRings === 'function') {
       try { window._initLethalRings(); } catch (e) { console.warn('[PREWARM] lethal rings init failed:', e && e.message); }
     }
-    // 2) Compile every material currently in the scene graph. renderer.compile()
-    //    is idempotent — a no-op for materials already compiled, so this is
-    //    safe even though earlier sites already compiled subsets.
-    if (typeof scene !== 'undefined' && typeof camera !== 'undefined') {
-      renderer.compile(scene, camera);
-    }
-    if (typeof titleScene !== 'undefined' && titleScene && typeof camera !== 'undefined') {
-      renderer.compile(titleScene, camera);
-    }
-    const dt = ((typeof performance !== 'undefined') ? performance.now() : 0) - t0;
+    // 2) Compile every material currently in the scene graph (idempotent).
+    window._reprewarmShaders('boot');
     status('PREWARM', 95);
   } catch (err) {
-    // Non-fatal — lazy compilation will still happen, we just lose the
-    // upfront-cost benefit. Log and let the game continue.
     console.warn('[PREWARM] global prewarm failed (non-fatal):', err && err.message);
   }
+})();
+
+// ── RESUME OVERLAY ─ tiny full-screen overlay shown during reprewarm ──
+// Used by both webglcontextrestored and long-background visibilitychange paths
+// so the user sees a brief "RESUMING" instead of a stalled black frame while
+// shaders recompile.
+window._jhResumeOverlay = (function _resumeOverlayFactory() {
+  let el = null;
+  function _build() {
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'jh-resume-overlay';
+    el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;color:#3ff;font-family:Silkscreen,monospace;font-size:14px;letter-spacing:2px;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .15s ease;';
+    el.textContent = 'RESUMING…';
+    document.body.appendChild(el);
+    return el;
+  }
+  return {
+    show(label) {
+      const e = _build();
+      e.textContent = label || 'RESUMING…';
+      e.style.pointerEvents = 'auto';
+      // Force reflow then fade in
+      void e.offsetWidth;
+      e.style.opacity = '1';
+    },
+    hide() {
+      if (!el) return;
+      el.style.opacity = '0';
+      el.style.pointerEvents = 'none';
+    }
+  };
+})();
+
+// ── WEBGL CONTEXT LOSS RECOVERY ──
+// iOS Safari can drop the GL context after long backgrounding, OS memory
+// pressure, or thermal events. When that happens every compiled shader is
+// gone and the next render produces a blank canvas + recompile stalls.
+// Listen on the canvas, prevent default loss handling, and reprewarm on
+// restore so first-spawn doesn't re-stall.
+(function _wireContextLossHandlers() {
+  if (typeof renderer === 'undefined' || !renderer.domElement) return;
+  const canvas = renderer.domElement;
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault(); // tells browser we want a restore
+    console.warn('[GL] context lost — waiting for restore');
+    try { window._jhResumeOverlay.show('RECOVERING…'); } catch(_) {}
+  }, false);
+  canvas.addEventListener('webglcontextrestored', () => {
+    console.warn('[GL] context restored — reprewarming shaders');
+    try { window._reprewarmShaders('ctx-restore'); } catch(_) {}
+    // Pool textures/materials may need needsUpdate flips for re-upload.
+    // Most THREE materials handle this automatically on next render, but
+    // give the canvas one frame before hiding the overlay.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      try { window._jhResumeOverlay.hide(); } catch(_) {}
+    }));
+  }, false);
 })();
 
 // ── BOOT LOAD GATE ─ fade out the boot loader once critical assets are ready ──

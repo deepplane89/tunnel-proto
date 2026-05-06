@@ -97,8 +97,11 @@ window.advanceTime = (ms) => {
 // ═══════════════════════════════════════════════════
 //  VISIBILITY CHANGE — auto-pause when app loses focus (mobile)
 // ═══════════════════════════════════════════════════
+let _jhHiddenAt = 0;
+const _JH_LONG_HIDE_MS = 30000; // >30s hidden → reprewarm shaders on resume (iOS evicts program cache)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
+    _jhHiddenAt = (typeof performance !== 'undefined') ? performance.now() : Date.now();
     // Pause all audio immediately regardless of game state
     const tracks = allTracks();
     Object.values(tracks).forEach(el => { if (el && !el.paused) el.pause(); });
@@ -118,6 +121,22 @@ document.addEventListener('visibilitychange', () => {
     // 'interrupted' is iOS-specific (phone call, Bluetooth route change).
     if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
       audioCtx.resume().catch(() => {});
+    }
+    // Long-background resume: iOS may have evicted the WebGL program cache
+    // even without firing webglcontextlost. Reprewarm under a tiny overlay
+    // so the user doesn't see first-render shader stalls (first cone delay,
+    // first lightning hitch, etc.) when returning from a backgrounded tab.
+    const _hiddenMs = _jhHiddenAt ? (((typeof performance !== 'undefined') ? performance.now() : Date.now()) - _jhHiddenAt) : 0;
+    _jhHiddenAt = 0;
+    if (_hiddenMs > _JH_LONG_HIDE_MS && typeof window._reprewarmShaders === 'function') {
+      try { window._jhResumeOverlay && window._jhResumeOverlay.show('RESUMING…'); } catch(_) {}
+      // Defer one rAF so the overlay paints before the (potentially blocking) compile.
+      requestAnimationFrame(() => {
+        try { window._reprewarmShaders('long-hide ' + (_hiddenMs/1000).toFixed(1) + 's'); } catch(_) {}
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          try { window._jhResumeOverlay && window._jhResumeOverlay.hide(); } catch(_) {}
+        }));
+      });
     }
     // If we came back from an iOS interruption, _rewireTrackGains handles
     // the silent-buffer sample-rate kick AND re-issues play() on tracks
