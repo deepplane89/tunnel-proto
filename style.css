@@ -2712,11 +2712,13 @@ html, body {
 
 .shop-handling-bar .fm-menu {
   display: none;
-  margin-top: 6px;
   padding: 4px;
-  background: rgba(0, 14, 28, 0.65);
-  border: 1px solid rgba(34, 211, 238, 0.25);
+  background: rgba(0, 14, 28, 0.92);
+  border: 1px solid rgba(34, 211, 238, 0.45);
   border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.55), 0 0 12px rgba(34, 211, 238, 0.15);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .shop-handling-bar.open .fm-menu { display: block; }
 
@@ -5697,7 +5699,7 @@ body.sr-open #title-leaderboard {
     0 0 0 1px rgba(34, 211, 238, 0.10) inset,
     0 8px 24px rgba(0, 0, 0, 0.6),
     0 0 16px rgba(34, 211, 238, 0.15);
-  z-index: 1000;
+  z-index: 10000;
   max-height: 220px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;

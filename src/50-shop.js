@@ -125,12 +125,65 @@ function _renderShopHandlingBar() {
     '</button>' +
     '<div class="fm-menu">' + menuHTML + '</div>';
 
-  // Wire toggle.
+  // ── Open/position helpers ────────────────────────────────────────
+  // The garage panel uses overflow:hidden on .sr-panel, so a normal-flow
+  // dropdown would get clipped. We position the menu with position:fixed,
+  // anchored to the bar, picking up vs down based on available space.
   const head = bar.querySelector('.fm-head');
+  const menu = bar.querySelector('.fm-menu');
+  function _fmCloseMenu() {
+    bar.classList.remove('open', 'open-up');
+    if (menu) {
+      menu.style.position = '';
+      menu.style.left = ''; menu.style.top = ''; menu.style.bottom = '';
+      menu.style.width = ''; menu.style.maxHeight = ''; menu.style.zIndex = '';
+    }
+    if (head) head.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', _fmOutside, true);
+    window.removeEventListener('resize', _fmCloseMenu);
+    window.removeEventListener('scroll', _fmCloseMenu, true);
+  }
+  function _fmOutside(e) {
+    if (!bar.contains(e.target)) _fmCloseMenu();
+  }
+  function _fmOpenMenu() {
+    bar.classList.add('open');
+    if (head) head.setAttribute('aria-expanded', 'true');
+    if (!menu) return;
+    try {
+      const r = bar.getBoundingClientRect();
+      const measured = menu.scrollHeight || 240;
+      const need = Math.min(measured, 280) + 8;
+      const below = window.innerHeight - r.bottom;
+      const above = r.top;
+      const openUp = below < need && above > below;
+      menu.style.position = 'fixed';
+      menu.style.left  = r.left + 'px';
+      menu.style.width = r.width + 'px';
+      menu.style.zIndex = '10000';
+      if (openUp) {
+        bar.classList.add('open-up');
+        menu.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+        menu.style.top = 'auto';
+        menu.style.maxHeight = Math.min(280, above - 8) + 'px';
+      } else {
+        bar.classList.remove('open-up');
+        menu.style.top = (r.bottom + 4) + 'px';
+        menu.style.bottom = 'auto';
+        menu.style.maxHeight = Math.min(280, below - 8) + 'px';
+      }
+    } catch(_){}
+    // Defer outside-click bind to next tick so the opening tap doesn't close.
+    setTimeout(() => {
+      document.addEventListener('pointerdown', _fmOutside, true);
+      window.addEventListener('resize', _fmCloseMenu);
+      window.addEventListener('scroll', _fmCloseMenu, true);
+    }, 0);
+  }
   if (head) {
     _tapBind(head, () => {
-      const open = bar.classList.toggle('open');
-      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (bar.classList.contains('open')) _fmCloseMenu();
+      else _fmOpenMenu();
     });
   }
   // Wire row clicks (equip if unlocked).
@@ -140,6 +193,7 @@ function _renderShopHandlingBar() {
       const name = row.getAttribute('data-fm');
       if (!name || !FM[name]) return;
       if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(name);
+      _fmCloseMenu();
       _renderShopHandlingBar();
     });
   });

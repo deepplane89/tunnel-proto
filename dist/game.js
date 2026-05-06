@@ -185,6 +185,55 @@ window._THRUSTER_PRESETS = {
     _thrFlame_bumpMult: 3.00, _thrFlame_bumpEnd: 0.30,
     _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.07,
   },
+
+  // ── FLOURISH PRESET ──
+  // Captured 2026-05-05 from user screenshots (shared globals + flourish particles/flame).
+  // Big plumey particles with strong bumps and a hot white-tipped flame mesh.
+  flourish: {
+    label: 'FLOURISH',
+    // Global (shared with DISTORT)
+    _thrPart_partOpacity: 0.30, _thrPart_miniPartOpacity: 0.48, _thrPart_posPinFrac: 0.14,
+    _thrusterScale: 0.15, _pointMatSize: 0.11, _miniPointMatSize: 0.08,
+    _nozzleBloomScale: 2.40, _nozzleBloomOpacity: 0.43, _nozzleBloom_whiteMix: 0.00,
+    _nozzleBloomPulse: 0.14,
+    _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
+    // Particles
+    _thrPart_midEnd: 0.74, _thrPart_midBoost: 1.94,
+    _thrPart_sizeBase: 0.60, _thrPart_sizeSpeed: 0.49,
+    _thrPart_bumpMult: 2.95, _thrPart_bumpEnd: 0.28, _thrPart_sizeJitter: 0.09,
+    _thrPart_lifeMin: 0.11, _thrPart_lifeJit: 0.13,
+    _thrPart_lifeBase: 0.65, _thrPart_lifeSpd: 0.10, _thrPart_spawnJit: 0.20,
+    // Flame mesh
+    _thrFlame_coreEnd: 0.30, _thrFlame_coreRGB: 1.00, _thrFlame_midEnd: 0.96,
+    _thrFlame_sizeBase: 0.01, _thrFlame_sizeSpeed: 0.00,
+    _thrFlame_bumpMult: 1.00, _thrFlame_bumpEnd: 0.00,
+    _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.20,
+  },
+
+  // ── DISTORT PRESET ──
+  // Captured 2026-05-05 from user screenshots (shared globals + distort particles/flame).
+  // Same big-plume base as FLOURISH but no jitter and a near-dead flame mesh —
+  // particles do all the work; flame is just a faint shimmer.
+  distort: {
+    label: 'DISTORT',
+    // Global (shared with FLOURISH)
+    _thrPart_partOpacity: 0.30, _thrPart_miniPartOpacity: 0.48, _thrPart_posPinFrac: 0.14,
+    _thrusterScale: 0.15, _pointMatSize: 0.11, _miniPointMatSize: 0.08,
+    _nozzleBloomScale: 2.40, _nozzleBloomOpacity: 0.43, _nozzleBloom_whiteMix: 0.00,
+    _nozzleBloomPulse: 0.14,
+    _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
+    // Particles
+    _thrPart_midEnd: 0.74, _thrPart_midBoost: 1.94,
+    _thrPart_sizeBase: 0.60, _thrPart_sizeSpeed: 0.49,
+    _thrPart_bumpMult: 2.95, _thrPart_bumpEnd: 0.28, _thrPart_sizeJitter: 0.00,
+    _thrPart_lifeMin: 0.11, _thrPart_lifeJit: 0.13,
+    _thrPart_lifeBase: 0.20, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.20,
+    // Flame mesh
+    _thrFlame_coreEnd: 0.00, _thrFlame_coreRGB: 0.00, _thrFlame_midEnd: 0.15,
+    _thrFlame_sizeBase: 0.01, _thrFlame_sizeSpeed: 0.00,
+    _thrFlame_bumpMult: 1.00, _thrFlame_bumpEnd: 0.01,
+    _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.28, _thrFlame_spawnJit: 0.20,
+  },
 };
 
 // Which preset is currently active (one at a time, mutually exclusive).
@@ -1505,6 +1554,7 @@ const MISSION_LADDER = [
   { type:'reward', reward:{ kind:'fuelcells', amount:250, label:'250 Fuel Cells', xp:350 } },
   { type:'mission', id:'shield4', desc:'Use shield 4 times in one run', check:(r)=>r.shields>=4 },
   { type:'mission', id:'ltcoins5k', desc:'Collect 5,000 total coins', check:(r,lt)=>lt.coins>=5000 },
+  { type:'reward', reward:{ kind:'thruster', presetKey:'flourish', label:'Unlock FLOURISH Thruster' } },
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:2, label:'Score Mult +2x' } },
   { type:'reward', reward:{ kind:'unlock', powerup:'powermeter', label:'Unlock POWER METER', fuelcells:200 } },
   { type:'mission', id:'score80k', desc:'Score 80,000+ in one run', check:(r)=>r.score>=80000 },
@@ -1520,6 +1570,7 @@ const MISSION_LADDER = [
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'white', label:'Unlock WHITE HOT Thruster Color' } },
   { type:'mission', id:'runs75', desc:'Complete 75 runs', check:(r,lt)=>lt.runs>=75 },
   { type:'mission', id:'ltcoins10k', desc:'Collect 10,000 total coins', check:(r,lt)=>lt.coins>=10000 },
+  { type:'reward', reward:{ kind:'thruster', presetKey:'distort', label:'Unlock DISTORT Thruster' } },
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:3, label:'Score Mult +3x' } },
   { type:'mission', id:'score150k', desc:'Score 150,000+ in one run', check:(r)=>r.score>=150000 },
   { type:'mission', id:'drtier5', desc:'Reach speed tier 5 in DR', check:(r)=>r.isDR&&r.drTier>=5 },
@@ -16630,12 +16681,65 @@ function _renderShopHandlingBar() {
     '</button>' +
     '<div class="fm-menu">' + menuHTML + '</div>';
 
-  // Wire toggle.
+  // ── Open/position helpers ────────────────────────────────────────
+  // The garage panel uses overflow:hidden on .sr-panel, so a normal-flow
+  // dropdown would get clipped. We position the menu with position:fixed,
+  // anchored to the bar, picking up vs down based on available space.
   const head = bar.querySelector('.fm-head');
+  const menu = bar.querySelector('.fm-menu');
+  function _fmCloseMenu() {
+    bar.classList.remove('open', 'open-up');
+    if (menu) {
+      menu.style.position = '';
+      menu.style.left = ''; menu.style.top = ''; menu.style.bottom = '';
+      menu.style.width = ''; menu.style.maxHeight = ''; menu.style.zIndex = '';
+    }
+    if (head) head.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', _fmOutside, true);
+    window.removeEventListener('resize', _fmCloseMenu);
+    window.removeEventListener('scroll', _fmCloseMenu, true);
+  }
+  function _fmOutside(e) {
+    if (!bar.contains(e.target)) _fmCloseMenu();
+  }
+  function _fmOpenMenu() {
+    bar.classList.add('open');
+    if (head) head.setAttribute('aria-expanded', 'true');
+    if (!menu) return;
+    try {
+      const r = bar.getBoundingClientRect();
+      const measured = menu.scrollHeight || 240;
+      const need = Math.min(measured, 280) + 8;
+      const below = window.innerHeight - r.bottom;
+      const above = r.top;
+      const openUp = below < need && above > below;
+      menu.style.position = 'fixed';
+      menu.style.left  = r.left + 'px';
+      menu.style.width = r.width + 'px';
+      menu.style.zIndex = '10000';
+      if (openUp) {
+        bar.classList.add('open-up');
+        menu.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+        menu.style.top = 'auto';
+        menu.style.maxHeight = Math.min(280, above - 8) + 'px';
+      } else {
+        bar.classList.remove('open-up');
+        menu.style.top = (r.bottom + 4) + 'px';
+        menu.style.bottom = 'auto';
+        menu.style.maxHeight = Math.min(280, below - 8) + 'px';
+      }
+    } catch(_){}
+    // Defer outside-click bind to next tick so the opening tap doesn't close.
+    setTimeout(() => {
+      document.addEventListener('pointerdown', _fmOutside, true);
+      window.addEventListener('resize', _fmCloseMenu);
+      window.addEventListener('scroll', _fmCloseMenu, true);
+    }, 0);
+  }
   if (head) {
     _tapBind(head, () => {
-      const open = bar.classList.toggle('open');
-      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (bar.classList.contains('open')) _fmCloseMenu();
+      else _fmOpenMenu();
     });
   }
   // Wire row clicks (equip if unlocked).
@@ -16645,6 +16749,7 @@ function _renderShopHandlingBar() {
       const name = row.getAttribute('data-fm');
       if (!name || !FM[name]) return;
       if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(name);
+      _fmCloseMenu();
       _renderShopHandlingBar();
     });
   });

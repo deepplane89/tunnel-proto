@@ -124,6 +124,55 @@ window._THRUSTER_PRESETS = {
     _thrFlame_bumpMult: 3.00, _thrFlame_bumpEnd: 0.30,
     _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.07,
   },
+
+  // ── FLOURISH PRESET ──
+  // Captured 2026-05-05 from user screenshots (shared globals + flourish particles/flame).
+  // Big plumey particles with strong bumps and a hot white-tipped flame mesh.
+  flourish: {
+    label: 'FLOURISH',
+    // Global (shared with DISTORT)
+    _thrPart_partOpacity: 0.30, _thrPart_miniPartOpacity: 0.48, _thrPart_posPinFrac: 0.14,
+    _thrusterScale: 0.15, _pointMatSize: 0.11, _miniPointMatSize: 0.08,
+    _nozzleBloomScale: 2.40, _nozzleBloomOpacity: 0.43, _nozzleBloom_whiteMix: 0.00,
+    _nozzleBloomPulse: 0.14,
+    _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
+    // Particles
+    _thrPart_midEnd: 0.74, _thrPart_midBoost: 1.94,
+    _thrPart_sizeBase: 0.60, _thrPart_sizeSpeed: 0.49,
+    _thrPart_bumpMult: 2.95, _thrPart_bumpEnd: 0.28, _thrPart_sizeJitter: 0.09,
+    _thrPart_lifeMin: 0.11, _thrPart_lifeJit: 0.13,
+    _thrPart_lifeBase: 0.65, _thrPart_lifeSpd: 0.10, _thrPart_spawnJit: 0.20,
+    // Flame mesh
+    _thrFlame_coreEnd: 0.30, _thrFlame_coreRGB: 1.00, _thrFlame_midEnd: 0.96,
+    _thrFlame_sizeBase: 0.01, _thrFlame_sizeSpeed: 0.00,
+    _thrFlame_bumpMult: 1.00, _thrFlame_bumpEnd: 0.00,
+    _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.20,
+  },
+
+  // ── DISTORT PRESET ──
+  // Captured 2026-05-05 from user screenshots (shared globals + distort particles/flame).
+  // Same big-plume base as FLOURISH but no jitter and a near-dead flame mesh —
+  // particles do all the work; flame is just a faint shimmer.
+  distort: {
+    label: 'DISTORT',
+    // Global (shared with FLOURISH)
+    _thrPart_partOpacity: 0.30, _thrPart_miniPartOpacity: 0.48, _thrPart_posPinFrac: 0.14,
+    _thrusterScale: 0.15, _pointMatSize: 0.11, _miniPointMatSize: 0.08,
+    _nozzleBloomScale: 2.40, _nozzleBloomOpacity: 0.43, _nozzleBloom_whiteMix: 0.00,
+    _nozzleBloomPulse: 0.14,
+    _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
+    // Particles
+    _thrPart_midEnd: 0.74, _thrPart_midBoost: 1.94,
+    _thrPart_sizeBase: 0.60, _thrPart_sizeSpeed: 0.49,
+    _thrPart_bumpMult: 2.95, _thrPart_bumpEnd: 0.28, _thrPart_sizeJitter: 0.00,
+    _thrPart_lifeMin: 0.11, _thrPart_lifeJit: 0.13,
+    _thrPart_lifeBase: 0.20, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.20,
+    // Flame mesh
+    _thrFlame_coreEnd: 0.00, _thrFlame_coreRGB: 0.00, _thrFlame_midEnd: 0.15,
+    _thrFlame_sizeBase: 0.01, _thrFlame_sizeSpeed: 0.00,
+    _thrFlame_bumpMult: 1.00, _thrFlame_bumpEnd: 0.01,
+    _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.28, _thrFlame_spawnJit: 0.20,
+  },
 };
 
 // Which preset is currently active (one at a time, mutually exclusive).
