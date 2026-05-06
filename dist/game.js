@@ -11541,10 +11541,10 @@ function _initSFXBuffers() {
   // Shop tier-upgrade SFX — VR transform sweep (replaces the VR_compute beep).
   _loadSFXBuffer('shop-purchase',   './assets/audio/vr-transform-powerup.mp3');
   _loadSFXBuffer('reject',          './assets/audio/reject.mp3');
-  // Title-screen menu taps + Exit/Resume + Garage open/close on title.
-  _loadSFXBuffer('menu-cycle',      './assets/audio/vr-transform-clicker.mp3');
-  // Garage card cycling (skin / preset / color / addon) — pinball pip.
-  _loadSFXBuffer('garage-cycle',    './assets/audio/menu-cycle.wav');
+  // Title-screen menu taps + Exit/Resume + Garage open/close on title — pinball pip.
+  _loadSFXBuffer('menu-cycle',      './assets/audio/menu-cycle.wav');
+  // Garage card cycling (skin / preset / color / addon) — VR clicker.
+  _loadSFXBuffer('garage-cycle',    './assets/audio/vr-transform-clicker.mp3');
   // Title-screen "death run" button (the ENTER moment from the loading screen).
   _loadSFXBuffer('start-interference', './assets/audio/start-interference.mp3');
   // Garage open/close audio removed — no sample needed.
