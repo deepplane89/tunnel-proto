@@ -134,34 +134,69 @@ function _renderShopHandlingBar() {
   let _fmOpenedAt = 0;
   let _fmOpenW = 0;
   let _fmOpenH = 0;
+  // Portal-to-body anchors. .sr-overlay has `will-change: transform` and an
+  // ancestor pop animation that breaks `position: fixed` on descendants on
+  // iOS — the menu opened, then iOS recomputed the containing block during
+  // the overlay's transform tween and visually shifted/clipped the menu so
+  // it appeared to close. Solution: while open, move the menu DOM node to
+  // <body>, and restore it back into the bar on close. Same pattern that
+  // fixed the COLOR dropdown clip-path issue.
+  let _fmMenuHome = null;       // original parent (the bar)
+  let _fmMenuNext = null;       // original next-sibling for restoration
+  let _fmMenuMounted = false;
+  function _fmPortalMount() {
+    if (!menu || _fmMenuMounted) return;
+    _fmMenuHome = menu.parentNode;
+    _fmMenuNext = menu.nextSibling;
+    document.body.appendChild(menu);
+    _fmMenuMounted = true;
+  }
+  function _fmPortalUnmount() {
+    if (!menu || !_fmMenuMounted) return;
+    if (_fmMenuHome) {
+      try { _fmMenuHome.insertBefore(menu, _fmMenuNext || null); } catch(_) {
+        try { _fmMenuHome.appendChild(menu); } catch(__){}
+      }
+    }
+    _fmMenuHome = null; _fmMenuNext = null; _fmMenuMounted = false;
+  }
   function _fmCloseMenu() {
     bar.classList.remove('open', 'open-up');
     if (menu) {
       menu.style.position = '';
       menu.style.left = ''; menu.style.top = ''; menu.style.bottom = '';
       menu.style.width = ''; menu.style.maxHeight = ''; menu.style.zIndex = '';
+      menu.style.display = '';
+      // Re-attach back into the bar so .open + class-driven CSS still finds
+      // it on next open.
+      _fmPortalUnmount();
     }
     if (head) head.setAttribute('aria-expanded', 'false');
-    document.removeEventListener('pointerdown', _fmOutside, true);
+    document.removeEventListener('click', _fmOutside, true);
     window.removeEventListener('resize', _fmResize);
   }
+  // Outside-click detection. Use `click` (not pointerdown) — click fires
+  // AFTER touchend, only on real, completed user taps. iOS Safari does NOT
+  // fire phantom click events from the gesture recognizer the way it can
+  // emit synthetic pointerdowns. This eliminates the entire class of
+  // "opens then immediately closes" bugs caused by trailing pointer events
+  // on landscape (touch-action:none ancestors are particularly noisy).
   function _fmOutside(e) {
-    // Ignore any pointerdown that arrives within ~250ms of opening — iOS
-    // can fire a trailing pointerdown from the same tap (or from synthetic
-    // mouse events) that targets the body and would otherwise close us.
     if (performance.now() - _fmOpenedAt < 250) return;
-    if (!bar.contains(e.target)) _fmCloseMenu();
+    if (bar.contains(e.target)) return;
+    if (menu && menu.contains(e.target)) return;
+    _fmCloseMenu();
   }
   function _fmResize() {
-    // iOS Safari fires resize events as the URL/tool bars animate in and
-    // out — especially right after a tap on landscape. Those are tiny
-    // (often <80px height tweaks) and would close us instantly. Only treat
-    // a resize as "meaningful" if it shifts width by >40px or height by
-    // >120px from the dimensions captured at open. (True orientation
-    // changes blow past both thresholds.)
+    // iOS Safari fires resize events as the URL/tool bars animate in/out —
+    // especially after a tap on landscape. Those are tiny (often <80px
+    // height tweaks) and would close us instantly. Only treat a resize as
+    // a real orientation flip if BOTH width and height deltas are large.
+    // True portrait↔landscape flips swap width and height, so both deltas
+    // are >> 100px. Anything else is just URL-bar noise.
     const dw = Math.abs(window.innerWidth  - _fmOpenW);
     const dh = Math.abs(window.innerHeight - _fmOpenH);
-    if (dw > 40 || dh > 120) _fmCloseMenu();
+    if (dw > 150 && dh > 150) _fmCloseMenu();
   }
   function _fmOpenMenu() {
     _fmOpenedAt = performance.now();
@@ -170,37 +205,45 @@ function _renderShopHandlingBar() {
     bar.classList.add('open');
     if (head) head.setAttribute('aria-expanded', 'true');
     if (!menu) return;
+    // Compute geometry while the menu is still in its original spot, then
+    // portal to <body> so no ancestor transform / clip-path / will-change
+    // can move it out from under the user.
+    let r, openUp = false, below = 0, above = 0;
     try {
-      const r = bar.getBoundingClientRect();
+      r = bar.getBoundingClientRect();
       const measured = menu.scrollHeight || 240;
       const need = Math.min(measured, 280) + 8;
-      const below = window.innerHeight - r.bottom;
-      const above = r.top;
-      const openUp = below < need && above > below;
-      menu.style.position = 'fixed';
-      menu.style.left  = r.left + 'px';
-      menu.style.width = r.width + 'px';
-      menu.style.zIndex = '10000';
-      if (openUp) {
-        bar.classList.add('open-up');
-        menu.style.bottom = (window.innerHeight - r.top + 4) + 'px';
-        menu.style.top = 'auto';
-        menu.style.maxHeight = Math.min(280, above - 8) + 'px';
-      } else {
-        bar.classList.remove('open-up');
-        menu.style.top = (r.bottom + 4) + 'px';
-        menu.style.bottom = 'auto';
-        menu.style.maxHeight = Math.min(280, below - 8) + 'px';
-      }
-    } catch(_){}
-    // Defer outside-click bind to next tick so the opening tap doesn't close.
-    // NOTE: deliberately no scroll-close listener — the menu is position:fixed
-    // so it stays anchored on parent scroll, and on mobile any incidental
-    // scroll bubble from the THRUSTERS pane was instantly closing the menu.
-    setTimeout(() => {
-      document.addEventListener('pointerdown', _fmOutside, true);
+      below = window.innerHeight - r.bottom;
+      above = r.top;
+      openUp = below < need && above > below;
+    } catch(_) { r = { left: 0, right: 0, top: 0, bottom: 0, width: 240 }; }
+    _fmPortalMount();
+    // .open is on the bar (controls .fm-menu display:block); since the menu
+    // is no longer a child of bar, force display directly.
+    menu.style.display = 'block';
+    menu.style.position = 'fixed';
+    menu.style.left  = r.left + 'px';
+    menu.style.width = r.width + 'px';
+    menu.style.zIndex = '10000';
+    if (openUp) {
+      bar.classList.add('open-up');
+      menu.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+      menu.style.top = 'auto';
+      menu.style.maxHeight = Math.min(280, above - 8) + 'px';
+    } else {
+      bar.classList.remove('open-up');
+      menu.style.top = (r.bottom + 4) + 'px';
+      menu.style.bottom = 'auto';
+      menu.style.maxHeight = Math.min(280, below - 8) + 'px';
+    }
+    // Defer outside-click bind so the opening tap's click event doesn't
+    // immediately re-fire on document and close us. requestAnimationFrame
+    // lets the current event loop finish; the 250ms grace inside _fmOutside
+    // covers any further iOS-Safari weirdness.
+    requestAnimationFrame(() => {
+      document.addEventListener('click', _fmOutside, true);
       window.addEventListener('resize', _fmResize);
-    }, 0);
+    });
   }
   if (head) {
     _tapBind(head, () => {
@@ -208,9 +251,12 @@ function _renderShopHandlingBar() {
       else _fmOpenMenu();
     });
   }
-  // Wire row clicks (equip if unlocked).
+  // Wire row clicks (equip if unlocked, reject sound if locked).
   bar.querySelectorAll('.fm-row').forEach(row => {
-    if (row.classList.contains('locked')) return;
+    if (row.classList.contains('locked')) {
+      _tapBind(row, () => { try { if (typeof window.playReject === 'function') window.playReject(); } catch(_){} });
+      return;
+    }
     _tapBind(row, () => {
       const name = row.getAttribute('data-fm');
       if (!name || !FM[name]) return;
@@ -290,6 +336,9 @@ function renderPowerupCards() {
         updateNotificationDots();
         openShopDetail(id);
       });
+    } else {
+      // Locked or fully maxed — nothing to enter; play reject blip.
+      _tapBind(card, () => { try { if (typeof window.playReject === 'function') window.playReject(); } catch(_){} });
     }
     container.appendChild(card);
   });

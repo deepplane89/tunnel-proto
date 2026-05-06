@@ -4747,12 +4747,15 @@ let skyConstellLines = null;  // constellation LineSegments
 
         gl_Position = vec4(position.xy, 0.999, 1.0);
 
-        // NOTE: do NOT multiply by uPixelRatio here. gl_PointSize is in
-        // device pixels, so on SHARP (DPR up to 3) the stars were rendering
-        // ~2x larger than on BALANCED (DPR 1.5). The constant 1.5 keeps
-        // BALANCED-look star sizes across all quality tiers; bloom pass
-        // already adapts to the framebuffer resolution.
-        float coreSize = aSize * uSizeMult * (0.7 + 0.3 * twinkle) * 1.5;
+        // gl_PointSize is in DEVICE pixels. To keep stars the same CSS size
+        // across quality tiers AND get sharper edges on SHARP (more device
+        // pixels resolving the radial falloff), scale by uPixelRatio. The
+        // BALANCED tier (uPixelRatio = 1.5) is the canonical look — that's
+        // why the historical multiplier was 1.5. Multiplying by uPixelRatio
+        // keeps CSS size constant: at SHARP (uPixelRatio = 3) we get 2x
+        // device pixels, which sub-samples the alpha falloff more finely
+        // (sharper antialiased edges) without growing the visible disc.
+        float coreSize = aSize * uSizeMult * (0.7 + 0.3 * twinkle) * uPixelRatio;
         float glowMul  = aSize > 2.5 ? 1.6 : 1.0;
         gl_PointSize = coreSize * glowMul;
       }

@@ -21,7 +21,13 @@
   const H_CANCEL    = 60;
   const INTERACTIVE = 'button, a, select, input, textarea, ' +
     '.sr-card, .sr-tab, .sr-addon-row, .sr-addon-card, .sr-select-wrap, ' +
-    '.settings-row, .settings-slider, [role="slider"]';
+    '.settings-row, .settings-slider, [role="slider"], ' +
+    // Flight-model dropdown bar + portaled menu rows. Without these, a touch
+    // that even barely drifts on the FM bar/menu starts the swipe-to-dismiss
+    // gesture, which translateY's the whole overlay and looks like the menu
+    // is closing on its own.
+    '.shop-handling-bar, .fm-head, .fm-menu, .fm-row, .fm-row *, ' +
+    '.shop-card, .shop-detail, .shop-detail-tier, .shop-upgrade-btn, .btn-upgrade';
 
   let active = false;
   let startX = 0, startY = 0, lastY = 0;
@@ -43,6 +49,12 @@
     if (!e.touches || e.touches.length !== 1) return;
     const found = activeOverlay();
     if (!found) return;
+    // If any popover/menu is currently open inside the overlay, kill the
+    // swipe-to-dismiss gesture entirely. The FLIGHT MODEL dropdown is the
+    // canonical case: while .open is set, any incidental touchmove would
+    // translateY the overlay and visually close the menu.
+    if (document.querySelector('.shop-handling-bar.open')) return;
+    if (document.querySelector('.sf-select-wrap.open')) return;
     const tgt = e.target;
     if (tgt && tgt.closest && tgt.closest(INTERACTIVE)) return;
     active = true;

@@ -181,6 +181,7 @@ function _initSFXBuffers() {
   // Laser machine-gun: one-shot per fire-rate tick instead of looping the whole clip.
   _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
   _loadSFXBuffer('shop-purchase',   './assets/audio/shop_purchase.mp3');
+  _loadSFXBuffer('reject',          './assets/audio/reject.mp3');
 }
 
 // ── Argon looping handle (Web Audio path) ──
@@ -231,7 +232,7 @@ function _playArgonOnce(targetVol, fadeInSec) {
   return src;
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx' };
+const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx', 'reject': 'reject-sfx' };
 // Play a pre-decoded buffer with gain + optional pan + playbackRate
 function _playBuffer(name, volume, rate, panVal) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
@@ -315,5 +316,13 @@ function playLevelUp() {
 function playShopPurchase() {
   _playBuffer('shop-purchase', 0.6, 1.0, null);
 }
+
+// Played when the player taps something they can't interact with: a locked
+// upgrade card, a fully-maxed power-up they can't enter the tier menu of, a
+// locked thruster preset, etc. Short "computer reject" blip.
+function playReject() {
+  _playBuffer('reject', 0.55, 1.0, null);
+}
+window.playReject = playReject;
 
 function playCrash() {

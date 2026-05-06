@@ -198,7 +198,10 @@
     menu.addEventListener('click', function(e) {
       const li = e.target.closest('.sf-select-item');
       if (!li) return;
-      if (li.classList.contains('sf-select-disabled')) return;
+      if (li.classList.contains('sf-select-disabled')) {
+        try { if (typeof window.playReject === 'function') window.playReject(); } catch(_){}
+        return;
+      }
       const val = li.dataset.value;
       if (sel.value !== val) {
         sel.value = val;

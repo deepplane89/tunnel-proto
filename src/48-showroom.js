@@ -283,7 +283,10 @@
     });
     grid.innerHTML = html;
     grid.querySelectorAll('button.sr-addon-card[data-skin]').forEach(btn => {
-      if (btn.classList.contains('locked')) return;
+      if (btn.classList.contains('locked')) {
+        btn.addEventListener('click', () => { try { if (typeof window.playReject === 'function') window.playReject(); } catch(_){} });
+        return;
+      }
       btn.addEventListener('click', () => {
         const idx = parseInt(btn.dataset.skin, 10);
         if (isNaN(idx)) return;
@@ -354,7 +357,10 @@
     });
     grid.innerHTML = html;
     grid.querySelectorAll('button.sr-addon-card[data-shape]').forEach(btn => {
-      if (btn.classList.contains('locked')) return;
+      if (btn.classList.contains('locked')) {
+        btn.addEventListener('click', () => { try { if (typeof window.playReject === 'function') window.playReject(); } catch(_){} });
+        return;
+      }
       btn.addEventListener('click', () => {
         const key = btn.dataset.shape;
         if (!key) return;
