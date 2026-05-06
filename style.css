@@ -5437,8 +5437,11 @@ body.sr-open #title-leaderboard {
 
 /* THRUSTERS pane: SHAPE grid scrolls; COLOR row pinned at bottom and fully
    visible/clickable. Without this, .sr-pane overflow:hidden silently clips
-   the COLOR row off the bottom on desktop where many SHAPE cards render. */
-.sr-pane[data-pane="thrusters"] {
+   the COLOR row off the bottom on desktop where many SHAPE cards render.
+   :not(.sr-hidden) gate keeps display:none winning when the pane is hidden
+   (otherwise this later rule overrides .sr-pane.sr-hidden and the thrusters
+   pane bleeds into other tabs). */
+.sr-pane[data-pane="thrusters"]:not(.sr-hidden) {
   display: flex;
   flex-direction: column;
   gap: 10px;

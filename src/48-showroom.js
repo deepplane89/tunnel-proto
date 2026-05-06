@@ -545,7 +545,7 @@
     const key = _currentAddonsKey();
     const entries = key && ADDON_REGISTRY[key];
     if (!entries || !entries.length) {
-      list.innerHTML = '<div class="sr-addon-empty">No add-ons available for this ship</div>';
+      list.innerHTML = '<div class="sr-addon-empty">No mods available for this ship</div>';
       return;
     }
     // Default-OFF for new users. Existing saved state wins. If no saved

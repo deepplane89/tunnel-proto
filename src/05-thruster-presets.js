@@ -149,6 +149,31 @@ window._THRUSTER_PRESETS = {
     _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.20,
   },
 
+  // ── PLASMA PRESET ──
+  // Captured 2026-05-05 from user screenshots (shared globals + plasma particles/flame).
+  // Same big-plume base as FLOURISH/DISTORT — particles get a moving life-speed
+  // for a churning plasma feel, flame mesh is a soft jittery shimmer.
+  plasma: {
+    label: 'PLASMA',
+    // Global (shared with FLOURISH/DISTORT)
+    _thrPart_partOpacity: 0.30, _thrPart_miniPartOpacity: 0.48, _thrPart_posPinFrac: 0.14,
+    _thrusterScale: 0.15, _pointMatSize: 0.11, _miniPointMatSize: 0.08,
+    _nozzleBloomScale: 2.40, _nozzleBloomOpacity: 0.43, _nozzleBloom_whiteMix: 0.00,
+    _nozzleBloomPulse: 0.14,
+    _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
+    // Particles
+    _thrPart_midEnd: 0.74, _thrPart_midBoost: 1.94,
+    _thrPart_sizeBase: 0.60, _thrPart_sizeSpeed: 0.49,
+    _thrPart_bumpMult: 2.95, _thrPart_bumpEnd: 0.28, _thrPart_sizeJitter: 0.00,
+    _thrPart_lifeMin: 0.11, _thrPart_lifeJit: 0.13,
+    _thrPart_lifeBase: 0.20, _thrPart_lifeSpd: 0.50, _thrPart_spawnJit: 0.20,
+    // Flame mesh
+    _thrFlame_coreEnd: 0.00, _thrFlame_coreRGB: 0.00, _thrFlame_midEnd: 0.23,
+    _thrFlame_sizeBase: 0.02, _thrFlame_sizeSpeed: 0.01,
+    _thrFlame_bumpMult: 1.00, _thrFlame_bumpEnd: 0.04,
+    _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.28, _thrFlame_spawnJit: 0.20,
+  },
+
   // ── DISTORT PRESET ──
   // Captured 2026-05-05 from user screenshots (shared globals + distort particles/flame).
   // Same big-plume base as FLOURISH but no jitter and a near-dead flame mesh —
