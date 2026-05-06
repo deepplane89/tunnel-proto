@@ -6877,47 +6877,133 @@ function initTitleShipPreview(sourceModel) {
 let _titleSkinOverrides = null;
 
 // Apply a skin to the title ship clone — maps by mesh name, not uuid
-function applyTitleSkin(skinIndex) {
-  if (!_titleShipModel || !_prebuiltSkins.length) return;
-  // ── HOLO GLITCH DIAG ─────────────────────────────────────────────────
-  // Logs every applyTitleSkin entry/exit + holo registry size + ship-tree
-  // mesh count under _titleShipModel. If the glitch correlates with a
-  // double-call within <1 frame, or registry growing every call, or two
-  // ship meshes alive at the same time, we'll see it here.
+// ── DIAG SAMPLER ─────────────────────────────────────────────────────
+// Polls the title ship every 500ms. Logs only on CHANGE so the console
+// isn't spammed. Catches: tuner broadcasts clobbering locked uniforms,
+// addon-toggle visibility flips, _altShipModel rendering on title, etc.
+// Also exposes window._holoSnap() for manual on-demand snapshot.
+window._holoSnap = function _holoSnap(label) {
   try {
-    const _hcount = (typeof _holoMaterials !== 'undefined' && _holoMaterials.length) | 0;
-    let _meshCount = 0; let _holoMeshCount = 0;
-    if (_titleShipModel) _titleShipModel.traverse(c => {
-      if (c.isMesh) { _meshCount++; if (c.material && c.material.uniforms && c.material.uniforms.hologramColor) _holoMeshCount++; }
+    const lines = [];
+    if (typeof _titleShipModel !== 'undefined' && _titleShipModel) _titleShipModel.traverse(c => {
+      if (!c.isMesh) return;
+      const slot = (c.userData && c.userData._origMatName) || (c.material && c.material.name) || '?';
+      const m = c.material;
+      if (!m) { lines.push(slot + ':NO_MAT'); return; }
+      if (m.uniforms && m.uniforms.hologramColor) {
+        const u = m.uniforms;
+        lines.push(slot + ':H ss=' + (u.signalSpeed && u.signalSpeed.value !== undefined ? u.signalSpeed.value.toFixed(2) : '?')
+          + ' sl=' + (u.scanlineSize && u.scanlineSize.value !== undefined ? u.scanlineSize.value.toFixed(1) : '?')
+          + ' br=' + (u.hologramBrightness && u.hologramBrightness.value !== undefined ? u.hologramBrightness.value.toFixed(2) : '?')
+          + ' op=' + (u.hologramOpacity && u.hologramOpacity.value !== undefined ? u.hologramOpacity.value.toFixed(2) : '?')
+          + ' lk=' + !!(m.userData && m.userData._lockHoloUniforms) + ' v=' + (c.visible ? 'T' : 'F'));
+      } else {
+        lines.push(slot + ':' + (m.type ? m.type.replace('Material','') : 'P') + ' #' + (m.color ? m.color.getHexString() : '?') + ' v=' + (c.visible ? 'T' : 'F'));
+      }
     });
-    let _altMeshCount = 0; let _altHoloMeshCount = 0;
-    if (typeof _altShipModel !== 'undefined' && _altShipModel) _altShipModel.traverse(c => {
-      if (c.isMesh) { _altMeshCount++; if (c.material && c.material.uniforms && c.material.uniforms.hologramColor) _altHoloMeshCount++; }
-    });
-    const _altVis = (typeof _altShipModel !== 'undefined' && _altShipModel) ? _altShipModel.visible : 'n/a';
-    // Sample first hull material color so we can spot grey-RUNNER bug:
-    // if hull color is the raw GLB tint instead of the per-skin paint, log it.
-    let _firstHullColor = 'n/a'; let _firstHullSlot = 'n/a';
-    if (_titleShipModel) {
-      _titleShipModel.traverse(c => {
-        if (_firstHullColor !== 'n/a' || !c.isMesh || !c.material) return;
-        const slot = (c.userData && c.userData._origMatName) || (c.material.name || '');
-        if (slot === 'rocket_base' || slot === 'fallback' || slot === 'gray') {
-          _firstHullSlot = slot;
-          if (c.material.color) _firstHullColor = '#' + c.material.color.getHexString();
-          else if (c.material.uniforms && c.material.uniforms.hologramColor) _firstHullColor = 'holo:#' + c.material.uniforms.hologramColor.value.getHexString();
+    const reg = (typeof _holoMaterials !== 'undefined') ? _holoMaterials.length : '?';
+    const altK = (_titleShipModel && _titleShipModel.userData && _titleShipModel.userData._altKey) || 'none';
+    const altV = (typeof _altShipModel !== 'undefined' && _altShipModel) ? _altShipModel.visible : 'n/a';
+    console.log('[DIAG] SNAP' + (label ? '[' + label + ']' : '') + ' t=' + performance.now().toFixed(0) + ' titleAltKey=' + altK + ' altVis=' + altV + ' holoReg=' + reg);
+    console.log('[DIAG]   ' + lines.join(' | '));
+  } catch(e){ console.warn('[DIAG] snap err', e); }
+};
+// Auto-sampler: log ONCE per second, only when something changed since last
+// sample (uniforms, mat type, color, visibility, holo-reg size).
+(function _diagAutoSampler(){
+  let _prev = '';
+  function _sig() {
+    try {
+      const parts = [];
+      if (typeof _titleShipModel !== 'undefined' && _titleShipModel) _titleShipModel.traverse(c => {
+        if (!c.isMesh) return;
+        const slot = (c.userData && c.userData._origMatName) || '?';
+        const m = c.material;
+        if (!m) { parts.push(slot + ':NM'); return; }
+        if (m.uniforms && m.uniforms.hologramColor) {
+          parts.push(slot + ':H' + (m.uniforms.signalSpeed && m.uniforms.signalSpeed.value !== undefined ? m.uniforms.signalSpeed.value.toFixed(2) : '?')
+            + ',' + (m.uniforms.scanlineSize && m.uniforms.scanlineSize.value !== undefined ? m.uniforms.scanlineSize.value.toFixed(1) : '?')
+            + ',v' + (c.visible ? '1' : '0'));
+        } else {
+          parts.push(slot + ':P' + (m.color ? m.color.getHexString() : '?') + ',v' + (c.visible ? '1' : '0'));
         }
       });
+      const reg = (typeof _holoMaterials !== 'undefined') ? _holoMaterials.length : 0;
+      const altK = (typeof _titleShipModel !== 'undefined' && _titleShipModel && _titleShipModel.userData) ? (_titleShipModel.userData._altKey || 'n') : 'n';
+      const altV = (typeof _altShipModel !== 'undefined' && _altShipModel) ? _altShipModel.visible : false;
+      return 'k=' + altK + ' av=' + altV + ' r=' + reg + ' [' + parts.join('|') + ']';
+    } catch(e) { return 'err:' + e.message; }
+  }
+  setInterval(() => {
+    const cur = _sig();
+    if (cur !== _prev) {
+      console.log('[DIAG] CHANGE t=' + performance.now().toFixed(0) + ' ' + cur);
+      _prev = cur;
     }
+  }, 500);
+})();
+
+function applyTitleSkin(skinIndex) {
+  if (!_titleShipModel || !_prebuiltSkins.length) {
+    try { console.log('[DIAG] applyTitleSkin skin=' + skinIndex + ' EARLY-RETURN titleShip=' + !!_titleShipModel + ' prebuilt=' + (_prebuiltSkins ? _prebuiltSkins.length : 'undef')); } catch(_){}
+    return;
+  }
+  // ── COMPREHENSIVE DIAG (covers holo flicker + grey-runner bugs) ──────
+  try {
+    const _t = performance.now().toFixed(0);
+    const _last = window._lastApplyTitleSkinT || 0;
+    const _dt = (parseFloat(_t) - _last).toFixed(0);
+    window._lastApplyTitleSkinT = parseFloat(_t);
+    const _stack = (new Error()).stack ? (new Error()).stack.split('\n').slice(2, 7).map(s => s.trim().replace(/^at\s+/, '').replace(/\s*\(.*$/, '')).join(' ← ') : 'no-stack';
+    const _phase = (typeof state !== 'undefined' && state && state.phase) ? state.phase : '?';
+    const _garageOpen = !!(window.Showroom && window.Showroom.isOpen && window.Showroom.isOpen());
+    const _hcount = (typeof _holoMaterials !== 'undefined' && _holoMaterials.length) | 0;
+    const _altKey = (_titleShipModel && _titleShipModel.userData && _titleShipModel.userData._altKey) || 'none';
     const _retryPending = (window._titleSkinRetryKey || 'none');
     const _hasCache = (typeof _altShipCache !== 'undefined') ? Object.keys(_altShipCache).join(',') : 'n/a';
-    console.log('[HOLO_DIAG] applyTitleSkin', skinIndex, 't=' + performance.now().toFixed(0),
-      'holoReg=' + _hcount, 'titleMesh=' + _meshCount + '(' + _holoMeshCount + 'holo)',
-      'altMesh=' + _altMeshCount + '(' + _altHoloMeshCount + 'holo,vis=' + _altVis + ')',
-      'hull[' + _firstHullSlot + ']=' + _firstHullColor,
-      'retry=' + _retryPending, 'cache=[' + _hasCache + ']');
-  } catch(_){}
-  // Clamp out-of-range to default — BUT only when the skin is also missing
+    const _meshMapLen = (typeof _titleMeshMap !== 'undefined' && _titleMeshMap) ? _titleMeshMap.length : 0;
+    const _selectedSkin = (typeof loadSkinData === 'function') ? loadSkinData().selected : '?';
+    const _activeSkinIdx = (typeof activeSkinIdx !== 'undefined') ? activeSkinIdx : '?';
+    // Per-mesh dump of _titleShipModel — full picture
+    const _titleMeshes = [];
+    if (_titleShipModel) _titleShipModel.traverse(c => {
+      if (!c.isMesh) return;
+      const slot = (c.userData && c.userData._origMatName) || (c.material && c.material.name) || '?';
+      const m = c.material;
+      let info = slot + ':';
+      if (!m) info += 'NO_MAT';
+      else if (m.uniforms && m.uniforms.hologramColor) {
+        const u = m.uniforms;
+        info += 'HOLO ss=' + (u.signalSpeed && u.signalSpeed.value !== undefined ? u.signalSpeed.value.toFixed(2) : '?')
+             + ' sl=' + (u.scanlineSize && u.scanlineSize.value !== undefined ? u.scanlineSize.value.toFixed(1) : '?')
+             + ' br=' + (u.hologramBrightness && u.hologramBrightness.value !== undefined ? u.hologramBrightness.value.toFixed(2) : '?')
+             + ' op=' + (u.hologramOpacity && u.hologramOpacity.value !== undefined ? u.hologramOpacity.value.toFixed(2) : '?')
+             + ' lock=' + !!(m.userData && m.userData._lockHoloUniforms)
+             + ' vis=' + (c.visible ? 'T' : 'F');
+      } else {
+        info += (m.type ? m.type.replace('Material', '') : 'PBR') + ' col=' + (m.color ? '#' + m.color.getHexString() : '?')
+             + ' em=' + (m.emissive ? '#' + m.emissive.getHexString() + '@' + (m.emissiveIntensity || 0).toFixed(2) : '-')
+             + ' vis=' + (c.visible ? 'T' : 'F');
+      }
+      _titleMeshes.push(info);
+    });
+    // _altShipModel dump (gameplay scene; should NOT render on title canvas)
+    const _altMeshes = [];
+    if (typeof _altShipModel !== 'undefined' && _altShipModel) _altShipModel.traverse(c => {
+      if (!c.isMesh) return;
+      const slot = (c.userData && c.userData._origMatName) || (c.material && c.material.name) || '?';
+      const m = c.material;
+      const isHolo = !!(m && m.uniforms && m.uniforms.hologramColor);
+      _altMeshes.push(slot + ':' + (isHolo ? 'HOLO' : 'PBR') + (c.visible ? 'T' : 'F'));
+    });
+    const _altVis = (typeof _altShipModel !== 'undefined' && _altShipModel) ? _altShipModel.visible : 'n/a';
+    const _altParent = (typeof _altShipModel !== 'undefined' && _altShipModel && _altShipModel.parent) ? (_altShipModel.parent.name || _altShipModel.parent.type) : 'none';
+    const _shipModelVis = (window._shipModel) ? window._shipModel.visible : 'n/a';
+    console.log('[DIAG] >>> applyTitleSkin skin=' + skinIndex + ' t=' + _t + ' dt=' + _dt + 'ms phase=' + _phase + ' garageOpen=' + _garageOpen + ' selected=' + _selectedSkin + ' activeSkinIdx=' + _activeSkinIdx + ' titleAltKey=' + _altKey + ' retry=' + _retryPending + ' holoReg=' + _hcount + ' mapLen=' + _meshMapLen + ' shipVis=' + _shipModelVis + ' altVis=' + _altVis + ' altParent=' + _altParent + ' cache=[' + _hasCache + ']');
+    console.log('[DIAG]   stack: ' + _stack);
+    console.log('[DIAG]   titleShip(' + _titleMeshes.length + '): ' + _titleMeshes.join(' | '));
+    if (_altMeshes.length) console.log('[DIAG]   altShip(' + _altMeshes.length + ',vis=' + _altVis + '): ' + _altMeshes.join(' | '));
+  } catch(e){ try { console.warn('[DIAG] entry error', e); } catch(_){} }
   // from SHIP_SKINS. Alt-GLB skins (e.g. MK Runner at idx 4) are valid even
   // though _prebuiltSkins doesn't have an entry for them: their materials
   // come from the alt GLB itself, not the per-skin material map.
@@ -6955,9 +7041,11 @@ function applyTitleSkin(skinIndex) {
     if (!_newSrc && _wantKey && typeof _loadAltShip === 'function' &&
         window._titleSkinRetryKey !== _wantKey) {
       window._titleSkinRetryKey = _wantKey;
+      try { console.log('[DIAG]   CACHE-MISS scheduling retry for ' + _wantKey); } catch(_){}
       try {
         _loadAltShip(_skinDef.glbFile, _skinDef, skinIndex, () => {
           window._titleSkinRetryKey = null;
+          try { console.log('[DIAG]   RETRY-CB resolved for ' + _wantKey); } catch(_){}
           // Re-call applyTitleSkin only if the user is still on the same skin
           // (they may have switched mid-load via shop/garage).
           try {
@@ -6966,8 +7054,11 @@ function applyTitleSkin(skinIndex) {
           } catch(_){}
         });
       } catch (_) { window._titleSkinRetryKey = null; }
+    } else if (!_newSrc && _wantKey) {
+      try { console.log('[DIAG]   CACHE-MISS but retry already pending for ' + _wantKey); } catch(_){}
     }
     if (_newSrc) {
+      try { console.log('[DIAG]   SWAP entering: from ' + (_titleShipModel.userData && _titleShipModel.userData._altKey || 'none') + ' to ' + _wantKey); } catch(_){}
       const parent = _titleShipModel.parent;
       if (parent) parent.remove(_titleShipModel);
       const fresh = _newSrc.clone(true);
@@ -7046,9 +7137,23 @@ function applyTitleSkin(skinIndex) {
       }
     }
     try {
-      let _postHolo = 0; let _postMesh = 0;
-      _titleShipModel.traverse(c => { if (c.isMesh) { _postMesh++; if (c.material && c.material.uniforms && c.material.uniforms.hologramColor) _postHolo++; } });
-      console.log('[HOLO_DIAG] PAINTED skin=' + skinIndex, 'mapEntries=' + _titleMeshMap.length, 'painted=' + _diagPainted, 'skipped=' + _diagSkipped, 'post titleMesh=' + _postMesh + '(' + _postHolo + 'holo)', 'slots=', _diagSlots.join(','));
+      const _postMeshes = [];
+      let _postHolo = 0; let _postPbr = 0;
+      _titleShipModel.traverse(c => {
+        if (!c.isMesh) return;
+        const slot = (c.userData && c.userData._origMatName) || (c.material && c.material.name) || '?';
+        const m = c.material;
+        if (!m) { _postMeshes.push(slot + ':NO_MAT'); return; }
+        if (m.uniforms && m.uniforms.hologramColor) {
+          _postHolo++;
+          _postMeshes.push(slot + ':HOLO#' + (m.uniforms.hologramColor.value ? m.uniforms.hologramColor.value.getHexString() : '?'));
+        } else {
+          _postPbr++;
+          _postMeshes.push(slot + ':' + (m.type ? m.type.replace('Material','') : 'PBR') + '#' + (m.color ? m.color.getHexString() : '?'));
+        }
+      });
+      console.log('[DIAG] <<< PAINTED skin=' + skinIndex + ' mapEntries=' + _titleMeshMap.length + ' painted=' + _diagPainted + ' skipped=' + _diagSkipped + ' postHolo=' + _postHolo + ' postPbr=' + _postPbr);
+      console.log('[DIAG]   postPaint: ' + _postMeshes.join(' | '));
     } catch(_){}
     return;
   }
@@ -7586,6 +7691,11 @@ function _loadAltShip(glbFile, skinDef, skinIdx, callback) {
       if (mixer) mixer.update(0);
     }
     _altShipCache[cacheKey] = { model, mixer, clips };
+    try {
+      let _h = 0; let _p = 0; const _slots = [];
+      model.traverse(c => { if (!c.isMesh) return; const isHolo = !!(c.material && c.material.uniforms && c.material.uniforms.hologramColor); if (isHolo) _h++; else _p++; if (_slots.length < 8) _slots.push(((c.userData && c.userData._origMatName) || '?') + ':' + (isHolo ? 'H' : 'P')); });
+      console.log('[DIAG]   CACHE-POPULATED ' + cacheKey + ' t=' + performance.now().toFixed(0) + ' holo=' + _h + ' pbr=' + _p + ' slots=' + _slots.join(','));
+    } catch(_){}
     _altShipModel = model;
     _altShipMixer = mixer;
     _altShipClips = clips;
