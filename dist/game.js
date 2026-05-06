@@ -6441,6 +6441,7 @@ function _makeMatForSkinSlot(skinIdx, slotName) {
     mat.depthWrite = true;
     // Lock from holo-powerup tuner broadcasts — ship keeps its tuned defaults.
     mat.userData._lockHoloUniforms = true;
+    mat.userData._jhSession = true; // session-owned: safe to dispose on swap
     _registerHoloMaterial(mat);
     return mat;
   }
@@ -6453,6 +6454,7 @@ function _makeMatForSkinSlot(skinIdx, slotName) {
   if (def.emissive !== undefined) props.emissive = def.emissive;
   if (def.emissiveIntensity !== undefined) props.emissiveIntensity = def.emissiveIntensity;
   mat = new THREE.MeshStandardMaterial(props);
+  mat.userData._jhSession = true; // session-owned: safe to dispose on swap
   if (def.diamond) {
     mat.onBeforeCompile = (shader) => {
       const du = window._diamondUniforms;
@@ -7081,24 +7083,46 @@ function applyTitleSkin(skinIndex) {
       // clone we're about to install own their own materials and won't be
       // touched.
       try {
-        const _orphans = [];
+        // Walk OLD ship, collect every material in use. Per Three.js docs:
+        //   - Materials: must be disposed explicitly (frees shader programs).
+        //   - Geometries: SHARED with cached source (clone(true) shares geo) —
+        //     do NOT dispose, would break cache.
+        //   - Textures: SHARED via Material.clone() (clone copies refs only) —
+        //     do NOT dispose, would break cache.
+        //   - Holos: also unregister from _holoMaterials registry so the tick
+        //     loop stops touching them.
+        // The OLD ship's materials at this point are session-owned: paint loop
+        // overwrote cache-shared mats with _makeMatForSkinSlot results before
+        // we got here. Cones (?:Shader) are also session-owned (built in
+        // _thrInit) but get torn down by resetThrusterAnchors below — still
+        // dispose them here defensively in case order ever changes.
+        const _mats = [];
         const _seen = new Set();
         const _collect = (m) => {
-          if (m && m.uniforms && m.uniforms.hologramColor && !_seen.has(m)) {
-            _seen.add(m); _orphans.push(m);
-          }
+          if (m && !_seen.has(m)) { _seen.add(m); _mats.push(m); }
         };
         _titleShipModel.traverse(c => {
           if (!c.isMesh || !c.material) return;
           if (Array.isArray(c.material)) c.material.forEach(_collect);
           else _collect(c.material);
         });
-        let _swept = 0;
-        if (typeof _unregisterHoloMaterial === 'function') {
-          for (const h of _orphans) { _unregisterHoloMaterial(h); _swept++; }
+        let _sweptHolo = 0; let _disposedMat = 0; let _skippedShared = 0;
+        for (const m of _mats) {
+          // Only dispose session-owned materials. Materials without _jhSession
+          // are cache-shared (Material.clone() refs textures from the cache;
+          // disposing the material itself is technically safe but leaves
+          // ambiguity — skip to be safe).
+          const _session = !!(m.userData && m.userData._jhSession);
+          const _isHolo = !!(m.uniforms && m.uniforms.hologramColor);
+          if (!_session && !_isHolo) { _skippedShared++; continue; }
+          if (_isHolo && typeof _unregisterHoloMaterial === 'function') {
+            _unregisterHoloMaterial(m); _sweptHolo++; // also disposes
+          } else {
+            try { if (typeof m.dispose === 'function') { m.dispose(); _disposedMat++; } } catch(_){}
+          }
         }
         const _regAfter = (typeof _holoMaterials !== 'undefined') ? _holoMaterials.length : '?';
-        try { console.log('[DIAG]   ORPHAN-SWEEP swept=' + _swept + ' regAfter=' + _regAfter); } catch(_){}
+        try { console.log('[DIAG]   ORPHAN-SWEEP holo=' + _sweptHolo + ' mat=' + _disposedMat + ' shared=' + _skippedShared + ' regAfter=' + _regAfter); } catch(_){}
       } catch(e){ try { console.warn('[DIAG] orphan sweep error', e); } catch(_){} }
       const fresh = _newSrc.clone(true);
       // Re-mark mesh slots so material override loop below can find them,
@@ -7172,13 +7196,25 @@ function applyTitleSkin(skinIndex) {
         if (newMat) { mesh.material = newMat; _diagPainted++; if (_diagSlots.length < 6) _diagSlots.push(origName + (newMat.uniforms && newMat.uniforms.hologramColor ? ':holo' : ':pbr')); }
         else { _diagSkipped++; }
       }
-      // If the old material was a HOLO and we just replaced it with a
-      // different material, unregister + dispose it. (Identity check: don't
-      // sweep if paint somehow returned the same instance.)
-      if (_oldMat && _oldMat !== mesh.material && _oldMat.uniforms && _oldMat.uniforms.hologramColor) {
-        if (typeof _unregisterHoloMaterial === 'function') {
-          _unregisterHoloMaterial(_oldMat); _paintReplacedHolos++;
+      // If we replaced the old material with a different instance, dispose
+      // the old one. Holos also unregister from the tick registry. The
+      // first paint after a SWAP sees cache-shared materials here — those
+      // are NOT session-owned, so guard with a userData flag set on every
+      // session-created material below. Without that guard, we'd dispose
+      // the cached source's materials and break future swaps to that skin.
+      if (_oldMat && _oldMat !== mesh.material && _oldMat.userData && _oldMat.userData._jhSession) {
+        if (_oldMat.uniforms && _oldMat.uniforms.hologramColor) {
+          if (typeof _unregisterHoloMaterial === 'function') {
+            _unregisterHoloMaterial(_oldMat); _paintReplacedHolos++;
+          }
+        } else {
+          try { _oldMat.dispose(); _paintReplacedHolos++; } catch(_){}
         }
+      }
+      // Tag this freshly-painted material as session-owned so the next paint
+      // knows it's safe to dispose (vs. a cache-shared material from clone).
+      if (mesh.material && mesh.material !== _oldMat) {
+        try { (mesh.material.userData = mesh.material.userData || {})._jhSession = true; } catch(_){}
       }
       void _diagPainted; void _diagSkipped; void _paintReplacedHolos;
       // BLACK MAMBA (idx 2) extra darkening: ensures hull reads stealth black
