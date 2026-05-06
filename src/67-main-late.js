@@ -735,7 +735,15 @@ function startDeathRun() {
   state._arcActive = false;
   state._arcQueue = null;
   state._arcStage = 0;
-  state._drSpeedFloor = 0; // ratchet: once L5 corridor hits, speed never drops below its mult
+  // _drSpeedFloor is a ratchet: once L5 corridor hits, speed never drops below
+  // its mult. Also seeded here from the player's handling-tier startBoost so
+  // tier 2+ (1.8x) and tier 3+ (2.1x "L4 feel") launches survive the
+  // sequencer's per-tick STAGE_RAMP writer (which would otherwise clamp speed
+  // back down to S1_CONES's 1.5x). Stock tier 1 = 1.00, never raises floor.
+  // L5 ratchet at line ~2213 uses Math.max, so handling floor never overrides
+  // the L5 lock.
+  const _hsB = (typeof getHandlingStartBoost === 'function') ? getHandlingStartBoost() : 1.0;
+  state._drSpeedFloor = (_hsB > 1.0) ? _hsB : 0;
 
   // Wave director state (kept for endless mix fallback)
   DR2_RUN_BANDS = _drGetRunBands();
@@ -967,10 +975,19 @@ function startDeathRun() {
 
       const firstVibe = DEATH_RUN_VIBES[0];
       const speedIdx = Math.min(firstVibe.speedTier, 4);
-      // Handling tier startBoost (1.00–1.55 by player level) multiplies the
-      // launch speed. Higher tier = punchier opening + faster score climb
-      // (score tick scales with state.speed/BASE_SPEED).
-      _setDRSpeed(BASE_SPEED * LEVELS[speedIdx].speedMult * getHandlingStartBoost(), 'RUN_START');
+      // Handling tier startBoost is an ABSOLUTE launch-speed target. Per
+      // docs/DR_SEQUENCE.md the canonical S1_CONES speed is 1.5x — the
+      // per-frame STAGE_RAMP writer at line ~1251 will pull speed to that
+      // value unless _drSpeedFloor is raised. We use Math.max with the floor
+      // (already seeded in startDeathRun) and the canonical S1 speed so:
+      //   tier 1 (boost 1.0) → sequencer wins, launch ramps to 1.5x
+      //   tier 2 (boost 1.8) → launch at 1.8x, sequencer respects floor
+      //   tier 3 (boost 2.1) → launch at 2.1x, "L4 feel"
+      //   tier 7 (boost 2.3) → launch at 2.3x, near endgame ceiling
+      const _vibeMult   = LEVELS[speedIdx].speedMult;
+      const _floorMult  = state._drSpeedFloor || 0;
+      const _launchMult = Math.max(_vibeMult, _floorMult);
+      _setDRSpeed(BASE_SPEED * _launchMult, 'RUN_START');
       // Opening bonus rings — right in front of ship, fly into them before cones
       _ringRemoveAll();
       _ringSpawnRow(0, true); // spawn close to ship for immediate action

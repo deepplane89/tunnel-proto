@@ -582,14 +582,18 @@ const SKIN_LEVEL_UNLOCKS = {
 // scale with live speed, so a higher startBoost = faster score climb too.
 // drift field is kept at 1.0 (stock) on every tier as a defensive default in
 // case any code reads it; getHandlingDrift() now ignores tier.drift entirely.
+// startBoost values (2026-05-06): tier 3 anchored at 2.10x to match the L4
+// admin-button "kicks into gear" feel (LEVELS[3].speedMult 1.5 + continuousBoost
+// cap 0.6 = 2.1). Tier 7 caps at 2.30x — below the natural L5 ceiling of 2.45
+// so endgame still rewards score-driven speed ramps. Stock = 1.00 (no boost).
 const HANDLING_TIERS = [
   { level: 1,  drift: 1.0, startBoost: 1.00, label: null },              // stock
-  { level: 2,  drift: 1.0, startBoost: 1.05, label: 'Hull Stabilized' },
-  { level: 3,  drift: 1.0, startBoost: 1.10, label: 'Thrusters Aligned' },
-  { level: 5,  drift: 1.0, startBoost: 1.18, label: 'Flight Control Online' },
-  { level: 8,  drift: 1.0, startBoost: 1.28, label: 'Advanced Handling' },
-  { level: 14, drift: 1.0, startBoost: 1.40, label: 'Precision Flight' },
-  { level: 22, drift: 1.0, startBoost: 1.55, label: 'Full Control' },
+  { level: 2,  drift: 1.0, startBoost: 1.80, label: 'Hull Stabilized' },
+  { level: 3,  drift: 1.0, startBoost: 2.10, label: 'Thrusters Aligned' },        // L4 feel
+  { level: 5,  drift: 1.0, startBoost: 2.15, label: 'Flight Control Online' },
+  { level: 8,  drift: 1.0, startBoost: 2.20, label: 'Advanced Handling' },
+  { level: 14, drift: 1.0, startBoost: 2.25, label: 'Precision Flight' },
+  { level: 22, drift: 1.0, startBoost: 2.30, label: 'Full Control' },
 ];
 const HANDLING_UPGRADE_KEY = 'jetslide_handling_claimed';
 

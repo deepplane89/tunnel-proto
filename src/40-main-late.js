@@ -2301,9 +2301,18 @@ function checkLevelUp() {
   // Continuous speed scaling within + beyond levels (score/30 on top of level base)
   const lvlDef = LEVELS[newIdx];
   const continuousBoost = Math.min(state.score / 180, 0.6); // up to +60% extra, ramps faster
+  // Handling-tier startBoost acts as a speed FLOOR — launch speed isn't
+  // clobbered by the level formula on the next score tick. The natural
+  // formula still wins once the player reaches a level whose speedMult +
+  // continuousBoost exceeds the floor (e.g. tier 3 floor of 2.1 is matched
+  // at L4 + score ramp). Above the floor, score-driven scaling resumes
+  // normally, so endgame players still see speed climb to the L5 ceiling.
+  const _handlingFloor = (typeof getHandlingStartBoost === 'function') ? getHandlingStartBoost() : 1.0;
+  const _formulaMult = lvlDef.speedMult + continuousBoost;
+  const _finalMult = Math.max(_formulaMult, _handlingFloor);
   // Freeze speed during corridors — prevents mid-corridor speed jumps
   const inCorridor = state.corridorMode || state.l4CorridorActive || state.l5CorridorActive || state.l3KnifeCanyon;
-  if (!inCorridor) _setDRSpeed(BASE_SPEED * (lvlDef.speedMult + continuousBoost), 'LEGACY_LEVEL');
+  if (!inCorridor) _setDRSpeed(BASE_SPEED * _finalMult, 'LEGACY_LEVEL');
 
   if (newIdx !== state.currentLevelIdx) {
     state.currentLevelIdx = newIdx;

@@ -1262,14 +1262,18 @@ const SKIN_LEVEL_UNLOCKS = {
 // scale with live speed, so a higher startBoost = faster score climb too.
 // drift field is kept at 1.0 (stock) on every tier as a defensive default in
 // case any code reads it; getHandlingDrift() now ignores tier.drift entirely.
+// startBoost values (2026-05-06): tier 3 anchored at 2.10x to match the L4
+// admin-button "kicks into gear" feel (LEVELS[3].speedMult 1.5 + continuousBoost
+// cap 0.6 = 2.1). Tier 7 caps at 2.30x — below the natural L5 ceiling of 2.45
+// so endgame still rewards score-driven speed ramps. Stock = 1.00 (no boost).
 const HANDLING_TIERS = [
   { level: 1,  drift: 1.0, startBoost: 1.00, label: null },              // stock
-  { level: 2,  drift: 1.0, startBoost: 1.05, label: 'Hull Stabilized' },
-  { level: 3,  drift: 1.0, startBoost: 1.10, label: 'Thrusters Aligned' },
-  { level: 5,  drift: 1.0, startBoost: 1.18, label: 'Flight Control Online' },
-  { level: 8,  drift: 1.0, startBoost: 1.28, label: 'Advanced Handling' },
-  { level: 14, drift: 1.0, startBoost: 1.40, label: 'Precision Flight' },
-  { level: 22, drift: 1.0, startBoost: 1.55, label: 'Full Control' },
+  { level: 2,  drift: 1.0, startBoost: 1.80, label: 'Hull Stabilized' },
+  { level: 3,  drift: 1.0, startBoost: 2.10, label: 'Thrusters Aligned' },        // L4 feel
+  { level: 5,  drift: 1.0, startBoost: 2.15, label: 'Flight Control Online' },
+  { level: 8,  drift: 1.0, startBoost: 2.20, label: 'Advanced Handling' },
+  { level: 14, drift: 1.0, startBoost: 2.25, label: 'Precision Flight' },
+  { level: 22, drift: 1.0, startBoost: 2.30, label: 'Full Control' },
 ];
 const HANDLING_UPGRADE_KEY = 'jetslide_handling_claimed';
 
@@ -14497,9 +14501,18 @@ function checkLevelUp() {
   // Continuous speed scaling within + beyond levels (score/30 on top of level base)
   const lvlDef = LEVELS[newIdx];
   const continuousBoost = Math.min(state.score / 180, 0.6); // up to +60% extra, ramps faster
+  // Handling-tier startBoost acts as a speed FLOOR — launch speed isn't
+  // clobbered by the level formula on the next score tick. The natural
+  // formula still wins once the player reaches a level whose speedMult +
+  // continuousBoost exceeds the floor (e.g. tier 3 floor of 2.1 is matched
+  // at L4 + score ramp). Above the floor, score-driven scaling resumes
+  // normally, so endgame players still see speed climb to the L5 ceiling.
+  const _handlingFloor = (typeof getHandlingStartBoost === 'function') ? getHandlingStartBoost() : 1.0;
+  const _formulaMult = lvlDef.speedMult + continuousBoost;
+  const _finalMult = Math.max(_formulaMult, _handlingFloor);
   // Freeze speed during corridors — prevents mid-corridor speed jumps
   const inCorridor = state.corridorMode || state.l4CorridorActive || state.l5CorridorActive || state.l3KnifeCanyon;
-  if (!inCorridor) _setDRSpeed(BASE_SPEED * (lvlDef.speedMult + continuousBoost), 'LEGACY_LEVEL');
+  if (!inCorridor) _setDRSpeed(BASE_SPEED * _finalMult, 'LEGACY_LEVEL');
 
   if (newIdx !== state.currentLevelIdx) {
     state.currentLevelIdx = newIdx;
@@ -20317,7 +20330,15 @@ function startDeathRun() {
   state._arcActive = false;
   state._arcQueue = null;
   state._arcStage = 0;
-  state._drSpeedFloor = 0; // ratchet: once L5 corridor hits, speed never drops below its mult
+  // _drSpeedFloor is a ratchet: once L5 corridor hits, speed never drops below
+  // its mult. Also seeded here from the player's handling-tier startBoost so
+  // tier 2+ (1.8x) and tier 3+ (2.1x "L4 feel") launches survive the
+  // sequencer's per-tick STAGE_RAMP writer (which would otherwise clamp speed
+  // back down to S1_CONES's 1.5x). Stock tier 1 = 1.00, never raises floor.
+  // L5 ratchet at line ~2213 uses Math.max, so handling floor never overrides
+  // the L5 lock.
+  const _hsB = (typeof getHandlingStartBoost === 'function') ? getHandlingStartBoost() : 1.0;
+  state._drSpeedFloor = (_hsB > 1.0) ? _hsB : 0;
 
   // Wave director state (kept for endless mix fallback)
   DR2_RUN_BANDS = _drGetRunBands();
@@ -20549,10 +20570,19 @@ function startDeathRun() {
 
       const firstVibe = DEATH_RUN_VIBES[0];
       const speedIdx = Math.min(firstVibe.speedTier, 4);
-      // Handling tier startBoost (1.00–1.55 by player level) multiplies the
-      // launch speed. Higher tier = punchier opening + faster score climb
-      // (score tick scales with state.speed/BASE_SPEED).
-      _setDRSpeed(BASE_SPEED * LEVELS[speedIdx].speedMult * getHandlingStartBoost(), 'RUN_START');
+      // Handling tier startBoost is an ABSOLUTE launch-speed target. Per
+      // docs/DR_SEQUENCE.md the canonical S1_CONES speed is 1.5x — the
+      // per-frame STAGE_RAMP writer at line ~1251 will pull speed to that
+      // value unless _drSpeedFloor is raised. We use Math.max with the floor
+      // (already seeded in startDeathRun) and the canonical S1 speed so:
+      //   tier 1 (boost 1.0) → sequencer wins, launch ramps to 1.5x
+      //   tier 2 (boost 1.8) → launch at 1.8x, sequencer respects floor
+      //   tier 3 (boost 2.1) → launch at 2.1x, "L4 feel"
+      //   tier 7 (boost 2.3) → launch at 2.3x, near endgame ceiling
+      const _vibeMult   = LEVELS[speedIdx].speedMult;
+      const _floorMult  = state._drSpeedFloor || 0;
+      const _launchMult = Math.max(_vibeMult, _floorMult);
+      _setDRSpeed(BASE_SPEED * _launchMult, 'RUN_START');
       // Opening bonus rings — right in front of ship, fly into them before cones
       _ringRemoveAll();
       _ringSpawnRow(0, true); // spawn close to ship for immediate action
