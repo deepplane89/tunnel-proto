@@ -1455,6 +1455,7 @@
     _wireOnce();
     overlay.classList.remove('hidden');
     document.body.classList.add('sr-open');
+    try { if (typeof window.playGarageOpen === 'function') window.playGarageOpen(); } catch(_){}
     _mountShopIntoShowroom();
     _switchTab(tab || 'skins');
     // Seed the garage preview index from whatever ship is currently on the
@@ -1500,6 +1501,7 @@
 
   function close() {
     const overlay = document.getElementById('thruster-overlay');
+    try { if (typeof window.playGarageClose === 'function') window.playGarageClose(); } catch(_){}
     _restoreCanvas();
     _unmountShopFromShowroom();
     if (overlay) overlay.classList.add('hidden');

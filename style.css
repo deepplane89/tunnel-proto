@@ -2710,7 +2710,12 @@ html, body {
 }
 .shop-handling-bar.open .fm-caret { transform: rotate(180deg); }
 
-.shop-handling-bar .fm-menu {
+/* FM menu rules apply both when nested inside .shop-handling-bar AND when
+ * portaled to <body> (via .fm-menu-portal flag). The portal mode is used to
+ * escape ancestor clip-path / will-change / transform on iOS landscape.
+ * Keep these two selector lists in sync. */
+.shop-handling-bar .fm-menu,
+.fm-menu.fm-menu-portal {
   display: none;
   padding: 4px;
   background: rgba(0, 14, 28, 0.92);
@@ -2720,9 +2725,11 @@ html, body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
-.shop-handling-bar.open .fm-menu { display: block; }
+.shop-handling-bar.open .fm-menu,
+.fm-menu.fm-menu-portal.open { display: block; }
 
-.shop-handling-bar .fm-row {
+.shop-handling-bar .fm-row,
+.fm-menu-portal .fm-row {
   padding: 6px 8px;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -2730,66 +2737,80 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   transition: background 0.12s, border-color 0.12s;
 }
-.shop-handling-bar .fm-row + .fm-row { margin-top: 2px; }
-.shop-handling-bar .fm-row:hover { background: rgba(255,255,255,0.04); }
-.shop-handling-bar .fm-row.equipped {
+.shop-handling-bar .fm-row + .fm-row,
+.fm-menu-portal .fm-row + .fm-row { margin-top: 2px; }
+.shop-handling-bar .fm-row:hover,
+.fm-menu-portal .fm-row:hover { background: rgba(255,255,255,0.04); }
+.shop-handling-bar .fm-row.equipped,
+.fm-menu-portal .fm-row.equipped {
   background: rgba(34, 211, 238, 0.12);
   border-color: rgba(34, 211, 238, 0.55);
   box-shadow: 0 0 8px rgba(34, 211, 238, 0.18) inset;
 }
-.shop-handling-bar .fm-row.locked {
+.shop-handling-bar .fm-row.locked,
+.fm-menu-portal .fm-row.locked {
   opacity: 0.45;
   cursor: not-allowed;
 }
-.shop-handling-bar .fm-row.locked:hover { background: transparent; }
+.shop-handling-bar .fm-row.locked:hover,
+.fm-menu-portal .fm-row.locked:hover { background: transparent; }
 
-.shop-handling-bar .fm-row-head {
+.shop-handling-bar .fm-row-head,
+.fm-menu-portal .fm-row-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
-.shop-handling-bar .fm-name {
+.shop-handling-bar .fm-name,
+.fm-menu-portal .fm-name {
   font-family: 'Orbitron', sans-serif;
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 1.2px;
 }
-.shop-handling-bar .fm-lock {
+.shop-handling-bar .fm-lock,
+.fm-menu-portal .fm-lock {
   font-family: var(--font-display, 'Rajdhani', sans-serif);
   font-size: 10px;
   color: rgba(255,255,255,0.5);
   letter-spacing: 0.05em;
 }
-.shop-handling-bar .fm-stats {
+.shop-handling-bar .fm-stats,
+.fm-menu-portal .fm-stats {
   display: flex;
   gap: 10px;
   margin-top: 4px;
   flex-wrap: wrap;
 }
-.shop-handling-bar .fm-stat {
+.shop-handling-bar .fm-stat,
+.fm-menu-portal .fm-stat {
   display: flex;
   align-items: center;
   gap: 4px;
   font-family: var(--font-display, 'Rajdhani', sans-serif);
 }
-.shop-handling-bar .fm-stat-lbl {
+.shop-handling-bar .fm-stat-lbl,
+.fm-menu-portal .fm-stat-lbl {
   font-size: 9px;
   letter-spacing: 0.08em;
   color: rgba(255,255,255,0.55);
   min-width: 36px;
 }
-.shop-handling-bar .fm-pips {
+.shop-handling-bar .fm-pips,
+.fm-menu-portal .fm-pips {
   display: inline-flex;
   gap: 2px;
 }
-.shop-handling-bar .fm-pip {
+.shop-handling-bar .fm-pip,
+.fm-menu-portal .fm-pip {
   width: 6px;
   height: 6px;
   border-radius: 1px;
   background: rgba(255,255,255,0.12);
 }
-.shop-handling-bar .fm-pip.on {
+.shop-handling-bar .fm-pip.on,
+.fm-menu-portal .fm-pip.on {
   background: #0ff;
   box-shadow: 0 0 4px rgba(0, 255, 255, 0.5);
 }

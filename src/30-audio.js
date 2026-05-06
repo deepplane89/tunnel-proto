@@ -182,6 +182,35 @@ function _initSFXBuffers() {
   _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
   _loadSFXBuffer('shop-purchase',   './assets/audio/shop_purchase.mp3');
   _loadSFXBuffer('reject',          './assets/audio/reject.mp3');
+  // Garage open/close share one source file. The close variant is the
+  // forward sample played in reverse via a sample-flipped clone built at
+  // decode time (see _loadSFXBufferWithReverse).
+  _loadSFXBufferWithReverse('garage-open', 'garage-close', './assets/audio/garage-open.mp3');
+}
+
+// Decode a sample, then build a sample-reversed clone under another name.
+// Useful when one source file should serve as both "forward" and "reverse"
+// cues (e.g. open/close) without shipping a second mp3.
+function _loadSFXBufferWithReverse(forwardName, reverseName, url) {
+  if (!audioCtx) return;
+  if (_sfxBuffers[forwardName] || _sfxLoading[forwardName]) return;
+  _sfxLoading[forwardName] = fetch(url)
+    .then(r => r.arrayBuffer())
+    .then(buf => audioCtx.decodeAudioData(buf))
+    .then(decoded => {
+      _sfxBuffers[forwardName] = decoded;
+      try {
+        const rev = audioCtx.createBuffer(decoded.numberOfChannels, decoded.length, decoded.sampleRate);
+        for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+          const src = decoded.getChannelData(ch);
+          const dst = rev.getChannelData(ch);
+          const n = src.length;
+          for (let i = 0; i < n; i++) dst[i] = src[n - 1 - i];
+        }
+        _sfxBuffers[reverseName] = rev;
+      } catch(_){}
+    })
+    .catch(() => {});
 }
 
 // ── Argon looping handle (Web Audio path) ──
@@ -324,5 +353,11 @@ function playReject() {
   _playBuffer('reject', 0.55, 1.0, null);
 }
 window.playReject = playReject;
+
+// Garage entry: forward power-up sweep. Garage exit: same sample reversed.
+function playGarageOpen()  { _playBuffer('garage-open',  0.6, 1.0, null); }
+function playGarageClose() { _playBuffer('garage-close', 0.6, 1.0, null); }
+window.playGarageOpen  = playGarageOpen;
+window.playGarageClose = playGarageClose;
 
 function playCrash() {

@@ -149,10 +149,18 @@ function _renderShopHandlingBar() {
     _fmMenuHome = menu.parentNode;
     _fmMenuNext = menu.nextSibling;
     document.body.appendChild(menu);
+    // .fm-menu-portal flag mirrors all .shop-handling-bar .fm-menu styling
+    // so the menu keeps its aesthetic when the ancestor selector breaks.
+    // .open is also mirrored here because the bar's .open class can no
+    // longer reach the menu via descendant selector.
+    menu.classList.add('fm-menu-portal');
+    menu.classList.add('open');
     _fmMenuMounted = true;
   }
   function _fmPortalUnmount() {
     if (!menu || !_fmMenuMounted) return;
+    menu.classList.remove('fm-menu-portal');
+    menu.classList.remove('open');
     if (_fmMenuHome) {
       try { _fmMenuHome.insertBefore(menu, _fmMenuNext || null); } catch(_) {
         try { _fmMenuHome.appendChild(menu); } catch(__){}
