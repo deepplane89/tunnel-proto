@@ -1941,10 +1941,12 @@ function spawnObstacles() {
     } else if (_density === 'dense') {
       obs = 6; maxObs = 8; gap = 1.0;
     } else if (_density === 'ramp') {
-      // Stage 1 ramp uses the fast-path block earlier in this function;
-      // these values are unused but kept to satisfy the if/else assignment.
-      obs = 1;
-      maxObs = 1;
+      // Stage 1 ramp: keep per-row count steady (no walls of cones bunched in
+      // a single row), let intensity come from spawn FREQUENCY instead. The
+      // row spacing is shrunk down by _drStageSpawnZScale() (driven by
+      // _seqRampT01) so cones arrive faster as the stage progresses.
+      obs = 4;
+      maxObs = 5;
       gap = 1.0;
     } else if (_density === 'normal') {
       // Sequencer 'normal' = moderate scatter, not the brutal endless-mode count
@@ -2009,47 +2011,6 @@ function spawnObstacles() {
     spawnGauntletRow();
     framesSinceLastPowerup++;
     return; // no power-ups during funnel — stay focused
-  }
-
-  // ── S1 RAMP FAST PATH: single-cone staggered scatter ──
-  // Skip the row/predictedX/gap-lane machinery below (designed for
-  // multi-cone rows). Spawn ONE cone per call. Lateral logic:
-  //  - The spawn REGION drifts with shipX (so cones stay in the player's
-  //    general vicinity — lateral camping doesn't trivialize the stage).
-  //  - Inside the region the cone's lane is uniform-random across a wide
-  //    band, so individual cones don't track the ship's exact X.
-  // Region width ±8 lanes (≈16 lanes / 51 units of road) centered on
-  // shipX — wide enough that you can dodge by drifting laterally, narrow
-  // enough that you can't park on one edge and watch them miss.
-  if (state.isDeathRun && state._seqConeDensity === 'ramp') {
-    const _shipLaneIdx = Math.round(state.shipX / LANE_WIDTH + (LANE_COUNT - 1) / 2);
-    const _regionHalfLanes = 8;
-    const _regionLo = Math.max(0, _shipLaneIdx - _regionHalfLanes);
-    const _regionHi = Math.min(LANE_COUNT - 1, _shipLaneIdx + _regionHalfLanes);
-    const _laneIdx = _regionLo + Math.floor(Math.random() * (_regionHi - _regionLo + 1));
-    const _laneX = (_laneIdx - (LANE_COUNT - 1) / 2) * LANE_WIDTH;
-    // Skip if cone would land inside an active bonus ring
-    let _inRing = false;
-    for (const br of _bonusRings) {
-      if (br.collected) continue;
-      const dz = Math.abs(br.mesh.position.z - SPAWN_Z);
-      if (dz < _ringTuner.freq * 0.7) {
-        const dx = Math.abs(br.mesh.position.x - _laneX);
-        if (dx < _ringTuner.radius + 0.8) { _inRing = true; break; }
-      }
-    }
-    if (!_inRing) {
-      const _coneType = Math.floor(Math.random() * 3);
-      const _cone = getPooledObstacle(_coneType);
-      if (_cone) {
-        _cone.position.set(_laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
-        _cone.userData.velX = 0;
-        activeObstacles.push(_cone);
-        _spawnLateralEchoes(_laneX, SPAWN_Z, 'cone');
-      }
-    }
-    framesSinceLastPowerup++;
-    return;
   }
 
   // ── Normal random spawn ──

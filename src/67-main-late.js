@@ -5203,20 +5203,16 @@ function update(dt) {
       }
       const _isFatConeMode = state._seqSpawnMode === 'fat_cones';
       let _spawnZBase = _isFatConeMode ? -28 : (_spawnBand === 1) ? -30 : (_spawnBand === 2 || _spawnBand >= 5) ? -22 : (state.isDeathRun ? -30 : -50);
-      // Stage 1 cone ramp: with `obs=1, maxObs=1` (set in spawnObstacles)
-      // each call drops a SINGLE cone on a random lane. Intensity comes
-      // from how often we call — i.e. _spawnZBase. Ramp from -10 (one
-      // cone every 10 units, sparse) down to -3 (one cone every 3 units,
-      // a steady staggered shower across the horizon) as t01 goes 0→1.
-      let _zJitter = 10;
+      // Stage 1 cone ramp: tighten row spacing as the stage progresses so
+      // the cones come faster instead of arriving in dense bunched rows.
+      // _seqConeDensity === 'ramp' is set by the S1_CONES sequencer stage.
+      // Was a fixed -30 unit gap; ramp from -36 (sparse, easy entry) down
+      // to -16 (cones rolling in fast) as t01 goes 0→1.
       if (state._seqConeDensity === 'ramp') {
         const _t01 = state._seqRampT01 || 0;
-        _spawnZBase = -10 + 7 * _t01; // -10 → -3
-        // Narrower jitter (±3) than the multi-cone modes (±5) so the rate
-        // doesn't degenerate into accidental bunches at the dense end.
-        _zJitter = 6;
+        _spawnZBase = -36 + 20 * _t01; // -36 → -16
       }
-      state.nextSpawnZ = _spawnZBase + (Math.random() - 0.5) * _zJitter;
+      state.nextSpawnZ = _spawnZBase + (Math.random() - 0.5) * 10;
       state.frameCount++;
       const l4PreClear = (!state.isDeathRun && state.currentLevelIdx === 3 && !state.l4CorridorDone &&
                           state.levelElapsed >= L4_CORRIDOR_TRIGGER_S - 4);
