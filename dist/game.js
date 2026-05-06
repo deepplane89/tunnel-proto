@@ -6895,9 +6895,27 @@ function applyTitleSkin(skinIndex) {
       if (c.isMesh) { _altMeshCount++; if (c.material && c.material.uniforms && c.material.uniforms.hologramColor) _altHoloMeshCount++; }
     });
     const _altVis = (typeof _altShipModel !== 'undefined' && _altShipModel) ? _altShipModel.visible : 'n/a';
+    // Sample first hull material color so we can spot grey-RUNNER bug:
+    // if hull color is the raw GLB tint instead of the per-skin paint, log it.
+    let _firstHullColor = 'n/a'; let _firstHullSlot = 'n/a';
+    if (_titleShipModel) {
+      _titleShipModel.traverse(c => {
+        if (_firstHullColor !== 'n/a' || !c.isMesh || !c.material) return;
+        const slot = (c.userData && c.userData._origMatName) || (c.material.name || '');
+        if (slot === 'rocket_base' || slot === 'fallback' || slot === 'gray') {
+          _firstHullSlot = slot;
+          if (c.material.color) _firstHullColor = '#' + c.material.color.getHexString();
+          else if (c.material.uniforms && c.material.uniforms.hologramColor) _firstHullColor = 'holo:#' + c.material.uniforms.hologramColor.value.getHexString();
+        }
+      });
+    }
+    const _retryPending = (window._titleSkinRetryKey || 'none');
+    const _hasCache = (typeof _altShipCache !== 'undefined') ? Object.keys(_altShipCache).join(',') : 'n/a';
     console.log('[HOLO_DIAG] applyTitleSkin', skinIndex, 't=' + performance.now().toFixed(0),
       'holoReg=' + _hcount, 'titleMesh=' + _meshCount + '(' + _holoMeshCount + 'holo)',
-      'altMesh=' + _altMeshCount + '(' + _altHoloMeshCount + 'holo,vis=' + _altVis + ')');
+      'altMesh=' + _altMeshCount + '(' + _altHoloMeshCount + 'holo,vis=' + _altVis + ')',
+      'hull[' + _firstHullSlot + ']=' + _firstHullColor,
+      'retry=' + _retryPending, 'cache=[' + _hasCache + ']');
   } catch(_){}
   // Clamp out-of-range to default — BUT only when the skin is also missing
   // from SHIP_SKINS. Alt-GLB skins (e.g. MK Runner at idx 4) are valid even
