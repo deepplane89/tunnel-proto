@@ -6509,12 +6509,19 @@ function applyTitleSkin(skinIndex) {
       // 11 holo mats with PBR but the holos remain in _holoMaterials, ticking
       // and (per the captured log) sometimes still rendering as ghost flicker.
       const _oldMat = mesh.material;
-      if (isLocked) { mesh.material = _titleDarkMat; }
-      else {
-        const newMat = _makeMatForSkinSlot(skinIndex, origName || '');
-        if (newMat) { mesh.material = newMat; _diagPainted++; if (_diagSlots.length < 6) _diagSlots.push(origName + (newMat.uniforms && newMat.uniforms.hologramColor ? ':holo' : ':pbr')); }
-        else { _diagSkipped++; }
+      if (isLocked) {
+        mesh.material = _titleDarkMat;
+        // Unregister the OLD holo (if any) before early-continuing.
+        if (_oldMat && _oldMat !== mesh.material && _oldMat.uniforms && _oldMat.uniforms.hologramColor) {
+          if (typeof _unregisterHoloMaterial === 'function') {
+            _unregisterHoloMaterial(_oldMat); _paintReplacedHolos++;
+          }
+        }
+        continue; // CRITICAL: skip MAMBA color mutation; _titleDarkMat is shared across all locked skins
       }
+      const newMat = _makeMatForSkinSlot(skinIndex, origName || '');
+      if (newMat) { mesh.material = newMat; _diagPainted++; if (_diagSlots.length < 6) _diagSlots.push(origName + (newMat.uniforms && newMat.uniforms.hologramColor ? ':holo' : ':pbr')); }
+      else { _diagSkipped++; }
       // If the OLD mat was a holo and we replaced it with a different
       // material, unregister it from the tick loop. We do NOT dispose:
       // the holo may still be referenced by the cached gameplay alt-ship
