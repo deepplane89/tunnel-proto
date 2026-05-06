@@ -1281,6 +1281,25 @@ function _drSequencerTick(dt) {
 
   const tp = stage.type;
 
+  // ─── PRE-CANYON CLEAR-OUT WINDOW ───
+  // Stages that spawn obstacles at z=-160 need a quiet window at the end
+  // so in-flight obstacles can z-scroll past the ship before the next
+  // stage's canyon (lightning + walls) activates. Without this, lightning
+  // appears to start while the previous stage's cones/walls are still in
+  // mid-air — visual collision between mechanics.
+  //
+  // Cones spawn at z=-160 and travel ~144 units to reach the ship. Time to
+  // clear depends on stage speed. We use 3s which covers everything from
+  // S1's 1.5x up to the late-stage 2.5x speeds with comfortable headroom.
+  const _nextStageIsCanyon = (() => {
+    const _ns = DR_SEQUENCE[state.seqStageIdx + 1];
+    return _ns && _ns.type === 'corridor';
+  })();
+  const _stageDur = stage.duration || 0;
+  const _PRE_CANYON_QUIET_S = 3;
+  const _inPreCanyonQuiet = _nextStageIsCanyon && _stageDur > 0 &&
+    state.seqStageElapsed >= _stageDur - _PRE_CANYON_QUIET_S;
+
   // ─── REST: clear all obstacles and wait ───
   if (tp === 'rest') {
     // On first tick of rest stage, wipe all active obstacles so screen is clear
@@ -1442,22 +1461,11 @@ function _drSequencerTick(dt) {
     // Density control: sparse | dense | normal | ramp.
     // 'ramp' = linear interpolation 5→9 cones over the stage duration (set by
     // spawnObstacles() reading state._seqRampT01). Used by S1_CONES.
-    state._seqSpawnMode = 'cones';
+    state._seqSpawnMode = _inPreCanyonQuiet ? 'none' : 'cones';
     const _density = stage.density || 'normal';
     state._seqConeDensity = _density;
-    // Clear-out window: stop spawning new cones for the final stretch of
-    // the stage so the field can scroll past the ship before the next
-    // stage's mechanics (canyon walls, lightning) activate. Cones spawn
-    // at z=-160 and travel ~144 units to reach the ship; at S1's 1.5x
-    // base speed that's ~2.5s of flight time. Use 3s for safety so even
-    // the last spawned cone is past the ship before transition.
-    const _dur = stage.duration || 30;
-    const _clearWindow = 3;
-    if (state.seqStageElapsed >= _dur - _clearWindow) {
-      state._seqSpawnMode = 'none';
-    }
     if (_density === 'ramp') {
-      // Hold t01 at 1.0 during the clear window so it doesn't roll back.
+      const _dur = stage.duration || 30;
       state._seqRampT01 = Math.min(1, state.seqStageElapsed / _dur);
     } else {
       state._seqRampT01 = 0;
@@ -1509,7 +1517,9 @@ function _drSequencerTick(dt) {
     // Stage 5: structured angled-wall bursts only. Burst every 3s, no rings.
     state._seqSpawnMode = 'none';
     state._seqStructuredTimer = (state._seqStructuredTimer || 0) + dt;
-    if (state._seqStructuredTimer >= 3 && !state.angledWallsActive) {
+    // Skip starting a new burst during the pre-canyon quiet window — walls
+    // spawned in the last 3s wouldn't reach the ship before lightning hits.
+    if (state._seqStructuredTimer >= 3 && !state.angledWallsActive && !_inPreCanyonQuiet) {
       state._seqStructuredTimer = 0;
       const fam = DR_MECHANIC_FAMILIES['ANGLED_WALL'];
       fam.activate({ label: 'BAND3' }, 'build');
@@ -1518,7 +1528,8 @@ function _drSequencerTick(dt) {
   else if (tp === 'slalom_only') {
     // Stage 9: continuous slalom. Re-arm after each slalom run completes.
     state._seqSpawnMode = 'none';
-    if (!state.slalomActive) {
+    // Don't kick off a new slalom run during the pre-canyon quiet window.
+    if (!state.slalomActive && !_inPreCanyonQuiet) {
       state.slalomActive = true;
       state.slalomUsePhysicsCurve = true;
       state._slalomGapWidth = 10;
@@ -1534,7 +1545,14 @@ function _drSequencerTick(dt) {
   else if (tp === 'zipper_only') {
     // Stage 10: continuous zipper bursts. Re-arm after each zipper run completes.
     state._seqSpawnMode = 'none';
-    if (!state.zipperActive) {
+    // During pre-canyon quiet, abort any active zipper and don't start new ones
+    // so tail rows don't bleed into the canyon entry.
+    if (_inPreCanyonQuiet) {
+      if (state.zipperActive) {
+        state.zipperActive = false;
+        state.zipperRowsLeft = 0;
+      }
+    } else if (!state.zipperActive) {
       state.zipperActive = true;
       state.zipperRowsLeft = ZIPPER_ROWS;
       state.zipperSide = Math.random() < 0.5 ? 1 : -1;
@@ -1543,11 +1561,10 @@ function _drSequencerTick(dt) {
     }
   }
   else if (tp === 'cones_and_zips') {
-    // Pre-canyon quiet window: for the last 2s of T3A_ZIPS, stop spawning new
-    // cones/zippers so the final batch z-scrolls past the player before L3
-    // canyon triggers. Paired with the no-wipe fix in _startL3KnifeCanyon.
-    const _preCanyonQuiet = (stage.duration || 30) - state.seqStageElapsed <= 2.0;
-    if (_preCanyonQuiet) {
+    // Pre-canyon quiet window: stop spawning new cones/zippers in the last
+    // stretch so the final batch z-scrolls past the player before the next
+    // canyon triggers. Uses the shared _inPreCanyonQuiet flag (3s).
+    if (_inPreCanyonQuiet) {
       state._seqSpawnMode = 'none';
       // Abort any in-flight zipper so its tail rows don't spawn into the canyon entry.
       if (state.zipperActive) {
@@ -1586,7 +1603,9 @@ function _drSequencerTick(dt) {
   else if (tp === 'angled_walls') {
     // 0-15s: random angled walls, 15-17s: breather, 17-30s: random angled walls
     const t = state.seqStageElapsed;
-    if (t < 15 || t >= 17) {
+    if (_inPreCanyonQuiet) {
+      state._seqSpawnMode = 'none';
+    } else if (t < 15 || t >= 17) {
       state._seqSpawnMode = 'angled';
     } else {
       state._seqSpawnMode = 'none';
@@ -1595,10 +1614,10 @@ function _drSequencerTick(dt) {
   else if (tp === 'lethal_rings') {
     // Rings-only the whole duration. The previous wall+ring multi-phase
     // logic is handled by separate stages (S4 angled_walls, S5 structured_walls).
-    state._seqSpawnMode = 'lethal';
+    state._seqSpawnMode = _inPreCanyonQuiet ? 'none' : 'lethal';
   }
   else if (tp === 'fat_cones') {
-    state._seqSpawnMode = 'fat_cones';
+    state._seqSpawnMode = _inPreCanyonQuiet ? 'none' : 'fat_cones';
   }
   else if (tp === 'slalom_then_zips') {
     // 0-15s: slalom (no background cones)
