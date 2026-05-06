@@ -5763,6 +5763,8 @@ function _makeMatForSkinSlot(skinIdx, slotName) {
       blendMode:          THREE.NormalBlending,
     });
     mat.depthWrite = true;
+    // Lock from holo-powerup tuner broadcasts — ship keeps its tuned defaults.
+    mat.userData._lockHoloUniforms = true;
     _registerHoloMaterial(mat);
     return mat;
   }
@@ -6037,6 +6039,8 @@ normal = _dbn;`;
           blendMode:          THREE.NormalBlending,
         });
         mat.depthWrite = true; // occlude sun/skybox like powerup cube
+        // Lock from holo-powerup tuner broadcasts — ship keeps tuned defaults.
+        mat.userData._lockHoloUniforms = true;
         _registerHoloMaterial(mat);
       } else if (def.physical) {
         props.clearcoat = def.clearcoat || 0;

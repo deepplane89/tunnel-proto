@@ -135,9 +135,15 @@ function _tickHoloMaterials(t) {
 }
 // Apply a uniform value to ALL registered holo materials. Used by the tuner.
 // The hologramColor is intentionally NOT broadcast — each powerup keeps its own tint.
+// Materials with userData._lockHoloUniforms=true are skipped — lets the ghost
+// ship hold its tuned defaults regardless of whether the holo-powerup tuner is
+// used. Without this lock, moving any holo slider would clobber the ship's
+// signalSpeed=0 / scanlineSize=5.5 etc. and make the ship flicker/distort.
 function _broadcastHoloUniform(name, value) {
   for (let i = 0; i < _holoMaterials.length; i++) {
-    const u = _holoMaterials[i].uniforms[name];
+    const m = _holoMaterials[i];
+    if (m.userData && m.userData._lockHoloUniforms) continue;
+    const u = m.uniforms[name];
     if (u) u.value = value;
   }
 }
