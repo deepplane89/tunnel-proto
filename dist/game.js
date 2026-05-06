@@ -11520,6 +11520,10 @@ function _initSFXBuffers() {
   _loadSFXBuffer('laser-mg',        './assets/audio/laser-beam-mg.mp3');
   _loadSFXBuffer('shop-purchase',   './assets/audio/shop_purchase.mp3');
   _loadSFXBuffer('reject',          './assets/audio/reject.mp3');
+  // Cycling between cards/options in the garage menus.
+  _loadSFXBuffer('menu-cycle',      './assets/audio/menu-cycle.wav');
+  // Title-screen "death run" button (the ENTER moment from the loading screen).
+  _loadSFXBuffer('start-interference', './assets/audio/start-interference.mp3');
   // Garage open/close share one source file. The close variant is the
   // forward sample played in reverse via a sample-flipped clone built at
   // decode time (see _loadSFXBufferWithReverse).
@@ -11697,6 +11701,14 @@ function playGarageOpen()  { _playBuffer('garage-open',  0.6, 1.0, null); }
 function playGarageClose() { _playBuffer('garage-close', 0.6, 1.0, null); }
 window.playGarageOpen  = playGarageOpen;
 window.playGarageClose = playGarageClose;
+
+// Garage card cycling (skin / preset / color / addon).
+function playMenuCycle() { _playBuffer('menu-cycle', 0.5, 1.0, null); }
+window.playMenuCycle = playMenuCycle;
+
+// Title-screen "start death run" press.
+function playStartInterference() { _playBuffer('start-interference', 0.7, 1.0, null); }
+window.playStartInterference = playStartInterference;
 
 function playCrash() {
   if (state.muted) return;
@@ -15033,7 +15045,7 @@ function updateStreakBadge() {
           const st = b.querySelector('.sr-addon-card-state');
           if (st && !b.classList.contains('locked')) st.textContent = '';
         });
-        try { playTitleTap(); } catch(_){}
+        try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
       });
     });
   }
@@ -15108,7 +15120,7 @@ function updateStreakBadge() {
           const st = b.querySelector('.sr-addon-card-state');
           if (st && !b.classList.contains('locked')) st.textContent = '';
         });
-        try { playTitleTap(); } catch(_){}
+        try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
       });
     });
   }
@@ -15333,7 +15345,7 @@ function updateStreakBadge() {
         // depending on whether every addon is on. Refresh the skin cards so
         // the label updates without reopening the garage.
         try { _buildSkinCards(); } catch(_){}
-        try { playTitleTap(); } catch(_){}
+        try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
       });
     });
   }
@@ -15371,7 +15383,7 @@ function updateStreakBadge() {
     // Sync showroom preview color immediately.
     _thrSyncColor();
     try { _refreshTabBadges(); } catch(_){}
-    try { playTitleTap(); } catch(_){}
+    try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
   }
 
   // Refresh the THRUSTERS tab “new” dot indicator. Called whenever any
@@ -15410,7 +15422,7 @@ function updateStreakBadge() {
   function _onTabClick(e) {
     const t = e.currentTarget;
     if (t.classList.contains('sr-hidden')) return;
-    try { playTitleTap(); } catch(_){}
+    try { if (typeof window.playMenuCycle === "function") window.playMenuCycle(); } catch(_){}
     _switchTab(t.dataset.tab);
   }
 
@@ -17812,7 +17824,7 @@ window.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight') { let _ni = (skinViewerIdx + 1) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni + 1) % SHIP_SKINS.length; navigateToSkin(_ni); }
     return;
   }
-  if (isSpace && phaseAtEvent === 'title')   { playStartSound(); startGame(); }
+  if (isSpace && phaseAtEvent === 'title')   { try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}; startGame(); }
   // if (isSpace && phaseAtEvent === 'playing') triggerJump(); // JUMP QUARANTINED
   if (e.key === 'Escape' && phaseAtEvent === 'playing') togglePause();
   if (e.key === 'Escape' && phaseAtEvent === 'paused')  togglePause();
@@ -18703,7 +18715,9 @@ _tapBind(document.getElementById('death-run-btn'), () => {
   const _ewRoar = document.getElementById('engine-roar');
   if (_ewEng) { _ewEng.load(); }
   if (_ewRoar) { _ewRoar.load(); }
-  playStartSound();
+  // ENTER from title: short "computer interference" cue (replaces the
+  // generic start-snap that played here previously).
+  try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}
   startDeathRun();
 });
 _tapBind(document.getElementById('restart-btn'), () => {

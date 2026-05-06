@@ -8,7 +8,9 @@ _tapBind(document.getElementById('death-run-btn'), () => {
   const _ewRoar = document.getElementById('engine-roar');
   if (_ewEng) { _ewEng.load(); }
   if (_ewRoar) { _ewRoar.load(); }
-  playStartSound();
+  // ENTER from title: short "computer interference" cue (replaces the
+  // generic start-snap that played here previously).
+  try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}
   startDeathRun();
 });
 _tapBind(document.getElementById('restart-btn'), () => {
