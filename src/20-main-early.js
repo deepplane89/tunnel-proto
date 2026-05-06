@@ -4747,7 +4747,12 @@ let skyConstellLines = null;  // constellation LineSegments
 
         gl_Position = vec4(position.xy, 0.999, 1.0);
 
-        float coreSize = aSize * uSizeMult * (0.7 + 0.3 * twinkle) * uPixelRatio;
+        // NOTE: do NOT multiply by uPixelRatio here. gl_PointSize is in
+        // device pixels, so on SHARP (DPR up to 3) the stars were rendering
+        // ~2x larger than on BALANCED (DPR 1.5). The constant 1.5 keeps
+        // BALANCED-look star sizes across all quality tiers; bloom pass
+        // already adapts to the framebuffer resolution.
+        float coreSize = aSize * uSizeMult * (0.7 + 0.3 * twinkle) * 1.5;
         float glowMul  = aSize > 2.5 ? 1.6 : 1.0;
         gl_PointSize = coreSize * glowMul;
       }

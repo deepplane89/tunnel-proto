@@ -5383,7 +5383,12 @@ let skyConstellLines = null;  // constellation LineSegments
 
         gl_Position = vec4(position.xy, 0.999, 1.0);
 
-        float coreSize = aSize * uSizeMult * (0.7 + 0.3 * twinkle) * uPixelRatio;
+        // NOTE: do NOT multiply by uPixelRatio here. gl_PointSize is in
+        // device pixels, so on SHARP (DPR up to 3) the stars were rendering
+        // ~2x larger than on BALANCED (DPR 1.5). The constant 1.5 keeps
+        // BALANCED-look star sizes across all quality tiers; bloom pass
+        // already adapts to the framebuffer resolution.
+        float coreSize = aSize * uSizeMult * (0.7 + 0.3 * twinkle) * 1.5;
         float glowMul  = aSize > 2.5 ? 1.6 : 1.0;
         gl_PointSize = coreSize * glowMul;
       }
@@ -16732,6 +16737,8 @@ function _renderShopHandlingBar() {
   const head = bar.querySelector('.fm-head');
   const menu = bar.querySelector('.fm-menu');
   let _fmOpenedAt = 0;
+  let _fmOpenW = 0;
+  let _fmOpenH = 0;
   function _fmCloseMenu() {
     bar.classList.remove('open', 'open-up');
     if (menu) {
@@ -16741,7 +16748,7 @@ function _renderShopHandlingBar() {
     }
     if (head) head.setAttribute('aria-expanded', 'false');
     document.removeEventListener('pointerdown', _fmOutside, true);
-    window.removeEventListener('resize', _fmCloseMenu);
+    window.removeEventListener('resize', _fmResize);
   }
   function _fmOutside(e) {
     // Ignore any pointerdown that arrives within ~250ms of opening — iOS
@@ -16750,8 +16757,21 @@ function _renderShopHandlingBar() {
     if (performance.now() - _fmOpenedAt < 250) return;
     if (!bar.contains(e.target)) _fmCloseMenu();
   }
+  function _fmResize() {
+    // iOS Safari fires resize events as the URL/tool bars animate in and
+    // out — especially right after a tap on landscape. Those are tiny
+    // (often <80px height tweaks) and would close us instantly. Only treat
+    // a resize as "meaningful" if it shifts width by >40px or height by
+    // >120px from the dimensions captured at open. (True orientation
+    // changes blow past both thresholds.)
+    const dw = Math.abs(window.innerWidth  - _fmOpenW);
+    const dh = Math.abs(window.innerHeight - _fmOpenH);
+    if (dw > 40 || dh > 120) _fmCloseMenu();
+  }
   function _fmOpenMenu() {
     _fmOpenedAt = performance.now();
+    _fmOpenW = window.innerWidth;
+    _fmOpenH = window.innerHeight;
     bar.classList.add('open');
     if (head) head.setAttribute('aria-expanded', 'true');
     if (!menu) return;
@@ -16784,7 +16804,7 @@ function _renderShopHandlingBar() {
     // scroll bubble from the THRUSTERS pane was instantly closing the menu.
     setTimeout(() => {
       document.addEventListener('pointerdown', _fmOutside, true);
-      window.addEventListener('resize', _fmCloseMenu);
+      window.addEventListener('resize', _fmResize);
     }, 0);
   }
   if (head) {
