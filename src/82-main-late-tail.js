@@ -96,13 +96,6 @@
       try {
         if (typeof window.initTitleAudio === 'function') window.initTitleAudio();
       } catch (_) {}
-      // Computer-interference cue plays here (the actual audio-unlock gesture).
-      // Previously fired on TAP TO PLAY, but iOS sometimes can't decode/play a
-      // fresh sample synchronously on a *second* gesture; the unlock tap is the
-      // most reliable place. Defer one tick so the AudioContext has resumed.
-      setTimeout(() => {
-        try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch (_) {}
-      }, 30);
       // First-time-ever load: show the graphics-quality picker before fading
       // the gate. The picker handles its own dismissal + gate hide.
       const _firstLoad = !window._LS.getItem('jh_gfx_picked');

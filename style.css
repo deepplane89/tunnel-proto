@@ -4711,21 +4711,6 @@ html, body {
   border-color: #ff1a8c;
   color: #ff1a8c;
   box-shadow: inset 0 0 14px rgba(255,26,140,0.10), 0 0 12px rgba(255,26,140,0.10);
-  transition: transform .08s ease, box-shadow .08s ease, background .08s ease, border-color .08s ease, color .08s ease;
-  will-change: transform;
-}
-/* Press-in feedback — SFX is hard to trigger reliably here on iOS, so the
-   button itself gives a strong tactile/visual cue: scale-down + deeper inset
-   glow + brighter pink wash. Matches the magenta DEATH RUN palette. */
-.btn-deathrun:active {
-  transform: translateY(1px) scale(0.965);
-  background: rgba(255,26,140,0.22);
-  border-color: #ff5fb0;
-  color: #ffd7ec;
-  box-shadow:
-    inset 0 0 28px rgba(255,26,140,0.55),
-    inset 0 2px 8px rgba(0,0,0,0.45),
-    0 0 22px rgba(255,26,140,0.45);
 }
 .btn-wormhole {
   border-color: #00ffcc;
@@ -5876,7 +5861,7 @@ body.sr-open #title-leaderboard {
    access gate (cyan tech / monospace) so it reads as part of the boot,
    not a settings dialog. */
 #gfx-picker {
-  position: fixed; inset: 0; z-index: 99997;
+  position: fixed; inset: 0; z-index: 99999;
   background: radial-gradient(ellipse at center,#001a24 0%,#000810 70%,#000406 100%);
   display: none;
   flex-direction: column; align-items: center; justify-content: center;

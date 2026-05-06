@@ -421,7 +421,7 @@ window.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight') { let _ni = (skinViewerIdx + 1) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni + 1) % SHIP_SKINS.length; navigateToSkin(_ni); }
     return;
   }
-  if (isSpace && phaseAtEvent === 'title')   { startGame(); }
+  if (isSpace && phaseAtEvent === 'title')   { try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}; startGame(); }
   // if (isSpace && phaseAtEvent === 'playing') triggerJump(); // JUMP QUARANTINED
   if (e.key === 'Escape' && phaseAtEvent === 'playing') togglePause();
   if (e.key === 'Escape' && phaseAtEvent === 'paused')  togglePause();

@@ -17826,7 +17826,7 @@ window.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight') { let _ni = (skinViewerIdx + 1) % SHIP_SKINS.length; while (SHIP_SKINS[_ni] && SHIP_SKINS[_ni].hidden) _ni = (_ni + 1) % SHIP_SKINS.length; navigateToSkin(_ni); }
     return;
   }
-  if (isSpace && phaseAtEvent === 'title')   { startGame(); }
+  if (isSpace && phaseAtEvent === 'title')   { try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}; startGame(); }
   // if (isSpace && phaseAtEvent === 'playing') triggerJump(); // JUMP QUARANTINED
   if (e.key === 'Escape' && phaseAtEvent === 'playing') togglePause();
   if (e.key === 'Escape' && phaseAtEvent === 'paused')  togglePause();
@@ -18702,9 +18702,8 @@ _tapBind(document.getElementById('death-run-btn'), () => {
   const _ewRoar = document.getElementById('engine-roar');
   if (_ewEng) { _ewEng.load(); }
   if (_ewRoar) { _ewRoar.load(); }
-  // No SFX here — the interference cue plays earlier on the ACCESS GRANTED
-  // tap (the audio-unlock gesture). TAP TO PLAY uses CSS press-in feedback
-  // since iOS sometimes can't trigger a fresh sample synchronously here.
+  // ENTER from title: short "computer interference" cue.
+  try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch(_){}
   startDeathRun();
 });
 _tapBind(document.getElementById('restart-btn'), () => {
@@ -31794,13 +31793,6 @@ function buildSkinTunerSliders() {
       try {
         if (typeof window.initTitleAudio === 'function') window.initTitleAudio();
       } catch (_) {}
-      // Computer-interference cue plays here (the actual audio-unlock gesture).
-      // Previously fired on TAP TO PLAY, but iOS sometimes can't decode/play a
-      // fresh sample synchronously on a *second* gesture; the unlock tap is the
-      // most reliable place. Defer one tick so the AudioContext has resumed.
-      setTimeout(() => {
-        try { if (typeof window.playStartInterference === 'function') window.playStartInterference(); } catch (_) {}
-      }, 30);
       // First-time-ever load: show the graphics-quality picker before fading
       // the gate. The picker handles its own dismissal + gate hide.
       const _firstLoad = !window._LS.getItem('jh_gfx_picked');

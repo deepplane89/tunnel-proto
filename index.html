@@ -57,8 +57,11 @@
   #access-gate.show{display:flex}
   #access-gate.hide{opacity:0;pointer-events:none}
   #access-gate-msg{font-size:11px;letter-spacing:3px;opacity:.7;text-transform:uppercase;margin-bottom:24px}
-  #access-gate-btn{font-family:monospace;font-size:clamp(16px,3.6vw,22px);letter-spacing:6px;color:#7ff5ff;background:rgba(0,240,255,.08);border:1px solid rgba(0,240,255,.5);padding:18px 36px;text-transform:uppercase;cursor:pointer;text-shadow:0 0 12px #00f0ff;box-shadow:0 0 24px rgba(0,240,255,.25),inset 0 0 18px rgba(0,240,255,.08);animation:al-pulse 2.4s ease-in-out infinite;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-  #access-gate-btn:active{background:rgba(0,240,255,.2);box-shadow:0 0 36px rgba(0,240,255,.55),inset 0 0 24px rgba(0,240,255,.18)}
+  #access-gate-btn{font-family:monospace;font-size:clamp(16px,3.6vw,22px);letter-spacing:6px;color:#7ff5ff;background:rgba(0,240,255,.08);border:1px solid rgba(0,240,255,.5);padding:18px 36px;text-transform:uppercase;cursor:pointer;text-shadow:0 0 12px #00f0ff;box-shadow:0 0 24px rgba(0,240,255,.25),inset 0 0 18px rgba(0,240,255,.08);animation:al-pulse 2.4s ease-in-out infinite;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:transform .08s ease,background .08s ease,border-color .08s ease,box-shadow .08s ease,color .08s ease;will-change:transform}
+  /* Press-in feedback — strong tactile cue since iOS sometimes can't trigger
+     a fresh sample synchronously on first gesture. Scale-down + deep inset
+     glow + brighter cyan wash. */
+  #access-gate-btn:active{transform:translateY(1px) scale(.965);background:rgba(0,240,255,.32);border-color:#9ff6ff;color:#e8fcff;box-shadow:inset 0 0 32px rgba(0,240,255,.65),inset 0 2px 8px rgba(0,0,0,.35),0 0 32px rgba(0,240,255,.55);animation:none}
   #access-gate-hint{margin-top:18px;font-size:10px;letter-spacing:2px;opacity:.45;text-transform:uppercase}
   /* Mobile tap latency: skip 300ms double-tap delay on all interactive UI */
   button, a, [role="button"], .btn, .menu-btn, .hud-btn, input[type="button"], input[type="submit"]{touch-action:manipulation}
@@ -617,6 +620,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1778035357"></script>
+<script type="module" src="./dist/game.js?v=1778035635"></script>
 </body>
 </html>
