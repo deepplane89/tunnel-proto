@@ -311,7 +311,8 @@
           const st = b.querySelector('.sr-addon-card-state');
           if (st && !b.classList.contains('locked')) st.textContent = '';
         });
-        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
+        // Ship select — use SELECT confirm sound (was cycle).
+        try { if (typeof window.playGarageSelect === "function") window.playGarageSelect(); } catch(_){}
       });
     });
   }
@@ -386,7 +387,8 @@
           const st = b.querySelector('.sr-addon-card-state');
           if (st && !b.classList.contains('locked')) st.textContent = '';
         });
-        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
+        // Thruster preset select — use SELECT confirm sound (was cycle).
+        try { if (typeof window.playGarageSelect === "function") window.playGarageSelect(); } catch(_){}
       });
     });
   }
@@ -688,7 +690,8 @@
         // depending on whether every addon is on. Refresh the skin cards so
         // the label updates without reopening the garage.
         try { _buildSkinCards(); } catch(_){}
-        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
+        // Mod (addon) toggle — use SELECT confirm sound (was cycle).
+        try { if (typeof window.playGarageSelect === "function") window.playGarageSelect(); } catch(_){}
       });
     });
   }

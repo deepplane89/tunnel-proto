@@ -12007,6 +12007,9 @@ function _initSFXBuffers() {
   _loadSFXBuffer('menu-cycle',      './assets/audio/menu-cycle.wav');
   // Garage card cycling (skin / preset / color / addon) — VR clicker.
   _loadSFXBuffer('garage-cycle',    './assets/audio/vr-transform-clicker.mp3');
+  // Garage selection confirm — VR transform contacts. Fires when picking an
+  // unlocked item (ship/thruster/mod/handling preset) or opening tier list.
+  _loadSFXBuffer('garage-select',   './assets/audio/garage-select.mp3');
   // Title-screen "death run" button (the ENTER moment from the loading screen).
   _loadSFXBuffer('start-interference', './assets/audio/start-interference.mp3');
   // Garage open/close audio removed — no sample needed.
@@ -12192,6 +12195,11 @@ window.playMenuCycle = playMenuCycle;
 // Garage card cycling (Showroom internal nav) — pinball pip.
 function playGarageCycle() { _playBuffer('garage-cycle', 0.5, 1.0, null); }
 window.playGarageCycle = playGarageCycle;
+
+// Garage SELECT confirm — VR transform contacts. Plays when player picks an
+// unlocked ship/thruster/mod/handling-preset, or opens tier-list/upgrade view.
+function playGarageSelect() { _playBuffer('garage-select', 0.55, 1.0, null); }
+window.playGarageSelect = playGarageSelect;
 
 // Title-screen "start death run" press.
 function playStartInterference() { _playBuffer('start-interference', 0.7, 1.0, null); }
@@ -15544,7 +15552,8 @@ function updateStreakBadge() {
           const st = b.querySelector('.sr-addon-card-state');
           if (st && !b.classList.contains('locked')) st.textContent = '';
         });
-        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
+        // Ship select — use SELECT confirm sound (was cycle).
+        try { if (typeof window.playGarageSelect === "function") window.playGarageSelect(); } catch(_){}
       });
     });
   }
@@ -15619,7 +15628,8 @@ function updateStreakBadge() {
           const st = b.querySelector('.sr-addon-card-state');
           if (st && !b.classList.contains('locked')) st.textContent = '';
         });
-        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
+        // Thruster preset select — use SELECT confirm sound (was cycle).
+        try { if (typeof window.playGarageSelect === "function") window.playGarageSelect(); } catch(_){}
       });
     });
   }
@@ -15921,7 +15931,8 @@ function updateStreakBadge() {
         // depending on whether every addon is on. Refresh the skin cards so
         // the label updates without reopening the garage.
         try { _buildSkinCards(); } catch(_){}
-        try { if (typeof window.playGarageCycle === "function") window.playGarageCycle(); } catch(_){}
+        // Mod (addon) toggle — use SELECT confirm sound (was cycle).
+        try { if (typeof window.playGarageSelect === "function") window.playGarageSelect(); } catch(_){}
       });
     });
   }
@@ -17532,6 +17543,8 @@ function _renderShopHandlingBar() {
       const name = row.getAttribute('data-fm');
       if (!name || !FM[name]) return;
       if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(name);
+      // Flight-model (handling preset) select — SELECT confirm sound.
+      try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
       _fmCloseMenu();
       _renderShopHandlingBar();
     });
@@ -17605,6 +17618,8 @@ function renderPowerupCards() {
         // Clear NEW flag when they tap a newly unlocked card
         if (justUnlocked) window._LS.removeItem('jetslide_shop_new');
         updateNotificationDots();
+        // Powerup tier-list / upgrade view open — SELECT confirm sound.
+        try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
         openShopDetail(id);
       });
     } else {

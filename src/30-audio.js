@@ -231,6 +231,9 @@ function _initSFXBuffers() {
   _loadSFXBuffer('menu-cycle',      './assets/audio/menu-cycle.wav');
   // Garage card cycling (skin / preset / color / addon) — VR clicker.
   _loadSFXBuffer('garage-cycle',    './assets/audio/vr-transform-clicker.mp3');
+  // Garage selection confirm — VR transform contacts. Fires when picking an
+  // unlocked item (ship/thruster/mod/handling preset) or opening tier list.
+  _loadSFXBuffer('garage-select',   './assets/audio/garage-select.mp3');
   // Title-screen "death run" button (the ENTER moment from the loading screen).
   _loadSFXBuffer('start-interference', './assets/audio/start-interference.mp3');
   // Garage open/close audio removed — no sample needed.
@@ -416,6 +419,11 @@ window.playMenuCycle = playMenuCycle;
 // Garage card cycling (Showroom internal nav) — pinball pip.
 function playGarageCycle() { _playBuffer('garage-cycle', 0.5, 1.0, null); }
 window.playGarageCycle = playGarageCycle;
+
+// Garage SELECT confirm — VR transform contacts. Plays when player picks an
+// unlocked ship/thruster/mod/handling-preset, or opens tier-list/upgrade view.
+function playGarageSelect() { _playBuffer('garage-select', 0.55, 1.0, null); }
+window.playGarageSelect = playGarageSelect;
 
 // Title-screen "start death run" press.
 function playStartInterference() { _playBuffer('start-interference', 0.7, 1.0, null); }

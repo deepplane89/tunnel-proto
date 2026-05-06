@@ -269,6 +269,8 @@ function _renderShopHandlingBar() {
       const name = row.getAttribute('data-fm');
       if (!name || !FM[name]) return;
       if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(name);
+      // Flight-model (handling preset) select — SELECT confirm sound.
+      try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
       _fmCloseMenu();
       _renderShopHandlingBar();
     });
@@ -342,6 +344,8 @@ function renderPowerupCards() {
         // Clear NEW flag when they tap a newly unlocked card
         if (justUnlocked) window._LS.removeItem('jetslide_shop_new');
         updateNotificationDots();
+        // Powerup tier-list / upgrade view open — SELECT confirm sound.
+        try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
         openShopDetail(id);
       });
     } else {
