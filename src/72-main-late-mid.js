@@ -3305,6 +3305,7 @@ window._jlDebug = {
           inst.ringMat.opacity  = 0.9;
           _ltShakeTime = _LT.shakeDuration;
           _playLightningStrike();
+          if (typeof hapticMedium === 'function') hapticMedium();
           // Rebuild bolt geometry at the final locked landX (ship pos at strike)
           _ltRejag(inst);
         }
