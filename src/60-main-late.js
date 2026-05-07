@@ -864,6 +864,9 @@ window.addEventListener('keyup', e => {
 
 // ── ADD TO HOME SCREEN NUDGE (iOS Safari only) ───────────────────────────────
 (function setupA2HS() {
+  // Skip in native Capacitor app — it's already an installed app.
+  const isCapNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  if (isCapNative) return;
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isStandalone = window.navigator.standalone === true;
   if (!isIOS || isStandalone) return;
