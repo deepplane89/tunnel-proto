@@ -43,7 +43,8 @@ fi
 
 # Find all .js files under src/, sorted alphabetically (which honors numeric
 # prefixes). `sort` is defensive against shells with weird glob ordering.
-mapfile -t FILES < <(find "$SRC_DIR" -maxdepth 1 -type f -name '*.js' | sort)
+FILES=()
+while IFS= read -r f; do FILES+=("$f"); done < <(find "$SRC_DIR" -maxdepth 1 -type f -name '*.js' | sort)
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
   echo "No .js files found in $SRC_DIR" >&2
