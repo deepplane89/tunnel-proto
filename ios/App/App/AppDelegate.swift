@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import AVFoundation
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,7 +8,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Configure AVAudioSession so the WKWebView's Web Audio output mixes
+        // with other apps (Spotify/Apple Music) and respects the silent switch.
+        // .ambient = game-style audio: silenced by mute switch, mixes with others.
+        do {
+            try AVAudioSession.sharedInstance().setCategory(
+                .ambient,
+                mode: .default,
+                options: [.mixWithOthers]
+            )
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            NSLog("[JetHorizon] AVAudioSession setup failed: \(error)")
+        }
         return true
     }
 
