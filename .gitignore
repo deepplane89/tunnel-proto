@@ -25,6 +25,7 @@ yarn-error.log
 dist/
 !dist/game.js
 build/
+!vendor/three/build/
 
 # Stray junk from shell redirects (e.g. accidental `cmd > 61028`)
 /[0-9][0-9][0-9][0-9]
