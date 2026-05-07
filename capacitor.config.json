@@ -1,0 +1,23 @@
+{
+  "appId": "com.deepplane.jethorizon",
+  "appName": "Jet Horizon",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SafeArea": {
+      "enabled": true,
+      "customColorsForSystemBars": {
+        "statusBarColor": "#00000000",
+        "statusBarContent": "light",
+        "navigationBarColor": "#00000000",
+        "navigationBarContent": "light"
+      }
+    }
+  },
+  "ios": {
+    "contentInset": "always"
+  },
+  "_comment": "iOS-specific config. Game code lives in src/ + style.css + index.html. To enable live-load from Vercel during dev: uncomment server.url. MUST be removed/commented before App Store submission."
+}
