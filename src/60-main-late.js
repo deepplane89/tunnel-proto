@@ -942,7 +942,11 @@ window.addEventListener('keyup', e => {
 window.initTitleAudio = initTitleAudio;
 function initTitleAudio() {
   if (audioCtx) { _ensureCtxRunning(); return; }  // already initialized
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // latencyHint: 'interactive' — default but explicit; matches src/30-audio.js
+  // and the unlock path below so AudioContext params are consistent across
+  // all three creation sites (iOS sample-rate renegotiation fix).
+  const _CtxClass = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new _CtxClass({ latencyHint: 'interactive' });
   _ensureCtxRunning();
   engineGain = audioCtx.createGain();
   engineGain.gain.value = 0.0;
@@ -979,7 +983,8 @@ function initTitleAudio() {
     // the once-only first-interaction listener has been installed.
     const unlock = () => {
       if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const _CtxClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new _CtxClass({ latencyHint: 'interactive' });
         engineGain = audioCtx.createGain();
         engineGain.gain.value = 0.0;
         engineGain.connect(audioCtx.destination);

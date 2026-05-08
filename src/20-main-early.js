@@ -5394,6 +5394,13 @@ function updateAurora(dt) {
 const TRACK_VOL = { title: 0.4, bg: 0.45, l3: 0.45, l4: 0.45, lake: 0.28, keepgoing: 0.7, radio: 0.45 };
 const trackGains = {};   // { title: GainNode, bg: GainNode, ... }
 let   _gainsReady = false;
+// Per-track fade generation counter. Each musicFadeTo call bumps the
+// generation for every track it touches; the deferred cleanup setTimeout
+// captures its own gen and only pauses tracks whose gen still matches.
+// This prevents a stale cleanup from a prior fade (e.g. death’s 2.5s
+// fade-to-title) from pausing a newer fade target (e.g. bg from REPAIR SHIP)
+// that’s still ramping in at low volume.
+const _trackFadeGen = {};
 
 function allTracks() {
   return { title: titleMusic, bg: bgMusic, l3: l3Music, l4: l4Music, lake: lakeMusic, keepgoing: keepGoingMusic, radio: radioMusic };
@@ -5550,6 +5557,15 @@ function musicFadeTo(toTrack, durationMs, outFadeMult) {
   const durSec    = durationMs / 1000;
   const outDurSec = durSec * (outFadeMult || 1.0);
 
+  // Bump generation for every track this fade touches (target + others).
+  // The deferred cleanup below captures these per-track gens and bails out
+  // for any track whose gen has since been superseded by a newer fade.
+  const myGen = {};
+  Object.keys(all).forEach(k => {
+    _trackFadeGen[k] = (_trackFadeGen[k] || 0) + 1;
+    myGen[k] = _trackFadeGen[k];
+  });
+
   if (state.muted) {
     Object.entries(all).forEach(([k, el]) => { if (el && k !== toTrack && k !== 'lake') el.pause(); });
     if (toEl.paused) { setTrackVol(toTrack, 0); toEl.play().catch(() => {}); }
@@ -5564,11 +5580,15 @@ function musicFadeTo(toTrack, durationMs, outFadeMult) {
     if (!el || k === toTrack || k === 'lake') return;
     rampTrackVol(k, 0, outDurSec);
   });
-  // Schedule cleanup: pause faded-out tracks after ramp completes
+  // Schedule cleanup: pause faded-out tracks after ramp completes.
+  // Skip any track whose gen no longer matches — a newer musicFadeTo has
+  // taken over and may be ramping that track back UP (e.g. REPAIR SHIP
+  // fading bg in while death’s stale title-fade cleanup is about to fire).
   const cleanupMs = Math.max(durationMs, durationMs * (outFadeMult || 1.0)) + 100;
   setTimeout(() => {
     Object.entries(all).forEach(([k, el]) => {
       if (!el || k === toTrack || k === 'lake') return;
+      if (_trackFadeGen[k] !== myGen[k]) return; // superseded by a newer fade
       if (getTrackVol(k) < 0.01) el.pause();
     });
   }, cleanupMs);

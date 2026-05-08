@@ -35,7 +35,8 @@ function initAudio() {
     _initTrackGains();
     return;
   }
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const _CtxClass = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new _CtxClass({ latencyHint: 'interactive' });
   _ensureCtxRunning();
 
   // Engine hum removed — keep gain node at 0 so SFX chain still works
@@ -178,8 +179,12 @@ function _rewireTrackGains() {
     audioCtx.resume().catch(() => {});
   }
   // iOS sample-rate renegotiation: 1-sample silent buffer through destination.
+  // The buffer rate MUST match audioCtx.sampleRate — passing a fixed 22050
+  // (the previous value) didn't actually trigger renegotiation on iOS WebKit
+  // because the buffer needed resampling rather than passing through cleanly.
+  // See: github.com/Jam3/ios-safe-audio-context, Howler.js issue #1141.
   try {
-    const _silent = audioCtx.createBuffer(1, 1, 22050);
+    const _silent = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
     const _src = audioCtx.createBufferSource();
     _src.buffer = _silent;
     _src.connect(audioCtx.destination);
@@ -190,12 +195,14 @@ function _rewireTrackGains() {
   if (typeof _initTrackGains === 'function') {
     try { _initTrackGains(); } catch (_) {}
   }
-  // Re-kick the elements that were playing pre-interrupt. Two RAFs to give
-  // Safari time to renegotiate output sample rate post-resume — calling
-  // play() in the same tick as resume() produces a brief pitch-up artifact.
+  // Re-kick the elements that were playing pre-interrupt. iOS needs ~100-300ms
+  // after resume() to finish output sample-rate renegotiation; calling play()
+  // any sooner produces the pitch-up/down artifact on resumed music. The
+  // previous 2× requestAnimationFrame (~33ms at 60Hz, ~17ms at 120Hz) was far
+  // too short. 200ms gives WebKit headroom while still feeling instant.
   const snap = _interruptedPlayingSnapshot || {};
   const tracks = (typeof allTracks === 'function') ? allTracks() : {};
-  requestAnimationFrame(() => requestAnimationFrame(() => {
+  setTimeout(() => {
     if (state.muted) { _clearAudioInterrupted(); return; }
     Object.keys(snap).forEach(k => {
       const el = tracks[k];
@@ -211,7 +218,7 @@ function _rewireTrackGains() {
       } catch (_) {}
     });
     _clearAudioInterrupted();
-  }));
+  }, 200);
 }
 function _initSFXBuffers() {
   if (!audioCtx) return;

@@ -218,9 +218,12 @@ function radioInterceptMusicFade(toTrack, durationMs) {
   try {
     const all = (typeof allTracks === 'function') ? allTracks() : {};
     const durSec = (durationMs || 1500) / 1000;
+    // Ramp every non-radio track (including title) to 0 and pause when silent.
+    // Title is included so the death→title fade doesn't bleed through when the
+    // player taps REPAIR SHIP and the radio takes over the gameplay slot.
     Object.entries(all).forEach(([k, el]) => {
       if (!el) return;
-      if (k === 'title' || k === 'radio') return;
+      if (k === 'radio') return;
       if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, durSec);
       setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, (durationMs || 1500) + 50);
     });
@@ -246,9 +249,16 @@ function refreshRadioButton() {
 window.refreshRadioButton = refreshRadioButton;
 
 // Toggle the prev/play/next popover under the ♫ button.
+// On first open, hoist the popover to <body> so it escapes the #title-screen
+// stacking context (the .overlay's backdrop-filter creates a containing block
+// that clips position:fixed children, which was hiding the popover behind the
+// title screen overlay).
 function toggleTitleRadioPopover(force) {
   const ctrls = document.getElementById('title-radio-controls');
   if (!ctrls) return;
+  if (ctrls.parentNode !== document.body) {
+    document.body.appendChild(ctrls);
+  }
   const want = (typeof force === 'boolean') ? force : ctrls.classList.contains('hidden');
   if (want) ctrls.classList.remove('hidden');
   else      ctrls.classList.add('hidden');
@@ -479,6 +489,9 @@ window.updatePauseRadioRow = updatePauseRadioRow;
         const ctrls = document.getElementById('title-radio-controls');
         if (!ctrls || ctrls.classList.contains('hidden')) return;
         const wrap = document.getElementById('title-radio-wrap');
+        // Popover is hoisted to <body> so it lives outside the wrap; treat it
+        // as part of the wrap for outside-click purposes.
+        if (ctrls.contains(e.target)) return;
         if (wrap && !wrap.contains(e.target)) toggleTitleRadioPopover(false);
       });
     }

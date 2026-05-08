@@ -3681,6 +3681,13 @@ function killPlayer() {
       _retryPending = true;
       const fadeEl = document.getElementById('retry-fade');
       fadeEl.style.opacity = '1'; // fade to black
+      // Kick the music fade SYNCHRONOUSLY from the tap so iOS preserves the
+      // user-gesture context for the underlying play() call. Doing this from
+      // inside the 180ms setTimeout below lets WebKit drop the gesture and
+      // silently reject play() on a paused gameplay track — which is the
+      // “sometimes the music altogether stops” symptom after REPAIR SHIP.
+      // The 320ms it now leads the fade-from-black is imperceptible.
+      try { musicFadeTo(currentGameTrack(), 1500); } catch (_) {}
       setTimeout(() => {
         _retryPending = false;
         // Reset score only — distance keeps accumulating as reward for survival
@@ -3743,8 +3750,8 @@ function killPlayer() {
           const _saveMeWarp = document.getElementById('retry-warp-sfx');
           if (_saveMeWarp && !state.muted) { _saveMeWarp.currentTime = 0; _saveMeWarp.volume = 0.85; _saveMeWarp.play().catch(()=>{}); }
         }, 300);
-        // Re-engage the correct music track for wherever we are in the run
-        musicFadeTo(currentGameTrack(), 1500);
+        // Music fade was already kicked synchronously above (pre-setTimeout)
+        // so iOS keeps the user-gesture context for play(). Don't re-fire it.
         // Fade from black
         fadeEl.style.opacity = '0';
       }, 180); // wait for fade-to-black

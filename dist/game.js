@@ -6232,6 +6232,13 @@ function updateAurora(dt) {
 const TRACK_VOL = { title: 0.4, bg: 0.45, l3: 0.45, l4: 0.45, lake: 0.28, keepgoing: 0.7, radio: 0.45 };
 const trackGains = {};   // { title: GainNode, bg: GainNode, ... }
 let   _gainsReady = false;
+// Per-track fade generation counter. Each musicFadeTo call bumps the
+// generation for every track it touches; the deferred cleanup setTimeout
+// captures its own gen and only pauses tracks whose gen still matches.
+// This prevents a stale cleanup from a prior fade (e.g. death’s 2.5s
+// fade-to-title) from pausing a newer fade target (e.g. bg from REPAIR SHIP)
+// that’s still ramping in at low volume.
+const _trackFadeGen = {};
 
 function allTracks() {
   return { title: titleMusic, bg: bgMusic, l3: l3Music, l4: l4Music, lake: lakeMusic, keepgoing: keepGoingMusic, radio: radioMusic };
@@ -6388,6 +6395,15 @@ function musicFadeTo(toTrack, durationMs, outFadeMult) {
   const durSec    = durationMs / 1000;
   const outDurSec = durSec * (outFadeMult || 1.0);
 
+  // Bump generation for every track this fade touches (target + others).
+  // The deferred cleanup below captures these per-track gens and bails out
+  // for any track whose gen has since been superseded by a newer fade.
+  const myGen = {};
+  Object.keys(all).forEach(k => {
+    _trackFadeGen[k] = (_trackFadeGen[k] || 0) + 1;
+    myGen[k] = _trackFadeGen[k];
+  });
+
   if (state.muted) {
     Object.entries(all).forEach(([k, el]) => { if (el && k !== toTrack && k !== 'lake') el.pause(); });
     if (toEl.paused) { setTrackVol(toTrack, 0); toEl.play().catch(() => {}); }
@@ -6402,11 +6418,15 @@ function musicFadeTo(toTrack, durationMs, outFadeMult) {
     if (!el || k === toTrack || k === 'lake') return;
     rampTrackVol(k, 0, outDurSec);
   });
-  // Schedule cleanup: pause faded-out tracks after ramp completes
+  // Schedule cleanup: pause faded-out tracks after ramp completes.
+  // Skip any track whose gen no longer matches — a newer musicFadeTo has
+  // taken over and may be ramping that track back UP (e.g. REPAIR SHIP
+  // fading bg in while death’s stale title-fade cleanup is about to fire).
   const cleanupMs = Math.max(durationMs, durationMs * (outFadeMult || 1.0)) + 100;
   setTimeout(() => {
     Object.entries(all).forEach(([k, el]) => {
       if (!el || k === toTrack || k === 'lake') return;
+      if (_trackFadeGen[k] !== myGen[k]) return; // superseded by a newer fade
       if (getTrackVol(k) < 0.01) el.pause();
     });
   }, cleanupMs);
@@ -12082,7 +12102,8 @@ function initAudio() {
     _initTrackGains();
     return;
   }
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const _CtxClass = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new _CtxClass({ latencyHint: 'interactive' });
   _ensureCtxRunning();
 
   // Engine hum removed — keep gain node at 0 so SFX chain still works
@@ -12225,8 +12246,12 @@ function _rewireTrackGains() {
     audioCtx.resume().catch(() => {});
   }
   // iOS sample-rate renegotiation: 1-sample silent buffer through destination.
+  // The buffer rate MUST match audioCtx.sampleRate — passing a fixed 22050
+  // (the previous value) didn't actually trigger renegotiation on iOS WebKit
+  // because the buffer needed resampling rather than passing through cleanly.
+  // See: github.com/Jam3/ios-safe-audio-context, Howler.js issue #1141.
   try {
-    const _silent = audioCtx.createBuffer(1, 1, 22050);
+    const _silent = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
     const _src = audioCtx.createBufferSource();
     _src.buffer = _silent;
     _src.connect(audioCtx.destination);
@@ -12237,12 +12262,14 @@ function _rewireTrackGains() {
   if (typeof _initTrackGains === 'function') {
     try { _initTrackGains(); } catch (_) {}
   }
-  // Re-kick the elements that were playing pre-interrupt. Two RAFs to give
-  // Safari time to renegotiate output sample rate post-resume — calling
-  // play() in the same tick as resume() produces a brief pitch-up artifact.
+  // Re-kick the elements that were playing pre-interrupt. iOS needs ~100-300ms
+  // after resume() to finish output sample-rate renegotiation; calling play()
+  // any sooner produces the pitch-up/down artifact on resumed music. The
+  // previous 2× requestAnimationFrame (~33ms at 60Hz, ~17ms at 120Hz) was far
+  // too short. 200ms gives WebKit headroom while still feeling instant.
   const snap = _interruptedPlayingSnapshot || {};
   const tracks = (typeof allTracks === 'function') ? allTracks() : {};
-  requestAnimationFrame(() => requestAnimationFrame(() => {
+  setTimeout(() => {
     if (state.muted) { _clearAudioInterrupted(); return; }
     Object.keys(snap).forEach(k => {
       const el = tracks[k];
@@ -12258,7 +12285,7 @@ function _rewireTrackGains() {
       } catch (_) {}
     });
     _clearAudioInterrupted();
-  }));
+  }, 200);
 }
 function _initSFXBuffers() {
   if (!audioCtx) return;
@@ -15296,9 +15323,12 @@ function radioInterceptMusicFade(toTrack, durationMs) {
   try {
     const all = (typeof allTracks === 'function') ? allTracks() : {};
     const durSec = (durationMs || 1500) / 1000;
+    // Ramp every non-radio track (including title) to 0 and pause when silent.
+    // Title is included so the death→title fade doesn't bleed through when the
+    // player taps REPAIR SHIP and the radio takes over the gameplay slot.
     Object.entries(all).forEach(([k, el]) => {
       if (!el) return;
-      if (k === 'title' || k === 'radio') return;
+      if (k === 'radio') return;
       if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, durSec);
       setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, (durationMs || 1500) + 50);
     });
@@ -15324,9 +15354,16 @@ function refreshRadioButton() {
 window.refreshRadioButton = refreshRadioButton;
 
 // Toggle the prev/play/next popover under the ♫ button.
+// On first open, hoist the popover to <body> so it escapes the #title-screen
+// stacking context (the .overlay's backdrop-filter creates a containing block
+// that clips position:fixed children, which was hiding the popover behind the
+// title screen overlay).
 function toggleTitleRadioPopover(force) {
   const ctrls = document.getElementById('title-radio-controls');
   if (!ctrls) return;
+  if (ctrls.parentNode !== document.body) {
+    document.body.appendChild(ctrls);
+  }
   const want = (typeof force === 'boolean') ? force : ctrls.classList.contains('hidden');
   if (want) ctrls.classList.remove('hidden');
   else      ctrls.classList.add('hidden');
@@ -15557,6 +15594,9 @@ window.updatePauseRadioRow = updatePauseRadioRow;
         const ctrls = document.getElementById('title-radio-controls');
         if (!ctrls || ctrls.classList.contains('hidden')) return;
         const wrap = document.getElementById('title-radio-wrap');
+        // Popover is hoisted to <body> so it lives outside the wrap; treat it
+        // as part of the wrap for outside-click purposes.
+        if (ctrls.contains(e.target)) return;
         if (wrap && !wrap.contains(e.target)) toggleTitleRadioPopover(false);
       });
     }
@@ -19791,7 +19831,11 @@ window.addEventListener('keyup', e => {
 window.initTitleAudio = initTitleAudio;
 function initTitleAudio() {
   if (audioCtx) { _ensureCtxRunning(); return; }  // already initialized
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // latencyHint: 'interactive' — default but explicit; matches src/30-audio.js
+  // and the unlock path below so AudioContext params are consistent across
+  // all three creation sites (iOS sample-rate renegotiation fix).
+  const _CtxClass = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new _CtxClass({ latencyHint: 'interactive' });
   _ensureCtxRunning();
   engineGain = audioCtx.createGain();
   engineGain.gain.value = 0.0;
@@ -19828,7 +19872,8 @@ function initTitleAudio() {
     // the once-only first-interaction listener has been installed.
     const unlock = () => {
       if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const _CtxClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new _CtxClass({ latencyHint: 'interactive' });
         engineGain = audioCtx.createGain();
         engineGain.gain.value = 0.0;
         engineGain.connect(audioCtx.destination);
@@ -24375,6 +24420,13 @@ function killPlayer() {
       _retryPending = true;
       const fadeEl = document.getElementById('retry-fade');
       fadeEl.style.opacity = '1'; // fade to black
+      // Kick the music fade SYNCHRONOUSLY from the tap so iOS preserves the
+      // user-gesture context for the underlying play() call. Doing this from
+      // inside the 180ms setTimeout below lets WebKit drop the gesture and
+      // silently reject play() on a paused gameplay track — which is the
+      // “sometimes the music altogether stops” symptom after REPAIR SHIP.
+      // The 320ms it now leads the fade-from-black is imperceptible.
+      try { musicFadeTo(currentGameTrack(), 1500); } catch (_) {}
       setTimeout(() => {
         _retryPending = false;
         // Reset score only — distance keeps accumulating as reward for survival
@@ -24437,8 +24489,8 @@ function killPlayer() {
           const _saveMeWarp = document.getElementById('retry-warp-sfx');
           if (_saveMeWarp && !state.muted) { _saveMeWarp.currentTime = 0; _saveMeWarp.volume = 0.85; _saveMeWarp.play().catch(()=>{}); }
         }, 300);
-        // Re-engage the correct music track for wherever we are in the run
-        musicFadeTo(currentGameTrack(), 1500);
+        // Music fade was already kicked synchronously above (pre-setTimeout)
+        // so iOS keeps the user-gesture context for play(). Don't re-fire it.
         // Fade from black
         fadeEl.style.opacity = '0';
       }, 180); // wait for fade-to-black
