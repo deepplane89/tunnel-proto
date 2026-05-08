@@ -20030,6 +20030,143 @@ function closeSettings() {
     if (e.target.id === 'settings-overlay') closeSettings();
   });
 
+  // ── SYNC PROGRESS (cross-device save codes) ─────────────────────────
+  // Backend: /api/save (POST → upload, returns {code}; GET ?code=... → keys).
+  // On Capacitor (iOS native, file://) relative /api/... won't resolve, so we
+  // fall back to the production Vercel URL. Web build uses the same origin.
+  const SYNC_API_BASE = (function() {
+    try {
+      const proto = window.location && window.location.protocol;
+      if (proto === 'http:' || proto === 'https:') return '/api/save';
+    } catch (_) {}
+    return 'https://tunnel-proto.vercel.app/api/save';
+  })();
+  // Keys that count as "player progress" — backed up on GET CODE.
+  function _collectSyncKeys() {
+    const out = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k.startsWith('jh_') || k.startsWith('jet-horizon') || k.startsWith('jetslide')) {
+          out[k] = localStorage.getItem(k);
+        }
+      }
+    } catch(_) {}
+    return out;
+  }
+  function _setSyncStatus(msg, kind) {
+    const el = document.getElementById('sync-status');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.classList.remove('ok', 'err', 'busy');
+    if (kind) el.classList.add(kind);
+  }
+  const getCodeBtn = document.getElementById('sync-get-code-btn');
+  if (getCodeBtn) {
+    _tapBind(getCodeBtn, async () => {
+      _setSyncStatus('Uploading save…', 'busy');
+      getCodeBtn.disabled = true;
+      try {
+        const keys = _collectSyncKeys();
+        if (Object.keys(keys).length === 0) {
+          _setSyncStatus('Nothing to back up yet.', 'err');
+          return;
+        }
+        const r = await fetch(SYNC_API_BASE, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keys }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.code) {
+          _setSyncStatus(data.error || 'Upload failed.', 'err');
+          return;
+        }
+        const row     = document.getElementById('sync-code-row');
+        const display = document.getElementById('sync-code-display');
+        if (row && display) {
+          display.textContent = data.code;
+          row.style.display = '';
+        }
+        _setSyncStatus('Saved. Use this code on another device to restore.', 'ok');
+      } catch (e) {
+        _setSyncStatus('Network error — check connection.', 'err');
+      } finally {
+        getCodeBtn.disabled = false;
+      }
+    });
+  }
+  const copyBtn = document.getElementById('sync-copy-btn');
+  if (copyBtn) {
+    _tapBind(copyBtn, async () => {
+      const display = document.getElementById('sync-code-display');
+      const code = display && display.textContent;
+      if (!code || code === '—') return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(code);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = code; document.body.appendChild(ta);
+          ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        }
+        _setSyncStatus('Code copied.', 'ok');
+      } catch (_) {
+        _setSyncStatus('Could not copy — select & copy manually.', 'err');
+      }
+    });
+  }
+  const restoreInput = document.getElementById('sync-restore-input');
+  const restoreBtn   = document.getElementById('sync-restore-btn');
+  if (restoreBtn && restoreInput) {
+    _tapBind(restoreBtn, async () => {
+      const raw = (restoreInput.value || '').trim();
+      if (!raw) { _setSyncStatus('Enter a code first.', 'err'); return; }
+      _setSyncStatus('Looking up code…', 'busy');
+      restoreBtn.disabled = true;
+      try {
+        const url = SYNC_API_BASE + '?code=' + encodeURIComponent(raw);
+        const r = await fetch(url);
+        const data = await r.json().catch(() => ({}));
+        if (r.status === 404) {
+          _setSyncStatus('Code not found or expired.', 'err');
+          return;
+        }
+        if (!r.ok || !data.keys) {
+          _setSyncStatus(data.error || 'Restore failed.', 'err');
+          return;
+        }
+        // Wipe current progress keys, then write restored ones, then reload.
+        try {
+          const toRemove = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (!k) continue;
+            if (k.startsWith('jh_') || k.startsWith('jet-horizon') || k.startsWith('jetslide')) {
+              toRemove.push(k);
+            }
+          }
+          toRemove.forEach(k => { try { localStorage.removeItem(k); } catch(_) {} });
+          Object.keys(data.keys).forEach(k => {
+            try { localStorage.setItem(k, data.keys[k]); } catch(_) {}
+          });
+        } catch(_) {}
+        _setSyncStatus('Progress restored. Reloading…', 'ok');
+        setTimeout(() => { try { location.reload(); } catch(_) {} }, 600);
+      } catch (e) {
+        _setSyncStatus('Network error — check connection.', 'err');
+      } finally {
+        restoreBtn.disabled = false;
+      }
+    });
+    // Auto-uppercase as user types; keep cursor sane.
+    restoreInput.addEventListener('input', () => {
+      const v = restoreInput.value.toUpperCase();
+      if (v !== restoreInput.value) restoreInput.value = v;
+    });
+  }
+
   // Reset Game button — wipes all local progress (skins, missions, fuel cells,
   // thrusters, upgrades, headstarts, tutorial flag, radio unlock, etc.).
   // Two-tap confirm: first tap arms (button turns red, label CONFIRM?), second
