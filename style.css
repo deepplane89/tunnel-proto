@@ -6145,14 +6145,21 @@ html.platform-ios-native body {
 }
 .radio-icon-btn.hidden { display: none; }
 
-/* Title HUD inline radio controls (replaces ♫ button on title screen). */
+/* Title HUD music wrap: ♫ button + popover with prev/play/next. */
+.title-radio-wrap { position: relative; display: inline-block; }
+.title-radio-wrap.hidden { display: none; }
 .title-radio-controls {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
   display: inline-flex; align-items: center; gap: 4px;
   height: 36px;
   padding: 0 4px;
-  background: rgba(0, 14, 28, 0.55);
-  border: 1px solid rgba(34, 211, 238, 0.30);
+  background: rgba(0, 14, 28, 0.85);
+  border: 1px solid rgba(34, 211, 238, 0.40);
   border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  z-index: 30;
 }
 .title-radio-controls.hidden { display: none; }
 .title-radio-btn {

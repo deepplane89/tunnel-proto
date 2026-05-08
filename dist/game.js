@@ -15314,7 +15314,7 @@ window.radioInterceptMusicFade = radioInterceptMusicFade;
 
 // ── UI: title-screen RADIO button visibility ────────────────────────────
 function refreshRadioButton() {
-  const wrap = document.getElementById('title-radio-controls');
+  const wrap = document.getElementById('title-radio-wrap');
   if (!wrap) return;
   if (isRadioUnlocked()) wrap.classList.remove('hidden');
   else                   wrap.classList.add('hidden');
@@ -15322,6 +15322,17 @@ function refreshRadioButton() {
   try { if (typeof updateTitleRadioToggle === 'function') updateTitleRadioToggle(); } catch(_) {}
 }
 window.refreshRadioButton = refreshRadioButton;
+
+// Toggle the prev/play/next popover under the ♫ button.
+function toggleTitleRadioPopover(force) {
+  const ctrls = document.getElementById('title-radio-controls');
+  if (!ctrls) return;
+  const want = (typeof force === 'boolean') ? force : ctrls.classList.contains('hidden');
+  if (want) ctrls.classList.remove('hidden');
+  else      ctrls.classList.add('hidden');
+  if (want) updateTitleRadioToggle();
+}
+window.toggleTitleRadioPopover = toggleTitleRadioPopover;
 
 function updateTitleRadioToggle() {
   const btn = document.getElementById('title-radio-toggle');
@@ -15526,10 +15537,29 @@ window.updatePauseRadioRow = updatePauseRadioRow;
         updatePauseRadioRow();
       });
     }
-    // Title-HUD controls (only present after radio unlock).
+    // Title-HUD music button + controls (only present after radio unlock).
+    const radioBtn = document.getElementById('radio-btn');
     const tPrev   = document.getElementById('title-radio-prev');
     const tToggle = document.getElementById('title-radio-toggle');
     const tSkip   = document.getElementById('title-radio-skip');
+    if (radioBtn && !radioBtn._wired) {
+      radioBtn._wired = true;
+      radioBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        try { if (typeof playTitleTap === 'function') playTitleTap(); } catch(_) {}
+        toggleTitleRadioPopover();
+      });
+    }
+    // Click anywhere outside the popover (or on the button again) closes it.
+    if (!document._titleRadioOutsideWired) {
+      document._titleRadioOutsideWired = true;
+      document.addEventListener('click', (e) => {
+        const ctrls = document.getElementById('title-radio-controls');
+        if (!ctrls || ctrls.classList.contains('hidden')) return;
+        const wrap = document.getElementById('title-radio-wrap');
+        if (wrap && !wrap.contains(e.target)) toggleTitleRadioPopover(false);
+      });
+    }
     // Title controls double as title-screen taps so they should play the
     // standard title click sound.
     function _titleClick() {
@@ -19863,6 +19893,7 @@ function playTitleTap()    {
   // — VR mecha interlock.
   try { if (typeof window.playTitleExit === 'function') window.playTitleExit(); } catch(_){}
 }
+window.playTitleTap = playTitleTap;
 function playTitleClose() {
   // Title-screen UI CLOSE — the legacy tap-to-play cue (start.mp3) so open
   // and close don't share the same sound.
