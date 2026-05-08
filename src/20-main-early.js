@@ -458,24 +458,27 @@ function saveSkinData(data) {
 // ── THRUSTER INVENTORY (presets + cosmetic colors) ───────────────────────────────
 // Storage shape:
 //   { selectedPreset, selectedColor, unlockedPresets:[], unlockedColors:[] }
-// 'baseline' preset and 'default' color are always unlocked.
+// 'light' preset and 'default' color are always unlocked (LIGHT is the new
+// starter thruster as of 2026-05-08; the original built-in look became the
+// unlockable BLINK preset, gated by the same mission slot LIGHT used to be).
 const THRUSTER_STORAGE_KEY = 'jh_thrusters';
 function loadThrusterData() {
   // 'coneThrust' is currently auto-unlocked for testing (no MISSION_LADDER gate).
   // Remove from defaults + the force-push below to re-gate it behind a mission.
   const defaults = {
-    selectedPreset: 'baseline',
+    selectedPreset: 'light',
     selectedColor:  'default',
-    unlockedPresets: ['baseline', 'coneThrust'],
+    unlockedPresets: ['light', 'coneThrust'],
     unlockedColors:  ['default'],
   };
   const raw = window._LS.getItem(THRUSTER_STORAGE_KEY);
   if (!raw) return defaults;
   try {
     const d = JSON.parse(raw);
-    if (!Array.isArray(d.unlockedPresets)) d.unlockedPresets = ['baseline'];
+    if (!Array.isArray(d.unlockedPresets)) d.unlockedPresets = ['light'];
     if (!Array.isArray(d.unlockedColors))  d.unlockedColors  = ['default'];
-    if (!d.unlockedPresets.includes('baseline')) d.unlockedPresets.push('baseline');
+    // LIGHT is now the always-available starter — force it into unlocks.
+    if (!d.unlockedPresets.includes('light')) d.unlockedPresets.push('light');
     if (!d.unlockedPresets.includes('coneThrust')) d.unlockedPresets.push('coneThrust');
     if (!d.unlockedColors.includes('default'))   d.unlockedColors.push('default');
     // Migration: drop unlocked entries that no longer exist in data tables
@@ -486,7 +489,7 @@ function loadThrusterData() {
       d.unlockedColors  = d.unlockedColors.filter(k => k in palette);
     } catch(_){}
     if (typeof d.selectedPreset !== 'string' || !d.unlockedPresets.includes(d.selectedPreset)) {
-      d.selectedPreset = 'baseline';
+      d.selectedPreset = 'light';
     }
     if (typeof d.selectedColor !== 'string' || !d.unlockedColors.includes(d.selectedColor)) {
       d.selectedColor = 'default';
@@ -1022,7 +1025,7 @@ const MISSION_LADDER = [
   { type:'mission', id:'shield2', desc:'Use shield 2 times in one run', check:(r)=>r.shields>=2 },
   { type:'mission', id:'drtier2', desc:'Reach speed tier 2 in DR', check:(r)=>r.isDR&&r.drTier>=2 },
   { type:'reward', reward:{ kind:'unlock', powerup:'invincible', label:'Unlock OVERDRIVE', fuelcells:100 } },
-  { type:'reward', reward:{ kind:'thruster', presetKey:'light', label:'Unlock LIGHT Thruster' } },
+  { type:'reward', reward:{ kind:'thruster', presetKey:'baseline', label:'Unlock BLINK Thruster' } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'cyan', label:'Unlock CYAN Thruster Color' } },
   { type:'mission', id:'runs15', desc:'Complete 15 runs', check:(r,lt)=>lt.runs>=15 },
   { type:'mission', id:'ltcoins500', desc:'Collect 500 total coins', check:(r,lt)=>lt.coins>=500 },
@@ -1313,7 +1316,7 @@ function openMissions() {
 window.openMissions = openMissions;
 
 function closeMissions() {
-  playTitleTap();
+  playTitleClose();
   const overlay = document.getElementById('missions-overlay');
   if (!overlay) return;
   overlay.classList.add('hidden');
@@ -1367,8 +1370,8 @@ function openThrusterPanel(targetTab) {
 window.openThrusterPanel = openThrusterPanel;
 
 function closeThrusterPanel() {
-  // VR clicker on garage close (matches the open cue).
-  playTitleTap();
+  // Title-close cue (legacy tap-to-play start.mp3) so close ≠ open sound.
+  playTitleClose();
 
   if (window.Showroom && typeof window.Showroom.close === 'function') {
     window.Showroom.close();
@@ -5349,12 +5352,12 @@ function updateAurora(dt) {
 }
 
 // ── Music system: Web Audio API gain nodes for smooth crossfades ─────────
-const TRACK_VOL = { title: 0.4, bg: 0.45, l3: 0.45, l4: 0.45, lake: 0.28, keepgoing: 0.7 };
+const TRACK_VOL = { title: 0.4, bg: 0.45, l3: 0.45, l4: 0.45, lake: 0.28, keepgoing: 0.7, radio: 0.45 };
 const trackGains = {};   // { title: GainNode, bg: GainNode, ... }
 let   _gainsReady = false;
 
 function allTracks() {
-  return { title: titleMusic, bg: bgMusic, l3: l3Music, l4: l4Music, lake: lakeMusic, keepgoing: keepGoingMusic };
+  return { title: titleMusic, bg: bgMusic, l3: l3Music, l4: l4Music, lake: lakeMusic, keepgoing: keepGoingMusic, radio: radioMusic };
 }
 
 // Wire each <audio> element through a GainNode. Called once from initAudio.
@@ -5500,6 +5503,9 @@ function resumeGameTrackInPlace(track) {
 // Smooth crossfade using Web Audio gain ramps — no JS timers for volume.
 function musicFadeTo(toTrack, durationMs, outFadeMult) {
   initAudio();
+  // Radio override: when the unlockable shuffle station is ON and the caller
+  // is targeting a gameplay zone (bg/l3/l4/lake/keepgoing), divert to radio.
+  if (typeof radioInterceptMusicFade === 'function' && radioInterceptMusicFade(toTrack, durationMs)) return;
   const all = allTracks();
   const toEl = all[toTrack];
   if (!toEl) return;

@@ -2695,19 +2695,65 @@ html, body {
 .shop-handling-bar.open .shop-handling-master-title .fm-caret {
   transform: rotate(180deg);
 }
-/* Quiet subsection labels inside the menu (TIER, FLIGHT MODEL) */
-.fm-section-label {
+/* BOOST POWER badge (read-only, auto-pinned to highest unlocked tier) */
+.shop-boost-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  background: rgba(0, 14, 28, 0.35);
+  border: 1px solid rgba(255, 204, 0, 0.25);
+  border-radius: 4px;
+}
+.shop-boost-badge-lbl {
   font-family: var(--font-display, 'Rajdhani', sans-serif);
   font-size: 10px;
   letter-spacing: 0.20em;
-  color: rgba(255,255,255,0.45);
+  color: rgba(255,255,255,0.55);
   text-transform: uppercase;
-  padding: 8px 12px 4px 12px;
 }
-.fm-section-divider {
-  height: 1px;
-  background: rgba(255,255,255,0.08);
-  margin: 6px 8px;
+.shop-boost-badge-val {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  color: #ffcc00;
+  text-transform: uppercase;
+}
+/* BOOST POWER row inside the SHIP HANDLING menu (above the FM rows). Not
+   selectable; just shows the auto-pinned tier so the garage layout doesn't
+   need a separate badge above the dropdown. */
+.shop-handling-bar .fm-boost-header,
+.fm-menu-portal .fm-boost-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  margin-bottom: 6px;
+  background: rgba(255, 204, 0, 0.06);
+  border: 1px solid rgba(255, 204, 0, 0.30);
+  border-radius: 4px;
+  pointer-events: none;
+}
+.shop-handling-bar .fm-boost-header-lbl,
+.fm-menu-portal .fm-boost-header-lbl {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  color: rgba(255,255,255,0.55);
+  text-transform: uppercase;
+}
+.shop-handling-bar .fm-boost-header-val,
+.fm-menu-portal .fm-boost-header-val {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  color: #ffcc00;
+  text-transform: uppercase;
 }
 .shop-handling-label {
   font-family: var(--font-display, 'Rajdhani', sans-serif);
@@ -5084,6 +5130,24 @@ html, body {
   border-color: var(--sr-edge);
   background: rgba(34,211,238,0.08);
 }
+/* Floating close button — lives inside .sr-overlay (sibling of .sr-stage),
+   pinned top-left over the ship preview. High z-index so it stays on the
+   top layer above stage canvas, vignette, grid, and the panel. Adds a
+   subtle backing so it's readable against any ship/skybox color. */
+.sr-overlay .sr-close-floating {
+  position: absolute;
+  top: max(8px, env(safe-area-inset-top, 0px));
+  left: max(8px, env(safe-area-inset-left, 0px));
+  right: auto;
+  z-index: 10000;
+  /* .sr-overlay sets pointer-events:none to gate clicks to the panel; the
+     floating close button is a direct child of .sr-overlay so we must
+     re-enable pointer events here, otherwise the tap falls through. */
+  pointer-events: auto;
+  background: rgba(0, 14, 28, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
 
 /* BODY + panes */
 .sr-body { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
@@ -5680,8 +5744,11 @@ body.sr-open #title-leaderboard {
   }
   .sr-overlay .sr-close {
     width: 24px; height: 24px;
-    top: 4px; right: 4px;
     font-size: 11px;
+  }
+  .sr-overlay .sr-close-floating {
+    top: max(4px, env(safe-area-inset-top, 0px));
+    left: max(4px, env(safe-area-inset-left, 0px));
   }
   /* Single-column power-up cards in narrow landscape panel — horizontal rows.
      All 5 cards share available space equally so MAGNET/COIN VALUE never get
@@ -5793,8 +5860,11 @@ body.sr-open #title-leaderboard {
   }
   .sr-overlay .sr-close {
     width: 28px; height: 28px;
-    top: 6px; right: 6px;
     font-size: 13px;
+  }
+  .sr-overlay .sr-close-floating {
+    top: max(6px, env(safe-area-inset-top, 0px));
+    left: max(6px, env(safe-area-inset-left, 0px));
   }
   .sr-overlay .sr-card-grid,
   .sr-overlay .sr-addons-list {
@@ -6044,4 +6114,207 @@ html.platform-ios-native * {
 html.platform-ios-native body {
   overscroll-behavior: none;
   touch-action: manipulation;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RADIO — unlockable shuffle station
+   ═══════════════════════════════════════════════════════ */
+
+/* Title-bar radio icon button. Hidden until unlock. */
+.radio-icon-btn {
+  position: relative;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 14, 28, 0.55);
+  border: 1px solid rgba(34, 211, 238, 0.30);
+  border-radius: 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, background 0.15s;
+}
+.radio-icon-btn:hover { border-color: rgba(34, 211, 238, 0.65); background: rgba(34, 211, 238, 0.07); }
+.radio-icon-glyph {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 20px;
+  color: #0ff;
+  line-height: 1;
+}
+.radio-icon-btn.hidden { display: none; }
+
+/* RADIO overlay — same visual family as settings-overlay */
+.radio-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.78);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 500;
+}
+.radio-overlay.hidden { display: none; }
+.radio-panel {
+  width: min(440px, 92vw);
+  max-height: 80vh;
+  background: rgba(8, 18, 30, 0.95);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 0 32px rgba(34, 211, 238, 0.15);
+}
+.radio-header {
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 16px; font-weight: 700; letter-spacing: 0.18em;
+  color: #fff;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  padding-bottom: 8px;
+}
+.radio-close {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.20);
+  border-radius: 4px;
+  color: rgba(255,255,255,0.7);
+  width: 28px; height: 28px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.radio-close:hover { background: rgba(255,255,255,0.08); }
+.radio-toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 4px;
+}
+.radio-toggle-lbl {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 12px; letter-spacing: 0.15em;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+}
+.radio-toggle-btn {
+  background: rgba(0, 14, 28, 0.55);
+  border: 1px solid rgba(255,255,255,0.20);
+  border-radius: 4px;
+  color: rgba(255,255,255,0.7);
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.15em;
+  padding: 6px 16px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+.radio-toggle-btn.on {
+  border-color: #0ff;
+  color: #0ff;
+  background: rgba(34, 211, 238, 0.10);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.30);
+}
+.radio-track-list {
+  display: flex; flex-direction: column; gap: 4px;
+  overflow-y: auto;
+  max-height: 50vh;
+  padding: 4px 0;
+}
+.radio-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 14, 28, 0.40);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 4px;
+}
+.radio-row-play {
+  width: 28px; height: 28px;
+  background: rgba(34, 211, 238, 0.10);
+  border: 1px solid rgba(34, 211, 238, 0.40);
+  border-radius: 4px;
+  color: #0ff;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.radio-row-play:hover { background: rgba(34, 211, 238, 0.20); }
+.radio-row-name {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 13px; letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.85);
+  flex: 1;
+}
+.radio-footer {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 10px; letter-spacing: 0.10em;
+  color: rgba(255,255,255,0.40);
+  text-align: center;
+  padding: 4px 0 0 0;
+  text-transform: uppercase;
+}
+
+/* Pause-menu now-playing strip */
+.pause-radio-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  margin: 8px 0 12px 0;
+  background: rgba(0, 14, 28, 0.55);
+  border: 1px solid rgba(34, 211, 238, 0.30);
+  border-radius: 4px;
+}
+.pause-radio-row.hidden { display: none; }
+.pause-radio-icon {
+  font-size: 16px;
+  color: #0ff;
+}
+.pause-radio-name {
+  flex: 1;
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 12px; letter-spacing: 0.10em;
+  color: rgba(255,255,255,0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pause-radio-controls {
+  display: flex; align-items: center; gap: 8px;
+}
+.pause-radio-btn {
+  background: rgba(34, 211, 238, 0.10);
+  border: 1px solid rgba(34, 211, 238, 0.40);
+  border-radius: 4px;
+  color: #0ff;
+  width: 36px; height: 30px;
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.pause-radio-btn:active { background: rgba(34, 211, 238, 0.25); }
+.pause-radio-skip { /* legacy alias */
+  background: rgba(34, 211, 238, 0.10);
+  border: 1px solid rgba(34, 211, 238, 0.40);
+  border-radius: 4px;
+  color: #0ff;
+  width: 32px; height: 28px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* RADIO UNLOCKED toast */
+.radio-unlock-toast {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  padding: 14px 28px;
+  background: rgba(0, 14, 28, 0.92);
+  border: 2px solid #0ff;
+  border-radius: 6px;
+  color: #0ff;
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 22px; font-weight: 700; letter-spacing: 0.25em;
+  text-transform: uppercase;
+  box-shadow: 0 0 32px rgba(34, 211, 238, 0.50);
+  opacity: 0;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  z-index: 9000;
+  pointer-events: none;
+}
+.radio-unlock-toast.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
 }

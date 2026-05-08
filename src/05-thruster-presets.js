@@ -15,7 +15,36 @@
 // panel build (see 72-main-late-mid.js). Keep it as `null` here.
 
 window._THRUSTER_PRESETS = {
-  // Captured at runtime — first panel build snapshots the live defaults.
+  // ── LIGHT PRESET ──
+  // (Listed first because it is now the default starting thruster.)
+  // Subtle, low-bloom, soft particles. Captured 2026-05-02.
+  light: {
+    label: 'LIGHT',
+    // Global
+    _thrPart_partOpacity: 0.48, _thrPart_miniPartOpacity: 0.48, _thrPart_posPinFrac: 0.14,
+    _thrusterScale: 0.80, _pointMatSize: 0.06, _miniPointMatSize: 0.09,
+    _nozzleBloomScale: 0.10, _nozzleBloomOpacity: 0.43, _nozzleBloom_whiteMix: 0.00,
+    _nozzleBloomPulse: 0.15,
+    _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
+    // Particles
+    _thrPart_bendInherit: 0.15, _thrPart_bendCatchup: 0.00,
+    _thrPart_midEnd: 0.10, _thrPart_midBoost: 0.00,
+    _thrPart_sizeBase: 0.05, _thrPart_sizeSpeed: 0.00,
+    _thrPart_bumpMult: 1.00, _thrPart_bumpEnd: 0.00, _thrPart_sizeJitter: 0.00,
+    _thrPart_lifeMin: 0.05, _thrPart_lifeJit: 0.05,
+    _thrPart_lifeBase: 0.20, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.07,
+    // Flame mesh
+    _thrFlame_coreEnd: 0.00, _thrFlame_coreRGB: 0.00, _thrFlame_midEnd: 0.10,
+    _thrFlame_sizeBase: 0.01, _thrFlame_sizeSpeed: 0.00,
+    _thrFlame_bumpMult: 1.00, _thrFlame_bumpEnd: 0.00,
+    _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.08,
+  },
+
+  // ── BLINK PRESET (formerly BASELINE / DEFAULT) ──
+  // The original built-in particle thruster look. Captured at runtime —
+  // first panel build (or the first _applyThrusterPresetByKey call) snapshots
+  // the live defaults into this slot. Renamed to BLINK so it can be a
+  // standard unlockable mission reward instead of the always-equipped fallback.
   baseline: null,
 
   // ── SHORT THRUSTER PRESET (MK Runner) ──
@@ -42,30 +71,6 @@ window._THRUSTER_PRESETS = {
     _thrFlame_sizeBase: 0.04, _thrFlame_sizeSpeed: 0.01,
     _thrFlame_bumpMult: 1.40, _thrFlame_bumpEnd: 0.07,
     _thrFlame_lifeMin: 0.05, _thrFlame_lifeJit: 0.06, _thrFlame_spawnJit: 0.02,
-  },
-
-  // ── LIGHT PRESET ──
-  // Captured 2026-05-02. Subtle, low-bloom, soft particles.
-  light: {
-    label: 'LIGHT',
-    // Global
-    _thrPart_partOpacity: 0.48, _thrPart_miniPartOpacity: 0.48, _thrPart_posPinFrac: 0.14,
-    _thrusterScale: 0.80, _pointMatSize: 0.06, _miniPointMatSize: 0.09,
-    _nozzleBloomScale: 0.10, _nozzleBloomOpacity: 0.43, _nozzleBloom_whiteMix: 0.00,
-    _nozzleBloomPulse: 0.15,
-    _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
-    // Particles
-    _thrPart_bendInherit: 0.15, _thrPart_bendCatchup: 0.00,
-    _thrPart_midEnd: 0.10, _thrPart_midBoost: 0.00,
-    _thrPart_sizeBase: 0.05, _thrPart_sizeSpeed: 0.00,
-    _thrPart_bumpMult: 1.00, _thrPart_bumpEnd: 0.00, _thrPart_sizeJitter: 0.00,
-    _thrPart_lifeMin: 0.05, _thrPart_lifeJit: 0.05,
-    _thrPart_lifeBase: 0.20, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.07,
-    // Flame mesh
-    _thrFlame_coreEnd: 0.00, _thrFlame_coreRGB: 0.00, _thrFlame_midEnd: 0.10,
-    _thrFlame_sizeBase: 0.01, _thrFlame_sizeSpeed: 0.00,
-    _thrFlame_bumpMult: 1.00, _thrFlame_bumpEnd: 0.00,
-    _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.08,
   },
 
   // ── CONE THRUST PRESET ──

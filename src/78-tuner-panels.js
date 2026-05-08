@@ -1276,7 +1276,7 @@ function _ringShowTuner() {
     };
     // Lazy-capture baseline on first panel build (only if not already set).
     if (!_THR_PRESETS.baseline) {
-      _THR_PRESETS.baseline = Object.assign({ label: 'BASELINE' }, _captureLiveThrValues());
+      _THR_PRESETS.baseline = Object.assign({ label: 'BLINK' }, _captureLiveThrValues());
     }
     const _applyThrPreset = (key) => {
       const P = _THR_PRESETS[key];

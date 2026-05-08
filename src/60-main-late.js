@@ -20,6 +20,8 @@ function setPauseOverlay(visible) {
   if (visible) {
     el.classList.remove('hidden');
     document.getElementById('hud').classList.add('hidden');
+    // Refresh radio now-playing row each time the pause menu opens.
+    try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_){}
   } else {
     el.classList.add('hidden');
     if (state.phase === 'playing') document.getElementById('hud').classList.remove('hidden');
@@ -136,6 +138,8 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
+  // Radio: ensure shuffle station is fully stopped before title music kicks in.
+  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
   // Release the screen wake lock — not needed on title/garage.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Release the thruster color lock so the title vibe (and the title
@@ -1020,23 +1024,41 @@ fetchLeaderboard();
 // kept as no-ops so any stray callers don't throw — and so the inline
 // onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
 function playStartSound() {
+  // TAP TO PLAY on title — low whoosh.
   if (state.muted) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
-  const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.85 * _sM); sfx.play().catch(() => {}); }
+  try { if (typeof window.playTapToPlay === 'function') window.playTapToPlay(); } catch(_){}
 }
 function playResumeSound() {
-  // CONTINUE from pause — VR clicker (title-tap cue).
+  // CONTINUE from pause — keep the existing menu-cycle click.
   try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 function playExitSound()   {
-  // EXIT from pause / return-to-title — VR clicker (title-tap cue).
-  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
+  // EXIT from in-gameplay pause — VR compute interference.
+  try { if (typeof window.playPauseExit === 'function') window.playPauseExit(); } catch(_){}
 }
 function playTitleTap()    {
-  // Generic title-screen menu tap — VR clicker (title-tap cue).
-  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
+  // Generic title-screen UI OPEN (garage/settings/missions/streak/radio open)
+  // — VR mecha interlock.
+  try { if (typeof window.playTitleExit === 'function') window.playTitleExit(); } catch(_){}
 }
+function playTitleClose() {
+  // Title-screen UI CLOSE — the legacy tap-to-play cue (start.mp3) so open
+  // and close don't share the same sound.
+  if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
+  try { if (typeof _ensureCtxRunning === 'function') _ensureCtxRunning(); } catch(_){}
+  try {
+    const sfx = document.getElementById('start-sound');
+    if (sfx) {
+      sfx.currentTime = 0;
+      sfx.volume = Math.min(1, 0.85 * _sM);
+      sfx.play().catch(() => {});
+    }
+  } catch(_){}
+}
+window.playTitleClose = playTitleClose;
 

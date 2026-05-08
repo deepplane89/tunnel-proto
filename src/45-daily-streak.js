@@ -191,7 +191,7 @@ window.openStreak = openStreak;
 
 // Close streak overlay — X button or tap outside panel
 function closeStreak() {
-  playTitleTap();
+  playTitleClose();
   document.getElementById('streak-overlay').classList.add('hidden');
 }
 _tapBind(document.getElementById('streak-close-btn'), closeStreak);

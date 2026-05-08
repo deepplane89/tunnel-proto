@@ -176,7 +176,9 @@
   }
 
   function _isPresetUnlocked(key) {
-    if (key === 'baseline' || _adminAll()) return true;
+    // 'light' (the new starter) and admin override are always unlocked.
+    // 'baseline' is now BLINK, a normal mission unlock — no special case.
+    if (key === 'light' || _adminAll()) return true;
     try {
       const td = loadThrusterData();
       return td.unlockedPresets.includes(key);
@@ -324,11 +326,11 @@
     if (!grid) return;
     const presets = window._THRUSTER_PRESETS || {};
     const reqs = _getUnlockReqs();
-    let selectedKey = 'baseline';
+    let selectedKey = 'light';
     let newSet = [];
     try {
       const td = loadThrusterData() || {};
-      selectedKey = td.selectedPreset || 'baseline';
+      selectedKey = td.selectedPreset || 'light';
       newSet = Array.isArray(td.newPresets) ? td.newPresets : [];
     } catch(_){}
     let html = '';
@@ -337,7 +339,7 @@
       const unlocked = _isPresetUnlocked(key);
       const isActive = (key === selectedKey) && unlocked;
       const isNew    = unlocked && newSet.indexOf(key) >= 0;
-      const rawLabel = (P && P.label) ? P.label : (key === 'baseline' ? 'DEFAULT' : key);
+      const rawLabel = (P && P.label) ? P.label : (key === 'baseline' ? 'BLINK' : key);
       const baseLabel = String(rawLabel).toUpperCase();
       const name = String(baseLabel).replace(/</g, '&lt;');
       let stateLabel = '';
@@ -941,11 +943,10 @@
         }
         // User zoom override: slider 40-160 (100 = baseline). Per-orientation
         // storage so portrait vs landscape have independent zoom settings.
-        // Default zoom by orientation: landscape uses 160 (max zoom-in)
-        // because the wide stage otherwise leaves the ship looking small;
-        // portrait keeps 100 baseline.
+        // Default zoom: 160 (max zoom-in) for both orientations — ship reads
+        // big in both portrait and landscape stages without clipping.
         const orient = _orient();
-        let zoomPct = (orient === 'l') ? 160 : 100;
+        let zoomPct = 160;
         try {
           const raw = localStorage.getItem('jh_showroom_zoom_' + orient);
           if (raw != null) {
@@ -1029,13 +1030,16 @@
   // of the current live values so selecting 'baseline' after another preset
   // actually restores. Mirrors the dev tuner's _captureLiveThrValues but does
   // not require opening the G-key panel.
+  // Exposed as window._captureBaselineIfMissing so _applyThrusterPresetByKey
+  // can grab the snapshot before applying LIGHT (the new default) on first
+  // boot — otherwise the BLINK look would be lost.
   function _captureBaselineIfMissing() {
     try {
       const presets = window._THRUSTER_PRESETS || {};
       if (presets.baseline) return;
       const allKeys = new Set();
       Object.values(presets).forEach(p => { if (p) Object.keys(p).forEach(k => allKeys.add(k)); });
-      const snap = { label: 'BASELINE' };
+      const snap = { label: 'BLINK' };
       allKeys.forEach(k => {
         if (k === 'label') return;
         if (k === '_pointMatSize') {
@@ -1054,6 +1058,8 @@
       presets.baseline = snap;
     } catch(_){}
   }
+  // Expose so other modules (e.g. _applyThrusterPresetByKey) can pre-capture.
+  try { window._captureBaselineIfMissing = _captureBaselineIfMissing; } catch(_){}
 
   // Build one particle+bloom system in titleScene; returns its handle.
   function _buildPodSystem(N, tex, isMini) {

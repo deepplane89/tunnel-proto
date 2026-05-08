@@ -140,7 +140,36 @@ window.nativePlugin = nativePlugin;
 // panel build (see 72-main-late-mid.js). Keep it as `null` here.
 
 window._THRUSTER_PRESETS = {
-  // Captured at runtime — first panel build snapshots the live defaults.
+  // ── LIGHT PRESET ──
+  // (Listed first because it is now the default starting thruster.)
+  // Subtle, low-bloom, soft particles. Captured 2026-05-02.
+  light: {
+    label: 'LIGHT',
+    // Global
+    _thrPart_partOpacity: 0.48, _thrPart_miniPartOpacity: 0.48, _thrPart_posPinFrac: 0.14,
+    _thrusterScale: 0.80, _pointMatSize: 0.06, _miniPointMatSize: 0.09,
+    _nozzleBloomScale: 0.10, _nozzleBloomOpacity: 0.43, _nozzleBloom_whiteMix: 0.00,
+    _nozzleBloomPulse: 0.15,
+    _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
+    // Particles
+    _thrPart_bendInherit: 0.15, _thrPart_bendCatchup: 0.00,
+    _thrPart_midEnd: 0.10, _thrPart_midBoost: 0.00,
+    _thrPart_sizeBase: 0.05, _thrPart_sizeSpeed: 0.00,
+    _thrPart_bumpMult: 1.00, _thrPart_bumpEnd: 0.00, _thrPart_sizeJitter: 0.00,
+    _thrPart_lifeMin: 0.05, _thrPart_lifeJit: 0.05,
+    _thrPart_lifeBase: 0.20, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.07,
+    // Flame mesh
+    _thrFlame_coreEnd: 0.00, _thrFlame_coreRGB: 0.00, _thrFlame_midEnd: 0.10,
+    _thrFlame_sizeBase: 0.01, _thrFlame_sizeSpeed: 0.00,
+    _thrFlame_bumpMult: 1.00, _thrFlame_bumpEnd: 0.00,
+    _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.08,
+  },
+
+  // ── BLINK PRESET (formerly BASELINE / DEFAULT) ──
+  // The original built-in particle thruster look. Captured at runtime —
+  // first panel build (or the first _applyThrusterPresetByKey call) snapshots
+  // the live defaults into this slot. Renamed to BLINK so it can be a
+  // standard unlockable mission reward instead of the always-equipped fallback.
   baseline: null,
 
   // ── SHORT THRUSTER PRESET (MK Runner) ──
@@ -167,30 +196,6 @@ window._THRUSTER_PRESETS = {
     _thrFlame_sizeBase: 0.04, _thrFlame_sizeSpeed: 0.01,
     _thrFlame_bumpMult: 1.40, _thrFlame_bumpEnd: 0.07,
     _thrFlame_lifeMin: 0.05, _thrFlame_lifeJit: 0.06, _thrFlame_spawnJit: 0.02,
-  },
-
-  // ── LIGHT PRESET ──
-  // Captured 2026-05-02. Subtle, low-bloom, soft particles.
-  light: {
-    label: 'LIGHT',
-    // Global
-    _thrPart_partOpacity: 0.48, _thrPart_miniPartOpacity: 0.48, _thrPart_posPinFrac: 0.14,
-    _thrusterScale: 0.80, _pointMatSize: 0.06, _miniPointMatSize: 0.09,
-    _nozzleBloomScale: 0.10, _nozzleBloomOpacity: 0.43, _nozzleBloom_whiteMix: 0.00,
-    _nozzleBloomPulse: 0.15,
-    _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
-    // Particles
-    _thrPart_bendInherit: 0.15, _thrPart_bendCatchup: 0.00,
-    _thrPart_midEnd: 0.10, _thrPart_midBoost: 0.00,
-    _thrPart_sizeBase: 0.05, _thrPart_sizeSpeed: 0.00,
-    _thrPart_bumpMult: 1.00, _thrPart_bumpEnd: 0.00, _thrPart_sizeJitter: 0.00,
-    _thrPart_lifeMin: 0.05, _thrPart_lifeJit: 0.05,
-    _thrPart_lifeBase: 0.20, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.07,
-    // Flame mesh
-    _thrFlame_coreEnd: 0.00, _thrFlame_coreRGB: 0.00, _thrFlame_midEnd: 0.10,
-    _thrFlame_sizeBase: 0.01, _thrFlame_sizeSpeed: 0.00,
-    _thrFlame_bumpMult: 1.00, _thrFlame_bumpEnd: 0.00,
-    _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.08,
   },
 
   // ── CONE THRUST PRESET ──
@@ -1202,24 +1207,27 @@ function saveSkinData(data) {
 // ── THRUSTER INVENTORY (presets + cosmetic colors) ───────────────────────────────
 // Storage shape:
 //   { selectedPreset, selectedColor, unlockedPresets:[], unlockedColors:[] }
-// 'baseline' preset and 'default' color are always unlocked.
+// 'light' preset and 'default' color are always unlocked (LIGHT is the new
+// starter thruster as of 2026-05-08; the original built-in look became the
+// unlockable BLINK preset, gated by the same mission slot LIGHT used to be).
 const THRUSTER_STORAGE_KEY = 'jh_thrusters';
 function loadThrusterData() {
   // 'coneThrust' is currently auto-unlocked for testing (no MISSION_LADDER gate).
   // Remove from defaults + the force-push below to re-gate it behind a mission.
   const defaults = {
-    selectedPreset: 'baseline',
+    selectedPreset: 'light',
     selectedColor:  'default',
-    unlockedPresets: ['baseline', 'coneThrust'],
+    unlockedPresets: ['light', 'coneThrust'],
     unlockedColors:  ['default'],
   };
   const raw = window._LS.getItem(THRUSTER_STORAGE_KEY);
   if (!raw) return defaults;
   try {
     const d = JSON.parse(raw);
-    if (!Array.isArray(d.unlockedPresets)) d.unlockedPresets = ['baseline'];
+    if (!Array.isArray(d.unlockedPresets)) d.unlockedPresets = ['light'];
     if (!Array.isArray(d.unlockedColors))  d.unlockedColors  = ['default'];
-    if (!d.unlockedPresets.includes('baseline')) d.unlockedPresets.push('baseline');
+    // LIGHT is now the always-available starter — force it into unlocks.
+    if (!d.unlockedPresets.includes('light')) d.unlockedPresets.push('light');
     if (!d.unlockedPresets.includes('coneThrust')) d.unlockedPresets.push('coneThrust');
     if (!d.unlockedColors.includes('default'))   d.unlockedColors.push('default');
     // Migration: drop unlocked entries that no longer exist in data tables
@@ -1230,7 +1238,7 @@ function loadThrusterData() {
       d.unlockedColors  = d.unlockedColors.filter(k => k in palette);
     } catch(_){}
     if (typeof d.selectedPreset !== 'string' || !d.unlockedPresets.includes(d.selectedPreset)) {
-      d.selectedPreset = 'baseline';
+      d.selectedPreset = 'light';
     }
     if (typeof d.selectedColor !== 'string' || !d.unlockedColors.includes(d.selectedColor)) {
       d.selectedColor = 'default';
@@ -1766,7 +1774,7 @@ const MISSION_LADDER = [
   { type:'mission', id:'shield2', desc:'Use shield 2 times in one run', check:(r)=>r.shields>=2 },
   { type:'mission', id:'drtier2', desc:'Reach speed tier 2 in DR', check:(r)=>r.isDR&&r.drTier>=2 },
   { type:'reward', reward:{ kind:'unlock', powerup:'invincible', label:'Unlock OVERDRIVE', fuelcells:100 } },
-  { type:'reward', reward:{ kind:'thruster', presetKey:'light', label:'Unlock LIGHT Thruster' } },
+  { type:'reward', reward:{ kind:'thruster', presetKey:'baseline', label:'Unlock BLINK Thruster' } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'cyan', label:'Unlock CYAN Thruster Color' } },
   { type:'mission', id:'runs15', desc:'Complete 15 runs', check:(r,lt)=>lt.runs>=15 },
   { type:'mission', id:'ltcoins500', desc:'Collect 500 total coins', check:(r,lt)=>lt.coins>=500 },
@@ -2057,7 +2065,7 @@ function openMissions() {
 window.openMissions = openMissions;
 
 function closeMissions() {
-  playTitleTap();
+  playTitleClose();
   const overlay = document.getElementById('missions-overlay');
   if (!overlay) return;
   overlay.classList.add('hidden');
@@ -2111,8 +2119,8 @@ function openThrusterPanel(targetTab) {
 window.openThrusterPanel = openThrusterPanel;
 
 function closeThrusterPanel() {
-  // VR clicker on garage close (matches the open cue).
-  playTitleTap();
+  // Title-close cue (legacy tap-to-play start.mp3) so close ≠ open sound.
+  playTitleClose();
 
   if (window.Showroom && typeof window.Showroom.close === 'function') {
     window.Showroom.close();
@@ -6093,12 +6101,12 @@ function updateAurora(dt) {
 }
 
 // ── Music system: Web Audio API gain nodes for smooth crossfades ─────────
-const TRACK_VOL = { title: 0.4, bg: 0.45, l3: 0.45, l4: 0.45, lake: 0.28, keepgoing: 0.7 };
+const TRACK_VOL = { title: 0.4, bg: 0.45, l3: 0.45, l4: 0.45, lake: 0.28, keepgoing: 0.7, radio: 0.45 };
 const trackGains = {};   // { title: GainNode, bg: GainNode, ... }
 let   _gainsReady = false;
 
 function allTracks() {
-  return { title: titleMusic, bg: bgMusic, l3: l3Music, l4: l4Music, lake: lakeMusic, keepgoing: keepGoingMusic };
+  return { title: titleMusic, bg: bgMusic, l3: l3Music, l4: l4Music, lake: lakeMusic, keepgoing: keepGoingMusic, radio: radioMusic };
 }
 
 // Wire each <audio> element through a GainNode. Called once from initAudio.
@@ -6244,6 +6252,9 @@ function resumeGameTrackInPlace(track) {
 // Smooth crossfade using Web Audio gain ramps — no JS timers for volume.
 function musicFadeTo(toTrack, durationMs, outFadeMult) {
   initAudio();
+  // Radio override: when the unlockable shuffle station is ON and the caller
+  // is targeting a gameplay zone (bg/l3/l4/lake/keepgoing), divert to radio.
+  if (typeof radioInterceptMusicFade === 'function' && radioInterceptMusicFade(toTrack, durationMs)) return;
   const all = allTracks();
   const toEl = all[toTrack];
   if (!toEl) return;
@@ -11919,6 +11930,7 @@ let l3Music        = null;
 let l4Music        = null;
 let lakeMusic      = null;
 let keepGoingMusic = null;
+let radioMusic     = null;  // shared <audio id="radio-music"> for the unlockable shuffle station
 let activeFadeIv = null;  // crossfade timer handle
 
 function initAudio() {
@@ -11929,6 +11941,7 @@ function initAudio() {
   l4Music        = l4Music        || document.getElementById('l4-music');
   lakeMusic      = lakeMusic      || document.getElementById('lake-music');
   keepGoingMusic = keepGoingMusic || document.getElementById('keep-going-music');
+  radioMusic     = radioMusic     || document.getElementById('radio-music');
   if (keepGoingMusic && !keepGoingMusic._endlessLoopSet) {
     keepGoingMusic._endlessLoopSet = true;
     keepGoingMusic.addEventListener('ended', () => {
@@ -12145,6 +12158,13 @@ function _initSFXBuffers() {
   _loadSFXBuffer('garage-select',   './assets/audio/garage-select.mp3');
   // Title-screen "death run" button (the ENTER moment from the loading screen).
   _loadSFXBuffer('start-interference', './assets/audio/start-interference.mp3');
+  // Pause-menu EXIT in gameplay — VR compute interference cue.
+  _loadSFXBuffer('pause-exit',      './assets/audio/pause-exit.mp3');
+  // Title-screen UI exits (garage close, settings close, daily streak close,
+  // any back/exit on title) — VR mecha interlock.
+  _loadSFXBuffer('title-exit',      './assets/audio/title-exit.mp3');
+  // Tap-to-play on title screen — low whoosh.
+  _loadSFXBuffer('tap-to-play',     './assets/audio/tap-to-play.mp3');
   // Garage open/close audio removed — no sample needed.
 }
 
@@ -12337,6 +12357,18 @@ window.playGarageSelect = playGarageSelect;
 // Title-screen "start death run" press.
 function playStartInterference() { _playBuffer('start-interference', 0.7, 1.0, null); }
 window.playStartInterference = playStartInterference;
+
+// Pause-menu EXIT during gameplay — VR compute interference.
+function playPauseExit() { _playBuffer('pause-exit', 0.7, 1.0, null); }
+window.playPauseExit = playPauseExit;
+
+// Title-screen UI exits (garage/settings/etc back) — VR mecha interlock.
+function playTitleExit() { _playBuffer('title-exit', 0.7, 1.0, null); }
+window.playTitleExit = playTitleExit;
+
+// Tap-to-play on title screen — low whoosh.
+function playTapToPlay() { _playBuffer('tap-to-play', 0.7, 1.0, null); }
+window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
   if (state.muted) return;
@@ -14917,6 +14949,408 @@ function initSkinViewer() {
   }
 }
 
+// ═══════════════════════════════════════════════════
+//  RADIO — unlockable shuffle station that replaces zone music in gameplay.
+//
+//  Unlock: after run #3 (death). Stored in localStorage.
+//  When ON, gameplay zones (bg / l3 / l4 / lake / keepgoing-as-cue) all
+//  play through a single shuffled <audio id="radio-music"> element instead
+//  of their dedicated tracks.
+//  Title music + keep-going-as-cue (when radio OFF) are untouched.
+// ═══════════════════════════════════════════════════
+
+const RADIO_TRACKS = [
+  { id: 'neon-underworld',   name: 'NEON UNDERWORLD',       src: './assets/audio/l4music.mp3' },
+  { id: 'brazilian-street',  name: 'BRAZILIAN STREET FIGHT',src: './assets/audio/l3music.mp3' },
+  { id: 'keep-going',        name: 'KEEP GOING',            src: './assets/audio/keep-going.mp3' },
+  { id: 'synesthetic-gears', name: 'SYNESTHETIC GEARS',     src: './assets/audio/radio-gears-1.mp3' },
+  { id: 'synthetic-gears-2', name: 'SYNTHETIC GEARS II',    src: './assets/audio/radio-gears-2.mp3' },
+  { id: 'funk-of-the-night', name: 'FUNK OF THE NIGHT',     src: './assets/audio/radio-funk.mp3' },
+  { id: 'orbital-ordinance', name: 'ORBITAL ORDINANCE',     src: './assets/audio/radio-orbital.mp3' },
+  { id: 'neon-mountain',     name: 'NEON MOUNTAIN',         src: './assets/audio/radio-neon-mtn.mp3' },
+];
+window.RADIO_TRACKS = RADIO_TRACKS;
+
+const RADIO_LS = {
+  unlocked:  'jh_radio_unlocked',
+  on:        'jh_radio_on',
+  runCount:  'jh_radio_run_count',
+};
+const RADIO_UNLOCK_AT = 3;  // unlock on/after death of run #3
+
+let _radioShuffleQueue = [];   // upcoming track indexes
+let _radioCurrentIdx   = -1;   // currently playing index into RADIO_TRACKS
+let _radioPlayHistory  = [];   // recent indexes for prev (most recent at end)
+let _radioEndedHooked  = false;
+
+function isRadioUnlocked() {
+  try { return localStorage.getItem(RADIO_LS.unlocked) === '1'; } catch(_) { return false; }
+}
+function setRadioUnlocked(v) {
+  try { localStorage.setItem(RADIO_LS.unlocked, v ? '1' : '0'); } catch(_) {}
+}
+function isRadioOn() {
+  if (!isRadioUnlocked()) return false;
+  try { return localStorage.getItem(RADIO_LS.on) === '1'; } catch(_) { return false; }
+}
+function setRadioOn(v) {
+  try { localStorage.setItem(RADIO_LS.on, v ? '1' : '0'); } catch(_) {}
+  if (!v) stopRadio();
+}
+window.isRadioUnlocked = isRadioUnlocked;
+window.isRadioOn       = isRadioOn;
+window.setRadioOn      = setRadioOn;
+
+// Run counter: incremented at startGame() entry. Used to unlock at run >=3.
+function getRadioRunCount() {
+  try { return parseInt(localStorage.getItem(RADIO_LS.runCount) || '0', 10) || 0; } catch(_) { return 0; }
+}
+function incrementRadioRunCount() {
+  const n = getRadioRunCount() + 1;
+  try { localStorage.setItem(RADIO_LS.runCount, String(n)); } catch(_) {}
+  return n;
+}
+window.incrementRadioRunCount = incrementRadioRunCount;
+
+// Called from death handler. If unlock threshold met and not yet unlocked,
+// flip the flag and queue the toast for after the death screen settles.
+function tryUnlockRadioOnDeath() {
+  if (isRadioUnlocked()) return false;
+  if (getRadioRunCount() < RADIO_UNLOCK_AT) return false;
+  setRadioUnlocked(true);
+  // Default to ON the first time it unlocks so the player notices it next run.
+  try { localStorage.setItem(RADIO_LS.on, '1'); } catch(_) {}
+  showRadioUnlockToast();
+  // Refresh title-screen UI so the RADIO button appears next time we hit title.
+  try { if (typeof refreshRadioButton === 'function') refreshRadioButton(); } catch(_) {}
+  return true;
+}
+window.tryUnlockRadioOnDeath = tryUnlockRadioOnDeath;
+
+function showRadioUnlockToast() {
+  try {
+    const t = document.createElement('div');
+    t.className = 'radio-unlock-toast';
+    t.textContent = 'RADIO UNLOCKED';
+    document.body.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('show'));
+    setTimeout(() => {
+      t.classList.remove('show');
+      setTimeout(() => { try { t.remove(); } catch(_){} }, 600);
+    }, 3000);
+  } catch(_) {}
+}
+
+// ── Shuffle engine ──────────────────────────────────────────────────────
+// Fisher-Yates the index array; refill when the queue empties. We avoid
+// repeating the most-recent track by swapping the head if it matches.
+function _refillShuffleQueue() {
+  const arr = RADIO_TRACKS.map((_, i) => i);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+  }
+  if (arr.length > 1 && arr[0] === _radioCurrentIdx) {
+    const tmp = arr[0]; arr[0] = arr[1]; arr[1] = tmp;
+  }
+  _radioShuffleQueue = arr;
+}
+
+function _nextRadioIdx() {
+  if (_radioShuffleQueue.length === 0) _refillShuffleQueue();
+  return _radioShuffleQueue.shift();
+}
+
+function _hookRadioEnded() {
+  if (_radioEndedHooked || !radioMusic) return;
+  _radioEndedHooked = true;
+  radioMusic.addEventListener('ended', () => {
+    // Only auto-advance if we're still meant to be playing (not paused/dead).
+    if (!isRadioOn()) return;
+    if (state && (state.phase === 'paused' || state.phase === 'dead' || state.phase === 'title')) return;
+    _playRadioIdx(_nextRadioIdx());
+  });
+}
+
+function _playRadioIdx(idx) {
+  if (typeof initAudio === 'function') initAudio();
+  if (!radioMusic) radioMusic = document.getElementById('radio-music');
+  if (!radioMusic) return;
+  _hookRadioEnded();
+  const tr = RADIO_TRACKS[idx];
+  if (!tr) return;
+  _radioCurrentIdx = idx;
+  // Track history for prev button (cap at 16 to avoid runaway memory).
+  _radioPlayHistory.push(idx);
+  if (_radioPlayHistory.length > 16) _radioPlayHistory.shift();
+  // Switching src on the same element is the cheapest way to swap; iOS handles
+  // it cleanly as long as we play() from a user-gesture-tied codepath (we are).
+  if (radioMusic.src.indexOf(tr.src) === -1) {
+    radioMusic.src = tr.src;
+  }
+  try { radioMusic.currentTime = 0; } catch(_) {}
+  // Volume is gated by the gain node ('radio' track) — don't fight it here.
+  radioMusic.play().catch(() => {});
+  // Notify pause-menu UI to refresh "now playing".
+  try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_) {}
+}
+
+function startRadio() {
+  if (!isRadioOn()) return;
+  if (typeof initAudio === 'function') initAudio();
+  if (!radioMusic) radioMusic = document.getElementById('radio-music');
+  if (!radioMusic) return;
+  // If already playing, just make sure gain is up.
+  if (!radioMusic.paused) {
+    try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+    return;
+  }
+  const idx = (_radioCurrentIdx >= 0) ? _radioCurrentIdx : _nextRadioIdx();
+  _playRadioIdx(idx);
+  try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+}
+window.startRadio = startRadio;
+
+function stopRadio() {
+  try {
+    if (radioMusic && !radioMusic.paused) radioMusic.pause();
+  } catch(_) {}
+  try { setTrackVol('radio', 0); } catch(_) {}
+}
+window.stopRadio = stopRadio;
+
+function skipRadioTrack() {
+  if (!isRadioOn()) return;
+  _playRadioIdx(_nextRadioIdx());
+}
+window.skipRadioTrack = skipRadioTrack;
+
+function prevRadioTrack() {
+  if (!isRadioOn()) return;
+  // Pop the previous track from history (current was pushed by _playRadioIdx).
+  // history layout: [..., previous, current]
+  if (_radioPlayHistory.length < 2) return;
+  _radioPlayHistory.pop();              // drop current
+  const prev = _radioPlayHistory.pop(); // take previous (will be re-pushed by _playRadioIdx)
+  if (typeof prev === 'number') _playRadioIdx(prev);
+}
+window.prevRadioTrack = prevRadioTrack;
+
+function toggleRadioPause() {
+  if (!isRadioOn()) return;
+  if (!radioMusic) radioMusic = document.getElementById('radio-music');
+  if (!radioMusic) return;
+  try {
+    if (radioMusic.paused) {
+      if (_radioCurrentIdx < 0) _playRadioIdx(_nextRadioIdx());
+      else radioMusic.play().catch(() => {});
+    } else {
+      radioMusic.pause();
+    }
+  } catch(_) {}
+  try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_) {}
+}
+window.toggleRadioPause = toggleRadioPause;
+
+function currentRadioTrackName() {
+  const tr = RADIO_TRACKS[_radioCurrentIdx];
+  return tr ? tr.name : '';
+}
+window.currentRadioTrackName = currentRadioTrackName;
+
+// ── musicFadeTo divert helper ────────────────────────────────────────────
+// Called from musicFadeTo() (in 20-main-early.js) when radio is ON and the
+// requested track is a gameplay zone. Returns true if it took over the fade.
+const _RADIO_GAMEPLAY_TRACKS = { bg: 1, l3: 1, l4: 1, lake: 1, keepgoing: 1 };
+function radioInterceptMusicFade(toTrack, durationMs) {
+  if (!isRadioOn()) return false;
+  if (!_RADIO_GAMEPLAY_TRACKS[toTrack]) return false;
+  try {
+    const all = (typeof allTracks === 'function') ? allTracks() : {};
+    const durSec = (durationMs || 1500) / 1000;
+    Object.entries(all).forEach(([k, el]) => {
+      if (!el) return;
+      if (k === 'title' || k === 'radio') return;
+      if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, durSec);
+      setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, (durationMs || 1500) + 50);
+    });
+    startRadio();
+    if (typeof rampTrackVol === 'function' && radioMusic) {
+      rampTrackVol('radio', 0, 0);
+      rampTrackVol('radio', TRACK_VOL.radio, durSec);
+    }
+    return true;
+  } catch(_) { return false; }
+}
+window.radioInterceptMusicFade = radioInterceptMusicFade;
+
+// ── UI: title-screen RADIO button visibility ────────────────────────────
+function refreshRadioButton() {
+  const btn = document.getElementById('radio-btn');
+  if (!btn) return;
+  if (isRadioUnlocked()) btn.classList.remove('hidden');
+  else                   btn.classList.add('hidden');
+}
+window.refreshRadioButton = refreshRadioButton;
+
+// ── UI: radio overlay (title-screen only) ──────────────────────────────
+let _radioPreviewIdx = -1;   // currently-previewing track in the overlay
+function openRadio() {
+  if (!isRadioUnlocked()) return;
+  try { if (typeof initAudio === 'function') initAudio(); } catch(_) {}
+  try { if (typeof playTitleTap === 'function') playTitleTap(); } catch(_) {}
+  const ov = document.getElementById('radio-overlay');
+  if (!ov) return;
+  ov.classList.remove('hidden');
+  _renderRadioOverlay();
+}
+window.openRadio = openRadio;
+
+function closeRadio() {
+  try { if (typeof playTitleClose === 'function') playTitleClose(); } catch(_) {}
+  const ov = document.getElementById('radio-overlay');
+  if (ov) ov.classList.add('hidden');
+  _stopRadioPreview();
+}
+window.closeRadio = closeRadio;
+
+function _stopRadioPreview() {
+  if (_radioPreviewIdx < 0) return;
+  if (radioMusic && !radioMusic.paused && state && state.phase !== 'playing') {
+    try { radioMusic.pause(); } catch(_) {}
+    try { setTrackVol('radio', 0); } catch(_) {}
+  }
+  _radioPreviewIdx = -1;
+  // Refresh play buttons in list.
+  const list = document.getElementById('radio-track-list');
+  if (list) list.querySelectorAll('.radio-row-play').forEach(b => b.textContent = '\u25B6');
+}
+
+function _previewRadioTrack(idx) {
+  if (typeof initAudio === 'function') initAudio();
+  if (!radioMusic) radioMusic = document.getElementById('radio-music');
+  if (!radioMusic) return;
+  // If tapping the row that's already previewing, stop.
+  if (_radioPreviewIdx === idx) { _stopRadioPreview(); return; }
+  // Stop previous preview.
+  _stopRadioPreview();
+  const tr = RADIO_TRACKS[idx];
+  if (!tr) return;
+  if (radioMusic.src.indexOf(tr.src) === -1) radioMusic.src = tr.src;
+  try { radioMusic.currentTime = 0; } catch(_) {}
+  try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+  radioMusic.play().catch(() => {});
+  _radioPreviewIdx = idx;
+  // Update play button glyph.
+  const list = document.getElementById('radio-track-list');
+  if (list) {
+    list.querySelectorAll('.radio-row-play').forEach(b => b.textContent = '\u25B6');
+    const btn = list.querySelector('.radio-row[data-idx="' + idx + '"] .radio-row-play');
+    if (btn) btn.textContent = '\u25A0';
+  }
+}
+
+function _renderRadioOverlay() {
+  const list = document.getElementById('radio-track-list');
+  const toggleBtn = document.getElementById('radio-master-toggle');
+  if (!list || !toggleBtn) return;
+  toggleBtn.textContent = isRadioOn() ? 'ON' : 'OFF';
+  toggleBtn.classList.toggle('on', isRadioOn());
+  list.innerHTML = RADIO_TRACKS.map((t, i) =>
+    '<div class="radio-row" data-idx="' + i + '">' +
+      '<button class="radio-row-play" aria-label="Preview">\u25B6</button>' +
+      '<span class="radio-row-name">' + t.name + '</span>' +
+    '</div>'
+  ).join('');
+  // Wire rows.
+  list.querySelectorAll('.radio-row-play').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const row = btn.closest('.radio-row');
+      const idx = parseInt(row.getAttribute('data-idx'), 10);
+      _previewRadioTrack(idx);
+    });
+  });
+  // Wire master toggle.
+  toggleBtn.onclick = () => {
+    const next = !isRadioOn();
+    setRadioOn(next);
+    toggleBtn.textContent = next ? 'ON' : 'OFF';
+    toggleBtn.classList.toggle('on', next);
+    if (!next) _stopRadioPreview();
+  };
+  // Wire close button (idempotent).
+  const closeBtn = document.getElementById('radio-close');
+  if (closeBtn && !closeBtn._wired) {
+    closeBtn._wired = true;
+    closeBtn.addEventListener('click', () => closeRadio());
+  }
+}
+
+// ── UI: pause-menu now-playing row ──────────────────────────────────────
+function updatePauseRadioRow() {
+  const row    = document.getElementById('pause-radio-row');
+  const name   = document.getElementById('pause-radio-name');
+  const toggle = document.getElementById('pause-radio-toggle');
+  if (!row || !name) return;
+  if (isRadioOn() && _radioCurrentIdx >= 0) {
+    row.classList.remove('hidden');
+    name.textContent = currentRadioTrackName();
+    if (toggle) {
+      const paused = !!(radioMusic && radioMusic.paused);
+      toggle.textContent = paused ? '▶' : '⏸';
+      toggle.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+    }
+  } else {
+    row.classList.add('hidden');
+  }
+}
+window.updatePauseRadioRow = updatePauseRadioRow;
+
+// Wire pause-menu radio buttons once DOM is parsed.
+(function wirePauseRadioControls() {
+  function _wire() {
+    const prevBtn   = document.getElementById('pause-radio-prev');
+    const toggleBtn = document.getElementById('pause-radio-toggle');
+    const skipBtn   = document.getElementById('pause-radio-skip');
+    if (prevBtn && !prevBtn._wired) {
+      prevBtn._wired = true;
+      prevBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof prevRadioTrack === 'function') prevRadioTrack();
+        updatePauseRadioRow();
+      });
+    }
+    if (toggleBtn && !toggleBtn._wired) {
+      toggleBtn._wired = true;
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof toggleRadioPause === 'function') toggleRadioPause();
+        updatePauseRadioRow();
+      });
+    }
+    if (skipBtn && !skipBtn._wired) {
+      skipBtn._wired = true;
+      skipBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof skipRadioTrack === 'function') skipRadioTrack();
+        updatePauseRadioRow();
+      });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _wire);
+  } else {
+    _wire();
+  }
+})();
+
+// Refresh the title button on load (in case it was already unlocked).
+(function refreshOnLoad() {
+  function _go() { try { refreshRadioButton(); } catch(_) {} }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _go);
+  else _go();
+})();
 // ═══════════════════════════════════════════════════════
 //  DAILY STREAK REWARDS
 // ═══════════════════════════════════════════════════════
@@ -15110,7 +15544,7 @@ window.openStreak = openStreak;
 
 // Close streak overlay — X button or tap outside panel
 function closeStreak() {
-  playTitleTap();
+  playTitleClose();
   document.getElementById('streak-overlay').classList.add('hidden');
 }
 _tapBind(document.getElementById('streak-close-btn'), closeStreak);
@@ -15551,7 +15985,9 @@ function updateStreakBadge() {
   }
 
   function _isPresetUnlocked(key) {
-    if (key === 'baseline' || _adminAll()) return true;
+    // 'light' (the new starter) and admin override are always unlocked.
+    // 'baseline' is now BLINK, a normal mission unlock — no special case.
+    if (key === 'light' || _adminAll()) return true;
     try {
       const td = loadThrusterData();
       return td.unlockedPresets.includes(key);
@@ -15699,11 +16135,11 @@ function updateStreakBadge() {
     if (!grid) return;
     const presets = window._THRUSTER_PRESETS || {};
     const reqs = _getUnlockReqs();
-    let selectedKey = 'baseline';
+    let selectedKey = 'light';
     let newSet = [];
     try {
       const td = loadThrusterData() || {};
-      selectedKey = td.selectedPreset || 'baseline';
+      selectedKey = td.selectedPreset || 'light';
       newSet = Array.isArray(td.newPresets) ? td.newPresets : [];
     } catch(_){}
     let html = '';
@@ -15712,7 +16148,7 @@ function updateStreakBadge() {
       const unlocked = _isPresetUnlocked(key);
       const isActive = (key === selectedKey) && unlocked;
       const isNew    = unlocked && newSet.indexOf(key) >= 0;
-      const rawLabel = (P && P.label) ? P.label : (key === 'baseline' ? 'DEFAULT' : key);
+      const rawLabel = (P && P.label) ? P.label : (key === 'baseline' ? 'BLINK' : key);
       const baseLabel = String(rawLabel).toUpperCase();
       const name = String(baseLabel).replace(/</g, '&lt;');
       let stateLabel = '';
@@ -16316,11 +16752,10 @@ function updateStreakBadge() {
         }
         // User zoom override: slider 40-160 (100 = baseline). Per-orientation
         // storage so portrait vs landscape have independent zoom settings.
-        // Default zoom by orientation: landscape uses 160 (max zoom-in)
-        // because the wide stage otherwise leaves the ship looking small;
-        // portrait keeps 100 baseline.
+        // Default zoom: 160 (max zoom-in) for both orientations — ship reads
+        // big in both portrait and landscape stages without clipping.
         const orient = _orient();
-        let zoomPct = (orient === 'l') ? 160 : 100;
+        let zoomPct = 160;
         try {
           const raw = localStorage.getItem('jh_showroom_zoom_' + orient);
           if (raw != null) {
@@ -16404,13 +16839,16 @@ function updateStreakBadge() {
   // of the current live values so selecting 'baseline' after another preset
   // actually restores. Mirrors the dev tuner's _captureLiveThrValues but does
   // not require opening the G-key panel.
+  // Exposed as window._captureBaselineIfMissing so _applyThrusterPresetByKey
+  // can grab the snapshot before applying LIGHT (the new default) on first
+  // boot — otherwise the BLINK look would be lost.
   function _captureBaselineIfMissing() {
     try {
       const presets = window._THRUSTER_PRESETS || {};
       if (presets.baseline) return;
       const allKeys = new Set();
       Object.values(presets).forEach(p => { if (p) Object.keys(p).forEach(k => allKeys.add(k)); });
-      const snap = { label: 'BASELINE' };
+      const snap = { label: 'BLINK' };
       allKeys.forEach(k => {
         if (k === 'label') return;
         if (k === '_pointMatSize') {
@@ -16429,6 +16867,8 @@ function updateStreakBadge() {
       presets.baseline = snap;
     } catch(_){}
   }
+  // Expose so other modules (e.g. _applyThrusterPresetByKey) can pre-capture.
+  try { window._captureBaselineIfMissing = _captureBaselineIfMissing; } catch(_){}
 
   // Build one particle+bloom system in titleScene; returns its handle.
   function _buildPodSystem(N, tex, isMini) {
@@ -17487,29 +17927,22 @@ function _renderShopHandlingBar() {
   const xpFillPct = Math.min(100, Math.round((xp / Math.max(1, xpNeed)) * 100));
   const xpText = 'L' + level + ' \u00B7 ' + xp + '/' + xpNeed + ' XP';
 
-  // ── TIER subsection rows (Boost Profile) ──
-  // Per user: minimal label "TIER N" only — flavor names appear on the
-  // unlock toast. Player can downshift to any unlocked tier on purpose.
-  const HT = window.HANDLING_TIERS || [];
-  const eqBoostIdx = (typeof loadEquippedBoostTierIndex === 'function') ? loadEquippedBoostTierIndex() : 0;
+  // ── BOOST POWER (read-only, auto-pinned to highest unlocked tier) ──
+  // No standalone badge anymore — it gets rendered as a header row at the
+  // top of the SHIP HANDLING menu (above the FM rows) so the garage doesn't
+  // grow vertically and clip in landscape. Still force-sync the saved
+  // equipped index so getHandlingStartBoost() returns the right base.
   const maxBoostIdx = (typeof getMaxUnlockedBoostTierIndex === 'function') ? getMaxUnlockedBoostTierIndex() : 0;
-  let tierRowsHTML = '';
-  for (let i = 0; i < HT.length; i++) {
-    const t = HT[i];
-    const unlocked = i <= maxBoostIdx;
-    const isEq = i === eqBoostIdx;
-    const cls = 'fm-row boost-row' + (isEq ? ' equipped' : '') + (unlocked ? '' : ' locked');
-    const lockBadge = unlocked ? '' : '<span class="fm-lock">L' + t.level + ' \uD83D\uDD12</span>';
-    tierRowsHTML +=
-      '<div class="' + cls + '" data-boost="' + i + '">' +
-        '<div class="fm-row-head">' +
-          '<span class="fm-name">TIER ' + (i + 1) + '</span>' +
-          lockBadge +
-        '</div>' +
-      '</div>';
+  if (typeof saveEquippedBoostTierIndex === 'function') {
+    try { saveEquippedBoostTierIndex(maxBoostIdx); } catch(_){}
   }
+  const boostHeaderHTML =
+    '<div class="fm-boost-header">' +
+      '<span class="fm-boost-header-lbl">BOOST POWER</span>' +
+      '<span class="fm-boost-header-val">TIER ' + (maxBoostIdx + 1) + '</span>' +
+    '</div>';
 
-  // ── FLIGHT MODEL subsection rows ──
+  // ── FLIGHT MODEL rows ──
   let fmRowsHTML = '';
   for (const [name, m] of Object.entries(FM)) {
     const unlocked = level >= m.unlock;
@@ -17530,14 +17963,13 @@ function _renderShopHandlingBar() {
       '</div>';
   }
 
-  // ── Mount: ONE master dropdown. Head = SHIP HANDLING + XP bar. Menu has
-  // two stacked subsections (TIER on top, FLIGHT MODEL below) under quiet
-  // section labels with a thin divider between them. Open/closed state is
-  // preserved across re-renders so equipping doesn't slam the menu shut.
-  // Render the bar in CLOSED state always; if wasOpen, we re-trigger open via
-  // synthetic click after wiring listeners (see equip handler below).
+  // ── Mount: SHIP HANDLING dropdown only.
+  // Head label is always "SHIP HANDLING" (section name); the equipped flight
+  // model name + color only show inside the menu rows. BOOST POWER tier is
+  // a non-selectable header row at the top of the menu. XP bar lives on the
+  // right of the head.
   root.innerHTML =
-    '<div class="fm-bar shop-handling-bar" data-kind="master">' +
+    '<div class="fm-bar shop-handling-bar" data-kind="fm">' +
       '<button type="button" class="fm-head" aria-expanded="false">' +
         '<div class="fm-head-l">' +
           '<div class="shop-handling-master-title">SHIP HANDLING <span class="fm-caret">\u25BE</span></div>' +
@@ -17548,10 +17980,7 @@ function _renderShopHandlingBar() {
         '</div>' +
       '</button>' +
       '<div class="fm-menu">' +
-        '<div class="fm-section-label">TIER</div>' +
-        tierRowsHTML +
-        '<div class="fm-section-divider"></div>' +
-        '<div class="fm-section-label">FLIGHT MODEL</div>' +
+        boostHeaderHTML +
         fmRowsHTML +
       '</div>' +
     '</div>';
@@ -17671,50 +18100,28 @@ function _setupHandlingDropdown(bar) {
       else _open();
     });
   }
-  // Wire row clicks. Master menu has TIER rows (data-boost) and FLIGHT MODEL
-  // rows (data-fm); both behave identically — equip on tap, reject sound if
-  // locked. Menu STAYS OPEN after a pick so the player can equip a tier and
-  // a flight model in one open session (closes only on outside-tap or
-  // tapping the head again).
+  // Wire row clicks. FLIGHT MODEL rows only — equip on tap, reject sound
+  // if locked. Closes after pick (single-select dropdown).
   bar.querySelectorAll('.fm-row').forEach(row => {
     if (row.classList.contains('locked')) {
       _tapBind(row, () => { try { if (typeof window.playReject === 'function') window.playReject(); } catch(_){} });
       return;
     }
     _tapBind(row, () => {
-      const boostStr = row.getAttribute('data-boost');
       const fmName = row.getAttribute('data-fm');
-      if (boostStr != null) {
-        const idx = parseInt(boostStr, 10);
-        if (isNaN(idx)) return;
-        if (typeof saveEquippedBoostTierIndex === 'function') saveEquippedBoostTierIndex(idx);
-      } else if (fmName) {
-        const FM = window._FLIGHT_MODELS;
-        if (!FM || !FM[fmName]) return;
-        if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(fmName);
-      } else {
-        return;
-      }
+      if (!fmName) return;
+      const FM = window._FLIGHT_MODELS;
+      if (!FM || !FM[fmName]) return;
+      if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(fmName);
       try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
-      // Re-render to refresh equipped highlight + head label, but keep the
-      // menu open. _renderShopHandlingBar() preserves wasOpen state, and we
-      // re-position the now-portaled menu so it stays anchored.
+      _close();
       _renderShopHandlingBar();
-      // After re-render, the bar/head/menu DOM has been replaced. Re-find
-      // them and re-attach listeners + reopen position. Easiest: trigger a
-      // synthetic open on the freshly-rendered master bar.
-      const newBar = document.querySelector('#shop-handling-bar .fm-bar[data-kind="master"]');
-      if (newBar) {
-        const newHead = newBar.querySelector('.fm-head');
-        // Defer one frame so layout settles + listeners are bound, then open.
-        if (newHead) requestAnimationFrame(() => { try { newHead.click(); } catch(_){} });
-      }
     });
   });
 }
 
 function closeShop() {
-  playTitleTap();
+  playTitleClose();
   const overlay = document.getElementById('shop-overlay');
   if (!overlay) return;
   overlay.classList.remove('shop-open');
@@ -17886,7 +18293,7 @@ function openShopDetail(id) {
 window.openShopDetail = openShopDetail;
 
 function closeShopDetail() {
-  playTitleTap();
+  playTitleClose();
   const detail = document.getElementById('shop-detail');
   if (detail) detail.classList.add('hidden');
   const tabs = document.querySelectorAll('.shop-tabs')[0];
@@ -18191,6 +18598,8 @@ function setPauseOverlay(visible) {
   if (visible) {
     el.classList.remove('hidden');
     document.getElementById('hud').classList.add('hidden');
+    // Refresh radio now-playing row each time the pause menu opens.
+    try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_){}
   } else {
     el.classList.add('hidden');
     if (state.phase === 'playing') document.getElementById('hud').classList.remove('hidden');
@@ -18307,6 +18716,8 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
+  // Radio: ensure shuffle station is fully stopped before title music kicks in.
+  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
   // Release the screen wake lock — not needed on title/garage.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Release the thruster color lock so the title vibe (and the title
@@ -19191,25 +19602,43 @@ fetchLeaderboard();
 // kept as no-ops so any stray callers don't throw — and so the inline
 // onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
 function playStartSound() {
+  // TAP TO PLAY on title — low whoosh.
   if (state.muted) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
-  const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.85 * _sM); sfx.play().catch(() => {}); }
+  try { if (typeof window.playTapToPlay === 'function') window.playTapToPlay(); } catch(_){}
 }
 function playResumeSound() {
-  // CONTINUE from pause — VR clicker (title-tap cue).
+  // CONTINUE from pause — keep the existing menu-cycle click.
   try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 function playExitSound()   {
-  // EXIT from pause / return-to-title — VR clicker (title-tap cue).
-  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
+  // EXIT from in-gameplay pause — VR compute interference.
+  try { if (typeof window.playPauseExit === 'function') window.playPauseExit(); } catch(_){}
 }
 function playTitleTap()    {
-  // Generic title-screen menu tap — VR clicker (title-tap cue).
-  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
+  // Generic title-screen UI OPEN (garage/settings/missions/streak/radio open)
+  // — VR mecha interlock.
+  try { if (typeof window.playTitleExit === 'function') window.playTitleExit(); } catch(_){}
 }
+function playTitleClose() {
+  // Title-screen UI CLOSE — the legacy tap-to-play cue (start.mp3) so open
+  // and close don't share the same sound.
+  if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
+  try { if (typeof _ensureCtxRunning === 'function') _ensureCtxRunning(); } catch(_){}
+  try {
+    const sfx = document.getElementById('start-sound');
+    if (sfx) {
+      sfx.currentTime = 0;
+      sfx.volume = Math.min(1, 0.85 * _sM);
+      sfx.play().catch(() => {});
+    }
+  } catch(_){}
+}
+window.playTitleClose = playTitleClose;
 
 // ═══════════════════════════════════════════════════════
 //  SIGNAL SALVAGE — REWARD WHEEL
@@ -19611,7 +20040,7 @@ function openSettings() {
   ov.classList.remove('hidden');
 }
 function closeSettings() {
-  playTitleTap();
+  playTitleClose();
   document.getElementById('settings-overlay').classList.add('hidden');
 }
 
@@ -19907,6 +20336,8 @@ function _triggerRetryWithSweep() {
 function startGame() {
   if (_gameStarting) return; // reentry guard — ignore double-taps / simultaneous inputs
   _gameStarting = true;
+  // Radio: bump run counter (used to unlock the shuffle station after run #3).
+  try { if (typeof incrementRadioRunCount === 'function') incrementRadioRunCount(); } catch(_) {}
   const _tlb = document.getElementById('title-leaderboard');
   if (_tlb) _tlb.classList.add('hidden');
   // Show onboarding on very first play
@@ -23049,6 +23480,9 @@ function killPlayer() {
                            : null;
 
   state.phase = 'dead';
+  // Radio: stop playback on death + try to unlock the shuffle station.
+  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  try { if (typeof tryUnlockRadioOnDeath === 'function') tryUnlockRadioOnDeath(); } catch(_) {}
   // Release the screen wake lock on death — game-over screen doesn't need it.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Defensive: release transition reentry locks so an in-flight startGame /
@@ -28312,6 +28746,14 @@ window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: nul
   // load before the dev tuner has been opened — in that case the live values
   // are already the baseline so the no-op is safe.
   window._applyThrusterPresetByKey = function(key) {
+    // BLINK (formerly baseline) preserves the original built-in look. The
+    // first time _any_ non-BLINK preset is applied (e.g. LIGHT, the new
+    // default), capture the live values into the baseline slot so the user
+    // can switch back to BLINK later. Without this, picking BLINK after
+    // boot would just no-op against whatever preset was last written.
+    if (key !== 'baseline' && typeof window._captureBaselineIfMissing === 'function') {
+      try { window._captureBaselineIfMissing(); } catch(_){}
+    }
     const P = (window._THRUSTER_PRESETS || {})[key];
     if (!P) return false;
     // Cone-mode flags are sticky: the cone preset (PYLON) sets
@@ -28359,7 +28801,9 @@ window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: nul
   window._applyEquippedThruster = function() {
     if (typeof loadThrusterData !== 'function') return;
     const d = loadThrusterData();
-    window._applyThrusterPresetByKey(d.selectedPreset || 'baseline');
+    // 'light' is the new default for new players; existing saves keep
+    // whatever they had stored.
+    window._applyThrusterPresetByKey(d.selectedPreset || 'light');
     window._applyThrusterColorByKey(d.selectedColor || 'default');
   };
 })();
@@ -31404,7 +31848,7 @@ function _ringShowTuner() {
     };
     // Lazy-capture baseline on first panel build (only if not already set).
     if (!_THR_PRESETS.baseline) {
-      _THR_PRESETS.baseline = Object.assign({ label: 'BASELINE' }, _captureLiveThrValues());
+      _THR_PRESETS.baseline = Object.assign({ label: 'BLINK' }, _captureLiveThrValues());
     }
     const _applyThrPreset = (key) => {
       const P = _THR_PRESETS[key];

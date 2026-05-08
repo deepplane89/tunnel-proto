@@ -98,7 +98,7 @@ function openSettings() {
   ov.classList.remove('hidden');
 }
 function closeSettings() {
-  playTitleTap();
+  playTitleClose();
   document.getElementById('settings-overlay').classList.add('hidden');
 }
 
