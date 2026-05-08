@@ -7,10 +7,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
 
+    // 120Hz ProMotion display link (iPhone 13 Pro and newer)
+    private var displayLink: CADisplayLink?
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Configure AVAudioSession so the WKWebView's Web Audio output mixes
-        // with other apps (Spotify/Apple Music) and respects the silent switch.
-        // .ambient = game-style audio: silenced by mute switch, mixes with others.
+        // ── AUDIO ─────────────────────────────────────────────────────────────
+        // .ambient = mixes with Spotify/Apple Music + respects silent switch
         do {
             try AVAudioSession.sharedInstance().setCategory(
                 .ambient,
@@ -21,41 +23,51 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         } catch {
             NSLog("[JetHorizon] AVAudioSession setup failed: \(error)")
         }
+
+        // ── PREVENT IDLE/THROTTLE ─────────────────────────────────────────────
+        // Stops iOS from dimming, sleeping, or down-clocking the GPU mid-play.
+        application.isIdleTimerDisabled = true
+
+        // ── 120Hz PROMOTION ───────────────────────────────────────────────────
+        // Request the highest available refresh rate on ProMotion devices
+        // (iPhone 13 Pro, 14 Pro, 15 Pro, 16 Pro). On non-ProMotion devices
+        // this is a no-op — they stay at 60Hz.
+        if #available(iOS 15.0, *) {
+            let link = CADisplayLink(target: self, selector: #selector(displayTick))
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+            link.add(to: .main, forMode: .common)
+            self.displayLink = link
+        }
+
         return true
     }
 
-    func applicationWillResignActive(_ application: UIApplication) {
-        // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
-        // Use this method to pause ongoing tasks, disable timers, and invalidate graphics rendering callbacks. Games should use this method to pause the game.
+    @objc private func displayTick() {
+        // No-op: just by existing this CADisplayLink tells the system the app
+        // wants 120Hz, which lifts the WebView/CAMetalLayer cap.
     }
+
+    func applicationWillResignActive(_ application: UIApplication) {}
 
     func applicationDidEnterBackground(_ application: UIApplication) {
-        // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
-        // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
+        // Re-enable idle timer when backgrounded so we don't drain battery
+        application.isIdleTimerDisabled = false
     }
 
-    func applicationWillEnterForeground(_ application: UIApplication) {
-        // Called as part of the transition from the background to the active state; here you can undo many of the changes made on entering the background.
-    }
+    func applicationWillEnterForeground(_ application: UIApplication) {}
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+        // Re-disable idle timer when returning to play
+        application.isIdleTimerDisabled = true
     }
 
-    func applicationWillTerminate(_ application: UIApplication) {
-        // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
-    }
+    func applicationWillTerminate(_ application: UIApplication) {}
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        // Called when the app was launched with a url. Feel free to add additional processing here,
-        // but if you want the App API to support tracking app url opens, make sure to keep this call
         return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
     }
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
-        // Called when the app was launched with an activity, including Universal Links.
-        // Feel free to add additional processing here, but if you want the App API to support
-        // tracking app url opens, make sure to keep this call
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 

@@ -78,6 +78,19 @@ function nativePlugin(name) {
 // Expose globally for use across the unity-build (concatenated) bundle.
 window.PLATFORM = PLATFORM;
 window.nativePlugin = nativePlugin;
+
+// Tag <html> with platform classes so CSS can target native-only rules
+// (e.g. disable text selection / callouts / tap highlight inside the
+// Capacitor app while leaving the web build untouched).
+(function tagPlatformOnHtml() {
+  try {
+    const root = document.documentElement;
+    if (!root) return;
+    if (PLATFORM.isNative)     root.classList.add('platform-native');
+    if (PLATFORM.isIOSNative)  root.classList.add('platform-ios-native');
+    if (PLATFORM.name)         root.classList.add('platform-' + PLATFORM.name);
+  } catch (_) {}
+})();
 // Menu open animation origin tracker.
 // On any pointer/click/touch, capture the screen coordinates and write them
 // as CSS custom properties (--menu-ox, --menu-oy) on :root. The shared
@@ -1391,17 +1404,48 @@ function getHandlingDrift() {
   return 1.0;
 }
 
-// Returns the starting-speed multiplier granted by the player's current
-// handling tier. Stock = 1.00, Full Control (lvl 22) = 1.55. Applied at
-// _setDRSpeed() in startGame() — also feeds the score tick (which scales with
-// live speed), so higher tiers = faster opening AND faster score climb.
-function getHandlingStartBoost() {
+// ── BOOST PROFILE (player-equippable handling tier) ─────────────────────
+// Each entry in HANDLING_TIERS is exposed in the garage as TIER 1, TIER 2, ...
+// Player can downshift to any unlocked tier on purpose (e.g. to play with a
+// gentler launch). Highest unlocked is auto-equipped on first claim; saved
+// choice is read from localStorage.
+const BOOST_PROFILE_KEY = 'jetslide_boost_tier';
+function getMaxUnlockedBoostTierIndex() {
   const level = loadPlayerLevel();
-  let boost = 1.0;
-  for (const t of HANDLING_TIERS) {
-    if (level >= t.level) boost = t.startBoost;
+  let idx = 0;
+  for (let i = 0; i < HANDLING_TIERS.length; i++) {
+    if (level >= HANDLING_TIERS[i].level) idx = i;
   }
-  return boost;
+  return idx;
+}
+function loadEquippedBoostTierIndex() {
+  const raw = window._LS.getItem(BOOST_PROFILE_KEY);
+  const max = getMaxUnlockedBoostTierIndex();
+  if (raw == null) return max; // default = highest unlocked (matches old behavior)
+  const v = parseInt(raw, 10);
+  if (isNaN(v) || v < 0) return 0;
+  // Clamp to max unlocked so an unlocked-then-locked scenario can't break.
+  return Math.min(v, max);
+}
+function saveEquippedBoostTierIndex(idx) {
+  if (typeof idx !== 'number' || idx < 0) return;
+  if (idx > getMaxUnlockedBoostTierIndex()) return;
+  window._LS.setItem(BOOST_PROFILE_KEY, String(idx));
+}
+window.loadEquippedBoostTierIndex = loadEquippedBoostTierIndex;
+window.saveEquippedBoostTierIndex = saveEquippedBoostTierIndex;
+window.getMaxUnlockedBoostTierIndex = getMaxUnlockedBoostTierIndex;
+window.HANDLING_TIERS = HANDLING_TIERS;
+
+// Returns the starting-speed multiplier from the player's EQUIPPED boost
+// tier (clamped to highest unlocked). Stock = 1.00, Full Control = 2.30.
+// Applied at _setDRSpeed() in startGame() — also feeds the score tick
+// (which scales with live speed), so higher tier = faster opening AND faster
+// score climb. Player can purposely equip a lower tier in the garage.
+function getHandlingStartBoost() {
+  const idx = loadEquippedBoostTierIndex();
+  const t = HANDLING_TIERS[idx] || HANDLING_TIERS[0];
+  return t.startBoost;
 }
 
 function getPendingHandlingUpgrade() {
@@ -17423,43 +17467,30 @@ function _fmStatPips(value) {
 }
 
 function _renderShopHandlingBar() {
-  const bar = document.getElementById('shop-handling-bar');
-  if (!bar) return;
+  const root = document.getElementById('shop-handling-bar');
+  if (!root) return;
   const FM = window._FLIGHT_MODELS;
   if (!FM) return;
   const level = loadPlayerLevel();
   const equippedName = (typeof loadEquippedFlightModel === 'function') ? loadEquippedFlightModel() : 'DEFAULT';
   const equipped = FM[equippedName] || FM.DEFAULT;
 
-  // Find next-unlocked model for the closed-state progress hint.
-  let nextEntry = null;
-  for (const [name, m] of Object.entries(FM)) {
-    if (m.unlock > level) {
-      if (!nextEntry || m.unlock < nextEntry.m.unlock) nextEntry = { name, m };
-    }
-  }
-  let fillPct = 100;
-  let nextText = 'ALL UNLOCKED';
-  if (nextEntry) {
-    // Progress from previous unlock threshold to next.
-    let prevUnlock = 1;
-    for (const m of Object.values(FM)) {
-      if (m.unlock <= level && m.unlock > prevUnlock) prevUnlock = m.unlock;
-    }
-    const needed = Math.max(1, nextEntry.m.unlock - prevUnlock);
-    const progress = Math.max(0, level - prevUnlock);
-    fillPct = Math.min(100, Math.round((progress / needed) * 100));
-    nextText = 'Next: ' + nextEntry.name + ' (Lv ' + nextEntry.m.unlock + ')';
-  }
+  // ── XP / level progress (replaces the old "Next: WIPEOUT (Lv 8)" hint) ──
+  // Player wanted the XP bar kept but tied to the player level itself, not
+  // to the next FM unlock. Bar reflects current XP toward next player level.
+  const xp = (typeof loadPlayerXP === 'function') ? loadPlayerXP() : 0;
+  const xpNeed = (typeof xpForLevel === 'function') ? xpForLevel(level) : 1000;
+  const xpFillPct = Math.min(100, Math.round((xp / Math.max(1, xpNeed)) * 100));
+  const xpText = 'L' + level + ' \u00B7 ' + xp + '/' + xpNeed + ' XP';
 
-  // Build menu rows.
-  let menuHTML = '';
+  // ── Flight Model menu rows ──
+  let fmMenuHTML = '';
   for (const [name, m] of Object.entries(FM)) {
     const unlocked = level >= m.unlock;
     const isEq = (name === equippedName) && unlocked;
     const cls = 'fm-row' + (isEq ? ' equipped' : '') + (unlocked ? '' : ' locked');
     const lockBadge = unlocked ? '' : '<span class="fm-lock">L' + m.unlock + ' \uD83D\uDD12</span>';
-    menuHTML +=
+    fmMenuHTML +=
       '<div class="' + cls + '" data-fm="' + name + '">' +
         '<div class="fm-row-head">' +
           '<span class="fm-name" style="color:' + m.color + '">' + name + '</span>' +
@@ -17473,55 +17504,97 @@ function _renderShopHandlingBar() {
       '</div>';
   }
 
-  // Preserve open/closed state across re-renders so equipping doesn't slam it shut.
-  const wasOpen = bar.classList.contains('open');
-  bar.classList.toggle('open', wasOpen);
-  bar.innerHTML =
-    '<button type="button" class="fm-head" aria-expanded="' + (wasOpen ? 'true' : 'false') + '">' +
-      '<div class="fm-head-l">' +
-        '<div class="shop-handling-label">FLIGHT MODEL</div>' +
-        '<div class="shop-handling-tier" style="color:' + equipped.color + '">' + equippedName + ' <span class="fm-caret">\u25BE</span></div>' +
-      '</div>' +
-      '<div class="fm-head-r">' +
-        '<div class="shop-handling-track"><div class="shop-handling-fill" style="width:' + fillPct + '%"></div></div>' +
-        '<div class="shop-handling-next">' + nextText + '</div>' +
-      '</div>' +
-    '</button>' +
-    '<div class="fm-menu">' + menuHTML + '</div>';
+  // ── Boost Profile menu rows ──
+  // Each HANDLING_TIERS entry becomes "TIER N". Locked entries grey out
+  // with the unlock level. Equipped row is highlighted (no ✓ text per the
+  // existing FM convention — highlight = equipped).
+  const HT = window.HANDLING_TIERS || [];
+  const eqBoostIdx = (typeof loadEquippedBoostTierIndex === 'function') ? loadEquippedBoostTierIndex() : 0;
+  const maxBoostIdx = (typeof getMaxUnlockedBoostTierIndex === 'function') ? getMaxUnlockedBoostTierIndex() : 0;
+  let boostMenuHTML = '';
+  for (let i = 0; i < HT.length; i++) {
+    const t = HT[i];
+    const unlocked = i <= maxBoostIdx;
+    const isEq = i === eqBoostIdx;
+    const cls = 'fm-row boost-row' + (isEq ? ' equipped' : '') + (unlocked ? '' : ' locked');
+    const lockBadge = unlocked ? '' : '<span class="fm-lock">L' + t.level + ' \uD83D\uDD12</span>';
+    boostMenuHTML +=
+      '<div class="' + cls + '" data-boost="' + i + '">' +
+        '<div class="fm-row-head">' +
+          '<span class="fm-name">TIER ' + (i + 1) + '</span>' +
+          lockBadge +
+        '</div>' +
+      '</div>';
+  }
+  const boostLabel = 'TIER ' + (eqBoostIdx + 1);
 
-  // ── Open/position helpers ────────────────────────────────────────
-  // The garage panel uses overflow:hidden on .sr-panel, so a normal-flow
-  // dropdown would get clipped. We position the menu with position:fixed,
-  // anchored to the bar, picking up vs down based on available space.
+  // ── Mount: section header + two bars (FM keeps XP bar, Boost has none) ──
+  // Both bars use the same `.fm-bar` + `.fm-head` + `.fm-menu` markup so the
+  // existing dropdown machinery (portal, open-up logic, outside-click) works
+  // for both via _setupFMDropdown() below. Open/closed state is preserved
+  // per-bar across re-renders.
+  const prevFMBar = root.querySelector('.fm-bar[data-kind="fm"]');
+  const prevBoostBar = root.querySelector('.fm-bar[data-kind="boost"]');
+  const wasFMOpen = !!(prevFMBar && prevFMBar.classList.contains('open'));
+  const wasBoostOpen = !!(prevBoostBar && prevBoostBar.classList.contains('open'));
+
+  root.innerHTML =
+    '<div class="shop-handling-section-title">SHIP HANDLING</div>' +
+    '<div class="fm-bar shop-handling-bar' + (wasFMOpen ? ' open' : '') + '" data-kind="fm">' +
+      '<button type="button" class="fm-head" aria-expanded="' + (wasFMOpen ? 'true' : 'false') + '">' +
+        '<div class="fm-head-l">' +
+          '<div class="shop-handling-label">FLIGHT MODEL</div>' +
+          '<div class="shop-handling-tier" style="color:' + equipped.color + '">' + equippedName + ' <span class="fm-caret">\u25BE</span></div>' +
+        '</div>' +
+        '<div class="fm-head-r">' +
+          '<div class="shop-handling-track"><div class="shop-handling-fill" style="width:' + xpFillPct + '%"></div></div>' +
+          '<div class="shop-handling-next">' + xpText + '</div>' +
+        '</div>' +
+      '</button>' +
+      '<div class="fm-menu">' + fmMenuHTML + '</div>' +
+    '</div>' +
+    '<div class="fm-bar shop-handling-bar boost-bar' + (wasBoostOpen ? ' open' : '') + '" data-kind="boost">' +
+      '<button type="button" class="fm-head" aria-expanded="' + (wasBoostOpen ? 'true' : 'false') + '">' +
+        '<div class="fm-head-l">' +
+          '<div class="shop-handling-label">BOOST PROFILE</div>' +
+          '<div class="shop-handling-tier">' + boostLabel + ' <span class="fm-caret">\u25BE</span></div>' +
+        '</div>' +
+      '</button>' +
+      '<div class="fm-menu">' + boostMenuHTML + '</div>' +
+    '</div>';
+
+  // ── Wire each bar (FM + Boost) with the same dropdown machinery ──
+  // The garage panel uses overflow:hidden on .sr-panel and a transformed,
+  // will-change:transform .sr-overlay ancestor that breaks position:fixed
+  // descendants on iOS, so we portal the menu to <body> while open. Same
+  // pattern as the original FM dropdown / COLOR dropdown.
+  root.querySelectorAll('.fm-bar').forEach(bar => {
+    _setupHandlingDropdown(bar);
+  });
+}
+
+// Per-bar dropdown wiring. Handles open/close, portal-to-body, outside-click,
+// resize, and row-click equip. Used by both FLIGHT MODEL and BOOST PROFILE.
+function _setupHandlingDropdown(bar) {
   const head = bar.querySelector('.fm-head');
   const menu = bar.querySelector('.fm-menu');
+  const kind = bar.getAttribute('data-kind') || 'fm';
   let _fmOpenedAt = 0;
   let _fmOpenW = 0;
   let _fmOpenH = 0;
-  // Portal-to-body anchors. .sr-overlay has `will-change: transform` and an
-  // ancestor pop animation that breaks `position: fixed` on descendants on
-  // iOS — the menu opened, then iOS recomputed the containing block during
-  // the overlay's transform tween and visually shifted/clipped the menu so
-  // it appeared to close. Solution: while open, move the menu DOM node to
-  // <body>, and restore it back into the bar on close. Same pattern that
-  // fixed the COLOR dropdown clip-path issue.
-  let _fmMenuHome = null;       // original parent (the bar)
-  let _fmMenuNext = null;       // original next-sibling for restoration
+  let _fmMenuHome = null;
+  let _fmMenuNext = null;
   let _fmMenuMounted = false;
-  function _fmPortalMount() {
+  function _portalMount() {
     if (!menu || _fmMenuMounted) return;
     _fmMenuHome = menu.parentNode;
     _fmMenuNext = menu.nextSibling;
     document.body.appendChild(menu);
-    // .fm-menu-portal flag mirrors all .shop-handling-bar .fm-menu styling
-    // so the menu keeps its aesthetic when the ancestor selector breaks.
-    // .open is also mirrored here because the bar's .open class can no
-    // longer reach the menu via descendant selector.
     menu.classList.add('fm-menu-portal');
     menu.classList.add('open');
     _fmMenuMounted = true;
   }
-  function _fmPortalUnmount() {
+  function _portalUnmount() {
     if (!menu || !_fmMenuMounted) return;
     menu.classList.remove('fm-menu-portal');
     menu.classList.remove('open');
@@ -17532,54 +17605,42 @@ function _renderShopHandlingBar() {
     }
     _fmMenuHome = null; _fmMenuNext = null; _fmMenuMounted = false;
   }
-  function _fmCloseMenu() {
+  function _close() {
     bar.classList.remove('open', 'open-up');
     if (menu) {
       menu.style.position = '';
       menu.style.left = ''; menu.style.top = ''; menu.style.bottom = '';
       menu.style.width = ''; menu.style.maxHeight = ''; menu.style.zIndex = '';
       menu.style.display = '';
-      // Re-attach back into the bar so .open + class-driven CSS still finds
-      // it on next open.
-      _fmPortalUnmount();
+      _portalUnmount();
     }
     if (head) head.setAttribute('aria-expanded', 'false');
-    document.removeEventListener('click', _fmOutside, true);
-    window.removeEventListener('resize', _fmResize);
+    document.removeEventListener('click', _outside, true);
+    window.removeEventListener('resize', _resize);
   }
-  // Outside-click detection. Use `click` (not pointerdown) — click fires
-  // AFTER touchend, only on real, completed user taps. iOS Safari does NOT
-  // fire phantom click events from the gesture recognizer the way it can
-  // emit synthetic pointerdowns. This eliminates the entire class of
-  // "opens then immediately closes" bugs caused by trailing pointer events
-  // on landscape (touch-action:none ancestors are particularly noisy).
-  function _fmOutside(e) {
+  function _outside(e) {
     if (performance.now() - _fmOpenedAt < 250) return;
     if (bar.contains(e.target)) return;
     if (menu && menu.contains(e.target)) return;
-    _fmCloseMenu();
+    _close();
   }
-  function _fmResize() {
-    // iOS Safari fires resize events as the URL/tool bars animate in/out —
-    // especially after a tap on landscape. Those are tiny (often <80px
-    // height tweaks) and would close us instantly. Only treat a resize as
-    // a real orientation flip if BOTH width and height deltas are large.
-    // True portrait↔landscape flips swap width and height, so both deltas
-    // are >> 100px. Anything else is just URL-bar noise.
+  function _resize() {
     const dw = Math.abs(window.innerWidth  - _fmOpenW);
     const dh = Math.abs(window.innerHeight - _fmOpenH);
-    if (dw > 150 && dh > 150) _fmCloseMenu();
+    if (dw > 150 && dh > 150) _close();
   }
-  function _fmOpenMenu() {
+  function _open() {
+    // Close any other open handling-bar first — only one open at a time so
+    // the two dropdowns don't visually fight in a small panel.
+    document.querySelectorAll('.fm-bar.open').forEach(b => {
+      if (b !== bar) b.classList.remove('open', 'open-up');
+    });
     _fmOpenedAt = performance.now();
     _fmOpenW = window.innerWidth;
     _fmOpenH = window.innerHeight;
     bar.classList.add('open');
     if (head) head.setAttribute('aria-expanded', 'true');
     if (!menu) return;
-    // Compute geometry while the menu is still in its original spot, then
-    // portal to <body> so no ancestor transform / clip-path / will-change
-    // can move it out from under the user.
     let r, openUp = false, below = 0, above = 0;
     try {
       r = bar.getBoundingClientRect();
@@ -17589,9 +17650,7 @@ function _renderShopHandlingBar() {
       above = r.top;
       openUp = below < need && above > below;
     } catch(_) { r = { left: 0, right: 0, top: 0, bottom: 0, width: 240 }; }
-    _fmPortalMount();
-    // .open is on the bar (controls .fm-menu display:block); since the menu
-    // is no longer a child of bar, force display directly.
+    _portalMount();
     menu.style.display = 'block';
     menu.style.position = 'fixed';
     menu.style.left  = r.left + 'px';
@@ -17608,19 +17667,15 @@ function _renderShopHandlingBar() {
       menu.style.bottom = 'auto';
       menu.style.maxHeight = Math.min(280, below - 8) + 'px';
     }
-    // Defer outside-click bind so the opening tap's click event doesn't
-    // immediately re-fire on document and close us. requestAnimationFrame
-    // lets the current event loop finish; the 250ms grace inside _fmOutside
-    // covers any further iOS-Safari weirdness.
     requestAnimationFrame(() => {
-      document.addEventListener('click', _fmOutside, true);
-      window.addEventListener('resize', _fmResize);
+      document.addEventListener('click', _outside, true);
+      window.addEventListener('resize', _resize);
     });
   }
   if (head) {
     _tapBind(head, () => {
-      if (bar.classList.contains('open')) _fmCloseMenu();
-      else _fmOpenMenu();
+      if (bar.classList.contains('open')) _close();
+      else _open();
     });
   }
   // Wire row clicks (equip if unlocked, reject sound if locked).
@@ -17630,12 +17685,20 @@ function _renderShopHandlingBar() {
       return;
     }
     _tapBind(row, () => {
-      const name = row.getAttribute('data-fm');
-      if (!name || !FM[name]) return;
-      if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(name);
-      // Flight-model (handling preset) select — SELECT confirm sound.
-      try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
-      _fmCloseMenu();
+      if (kind === 'boost') {
+        const idxStr = row.getAttribute('data-boost');
+        const idx = parseInt(idxStr, 10);
+        if (isNaN(idx)) return;
+        if (typeof saveEquippedBoostTierIndex === 'function') saveEquippedBoostTierIndex(idx);
+        try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
+      } else {
+        const name = row.getAttribute('data-fm');
+        const FM = window._FLIGHT_MODELS;
+        if (!name || !FM || !FM[name]) return;
+        if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(name);
+        try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
+      }
+      _close();
       _renderShopHandlingBar();
     });
   });

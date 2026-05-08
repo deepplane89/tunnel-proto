@@ -49,3 +49,16 @@ function nativePlugin(name) {
 // Expose globally for use across the unity-build (concatenated) bundle.
 window.PLATFORM = PLATFORM;
 window.nativePlugin = nativePlugin;
+
+// Tag <html> with platform classes so CSS can target native-only rules
+// (e.g. disable text selection / callouts / tap highlight inside the
+// Capacitor app while leaving the web build untouched).
+(function tagPlatformOnHtml() {
+  try {
+    const root = document.documentElement;
+    if (!root) return;
+    if (PLATFORM.isNative)     root.classList.add('platform-native');
+    if (PLATFORM.isIOSNative)  root.classList.add('platform-ios-native');
+    if (PLATFORM.name)         root.classList.add('platform-' + PLATFORM.name);
+  } catch (_) {}
+})();

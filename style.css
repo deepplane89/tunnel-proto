@@ -2664,11 +2664,34 @@ html, body {
 }
 
 /* Ship handling progress bar */
+/* ── SHIP HANDLING section (wraps both FLIGHT MODEL + BOOST PROFILE) ─── */
+#shop-handling-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px 0;
+}
+.shop-handling-section-title {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: rgba(255,255,255,0.55);
+  text-transform: uppercase;
+  padding: 0 4px;
+  margin-bottom: 2px;
+}
 .shop-handling-bar {
   padding: 8px 12px;
   background: rgba(255,255,255,0.04);
   border-radius: 6px;
-  margin: 0 0 8px 0;
+  margin: 0;
+}
+/* Boost Profile bar: no XP track, so head-r is unused. Tier label aligned right. */
+.shop-handling-bar.boost-bar .fm-head-r { display: none; }
+.shop-handling-bar.boost-bar .fm-head-l { flex: 1; }
+.shop-handling-bar.boost-bar .shop-handling-tier {
+  margin-bottom: 0;
+  color: #0ff;
 }
 .shop-handling-label {
   font-family: var(--font-display, 'Rajdhani', sans-serif);
@@ -5983,4 +6006,26 @@ body.sr-open #title-leaderboard {
   margin-top: 22px;
   font-size: 9px; letter-spacing: 2px;
   opacity: .4; text-transform: uppercase;
+}
+
+/* ═══════════════════════════════════════════════════
+   NATIVE iOS APP — WebView polish
+   ═══════════════════════════════════════════════════
+   Only applies inside the Capacitor app shell. Web build
+   (Vercel / mobile Safari) is unaffected.
+   - kill text selection / long-press callout / link preview
+   - kill tap highlight + double-tap zoom
+   - lock content from scrolling/bouncing
+*/
+html.platform-ios-native,
+html.platform-ios-native body,
+html.platform-ios-native * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+html.platform-ios-native body {
+  overscroll-behavior: none;
+  touch-action: manipulation;
 }
