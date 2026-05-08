@@ -2555,17 +2555,10 @@ html, body {
 #title-leaderboard-list {
   pointer-events: auto;
 }
-/* Mobile landscape safety net: even if JS misses a hide call, never block
-   the bottom-anchored TAP TO PLAY button. Force the whole leaderboard
-   click-through and keep it hidden. */
-@media (orientation: landscape) and (max-width: 1023px) {
-  .title-leaderboard,
-  #title-leaderboard,
-  #title-leaderboard-list {
-    display: none !important;
-    pointer-events: none !important;
-  }
-}
+/* Mobile landscape: leaderboard now shown (positioned by JS updateLB()).
+   The container itself stays click-through (.title-leaderboard has
+   pointer-events:none) so it never blocks TAP TO PLAY — only the inner
+   list is interactive. */
 .title-lb-header {
   font-family: monospace;
   font-size: 11px;
@@ -4597,6 +4590,9 @@ html, body {
   top: 80px;
   right: 0;
   width: 240px;
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: rgba(0,0,0,0.92);
   padding: 10px 12px;
   z-index: 9999;
@@ -4606,6 +4602,13 @@ html, body {
   border-left: 1px solid rgba(0,204,255,0.4);
   border-bottom: 1px solid rgba(0,204,255,0.4);
   border-radius: 0 0 0 8px;
+}
+/* Mobile landscape: short viewport — push tuner to top edge to use full height */
+@media (orientation: landscape) and (max-width: 1023px) {
+  .layout-tuner {
+    top: 8px;
+    max-height: calc(100vh - 16px);
+  }
 }
 .layout-tuner.hidden { display: none; }
 .layout-tuner .tuner-title {

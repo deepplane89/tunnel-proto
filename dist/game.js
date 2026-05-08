@@ -26491,11 +26491,12 @@ if (_origAdminToggle) {
   }
 
   // Portrait defaults
-  // titleY adjusted 2026-05-07: was -33, moved to -73 to bring title ~15px
-  // below the HUD bottom edge (per user). Fine-tune via triple-tap admin tuner.
-  const PORTRAIT   = { shipX: -1, shipY: -88, shipSize: 100, platX: 1, platY: 100, platSize: 180, labelX: 9,  labelY: -111, titleSize: 100, titleY: -73 };
-  // Mobile landscape defaults (phone on its side)
-  const LANDSCAPE  = { shipX: 2,  shipY: -52, shipSize: 300, platX: 1, platY: 37, platSize: 104, labelX: 13, labelY: -32, titleSize: 102, titleY: 87 };
+  // titleY -100 / lbYOffset 9 (user-tuned 2026-05-07).
+  const PORTRAIT   = { shipX: -1, shipY: -88, shipSize: 100, platX: 1, platY: 100, platSize: 180, labelX: 9,  labelY: -111, titleSize: 100, titleY: -100, lbYOffset: 9 };
+  // Mobile landscape defaults — mirrors desktop structure (title near HUD,
+  // leaderboard below it) but with smaller title size + tighter sizes for the
+  // short viewport. Leaderboard now SHOWN in landscape (was hidden).
+  const LANDSCAPE  = { shipX: 2, shipY: -1, shipSize: 180, platX: 1, platY: -17, platSize: 130, labelX: 13, labelY: -26, titleSize: 80,  titleY: -110, lbYOffset: -30 };
   // Desktop defaults
   // titleY adjusted 2026-05-07 (final): user-tuned to -130 to sit higher under
   // the HUD; leaderboard offset -30px from auto-anchor (set via lbYOffset below).
@@ -26538,11 +26539,9 @@ if (_origAdminToggle) {
       lb.classList.add('hidden');
       return;
     }
-    // Hide on mobile landscape
-    if (_isMobileLandscape()) {
-      lb.classList.add('hidden');
-      return;
-    }
+    // Mobile landscape: now SHOWN (per user request 2026-05-07). Was hidden
+    // historically because TAP TO PLAY sits at bottom; we cap the LB height
+    // tightly below to leave room.
     lb.classList.remove('hidden');
     // Desktop: position 12px below the JET HORIZON title element so the
     // leaderboard always sits in a predictable spot below the title — not
@@ -26570,15 +26569,17 @@ if (_origAdminToggle) {
         lb.style.bottom = '0';
       }
     } else {
-      // Portrait: anchor below the title element + 12px + offset, capped so
-      // it never spills over TAP TO PLAY on short screens.
+      // Portrait & mobile-landscape: anchor below the title element + 12px +
+      // offset, capped so it never spills over TAP TO PLAY at the bottom.
+      // Mobile landscape uses a tighter cap because the viewport is short.
+      const cap = _isMobileLandscape() ? 55 : 80;
       const tEl = document.querySelector('#title-screen .game-title');
       if (tEl) {
         const r = tEl.getBoundingClientRect();
         if (r && r.bottom > 0) {
           const pxFromTop = r.bottom + 12 + off;
           const pctFromTop = (pxFromTop / window.innerHeight) * 100;
-          lb.style.top = Math.min(Math.max(pctFromTop, 0), 80) + '%';
+          lb.style.top = Math.min(Math.max(pctFromTop, 0), cap) + '%';
           lb.style.bottom = '0';
         } else {
           lb.style.top = '68%';
