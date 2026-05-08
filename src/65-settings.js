@@ -119,25 +119,11 @@ function closeSettings() {
     if (typeof toggleLeaderboard === 'function') toggleLeaderboard();
   });
 
-  // Replay tutorial button
+  // Replay tutorial button — delegates to shared startTutorial() in 67-main-late.js
+  // so the auto-launch flow and the manual-replay flow stay identical.
   _tapBind(document.getElementById('replay-tutorial-btn'), () => {
-    window._LS.removeItem('jh_tutorial_done');
     closeSettings();
-    // Apply JL_v1 physics as tutorial baseline
-    const _tp = _PHYSICS_PRESETS['JL_v1'];
-    _accelBase     = _tp.accelBase;
-    _accelSnap     = _tp.accelSnap;
-    _maxVelBase    = _tp.maxVelBase;
-    _maxVelSnap    = _tp.maxVelSnap;
-    _bankMax       = _tp.bankMax;
-    _bankSmoothing = _tp.bankSmoothing;
-    _decelBasePct  = _tp.decelBasePct;
-    _decelFullPct  = _tp.decelFullPct;
-    state._tutorialActive = true;  // must be set BEFORE startGame() so prologue is suppressed
-    state._tutorialStep = -0.5;
-    startGame();
-    state._tutRocksSpawned = false;
-    state._tutRocksPassed = 0;
+    if (typeof window.startTutorial === 'function') window.startTutorial();
   });
 
   document.getElementById('settings-overlay').addEventListener('click', (e) => {
