@@ -19873,7 +19873,17 @@ window.addEventListener('keyup', e => {
 // resume + <audio> playback unless they're invoked synchronously from a tap.
 window.initTitleAudio = initTitleAudio;
 function initTitleAudio() {
-  if (audioCtx) { _ensureCtxRunning(); return; }  // already initialized
+  if (audioCtx) {
+    _ensureCtxRunning();
+    // Even when audioCtx already exists, gains may not be wired yet (e.g. the
+    // attemptAutoplay unlock path created the context inline without going
+    // through _initTrackGains). Wire them defensively here — _initTrackGains
+    // skips already-wired tracks so this is idempotent.
+    if (typeof _initTrackGains === 'function') {
+      try { _initTrackGains(); } catch (_) {}
+    }
+    return;
+  }
   // No latencyHint — see src/30-audio.js for rationale (default 'balanced'
   // buffer is more tolerant of stalls; 'interactive' caused glitchiness).
   const _CtxClass = window.AudioContext || window.webkitAudioContext;
@@ -19887,6 +19897,13 @@ function initTitleAudio() {
   titleMusic = titleMusic || document.getElementById('title-music');
   if (!l3Music) { l3Music = document.getElementById('l3-music'); setTrackVol('l3', 0); }
   if (!l4Music) { l4Music = document.getElementById('l4-music'); setTrackVol('l4', 0); }
+  // Wire each <audio> element through a Web Audio GainNode. iOS WKWebView
+  // ignores HTMLAudioElement.volume — GainNode is the only way to actually
+  // modulate music volume on mobile. Without this, music plays at whatever
+  // raw element volume was set, with no fade control.
+  if (typeof _initTrackGains === 'function') {
+    try { _initTrackGains(); } catch (_) {}
+  }
   // Only start title music if it isn't already playing (don't restart mid-track)
   if (!state.muted && titleMusic && titleMusic.paused) {
     titleMusic.currentTime = 0;
@@ -19913,14 +19930,15 @@ function initTitleAudio() {
     // gesture for SFX. Race we're fixing: user taps to start gameplay before
     // the once-only first-interaction listener has been installed.
     const unlock = () => {
-      if (!audioCtx) {
-        const _CtxClass = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new _CtxClass();
-        engineGain = audioCtx.createGain();
-        engineGain.gain.value = 0.0;
-        engineGain.connect(audioCtx.destination);
-        _initSFXBuffers();
-      }
+      // Delegate to initTitleAudio rather than duplicating the AudioContext +
+      // engineGain + SFX-buffers init inline. The inline version was missing
+      // _initTrackGains, which meant if this unlock path ran first (instead of
+      // the _firstInteraction listener below), audioCtx existed but trackGains
+      // never got wired — music played through HTMLAudioElement.volume only,
+      // which iOS WKWebView ignores entirely. Result: silent music on iOS
+      // until something else happened to call _initTrackGains via initAudio.
+      // initTitleAudio is idempotent and includes the full wiring chain.
+      try { if (typeof initTitleAudio === 'function') initTitleAudio(); } catch (_) {}
       _ensureCtxRunning();
       // If autoplay was blocked, this is also when title music actually starts.
       if (!state.muted && titleMusic && titleMusic.paused) {
