@@ -305,9 +305,9 @@ if (_origAdminToggle) {
   // Mobile landscape defaults (phone on its side)
   const LANDSCAPE  = { shipX: 2,  shipY: -52, shipSize: 300, platX: 1, platY: 37, platSize: 104, labelX: 13, labelY: -32, titleSize: 102, titleY: 87 };
   // Desktop defaults
-  // titleY adjusted 2026-05-07: was 87, moved to 40 so the title sits closer
-  // to the HUD with the leaderboard tucked below it (per user).
-  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: 40 };
+  // titleY adjusted 2026-05-07 (final): user-tuned to -130 to sit higher under
+  // the HUD; leaderboard offset -30px from auto-anchor (set via lbYOffset below).
+  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: -130, lbYOffset: -30 };
 
   let shipX, shipY, shipSize, platX, platY, platSize, labelX, labelY, titleSize, titleY;
 
@@ -413,6 +413,10 @@ if (_origAdminToggle) {
     platX = d.platX; platY = d.platY; platSize = d.platSize;
     labelX = d.labelX; labelY = d.labelY;
     titleSize = d.titleSize; titleY = d.titleY;
+    // Per-mode leaderboard Y offset (px nudge over title.bottom + 12 baseline).
+    // Falls back to 0 for modes that don't define one.
+    window._lbYOffset = (typeof d.lbYOffset === 'number') ? d.lbYOffset : 0;
+    setSlider('tune-lb-y', 'val-lb-y', window._lbYOffset);
     setSlider('tune-ship-y', 'val-ship-y', shipY);
     setSlider('tune-ship-x', 'val-ship-x', shipX);
     setSlider('tune-ship-size', 'val-ship-size', shipSize);
