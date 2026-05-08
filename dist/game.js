@@ -1571,7 +1571,7 @@ function claimHandlingUpgrade() {
 // Order: Glide → Wipeout → Rail → Jet. Jet is the final unlock around
 // 3/4 through the handling-level ladder (handling tops at L22, jet at L20).
 window._FLIGHT_MODELS = {
-  DEFAULT: { unlock: 1,  color: '#aaaaaa', resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
+  DEFAULT: { unlock: 1,  color: '#aaaaaa', resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.65, drift: 0.30 },
   GLIDE:   { unlock: 4,  color: '#7bbbff', resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
   WIPEOUT: { unlock: 8,  color: '#ff77aa', resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
   RAIL:    { unlock: 14, color: '#ffff77', resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },
@@ -18634,8 +18634,13 @@ function applyPowerup(typeIdx) {
       shieldLight.intensity = 0;
       // Force-field loop: starts at 0 during speed phase
       const _invSfx = document.getElementById('invincible-loop-sfx');
+      console.log('[INVINC-SFX] activate', { found: !!_invSfx, muted: state.muted, src: _invSfx && _invSfx.src, readyState: _invSfx && _invSfx.readyState });
       if (_invSfx && !state.muted) {
-        try { _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45; _invSfx.play().catch(()=>{}); } catch(_) {}
+        try {
+          _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45;
+          const _p = _invSfx.play();
+          if (_p && _p.then) _p.then(()=>console.log('[INVINC-SFX] play OK')).catch((e)=>console.warn('[INVINC-SFX] play FAIL', e && e.message));
+        } catch(e) { console.warn('[INVINC-SFX] throw', e && e.message); }
       }
       break;
     }
@@ -31859,7 +31864,7 @@ function _ringShowTuner() {
     // regardless of player level. drift=0 → no wobble (RAIL); drift=0.8 → loose (WIPEOUT).
     // Manual slider edits + reset clear the override (back to player-level driven).
     const _FEEL_PRESETS = {
-      DEFAULT: { resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
+      DEFAULT: { resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.65, drift: 0.30 },
       GLIDE:   { resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
       JET:     { resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
       RAIL:    { resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },

@@ -658,8 +658,13 @@ function applyPowerup(typeIdx) {
       shieldLight.intensity = 0;
       // Force-field loop: starts at 0 during speed phase
       const _invSfx = document.getElementById('invincible-loop-sfx');
+      console.log('[INVINC-SFX] activate', { found: !!_invSfx, muted: state.muted, src: _invSfx && _invSfx.src, readyState: _invSfx && _invSfx.readyState });
       if (_invSfx && !state.muted) {
-        try { _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45; _invSfx.play().catch(()=>{}); } catch(_) {}
+        try {
+          _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45;
+          const _p = _invSfx.play();
+          if (_p && _p.then) _p.then(()=>console.log('[INVINC-SFX] play OK')).catch((e)=>console.warn('[INVINC-SFX] play FAIL', e && e.message));
+        } catch(e) { console.warn('[INVINC-SFX] throw', e && e.message); }
       }
       break;
     }
