@@ -248,6 +248,9 @@ function _setupHandlingDropdown(bar) {
   }
   if (head) {
     _tapBind(head, () => {
+      // Match thruster panel sub-tab feedback (playGarageCycle) on every
+      // open/close tap of the SHIP HANDLING head.
+      try { if (typeof window.playGarageCycle === 'function') window.playGarageCycle(); } catch(_){}
       if (bar.classList.contains('open')) _close();
       else _open();
     });
