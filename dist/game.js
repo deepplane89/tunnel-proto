@@ -140,7 +140,36 @@ window.nativePlugin = nativePlugin;
 // panel build (see 72-main-late-mid.js). Keep it as `null` here.
 
 window._THRUSTER_PRESETS = {
-  // Captured at runtime — first panel build snapshots the live defaults.
+  // ── LIGHT PRESET ──
+  // (Listed first because it is now the default starting thruster.)
+  // Subtle, low-bloom, soft particles. Captured 2026-05-02.
+  light: {
+    label: 'LIGHT',
+    // Global
+    _thrPart_partOpacity: 0.48, _thrPart_miniPartOpacity: 0.48, _thrPart_posPinFrac: 0.14,
+    _thrusterScale: 0.80, _pointMatSize: 0.06, _miniPointMatSize: 0.09,
+    _nozzleBloomScale: 0.10, _nozzleBloomOpacity: 0.43, _nozzleBloom_whiteMix: 0.00,
+    _nozzleBloomPulse: 0.15,
+    _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
+    // Particles
+    _thrPart_bendInherit: 0.15, _thrPart_bendCatchup: 0.00,
+    _thrPart_midEnd: 0.10, _thrPart_midBoost: 0.00,
+    _thrPart_sizeBase: 0.05, _thrPart_sizeSpeed: 0.00,
+    _thrPart_bumpMult: 1.00, _thrPart_bumpEnd: 0.00, _thrPart_sizeJitter: 0.00,
+    _thrPart_lifeMin: 0.05, _thrPart_lifeJit: 0.05,
+    _thrPart_lifeBase: 0.20, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.07,
+    // Flame mesh
+    _thrFlame_coreEnd: 0.00, _thrFlame_coreRGB: 0.00, _thrFlame_midEnd: 0.10,
+    _thrFlame_sizeBase: 0.01, _thrFlame_sizeSpeed: 0.00,
+    _thrFlame_bumpMult: 1.00, _thrFlame_bumpEnd: 0.00,
+    _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.08,
+  },
+
+  // ── BLINK PRESET (formerly BASELINE / DEFAULT) ──
+  // The original built-in particle thruster look. Captured at runtime —
+  // first panel build (or the first _applyThrusterPresetByKey call) snapshots
+  // the live defaults into this slot. Renamed to BLINK so it can be a
+  // standard unlockable mission reward instead of the always-equipped fallback.
   baseline: null,
 
   // ── SHORT THRUSTER PRESET (MK Runner) ──
@@ -167,30 +196,6 @@ window._THRUSTER_PRESETS = {
     _thrFlame_sizeBase: 0.04, _thrFlame_sizeSpeed: 0.01,
     _thrFlame_bumpMult: 1.40, _thrFlame_bumpEnd: 0.07,
     _thrFlame_lifeMin: 0.05, _thrFlame_lifeJit: 0.06, _thrFlame_spawnJit: 0.02,
-  },
-
-  // ── LIGHT PRESET ──
-  // Captured 2026-05-02. Subtle, low-bloom, soft particles.
-  light: {
-    label: 'LIGHT',
-    // Global
-    _thrPart_partOpacity: 0.48, _thrPart_miniPartOpacity: 0.48, _thrPart_posPinFrac: 0.14,
-    _thrusterScale: 0.80, _pointMatSize: 0.06, _miniPointMatSize: 0.09,
-    _nozzleBloomScale: 0.10, _nozzleBloomOpacity: 0.43, _nozzleBloom_whiteMix: 0.00,
-    _nozzleBloomPulse: 0.15,
-    _miniBloomScale: 1.00, _miniBloomOpacity: 0.15, _miniBloomOpacitySpd: 0.15, _miniBloom_whiteMix: 0.00,
-    // Particles
-    _thrPart_bendInherit: 0.15, _thrPart_bendCatchup: 0.00,
-    _thrPart_midEnd: 0.10, _thrPart_midBoost: 0.00,
-    _thrPart_sizeBase: 0.05, _thrPart_sizeSpeed: 0.00,
-    _thrPart_bumpMult: 1.00, _thrPart_bumpEnd: 0.00, _thrPart_sizeJitter: 0.00,
-    _thrPart_lifeMin: 0.05, _thrPart_lifeJit: 0.05,
-    _thrPart_lifeBase: 0.20, _thrPart_lifeSpd: 0.00, _thrPart_spawnJit: 0.07,
-    // Flame mesh
-    _thrFlame_coreEnd: 0.00, _thrFlame_coreRGB: 0.00, _thrFlame_midEnd: 0.10,
-    _thrFlame_sizeBase: 0.01, _thrFlame_sizeSpeed: 0.00,
-    _thrFlame_bumpMult: 1.00, _thrFlame_bumpEnd: 0.00,
-    _thrFlame_lifeMin: 0.01, _thrFlame_lifeJit: 0.00, _thrFlame_spawnJit: 0.08,
   },
 
   // ── CONE THRUST PRESET ──
@@ -1202,24 +1207,27 @@ function saveSkinData(data) {
 // ── THRUSTER INVENTORY (presets + cosmetic colors) ───────────────────────────────
 // Storage shape:
 //   { selectedPreset, selectedColor, unlockedPresets:[], unlockedColors:[] }
-// 'baseline' preset and 'default' color are always unlocked.
+// 'light' preset and 'default' color are always unlocked (LIGHT is the new
+// starter thruster as of 2026-05-08; the original built-in look became the
+// unlockable BLINK preset, gated by the same mission slot LIGHT used to be).
 const THRUSTER_STORAGE_KEY = 'jh_thrusters';
 function loadThrusterData() {
   // 'coneThrust' is currently auto-unlocked for testing (no MISSION_LADDER gate).
   // Remove from defaults + the force-push below to re-gate it behind a mission.
   const defaults = {
-    selectedPreset: 'baseline',
+    selectedPreset: 'light',
     selectedColor:  'default',
-    unlockedPresets: ['baseline', 'coneThrust'],
+    unlockedPresets: ['light', 'coneThrust'],
     unlockedColors:  ['default'],
   };
   const raw = window._LS.getItem(THRUSTER_STORAGE_KEY);
   if (!raw) return defaults;
   try {
     const d = JSON.parse(raw);
-    if (!Array.isArray(d.unlockedPresets)) d.unlockedPresets = ['baseline'];
+    if (!Array.isArray(d.unlockedPresets)) d.unlockedPresets = ['light'];
     if (!Array.isArray(d.unlockedColors))  d.unlockedColors  = ['default'];
-    if (!d.unlockedPresets.includes('baseline')) d.unlockedPresets.push('baseline');
+    // LIGHT is now the always-available starter — force it into unlocks.
+    if (!d.unlockedPresets.includes('light')) d.unlockedPresets.push('light');
     if (!d.unlockedPresets.includes('coneThrust')) d.unlockedPresets.push('coneThrust');
     if (!d.unlockedColors.includes('default'))   d.unlockedColors.push('default');
     // Migration: drop unlocked entries that no longer exist in data tables
@@ -1230,7 +1238,7 @@ function loadThrusterData() {
       d.unlockedColors  = d.unlockedColors.filter(k => k in palette);
     } catch(_){}
     if (typeof d.selectedPreset !== 'string' || !d.unlockedPresets.includes(d.selectedPreset)) {
-      d.selectedPreset = 'baseline';
+      d.selectedPreset = 'light';
     }
     if (typeof d.selectedColor !== 'string' || !d.unlockedColors.includes(d.selectedColor)) {
       d.selectedColor = 'default';
@@ -1766,7 +1774,7 @@ const MISSION_LADDER = [
   { type:'mission', id:'shield2', desc:'Use shield 2 times in one run', check:(r)=>r.shields>=2 },
   { type:'mission', id:'drtier2', desc:'Reach speed tier 2 in DR', check:(r)=>r.isDR&&r.drTier>=2 },
   { type:'reward', reward:{ kind:'unlock', powerup:'invincible', label:'Unlock OVERDRIVE', fuelcells:100 } },
-  { type:'reward', reward:{ kind:'thruster', presetKey:'light', label:'Unlock LIGHT Thruster' } },
+  { type:'reward', reward:{ kind:'thruster', presetKey:'baseline', label:'Unlock BLINK Thruster' } },
   { type:'reward', reward:{ kind:'thrustercolor', colorKey:'cyan', label:'Unlock CYAN Thruster Color' } },
   { type:'mission', id:'runs15', desc:'Complete 15 runs', check:(r,lt)=>lt.runs>=15 },
   { type:'mission', id:'ltcoins500', desc:'Collect 500 total coins', check:(r,lt)=>lt.coins>=500 },
@@ -15921,7 +15929,9 @@ function updateStreakBadge() {
   }
 
   function _isPresetUnlocked(key) {
-    if (key === 'baseline' || _adminAll()) return true;
+    // 'light' (the new starter) and admin override are always unlocked.
+    // 'baseline' is now BLINK, a normal mission unlock — no special case.
+    if (key === 'light' || _adminAll()) return true;
     try {
       const td = loadThrusterData();
       return td.unlockedPresets.includes(key);
@@ -16069,11 +16079,11 @@ function updateStreakBadge() {
     if (!grid) return;
     const presets = window._THRUSTER_PRESETS || {};
     const reqs = _getUnlockReqs();
-    let selectedKey = 'baseline';
+    let selectedKey = 'light';
     let newSet = [];
     try {
       const td = loadThrusterData() || {};
-      selectedKey = td.selectedPreset || 'baseline';
+      selectedKey = td.selectedPreset || 'light';
       newSet = Array.isArray(td.newPresets) ? td.newPresets : [];
     } catch(_){}
     let html = '';
@@ -16082,7 +16092,7 @@ function updateStreakBadge() {
       const unlocked = _isPresetUnlocked(key);
       const isActive = (key === selectedKey) && unlocked;
       const isNew    = unlocked && newSet.indexOf(key) >= 0;
-      const rawLabel = (P && P.label) ? P.label : (key === 'baseline' ? 'DEFAULT' : key);
+      const rawLabel = (P && P.label) ? P.label : (key === 'baseline' ? 'BLINK' : key);
       const baseLabel = String(rawLabel).toUpperCase();
       const name = String(baseLabel).replace(/</g, '&lt;');
       let stateLabel = '';
@@ -16773,13 +16783,16 @@ function updateStreakBadge() {
   // of the current live values so selecting 'baseline' after another preset
   // actually restores. Mirrors the dev tuner's _captureLiveThrValues but does
   // not require opening the G-key panel.
+  // Exposed as window._captureBaselineIfMissing so _applyThrusterPresetByKey
+  // can grab the snapshot before applying LIGHT (the new default) on first
+  // boot — otherwise the BLINK look would be lost.
   function _captureBaselineIfMissing() {
     try {
       const presets = window._THRUSTER_PRESETS || {};
       if (presets.baseline) return;
       const allKeys = new Set();
       Object.values(presets).forEach(p => { if (p) Object.keys(p).forEach(k => allKeys.add(k)); });
-      const snap = { label: 'BASELINE' };
+      const snap = { label: 'BLINK' };
       allKeys.forEach(k => {
         if (k === 'label') return;
         if (k === '_pointMatSize') {
@@ -16798,6 +16811,8 @@ function updateStreakBadge() {
       presets.baseline = snap;
     } catch(_){}
   }
+  // Expose so other modules (e.g. _applyThrusterPresetByKey) can pre-capture.
+  try { window._captureBaselineIfMissing = _captureBaselineIfMissing; } catch(_){}
 
   // Build one particle+bloom system in titleScene; returns its handle.
   function _buildPodSystem(N, tex, isMini) {
@@ -28675,6 +28690,14 @@ window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: nul
   // load before the dev tuner has been opened — in that case the live values
   // are already the baseline so the no-op is safe.
   window._applyThrusterPresetByKey = function(key) {
+    // BLINK (formerly baseline) preserves the original built-in look. The
+    // first time _any_ non-BLINK preset is applied (e.g. LIGHT, the new
+    // default), capture the live values into the baseline slot so the user
+    // can switch back to BLINK later. Without this, picking BLINK after
+    // boot would just no-op against whatever preset was last written.
+    if (key !== 'baseline' && typeof window._captureBaselineIfMissing === 'function') {
+      try { window._captureBaselineIfMissing(); } catch(_){}
+    }
     const P = (window._THRUSTER_PRESETS || {})[key];
     if (!P) return false;
     // Cone-mode flags are sticky: the cone preset (PYLON) sets
@@ -28722,7 +28745,9 @@ window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: nul
   window._applyEquippedThruster = function() {
     if (typeof loadThrusterData !== 'function') return;
     const d = loadThrusterData();
-    window._applyThrusterPresetByKey(d.selectedPreset || 'baseline');
+    // 'light' is the new default for new players; existing saves keep
+    // whatever they had stored.
+    window._applyThrusterPresetByKey(d.selectedPreset || 'light');
     window._applyThrusterColorByKey(d.selectedColor || 'default');
   };
 })();
@@ -31767,7 +31792,7 @@ function _ringShowTuner() {
     };
     // Lazy-capture baseline on first panel build (only if not already set).
     if (!_THR_PRESETS.baseline) {
-      _THR_PRESETS.baseline = Object.assign({ label: 'BASELINE' }, _captureLiveThrValues());
+      _THR_PRESETS.baseline = Object.assign({ label: 'BLINK' }, _captureLiveThrValues());
     }
     const _applyThrPreset = (key) => {
       const P = _THR_PRESETS[key];

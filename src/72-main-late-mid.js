@@ -2035,6 +2035,14 @@ window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: nul
   // load before the dev tuner has been opened — in that case the live values
   // are already the baseline so the no-op is safe.
   window._applyThrusterPresetByKey = function(key) {
+    // BLINK (formerly baseline) preserves the original built-in look. The
+    // first time _any_ non-BLINK preset is applied (e.g. LIGHT, the new
+    // default), capture the live values into the baseline slot so the user
+    // can switch back to BLINK later. Without this, picking BLINK after
+    // boot would just no-op against whatever preset was last written.
+    if (key !== 'baseline' && typeof window._captureBaselineIfMissing === 'function') {
+      try { window._captureBaselineIfMissing(); } catch(_){}
+    }
     const P = (window._THRUSTER_PRESETS || {})[key];
     if (!P) return false;
     // Cone-mode flags are sticky: the cone preset (PYLON) sets
@@ -2082,7 +2090,9 @@ window._invalidateMkWarpCache = function() { _mkWarpCache = { v: false, raw: nul
   window._applyEquippedThruster = function() {
     if (typeof loadThrusterData !== 'function') return;
     const d = loadThrusterData();
-    window._applyThrusterPresetByKey(d.selectedPreset || 'baseline');
+    // 'light' is the new default for new players; existing saves keep
+    // whatever they had stored.
+    window._applyThrusterPresetByKey(d.selectedPreset || 'light');
     window._applyThrusterColorByKey(d.selectedColor || 'default');
   };
 })();
