@@ -144,6 +144,45 @@ function closeSettings() {
     if (e.target.id === 'settings-overlay') closeSettings();
   });
 
+  // Reset Game button — wipes all local progress (skins, missions, fuel cells,
+  // thrusters, upgrades, headstarts, tutorial flag, radio unlock, etc.).
+  // Two-tap confirm: first tap arms (button turns red, label CONFIRM?), second
+  // tap within 4s actually wipes. Tap anywhere else (or wait) to cancel.
+  const resetBtn = document.getElementById('settings-reset-btn');
+  if (resetBtn) {
+    let _armed = false;
+    let _armTimer = null;
+    function disarm() {
+      _armed = false;
+      resetBtn.textContent = 'RESET GAME';
+      resetBtn.classList.remove('armed');
+      if (_armTimer) { clearTimeout(_armTimer); _armTimer = null; }
+    }
+    _tapBind(resetBtn, () => {
+      if (!_armed) {
+        _armed = true;
+        resetBtn.textContent = 'CONFIRM?';
+        resetBtn.classList.add('armed');
+        _armTimer = setTimeout(disarm, 4000);
+        return;
+      }
+      // Confirmed — wipe.
+      try {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k) continue;
+          if (k.startsWith('jh_') || k.startsWith('jet-horizon') || k.startsWith('jetslide')) {
+            keys.push(k);
+          }
+        }
+        keys.forEach(k => { try { localStorage.removeItem(k); } catch(_) {} });
+      } catch(_) {}
+      // Hard reload to fully reinit state with cleared storage.
+      try { location.reload(); } catch(_) { window.location.href = window.location.href; }
+    });
+  }
+
   // Music volume slider
   document.getElementById('vol-music').addEventListener('input', (e) => {
     _settings.musicVol = parseInt(e.target.value);

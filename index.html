@@ -445,6 +445,10 @@
       <label>Leaderboard</label>
       <button id="settings-leaderboard-btn" class="toggle-btn">VIEW</button>
     </div>
+    <div class="settings-row">
+      <label>Reset</label>
+      <button id="settings-reset-btn" class="toggle-btn settings-reset-btn">RESET GAME</button>
+    </div>
     <div class="settings-footer">
       <button id="replay-tutorial-btn" style="background:none;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.5);font-family:monospace;font-size:11px;letter-spacing:2px;padding:8px 16px;border-radius:4px;cursor:pointer;width:100%;margin-bottom:10px;">TUTORIAL</button>
       <a href="./privacy.html" target="_blank" class="settings-link">Privacy Policy</a>
@@ -473,9 +477,12 @@
   <div class="pause-content">
     <div class="pause-title">PAUSED</div>
     <div id="pause-radio-row" class="pause-radio-row hidden">
-      <span class="pause-radio-icon">♫</span>
       <span class="pause-radio-name" id="pause-radio-name">—</span>
-      <button id="pause-radio-skip" class="pause-radio-skip" aria-label="Skip track">⏭</button>
+      <div class="pause-radio-controls">
+        <button id="pause-radio-prev" class="pause-radio-btn" aria-label="Previous track">⏮</button>
+        <button id="pause-radio-toggle" class="pause-radio-btn" aria-label="Play/Pause">⏸</button>
+        <button id="pause-radio-skip" class="pause-radio-btn" aria-label="Next track">⏭</button>
+      </div>
     </div>
     <div class="pause-actions">
       <button class="btn-space" onclick="playResumeSound(); togglePause()">CONTINUE</button>
@@ -614,6 +621,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1778279185"></script>
+<script type="module" src="./dist/game.js?v=1778216737"></script>
 </body>
 </html>
