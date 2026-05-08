@@ -140,8 +140,9 @@ function _playRadioIdx(idx) {
   try { radioMusic.currentTime = 0; } catch(_) {}
   // Volume is gated by the gain node ('radio' track) — don't fight it here.
   radioMusic.play().catch(() => {});
-  // Notify pause-menu UI to refresh "now playing".
+  // Notify pause-menu + title-HUD UI to refresh "now playing" / glyph state.
   try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_) {}
+  try { if (typeof updateTitleRadioToggle === 'function') updateTitleRadioToggle(); } catch(_) {}
 }
 
 function startRadio() {
@@ -235,12 +236,72 @@ window.radioInterceptMusicFade = radioInterceptMusicFade;
 
 // ── UI: title-screen RADIO button visibility ────────────────────────────
 function refreshRadioButton() {
-  const btn = document.getElementById('radio-btn');
-  if (!btn) return;
-  if (isRadioUnlocked()) btn.classList.remove('hidden');
-  else                   btn.classList.add('hidden');
+  const wrap = document.getElementById('title-radio-controls');
+  if (!wrap) return;
+  if (isRadioUnlocked()) wrap.classList.remove('hidden');
+  else                   wrap.classList.add('hidden');
+  // Sync the play/pause glyph with current state.
+  try { if (typeof updateTitleRadioToggle === 'function') updateTitleRadioToggle(); } catch(_) {}
 }
 window.refreshRadioButton = refreshRadioButton;
+
+function updateTitleRadioToggle() {
+  const btn = document.getElementById('title-radio-toggle');
+  if (!btn) return;
+  const playing = !!(radioMusic && !radioMusic.paused && isRadioOn());
+  btn.textContent = playing ? '\u23F8' : '\u25B6';
+  btn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+}
+window.updateTitleRadioToggle = updateTitleRadioToggle;
+
+// Title-screen play: if radio is off, turn it on; fade title music down so
+// radio takes over. Mirrors the gameplay radioInterceptMusicFade override
+// but for the title track specifically.
+function titleRadioPlay() {
+  if (typeof initAudio === 'function') initAudio();
+  if (!isRadioOn()) setRadioOn(true);
+  // Duck/pause title music so radio is what you hear.
+  try {
+    if (typeof titleMusic !== 'undefined' && titleMusic && !titleMusic.paused) {
+      if (typeof rampTrackVol === 'function') rampTrackVol('title', 0, 0.25);
+      setTimeout(() => { try { if (titleMusic && !titleMusic.paused) titleMusic.pause(); } catch(_){} }, 280);
+    }
+  } catch(_) {}
+  if (!radioMusic) radioMusic = document.getElementById('radio-music');
+  if (!radioMusic) return;
+  if (radioMusic.paused) {
+    if (_radioCurrentIdx < 0) _playRadioIdx(_nextRadioIdx());
+    else { try { radioMusic.play().catch(()=>{}); } catch(_){} }
+  }
+  try { if (typeof setTrackVol === 'function') setTrackVol('radio', TRACK_VOL.radio); } catch(_){}
+  updateTitleRadioToggle();
+}
+window.titleRadioPlay = titleRadioPlay;
+
+// Title-screen pause: pause radio + bring title music back.
+function titleRadioPause() {
+  if (radioMusic && !radioMusic.paused) { try { radioMusic.pause(); } catch(_){} }
+  // Restore title music if we're on the title screen.
+  try {
+    if (typeof titleMusic !== 'undefined' && titleMusic && typeof state !== 'undefined' &&
+        (state.phase === 'title' || state.phase === 'dead')) {
+      if (typeof setTrackVol === 'function') setTrackVol('title', 0);
+      titleMusic.play().catch(()=>{});
+      if (typeof rampTrackVol === 'function' && typeof TRACK_VOL !== 'undefined') {
+        rampTrackVol('title', TRACK_VOL.title, 0.4);
+      }
+    }
+  } catch(_) {}
+  updateTitleRadioToggle();
+}
+window.titleRadioPause = titleRadioPause;
+
+function titleRadioToggle() {
+  const playing = !!(radioMusic && !radioMusic.paused && isRadioOn());
+  if (playing) titleRadioPause();
+  else         titleRadioPlay();
+}
+window.titleRadioToggle = titleRadioToggle;
 
 // ── UI: radio overlay (title-screen only) ──────────────────────────────
 let _radioPreviewIdx = -1;   // currently-previewing track in the overlay
@@ -356,9 +417,10 @@ function updatePauseRadioRow() {
 }
 window.updatePauseRadioRow = updatePauseRadioRow;
 
-// Wire pause-menu radio buttons once DOM is parsed.
-(function wirePauseRadioControls() {
+// Wire pause-menu + title-HUD radio buttons once DOM is parsed.
+(function wireRadioControls() {
   function _wire() {
+    // Pause-menu controls.
     const prevBtn   = document.getElementById('pause-radio-prev');
     const toggleBtn = document.getElementById('pause-radio-toggle');
     const skipBtn   = document.getElementById('pause-radio-skip');
@@ -384,6 +446,50 @@ window.updatePauseRadioRow = updatePauseRadioRow;
         e.stopPropagation();
         if (typeof skipRadioTrack === 'function') skipRadioTrack();
         updatePauseRadioRow();
+      });
+    }
+    // Title-HUD controls (only present after radio unlock).
+    const tPrev   = document.getElementById('title-radio-prev');
+    const tToggle = document.getElementById('title-radio-toggle');
+    const tSkip   = document.getElementById('title-radio-skip');
+    // Title controls double as title-screen taps so they should play the
+    // standard title click sound.
+    function _titleClick() {
+      try { if (typeof playTitleTap === 'function') playTitleTap(); } catch(_) {}
+    }
+    if (tPrev && !tPrev._wired) {
+      tPrev._wired = true;
+      tPrev.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _titleClick();
+        // If radio isn't on yet, prev = start playing the latest queued track.
+        if (!isRadioOn() || (radioMusic && radioMusic.paused)) {
+          if (typeof titleRadioPlay === 'function') titleRadioPlay();
+        } else if (typeof prevRadioTrack === 'function') {
+          prevRadioTrack();
+        }
+        updateTitleRadioToggle();
+      });
+    }
+    if (tToggle && !tToggle._wired) {
+      tToggle._wired = true;
+      tToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _titleClick();
+        if (typeof titleRadioToggle === 'function') titleRadioToggle();
+      });
+    }
+    if (tSkip && !tSkip._wired) {
+      tSkip._wired = true;
+      tSkip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _titleClick();
+        if (!isRadioOn() || (radioMusic && radioMusic.paused)) {
+          if (typeof titleRadioPlay === 'function') titleRadioPlay();
+        } else if (typeof skipRadioTrack === 'function') {
+          skipRadioTrack();
+        }
+        updateTitleRadioToggle();
       });
     }
   }
