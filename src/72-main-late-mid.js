@@ -261,13 +261,15 @@ if (_origAdminToggle) {
 
 // ── LAYOUT TUNER ──────────────────────────────────────────────────────────
 (function() {
-  // Triple-tap skin label to toggle
+  // Triple-tap title (.game-title) to toggle the layout tuner. Lives on the
+  // same element as the admin-panel triple-tap (78-tuner-panels.js) — both
+  // listeners run independently so 3 taps reveals BOTH admin panel + tuner.
   let tapCount = 0, tapTimer = null;
-  const skinLabel = document.getElementById('skin-viewer-label');
+  const titleTapEl = document.querySelector('.game-title');
   const tunerPanel = document.getElementById('layout-tuner');
-  if (!skinLabel || !tunerPanel) return;
+  if (!titleTapEl || !tunerPanel) return;
 
-  skinLabel.addEventListener('click', () => {
+  titleTapEl.addEventListener('click', () => {
     tapCount++;
     if (tapCount === 3) {
       tapCount = 0;
@@ -275,7 +277,7 @@ if (_origAdminToggle) {
       tunerPanel.classList.toggle('hidden');
     } else {
       clearTimeout(tapTimer);
-      tapTimer = setTimeout(() => { tapCount = 0; }, 500);
+      tapTimer = setTimeout(() => { tapCount = 0; }, 600);
     }
   });
 
@@ -354,12 +356,16 @@ if (_origAdminToggle) {
     // leaderboard always sits in a predictable spot below the title — not
     // "slotted near top of screen over a bunch of stuff". Falls back to a
     // sensible % if the title isn't measurable yet (first paint race).
+    // _lbYOffset is a tuner-driven px nudge applied on top of the anchored
+    // baseline (title.bottom + 12). 0 = default. Persisted on window so the
+    // resize-driven re-anchor keeps using the user's chosen offset.
+    const off = (typeof window._lbYOffset === 'number') ? window._lbYOffset : 0;
     if (_isDesktop()) {
       const tEl = document.querySelector('#title-screen .game-title');
       if (tEl) {
         const r = tEl.getBoundingClientRect();
         if (r && r.bottom > 0) {
-          lb.style.top = (r.bottom + 12) + 'px';
+          lb.style.top = (r.bottom + 12 + off) + 'px';
           lb.style.bottom = '0';
         } else {
           // Title not laid out yet — retry next frame.
@@ -372,16 +378,15 @@ if (_origAdminToggle) {
         lb.style.bottom = '0';
       }
     } else {
-      // Portrait: anchor below the title element + 12px so it never overlaps
-      // the JET HORIZON text or the TAP TO PLAY button below the ship.
+      // Portrait: anchor below the title element + 12px + offset, capped so
+      // it never spills over TAP TO PLAY on short screens.
       const tEl = document.querySelector('#title-screen .game-title');
       if (tEl) {
         const r = tEl.getBoundingClientRect();
         if (r && r.bottom > 0) {
-          // Cap at 72% so it never spills over TAP TO PLAY on short screens.
-          const pxFromTop = r.bottom + 12;
+          const pxFromTop = r.bottom + 12 + off;
           const pctFromTop = (pxFromTop / window.innerHeight) * 100;
-          lb.style.top = Math.min(pctFromTop, 72) + '%';
+          lb.style.top = Math.min(Math.max(pctFromTop, 0), 80) + '%';
           lb.style.bottom = '0';
         } else {
           lb.style.top = '68%';
@@ -459,9 +464,12 @@ if (_origAdminToggle) {
   bind('tune-label-x', 'val-label-x', v => { labelX = v; updateLabel(); });
   bind('tune-title-size', 'val-title-size', v => { titleSize = v; updateTitle(); });
   bind('tune-title-y', 'val-title-y', v => { titleY = v; updateTitle(); });
+  // LB Y Offset: nudge leaderboard up/down in px relative to the auto-anchor
+  // (title.bottom + 12). Re-runs updateLB() so resize/orientation flips keep
+  // honoring the user's chosen offset.
   bind('tune-lb-y', 'val-lb-y', v => {
-    const lb = document.getElementById('title-leaderboard');
-    if (lb) lb.style.top = v + '%';
+    window._lbYOffset = v;
+    updateLB();
   });
 
   // 3D ship orientation sliders (values stored as integers, divided to get floats)
