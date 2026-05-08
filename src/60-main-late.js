@@ -140,6 +140,9 @@ function returnToTitle() {
   state.phase = 'title';
   // Radio: ensure shuffle station is fully stopped before title music kicks in.
   try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  // Defensive: refresh radio button visibility on every title return so an
+  // earlier load-time race that left it hidden self-heals.
+  try { if (typeof refreshRadioButton === 'function') refreshRadioButton(); } catch(_) {}
   // Release the screen wake lock — not needed on title/garage.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Release the thruster color lock so the title vibe (and the title

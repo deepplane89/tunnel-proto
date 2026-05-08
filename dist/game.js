@@ -12711,10 +12711,16 @@ window.updatePauseRadioRow = updatePauseRadioRow;
 })();
 
 // Refresh the title button on load (in case it was already unlocked).
+// Defensive: fire on multiple lifecycle hooks because the single-shot
+// DOMContentLoaded path was racing on iOS — sometimes radio-btn was
+// still hidden until the player ran a round and returned to title.
 (function refreshOnLoad() {
   function _go() { try { refreshRadioButton(); } catch(_) {} }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _go);
   else _go();
+  // Also retry on next rAF (after layout) and on window load (after assets).
+  try { requestAnimationFrame(_go); } catch(_) {}
+  try { window.addEventListener('load', _go, { once: true }); } catch(_) {}
 })();
   if (state.muted) return;
   _ensureCtxRunning();
@@ -18661,6 +18667,9 @@ function returnToTitle() {
   state.phase = 'title';
   // Radio: ensure shuffle station is fully stopped before title music kicks in.
   try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  // Defensive: refresh radio button visibility on every title return so an
+  // earlier load-time race that left it hidden self-heals.
+  try { if (typeof refreshRadioButton === 'function') refreshRadioButton(); } catch(_) {}
   // Release the screen wake lock — not needed on title/garage.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Release the thruster color lock so the title vibe (and the title
