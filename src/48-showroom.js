@@ -941,11 +941,10 @@
         }
         // User zoom override: slider 40-160 (100 = baseline). Per-orientation
         // storage so portrait vs landscape have independent zoom settings.
-        // Default zoom by orientation: landscape uses 160 (max zoom-in)
-        // because the wide stage otherwise leaves the ship looking small;
-        // portrait uses 145 — ship reads big on phone screens.
+        // Default zoom: 160 (max zoom-in) for both orientations — ship reads
+        // big in both portrait and landscape stages without clipping.
         const orient = _orient();
-        let zoomPct = (orient === 'l') ? 160 : 145;
+        let zoomPct = 160;
         try {
           const raw = localStorage.getItem('jh_showroom_zoom_' + orient);
           if (raw != null) {
