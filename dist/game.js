@@ -860,8 +860,16 @@ function _tapBind(el, fn, opts) {
   if (!el) return;
   const passive = !(opts && opts.preventDefault);
   let _firedAt = 0;
+  // Debounce window: ignore repeat pointerdowns within 250ms of the last fire.
+  // iOS Capacitor + WKWebView can emit phantom pointerdowns from gesture state
+  // (Reachability swipes, palm contact, scroll bounce). Without this guard the
+  // handler fires multiple times for what the user perceives as a single tap,
+  // which manifested as the tap-to-play SFX 'randomly looping' on title.
+  const _DEBOUNCE_MS = 250;
   const handler = (e) => {
-    _firedAt = performance.now();
+    const now = performance.now();
+    if (now - _firedAt < _DEBOUNCE_MS) return;
+    _firedAt = now;
     if (opts && opts.preventDefault) { try { e.preventDefault(); } catch (_) {} }
     fn(e);
   };
