@@ -6445,3 +6445,16 @@ html.platform-ios-native body {
     padding-bottom: 6px;
   }
 }
+
+/* iOS native portrait — pull the bottom edge of the garage sr-panel up
+   and into the safe area so its border isn't clipped by the home-bar
+   region or by the 50vh budget itself. Scoped tightly so landscape +
+   web build are untouched. */
+@media (orientation: portrait) {
+  html.platform-ios-native .sr-overlay .sr-panel {
+    /* Reserve space for the iPhone home indicator + a tiny visual gap */
+    margin-bottom: max(env(safe-area-inset-bottom), 8px);
+    /* Cap a hair under 50vh so the final border line always renders */
+    max-height: calc(50vh - 4px);
+  }
+}
