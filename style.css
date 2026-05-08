@@ -2722,6 +2722,39 @@ html, body {
   color: #ffcc00;
   text-transform: uppercase;
 }
+/* BOOST POWER row inside the SHIP HANDLING menu (above the FM rows). Not
+   selectable; just shows the auto-pinned tier so the garage layout doesn't
+   need a separate badge above the dropdown. */
+.shop-handling-bar .fm-boost-header,
+.fm-menu-portal .fm-boost-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  margin-bottom: 6px;
+  background: rgba(255, 204, 0, 0.06);
+  border: 1px solid rgba(255, 204, 0, 0.30);
+  border-radius: 4px;
+  pointer-events: none;
+}
+.shop-handling-bar .fm-boost-header-lbl,
+.fm-menu-portal .fm-boost-header-lbl {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  color: rgba(255,255,255,0.55);
+  text-transform: uppercase;
+}
+.shop-handling-bar .fm-boost-header-val,
+.fm-menu-portal .fm-boost-header-val {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  color: #ffcc00;
+  text-transform: uppercase;
+}
 .shop-handling-label {
   font-family: var(--font-display, 'Rajdhani', sans-serif);
   font-size: 11px;

@@ -79,17 +79,19 @@ function _renderShopHandlingBar() {
   const xpFillPct = Math.min(100, Math.round((xp / Math.max(1, xpNeed)) * 100));
   const xpText = 'L' + level + ' \u00B7 ' + xp + '/' + xpNeed + ' XP';
 
-  // ── BOOST POWER badge (read-only) ──
-  // Auto-pinned to highest unlocked tier; not selectable. Force-sync the
-  // saved equipped index so getHandlingStartBoost() returns the right base.
+  // ── BOOST POWER (read-only, auto-pinned to highest unlocked tier) ──
+  // No standalone badge anymore — it gets rendered as a header row at the
+  // top of the SHIP HANDLING menu (above the FM rows) so the garage doesn't
+  // grow vertically and clip in landscape. Still force-sync the saved
+  // equipped index so getHandlingStartBoost() returns the right base.
   const maxBoostIdx = (typeof getMaxUnlockedBoostTierIndex === 'function') ? getMaxUnlockedBoostTierIndex() : 0;
   if (typeof saveEquippedBoostTierIndex === 'function') {
     try { saveEquippedBoostTierIndex(maxBoostIdx); } catch(_){}
   }
-  const boostBadgeHTML =
-    '<div class="shop-boost-badge">' +
-      '<span class="shop-boost-badge-lbl">BOOST POWER</span>' +
-      '<span class="shop-boost-badge-val">TIER ' + (maxBoostIdx + 1) + '</span>' +
+  const boostHeaderHTML =
+    '<div class="fm-boost-header">' +
+      '<span class="fm-boost-header-lbl">BOOST POWER</span>' +
+      '<span class="fm-boost-header-val">TIER ' + (maxBoostIdx + 1) + '</span>' +
     '</div>';
 
   // ── FLIGHT MODEL rows ──
@@ -113,12 +115,12 @@ function _renderShopHandlingBar() {
       '</div>';
   }
 
-  // ── Mount: BOOST POWER badge + SHIP HANDLING dropdown.
+  // ── Mount: SHIP HANDLING dropdown only.
   // Head label is always "SHIP HANDLING" (section name); the equipped flight
-  // model name + color only show inside the menu rows. XP bar lives on the
+  // model name + color only show inside the menu rows. BOOST POWER tier is
+  // a non-selectable header row at the top of the menu. XP bar lives on the
   // right of the head.
   root.innerHTML =
-    boostBadgeHTML +
     '<div class="fm-bar shop-handling-bar" data-kind="fm">' +
       '<button type="button" class="fm-head" aria-expanded="false">' +
         '<div class="fm-head-l">' +
@@ -130,6 +132,7 @@ function _renderShopHandlingBar() {
         '</div>' +
       '</button>' +
       '<div class="fm-menu">' +
+        boostHeaderHTML +
         fmRowsHTML +
       '</div>' +
     '</div>';
