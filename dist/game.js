@@ -17469,28 +17469,54 @@ function _fmStatPips(value) {
 function _renderShopHandlingBar() {
   const root = document.getElementById('shop-handling-bar');
   if (!root) return;
+  // If a previous render's menu was portaled to <body>, it would survive a
+  // re-render of root.innerHTML and leak (and break .fm-menu queries).
+  // Sweep any stale portaled menus out of the body before re-rendering.
+  document.querySelectorAll('body > .fm-menu.fm-menu-portal').forEach(m => {
+    try { m.parentNode.removeChild(m); } catch(_){}
+  });
   const FM = window._FLIGHT_MODELS;
   if (!FM) return;
   const level = loadPlayerLevel();
   const equippedName = (typeof loadEquippedFlightModel === 'function') ? loadEquippedFlightModel() : 'DEFAULT';
   const equipped = FM[equippedName] || FM.DEFAULT;
 
-  // ── XP / level progress (replaces the old "Next: WIPEOUT (Lv 8)" hint) ──
-  // Player wanted the XP bar kept but tied to the player level itself, not
-  // to the next FM unlock. Bar reflects current XP toward next player level.
+  // ── XP / level progress (left-of-XP-bar in master head) ──
   const xp = (typeof loadPlayerXP === 'function') ? loadPlayerXP() : 0;
   const xpNeed = (typeof xpForLevel === 'function') ? xpForLevel(level) : 1000;
   const xpFillPct = Math.min(100, Math.round((xp / Math.max(1, xpNeed)) * 100));
   const xpText = 'L' + level + ' \u00B7 ' + xp + '/' + xpNeed + ' XP';
 
-  // ── Flight Model menu rows ──
-  let fmMenuHTML = '';
+  // ── TIER subsection rows (Boost Profile) ──
+  // Per user: minimal label "TIER N" only — flavor names appear on the
+  // unlock toast. Player can downshift to any unlocked tier on purpose.
+  const HT = window.HANDLING_TIERS || [];
+  const eqBoostIdx = (typeof loadEquippedBoostTierIndex === 'function') ? loadEquippedBoostTierIndex() : 0;
+  const maxBoostIdx = (typeof getMaxUnlockedBoostTierIndex === 'function') ? getMaxUnlockedBoostTierIndex() : 0;
+  let tierRowsHTML = '';
+  for (let i = 0; i < HT.length; i++) {
+    const t = HT[i];
+    const unlocked = i <= maxBoostIdx;
+    const isEq = i === eqBoostIdx;
+    const cls = 'fm-row boost-row' + (isEq ? ' equipped' : '') + (unlocked ? '' : ' locked');
+    const lockBadge = unlocked ? '' : '<span class="fm-lock">L' + t.level + ' \uD83D\uDD12</span>';
+    tierRowsHTML +=
+      '<div class="' + cls + '" data-boost="' + i + '">' +
+        '<div class="fm-row-head">' +
+          '<span class="fm-name">TIER ' + (i + 1) + '</span>' +
+          lockBadge +
+        '</div>' +
+      '</div>';
+  }
+
+  // ── FLIGHT MODEL subsection rows ──
+  let fmRowsHTML = '';
   for (const [name, m] of Object.entries(FM)) {
     const unlocked = level >= m.unlock;
     const isEq = (name === equippedName) && unlocked;
     const cls = 'fm-row' + (isEq ? ' equipped' : '') + (unlocked ? '' : ' locked');
     const lockBadge = unlocked ? '' : '<span class="fm-lock">L' + m.unlock + ' \uD83D\uDD12</span>';
-    fmMenuHTML +=
+    fmRowsHTML +=
       '<div class="' + cls + '" data-fm="' + name + '">' +
         '<div class="fm-row-head">' +
           '<span class="fm-name" style="color:' + m.color + '">' + name + '</span>' +
@@ -17504,63 +17530,30 @@ function _renderShopHandlingBar() {
       '</div>';
   }
 
-  // ── Boost Profile menu rows ──
-  // Each HANDLING_TIERS entry becomes "TIER N". Locked entries grey out
-  // with the unlock level. Equipped row is highlighted (no ✓ text per the
-  // existing FM convention — highlight = equipped).
-  const HT = window.HANDLING_TIERS || [];
-  const eqBoostIdx = (typeof loadEquippedBoostTierIndex === 'function') ? loadEquippedBoostTierIndex() : 0;
-  const maxBoostIdx = (typeof getMaxUnlockedBoostTierIndex === 'function') ? getMaxUnlockedBoostTierIndex() : 0;
-  let boostMenuHTML = '';
-  for (let i = 0; i < HT.length; i++) {
-    const t = HT[i];
-    const unlocked = i <= maxBoostIdx;
-    const isEq = i === eqBoostIdx;
-    const cls = 'fm-row boost-row' + (isEq ? ' equipped' : '') + (unlocked ? '' : ' locked');
-    const lockBadge = unlocked ? '' : '<span class="fm-lock">L' + t.level + ' \uD83D\uDD12</span>';
-    boostMenuHTML +=
-      '<div class="' + cls + '" data-boost="' + i + '">' +
-        '<div class="fm-row-head">' +
-          '<span class="fm-name">TIER ' + (i + 1) + '</span>' +
-          lockBadge +
-        '</div>' +
-      '</div>';
-  }
-  const boostLabel = 'TIER ' + (eqBoostIdx + 1);
-
-  // ── Mount: section header + two bars (FM keeps XP bar, Boost has none) ──
-  // Both bars use the same `.fm-bar` + `.fm-head` + `.fm-menu` markup so the
-  // existing dropdown machinery (portal, open-up logic, outside-click) works
-  // for both via _setupFMDropdown() below. Open/closed state is preserved
-  // per-bar across re-renders.
-  const prevFMBar = root.querySelector('.fm-bar[data-kind="fm"]');
-  const prevBoostBar = root.querySelector('.fm-bar[data-kind="boost"]');
-  const wasFMOpen = !!(prevFMBar && prevFMBar.classList.contains('open'));
-  const wasBoostOpen = !!(prevBoostBar && prevBoostBar.classList.contains('open'));
-
+  // ── Mount: ONE master dropdown. Head = SHIP HANDLING + XP bar. Menu has
+  // two stacked subsections (TIER on top, FLIGHT MODEL below) under quiet
+  // section labels with a thin divider between them. Open/closed state is
+  // preserved across re-renders so equipping doesn't slam the menu shut.
+  // Render the bar in CLOSED state always; if wasOpen, we re-trigger open via
+  // synthetic click after wiring listeners (see equip handler below).
   root.innerHTML =
-    '<div class="shop-handling-section-title">SHIP HANDLING</div>' +
-    '<div class="fm-bar shop-handling-bar' + (wasFMOpen ? ' open' : '') + '" data-kind="fm">' +
-      '<button type="button" class="fm-head" aria-expanded="' + (wasFMOpen ? 'true' : 'false') + '">' +
+    '<div class="fm-bar shop-handling-bar" data-kind="master">' +
+      '<button type="button" class="fm-head" aria-expanded="false">' +
         '<div class="fm-head-l">' +
-          '<div class="shop-handling-label">FLIGHT MODEL</div>' +
-          '<div class="shop-handling-tier" style="color:' + equipped.color + '">' + equippedName + ' <span class="fm-caret">\u25BE</span></div>' +
+          '<div class="shop-handling-master-title">SHIP HANDLING <span class="fm-caret">\u25BE</span></div>' +
         '</div>' +
         '<div class="fm-head-r">' +
           '<div class="shop-handling-track"><div class="shop-handling-fill" style="width:' + xpFillPct + '%"></div></div>' +
           '<div class="shop-handling-next">' + xpText + '</div>' +
         '</div>' +
       '</button>' +
-      '<div class="fm-menu">' + fmMenuHTML + '</div>' +
-    '</div>' +
-    '<div class="fm-bar shop-handling-bar boost-bar' + (wasBoostOpen ? ' open' : '') + '" data-kind="boost">' +
-      '<button type="button" class="fm-head" aria-expanded="' + (wasBoostOpen ? 'true' : 'false') + '">' +
-        '<div class="fm-head-l">' +
-          '<div class="shop-handling-label">BOOST PROFILE</div>' +
-          '<div class="shop-handling-tier">' + boostLabel + ' <span class="fm-caret">\u25BE</span></div>' +
-        '</div>' +
-      '</button>' +
-      '<div class="fm-menu">' + boostMenuHTML + '</div>' +
+      '<div class="fm-menu">' +
+        '<div class="fm-section-label">TIER</div>' +
+        tierRowsHTML +
+        '<div class="fm-section-divider"></div>' +
+        '<div class="fm-section-label">FLIGHT MODEL</div>' +
+        fmRowsHTML +
+      '</div>' +
     '</div>';
 
   // ── Wire each bar (FM + Boost) with the same dropdown machinery ──
@@ -17678,28 +17671,44 @@ function _setupHandlingDropdown(bar) {
       else _open();
     });
   }
-  // Wire row clicks (equip if unlocked, reject sound if locked).
+  // Wire row clicks. Master menu has TIER rows (data-boost) and FLIGHT MODEL
+  // rows (data-fm); both behave identically — equip on tap, reject sound if
+  // locked. Menu STAYS OPEN after a pick so the player can equip a tier and
+  // a flight model in one open session (closes only on outside-tap or
+  // tapping the head again).
   bar.querySelectorAll('.fm-row').forEach(row => {
     if (row.classList.contains('locked')) {
       _tapBind(row, () => { try { if (typeof window.playReject === 'function') window.playReject(); } catch(_){} });
       return;
     }
     _tapBind(row, () => {
-      if (kind === 'boost') {
-        const idxStr = row.getAttribute('data-boost');
-        const idx = parseInt(idxStr, 10);
+      const boostStr = row.getAttribute('data-boost');
+      const fmName = row.getAttribute('data-fm');
+      if (boostStr != null) {
+        const idx = parseInt(boostStr, 10);
         if (isNaN(idx)) return;
         if (typeof saveEquippedBoostTierIndex === 'function') saveEquippedBoostTierIndex(idx);
-        try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
-      } else {
-        const name = row.getAttribute('data-fm');
+      } else if (fmName) {
         const FM = window._FLIGHT_MODELS;
-        if (!name || !FM || !FM[name]) return;
-        if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(name);
-        try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
+        if (!FM || !FM[fmName]) return;
+        if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(fmName);
+      } else {
+        return;
       }
-      _close();
+      try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
+      // Re-render to refresh equipped highlight + head label, but keep the
+      // menu open. _renderShopHandlingBar() preserves wasOpen state, and we
+      // re-position the now-portaled menu so it stays anchored.
       _renderShopHandlingBar();
+      // After re-render, the bar/head/menu DOM has been replaced. Re-find
+      // them and re-attach listeners + reopen position. Easiest: trigger a
+      // synthetic open on the freshly-rendered master bar.
+      const newBar = document.querySelector('#shop-handling-bar .fm-bar[data-kind="master"]');
+      if (newBar) {
+        const newHead = newBar.querySelector('.fm-head');
+        // Defer one frame so layout settles + listeners are bound, then open.
+        if (newHead) requestAnimationFrame(() => { try { newHead.click(); } catch(_){} });
+      }
     });
   });
 }

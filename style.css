@@ -2663,22 +2663,11 @@ html, body {
   gap: 6px;
 }
 
-/* Ship handling progress bar */
-/* ── SHIP HANDLING section (wraps both FLIGHT MODEL + BOOST PROFILE) ─── */
+/* ── SHIP HANDLING master dropdown (single bar, TIER + FLIGHT MODEL inside) ── */
 #shop-handling-bar {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   margin: 0 0 8px 0;
-}
-.shop-handling-section-title {
-  font-family: var(--font-display, 'Rajdhani', sans-serif);
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  color: rgba(255,255,255,0.55);
-  text-transform: uppercase;
-  padding: 0 4px;
-  margin-bottom: 2px;
 }
 .shop-handling-bar {
   padding: 8px 12px;
@@ -2686,12 +2675,39 @@ html, body {
   border-radius: 6px;
   margin: 0;
 }
-/* Boost Profile bar: no XP track, so head-r is unused. Tier label aligned right. */
-.shop-handling-bar.boost-bar .fm-head-r { display: none; }
-.shop-handling-bar.boost-bar .fm-head-l { flex: 1; }
-.shop-handling-bar.boost-bar .shop-handling-tier {
-  margin-bottom: 0;
-  color: #0ff;
+/* Master head text: SHIP HANDLING + caret on the left, XP bar on the right */
+.shop-handling-master-title {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #fff;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.shop-handling-master-title .fm-caret {
+  font-size: 10px;
+  color: rgba(255,255,255,0.55);
+  transition: transform 160ms ease;
+}
+.shop-handling-bar.open .shop-handling-master-title .fm-caret {
+  transform: rotate(180deg);
+}
+/* Quiet subsection labels inside the menu (TIER, FLIGHT MODEL) */
+.fm-section-label {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  color: rgba(255,255,255,0.45);
+  text-transform: uppercase;
+  padding: 8px 12px 4px 12px;
+}
+.fm-section-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.08);
+  margin: 6px 8px;
 }
 .shop-handling-label {
   font-family: var(--font-display, 'Rajdhani', sans-serif);
