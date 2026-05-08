@@ -246,9 +246,16 @@ function refreshRadioButton() {
 window.refreshRadioButton = refreshRadioButton;
 
 // Toggle the prev/play/next popover under the ♫ button.
+// On first open, hoist the popover to <body> so it escapes the #title-screen
+// stacking context (the .overlay's backdrop-filter creates a containing block
+// that clips position:fixed children, which was hiding the popover behind the
+// title screen overlay).
 function toggleTitleRadioPopover(force) {
   const ctrls = document.getElementById('title-radio-controls');
   if (!ctrls) return;
+  if (ctrls.parentNode !== document.body) {
+    document.body.appendChild(ctrls);
+  }
   const want = (typeof force === 'boolean') ? force : ctrls.classList.contains('hidden');
   if (want) ctrls.classList.remove('hidden');
   else      ctrls.classList.add('hidden');
@@ -479,6 +486,9 @@ window.updatePauseRadioRow = updatePauseRadioRow;
         const ctrls = document.getElementById('title-radio-controls');
         if (!ctrls || ctrls.classList.contains('hidden')) return;
         const wrap = document.getElementById('title-radio-wrap');
+        // Popover is hoisted to <body> so it lives outside the wrap; treat it
+        // as part of the wrap for outside-click purposes.
+        if (ctrls.contains(e.target)) return;
         if (wrap && !wrap.contains(e.target)) toggleTitleRadioPopover(false);
       });
     }
