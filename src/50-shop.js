@@ -273,7 +273,7 @@ function _setupHandlingDropdown(bar) {
 }
 
 function closeShop() {
-  playTitleTap();
+  playTitleClose();
   const overlay = document.getElementById('shop-overlay');
   if (!overlay) return;
   overlay.classList.remove('shop-open');
@@ -445,7 +445,7 @@ function openShopDetail(id) {
 window.openShopDetail = openShopDetail;
 
 function closeShopDetail() {
-  playTitleTap();
+  playTitleClose();
   const detail = document.getElementById('shop-detail');
   if (detail) detail.classList.add('hidden');
   const tabs = document.querySelectorAll('.shop-tabs')[0];

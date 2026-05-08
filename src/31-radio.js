@@ -225,7 +225,7 @@ function openRadio() {
 window.openRadio = openRadio;
 
 function closeRadio() {
-  try { if (typeof playTitleTap === 'function') playTitleTap(); } catch(_) {}
+  try { if (typeof playTitleClose === 'function') playTitleClose(); } catch(_) {}
   const ov = document.getElementById('radio-overlay');
   if (ov) ov.classList.add('hidden');
   _stopRadioPreview();

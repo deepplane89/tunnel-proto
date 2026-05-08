@@ -1313,7 +1313,7 @@ function openMissions() {
 window.openMissions = openMissions;
 
 function closeMissions() {
-  playTitleTap();
+  playTitleClose();
   const overlay = document.getElementById('missions-overlay');
   if (!overlay) return;
   overlay.classList.add('hidden');
@@ -1367,8 +1367,8 @@ function openThrusterPanel(targetTab) {
 window.openThrusterPanel = openThrusterPanel;
 
 function closeThrusterPanel() {
-  // VR clicker on garage close (matches the open cue).
-  playTitleTap();
+  // Title-close cue (legacy tap-to-play start.mp3) so close ≠ open sound.
+  playTitleClose();
 
   if (window.Showroom && typeof window.Showroom.close === 'function') {
     window.Showroom.close();

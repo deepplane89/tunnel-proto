@@ -2057,7 +2057,7 @@ function openMissions() {
 window.openMissions = openMissions;
 
 function closeMissions() {
-  playTitleTap();
+  playTitleClose();
   const overlay = document.getElementById('missions-overlay');
   if (!overlay) return;
   overlay.classList.add('hidden');
@@ -2111,8 +2111,8 @@ function openThrusterPanel(targetTab) {
 window.openThrusterPanel = openThrusterPanel;
 
 function closeThrusterPanel() {
-  // VR clicker on garage close (matches the open cue).
-  playTitleTap();
+  // Title-close cue (legacy tap-to-play start.mp3) so close ≠ open sound.
+  playTitleClose();
 
   if (window.Showroom && typeof window.Showroom.close === 'function') {
     window.Showroom.close();
@@ -12590,7 +12590,7 @@ function openRadio() {
 window.openRadio = openRadio;
 
 function closeRadio() {
-  try { if (typeof playTitleTap === 'function') playTitleTap(); } catch(_) {}
+  try { if (typeof playTitleClose === 'function') playTitleClose(); } catch(_) {}
   const ov = document.getElementById('radio-overlay');
   if (ov) ov.classList.add('hidden');
   _stopRadioPreview();
@@ -15480,7 +15480,7 @@ window.openStreak = openStreak;
 
 // Close streak overlay — X button or tap outside panel
 function closeStreak() {
-  playTitleTap();
+  playTitleClose();
   document.getElementById('streak-overlay').classList.add('hidden');
 }
 _tapBind(document.getElementById('streak-close-btn'), closeStreak);
@@ -18050,7 +18050,7 @@ function _setupHandlingDropdown(bar) {
 }
 
 function closeShop() {
-  playTitleTap();
+  playTitleClose();
   const overlay = document.getElementById('shop-overlay');
   if (!overlay) return;
   overlay.classList.remove('shop-open');
@@ -18222,7 +18222,7 @@ function openShopDetail(id) {
 window.openShopDetail = openShopDetail;
 
 function closeShopDetail() {
-  playTitleTap();
+  playTitleClose();
   const detail = document.getElementById('shop-detail');
   if (detail) detail.classList.add('hidden');
   const tabs = document.querySelectorAll('.shop-tabs')[0];
@@ -19547,9 +19547,27 @@ function playExitSound()   {
   try { if (typeof window.playPauseExit === 'function') window.playPauseExit(); } catch(_){}
 }
 function playTitleTap()    {
-  // Generic title-screen UI exit (garage/settings/etc close) — VR mecha interlock.
+  // Generic title-screen UI OPEN (garage/settings/missions/streak/radio open)
+  // — VR mecha interlock.
   try { if (typeof window.playTitleExit === 'function') window.playTitleExit(); } catch(_){}
 }
+function playTitleClose() {
+  // Title-screen UI CLOSE — the legacy tap-to-play cue (start.mp3) so open
+  // and close don't share the same sound.
+  if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
+  try { if (typeof _ensureCtxRunning === 'function') _ensureCtxRunning(); } catch(_){}
+  try {
+    const sfx = document.getElementById('start-sound');
+    if (sfx) {
+      sfx.currentTime = 0;
+      sfx.volume = Math.min(1, 0.85 * _sM);
+      sfx.play().catch(() => {});
+    }
+  } catch(_){}
+}
+window.playTitleClose = playTitleClose;
 
 // ═══════════════════════════════════════════════════════
 //  SIGNAL SALVAGE — REWARD WHEEL
@@ -19951,7 +19969,7 @@ function openSettings() {
   ov.classList.remove('hidden');
 }
 function closeSettings() {
-  playTitleTap();
+  playTitleClose();
   document.getElementById('settings-overlay').classList.add('hidden');
 }
 

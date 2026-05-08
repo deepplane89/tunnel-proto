@@ -1040,7 +1040,25 @@ function playExitSound()   {
   try { if (typeof window.playPauseExit === 'function') window.playPauseExit(); } catch(_){}
 }
 function playTitleTap()    {
-  // Generic title-screen UI exit (garage/settings/etc close) — VR mecha interlock.
+  // Generic title-screen UI OPEN (garage/settings/missions/streak/radio open)
+  // — VR mecha interlock.
   try { if (typeof window.playTitleExit === 'function') window.playTitleExit(); } catch(_){}
 }
+function playTitleClose() {
+  // Title-screen UI CLOSE — the legacy tap-to-play cue (start.mp3) so open
+  // and close don't share the same sound.
+  if (state.muted) return;
+  const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
+  if (_sM <= 0) return;
+  try { if (typeof _ensureCtxRunning === 'function') _ensureCtxRunning(); } catch(_){}
+  try {
+    const sfx = document.getElementById('start-sound');
+    if (sfx) {
+      sfx.currentTime = 0;
+      sfx.volume = Math.min(1, 0.85 * _sM);
+      sfx.play().catch(() => {});
+    }
+  } catch(_){}
+}
+window.playTitleClose = playTitleClose;
 
