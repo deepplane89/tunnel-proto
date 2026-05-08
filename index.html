@@ -588,6 +588,16 @@
 <audio id="powerup-burst-sfx" src="./assets/audio/powerup-burst.mp3" preload="auto"></audio>
 <audio id="shop-purchase-sfx" src="./assets/audio/vr-transform-powerup.mp3" preload="auto"></audio>
 <audio id="reject-sfx" src="./assets/audio/reject.mp3" preload="auto"></audio>
+<!-- First-tap UI SFX fallback elements: cloneNode'd by _playBuffer when the
+     decoded AudioBuffer isn't ready yet (e.g. ACCESS GRANTED tap that itself
+     kicks off audio init). preload="auto" ensures they're in memory by then. -->
+<audio id="title-exit-sfx" src="./assets/audio/title-exit.mp3" preload="auto"></audio>
+<audio id="start-interference-sfx" src="./assets/audio/start-interference.mp3" preload="auto"></audio>
+<audio id="tap-to-play-sfx" src="./assets/audio/tap-to-play.mp3" preload="auto"></audio>
+<audio id="menu-cycle-sfx" src="./assets/audio/menu-cycle.wav" preload="auto"></audio>
+<audio id="garage-cycle-sfx" src="./assets/audio/vr-transform-clicker.mp3" preload="auto"></audio>
+<audio id="garage-select-sfx" src="./assets/audio/garage-select.mp3" preload="auto"></audio>
+<audio id="pause-exit-sfx" src="./assets/audio/pause-exit.mp3" preload="auto"></audio>
 <audio id="invincible-loop-sfx" src="./assets/audio/invincible-loop.mp3" preload="auto"></audio>
 <audio id="speed-dip-sfx" src="./assets/audio/invincible-loop.mp3" preload="auto"></audio>
 <audio id="argon-ambient-sfx" src="./assets/audio/argon-ambient.mp3" preload="auto" loop></audio>
@@ -647,6 +657,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1778268223"></script>
+<script type="module" src="./dist/game.js?v=1778268792"></script>
 </body>
 </html>

@@ -330,8 +330,28 @@ function _playArgonOnce(targetVol, fadeInSec) {
   src._jhDuration = buf.duration;
   return src;
 }
-// SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx', 'reject': 'reject-sfx' };
+// SFX element fallback map — used when AudioBuffer hasn't decoded yet.
+// Critical for first-tap-of-session SFX (title-exit, menu-cycle, etc.) that
+// fire from the same gesture that initializes the AudioContext: buffers are
+// still in async fetch+decode, so _playBuffer() falls through to cloneNode of
+// the matching <audio> element here. Any SFX that can play before/during the
+// first ~300ms of audio init MUST have an entry here or it'll silently no-op.
+const _sfxFallbackIds = {
+  'nearmiss':            'nearmiss-sfx',
+  'whoosh':              'whoosh1',
+  'whoosh-release':      'whoosh-release',
+  'laser-mg':            'laser-beam-sfx',
+  'shop-purchase':       'shop-purchase-sfx',
+  'reject':              'reject-sfx',
+  // First-tap UI SFX (added 2026-05-08 to fix silent ACCESS GRANTED tap):
+  'title-exit':          'title-exit-sfx',
+  'start-interference':  'start-interference-sfx',
+  'tap-to-play':         'tap-to-play-sfx',
+  'menu-cycle':          'menu-cycle-sfx',
+  'garage-cycle':        'garage-cycle-sfx',
+  'garage-select':       'garage-select-sfx',
+  'pause-exit':          'pause-exit-sfx',
+};
 // Play a pre-decoded buffer with gain + optional pan + playbackRate
 function _playBuffer(name, volume, rate, panVal) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
