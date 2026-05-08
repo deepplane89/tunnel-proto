@@ -253,9 +253,9 @@ function _initSFXBuffers() {
   // Title-screen UI exits (garage close, settings close, daily streak close,
   // any back/exit on title) — VR mecha interlock.
   _loadSFXBuffer('title-exit',      './assets/audio/title-exit.mp3');
-  // Tap-to-play on title screen — low whoosh.
-  _loadSFXBuffer('tap-to-play',     './assets/audio/tap-to-play.mp3');
   // Garage open/close audio removed — no sample needed.
+  // (Removed 'tap-to-play' — start-of-gameplay now reuses 'title-exit'
+  // via playTitleTap/playStartSound to match other title-screen taps.)
 }
 
 // Decode a sample, then build a sample-reversed clone under another name.
@@ -346,7 +346,6 @@ const _sfxFallbackIds = {
   // First-tap UI SFX (added 2026-05-08 to fix silent ACCESS GRANTED tap):
   'title-exit':          'title-exit-sfx',
   'start-interference':  'start-interference-sfx',
-  'tap-to-play':         'tap-to-play-sfx',
   'menu-cycle':          'menu-cycle-sfx',
   'garage-cycle':        'garage-cycle-sfx',
   'garage-select':       'garage-select-sfx',
@@ -475,9 +474,5 @@ window.playPauseExit = playPauseExit;
 // Title-screen UI exits (garage/settings/etc back) — VR mecha interlock.
 function playTitleExit() { _playBuffer('title-exit', 0.7, 1.0, null); }
 window.playTitleExit = playTitleExit;
-
-// Tap-to-play on title screen — low whoosh.
-function playTapToPlay() { _playBuffer('tap-to-play', 0.7, 1.0, null); }
-window.playTapToPlay = playTapToPlay;
 
 function playCrash() {

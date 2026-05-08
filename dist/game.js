@@ -12328,9 +12328,9 @@ function _initSFXBuffers() {
   // Title-screen UI exits (garage close, settings close, daily streak close,
   // any back/exit on title) — VR mecha interlock.
   _loadSFXBuffer('title-exit',      './assets/audio/title-exit.mp3');
-  // Tap-to-play on title screen — low whoosh.
-  _loadSFXBuffer('tap-to-play',     './assets/audio/tap-to-play.mp3');
   // Garage open/close audio removed — no sample needed.
+  // (Removed 'tap-to-play' — start-of-gameplay now reuses 'title-exit'
+  // via playTitleTap/playStartSound to match other title-screen taps.)
 }
 
 // Decode a sample, then build a sample-reversed clone under another name.
@@ -12421,7 +12421,6 @@ const _sfxFallbackIds = {
   // First-tap UI SFX (added 2026-05-08 to fix silent ACCESS GRANTED tap):
   'title-exit':          'title-exit-sfx',
   'start-interference':  'start-interference-sfx',
-  'tap-to-play':         'tap-to-play-sfx',
   'menu-cycle':          'menu-cycle-sfx',
   'garage-cycle':        'garage-cycle-sfx',
   'garage-select':       'garage-select-sfx',
@@ -12550,10 +12549,6 @@ window.playPauseExit = playPauseExit;
 // Title-screen UI exits (garage/settings/etc back) — VR mecha interlock.
 function playTitleExit() { _playBuffer('title-exit', 0.7, 1.0, null); }
 window.playTitleExit = playTitleExit;
-
-// Tap-to-play on title screen — low whoosh.
-function playTapToPlay() { _playBuffer('tap-to-play', 0.7, 1.0, null); }
-window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
   if (state.muted) return;
@@ -19978,12 +19973,14 @@ fetchLeaderboard();
 // kept as no-ops so any stray callers don't throw — and so the inline
 // onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
 function playStartSound() {
-  // TAP TO PLAY on title — low whoosh.
+  // TAP TO PLAY on title — reuse the standard title-screen UI open cue
+  // (title-exit.mp3 / VR mecha interlock) so start-of-gameplay matches the
+  // sound the player hears tapping anything else on the title.
   if (state.muted) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
-  try { if (typeof window.playTapToPlay === 'function') window.playTapToPlay(); } catch(_){}
+  try { if (typeof window.playTitleTap === 'function') window.playTitleTap(); } catch(_){}
 }
 function playResumeSound() {
   // CONTINUE from pause — keep the existing menu-cycle click.

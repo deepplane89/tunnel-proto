@@ -1046,12 +1046,14 @@ fetchLeaderboard();
 // kept as no-ops so any stray callers don't throw — and so the inline
 // onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
 function playStartSound() {
-  // TAP TO PLAY on title — low whoosh.
+  // TAP TO PLAY on title — reuse the standard title-screen UI open cue
+  // (title-exit.mp3 / VR mecha interlock) so start-of-gameplay matches the
+  // sound the player hears tapping anything else on the title.
   if (state.muted) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
-  try { if (typeof window.playTapToPlay === 'function') window.playTapToPlay(); } catch(_){}
+  try { if (typeof window.playTitleTap === 'function') window.playTitleTap(); } catch(_){}
 }
 function playResumeSound() {
   // CONTINUE from pause — keep the existing menu-cycle click.
