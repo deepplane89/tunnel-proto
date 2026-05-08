@@ -926,8 +926,47 @@ function loadMissionFlags() {
 function saveMissionFlags(flags) {
   window._LS.setItem('jetslide_mission_flags', JSON.stringify(flags));
 }
-function loadFuelCells() { return parseInt(window._LS.getItem(FUELCELL_KEY) || '0', 10); }
+function loadFuelCells() {
+  // First-launch starter grant: +50 fuel cells, one-time per device.
+  // Gated by jh_starter_grant_v1 so existing players don't get a freebie
+  // on update and so the grant never repeats. Bump suffix (_v2 etc) only
+  // if intentionally re-granting in the future.
+  try {
+    if (window._LS.getItem('jh_starter_grant_v1') !== '1') {
+      const cur = parseInt(window._LS.getItem(FUELCELL_KEY) || '0', 10);
+      // Only grant to genuinely-new players. If they already have any fuel
+      // OR any other game progress, treat them as existing — just set the
+      // flag so they never get a retroactive grant.
+      const hasProgress = (
+        cur > 0 ||
+        !!window._LS.getItem('jh_owned_skins') ||
+        !!window._LS.getItem('jetslide_mission_flags') ||
+        !!window._LS.getItem('jh_tutorial_done') ||
+        !!window._LS.getItem('jet-horizon-scores')
+      );
+      if (!hasProgress) {
+        window._LS.setItem(FUELCELL_KEY, String(cur + 50));
+      }
+      window._LS.setItem('jh_starter_grant_v1', '1');
+    }
+  } catch(_) {}
+  return parseInt(window._LS.getItem(FUELCELL_KEY) || '0', 10);
+}
 function saveFuelCells(n) { window._LS.setItem(FUELCELL_KEY, String(n)); }
+
+// Tutorial-completion grant: +25 fuel cells, one-time. Called from the
+// tutorial end card (only on actual completion, not early exit).
+function grantTutorialFuelBonus() {
+  try {
+    if (window._LS.getItem('jh_tutorial_grant_v1') === '1') return false;
+    const cur = parseInt(window._LS.getItem(FUELCELL_KEY) || '0', 10);
+    window._LS.setItem(FUELCELL_KEY, String(cur + 25));
+    window._LS.setItem('jh_tutorial_grant_v1', '1');
+    try { if (typeof updateTitleFuelCells === 'function') updateTitleFuelCells(); } catch(_) {}
+    return true;
+  } catch(_) { return false; }
+}
+window.grantTutorialFuelBonus = grantTutorialFuelBonus;
 
 // ── Addon unlocks (turrets etc) ──
 // Tracks which ship-addon mesh nodes the player has unlocked via the mission

@@ -4720,6 +4720,8 @@ function update(dt) {
         '#ff9500',
         () => {
           window._LS.setItem('jh_tutorial_done', '1');
+          // One-time +25 fuel cell completion bonus (gated by jh_tutorial_grant_v1).
+          try { if (typeof grantTutorialFuelBonus === 'function') grantTutorialFuelBonus(); } catch(_) {}
           _tutDestroyOverlay();
           // Play droplet sound on exit
           const _drp = document.getElementById('droplet-sfx');
