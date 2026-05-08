@@ -29,6 +29,7 @@ const RADIO_UNLOCK_AT = 3;  // unlock on/after death of run #3
 
 let _radioShuffleQueue = [];   // upcoming track indexes
 let _radioCurrentIdx   = -1;   // currently playing index into RADIO_TRACKS
+let _radioPlayHistory  = [];   // recent indexes for prev (most recent at end)
 let _radioEndedHooked  = false;
 
 function isRadioUnlocked() {
@@ -128,6 +129,9 @@ function _playRadioIdx(idx) {
   const tr = RADIO_TRACKS[idx];
   if (!tr) return;
   _radioCurrentIdx = idx;
+  // Track history for prev button (cap at 16 to avoid runaway memory).
+  _radioPlayHistory.push(idx);
+  if (_radioPlayHistory.length > 16) _radioPlayHistory.shift();
   // Switching src on the same element is the cheapest way to swap; iOS handles
   // it cleanly as long as we play() from a user-gesture-tied codepath (we are).
   if (radioMusic.src.indexOf(tr.src) === -1) {
@@ -169,6 +173,33 @@ function skipRadioTrack() {
   _playRadioIdx(_nextRadioIdx());
 }
 window.skipRadioTrack = skipRadioTrack;
+
+function prevRadioTrack() {
+  if (!isRadioOn()) return;
+  // Pop the previous track from history (current was pushed by _playRadioIdx).
+  // history layout: [..., previous, current]
+  if (_radioPlayHistory.length < 2) return;
+  _radioPlayHistory.pop();              // drop current
+  const prev = _radioPlayHistory.pop(); // take previous (will be re-pushed by _playRadioIdx)
+  if (typeof prev === 'number') _playRadioIdx(prev);
+}
+window.prevRadioTrack = prevRadioTrack;
+
+function toggleRadioPause() {
+  if (!isRadioOn()) return;
+  if (!radioMusic) radioMusic = document.getElementById('radio-music');
+  if (!radioMusic) return;
+  try {
+    if (radioMusic.paused) {
+      if (_radioCurrentIdx < 0) _playRadioIdx(_nextRadioIdx());
+      else radioMusic.play().catch(() => {});
+    } else {
+      radioMusic.pause();
+    }
+  } catch(_) {}
+  try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_) {}
+}
+window.toggleRadioPause = toggleRadioPause;
 
 function currentRadioTrackName() {
   const tr = RADIO_TRACKS[_radioCurrentIdx];
@@ -307,29 +338,54 @@ function _renderRadioOverlay() {
 
 // ── UI: pause-menu now-playing row ──────────────────────────────────────
 function updatePauseRadioRow() {
-  const row  = document.getElementById('pause-radio-row');
-  const name = document.getElementById('pause-radio-name');
+  const row    = document.getElementById('pause-radio-row');
+  const name   = document.getElementById('pause-radio-name');
+  const toggle = document.getElementById('pause-radio-toggle');
   if (!row || !name) return;
   if (isRadioOn() && _radioCurrentIdx >= 0) {
     row.classList.remove('hidden');
     name.textContent = currentRadioTrackName();
+    if (toggle) {
+      const paused = !!(radioMusic && radioMusic.paused);
+      toggle.textContent = paused ? '▶' : '⏸';
+      toggle.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+    }
   } else {
     row.classList.add('hidden');
   }
 }
 window.updatePauseRadioRow = updatePauseRadioRow;
 
-// Wire pause skip button once DOM is parsed.
-(function wirePauseRadioSkip() {
+// Wire pause-menu radio buttons once DOM is parsed.
+(function wirePauseRadioControls() {
   function _wire() {
-    const skipBtn = document.getElementById('pause-radio-skip');
-    if (!skipBtn || skipBtn._wired) return;
-    skipBtn._wired = true;
-    skipBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (typeof skipRadioTrack === 'function') skipRadioTrack();
-      updatePauseRadioRow();
-    });
+    const prevBtn   = document.getElementById('pause-radio-prev');
+    const toggleBtn = document.getElementById('pause-radio-toggle');
+    const skipBtn   = document.getElementById('pause-radio-skip');
+    if (prevBtn && !prevBtn._wired) {
+      prevBtn._wired = true;
+      prevBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof prevRadioTrack === 'function') prevRadioTrack();
+        updatePauseRadioRow();
+      });
+    }
+    if (toggleBtn && !toggleBtn._wired) {
+      toggleBtn._wired = true;
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof toggleRadioPause === 'function') toggleRadioPause();
+        updatePauseRadioRow();
+      });
+    }
+    if (skipBtn && !skipBtn._wired) {
+      skipBtn._wired = true;
+      skipBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof skipRadioTrack === 'function') skipRadioTrack();
+        updatePauseRadioRow();
+      });
+    }
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _wire);

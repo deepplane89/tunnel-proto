@@ -6269,7 +6269,23 @@ html.platform-ios-native body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pause-radio-skip {
+.pause-radio-controls {
+  display: flex; align-items: center; gap: 8px;
+}
+.pause-radio-btn {
+  background: rgba(34, 211, 238, 0.10);
+  border: 1px solid rgba(34, 211, 238, 0.40);
+  border-radius: 4px;
+  color: #0ff;
+  width: 36px; height: 30px;
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.pause-radio-btn:active { background: rgba(34, 211, 238, 0.25); }
+.pause-radio-skip { /* legacy alias */
   background: rgba(34, 211, 238, 0.10);
   border: 1px solid rgba(34, 211, 238, 0.40);
   border-radius: 4px;
