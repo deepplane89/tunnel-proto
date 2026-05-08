@@ -236,6 +236,13 @@ function _initSFXBuffers() {
   _loadSFXBuffer('garage-select',   './assets/audio/garage-select.mp3');
   // Title-screen "death run" button (the ENTER moment from the loading screen).
   _loadSFXBuffer('start-interference', './assets/audio/start-interference.mp3');
+  // Pause-menu EXIT in gameplay — VR compute interference cue.
+  _loadSFXBuffer('pause-exit',      './assets/audio/pause-exit.mp3');
+  // Title-screen UI exits (garage close, settings close, daily streak close,
+  // any back/exit on title) — VR mecha interlock.
+  _loadSFXBuffer('title-exit',      './assets/audio/title-exit.mp3');
+  // Tap-to-play on title screen — low whoosh.
+  _loadSFXBuffer('tap-to-play',     './assets/audio/tap-to-play.mp3');
   // Garage open/close audio removed — no sample needed.
 }
 
@@ -428,5 +435,17 @@ window.playGarageSelect = playGarageSelect;
 // Title-screen "start death run" press.
 function playStartInterference() { _playBuffer('start-interference', 0.7, 1.0, null); }
 window.playStartInterference = playStartInterference;
+
+// Pause-menu EXIT during gameplay — VR compute interference.
+function playPauseExit() { _playBuffer('pause-exit', 0.7, 1.0, null); }
+window.playPauseExit = playPauseExit;
+
+// Title-screen UI exits (garage/settings/etc back) — VR mecha interlock.
+function playTitleExit() { _playBuffer('title-exit', 0.7, 1.0, null); }
+window.playTitleExit = playTitleExit;
+
+// Tap-to-play on title screen — low whoosh.
+function playTapToPlay() { _playBuffer('tap-to-play', 0.7, 1.0, null); }
+window.playTapToPlay = playTapToPlay;
 
 function playCrash() {

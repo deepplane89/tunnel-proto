@@ -12145,6 +12145,13 @@ function _initSFXBuffers() {
   _loadSFXBuffer('garage-select',   './assets/audio/garage-select.mp3');
   // Title-screen "death run" button (the ENTER moment from the loading screen).
   _loadSFXBuffer('start-interference', './assets/audio/start-interference.mp3');
+  // Pause-menu EXIT in gameplay — VR compute interference cue.
+  _loadSFXBuffer('pause-exit',      './assets/audio/pause-exit.mp3');
+  // Title-screen UI exits (garage close, settings close, daily streak close,
+  // any back/exit on title) — VR mecha interlock.
+  _loadSFXBuffer('title-exit',      './assets/audio/title-exit.mp3');
+  // Tap-to-play on title screen — low whoosh.
+  _loadSFXBuffer('tap-to-play',     './assets/audio/tap-to-play.mp3');
   // Garage open/close audio removed — no sample needed.
 }
 
@@ -12337,6 +12344,18 @@ window.playGarageSelect = playGarageSelect;
 // Title-screen "start death run" press.
 function playStartInterference() { _playBuffer('start-interference', 0.7, 1.0, null); }
 window.playStartInterference = playStartInterference;
+
+// Pause-menu EXIT during gameplay — VR compute interference.
+function playPauseExit() { _playBuffer('pause-exit', 0.7, 1.0, null); }
+window.playPauseExit = playPauseExit;
+
+// Title-screen UI exits (garage/settings/etc back) — VR mecha interlock.
+function playTitleExit() { _playBuffer('title-exit', 0.7, 1.0, null); }
+window.playTitleExit = playTitleExit;
+
+// Tap-to-play on title screen — low whoosh.
+function playTapToPlay() { _playBuffer('tap-to-play', 0.7, 1.0, null); }
+window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
   if (state.muted) return;
@@ -19153,24 +19172,24 @@ fetchLeaderboard();
 // kept as no-ops so any stray callers don't throw — and so the inline
 // onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
 function playStartSound() {
+  // TAP TO PLAY on title — low whoosh.
   if (state.muted) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
-  const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.85 * _sM); sfx.play().catch(() => {}); }
+  try { if (typeof window.playTapToPlay === 'function') window.playTapToPlay(); } catch(_){}
 }
 function playResumeSound() {
-  // CONTINUE from pause — VR clicker (title-tap cue).
+  // CONTINUE from pause — keep the existing menu-cycle click.
   try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 function playExitSound()   {
-  // EXIT from pause / return-to-title — VR clicker (title-tap cue).
-  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
+  // EXIT from in-gameplay pause — VR compute interference.
+  try { if (typeof window.playPauseExit === 'function') window.playPauseExit(); } catch(_){}
 }
 function playTitleTap()    {
-  // Generic title-screen menu tap — VR clicker (title-tap cue).
-  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
+  // Generic title-screen UI exit (garage/settings/etc close) — VR mecha interlock.
+  try { if (typeof window.playTitleExit === 'function') window.playTitleExit(); } catch(_){}
 }
 
 // ═══════════════════════════════════════════════════════

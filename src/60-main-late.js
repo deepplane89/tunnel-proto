@@ -1020,23 +1020,23 @@ fetchLeaderboard();
 // kept as no-ops so any stray callers don't throw — and so the inline
 // onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
 function playStartSound() {
+  // TAP TO PLAY on title — low whoosh.
   if (state.muted) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
-  const sfx = document.getElementById('start-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = Math.min(1, 0.85 * _sM); sfx.play().catch(() => {}); }
+  try { if (typeof window.playTapToPlay === 'function') window.playTapToPlay(); } catch(_){}
 }
 function playResumeSound() {
-  // CONTINUE from pause — VR clicker (title-tap cue).
+  // CONTINUE from pause — keep the existing menu-cycle click.
   try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
 }
 function playExitSound()   {
-  // EXIT from pause / return-to-title — VR clicker (title-tap cue).
-  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
+  // EXIT from in-gameplay pause — VR compute interference.
+  try { if (typeof window.playPauseExit === 'function') window.playPauseExit(); } catch(_){}
 }
 function playTitleTap()    {
-  // Generic title-screen menu tap — VR clicker (title-tap cue).
-  try { if (typeof window.playMenuCycle === 'function') window.playMenuCycle(); } catch(_){}
+  // Generic title-screen UI exit (garage/settings/etc close) — VR mecha interlock.
+  try { if (typeof window.playTitleExit === 'function') window.playTitleExit(); } catch(_){}
 }
 
