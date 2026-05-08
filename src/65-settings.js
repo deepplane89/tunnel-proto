@@ -58,12 +58,6 @@ function loadSettings() {
 }
 function saveSettings() {
   window._LS.setItem(SETTINGS_KEY, JSON.stringify(_settings));
-  try {
-    if (_settings.musicMuted || _settings.sfxMuted) {
-      console.warn('[MUTE-DIAG] saveSettings with muted state', { musicMuted: _settings.musicMuted, sfxMuted: _settings.sfxMuted });
-      console.trace('[MUTE-DIAG] save trace');
-    }
-  } catch(_) {}
 }
 loadSettings();
 
@@ -346,23 +340,21 @@ function closeSettings() {
   });
 
   // Music mute toggle
-  _tapBind(document.getElementById('mute-music'), (e) => {
+  _tapBind(document.getElementById('mute-music'), () => {
     _settings.musicMuted = !_settings.musicMuted;
     document.getElementById('mute-music').classList.toggle('muted', _settings.musicMuted);
     document.getElementById('mute-music').textContent = _settings.musicMuted ? '🔇' : '♪';
     applyMusicVolume();
     saveSettings();
-    try { console.warn('[MUTE-DIAG] music mute toggled →', _settings.musicMuted, 'evt:', e && e.type, 'target:', e && e.target && e.target.id); } catch(_) {}
   });
 
   // SFX mute toggle
-  _tapBind(document.getElementById('mute-sfx'), (e) => {
+  _tapBind(document.getElementById('mute-sfx'), () => {
     _settings.sfxMuted = !_settings.sfxMuted;
     document.getElementById('mute-sfx').classList.toggle('muted', _settings.sfxMuted);
     document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '♪';
     applyMusicVolume(); // recalc state.muted (depends on both mults)
     saveSettings();
-    try { console.warn('[MUTE-DIAG] sfx mute toggled →', _settings.sfxMuted, 'evt:', e && e.type, 'target:', e && e.target && e.target.id); } catch(_) {}
   });
 
   // Graphics quality 3-way toggle (Performance / Balanced / Sharp)
