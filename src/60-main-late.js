@@ -255,6 +255,7 @@ function returnToTitle() {
   document.getElementById('hud').classList.add('hidden');
   setPauseOverlay(false);
   document.getElementById('touch-controls').classList.add('hidden');
+  { const _tp = document.getElementById('touch-pause'); if (_tp) _tp.classList.add('hidden'); }
   document.getElementById('settings-btn').style.display = ''; // show gear on title/gameover
   // Trophy icon was moved into Settings panel; element no longer exists.
   { const _lb = document.getElementById('lb-icon-btn'); if (_lb) _lb.style.display = ''; }

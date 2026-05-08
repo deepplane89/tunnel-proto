@@ -382,6 +382,9 @@ function startGame() {
   if (navigator.maxTouchPoints > 0) {
     const _tc = document.getElementById('touch-controls');
     _tc.classList.remove('hidden');
+    // Pause button is a top-level sibling now — keep it in sync.
+    const _tp = document.getElementById('touch-pause');
+    if (_tp) _tp.classList.remove('hidden');
     // Hide the visual arrow indicators once the player has steered through
     // the prologue at least once (LS flag set in _launchDeathRun). Tutorial
     // always shows arrows so new players know where to tap. Touch zones

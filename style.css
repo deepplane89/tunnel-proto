@@ -1324,7 +1324,10 @@ html, body {
 
 /* Pause button — top right */
 .touch-pause {
-  position: absolute;
+  /* Now a top-level fixed element (sibling of #intro-overlay) so its
+     z-index participates in the root stacking context and escapes the
+     prologue overlay (z:500) reliably. */
+  position: fixed;
   top: 16px;
   right: 16px;
   width: 48px;
@@ -1341,8 +1344,9 @@ html, body {
   pointer-events: auto;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  z-index: 600; /* above prologue overlay (500) and touch zones (201) so pause tap is never intercepted */
+  z-index: 600; /* above prologue overlay (500) so pause tap is never intercepted */
 }
+.touch-pause.hidden { display: none; }
 
 /* ── L1 CINEMATIC INTRO ──────────────────────────────── */
 #intro-overlay {

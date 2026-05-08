@@ -2591,29 +2591,6 @@ function buildSkinTunerSliders() {
   titleEl.addEventListener('click', onTap);
 })();
 
-// Ship Z tuner slider (settings panel only — admin version was removed)
-(function setupShipZSlider() {
-  const slider = document.getElementById('ship-z-settings');
-  const label = document.getElementById('ship-z-settings-val');
-  if (!slider || !label) return;
-  slider.addEventListener('input', () => {
-    const v = parseFloat(slider.value);
-    shipGroup.position.z = v;
-    slider.value = v;
-    label.textContent = v.toFixed(1);
-  });
-})();
-
-// Ship Y (hover height) slider — settings panel only (admin version removed)
-(function setupShipYSlider() {
-  const slider = document.getElementById('ship-y-settings');
-  const label = document.getElementById('ship-y-settings-val');
-  if (!slider || !label) return;
-  slider.addEventListener('input', () => {
-    const v = parseFloat(slider.value);
-    _hoverBaseY = v;
-    shipGroup.position.y = v;
-    slider.value = v;
-    label.textContent = v.toFixed(2);
-  });
-})();
+// Ship Z + Ship Y tuner sliders removed from settings panel 2026-05-07 —
+// the underlying _hoverBaseY default and shipGroup.position.z initial values
+// remain set elsewhere; these were just user-facing sliders.

@@ -297,11 +297,15 @@ if (_origAdminToggle) {
   }
 
   // Portrait defaults
-  const PORTRAIT   = { shipX: -1, shipY: -88, shipSize: 100, platX: 1, platY: 100, platSize: 180, labelX: 9,  labelY: -111, titleSize: 100, titleY: -33 };
+  // titleY adjusted 2026-05-07: was -33, moved to -73 to bring title ~15px
+  // below the HUD bottom edge (per user). Fine-tune via triple-tap admin tuner.
+  const PORTRAIT   = { shipX: -1, shipY: -88, shipSize: 100, platX: 1, platY: 100, platSize: 180, labelX: 9,  labelY: -111, titleSize: 100, titleY: -73 };
   // Mobile landscape defaults (phone on its side)
   const LANDSCAPE  = { shipX: 2,  shipY: -52, shipSize: 300, platX: 1, platY: 37, platSize: 104, labelX: 13, labelY: -32, titleSize: 102, titleY: 87 };
   // Desktop defaults
-  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: 87 };
+  // titleY adjusted 2026-05-07: was 87, moved to 40 so the title sits closer
+  // to the HUD with the leaderboard tucked below it (per user).
+  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: 40 };
 
   let shipX, shipY, shipSize, platX, platY, platSize, labelX, labelY, titleSize, titleY;
 
@@ -346,17 +350,48 @@ if (_origAdminToggle) {
       return;
     }
     lb.classList.remove('hidden');
-    // Desktop: position 10px below the skin label
+    // Desktop: position 12px below the JET HORIZON title element so the
+    // leaderboard always sits in a predictable spot below the title — not
+    // "slotted near top of screen over a bunch of stuff". Falls back to a
+    // sensible % if the title isn't measurable yet (first paint race).
     if (_isDesktop()) {
-      const labelEl = document.querySelector('.skin-viewer-label');
-      if (labelEl) {
-        const labelRect = labelEl.getBoundingClientRect();
-        lb.style.top = (labelRect.bottom + 10) + 'px';
+      const tEl = document.querySelector('#title-screen .game-title');
+      if (tEl) {
+        const r = tEl.getBoundingClientRect();
+        if (r && r.bottom > 0) {
+          lb.style.top = (r.bottom + 12) + 'px';
+          lb.style.bottom = '0';
+        } else {
+          // Title not laid out yet — retry next frame.
+          lb.style.top = '40%';
+          lb.style.bottom = '0';
+          requestAnimationFrame(() => updateLB());
+        }
+      } else {
+        lb.style.top = '40%';
         lb.style.bottom = '0';
       }
     } else {
-      lb.style.top = '68%';
-      lb.style.bottom = '0';
+      // Portrait: anchor below the title element + 12px so it never overlaps
+      // the JET HORIZON text or the TAP TO PLAY button below the ship.
+      const tEl = document.querySelector('#title-screen .game-title');
+      if (tEl) {
+        const r = tEl.getBoundingClientRect();
+        if (r && r.bottom > 0) {
+          // Cap at 72% so it never spills over TAP TO PLAY on short screens.
+          const pxFromTop = r.bottom + 12;
+          const pctFromTop = (pxFromTop / window.innerHeight) * 100;
+          lb.style.top = Math.min(pctFromTop, 72) + '%';
+          lb.style.bottom = '0';
+        } else {
+          lb.style.top = '68%';
+          lb.style.bottom = '0';
+          requestAnimationFrame(() => updateLB());
+        }
+      } else {
+        lb.style.top = '68%';
+        lb.style.bottom = '0';
+      }
     }
   }
 

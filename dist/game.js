@@ -27,6 +27,57 @@ window.__loadGate = window.__loadGate || {
 };
 
 
+// ═══════════════════════════════════════════════════
+//  PLATFORM DETECTION (web vs Capacitor native iOS/Android)
+// ═══════════════════════════════════════════════════
+//
+// Single source of truth for runtime platform checks.
+// All Capacitor-specific code paths in the rest of the codebase MUST
+// route through PLATFORM.* and nativePlugin() instead of touching
+// window.Capacitor directly.
+//
+// Why: keeps "is this native?" logic in one file, makes web/iOS
+// abstractions uniform, and means feature code can stay platform-agnostic.
+//
+// PATTERN FOR PLATFORM-SPECIFIC FEATURES:
+//   const Haptics = nativePlugin('Haptics');
+//   if (Haptics) Haptics.impact({ style: 'medium' });
+//   else if (navigator.vibrate) navigator.vibrate(20);
+//
+// See: https://capacitorjs.com/docs/basics/utilities
+
+const PLATFORM = {
+  // True when running inside the Capacitor iOS or Android app shell.
+  // False on Vercel, Mobile Safari, desktop browsers, PWAs.
+  isNative: !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()),
+
+  // 'web' | 'ios' | 'android' — Capacitor's own answer.
+  name: (window.Capacitor && window.Capacitor.getPlatform) ? window.Capacitor.getPlatform() : 'web',
+
+  // True for iPhone/iPad/iPod regardless of native vs web (UA-based).
+  isIOS: /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
+
+  // True only for installed PWA on iOS Safari (Add to Home Screen).
+  // Distinct from isNative — isNative covers Capacitor app, this covers PWA.
+  isStandalonePWA: window.navigator.standalone === true,
+};
+
+// Convenience: PLATFORM.isIOSNative === Capacitor app on iOS specifically.
+PLATFORM.isIOSNative = PLATFORM.isNative && PLATFORM.name === 'ios';
+
+// Get a Capacitor plugin if we're native AND the plugin is registered.
+// Returns the plugin object, or null on web / when plugin isn't installed.
+// Always check the return value before calling methods on it.
+function nativePlugin(name) {
+  if (!PLATFORM.isNative) return null;
+  if (window.Capacitor.isPluginAvailable && !window.Capacitor.isPluginAvailable(name)) return null;
+  return (window.Capacitor.Plugins && window.Capacitor.Plugins[name]) || null;
+}
+
+// Expose globally for use across the unity-build (concatenated) bundle.
+window.PLATFORM = PLATFORM;
+window.nativePlugin = nativePlugin;
 // Menu open animation origin tracker.
 // On any pointer/click/touch, capture the screen coordinates and write them
 // as CSS custom properties (--menu-ox, --menu-oy) on :root. The shared
@@ -14905,7 +14956,8 @@ function renderStreakCircles() {
 
 function claimStreakReward(el, dayNum) {
   if (el.classList.contains('claimed')) return;
-  playTitleTap();
+  // Note: no playTitleTap() here — the synth playRewardSFX() below is the
+  // intended sound. Layering the menu-select tap on top double-stacks audio.
   el.classList.remove('today');
   el.classList.add('burst');
 
@@ -18302,6 +18354,7 @@ function returnToTitle() {
   document.getElementById('hud').classList.add('hidden');
   setPauseOverlay(false);
   document.getElementById('touch-controls').classList.add('hidden');
+  { const _tp = document.getElementById('touch-pause'); if (_tp) _tp.classList.add('hidden'); }
   document.getElementById('settings-btn').style.display = ''; // show gear on title/gameover
   // Trophy icon was moved into Settings panel; element no longer exists.
   { const _lb = document.getElementById('lb-icon-btn'); if (_lb) _lb.style.display = ''; }
@@ -18911,9 +18964,9 @@ window.addEventListener('keyup', e => {
 
 // ── ADD TO HOME SCREEN NUDGE (iOS Safari only) ───────────────────────────────
 (function setupA2HS() {
-  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const isStandalone = window.navigator.standalone === true;
-  if (!isIOS || isStandalone) return;
+  // Skip in native Capacitor app — it's already an installed app.
+  // Skip if already running as installed PWA. Skip on non-iOS.
+  if (PLATFORM.isNative || PLATFORM.isStandalonePWA || !PLATFORM.isIOS) return;
 
   const banner = document.getElementById('a2hs-banner');
   if (!banner) return;
@@ -19650,10 +19703,50 @@ window._showGfxPicker = function _showGfxPicker(onDone) {
 // ═══════════════════════════════════════════════════════
 //  HAPTIC FEEDBACK
 // ═══════════════════════════════════════════════════════
-function hapticTap()    { if (_settings.hapticsOn && navigator.vibrate) navigator.vibrate(10); }
-function hapticMedium() { if (_settings.hapticsOn && navigator.vibrate) navigator.vibrate(25); }
-function hapticHeavy()  { if (_settings.hapticsOn && navigator.vibrate) navigator.vibrate([40, 30, 40]); }
+//
+// Three intensity levels mapped to:
+//   - iOS Capacitor app:  AVFoundation Taptic Engine (precise)
+//   - Web/Android Chrome: navigator.vibrate (rumble motor)
+//   - iOS Safari:         no-op (Safari doesn't support vibrate)
+//
+// Plugin resolved lazily on first call so Capacitor has time to init.
 
+let _Haptics = undefined;  // undefined = not yet resolved, null = unavailable
+function _getHaptics() {
+  if (_Haptics !== undefined) return _Haptics;
+  _Haptics = (typeof nativePlugin === 'function') ? nativePlugin('Haptics') : null;
+  return _Haptics;
+}
+
+function hapticTap() {
+  if (!_settings.hapticsOn) return;
+  const H = _getHaptics();
+  if (H) {
+    H.impact({ style: 'LIGHT' }).catch(() => {});
+  } else if (navigator.vibrate) {
+    navigator.vibrate(10);
+  }
+}
+
+function hapticMedium() {
+  if (!_settings.hapticsOn) return;
+  const H = _getHaptics();
+  if (H) {
+    H.impact({ style: 'MEDIUM' }).catch(() => {});
+  } else if (navigator.vibrate) {
+    navigator.vibrate(25);
+  }
+}
+
+function hapticHeavy() {
+  if (!_settings.hapticsOn) return;
+  const H = _getHaptics();
+  if (H) {
+    H.impact({ style: 'HEAVY' }).catch(() => {});
+  } else if (navigator.vibrate) {
+    navigator.vibrate([40, 30, 40]);
+  }
+}
 // ═══════════════════════════════════════════════════════
 //  ONBOARDING (first play only)
 // ═══════════════════════════════════════════════════════
@@ -20038,6 +20131,9 @@ function startGame() {
   if (navigator.maxTouchPoints > 0) {
     const _tc = document.getElementById('touch-controls');
     _tc.classList.remove('hidden');
+    // Pause button is a top-level sibling now — keep it in sync.
+    const _tp = document.getElementById('touch-pause');
+    if (_tp) _tp.classList.remove('hidden');
     // Hide the visual arrow indicators once the player has steered through
     // the prologue at least once (LS flag set in _launchDeathRun). Tutorial
     // always shows arrows so new players know where to tap. Touch zones
@@ -26393,11 +26489,15 @@ if (_origAdminToggle) {
   }
 
   // Portrait defaults
-  const PORTRAIT   = { shipX: -1, shipY: -88, shipSize: 100, platX: 1, platY: 100, platSize: 180, labelX: 9,  labelY: -111, titleSize: 100, titleY: -33 };
+  // titleY adjusted 2026-05-07: was -33, moved to -73 to bring title ~15px
+  // below the HUD bottom edge (per user). Fine-tune via triple-tap admin tuner.
+  const PORTRAIT   = { shipX: -1, shipY: -88, shipSize: 100, platX: 1, platY: 100, platSize: 180, labelX: 9,  labelY: -111, titleSize: 100, titleY: -73 };
   // Mobile landscape defaults (phone on its side)
   const LANDSCAPE  = { shipX: 2,  shipY: -52, shipSize: 300, platX: 1, platY: 37, platSize: 104, labelX: 13, labelY: -32, titleSize: 102, titleY: 87 };
   // Desktop defaults
-  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: 87 };
+  // titleY adjusted 2026-05-07: was 87, moved to 40 so the title sits closer
+  // to the HUD with the leaderboard tucked below it (per user).
+  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: 40 };
 
   let shipX, shipY, shipSize, platX, platY, platSize, labelX, labelY, titleSize, titleY;
 
@@ -26442,17 +26542,48 @@ if (_origAdminToggle) {
       return;
     }
     lb.classList.remove('hidden');
-    // Desktop: position 10px below the skin label
+    // Desktop: position 12px below the JET HORIZON title element so the
+    // leaderboard always sits in a predictable spot below the title — not
+    // "slotted near top of screen over a bunch of stuff". Falls back to a
+    // sensible % if the title isn't measurable yet (first paint race).
     if (_isDesktop()) {
-      const labelEl = document.querySelector('.skin-viewer-label');
-      if (labelEl) {
-        const labelRect = labelEl.getBoundingClientRect();
-        lb.style.top = (labelRect.bottom + 10) + 'px';
+      const tEl = document.querySelector('#title-screen .game-title');
+      if (tEl) {
+        const r = tEl.getBoundingClientRect();
+        if (r && r.bottom > 0) {
+          lb.style.top = (r.bottom + 12) + 'px';
+          lb.style.bottom = '0';
+        } else {
+          // Title not laid out yet — retry next frame.
+          lb.style.top = '40%';
+          lb.style.bottom = '0';
+          requestAnimationFrame(() => updateLB());
+        }
+      } else {
+        lb.style.top = '40%';
         lb.style.bottom = '0';
       }
     } else {
-      lb.style.top = '68%';
-      lb.style.bottom = '0';
+      // Portrait: anchor below the title element + 12px so it never overlaps
+      // the JET HORIZON text or the TAP TO PLAY button below the ship.
+      const tEl = document.querySelector('#title-screen .game-title');
+      if (tEl) {
+        const r = tEl.getBoundingClientRect();
+        if (r && r.bottom > 0) {
+          // Cap at 72% so it never spills over TAP TO PLAY on short screens.
+          const pxFromTop = r.bottom + 12;
+          const pctFromTop = (pxFromTop / window.innerHeight) * 100;
+          lb.style.top = Math.min(pctFromTop, 72) + '%';
+          lb.style.bottom = '0';
+        } else {
+          lb.style.top = '68%';
+          lb.style.bottom = '0';
+          requestAnimationFrame(() => updateLB());
+        }
+      } else {
+        lb.style.top = '68%';
+        lb.style.bottom = '0';
+      }
     }
   }
 
@@ -29401,6 +29532,7 @@ window._jlDebug = {
           inst.ringMat.opacity  = 0.9;
           _ltShakeTime = _LT.shakeDuration;
           _playLightningStrike();
+          if (typeof hapticMedium === 'function') hapticMedium();
           // Rebuild bolt geometry at the final locked landX (ship pos at strike)
           _ltRejag(inst);
         }
@@ -32489,32 +32621,9 @@ function buildSkinTunerSliders() {
   titleEl.addEventListener('click', onTap);
 })();
 
-// Ship Z tuner slider (settings panel only — admin version was removed)
-(function setupShipZSlider() {
-  const slider = document.getElementById('ship-z-settings');
-  const label = document.getElementById('ship-z-settings-val');
-  if (!slider || !label) return;
-  slider.addEventListener('input', () => {
-    const v = parseFloat(slider.value);
-    shipGroup.position.z = v;
-    slider.value = v;
-    label.textContent = v.toFixed(1);
-  });
-})();
-
-// Ship Y (hover height) slider — settings panel only (admin version removed)
-(function setupShipYSlider() {
-  const slider = document.getElementById('ship-y-settings');
-  const label = document.getElementById('ship-y-settings-val');
-  if (!slider || !label) return;
-  slider.addEventListener('input', () => {
-    const v = parseFloat(slider.value);
-    _hoverBaseY = v;
-    shipGroup.position.y = v;
-    slider.value = v;
-    label.textContent = v.toFixed(2);
-  });
-})();
+// Ship Z + Ship Y tuner sliders removed from settings panel 2026-05-07 —
+// the underlying _hoverBaseY default and shipGroup.position.z initial values
+// remain set elsewhere; these were just user-facing sliders.
 // cache bust 1777249800
 
 // ── GLOBAL SHADER PREWARM ──
