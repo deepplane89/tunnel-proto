@@ -5516,15 +5516,14 @@ function resumeGameTrackInPlace(track) {
       typeof _rewireTrackGains === 'function') {
     _rewireTrackGains();
   }
-  // Fade title down (don't slam pause) — same anti-glitch logic as pauseGameTrack.
-  if (titleMusic && !titleMusic.paused) {
-    rampTrackVol('title', 0, 0.09);
-    setTimeout(() => {
-      try { if (titleMusic && !titleMusic.paused) titleMusic.pause(); } catch (_) {}
-      if (titleMusic) { try { titleMusic.currentTime = 0; } catch (_) {} }
-    }, 110);
-  } else if (titleMusic) {
+  // Hard-stop title music immediately on resume. Previous fade-and-delayed-pause
+  // approach raced with the radio interceptor + gameplay track resume — title
+  // would bleed through into gameplay (esp. when radio was on). Mute first to
+  // avoid the pop, then pause synchronously.
+  if (titleMusic) {
     setTrackVol('title', 0);
+    try { if (!titleMusic.paused) titleMusic.pause(); } catch (_) {}
+    try { titleMusic.currentTime = 0; } catch (_) {}
   }
   const all = allTracks();
   const el = all[track];
