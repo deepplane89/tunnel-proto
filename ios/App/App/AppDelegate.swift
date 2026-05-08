@@ -49,7 +49,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // No-op: existence of this CADisplayLink hints the system to lift the cap.
     }
 
-    func applicationWillResignActive(_ application: UIApplication) {}
+    func applicationWillResignActive(_ application: UIApplication) {
+        // Pause every <audio> element synchronously the moment the user begins
+        // swiping the app away (or any other resign-active gesture). Capacitor's
+        // App.pause / appStateChange:inactive event fires noticeably later —
+        // by the time JS receives it, the WKWebView's JS thread has already
+        // been throttled for ~100-300ms, producing an audible audio stutter
+        // during the swipe-up animation. Hooking this here lets us pause via
+        // a direct evaluateJavaScript call before throttling kicks in.
+        //
+        // We only pause <audio> tags; we do NOT touch the AudioContext or
+        // call _markAudioInterrupted here — the existing visibilitychange
+        // path in 72-main-late-mid.js handles the suspend + snapshot once
+        // Capacitor delivers the app-state event a moment later. Pausing
+        // <audio> here twice (here + JS) is harmless: the second .pause()
+        // is a no-op since the element is already paused.
+        guard let bridgeVC = window?.rootViewController as? CAPBridgeViewController,
+              let webView = bridgeVC.webView else { return }
+        webView.evaluateJavaScript(
+            "document.querySelectorAll('audio').forEach(function(a){ try { if (!a.paused) a.pause(); } catch(_){} });",
+            completionHandler: nil
+        )
+    }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
         // Re-enable idle timer to spare battery while backgrounded.
