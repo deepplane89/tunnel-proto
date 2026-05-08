@@ -825,7 +825,9 @@ function startDeathRun() {
     // Higher player handling tier = faster opening + faster score climb (score
     // tick at line ~4432 multiplies by live speed/BASE_SPEED).
     _setDRSpeed(BASE_SPEED * _funFloorSpeed * getHandlingStartBoost(), 'RUN_START');
-    setTimeout(() => { state._tutorialStep = -0.5; }, 100); // start with rock mounds
+    // Begin proper tutorial flow at DODGE (step 0). Step -0.5 is a dev-only
+    // terrain-walls testing entry, not real tutorial content.
+    setTimeout(() => { state._tutorialStep = 0; }, 100);
   }
   state._tutorialTimer       = 0;
   state._tutorialSubStep     = 0;
@@ -1837,6 +1839,68 @@ function _drApplyPendingSpeed() {
 }
 
 // Endless mix fallback — uses existing random wave director logic
+
+// Shared tutorial entrypoint. Used by Settings → TUTORIAL button and by the
+// first-launch auto-trigger. Applies the JL_v1 baseline physics, sets the
+// tutorial flag, and calls startGame() which starts the real DODGE flow.
+function startTutorial() {
+  try {
+    window._LS.removeItem('jh_tutorial_done');
+    const _tp = (typeof _PHYSICS_PRESETS !== 'undefined') ? _PHYSICS_PRESETS['JL_v1'] : null;
+    if (_tp) {
+      _accelBase     = _tp.accelBase;
+      _accelSnap     = _tp.accelSnap;
+      _maxVelBase    = _tp.maxVelBase;
+      _maxVelSnap    = _tp.maxVelSnap;
+      _bankMax       = _tp.bankMax;
+      _bankSmoothing = _tp.bankSmoothing;
+      _decelBasePct  = _tp.decelBasePct;
+      _decelFullPct  = _tp.decelFullPct;
+    }
+    state._tutorialActive  = true;  // suppress prologue inside startGame()
+    state._tutRocksSpawned = false;
+    state._tutRocksPassed  = 0;
+    startGame();
+  } catch (e) { try { console.warn('[tutorial] start failed', e); } catch(_) {} }
+}
+window.startTutorial = startTutorial;
+
+// First-launch auto-trigger: if a brand-new player has never completed
+// (or skipped) the tutorial, launch it automatically right after the title
+// finishes mounting. Gated by jh_tutorial_done so it never re-triggers, and
+// jh_tutorial_autostarted_v1 so an upgrade doesn't auto-launch existing players.
+function _maybeAutoStartTutorial() {
+  try {
+    if (window._LS.getItem('jh_tutorial_done') === '1') return;
+    if (window._LS.getItem('jh_tutorial_autostarted_v1') === '1') return;
+    // Skip if any meaningful progress already exists (existing players who
+    // somehow lost the tutorial flag should not get auto-launched).
+    const hasProgress = (
+      !!window._LS.getItem('jh_owned_skins') ||
+      !!window._LS.getItem('jetslide_mission_flags') ||
+      !!window._LS.getItem('jet-horizon-scores') ||
+      parseInt(window._LS.getItem('jetslide_fuelcells') || '0', 10) > 50
+    );
+    if (hasProgress) {
+      window._LS.setItem('jh_tutorial_autostarted_v1', '1');
+      return;
+    }
+    window._LS.setItem('jh_tutorial_autostarted_v1', '1');
+    // Small delay so the title screen renders one frame first — keeps the
+    // crossfade clean and gives audio a chance to init.
+    setTimeout(() => { try { startTutorial(); } catch(_){} }, 800);
+  } catch(_) {}
+}
+window._maybeAutoStartTutorial = _maybeAutoStartTutorial;
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    // Title screen mounts on DOMContentLoaded; defer one tick so it's up first.
+    setTimeout(_maybeAutoStartTutorial, 0);
+  });
+} else {
+  setTimeout(_maybeAutoStartTutorial, 0);
+}
+
 // ── Tutorial overlay helpers ──
 // ── Tutorial overlay helpers ──
 function _tutShowInstructionBox(title, sub, color, onDismiss) {
@@ -4720,6 +4784,8 @@ function update(dt) {
         '#ff9500',
         () => {
           window._LS.setItem('jh_tutorial_done', '1');
+          // One-time +25 fuel cell completion bonus (gated by jh_tutorial_grant_v1).
+          try { if (typeof grantTutorialFuelBonus === 'function') grantTutorialFuelBonus(); } catch(_) {}
           _tutDestroyOverlay();
           // Play droplet sound on exit
           const _drp = document.getElementById('droplet-sfx');

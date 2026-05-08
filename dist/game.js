@@ -92,126 +92,80 @@ window.nativePlugin = nativePlugin;
   } catch (_) {}
 })();
 // ═══════════════════════════════════════════════════
-//  iOS LIFECYCLE — force-silence audio on background
+//  iOS LIFECYCLE — backstop for visibilitychange
 // ═══════════════════════════════════════════════════
 //
-// Bug we're fixing:
-//   On Capacitor iOS, sound (especially radio + Web Audio buffer sources)
-//   could keep playing after the app was backgrounded or even swiped away.
+// The existing `visibilitychange` handler in 72-main-late-mid.js has
+// careful pause/resume logic — it pauses music tracks, suspends the
+// AudioContext, marks audio as interrupted, snapshots which tracks were
+// playing, re-issues play() on resume, and reprewarms shaders after a
+// long background.
 //
-// Root causes:
-//   1. AVAudioSession remained "active" on iOS even though the WebView
-//      was paused — fixed in AppDelegate.swift (deactivate on background,
-//      reactivate on foreground).
-//   2. `visibilitychange` doesn't always fire reliably on Capacitor iOS,
-//      and even when it does, JS may run *after* the audio has already
-//      kept playing for a frame or two.
+// On Capacitor iOS, `visibilitychange` fires unreliably from a WKWebView
+// (sometimes late, sometimes not at all). We don't want to duplicate the
+// pause/resume logic here — that caused a regression where:
+//   1. Music wouldn't restart on return (our resume path skipped the
+//      _rewireTrackGains snapshot replay).
+//   2. Game state could double-pause and feel like it "reset".
 //
-// This file adds belt-and-suspenders on the JS side: we listen for
-// Capacitor's @capacitor/app `appStateChange` event (fires synchronously
-// from the native side via the bridge) and force-silence everything we
-// know about — AudioContext, all <audio> elements, engine sound, radio.
+// Fix: this file ONLY ensures the existing handler runs reliably. It does
+// not pause/resume audio itself. It listens for Capacitor's App lifecycle
+// events and fires a synthetic `visibilitychange` event, so all the
+// existing logic just works.
 //
-// Web build: this entire block is a no-op unless PLATFORM.isNative is true,
-// so behavior on Vercel / mobile Safari is unchanged.
+// Web build: native-only no-op so Vercel / mobile Safari are unaffected.
 
 (function setupIOSLifecycle() {
   if (!window.PLATFORM || !window.PLATFORM.isNative) return;
 
-  // Force-silence everything we can reach.
-  function forceSilenceAll(reason) {
-    try {
-      // 1. Suspend the WebAudio context — stops every BufferSourceNode
-      //    immediately, including in-flight SFX.
-      if (typeof audioCtx !== 'undefined' && audioCtx && audioCtx.state === 'running') {
-        audioCtx.suspend().catch(() => {});
-      }
-    } catch (_) {}
+  // Track our own "is hidden" state so we don't fire duplicate events when
+  // the document.hidden flag is already in sync (iOS often fires both).
+  let lastHiddenState = null;
 
+  function setHidden(shouldBeHidden, reason) {
     try {
-      // 2. Pause every <audio> element on the page (music tracks, engine
-      //    voice, radio, etc.).
-      const els = document.querySelectorAll('audio');
-      for (let i = 0; i < els.length; i++) {
-        const el = els[i];
-        if (el && !el.paused) {
-          try { el.pause(); } catch (_) {}
-        }
-      }
-    } catch (_) {}
+      // Already in the requested state? Skip — avoid double-firing the
+      // visibilitychange handler which would double-pause music.
+      if (lastHiddenState === shouldBeHidden) return;
+      lastHiddenState = shouldBeHidden;
 
-    try {
-      // 3. If a music-track helper exists, pause through that path too —
-      //    handles MediaElementSource graphs that bypass the <audio>
-      //    element's paused flag.
-      if (typeof allTracks === 'function') {
-        const tracks = allTracks();
-        if (tracks) {
-          Object.values(tracks).forEach(el => {
-            if (el && typeof el.pause === 'function' && !el.paused) {
-              try { el.pause(); } catch (_) {}
-            }
-          });
-        }
-      }
-    } catch (_) {}
+      // If the browser's document.hidden is already correct, just fire
+      // the event so the existing handler runs. If it's out of sync,
+      // we still fire the event — the handler reads document.hidden,
+      // and Capacitor WKWebView usually has it correct by the time we
+      // get here.
+      try { console.log('[ios-lifecycle] visibility →', shouldBeHidden ? 'hidden' : 'visible', '(' + reason + ')'); } catch (_) {}
 
-    try {
-      // 4. Mark the audio interrupted so resume paths know to rewire on
-      //    foreground (matches the existing visibilitychange handler).
-      if (typeof _markAudioInterrupted === 'function') _markAudioInterrupted();
+      // Synthesize the event so the existing visibilitychange handler runs.
+      const evt = new Event('visibilitychange');
+      document.dispatchEvent(evt);
     } catch (_) {}
-
-    try { console.log('[ios-lifecycle] forceSilenceAll:', reason); } catch (_) {}
   }
 
-  // Resume audio context on foreground — JS-side mirror of the AppDelegate
-  // reactivation. Existing visibilitychange handlers will re-issue play()
-  // for tracks that were active.
-  function tryResumeAudio(reason) {
-    try {
-      if (typeof audioCtx !== 'undefined' && audioCtx &&
-          (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
-        audioCtx.resume().catch(() => {});
-      }
-    } catch (_) {}
-    try { console.log('[ios-lifecycle] tryResumeAudio:', reason); } catch (_) {}
-  }
-
-  // ── Capacitor App plugin ───────────────────────────────────────────────
-  // Fires reliably on iOS lifecycle changes via the native bridge. This is
-  // more dependable than visibilitychange in a WKWebView.
   function attachAppPlugin() {
     const App = window.nativePlugin && window.nativePlugin('App');
     if (!App || typeof App.addListener !== 'function') return false;
 
     try {
       App.addListener('appStateChange', (state) => {
-        // state.isActive === true  → app foregrounded
-        // state.isActive === false → app backgrounded / lost focus
         if (state && state.isActive === false) {
-          forceSilenceAll('appStateChange:inactive');
+          setHidden(true,  'appStateChange:inactive');
         } else if (state && state.isActive === true) {
-          tryResumeAudio('appStateChange:active');
+          setHidden(false, 'appStateChange:active');
         }
       });
     } catch (_) {}
 
     try {
-      // pause / resume events fire on full background/foreground transitions
-      App.addListener('pause',  () => forceSilenceAll('App.pause'));
-      App.addListener('resume', () => tryResumeAudio('App.resume'));
+      App.addListener('pause',  () => setHidden(true,  'App.pause'));
+      App.addListener('resume', () => setHidden(false, 'App.resume'));
     } catch (_) {}
 
     return true;
   }
 
-  // The Capacitor bridge may not be ready immediately — try now, and again
-  // after deviceready. attachAppPlugin is idempotent in practice (Capacitor
-  // dedupes identical listeners).
   if (!attachAppPlugin()) {
     document.addEventListener('deviceready', attachAppPlugin, { once: true });
-    // Fallback: poll briefly until the plugin appears (usually <100ms).
     let tries = 0;
     const poll = setInterval(() => {
       tries++;
@@ -219,9 +173,12 @@ window.nativePlugin = nativePlugin;
     }, 100);
   }
 
-  // ── Page-hide as last-resort safety net ────────────────────────────────
-  // pagehide fires on iOS when the app is being killed (terminate).
-  window.addEventListener('pagehide', () => forceSilenceAll('pagehide'));
+  // Track real visibilitychange so our state stays in sync. If the OS
+  // already fires it correctly, we just record it; we won't synthesize
+  // a duplicate.
+  document.addEventListener('visibilitychange', () => {
+    lastHiddenState = !!document.hidden;
+  });
 })();
 // Menu open animation origin tracker.
 // On any pointer/click/touch, capture the screen coordinates and write them
@@ -1614,7 +1571,7 @@ function claimHandlingUpgrade() {
 // Order: Glide → Wipeout → Rail → Jet. Jet is the final unlock around
 // 3/4 through the handling-level ladder (handling tops at L22, jet at L20).
 window._FLIGHT_MODELS = {
-  DEFAULT: { unlock: 1,  color: '#aaaaaa', resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
+  DEFAULT: { unlock: 1,  color: '#aaaaaa', resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.65, drift: 0.30 },
   GLIDE:   { unlock: 4,  color: '#7bbbff', resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
   WIPEOUT: { unlock: 8,  color: '#ff77aa', resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
   RAIL:    { unlock: 14, color: '#ffff77', resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },
@@ -1807,8 +1764,47 @@ function loadMissionFlags() {
 function saveMissionFlags(flags) {
   window._LS.setItem('jetslide_mission_flags', JSON.stringify(flags));
 }
-function loadFuelCells() { return parseInt(window._LS.getItem(FUELCELL_KEY) || '0', 10); }
+function loadFuelCells() {
+  // First-launch starter grant: +50 fuel cells, one-time per device.
+  // Gated by jh_starter_grant_v1 so existing players don't get a freebie
+  // on update and so the grant never repeats. Bump suffix (_v2 etc) only
+  // if intentionally re-granting in the future.
+  try {
+    if (window._LS.getItem('jh_starter_grant_v1') !== '1') {
+      const cur = parseInt(window._LS.getItem(FUELCELL_KEY) || '0', 10);
+      // Only grant to genuinely-new players. If they already have any fuel
+      // OR any other game progress, treat them as existing — just set the
+      // flag so they never get a retroactive grant.
+      const hasProgress = (
+        cur > 0 ||
+        !!window._LS.getItem('jh_owned_skins') ||
+        !!window._LS.getItem('jetslide_mission_flags') ||
+        !!window._LS.getItem('jh_tutorial_done') ||
+        !!window._LS.getItem('jet-horizon-scores')
+      );
+      if (!hasProgress) {
+        window._LS.setItem(FUELCELL_KEY, String(cur + 50));
+      }
+      window._LS.setItem('jh_starter_grant_v1', '1');
+    }
+  } catch(_) {}
+  return parseInt(window._LS.getItem(FUELCELL_KEY) || '0', 10);
+}
 function saveFuelCells(n) { window._LS.setItem(FUELCELL_KEY, String(n)); }
+
+// Tutorial-completion grant: +25 fuel cells, one-time. Called from the
+// tutorial end card (only on actual completion, not early exit).
+function grantTutorialFuelBonus() {
+  try {
+    if (window._LS.getItem('jh_tutorial_grant_v1') === '1') return false;
+    const cur = parseInt(window._LS.getItem(FUELCELL_KEY) || '0', 10);
+    window._LS.setItem(FUELCELL_KEY, String(cur + 25));
+    window._LS.setItem('jh_tutorial_grant_v1', '1');
+    try { if (typeof updateTitleFuelCells === 'function') updateTitleFuelCells(); } catch(_) {}
+    return true;
+  } catch(_) { return false; }
+}
+window.grantTutorialFuelBonus = grantTutorialFuelBonus;
 
 // ── Addon unlocks (turrets etc) ──
 // Tracks which ship-addon mesh nodes the player has unlocked via the mission
@@ -18638,8 +18634,13 @@ function applyPowerup(typeIdx) {
       shieldLight.intensity = 0;
       // Force-field loop: starts at 0 during speed phase
       const _invSfx = document.getElementById('invincible-loop-sfx');
+      console.log('[INVINC-SFX] activate', { found: !!_invSfx, muted: state.muted, src: _invSfx && _invSfx.src, readyState: _invSfx && _invSfx.readyState });
       if (_invSfx && !state.muted) {
-        try { _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45; _invSfx.play().catch(()=>{}); } catch(_) {}
+        try {
+          _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45;
+          const _p = _invSfx.play();
+          if (_p && _p.then) _p.then(()=>console.log('[INVINC-SFX] play OK')).catch((e)=>console.warn('[INVINC-SFX] play FAIL', e && e.message));
+        } catch(e) { console.warn('[INVINC-SFX] throw', e && e.message); }
       }
       break;
     }
@@ -20196,25 +20197,11 @@ function closeSettings() {
     if (typeof toggleLeaderboard === 'function') toggleLeaderboard();
   });
 
-  // Replay tutorial button
+  // Replay tutorial button — delegates to shared startTutorial() in 67-main-late.js
+  // so the auto-launch flow and the manual-replay flow stay identical.
   _tapBind(document.getElementById('replay-tutorial-btn'), () => {
-    window._LS.removeItem('jh_tutorial_done');
     closeSettings();
-    // Apply JL_v1 physics as tutorial baseline
-    const _tp = _PHYSICS_PRESETS['JL_v1'];
-    _accelBase     = _tp.accelBase;
-    _accelSnap     = _tp.accelSnap;
-    _maxVelBase    = _tp.maxVelBase;
-    _maxVelSnap    = _tp.maxVelSnap;
-    _bankMax       = _tp.bankMax;
-    _bankSmoothing = _tp.bankSmoothing;
-    _decelBasePct  = _tp.decelBasePct;
-    _decelFullPct  = _tp.decelFullPct;
-    state._tutorialActive = true;  // must be set BEFORE startGame() so prologue is suppressed
-    state._tutorialStep = -0.5;
-    startGame();
-    state._tutRocksSpawned = false;
-    state._tutRocksPassed = 0;
+    if (typeof window.startTutorial === 'function') window.startTutorial();
   });
 
   document.getElementById('settings-overlay').addEventListener('click', (e) => {
@@ -21396,7 +21383,9 @@ function startDeathRun() {
     // Higher player handling tier = faster opening + faster score climb (score
     // tick at line ~4432 multiplies by live speed/BASE_SPEED).
     _setDRSpeed(BASE_SPEED * _funFloorSpeed * getHandlingStartBoost(), 'RUN_START');
-    setTimeout(() => { state._tutorialStep = -0.5; }, 100); // start with rock mounds
+    // Begin proper tutorial flow at DODGE (step 0). Step -0.5 is a dev-only
+    // terrain-walls testing entry, not real tutorial content.
+    setTimeout(() => { state._tutorialStep = 0; }, 100);
   }
   state._tutorialTimer       = 0;
   state._tutorialSubStep     = 0;
@@ -22408,6 +22397,68 @@ function _drApplyPendingSpeed() {
 }
 
 // Endless mix fallback — uses existing random wave director logic
+
+// Shared tutorial entrypoint. Used by Settings → TUTORIAL button and by the
+// first-launch auto-trigger. Applies the JL_v1 baseline physics, sets the
+// tutorial flag, and calls startGame() which starts the real DODGE flow.
+function startTutorial() {
+  try {
+    window._LS.removeItem('jh_tutorial_done');
+    const _tp = (typeof _PHYSICS_PRESETS !== 'undefined') ? _PHYSICS_PRESETS['JL_v1'] : null;
+    if (_tp) {
+      _accelBase     = _tp.accelBase;
+      _accelSnap     = _tp.accelSnap;
+      _maxVelBase    = _tp.maxVelBase;
+      _maxVelSnap    = _tp.maxVelSnap;
+      _bankMax       = _tp.bankMax;
+      _bankSmoothing = _tp.bankSmoothing;
+      _decelBasePct  = _tp.decelBasePct;
+      _decelFullPct  = _tp.decelFullPct;
+    }
+    state._tutorialActive  = true;  // suppress prologue inside startGame()
+    state._tutRocksSpawned = false;
+    state._tutRocksPassed  = 0;
+    startGame();
+  } catch (e) { try { console.warn('[tutorial] start failed', e); } catch(_) {} }
+}
+window.startTutorial = startTutorial;
+
+// First-launch auto-trigger: if a brand-new player has never completed
+// (or skipped) the tutorial, launch it automatically right after the title
+// finishes mounting. Gated by jh_tutorial_done so it never re-triggers, and
+// jh_tutorial_autostarted_v1 so an upgrade doesn't auto-launch existing players.
+function _maybeAutoStartTutorial() {
+  try {
+    if (window._LS.getItem('jh_tutorial_done') === '1') return;
+    if (window._LS.getItem('jh_tutorial_autostarted_v1') === '1') return;
+    // Skip if any meaningful progress already exists (existing players who
+    // somehow lost the tutorial flag should not get auto-launched).
+    const hasProgress = (
+      !!window._LS.getItem('jh_owned_skins') ||
+      !!window._LS.getItem('jetslide_mission_flags') ||
+      !!window._LS.getItem('jet-horizon-scores') ||
+      parseInt(window._LS.getItem('jetslide_fuelcells') || '0', 10) > 50
+    );
+    if (hasProgress) {
+      window._LS.setItem('jh_tutorial_autostarted_v1', '1');
+      return;
+    }
+    window._LS.setItem('jh_tutorial_autostarted_v1', '1');
+    // Small delay so the title screen renders one frame first — keeps the
+    // crossfade clean and gives audio a chance to init.
+    setTimeout(() => { try { startTutorial(); } catch(_){} }, 800);
+  } catch(_) {}
+}
+window._maybeAutoStartTutorial = _maybeAutoStartTutorial;
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    // Title screen mounts on DOMContentLoaded; defer one tick so it's up first.
+    setTimeout(_maybeAutoStartTutorial, 0);
+  });
+} else {
+  setTimeout(_maybeAutoStartTutorial, 0);
+}
+
 // ── Tutorial overlay helpers ──
 // ── Tutorial overlay helpers ──
 function _tutShowInstructionBox(title, sub, color, onDismiss) {
@@ -25291,6 +25342,8 @@ function update(dt) {
         '#ff9500',
         () => {
           window._LS.setItem('jh_tutorial_done', '1');
+          // One-time +25 fuel cell completion bonus (gated by jh_tutorial_grant_v1).
+          try { if (typeof grantTutorialFuelBonus === 'function') grantTutorialFuelBonus(); } catch(_) {}
           _tutDestroyOverlay();
           // Play droplet sound on exit
           const _drp = document.getElementById('droplet-sfx');
@@ -31811,7 +31864,7 @@ function _ringShowTuner() {
     // regardless of player level. drift=0 → no wobble (RAIL); drift=0.8 → loose (WIPEOUT).
     // Manual slider edits + reset clear the override (back to player-level driven).
     const _FEEL_PRESETS = {
-      DEFAULT: { resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
+      DEFAULT: { resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.65, drift: 0.30 },
       GLIDE:   { resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
       JET:     { resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
       RAIL:    { resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },
