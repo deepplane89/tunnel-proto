@@ -660,17 +660,48 @@ function getHandlingDrift() {
   return 1.0;
 }
 
-// Returns the starting-speed multiplier granted by the player's current
-// handling tier. Stock = 1.00, Full Control (lvl 22) = 1.55. Applied at
-// _setDRSpeed() in startGame() — also feeds the score tick (which scales with
-// live speed), so higher tiers = faster opening AND faster score climb.
-function getHandlingStartBoost() {
+// ── BOOST PROFILE (player-equippable handling tier) ─────────────────────
+// Each entry in HANDLING_TIERS is exposed in the garage as TIER 1, TIER 2, ...
+// Player can downshift to any unlocked tier on purpose (e.g. to play with a
+// gentler launch). Highest unlocked is auto-equipped on first claim; saved
+// choice is read from localStorage.
+const BOOST_PROFILE_KEY = 'jetslide_boost_tier';
+function getMaxUnlockedBoostTierIndex() {
   const level = loadPlayerLevel();
-  let boost = 1.0;
-  for (const t of HANDLING_TIERS) {
-    if (level >= t.level) boost = t.startBoost;
+  let idx = 0;
+  for (let i = 0; i < HANDLING_TIERS.length; i++) {
+    if (level >= HANDLING_TIERS[i].level) idx = i;
   }
-  return boost;
+  return idx;
+}
+function loadEquippedBoostTierIndex() {
+  const raw = window._LS.getItem(BOOST_PROFILE_KEY);
+  const max = getMaxUnlockedBoostTierIndex();
+  if (raw == null) return max; // default = highest unlocked (matches old behavior)
+  const v = parseInt(raw, 10);
+  if (isNaN(v) || v < 0) return 0;
+  // Clamp to max unlocked so an unlocked-then-locked scenario can't break.
+  return Math.min(v, max);
+}
+function saveEquippedBoostTierIndex(idx) {
+  if (typeof idx !== 'number' || idx < 0) return;
+  if (idx > getMaxUnlockedBoostTierIndex()) return;
+  window._LS.setItem(BOOST_PROFILE_KEY, String(idx));
+}
+window.loadEquippedBoostTierIndex = loadEquippedBoostTierIndex;
+window.saveEquippedBoostTierIndex = saveEquippedBoostTierIndex;
+window.getMaxUnlockedBoostTierIndex = getMaxUnlockedBoostTierIndex;
+window.HANDLING_TIERS = HANDLING_TIERS;
+
+// Returns the starting-speed multiplier from the player's EQUIPPED boost
+// tier (clamped to highest unlocked). Stock = 1.00, Full Control = 2.30.
+// Applied at _setDRSpeed() in startGame() — also feeds the score tick
+// (which scales with live speed), so higher tier = faster opening AND faster
+// score climb. Player can purposely equip a lower tier in the garage.
+function getHandlingStartBoost() {
+  const idx = loadEquippedBoostTierIndex();
+  const t = HANDLING_TIERS[idx] || HANDLING_TIERS[0];
+  return t.startBoost;
 }
 
 function getPendingHandlingUpgrade() {
