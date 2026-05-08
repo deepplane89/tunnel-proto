@@ -5984,3 +5984,25 @@ body.sr-open #title-leaderboard {
   font-size: 9px; letter-spacing: 2px;
   opacity: .4; text-transform: uppercase;
 }
+
+/* ═══════════════════════════════════════════════════
+   NATIVE iOS APP — WebView polish
+   ═══════════════════════════════════════════════════
+   Only applies inside the Capacitor app shell. Web build
+   (Vercel / mobile Safari) is unaffected.
+   - kill text selection / long-press callout / link preview
+   - kill tap highlight + double-tap zoom
+   - lock content from scrolling/bouncing
+*/
+html.platform-ios-native,
+html.platform-ios-native body,
+html.platform-ios-native * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+html.platform-ios-native body {
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}

@@ -19,7 +19,10 @@
   "ios": {
     "contentInset": "always",
     "scrollEnabled": false,
-    "limitsNavigationsToAppBoundDomains": false
+    "limitsNavigationsToAppBoundDomains": false,
+    "allowsLinkPreview": false,
+    "preferredContentMode": "mobile",
+    "backgroundColor": "#000000"
   },
   "_comment": "iOS-specific config. Game code lives in src/ + style.css + index.html. To enable live-load from Vercel during dev: uncomment server.url. MUST be removed/commented before App Store submission."
 }
