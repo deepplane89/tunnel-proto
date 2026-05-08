@@ -261,13 +261,15 @@ if (_origAdminToggle) {
 
 // ── LAYOUT TUNER ──────────────────────────────────────────────────────────
 (function() {
-  // Triple-tap skin label to toggle
+  // Triple-tap title (.game-title) to toggle the layout tuner. Lives on the
+  // same element as the admin-panel triple-tap (78-tuner-panels.js) — both
+  // listeners run independently so 3 taps reveals BOTH admin panel + tuner.
   let tapCount = 0, tapTimer = null;
-  const skinLabel = document.getElementById('skin-viewer-label');
+  const titleTapEl = document.querySelector('.game-title');
   const tunerPanel = document.getElementById('layout-tuner');
-  if (!skinLabel || !tunerPanel) return;
+  if (!titleTapEl || !tunerPanel) return;
 
-  skinLabel.addEventListener('click', () => {
+  titleTapEl.addEventListener('click', () => {
     tapCount++;
     if (tapCount === 3) {
       tapCount = 0;
@@ -275,7 +277,7 @@ if (_origAdminToggle) {
       tunerPanel.classList.toggle('hidden');
     } else {
       clearTimeout(tapTimer);
-      tapTimer = setTimeout(() => { tapCount = 0; }, 500);
+      tapTimer = setTimeout(() => { tapCount = 0; }, 600);
     }
   });
 
@@ -297,11 +299,15 @@ if (_origAdminToggle) {
   }
 
   // Portrait defaults
-  const PORTRAIT   = { shipX: -1, shipY: -88, shipSize: 100, platX: 1, platY: 100, platSize: 180, labelX: 9,  labelY: -111, titleSize: 100, titleY: -33 };
+  // titleY adjusted 2026-05-07: was -33, moved to -73 to bring title ~15px
+  // below the HUD bottom edge (per user). Fine-tune via triple-tap admin tuner.
+  const PORTRAIT   = { shipX: -1, shipY: -88, shipSize: 100, platX: 1, platY: 100, platSize: 180, labelX: 9,  labelY: -111, titleSize: 100, titleY: -73 };
   // Mobile landscape defaults (phone on its side)
   const LANDSCAPE  = { shipX: 2,  shipY: -52, shipSize: 300, platX: 1, platY: 37, platSize: 104, labelX: 13, labelY: -32, titleSize: 102, titleY: 87 };
   // Desktop defaults
-  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: 87 };
+  // titleY adjusted 2026-05-07: was 87, moved to 40 so the title sits closer
+  // to the HUD with the leaderboard tucked below it (per user).
+  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: 40 };
 
   let shipX, shipY, shipSize, platX, platY, platSize, labelX, labelY, titleSize, titleY;
 
@@ -346,17 +352,51 @@ if (_origAdminToggle) {
       return;
     }
     lb.classList.remove('hidden');
-    // Desktop: position 10px below the skin label
+    // Desktop: position 12px below the JET HORIZON title element so the
+    // leaderboard always sits in a predictable spot below the title — not
+    // "slotted near top of screen over a bunch of stuff". Falls back to a
+    // sensible % if the title isn't measurable yet (first paint race).
+    // _lbYOffset is a tuner-driven px nudge applied on top of the anchored
+    // baseline (title.bottom + 12). 0 = default. Persisted on window so the
+    // resize-driven re-anchor keeps using the user's chosen offset.
+    const off = (typeof window._lbYOffset === 'number') ? window._lbYOffset : 0;
     if (_isDesktop()) {
-      const labelEl = document.querySelector('.skin-viewer-label');
-      if (labelEl) {
-        const labelRect = labelEl.getBoundingClientRect();
-        lb.style.top = (labelRect.bottom + 10) + 'px';
+      const tEl = document.querySelector('#title-screen .game-title');
+      if (tEl) {
+        const r = tEl.getBoundingClientRect();
+        if (r && r.bottom > 0) {
+          lb.style.top = (r.bottom + 12 + off) + 'px';
+          lb.style.bottom = '0';
+        } else {
+          // Title not laid out yet — retry next frame.
+          lb.style.top = '40%';
+          lb.style.bottom = '0';
+          requestAnimationFrame(() => updateLB());
+        }
+      } else {
+        lb.style.top = '40%';
         lb.style.bottom = '0';
       }
     } else {
-      lb.style.top = '68%';
-      lb.style.bottom = '0';
+      // Portrait: anchor below the title element + 12px + offset, capped so
+      // it never spills over TAP TO PLAY on short screens.
+      const tEl = document.querySelector('#title-screen .game-title');
+      if (tEl) {
+        const r = tEl.getBoundingClientRect();
+        if (r && r.bottom > 0) {
+          const pxFromTop = r.bottom + 12 + off;
+          const pctFromTop = (pxFromTop / window.innerHeight) * 100;
+          lb.style.top = Math.min(Math.max(pctFromTop, 0), 80) + '%';
+          lb.style.bottom = '0';
+        } else {
+          lb.style.top = '68%';
+          lb.style.bottom = '0';
+          requestAnimationFrame(() => updateLB());
+        }
+      } else {
+        lb.style.top = '68%';
+        lb.style.bottom = '0';
+      }
     }
   }
 
@@ -424,9 +464,12 @@ if (_origAdminToggle) {
   bind('tune-label-x', 'val-label-x', v => { labelX = v; updateLabel(); });
   bind('tune-title-size', 'val-title-size', v => { titleSize = v; updateTitle(); });
   bind('tune-title-y', 'val-title-y', v => { titleY = v; updateTitle(); });
+  // LB Y Offset: nudge leaderboard up/down in px relative to the auto-anchor
+  // (title.bottom + 12). Re-runs updateLB() so resize/orientation flips keep
+  // honoring the user's chosen offset.
   bind('tune-lb-y', 'val-lb-y', v => {
-    const lb = document.getElementById('title-leaderboard');
-    if (lb) lb.style.top = v + '%';
+    window._lbYOffset = v;
+    updateLB();
   });
 
   // 3D ship orientation sliders (values stored as integers, divided to get floats)
@@ -3305,6 +3348,7 @@ window._jlDebug = {
           inst.ringMat.opacity  = 0.9;
           _ltShakeTime = _LT.shakeDuration;
           _playLightningStrike();
+          if (typeof hapticMedium === 'function') hapticMedium();
           // Rebuild bolt geometry at the final locked landX (ship pos at strike)
           _ltRejag(inst);
         }

@@ -81,7 +81,8 @@ function renderStreakCircles() {
 
 function claimStreakReward(el, dayNum) {
   if (el.classList.contains('claimed')) return;
-  playTitleTap();
+  // Note: no playTitleTap() here — the synth playRewardSFX() below is the
+  // intended sound. Layering the menu-select tap on top double-stacks audio.
   el.classList.remove('today');
   el.classList.add('burst');
 
