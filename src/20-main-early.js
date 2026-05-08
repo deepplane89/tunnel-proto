@@ -5349,12 +5349,12 @@ function updateAurora(dt) {
 }
 
 // ── Music system: Web Audio API gain nodes for smooth crossfades ─────────
-const TRACK_VOL = { title: 0.4, bg: 0.45, l3: 0.45, l4: 0.45, lake: 0.28, keepgoing: 0.7 };
+const TRACK_VOL = { title: 0.4, bg: 0.45, l3: 0.45, l4: 0.45, lake: 0.28, keepgoing: 0.7, radio: 0.45 };
 const trackGains = {};   // { title: GainNode, bg: GainNode, ... }
 let   _gainsReady = false;
 
 function allTracks() {
-  return { title: titleMusic, bg: bgMusic, l3: l3Music, l4: l4Music, lake: lakeMusic, keepgoing: keepGoingMusic };
+  return { title: titleMusic, bg: bgMusic, l3: l3Music, l4: l4Music, lake: lakeMusic, keepgoing: keepGoingMusic, radio: radioMusic };
 }
 
 // Wire each <audio> element through a GainNode. Called once from initAudio.
@@ -5500,6 +5500,9 @@ function resumeGameTrackInPlace(track) {
 // Smooth crossfade using Web Audio gain ramps — no JS timers for volume.
 function musicFadeTo(toTrack, durationMs, outFadeMult) {
   initAudio();
+  // Radio override: when the unlockable shuffle station is ON and the caller
+  // is targeting a gameplay zone (bg/l3/l4/lake/keepgoing), divert to radio.
+  if (typeof radioInterceptMusicFade === 'function' && radioInterceptMusicFade(toTrack, durationMs)) return;
   const all = allTracks();
   const toEl = all[toTrack];
   if (!toEl) return;

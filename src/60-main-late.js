@@ -20,6 +20,8 @@ function setPauseOverlay(visible) {
   if (visible) {
     el.classList.remove('hidden');
     document.getElementById('hud').classList.add('hidden');
+    // Refresh radio now-playing row each time the pause menu opens.
+    try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_){}
   } else {
     el.classList.add('hidden');
     if (state.phase === 'playing') document.getElementById('hud').classList.remove('hidden');
@@ -136,6 +138,8 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
+  // Radio: ensure shuffle station is fully stopped before title music kicks in.
+  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
   // Release the screen wake lock — not needed on title/garage.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Release the thruster color lock so the title vibe (and the title

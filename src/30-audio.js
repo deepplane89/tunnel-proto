@@ -10,6 +10,7 @@ let l3Music        = null;
 let l4Music        = null;
 let lakeMusic      = null;
 let keepGoingMusic = null;
+let radioMusic     = null;  // shared <audio id="radio-music"> for the unlockable shuffle station
 let activeFadeIv = null;  // crossfade timer handle
 
 function initAudio() {
@@ -20,6 +21,7 @@ function initAudio() {
   l4Music        = l4Music        || document.getElementById('l4-music');
   lakeMusic      = lakeMusic      || document.getElementById('lake-music');
   keepGoingMusic = keepGoingMusic || document.getElementById('keep-going-music');
+  radioMusic     = radioMusic     || document.getElementById('radio-music');
   if (keepGoingMusic && !keepGoingMusic._endlessLoopSet) {
     keepGoingMusic._endlessLoopSet = true;
     keepGoingMusic.addEventListener('ended', () => {

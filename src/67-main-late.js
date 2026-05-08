@@ -76,6 +76,8 @@ function _triggerRetryWithSweep() {
 function startGame() {
   if (_gameStarting) return; // reentry guard — ignore double-taps / simultaneous inputs
   _gameStarting = true;
+  // Radio: bump run counter (used to unlock the shuffle station after run #3).
+  try { if (typeof incrementRadioRunCount === 'function') incrementRadioRunCount(); } catch(_) {}
   const _tlb = document.getElementById('title-leaderboard');
   if (_tlb) _tlb.classList.add('hidden');
   // Show onboarding on very first play
@@ -3218,6 +3220,9 @@ function killPlayer() {
                            : null;
 
   state.phase = 'dead';
+  // Radio: stop playback on death + try to unlock the shuffle station.
+  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  try { if (typeof tryUnlockRadioOnDeath === 'function') tryUnlockRadioOnDeath(); } catch(_) {}
   // Release the screen wake lock on death — game-over screen doesn't need it.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Defensive: release transition reentry locks so an in-flight startGame /
