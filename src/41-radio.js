@@ -218,9 +218,12 @@ function radioInterceptMusicFade(toTrack, durationMs) {
   try {
     const all = (typeof allTracks === 'function') ? allTracks() : {};
     const durSec = (durationMs || 1500) / 1000;
+    // Ramp every non-radio track (including title) to 0 and pause when silent.
+    // Title is included so the death→title fade doesn't bleed through when the
+    // player taps REPAIR SHIP and the radio takes over the gameplay slot.
     Object.entries(all).forEach(([k, el]) => {
       if (!el) return;
-      if (k === 'title' || k === 'radio') return;
+      if (k === 'radio') return;
       if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, durSec);
       setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, (durationMs || 1500) + 50);
     });

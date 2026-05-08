@@ -6232,6 +6232,13 @@ function updateAurora(dt) {
 const TRACK_VOL = { title: 0.4, bg: 0.45, l3: 0.45, l4: 0.45, lake: 0.28, keepgoing: 0.7, radio: 0.45 };
 const trackGains = {};   // { title: GainNode, bg: GainNode, ... }
 let   _gainsReady = false;
+// Per-track fade generation counter. Each musicFadeTo call bumps the
+// generation for every track it touches; the deferred cleanup setTimeout
+// captures its own gen and only pauses tracks whose gen still matches.
+// This prevents a stale cleanup from a prior fade (e.g. death’s 2.5s
+// fade-to-title) from pausing a newer fade target (e.g. bg from REPAIR SHIP)
+// that’s still ramping in at low volume.
+const _trackFadeGen = {};
 
 function allTracks() {
   return { title: titleMusic, bg: bgMusic, l3: l3Music, l4: l4Music, lake: lakeMusic, keepgoing: keepGoingMusic, radio: radioMusic };
@@ -6388,6 +6395,15 @@ function musicFadeTo(toTrack, durationMs, outFadeMult) {
   const durSec    = durationMs / 1000;
   const outDurSec = durSec * (outFadeMult || 1.0);
 
+  // Bump generation for every track this fade touches (target + others).
+  // The deferred cleanup below captures these per-track gens and bails out
+  // for any track whose gen has since been superseded by a newer fade.
+  const myGen = {};
+  Object.keys(all).forEach(k => {
+    _trackFadeGen[k] = (_trackFadeGen[k] || 0) + 1;
+    myGen[k] = _trackFadeGen[k];
+  });
+
   if (state.muted) {
     Object.entries(all).forEach(([k, el]) => { if (el && k !== toTrack && k !== 'lake') el.pause(); });
     if (toEl.paused) { setTrackVol(toTrack, 0); toEl.play().catch(() => {}); }
@@ -6402,11 +6418,15 @@ function musicFadeTo(toTrack, durationMs, outFadeMult) {
     if (!el || k === toTrack || k === 'lake') return;
     rampTrackVol(k, 0, outDurSec);
   });
-  // Schedule cleanup: pause faded-out tracks after ramp completes
+  // Schedule cleanup: pause faded-out tracks after ramp completes.
+  // Skip any track whose gen no longer matches — a newer musicFadeTo has
+  // taken over and may be ramping that track back UP (e.g. REPAIR SHIP
+  // fading bg in while death’s stale title-fade cleanup is about to fire).
   const cleanupMs = Math.max(durationMs, durationMs * (outFadeMult || 1.0)) + 100;
   setTimeout(() => {
     Object.entries(all).forEach(([k, el]) => {
       if (!el || k === toTrack || k === 'lake') return;
+      if (_trackFadeGen[k] !== myGen[k]) return; // superseded by a newer fade
       if (getTrackVol(k) < 0.01) el.pause();
     });
   }, cleanupMs);
@@ -15303,9 +15323,12 @@ function radioInterceptMusicFade(toTrack, durationMs) {
   try {
     const all = (typeof allTracks === 'function') ? allTracks() : {};
     const durSec = (durationMs || 1500) / 1000;
+    // Ramp every non-radio track (including title) to 0 and pause when silent.
+    // Title is included so the death→title fade doesn't bleed through when the
+    // player taps REPAIR SHIP and the radio takes over the gameplay slot.
     Object.entries(all).forEach(([k, el]) => {
       if (!el) return;
-      if (k === 'title' || k === 'radio') return;
+      if (k === 'radio') return;
       if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, durSec);
       setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, (durationMs || 1500) + 50);
     });
@@ -24397,6 +24420,13 @@ function killPlayer() {
       _retryPending = true;
       const fadeEl = document.getElementById('retry-fade');
       fadeEl.style.opacity = '1'; // fade to black
+      // Kick the music fade SYNCHRONOUSLY from the tap so iOS preserves the
+      // user-gesture context for the underlying play() call. Doing this from
+      // inside the 180ms setTimeout below lets WebKit drop the gesture and
+      // silently reject play() on a paused gameplay track — which is the
+      // “sometimes the music altogether stops” symptom after REPAIR SHIP.
+      // The 320ms it now leads the fade-from-black is imperceptible.
+      try { musicFadeTo(currentGameTrack(), 1500); } catch (_) {}
       setTimeout(() => {
         _retryPending = false;
         // Reset score only — distance keeps accumulating as reward for survival
@@ -24459,8 +24489,8 @@ function killPlayer() {
           const _saveMeWarp = document.getElementById('retry-warp-sfx');
           if (_saveMeWarp && !state.muted) { _saveMeWarp.currentTime = 0; _saveMeWarp.volume = 0.85; _saveMeWarp.play().catch(()=>{}); }
         }, 300);
-        // Re-engage the correct music track for wherever we are in the run
-        musicFadeTo(currentGameTrack(), 1500);
+        // Music fade was already kicked synchronously above (pre-setTimeout)
+        // so iOS keeps the user-gesture context for play(). Don't re-fire it.
         // Fade from black
         fadeEl.style.opacity = '0';
       }, 180); // wait for fade-to-black
