@@ -17891,14 +17891,16 @@ function _renderShopHandlingBar() {
       '</div>';
   }
 
-  // ── Mount: BOOST POWER badge + FLIGHT MODEL dropdown.
-  // Head = equipped FM name + XP bar. Menu = FLIGHT MODEL rows only.
+  // ── Mount: BOOST POWER badge + SHIP HANDLING dropdown.
+  // Head label is always "SHIP HANDLING" (section name); the equipped flight
+  // model name + color only show inside the menu rows. XP bar lives on the
+  // right of the head.
   root.innerHTML =
     boostBadgeHTML +
     '<div class="fm-bar shop-handling-bar" data-kind="fm">' +
       '<button type="button" class="fm-head" aria-expanded="false">' +
         '<div class="fm-head-l">' +
-          '<div class="shop-handling-master-title" style="color:' + (equipped.color || '#fff') + '">' + equippedName + ' <span class="fm-caret">\u25BE</span></div>' +
+          '<div class="shop-handling-master-title">SHIP HANDLING <span class="fm-caret">\u25BE</span></div>' +
         '</div>' +
         '<div class="fm-head-r">' +
           '<div class="shop-handling-track"><div class="shop-handling-fill" style="width:' + xpFillPct + '%"></div></div>' +
