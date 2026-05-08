@@ -6145,6 +6145,40 @@ html.platform-ios-native body {
 }
 .radio-icon-btn.hidden { display: none; }
 
+/* Title HUD music wrap: ♫ button + popover with prev/play/next. */
+.title-radio-wrap { position: relative; display: inline-block; }
+.title-radio-wrap.hidden { display: none; }
+.title-radio-controls {
+  position: fixed;
+  top: calc(max(env(safe-area-inset-top, 12px), 12px) + 44px);
+  right: 12px;
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 36px;
+  padding: 0 6px;
+  background: rgba(0, 14, 28, 0.92);
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+  z-index: 200;
+}
+.title-radio-controls.hidden { display: none; }
+.title-radio-btn {
+  background: transparent;
+  border: none;
+  color: #0ff;
+  width: 26px; height: 28px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  border-radius: 4px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s;
+}
+.title-radio-btn:hover  { background: rgba(34, 211, 238, 0.10); }
+.title-radio-btn:active { background: rgba(34, 211, 238, 0.25); }
+
 /* RADIO overlay — same visual family as settings-overlay */
 .radio-overlay {
   position: fixed; inset: 0;
@@ -6395,3 +6429,53 @@ html.platform-ios-native body {
 .sync-status.ok    { color: #6effa8; }
 .sync-status.err   { color: #ff8080; }
 .sync-status.busy  { color: rgba(0,238,255,0.8); }
+
+/* ═══════════════════════════════════════════════════
+   iOS NATIVE — PORTRAIT-ONLY GARAGE THRUSTER FIX
+   ═══════════════════════════════════════════════════
+   Bug: in the Capacitor iOS app in portrait mode, the THRUSTERS pane
+   in the garage clipped at the bottom and the preset cells (.sr-addon-card
+   inside #sr-shape-grid) were too large to fit alongside the COLOR row
+   inside the 50vh sr-panel. Caused by the SHIP HANDLING dropdown adding
+   vertical chrome above the panel since the layout was last calibrated.
+
+   Scope:
+     - html.platform-ios-native  → only inside the Capacitor app
+     - (orientation: portrait)   → landscape stays untouched
+
+   Web build (Vercel / mobile Safari) is unaffected because
+   .platform-ios-native is only added in src/01-platform.js when running
+   inside Capacitor.
+*/
+@media (orientation: portrait) {
+  /* Smaller preset cells so all rows fit without scroll */
+  html.platform-ios-native .sr-pane[data-pane="thrusters"] #sr-shape-grid {
+    gap: 6px;
+    padding: 2px 0;
+    margin-bottom: 6px;
+  }
+  html.platform-ios-native .sr-pane[data-pane="thrusters"] #sr-shape-grid .sr-addon-card {
+    padding: 6px 6px;
+    border-radius: 8px;
+    gap: 2px;
+    min-height: 0;
+  }
+  /* Tighten any icon / label inside each preset cell */
+  html.platform-ios-native .sr-pane[data-pane="thrusters"] #sr-shape-grid .sr-addon-card svg,
+  html.platform-ios-native .sr-pane[data-pane="thrusters"] #sr-shape-grid .sr-addon-card img {
+    width: 28px;
+    height: 28px;
+  }
+  html.platform-ios-native .sr-pane[data-pane="thrusters"] #sr-shape-grid .sr-addon-card * {
+    font-size: 10px;
+    line-height: 1.1;
+  }
+  /* Make sure the bottom edge of the thrusters pane (and its panel) has
+     breathing room — the 50vh panel was clipping the last row's border. */
+  html.platform-ios-native .sr-pane[data-pane="thrusters"]:not(.sr-hidden) {
+    padding-bottom: 8px;
+  }
+  html.platform-ios-native .sr-overlay .sr-panel {
+    padding-bottom: 6px;
+  }
+}
