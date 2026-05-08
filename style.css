@@ -6395,3 +6395,53 @@ html.platform-ios-native body {
 .sync-status.ok    { color: #6effa8; }
 .sync-status.err   { color: #ff8080; }
 .sync-status.busy  { color: rgba(0,238,255,0.8); }
+
+/* ═══════════════════════════════════════════════════
+   iOS NATIVE — PORTRAIT-ONLY GARAGE THRUSTER FIX
+   ═══════════════════════════════════════════════════
+   Bug: in the Capacitor iOS app in portrait mode, the THRUSTERS pane
+   in the garage clipped at the bottom and the preset cells (.sr-addon-card
+   inside #sr-shape-grid) were too large to fit alongside the COLOR row
+   inside the 50vh sr-panel. Caused by the SHIP HANDLING dropdown adding
+   vertical chrome above the panel since the layout was last calibrated.
+
+   Scope:
+     - html.platform-ios-native  → only inside the Capacitor app
+     - (orientation: portrait)   → landscape stays untouched
+
+   Web build (Vercel / mobile Safari) is unaffected because
+   .platform-ios-native is only added in src/01-platform.js when running
+   inside Capacitor.
+*/
+@media (orientation: portrait) {
+  /* Smaller preset cells so all rows fit without scroll */
+  html.platform-ios-native .sr-pane[data-pane="thrusters"] #sr-shape-grid {
+    gap: 6px;
+    padding: 2px 0;
+    margin-bottom: 6px;
+  }
+  html.platform-ios-native .sr-pane[data-pane="thrusters"] #sr-shape-grid .sr-addon-card {
+    padding: 6px 6px;
+    border-radius: 8px;
+    gap: 2px;
+    min-height: 0;
+  }
+  /* Tighten any icon / label inside each preset cell */
+  html.platform-ios-native .sr-pane[data-pane="thrusters"] #sr-shape-grid .sr-addon-card svg,
+  html.platform-ios-native .sr-pane[data-pane="thrusters"] #sr-shape-grid .sr-addon-card img {
+    width: 28px;
+    height: 28px;
+  }
+  html.platform-ios-native .sr-pane[data-pane="thrusters"] #sr-shape-grid .sr-addon-card * {
+    font-size: 10px;
+    line-height: 1.1;
+  }
+  /* Make sure the bottom edge of the thrusters pane (and its panel) has
+     breathing room — the 50vh panel was clipping the last row's border. */
+  html.platform-ios-native .sr-pane[data-pane="thrusters"]:not(.sr-hidden) {
+    padding-bottom: 8px;
+  }
+  html.platform-ios-native .sr-overlay .sr-panel {
+    padding-bottom: 6px;
+  }
+}
