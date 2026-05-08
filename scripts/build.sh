@@ -41,10 +41,24 @@ if [[ ! -d "$SRC_DIR" ]]; then
   exit 0
 fi
 
-# Find all .js files under src/, sorted alphabetically (which honors numeric
-# prefixes). `sort` is defensive against shells with weird glob ordering.
+# Find all .js files under src/ (and one level of subdirs, e.g. src/radio/),
+# ordered by BASENAME so a file's numeric prefix controls placement regardless
+# of which subdir it lives in. e.g. src/radio/31-radio.js slots between
+# src/30-audio.js and src/40-main-late.js because basename '31-radio.js' sorts
+# between '30-audio.js' and '40-main-late.js'.
+#
+# Portable across macOS (BSD find) and Linux (GNU find): we don't use -printf.
+# Instead we awk the basename to the front, sort, then strip it back off.
+# Skip any directory whose name starts with `_` (e.g. src/_archived/) so
+# experimental / parked code doesn't get pulled into the build.
 FILES=()
-while IFS= read -r f; do FILES+=("$f"); done < <(find "$SRC_DIR" -maxdepth 1 -type f -name '*.js' | sort)
+while IFS= read -r line; do
+  FILES+=("${line#*$'\t'}")
+done < <(
+  find "$SRC_DIR" -type d -name '_*' -prune -o -type f -name '*.js' -print \
+    | awk -F/ '{print $NF "\t" $0}' \
+    | sort
+)
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
   echo "No .js files found in $SRC_DIR" >&2

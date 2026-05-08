@@ -450,3 +450,11 @@ function playTapToPlay() { _playBuffer('title-exit', 0.7, 1.0, null); }
 window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
+  if (state.muted) return;
+  _ensureCtxRunning();
+  const sfx = document.getElementById('crash-sound');
+  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.25; sfx.play().catch(() => {}); }
+  // Layered crash-impact sample — same gate as base crash, matched volume.
+  const _cl = document.getElementById('crash-layer-sound');
+  if (_cl) { try { _cl.currentTime = 0; _cl.volume = 0.25; _cl.play().catch(() => {}); } catch (_) {} }
+}
