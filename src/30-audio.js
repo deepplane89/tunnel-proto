@@ -243,8 +243,6 @@ function _initSFXBuffers() {
   // Title-screen UI exits (garage close, settings close, daily streak close,
   // any back/exit on title) — VR mecha interlock.
   _loadSFXBuffer('title-exit',      './assets/audio/title-exit.mp3');
-  // Tap-to-play on title screen — low whoosh.
-  _loadSFXBuffer('tap-to-play',     './assets/audio/tap-to-play.mp3');
   // Garage open/close audio removed — no sample needed.
 }
 
@@ -446,8 +444,9 @@ window.playPauseExit = playPauseExit;
 function playTitleExit() { _playBuffer('title-exit', 0.7, 1.0, null); }
 window.playTitleExit = playTitleExit;
 
-// Tap-to-play on title screen — low whoosh.
-function playTapToPlay() { _playBuffer('tap-to-play', 0.7, 1.0, null); }
+// Tap-to-play on title screen — uses the same title-tap cue as other UI taps.
+// (Was a 25.7s whoosh — way too long for a tap cue, sounded like a stuck loop.)
+function playTapToPlay() { _playBuffer('title-exit', 0.7, 1.0, null); }
 window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
