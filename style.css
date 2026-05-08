@@ -5140,6 +5140,10 @@ html, body {
   left: max(8px, env(safe-area-inset-left, 0px));
   right: auto;
   z-index: 10000;
+  /* .sr-overlay sets pointer-events:none to gate clicks to the panel; the
+     floating close button is a direct child of .sr-overlay so we must
+     re-enable pointer events here, otherwise the tap falls through. */
+  pointer-events: auto;
   background: rgba(0, 14, 28, 0.55);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
