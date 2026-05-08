@@ -32,6 +32,14 @@ let _radioCurrentIdx   = -1;   // currently playing index into RADIO_TRACKS
 let _radioPlayHistory  = [];   // recent indexes for prev (most recent at end)
 let _radioEndedHooked  = false;
 
+// Radio is music-class — respect _settings.musicMuted. When music is muted,
+// radio is silent regardless of jh_radio_on. applyMusicVolume() in 65-settings
+// calls _radioApplyMute() so toggling the music mute reflects on radio.
+function _isMusicMutedForRadio() {
+  try { return (typeof musicMult === 'function') ? (musicMult() <= 0) : false; }
+  catch(_) { return false; }
+}
+
 function isRadioUnlocked() {
   try { return localStorage.getItem(RADIO_LS.unlocked) === '1'; } catch(_) { return false; }
 }
@@ -139,7 +147,8 @@ function _playRadioIdx(idx) {
   }
   try { radioMusic.currentTime = 0; } catch(_) {}
   // Volume is gated by the gain node ('radio' track) — don't fight it here.
-  radioMusic.play().catch(() => {});
+  if (_isMusicMutedForRadio()) { try { radioMusic.pause(); } catch(_){} }
+  else radioMusic.play().catch(() => {});
   // Notify pause-menu + title-HUD UI to refresh "now playing" / glyph state.
   try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_) {}
   try { if (typeof updateTitleRadioToggle === 'function') updateTitleRadioToggle(); } catch(_) {}
@@ -147,6 +156,7 @@ function _playRadioIdx(idx) {
 
 function startRadio() {
   if (!isRadioOn()) return;
+  if (_isMusicMutedForRadio()) return; // music muted → don't start radio
   if (typeof initAudio === 'function') initAudio();
   if (!radioMusic) radioMusic = document.getElementById('radio-music');
   if (!radioMusic) return;
@@ -192,6 +202,7 @@ function toggleRadioPause() {
   if (!radioMusic) return;
   try {
     if (radioMusic.paused) {
+      if (_isMusicMutedForRadio()) return; // music muted → don't unpause
       if (_radioCurrentIdx < 0) _playRadioIdx(_nextRadioIdx());
       else radioMusic.play().catch(() => {});
     } else {

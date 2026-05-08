@@ -1666,7 +1666,7 @@ function _killAsteroid(inst, impact) {
         if (state._tutorialActive || _godMode) {
           // Tutorial / god mode: play shield-hit sound, no death
           const _shHitSfx = document.getElementById('shield-hit-sfx');
-          if (_shHitSfx) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
+          if (_shHitSfx && !state.muted) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
           addCrashFlash(0xff4400);
         } else {
           killPlayer();
@@ -3389,7 +3389,7 @@ window._jlDebug = {
           const dz = Math.abs(_shipZ() - inst.strikePosZ);
           if (Math.abs(dx) < (_LT.glowRadius * _LT.hitboxScale) && dz < 6) {
                     const _ltHitSfx = document.getElementById('shield-hit-sfx');
-            if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
+            if (_ltHitSfx && !state.muted) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
             if (state._tutorialActive || _godMode) addCrashFlash(0x4488ff);
             else killPlayer();
           }
@@ -3424,7 +3424,7 @@ window._jlDebug = {
           if (near && !inst.hitChecked) {
             inst.hitChecked = true;
                     const _ltHitSfx = document.getElementById('shield-hit-sfx');
-            if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
+            if (_ltHitSfx && !state.muted) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
             if (state._tutorialActive || _godMode) addCrashFlash(0x4488ff);
             else killPlayer();
           }

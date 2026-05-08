@@ -72,6 +72,19 @@ function applyMusicVolume() {
   Object.entries(TRACK_VOL).forEach(([k, base]) => {
     setTrackVol(k, base * m);
   });
+  // Radio is music-class — pause/resume it to match the music mute state.
+  // Without this, radio kept playing through a fresh music mute (it has its
+  // own gain node and bypasses the TRACK_VOL multiplier path for play/pause).
+  try {
+    const _rm = document.getElementById('radio-music');
+    if (_rm) {
+      if (m <= 0) {
+        if (!_rm.paused) _rm.pause();
+      } else if (typeof isRadioOn === 'function' && isRadioOn() && _rm.paused) {
+        if (typeof startRadio === 'function') startRadio();
+      }
+    }
+  } catch(_) {}
 }
 
 // Open / close settings
@@ -322,6 +335,7 @@ function closeSettings() {
     _settings.sfxMuted = false;
     document.getElementById('mute-sfx').classList.remove('muted');
     document.getElementById('mute-sfx').textContent = '♪';
+    applyMusicVolume(); // recalc state.muted (depends on both mults)
     saveSettings();
   });
 
@@ -339,6 +353,7 @@ function closeSettings() {
     _settings.sfxMuted = !_settings.sfxMuted;
     document.getElementById('mute-sfx').classList.toggle('muted', _settings.sfxMuted);
     document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '♪';
+    applyMusicVolume(); // recalc state.muted (depends on both mults)
     saveSettings();
   });
 

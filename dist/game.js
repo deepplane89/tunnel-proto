@@ -15140,6 +15140,14 @@ let _radioCurrentIdx   = -1;   // currently playing index into RADIO_TRACKS
 let _radioPlayHistory  = [];   // recent indexes for prev (most recent at end)
 let _radioEndedHooked  = false;
 
+// Radio is music-class — respect _settings.musicMuted. When music is muted,
+// radio is silent regardless of jh_radio_on. applyMusicVolume() in 65-settings
+// calls _radioApplyMute() so toggling the music mute reflects on radio.
+function _isMusicMutedForRadio() {
+  try { return (typeof musicMult === 'function') ? (musicMult() <= 0) : false; }
+  catch(_) { return false; }
+}
+
 function isRadioUnlocked() {
   try { return localStorage.getItem(RADIO_LS.unlocked) === '1'; } catch(_) { return false; }
 }
@@ -15247,7 +15255,8 @@ function _playRadioIdx(idx) {
   }
   try { radioMusic.currentTime = 0; } catch(_) {}
   // Volume is gated by the gain node ('radio' track) — don't fight it here.
-  radioMusic.play().catch(() => {});
+  if (_isMusicMutedForRadio()) { try { radioMusic.pause(); } catch(_){} }
+  else radioMusic.play().catch(() => {});
   // Notify pause-menu + title-HUD UI to refresh "now playing" / glyph state.
   try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_) {}
   try { if (typeof updateTitleRadioToggle === 'function') updateTitleRadioToggle(); } catch(_) {}
@@ -15255,6 +15264,7 @@ function _playRadioIdx(idx) {
 
 function startRadio() {
   if (!isRadioOn()) return;
+  if (_isMusicMutedForRadio()) return; // music muted → don't start radio
   if (typeof initAudio === 'function') initAudio();
   if (!radioMusic) radioMusic = document.getElementById('radio-music');
   if (!radioMusic) return;
@@ -15300,6 +15310,7 @@ function toggleRadioPause() {
   if (!radioMusic) return;
   try {
     if (radioMusic.paused) {
+      if (_isMusicMutedForRadio()) return; // music muted → don't unpause
       if (_radioCurrentIdx < 0) _playRadioIdx(_nextRadioIdx());
       else radioMusic.play().catch(() => {});
     } else {
@@ -18717,7 +18728,7 @@ function applyPowerup(typeIdx) {
       shieldMesh.visible = false;
       shieldWire.visible = false;
       shieldLight.intensity = 0;
-      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
+      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx && !state.muted) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
       break;
     }
     case 'laser': {
@@ -18750,6 +18761,7 @@ function applyPowerup(typeIdx) {
           // mid-second-laser and kill the new interval before its time.
           if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
           state._laserSfxIv = setInterval(() => {
+            if (state.muted) return; // honor mid-laser mute toggle
             try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           }, _retriggerMs);
           // Stop retriggering when laser ends, but DON'T cut the in-flight shot.
@@ -20333,6 +20345,19 @@ function applyMusicVolume() {
   Object.entries(TRACK_VOL).forEach(([k, base]) => {
     setTrackVol(k, base * m);
   });
+  // Radio is music-class — pause/resume it to match the music mute state.
+  // Without this, radio kept playing through a fresh music mute (it has its
+  // own gain node and bypasses the TRACK_VOL multiplier path for play/pause).
+  try {
+    const _rm = document.getElementById('radio-music');
+    if (_rm) {
+      if (m <= 0) {
+        if (!_rm.paused) _rm.pause();
+      } else if (typeof isRadioOn === 'function' && isRadioOn() && _rm.paused) {
+        if (typeof startRadio === 'function') startRadio();
+      }
+    }
+  } catch(_) {}
 }
 
 // Open / close settings
@@ -20583,6 +20608,7 @@ function closeSettings() {
     _settings.sfxMuted = false;
     document.getElementById('mute-sfx').classList.remove('muted');
     document.getElementById('mute-sfx').textContent = '♪';
+    applyMusicVolume(); // recalc state.muted (depends on both mults)
     saveSettings();
   });
 
@@ -20600,6 +20626,7 @@ function closeSettings() {
     _settings.sfxMuted = !_settings.sfxMuted;
     document.getElementById('mute-sfx').classList.toggle('muted', _settings.sfxMuted);
     document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '♪';
+    applyMusicVolume(); // recalc state.muted (depends on both mults)
     saveSettings();
   });
 
@@ -24003,7 +24030,7 @@ function killPlayer() {
       const _shTierForLife2 = loadUpgradeTier('shield');
       shieldMat.uniforms.uLife.value = (_shTierForLife2 >= 3) ? state.shieldHitPoints / _shMaxHits : 1.0;
       addCrashFlash(sc);
-      const _shHitSfx = document.getElementById('shield-hit-sfx'); if (_shHitSfx) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
+      const _shHitSfx = document.getElementById('shield-hit-sfx'); if (_shHitSfx && !state.muted) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
       state._prevShieldHP = state.shieldHitPoints;
       return;
     }
@@ -24013,7 +24040,7 @@ function killPlayer() {
     state._shieldBreakT = 0;
     shieldWireMat.opacity = 0;
     addCrashFlash(0x00f0ff);
-    const _shHitSfx2 = document.getElementById('shield-hit-sfx'); if (_shHitSfx2) { _shHitSfx2.currentTime = 0; _shHitSfx2.play().catch(()=>{}); }
+    const _shHitSfx2 = document.getElementById('shield-hit-sfx'); if (_shHitSfx2 && !state.muted) { _shHitSfx2.currentTime = 0; _shHitSfx2.play().catch(()=>{}); }
     return;
   }
 
@@ -25680,7 +25707,7 @@ function update(dt) {
       shieldMat.uniforms.uReveal.value = 1.0;
       shieldWireMat.opacity = 0;
       shieldLight.intensity = 0;
-      const _shExpSfx = document.getElementById('shield-expire-sfx'); if (_shExpSfx) { _shExpSfx.currentTime = 0; _shExpSfx.volume = 0.18; _shExpSfx.play().catch(()=>{}); }
+      const _shExpSfx = document.getElementById('shield-expire-sfx'); if (_shExpSfx && !state.muted) { _shExpSfx.currentTime = 0; _shExpSfx.volume = 0.18; _shExpSfx.play().catch(()=>{}); }
     }
   }
   if (state.invincibleTimer > 0) {
@@ -26315,7 +26342,7 @@ function update(dt) {
       activeObstacles.splice(i, 1);
       if (_godMode) {
         const _shHitSfx = document.getElementById('shield-hit-sfx');
-        if (_shHitSfx) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
+        if (_shHitSfx && !state.muted) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
         addCrashFlash(0xff4400);
       } else {
         killPlayer();
@@ -28931,7 +28958,7 @@ function _killAsteroid(inst, impact) {
         if (state._tutorialActive || _godMode) {
           // Tutorial / god mode: play shield-hit sound, no death
           const _shHitSfx = document.getElementById('shield-hit-sfx');
-          if (_shHitSfx) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
+          if (_shHitSfx && !state.muted) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
           addCrashFlash(0xff4400);
         } else {
           killPlayer();
@@ -30654,7 +30681,7 @@ window._jlDebug = {
           const dz = Math.abs(_shipZ() - inst.strikePosZ);
           if (Math.abs(dx) < (_LT.glowRadius * _LT.hitboxScale) && dz < 6) {
                     const _ltHitSfx = document.getElementById('shield-hit-sfx');
-            if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
+            if (_ltHitSfx && !state.muted) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
             if (state._tutorialActive || _godMode) addCrashFlash(0x4488ff);
             else killPlayer();
           }
@@ -30689,7 +30716,7 @@ window._jlDebug = {
           if (near && !inst.hitChecked) {
             inst.hitChecked = true;
                     const _ltHitSfx = document.getElementById('shield-hit-sfx');
-            if (_ltHitSfx) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
+            if (_ltHitSfx && !state.muted) { _ltHitSfx.currentTime = 0; _ltHitSfx.play().catch(()=>{}); }
             if (state._tutorialActive || _godMode) addCrashFlash(0x4488ff);
             else killPlayer();
           }

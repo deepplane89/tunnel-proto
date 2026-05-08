@@ -563,7 +563,7 @@ function applyPowerup(typeIdx) {
       shieldMesh.visible = false;
       shieldWire.visible = false;
       shieldLight.intensity = 0;
-      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
+      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx && !state.muted) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
       break;
     }
     case 'laser': {
@@ -596,6 +596,7 @@ function applyPowerup(typeIdx) {
           // mid-second-laser and kill the new interval before its time.
           if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
           state._laserSfxIv = setInterval(() => {
+            if (state.muted) return; // honor mid-laser mute toggle
             try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           }, _retriggerMs);
           // Stop retriggering when laser ends, but DON'T cut the in-flight shot.

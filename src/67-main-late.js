@@ -3262,7 +3262,7 @@ function killPlayer() {
       const _shTierForLife2 = loadUpgradeTier('shield');
       shieldMat.uniforms.uLife.value = (_shTierForLife2 >= 3) ? state.shieldHitPoints / _shMaxHits : 1.0;
       addCrashFlash(sc);
-      const _shHitSfx = document.getElementById('shield-hit-sfx'); if (_shHitSfx) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
+      const _shHitSfx = document.getElementById('shield-hit-sfx'); if (_shHitSfx && !state.muted) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
       state._prevShieldHP = state.shieldHitPoints;
       return;
     }
@@ -3272,7 +3272,7 @@ function killPlayer() {
     state._shieldBreakT = 0;
     shieldWireMat.opacity = 0;
     addCrashFlash(0x00f0ff);
-    const _shHitSfx2 = document.getElementById('shield-hit-sfx'); if (_shHitSfx2) { _shHitSfx2.currentTime = 0; _shHitSfx2.play().catch(()=>{}); }
+    const _shHitSfx2 = document.getElementById('shield-hit-sfx'); if (_shHitSfx2 && !state.muted) { _shHitSfx2.currentTime = 0; _shHitSfx2.play().catch(()=>{}); }
     return;
   }
 
@@ -4939,7 +4939,7 @@ function update(dt) {
       shieldMat.uniforms.uReveal.value = 1.0;
       shieldWireMat.opacity = 0;
       shieldLight.intensity = 0;
-      const _shExpSfx = document.getElementById('shield-expire-sfx'); if (_shExpSfx) { _shExpSfx.currentTime = 0; _shExpSfx.volume = 0.18; _shExpSfx.play().catch(()=>{}); }
+      const _shExpSfx = document.getElementById('shield-expire-sfx'); if (_shExpSfx && !state.muted) { _shExpSfx.currentTime = 0; _shExpSfx.volume = 0.18; _shExpSfx.play().catch(()=>{}); }
     }
   }
   if (state.invincibleTimer > 0) {
@@ -5574,7 +5574,7 @@ function update(dt) {
       activeObstacles.splice(i, 1);
       if (_godMode) {
         const _shHitSfx = document.getElementById('shield-hit-sfx');
-        if (_shHitSfx) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
+        if (_shHitSfx && !state.muted) { _shHitSfx.currentTime = 0; _shHitSfx.play().catch(()=>{}); }
         addCrashFlash(0xff4400);
       } else {
         killPlayer();
