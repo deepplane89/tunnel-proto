@@ -3062,8 +3062,11 @@ function showIntroText() {
   overlay.appendChild(skipHint);
 
   // Mobile: tap anywhere on the intro overlay to skip (250ms grace so the follow-through
-  // tap from "tap to play" doesn't immediately kill the freshly-launched prologue)
+  // tap from "tap to play" doesn't immediately kill the freshly-launched prologue).
+  // Also: don't swallow taps that land on the pause button — user wants pause to
+  // win during prologue. Mirror the same guard used by _launchDeathRun above.
   overlay.addEventListener('touchstart', function _tapSkip(e) {
+    if (e && e.target && e.target.closest && e.target.closest('#touch-pause')) return;
     e.preventDefault();
     if ((performance.now() - (state._introStartedAt || 0)) < 250) return;
     overlay.removeEventListener('touchstart', _tapSkip);

@@ -824,10 +824,20 @@ window.addEventListener('keyup', e => {
 
   const pauseBtn = document.getElementById('touch-pause');
   if (pauseBtn) {
+    // capture-phase + stopPropagation so the prologue overlay's _tapSkip
+    // listener never sees this touch even if event ordering races. The
+    // closest('#touch-pause') guard inside _tapSkip is the second line of
+    // defense; this is the first.
     pauseBtn.addEventListener('touchstart', e => {
       e.preventDefault();
+      e.stopPropagation();
       togglePause();
-    }, { passive: false });
+    }, { passive: false, capture: true });
+    // Same for click (desktop)
+    pauseBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      togglePause();
+    }, { capture: true });
   }
 
   // Triple-tap skin label = unlock entire shop (all skins + all powerups max tier)
