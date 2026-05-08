@@ -5130,6 +5130,20 @@ html, body {
   border-color: var(--sr-edge);
   background: rgba(34,211,238,0.08);
 }
+/* Floating close button — lives inside .sr-overlay (sibling of .sr-stage),
+   pinned top-left over the ship preview. High z-index so it stays on the
+   top layer above stage canvas, vignette, grid, and the panel. Adds a
+   subtle backing so it's readable against any ship/skybox color. */
+.sr-overlay .sr-close-floating {
+  position: absolute;
+  top: max(8px, env(safe-area-inset-top, 0px));
+  left: max(8px, env(safe-area-inset-left, 0px));
+  right: auto;
+  z-index: 10000;
+  background: rgba(0, 14, 28, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
 
 /* BODY + panes */
 .sr-body { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
@@ -5726,8 +5740,11 @@ body.sr-open #title-leaderboard {
   }
   .sr-overlay .sr-close {
     width: 24px; height: 24px;
-    top: 4px; right: 4px;
     font-size: 11px;
+  }
+  .sr-overlay .sr-close-floating {
+    top: max(4px, env(safe-area-inset-top, 0px));
+    left: max(4px, env(safe-area-inset-left, 0px));
   }
   /* Single-column power-up cards in narrow landscape panel — horizontal rows.
      All 5 cards share available space equally so MAGNET/COIN VALUE never get
@@ -5839,8 +5856,11 @@ body.sr-open #title-leaderboard {
   }
   .sr-overlay .sr-close {
     width: 28px; height: 28px;
-    top: 6px; right: 6px;
     font-size: 13px;
+  }
+  .sr-overlay .sr-close-floating {
+    top: max(6px, env(safe-area-inset-top, 0px));
+    left: max(6px, env(safe-area-inset-left, 0px));
   }
   .sr-overlay .sr-card-grid,
   .sr-overlay .sr-addons-list {
