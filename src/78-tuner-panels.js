@@ -883,7 +883,9 @@ function _ringShowTuner() {
     // Scales wobble, overshoot, and micro-turbulence together. Absolute mapping
     // (not multiplicative) because some baselines are zero.
     function _applyJuice(m) {
-      _wobbleMaxAmp  = _macroLerp3(m, 0.0,  0.05, 0.15);
+      // 2026-05: bumped 0.05/0.15 → 0.12/0.30 — old amps were attenuated to ~1° on
+      // visible ship by camera-roll lerp; presets read as having no wobble at all.
+      _wobbleMaxAmp  = _macroLerp3(m, 0.0,  0.12, 0.30);
       // Damping inverts with JUICE — high JUICE = low damping = wobble rings
       // longer. At 20 the wobble dies in ~150ms (surgical); at 4 it rings
       // for ~750ms (alive). 10 = baked legacy feel.
