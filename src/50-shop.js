@@ -79,29 +79,20 @@ function _renderShopHandlingBar() {
   const xpFillPct = Math.min(100, Math.round((xp / Math.max(1, xpNeed)) * 100));
   const xpText = 'L' + level + ' \u00B7 ' + xp + '/' + xpNeed + ' XP';
 
-  // ── TIER subsection rows (Boost Profile) ──
-  // Per user: minimal label "TIER N" only — flavor names appear on the
-  // unlock toast. Player can downshift to any unlocked tier on purpose.
-  const HT = window.HANDLING_TIERS || [];
-  const eqBoostIdx = (typeof loadEquippedBoostTierIndex === 'function') ? loadEquippedBoostTierIndex() : 0;
+  // ── BOOST POWER badge (read-only) ──
+  // Auto-pinned to highest unlocked tier; not selectable. Force-sync the
+  // saved equipped index so getHandlingStartBoost() returns the right base.
   const maxBoostIdx = (typeof getMaxUnlockedBoostTierIndex === 'function') ? getMaxUnlockedBoostTierIndex() : 0;
-  let tierRowsHTML = '';
-  for (let i = 0; i < HT.length; i++) {
-    const t = HT[i];
-    const unlocked = i <= maxBoostIdx;
-    const isEq = i === eqBoostIdx;
-    const cls = 'fm-row boost-row' + (isEq ? ' equipped' : '') + (unlocked ? '' : ' locked');
-    const lockBadge = unlocked ? '' : '<span class="fm-lock">L' + t.level + ' \uD83D\uDD12</span>';
-    tierRowsHTML +=
-      '<div class="' + cls + '" data-boost="' + i + '">' +
-        '<div class="fm-row-head">' +
-          '<span class="fm-name">TIER ' + (i + 1) + '</span>' +
-          lockBadge +
-        '</div>' +
-      '</div>';
+  if (typeof saveEquippedBoostTierIndex === 'function') {
+    try { saveEquippedBoostTierIndex(maxBoostIdx); } catch(_){}
   }
+  const boostBadgeHTML =
+    '<div class="shop-boost-badge">' +
+      '<span class="shop-boost-badge-lbl">BOOST POWER</span>' +
+      '<span class="shop-boost-badge-val">TIER ' + (maxBoostIdx + 1) + '</span>' +
+    '</div>';
 
-  // ── FLIGHT MODEL subsection rows ──
+  // ── FLIGHT MODEL rows ──
   let fmRowsHTML = '';
   for (const [name, m] of Object.entries(FM)) {
     const unlocked = level >= m.unlock;
@@ -122,17 +113,14 @@ function _renderShopHandlingBar() {
       '</div>';
   }
 
-  // ── Mount: ONE master dropdown. Head = SHIP HANDLING + XP bar. Menu has
-  // two stacked subsections (TIER on top, FLIGHT MODEL below) under quiet
-  // section labels with a thin divider between them. Open/closed state is
-  // preserved across re-renders so equipping doesn't slam the menu shut.
-  // Render the bar in CLOSED state always; if wasOpen, we re-trigger open via
-  // synthetic click after wiring listeners (see equip handler below).
+  // ── Mount: BOOST POWER badge + FLIGHT MODEL dropdown.
+  // Head = equipped FM name + XP bar. Menu = FLIGHT MODEL rows only.
   root.innerHTML =
-    '<div class="fm-bar shop-handling-bar" data-kind="master">' +
+    boostBadgeHTML +
+    '<div class="fm-bar shop-handling-bar" data-kind="fm">' +
       '<button type="button" class="fm-head" aria-expanded="false">' +
         '<div class="fm-head-l">' +
-          '<div class="shop-handling-master-title">SHIP HANDLING <span class="fm-caret">\u25BE</span></div>' +
+          '<div class="shop-handling-master-title" style="color:' + (equipped.color || '#fff') + '">' + equippedName + ' <span class="fm-caret">\u25BE</span></div>' +
         '</div>' +
         '<div class="fm-head-r">' +
           '<div class="shop-handling-track"><div class="shop-handling-fill" style="width:' + xpFillPct + '%"></div></div>' +
@@ -140,10 +128,6 @@ function _renderShopHandlingBar() {
         '</div>' +
       '</button>' +
       '<div class="fm-menu">' +
-        '<div class="fm-section-label">TIER</div>' +
-        tierRowsHTML +
-        '<div class="fm-section-divider"></div>' +
-        '<div class="fm-section-label">FLIGHT MODEL</div>' +
         fmRowsHTML +
       '</div>' +
     '</div>';
@@ -263,44 +247,22 @@ function _setupHandlingDropdown(bar) {
       else _open();
     });
   }
-  // Wire row clicks. Master menu has TIER rows (data-boost) and FLIGHT MODEL
-  // rows (data-fm); both behave identically — equip on tap, reject sound if
-  // locked. Menu STAYS OPEN after a pick so the player can equip a tier and
-  // a flight model in one open session (closes only on outside-tap or
-  // tapping the head again).
+  // Wire row clicks. FLIGHT MODEL rows only — equip on tap, reject sound
+  // if locked. Closes after pick (single-select dropdown).
   bar.querySelectorAll('.fm-row').forEach(row => {
     if (row.classList.contains('locked')) {
       _tapBind(row, () => { try { if (typeof window.playReject === 'function') window.playReject(); } catch(_){} });
       return;
     }
     _tapBind(row, () => {
-      const boostStr = row.getAttribute('data-boost');
       const fmName = row.getAttribute('data-fm');
-      if (boostStr != null) {
-        const idx = parseInt(boostStr, 10);
-        if (isNaN(idx)) return;
-        if (typeof saveEquippedBoostTierIndex === 'function') saveEquippedBoostTierIndex(idx);
-      } else if (fmName) {
-        const FM = window._FLIGHT_MODELS;
-        if (!FM || !FM[fmName]) return;
-        if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(fmName);
-      } else {
-        return;
-      }
+      if (!fmName) return;
+      const FM = window._FLIGHT_MODELS;
+      if (!FM || !FM[fmName]) return;
+      if (typeof saveEquippedFlightModel === 'function') saveEquippedFlightModel(fmName);
       try { if (typeof window.playGarageSelect === 'function') window.playGarageSelect(); } catch(_){}
-      // Re-render to refresh equipped highlight + head label, but keep the
-      // menu open. _renderShopHandlingBar() preserves wasOpen state, and we
-      // re-position the now-portaled menu so it stays anchored.
+      _close();
       _renderShopHandlingBar();
-      // After re-render, the bar/head/menu DOM has been replaced. Re-find
-      // them and re-attach listeners + reopen position. Easiest: trigger a
-      // synthetic open on the freshly-rendered master bar.
-      const newBar = document.querySelector('#shop-handling-bar .fm-bar[data-kind="master"]');
-      if (newBar) {
-        const newHead = newBar.querySelector('.fm-head');
-        // Defer one frame so layout settles + listeners are bound, then open.
-        if (newHead) requestAnimationFrame(() => { try { newHead.click(); } catch(_){} });
-      }
     });
   });
 }

@@ -2695,19 +2695,32 @@ html, body {
 .shop-handling-bar.open .shop-handling-master-title .fm-caret {
   transform: rotate(180deg);
 }
-/* Quiet subsection labels inside the menu (TIER, FLIGHT MODEL) */
-.fm-section-label {
+/* BOOST POWER badge (read-only, auto-pinned to highest unlocked tier) */
+.shop-boost-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  background: rgba(0, 14, 28, 0.35);
+  border: 1px solid rgba(255, 204, 0, 0.25);
+  border-radius: 4px;
+}
+.shop-boost-badge-lbl {
   font-family: var(--font-display, 'Rajdhani', sans-serif);
   font-size: 10px;
   letter-spacing: 0.20em;
-  color: rgba(255,255,255,0.45);
+  color: rgba(255,255,255,0.55);
   text-transform: uppercase;
-  padding: 8px 12px 4px 12px;
 }
-.fm-section-divider {
-  height: 1px;
-  background: rgba(255,255,255,0.08);
-  margin: 6px 8px;
+.shop-boost-badge-val {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  color: #ffcc00;
+  text-transform: uppercase;
 }
 .shop-handling-label {
   font-family: var(--font-display, 'Rajdhani', sans-serif);
