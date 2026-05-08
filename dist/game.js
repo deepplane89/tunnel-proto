@@ -12371,6 +12371,11 @@ function playTapToPlay() { _playBuffer('tap-to-play', 0.7, 1.0, null); }
 window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
+  if (state.muted) return;
+  const sfx = document.getElementById('crash-sound');
+  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.25; sfx.play().catch(() => {}); }
+}
+window.playCrash = playCrash;
 // ═══════════════════════════════════════════════════
 //  RADIO — unlockable shuffle station that replaces zone music in gameplay.
 //
