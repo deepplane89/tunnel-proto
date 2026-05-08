@@ -36,7 +36,10 @@ function initAudio() {
     return;
   }
   const _CtxClass = window.AudioContext || window.webkitAudioContext;
-  audioCtx = new _CtxClass({ latencyHint: 'interactive' });
+  // No latencyHint: default ('balanced') uses a larger audio buffer which is
+  // more tolerant of main-thread stalls. 'interactive' was tried briefly but
+  // produced general audio glitchiness on Safari (small buffer underruns).
+  audioCtx = new _CtxClass();
   _ensureCtxRunning();
 
   // Engine hum removed — keep gain node at 0 so SFX chain still works

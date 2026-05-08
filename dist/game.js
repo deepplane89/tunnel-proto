@@ -12103,7 +12103,10 @@ function initAudio() {
     return;
   }
   const _CtxClass = window.AudioContext || window.webkitAudioContext;
-  audioCtx = new _CtxClass({ latencyHint: 'interactive' });
+  // No latencyHint: default ('balanced') uses a larger audio buffer which is
+  // more tolerant of main-thread stalls. 'interactive' was tried briefly but
+  // produced general audio glitchiness on Safari (small buffer underruns).
+  audioCtx = new _CtxClass();
   _ensureCtxRunning();
 
   // Engine hum removed — keep gain node at 0 so SFX chain still works
@@ -19831,11 +19834,10 @@ window.addEventListener('keyup', e => {
 window.initTitleAudio = initTitleAudio;
 function initTitleAudio() {
   if (audioCtx) { _ensureCtxRunning(); return; }  // already initialized
-  // latencyHint: 'interactive' — default but explicit; matches src/30-audio.js
-  // and the unlock path below so AudioContext params are consistent across
-  // all three creation sites (iOS sample-rate renegotiation fix).
+  // No latencyHint — see src/30-audio.js for rationale (default 'balanced'
+  // buffer is more tolerant of stalls; 'interactive' caused glitchiness).
   const _CtxClass = window.AudioContext || window.webkitAudioContext;
-  audioCtx = new _CtxClass({ latencyHint: 'interactive' });
+  audioCtx = new _CtxClass();
   _ensureCtxRunning();
   engineGain = audioCtx.createGain();
   engineGain.gain.value = 0.0;
@@ -19873,7 +19875,7 @@ function initTitleAudio() {
     const unlock = () => {
       if (!audioCtx) {
         const _CtxClass = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new _CtxClass({ latencyHint: 'interactive' });
+        audioCtx = new _CtxClass();
         engineGain = audioCtx.createGain();
         engineGain.gain.value = 0.0;
         engineGain.connect(audioCtx.destination);
