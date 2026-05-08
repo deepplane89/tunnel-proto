@@ -1,13 +1,14 @@
 {
   "name": "jet-horizon",
   "version": "1.0.0",
-  "description": "Jet Horizon — a synthwave endless runner game",
+  "description": "Jet Horizon \u2014 a synthwave endless runner game",
   "private": true,
   "scripts": {
     "build": "bash scripts/build.sh"
   },
   "dependencies": {
     "@capacitor-community/safe-area": "^8.0.1",
+    "@capacitor/app": "^8.0.0",
     "@capacitor/cli": "^8.3.1",
     "@capacitor/core": "^8.3.1",
     "@capacitor/haptics": "^8.0.0",

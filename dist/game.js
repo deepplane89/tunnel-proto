@@ -91,6 +91,138 @@ window.nativePlugin = nativePlugin;
     if (PLATFORM.name)         root.classList.add('platform-' + PLATFORM.name);
   } catch (_) {}
 })();
+// ═══════════════════════════════════════════════════
+//  iOS LIFECYCLE — force-silence audio on background
+// ═══════════════════════════════════════════════════
+//
+// Bug we're fixing:
+//   On Capacitor iOS, sound (especially radio + Web Audio buffer sources)
+//   could keep playing after the app was backgrounded or even swiped away.
+//
+// Root causes:
+//   1. AVAudioSession remained "active" on iOS even though the WebView
+//      was paused — fixed in AppDelegate.swift (deactivate on background,
+//      reactivate on foreground).
+//   2. `visibilitychange` doesn't always fire reliably on Capacitor iOS,
+//      and even when it does, JS may run *after* the audio has already
+//      kept playing for a frame or two.
+//
+// This file adds belt-and-suspenders on the JS side: we listen for
+// Capacitor's @capacitor/app `appStateChange` event (fires synchronously
+// from the native side via the bridge) and force-silence everything we
+// know about — AudioContext, all <audio> elements, engine sound, radio.
+//
+// Web build: this entire block is a no-op unless PLATFORM.isNative is true,
+// so behavior on Vercel / mobile Safari is unchanged.
+
+(function setupIOSLifecycle() {
+  if (!window.PLATFORM || !window.PLATFORM.isNative) return;
+
+  // Force-silence everything we can reach.
+  function forceSilenceAll(reason) {
+    try {
+      // 1. Suspend the WebAudio context — stops every BufferSourceNode
+      //    immediately, including in-flight SFX.
+      if (typeof audioCtx !== 'undefined' && audioCtx && audioCtx.state === 'running') {
+        audioCtx.suspend().catch(() => {});
+      }
+    } catch (_) {}
+
+    try {
+      // 2. Pause every <audio> element on the page (music tracks, engine
+      //    voice, radio, etc.).
+      const els = document.querySelectorAll('audio');
+      for (let i = 0; i < els.length; i++) {
+        const el = els[i];
+        if (el && !el.paused) {
+          try { el.pause(); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
+    try {
+      // 3. If a music-track helper exists, pause through that path too —
+      //    handles MediaElementSource graphs that bypass the <audio>
+      //    element's paused flag.
+      if (typeof allTracks === 'function') {
+        const tracks = allTracks();
+        if (tracks) {
+          Object.values(tracks).forEach(el => {
+            if (el && typeof el.pause === 'function' && !el.paused) {
+              try { el.pause(); } catch (_) {}
+            }
+          });
+        }
+      }
+    } catch (_) {}
+
+    try {
+      // 4. Mark the audio interrupted so resume paths know to rewire on
+      //    foreground (matches the existing visibilitychange handler).
+      if (typeof _markAudioInterrupted === 'function') _markAudioInterrupted();
+    } catch (_) {}
+
+    try { console.log('[ios-lifecycle] forceSilenceAll:', reason); } catch (_) {}
+  }
+
+  // Resume audio context on foreground — JS-side mirror of the AppDelegate
+  // reactivation. Existing visibilitychange handlers will re-issue play()
+  // for tracks that were active.
+  function tryResumeAudio(reason) {
+    try {
+      if (typeof audioCtx !== 'undefined' && audioCtx &&
+          (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
+        audioCtx.resume().catch(() => {});
+      }
+    } catch (_) {}
+    try { console.log('[ios-lifecycle] tryResumeAudio:', reason); } catch (_) {}
+  }
+
+  // ── Capacitor App plugin ───────────────────────────────────────────────
+  // Fires reliably on iOS lifecycle changes via the native bridge. This is
+  // more dependable than visibilitychange in a WKWebView.
+  function attachAppPlugin() {
+    const App = window.nativePlugin && window.nativePlugin('App');
+    if (!App || typeof App.addListener !== 'function') return false;
+
+    try {
+      App.addListener('appStateChange', (state) => {
+        // state.isActive === true  → app foregrounded
+        // state.isActive === false → app backgrounded / lost focus
+        if (state && state.isActive === false) {
+          forceSilenceAll('appStateChange:inactive');
+        } else if (state && state.isActive === true) {
+          tryResumeAudio('appStateChange:active');
+        }
+      });
+    } catch (_) {}
+
+    try {
+      // pause / resume events fire on full background/foreground transitions
+      App.addListener('pause',  () => forceSilenceAll('App.pause'));
+      App.addListener('resume', () => tryResumeAudio('App.resume'));
+    } catch (_) {}
+
+    return true;
+  }
+
+  // The Capacitor bridge may not be ready immediately — try now, and again
+  // after deviceready. attachAppPlugin is idempotent in practice (Capacitor
+  // dedupes identical listeners).
+  if (!attachAppPlugin()) {
+    document.addEventListener('deviceready', attachAppPlugin, { once: true });
+    // Fallback: poll briefly until the plugin appears (usually <100ms).
+    let tries = 0;
+    const poll = setInterval(() => {
+      tries++;
+      if (attachAppPlugin() || tries > 30) clearInterval(poll);
+    }, 100);
+  }
+
+  // ── Page-hide as last-resort safety net ────────────────────────────────
+  // pagehide fires on iOS when the app is being killed (terminate).
+  window.addEventListener('pagehide', () => forceSilenceAll('pagehide'));
+})();
 // Menu open animation origin tracker.
 // On any pointer/click/touch, capture the screen coordinates and write them
 // as CSS custom properties (--menu-ox, --menu-oy) on :root. The shared
@@ -18096,6 +18228,9 @@ function _setupHandlingDropdown(bar) {
   }
   if (head) {
     _tapBind(head, () => {
+      // Match thruster panel sub-tab feedback (playGarageCycle) on every
+      // open/close tap of the SHIP HANDLING head.
+      try { if (typeof window.playGarageCycle === 'function') window.playGarageCycle(); } catch(_){}
       if (bar.classList.contains('open')) _close();
       else _open();
     });
@@ -20085,6 +20220,182 @@ function closeSettings() {
   document.getElementById('settings-overlay').addEventListener('click', (e) => {
     if (e.target.id === 'settings-overlay') closeSettings();
   });
+
+  // ── SYNC PROGRESS (cross-device save codes) ─────────────────────────
+  // Backend: /api/save (POST → upload, returns {code}; GET ?code=... → keys).
+  // On Capacitor (iOS native, file://) relative /api/... won't resolve, so we
+  // fall back to the production Vercel URL. Web build uses the same origin.
+  const SYNC_API_BASE = (function() {
+    try {
+      const proto = window.location && window.location.protocol;
+      if (proto === 'http:' || proto === 'https:') return '/api/save';
+    } catch (_) {}
+    return 'https://tunnel-proto.vercel.app/api/save';
+  })();
+  // Keys that count as "player progress" — backed up on GET CODE.
+  function _collectSyncKeys() {
+    const out = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k.startsWith('jh_') || k.startsWith('jet-horizon') || k.startsWith('jetslide')) {
+          out[k] = localStorage.getItem(k);
+        }
+      }
+    } catch(_) {}
+    return out;
+  }
+  function _setSyncStatus(msg, kind) {
+    const el = document.getElementById('sync-status');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.classList.remove('ok', 'err', 'busy');
+    if (kind) el.classList.add(kind);
+  }
+  const getCodeBtn = document.getElementById('sync-get-code-btn');
+  if (getCodeBtn) {
+    _tapBind(getCodeBtn, async () => {
+      _setSyncStatus('Uploading save…', 'busy');
+      getCodeBtn.disabled = true;
+      try {
+        const keys = _collectSyncKeys();
+        if (Object.keys(keys).length === 0) {
+          _setSyncStatus('Nothing to back up yet.', 'err');
+          return;
+        }
+        const r = await fetch(SYNC_API_BASE, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keys }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.code) {
+          _setSyncStatus(data.error || 'Upload failed.', 'err');
+          return;
+        }
+        const row     = document.getElementById('sync-code-row');
+        const display = document.getElementById('sync-code-display');
+        if (row && display) {
+          display.textContent = data.code;
+          row.style.display = '';
+        }
+        _setSyncStatus('Saved. Use this code on another device to restore.', 'ok');
+      } catch (e) {
+        _setSyncStatus('Network error — check connection.', 'err');
+      } finally {
+        getCodeBtn.disabled = false;
+      }
+    });
+  }
+  const copyBtn = document.getElementById('sync-copy-btn');
+  if (copyBtn) {
+    _tapBind(copyBtn, async () => {
+      const display = document.getElementById('sync-code-display');
+      const code = display && display.textContent;
+      if (!code || code === '—') return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(code);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = code; document.body.appendChild(ta);
+          ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        }
+        _setSyncStatus('Code copied.', 'ok');
+      } catch (_) {
+        _setSyncStatus('Could not copy — select & copy manually.', 'err');
+      }
+    });
+  }
+  const restoreInput = document.getElementById('sync-restore-input');
+  const restoreBtn   = document.getElementById('sync-restore-btn');
+  if (restoreBtn && restoreInput) {
+    _tapBind(restoreBtn, async () => {
+      const raw = (restoreInput.value || '').trim();
+      if (!raw) { _setSyncStatus('Enter a code first.', 'err'); return; }
+      _setSyncStatus('Looking up code…', 'busy');
+      restoreBtn.disabled = true;
+      try {
+        const url = SYNC_API_BASE + '?code=' + encodeURIComponent(raw);
+        const r = await fetch(url);
+        const data = await r.json().catch(() => ({}));
+        if (r.status === 404) {
+          _setSyncStatus('Code not found or expired.', 'err');
+          return;
+        }
+        if (!r.ok || !data.keys) {
+          _setSyncStatus(data.error || 'Restore failed.', 'err');
+          return;
+        }
+        // Wipe current progress keys, then write restored ones, then reload.
+        try {
+          const toRemove = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (!k) continue;
+            if (k.startsWith('jh_') || k.startsWith('jet-horizon') || k.startsWith('jetslide')) {
+              toRemove.push(k);
+            }
+          }
+          toRemove.forEach(k => { try { localStorage.removeItem(k); } catch(_) {} });
+          Object.keys(data.keys).forEach(k => {
+            try { localStorage.setItem(k, data.keys[k]); } catch(_) {}
+          });
+        } catch(_) {}
+        _setSyncStatus('Progress restored. Reloading…', 'ok');
+        setTimeout(() => { try { location.reload(); } catch(_) {} }, 600);
+      } catch (e) {
+        _setSyncStatus('Network error — check connection.', 'err');
+      } finally {
+        restoreBtn.disabled = false;
+      }
+    });
+    // Auto-uppercase as user types; keep cursor sane.
+    restoreInput.addEventListener('input', () => {
+      const v = restoreInput.value.toUpperCase();
+      if (v !== restoreInput.value) restoreInput.value = v;
+    });
+  }
+
+  // Reset Game button — wipes all local progress (skins, missions, fuel cells,
+  // thrusters, upgrades, headstarts, tutorial flag, radio unlock, etc.).
+  // Two-tap confirm: first tap arms (button turns red, label CONFIRM?), second
+  // tap within 4s actually wipes. Tap anywhere else (or wait) to cancel.
+  const resetBtn = document.getElementById('settings-reset-btn');
+  if (resetBtn) {
+    let _armed = false;
+    let _armTimer = null;
+    function disarm() {
+      _armed = false;
+      resetBtn.textContent = 'RESET GAME';
+      resetBtn.classList.remove('armed');
+      if (_armTimer) { clearTimeout(_armTimer); _armTimer = null; }
+    }
+    _tapBind(resetBtn, () => {
+      if (!_armed) {
+        _armed = true;
+        resetBtn.textContent = 'CONFIRM?';
+        resetBtn.classList.add('armed');
+        _armTimer = setTimeout(disarm, 4000);
+        return;
+      }
+      // Confirmed — wipe.
+      try {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k) continue;
+          if (k.startsWith('jh_') || k.startsWith('jet-horizon') || k.startsWith('jetslide')) {
+            keys.push(k);
+          }
+        }
+        keys.forEach(k => { try { localStorage.removeItem(k); } catch(_) {} });
+      } catch(_) {}
+      // Hard reload to fully reinit state with cleared storage.
+      try { location.reload(); } catch(_) { window.location.href = window.location.href; }
+    });
+  }
 
   // Music volume slider
   document.getElementById('vol-music').addEventListener('input', (e) => {

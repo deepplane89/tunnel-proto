@@ -11,8 +11,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     private var displayLink: CADisplayLink?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // ── AUDIO ─────────────────────────────────────────────────────────────
-        // .ambient = mixes with Spotify/Apple Music + respects silent switch
+        // ── AUDIO SESSION ─────────────────────────────────────────────────────
+        // .ambient + .mixWithOthers = mixes with Spotify/Apple Music + respects
+        // the silent switch. iOS automatically pauses .ambient audio when the
+        // app backgrounds and resumes it when foregrounded — we don't manually
+        // deactivate/reactivate the session because doing so would interfere
+        // with the JS-side _markAudioInterrupted / audioCtx.suspend snapshot
+        // logic in 30-audio.js + 72-main-late-mid.js, which carefully tracks
+        // which tracks were playing so it can re-issue play() on resume.
         do {
             try AVAudioSession.sharedInstance().setCategory(
                 .ambient,
@@ -24,14 +30,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             NSLog("[JetHorizon] AVAudioSession setup failed: \(error)")
         }
 
-        // ── PREVENT IDLE/THROTTLE ─────────────────────────────────────────────
         // Stops iOS from dimming, sleeping, or down-clocking the GPU mid-play.
         application.isIdleTimerDisabled = true
 
-        // ── 120Hz PROMOTION ───────────────────────────────────────────────────
         // Request the highest available refresh rate on ProMotion devices
-        // (iPhone 13 Pro, 14 Pro, 15 Pro, 16 Pro). On non-ProMotion devices
-        // this is a no-op — they stay at 60Hz.
+        // (iPhone 13 Pro, 14 Pro, 15 Pro, 16 Pro). No-op on 60Hz devices.
         if #available(iOS 15.0, *) {
             let link = CADisplayLink(target: self, selector: #selector(displayTick))
             link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
@@ -43,21 +46,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     @objc private func displayTick() {
-        // No-op: just by existing this CADisplayLink tells the system the app
-        // wants 120Hz, which lifts the WebView/CAMetalLayer cap.
+        // No-op: existence of this CADisplayLink hints the system to lift the cap.
     }
 
     func applicationWillResignActive(_ application: UIApplication) {}
 
     func applicationDidEnterBackground(_ application: UIApplication) {
-        // Re-enable idle timer when backgrounded so we don't drain battery
+        // Re-enable idle timer to spare battery while backgrounded.
         application.isIdleTimerDisabled = false
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {}
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        // Re-disable idle timer when returning to play
         application.isIdleTimerDisabled = true
     }
 
