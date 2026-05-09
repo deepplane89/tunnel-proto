@@ -13060,35 +13060,24 @@ function enableRadioInGame() {
 }
 window.enableRadioInGame = enableRadioInGame;
 
-// Mid-run: turn the shuffle station OFF, fade radio out. If we're playing,
-// re-bring the current zone's gameplay track. If we're paused, bring up
-// title music as the pause underscore (matching pauseGameTrackInPlace).
+// Mid-run: turn the shuffle station OFF and bring the current zone's
+// gameplay music back. Works whether we're 'playing' or 'paused'.
 function disableRadioInGame() {
   setRadioOn(false);
-  // Hard-stop synchronously so any subsequent resume / musicFadeTo can't see
-  // the radio still playing and overlap with the gameplay zone track. The
-  // ramp + delayed pause we used before raced with togglePause()'s resume path.
+  // Hard-stop the radio synchronously so it can't bleed through.
   try { if (typeof setTrackVol === 'function') setTrackVol('radio', 0); } catch(_) {}
   try { if (radioMusic && !radioMusic.paused) radioMusic.pause(); } catch(_) {}
+  // Bring the current zone track back. Use currentGameTrack() (campaign +
+  // DR sequence aware) instead of guessing from currentLevelIdx.
   try {
-    if (!state || state.muted) {
-      // nothing
-    } else if (state.phase === 'playing') {
-      const lvl = state.currentLevelIdx || 0;
-      const k = (lvl >= 2) ? 'l3' : 'bg';
+    if (state && !state.muted) {
+      const k = (typeof currentGameTrack === 'function') ? currentGameTrack() : 'bg';
       const el = (typeof allTracks === 'function') ? allTracks()[k] : null;
       if (el) {
         if (el.paused) { try { el.play().catch(() => {}); } catch(_) {} }
         if (typeof rampTrackVol === 'function') rampTrackVol(k, TRACK_VOL[k], 0.6);
         else setTrackVol(k, TRACK_VOL[k]);
       }
-    } else if (state.phase === 'paused' && titleMusic) {
-      try {
-        titleMusic.currentTime = 0;
-        setTrackVol('title', 0);
-        titleMusic.play().catch(() => {});
-        if (typeof rampTrackVol === 'function') rampTrackVol('title', TRACK_VOL.title, 0.5);
-      } catch(_) {}
     }
   } catch(_) {}
   _updatePlayIcon();
