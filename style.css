@@ -959,7 +959,15 @@ html, body {
   border-radius: 14px;
   padding: 24px 28px;
   width: 300px; max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
+/* Portrait + desktop: single column — .settings-body is just a wrapper. */
+.settings-body { display: block; }
+.settings-col  { display: block; }
+/* Show the SYNC PROGRESS divider only at the start of column 2; in single-
+   column it sits inline like before. */
 .settings-header {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 20px;
@@ -1028,6 +1036,52 @@ html, body {
   margin-top: 18px; padding-top: 14px;
   border-top: 1px solid rgba(255,255,255,0.06);
   text-align: center;
+}
+.settings-tutorial-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.5);
+  font-family: monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 100%;
+  margin-bottom: 10px;
+}
+.gfx-row {
+  display: flex; gap: 6px; flex: 1; justify-content: flex-end;
+}
+
+/* ── Landscape mobile: two-column settings panel ───────────────
+   In short landscape (phones held sideways) the 14-row single-column
+   panel overflows. Switch to a two-column grid: left column = audio +
+   display + controls, right column = sync + reset + footer. Widen the
+   panel so each column has comfortable breathing room. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .settings-panel {
+    width: 620px;
+    max-width: 94vw;
+    max-height: 92vh;
+    padding: 16px 22px 14px;
+  }
+  .settings-header { margin-bottom: 12px; }
+  .settings-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 28px;
+    row-gap: 0;
+    align-items: start;
+  }
+  .settings-col {
+    display: flex;
+    flex-direction: column;
+  }
+  .settings-row { margin-bottom: 10px; }
+  .settings-section-divider { margin-top: 0; }
+  .settings-footer { margin-top: 12px; padding-top: 10px; }
+  .settings-tutorial-btn { margin-bottom: 6px; padding: 6px 12px; }
 }
 .settings-link {
   font: 400 11px/1 'Rajdhani', sans-serif;

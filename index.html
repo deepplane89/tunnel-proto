@@ -414,63 +414,67 @@
       <span>SETTINGS</span>
       <button id="settings-close" class="settings-close">✕</button>
     </div>
-    <div class="settings-row">
-      <label>Music</label>
-      <input type="range" id="vol-music" min="0" max="100" value="80" class="vol-slider">
-      <button id="mute-music" class="mute-toggle">♪</button>
-    </div>
-    <div class="settings-row">
-      <label>SFX</label>
-      <input type="range" id="vol-sfx" min="0" max="100" value="80" class="vol-slider">
-      <button id="mute-sfx" class="mute-toggle">♪</button>
-    </div>
-    <div class="settings-row">
-      <label>Graphics</label>
-      <div style="display:flex;gap:6px;flex:1;justify-content:flex-end;">
-        <button id="gfx-performance" class="toggle-btn gfx-btn">PERF</button>
-        <button id="gfx-balanced"    class="toggle-btn gfx-btn active">BAL</button>
-        <button id="gfx-sharp"       class="toggle-btn gfx-btn">SHARP</button>
+    <div class="settings-body">
+      <div class="settings-col">
+        <div class="settings-row">
+          <label>Music</label>
+          <input type="range" id="vol-music" min="0" max="100" value="80" class="vol-slider">
+          <button id="mute-music" class="mute-toggle">♪</button>
+        </div>
+        <div class="settings-row">
+          <label>SFX</label>
+          <input type="range" id="vol-sfx" min="0" max="100" value="80" class="vol-slider">
+          <button id="mute-sfx" class="mute-toggle">♪</button>
+        </div>
+        <div class="settings-row">
+          <label>Graphics</label>
+          <div class="gfx-row">
+            <button id="gfx-performance" class="toggle-btn gfx-btn">PERF</button>
+            <button id="gfx-balanced"    class="toggle-btn gfx-btn active">BAL</button>
+            <button id="gfx-sharp"       class="toggle-btn gfx-btn">SHARP</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <label>Haptics</label>
+          <button id="haptic-toggle" class="toggle-btn on">ON</button>
+        </div>
+        <div class="settings-row">
+          <label>Controls</label>
+          <button id="show-tutorial-btn" class="toggle-btn">HOW TO PLAY</button>
+        </div>
+        <div class="settings-row">
+          <label>Leaderboard</label>
+          <button id="settings-leaderboard-btn" class="toggle-btn">VIEW</button>
+        </div>
       </div>
-    </div>
-    <div class="settings-row">
-      <label>Haptics</label>
-      <button id="haptic-toggle" class="toggle-btn on">ON</button>
-    </div>
-
-    <div class="settings-row">
-      <label>Controls</label>
-      <button id="show-tutorial-btn" class="toggle-btn">HOW TO PLAY</button>
-    </div>
-    <div class="settings-row">
-      <label>Leaderboard</label>
-      <button id="settings-leaderboard-btn" class="toggle-btn">VIEW</button>
-    </div>
-    <div class="settings-section-divider">SYNC PROGRESS</div>
-    <div class="settings-row">
-      <label>Backup</label>
-      <div class="settings-row-actions">
-        <button id="sync-get-code-btn" class="toggle-btn">GET CODE</button>
+      <div class="settings-col">
+        <div class="settings-section-divider">SYNC PROGRESS</div>
+        <div class="settings-row">
+          <label>Backup</label>
+          <div class="settings-row-actions">
+            <button id="sync-get-code-btn" class="toggle-btn">GET CODE</button>
+          </div>
+        </div>
+        <div class="settings-row" id="sync-code-row" style="display:none;">
+          <label>Code</label>
+          <span id="sync-code-display" class="sync-code-display">—</span>
+          <button id="sync-copy-btn" class="toggle-btn" style="width:64px;">COPY</button>
+        </div>
+        <div class="settings-row">
+          <label>Restore</label>
+          <input id="sync-restore-input" class="sync-code-input" type="text" maxlength="12" placeholder="JH-XXXX-XX" autocapitalize="characters" autocorrect="off" spellcheck="false">
+          <button id="sync-restore-btn" class="toggle-btn" style="width:64px;">LOAD</button>
+        </div>
+        <div id="sync-status" class="sync-status"></div>
+        <div class="settings-row">
+          <label>Reset</label>
+          <button id="settings-reset-btn" class="toggle-btn settings-reset-btn">RESET GAME</button>
+        </div>
+        <div class="settings-footer">
+          <button id="replay-tutorial-btn" class="settings-tutorial-btn">TUTORIAL</button>
+          <a href="./privacy.html" target="_blank" class="settings-link">Privacy Policy</a>
+        </div>
       </div>
-    </div>
-    <div class="settings-row" id="sync-code-row" style="display:none;">
-      <label>Code</label>
-      <span id="sync-code-display" class="sync-code-display">—</span>
-      <button id="sync-copy-btn" class="toggle-btn" style="width:64px;">COPY</button>
-    </div>
-    <div class="settings-row">
-      <label>Restore</label>
-      <input id="sync-restore-input" class="sync-code-input" type="text" maxlength="12" placeholder="JH-XXXX-XX" autocapitalize="characters" autocorrect="off" spellcheck="false">
-      <button id="sync-restore-btn" class="toggle-btn" style="width:64px;">LOAD</button>
-    </div>
-    <div id="sync-status" class="sync-status"></div>
-
-    <div class="settings-row">
-      <label>Reset</label>
-      <button id="settings-reset-btn" class="toggle-btn settings-reset-btn">RESET GAME</button>
-    </div>
-    <div class="settings-footer">
-      <button id="replay-tutorial-btn" style="background:none;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.5);font-family:monospace;font-size:11px;letter-spacing:2px;padding:8px 16px;border-radius:4px;cursor:pointer;width:100%;margin-bottom:10px;">TUTORIAL</button>
-      <a href="./privacy.html" target="_blank" class="settings-link">Privacy Policy</a>
     </div>
   </div>
 </div>
@@ -640,6 +644,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1778287674"></script>
+<script type="module" src="./dist/game.js?v=1778289346"></script>
 </body>
 </html>
