@@ -576,57 +576,93 @@ function _wirePlayerTransport(prefix) {
     play.addEventListener('click', (e) => { e.stopPropagation(); _togglePlayPause(); });
   }
 
-  // Tap/drag the progress track to seek. Single pointer capture model so it
-  // works for mouse + touch + pen with one code path. Live-update fill +
-  // current-time text during drag (rAF tick is suppressed via _rpSeeking),
-  // commit radioMusic.currentTime on release.
+  // Tap/drag the progress track to seek. iOS Safari + iOS PWA needs explicit
+  // touch handlers — pointer events alone get hijacked by gesture systems
+  // (rubber-band, native scroll), so we wire BOTH paths and gate against
+  // double-fire via a single _rpSeeking flag.
   const track = document.getElementById(prefix + '-progress-track');
   if (track && !track._wired) {
     track._wired = true;
-    const fill = document.getElementById(prefix + '-progress-fill');
-    const cur  = document.getElementById(prefix + '-time-cur');
-    const ratioFromEvent = (e) => {
+    let pendingT = 0;
+    const ratioFromXY = (clientX) => {
       const r = track.getBoundingClientRect();
       if (r.width <= 0) return 0;
-      const x = (e.clientX != null ? e.clientX : 0) - r.left;
-      return Math.max(0, Math.min(1, x / r.width));
+      return Math.max(0, Math.min(1, (clientX - r.left) / r.width));
     };
-    let pendingT = 0;
-    const onMove = (e) => {
-      if (!_rpSeeking) return;
-      const d = (radioMusic && isFinite(radioMusic.duration)) ? radioMusic.duration : 0;
-      const ratio = ratioFromEvent(e);
-      pendingT = d * ratio;
+    const updateUI = (ratio, t) => {
       RP_PREFIXES.forEach(p => {
         const f = document.getElementById(p + '-progress-fill');
         const c = document.getElementById(p + '-time-cur');
         if (f) f.style.width = (ratio * 100) + '%';
-        if (c) c.textContent = _fmtTime(pendingT);
+        if (c) c.textContent = _fmtTime(t);
       });
     };
-    const onUp = (e) => {
+    const begin = (clientX) => {
+      if (!radioMusic || !isFinite(radioMusic.duration) || radioMusic.duration <= 0) return false;
+      _rpSeeking = true;
+      const ratio = ratioFromXY(clientX);
+      pendingT = radioMusic.duration * ratio;
+      updateUI(ratio, pendingT);
+      return true;
+    };
+    const move = (clientX) => {
+      if (!_rpSeeking) return;
+      const d = (radioMusic && isFinite(radioMusic.duration)) ? radioMusic.duration : 0;
+      const ratio = ratioFromXY(clientX);
+      pendingT = d * ratio;
+      updateUI(ratio, pendingT);
+    };
+    const commit = () => {
       if (!_rpSeeking) return;
       _rpSeeking = false;
-      try { track.releasePointerCapture(e.pointerId); } catch(_){}
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
       try { if (radioMusic && isFinite(pendingT)) radioMusic.currentTime = pendingT; } catch(_){}
     };
+
+    // ── Pointer Events path (desktop + Android Chrome). On iOS Safari we
+    //    suppress this path because Touch Events fire first and we don't
+    //    want both to begin().
     track.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') return;  // touch path handles it
       e.stopPropagation();
-      if (!radioMusic || !isFinite(radioMusic.duration) || radioMusic.duration <= 0) return;
-      _rpSeeking = true;
+      if (!begin(e.clientX)) return;
       try { track.setPointerCapture(e.pointerId); } catch(_){}
-      // Initial position (tap-to-seek without drag).
-      const ratio = ratioFromEvent(e);
-      pendingT = radioMusic.duration * ratio;
-      if (fill) fill.style.width = (ratio * 100) + '%';
-      if (cur)  cur.textContent  = _fmtTime(pendingT);
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
-      window.addEventListener('pointercancel', onUp);
     });
+    track.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch') return;
+      if (_rpSeeking) move(e.clientX);
+    });
+    const ptrEnd = (e) => {
+      if (e.pointerType === 'touch') return;
+      commit();
+      try { track.releasePointerCapture(e.pointerId); } catch(_){}
+    };
+    track.addEventListener('pointerup', ptrEnd);
+    track.addEventListener('pointercancel', ptrEnd);
+
+    // ── Touch Events path (iOS Safari, iOS PWA, fallback). Non-passive so
+    //    we can preventDefault to stop scroll/rubber-band stealing the drag.
+    track.addEventListener('touchstart', (e) => {
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      if (!begin(t.clientX)) return;
+      e.stopPropagation();
+      if (e.cancelable) { try { e.preventDefault(); } catch(_){} }
+    }, { passive: false });
+    track.addEventListener('touchmove', (e) => {
+      if (!_rpSeeking) return;
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      move(t.clientX);
+      e.stopPropagation();
+      if (e.cancelable) { try { e.preventDefault(); } catch(_){} }
+    }, { passive: false });
+    const touchEnd = (e) => {
+      if (!_rpSeeking) return;
+      commit();
+      e.stopPropagation();
+    };
+    track.addEventListener('touchend', touchEnd);
+    track.addEventListener('touchcancel', touchEnd);
   }
 }
 
