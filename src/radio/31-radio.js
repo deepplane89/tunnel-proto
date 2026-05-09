@@ -32,9 +32,11 @@ const RADIO_LS = {
 };
 const RADIO_UNLOCK_AT = 3;  // unlock on/after death of run #3
 
-let _radioShuffleQueue = [];   // upcoming track indexes
+let _radioShuffleQueue = [];   // upcoming track indexes (shuffled)
+let _radioHistory      = [];   // played-track history for PREV (most recent at end)
 let _radioCurrentIdx   = -1;   // currently playing index into RADIO_TRACKS
 let _radioEndedHooked  = false;
+const _RADIO_HISTORY_MAX = 24;
 
 function isRadioUnlocked() {
   try { return localStorage.getItem(RADIO_LS.unlocked) === '1'; } catch(_) { return false; }
@@ -122,6 +124,10 @@ function _hookRadioEnded() {
     // Only auto-advance if we're still meant to be playing (not paused/dead).
     if (!isRadioOn()) return;
     if (state && (state.phase === 'paused' || state.phase === 'dead' || state.phase === 'title')) return;
+    if (_radioCurrentIdx >= 0) {
+      _radioHistory.push(_radioCurrentIdx);
+      if (_radioHistory.length > _RADIO_HISTORY_MAX) _radioHistory.shift();
+    }
     _playRadioIdx(_nextRadioIdx());
   });
 }
@@ -347,10 +353,8 @@ function _updatePlayerMeta() {
   if (!tr) return;
   RP_PREFIXES.forEach(p => {
     const titleEl = document.getElementById(p + '-title');
-    const idxEl   = document.getElementById(p + '-index');
-    if (!titleEl || !idxEl) return;
+    if (!titleEl) return;
     titleEl.textContent = tr.name;
-    idxEl.textContent = _pad2(i + 1) + ' / ' + _pad2(total);
     requestAnimationFrame(() => {
       if (titleEl.scrollWidth > titleEl.clientWidth + 4) titleEl.classList.add('scroll');
       else titleEl.classList.remove('scroll');
@@ -454,11 +458,38 @@ function _radioPlayerTick() {
 
 function _stepRadioTrack(dir) {
   if (typeof initAudio === 'function') initAudio();
-  let i = (_radioPreviewIdx >= 0) ? _radioPreviewIdx
-        : (_radioCurrentIdx >= 0) ? _radioCurrentIdx
-        : 0;
-  i = (i + dir + RADIO_TRACKS.length) % RADIO_TRACKS.length;
-  _previewRadioTrack(i);
+  const cur = (_radioPreviewIdx >= 0) ? _radioPreviewIdx
+            : (_radioCurrentIdx >= 0) ? _radioCurrentIdx
+            : -1;
+  let nextIdx;
+  if (dir > 0) {
+    // NEXT: pull from the shuffle queue. Push current onto history.
+    if (cur >= 0) {
+      _radioHistory.push(cur);
+      if (_radioHistory.length > _RADIO_HISTORY_MAX) _radioHistory.shift();
+    }
+    nextIdx = _nextRadioIdx();
+    // Avoid landing on the same track we're already on (small playlists).
+    if (nextIdx === cur && RADIO_TRACKS.length > 1) {
+      if (_radioShuffleQueue.length === 0) _refillShuffleQueue();
+      const swap = _radioShuffleQueue.shift();
+      if (typeof swap === 'number') nextIdx = swap;
+    }
+  } else {
+    // PREV: pop history. If empty, pick a fresh shuffle pick (still random).
+    if (_radioHistory.length > 0) {
+      nextIdx = _radioHistory.pop();
+    } else {
+      nextIdx = _nextRadioIdx();
+      if (nextIdx === cur && RADIO_TRACKS.length > 1) {
+        if (_radioShuffleQueue.length === 0) _refillShuffleQueue();
+        const swap = _radioShuffleQueue.shift();
+        if (typeof swap === 'number') nextIdx = swap;
+      }
+    }
+  }
+  if (typeof nextIdx !== 'number' || nextIdx < 0) return;
+  _previewRadioTrack(nextIdx);
 }
 
 function _togglePlayPause() {
