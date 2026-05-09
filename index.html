@@ -542,12 +542,28 @@
 <div id="pause-overlay" class="pause-overlay hidden">
   <div class="pause-content">
     <div class="pause-title">PAUSED</div>
-    <div id="pause-radio-row" class="pause-radio-row hidden">
-      <span class="pause-radio-name" id="pause-radio-name">—</span>
-      <div class="pause-radio-controls">
-        <button id="pause-radio-prev" class="pause-radio-btn" aria-label="Previous track">⏮</button>
-        <button id="pause-radio-toggle" class="pause-radio-btn" aria-label="Play/Pause">⏸</button>
-        <button id="pause-radio-skip" class="pause-radio-btn" aria-label="Next track">⏭</button>
+    <div id="pause-radio-row" class="pause-radio-player hidden">
+      <div class="rp-meta-row">
+        <canvas id="pp-eq" class="rp-eq" width="160" height="48" aria-hidden="true"></canvas>
+        <div class="rp-meta-text">
+          <div class="rp-label">NOW PLAYING</div>
+          <div class="rp-index" id="pp-index">— / —</div>
+        </div>
+      </div>
+      <div class="rp-title-wrap">
+        <div class="rp-title" id="pp-title">—</div>
+      </div>
+      <div class="rp-progress">
+        <div class="rp-progress-track"><div class="rp-progress-fill" id="pp-progress-fill"></div></div>
+        <div class="rp-time-row">
+          <span class="rp-time" id="pp-time-cur">0:00</span>
+          <span class="rp-time" id="pp-time-tot">0:00</span>
+        </div>
+      </div>
+      <div class="rp-transport">
+        <button id="pp-prev" class="rp-btn" aria-label="Previous track"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h2v14H7zM20 5v14L9 12z"/></svg></button>
+        <button id="pp-play" class="rp-btn rp-btn-play" aria-label="Play"><svg id="pp-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+        <button id="pp-next" class="rp-btn" aria-label="Next track"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15 5h2v14h-2zM4 5l11 7-11 7z"/></svg></button>
       </div>
     </div>
     <div class="pause-actions">
@@ -687,6 +703,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1778297842"></script>
+<script type="module" src="./dist/game.js?v=1778298700"></script>
 </body>
 </html>

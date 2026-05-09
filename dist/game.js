@@ -12864,9 +12864,13 @@ function _previewRadioTrack(idx) {
 }
 
 // ── New premium player UI ─────────────────────────────────────────────
+// Two players share the same audio + analyser:
+//   'rp-' prefix = title-screen radio overlay
+//   'pp-' prefix = in-game pause-menu player
 let _rpRAF = 0;
-let _rpEqCtx = null;
+const _rpEqCtxs = {};   // keyed by canvas id
 let _rpEqBuf = null;
+const RP_PREFIXES = ['rp', 'pp'];
 
 function _fmtTime(s) {
   if (!isFinite(s) || s < 0) s = 0;
@@ -12877,43 +12881,45 @@ function _fmtTime(s) {
 function _pad2(n) { return n.toString().padStart(2, '0'); }
 
 function _updatePlayerMeta() {
-  const titleEl = document.getElementById('rp-title');
-  const idxEl   = document.getElementById('rp-index');
-  if (!titleEl || !idxEl) return;
   const total = RADIO_TRACKS.length;
   const i = (_radioPreviewIdx >= 0) ? _radioPreviewIdx
           : (_radioCurrentIdx >= 0) ? _radioCurrentIdx
           : 0;
   const tr = RADIO_TRACKS[i];
   if (!tr) return;
-  titleEl.textContent = tr.name;
-  idxEl.textContent = _pad2(i + 1) + ' / ' + _pad2(total);
-  // Marquee if the title overflows its container.
-  requestAnimationFrame(() => {
-    if (titleEl.scrollWidth > titleEl.clientWidth + 4) titleEl.classList.add('scroll');
-    else titleEl.classList.remove('scroll');
+  RP_PREFIXES.forEach(p => {
+    const titleEl = document.getElementById(p + '-title');
+    const idxEl   = document.getElementById(p + '-index');
+    if (!titleEl || !idxEl) return;
+    titleEl.textContent = tr.name;
+    idxEl.textContent = _pad2(i + 1) + ' / ' + _pad2(total);
+    requestAnimationFrame(() => {
+      if (titleEl.scrollWidth > titleEl.clientWidth + 4) titleEl.classList.add('scroll');
+      else titleEl.classList.remove('scroll');
+    });
   });
 }
 
 function _updatePlayIcon() {
-  const icon = document.getElementById('rp-play-icon');
-  const btn  = document.getElementById('rp-play');
-  if (!icon || !btn) return;
   const playing = !!(radioMusic && !radioMusic.paused);
-  if (playing) {
-    icon.innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
-    btn.setAttribute('aria-label', 'Pause');
-  } else {
-    icon.innerHTML = '<path d="M8 5v14l11-7z"/>';
-    btn.setAttribute('aria-label', 'Play');
-  }
+  RP_PREFIXES.forEach(p => {
+    const icon = document.getElementById(p + '-play-icon');
+    const btn  = document.getElementById(p + '-play');
+    if (!icon || !btn) return;
+    if (playing) {
+      icon.innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+      btn.setAttribute('aria-label', 'Pause');
+    } else {
+      icon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+      btn.setAttribute('aria-label', 'Play');
+    }
+  });
 }
 
-function _drawRadioEq() {
-  const cv = document.getElementById('rp-eq');
-  if (!cv) return;
-  if (!_rpEqCtx) _rpEqCtx = cv.getContext('2d');
-  const ctx = _rpEqCtx;
+function _drawRadioEqOnCanvas(cv) {
+  if (!cv || cv.offsetParent === null) return; // skip if hidden
+  let ctx = _rpEqCtxs[cv.id];
+  if (!ctx) { ctx = cv.getContext('2d'); _rpEqCtxs[cv.id] = ctx; }
   if (!ctx) return;
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
@@ -12961,19 +12967,25 @@ function _drawRadioEq() {
   }
   ctx.shadowBlur = 0;
 }
+function _drawRadioEq() {
+  RP_PREFIXES.forEach(p => _drawRadioEqOnCanvas(document.getElementById(p + '-eq')));
+}
 
 function _radioPlayerTick() {
-  // Progress bar + timecode.
-  const fill = document.getElementById('rp-progress-fill');
-  const cur  = document.getElementById('rp-time-cur');
-  const tot  = document.getElementById('rp-time-tot');
-  if (radioMusic && fill && cur && tot) {
-    const d = isFinite(radioMusic.duration) ? radioMusic.duration : 0;
-    const t = radioMusic.currentTime || 0;
+  let d = 0, t = 0;
+  if (radioMusic) {
+    d = isFinite(radioMusic.duration) ? radioMusic.duration : 0;
+    t = radioMusic.currentTime || 0;
+  }
+  RP_PREFIXES.forEach(p => {
+    const fill = document.getElementById(p + '-progress-fill');
+    const cur  = document.getElementById(p + '-time-cur');
+    const tot  = document.getElementById(p + '-time-tot');
+    if (!fill || !cur || !tot) return;
     fill.style.width = (d > 0 ? (t / d * 100) : 0) + '%';
     cur.textContent = _fmtTime(t);
     tot.textContent = _fmtTime(d);
-  }
+  });
   _drawRadioEq();
   _rpRAF = requestAnimationFrame(_radioPlayerTick);
 }
@@ -13010,6 +13022,21 @@ function _togglePlayPause() {
   _updatePlayIcon();
 }
 
+// Wire transport buttons for one prefix (idempotent).
+function _wirePlayerTransport(prefix) {
+  const prev = document.getElementById(prefix + '-prev');
+  const play = document.getElementById(prefix + '-play');
+  const next = document.getElementById(prefix + '-next');
+  if (prev && !prev._wired) { prev._wired = true; prev.addEventListener('click', (e) => { e.stopPropagation(); _stepRadioTrack(-1); }); }
+  if (next && !next._wired) { next._wired = true; next.addEventListener('click', (e) => { e.stopPropagation(); _stepRadioTrack(1); }); }
+  if (play && !play._wired) { play._wired = true; play.addEventListener('click', (e) => { e.stopPropagation(); _togglePlayPause(); }); }
+}
+
+function _startPlayerLoop() {
+  if (_rpRAF) cancelAnimationFrame(_rpRAF);
+  _rpRAF = requestAnimationFrame(_radioPlayerTick);
+}
+
 function _renderRadioOverlay() {
   const toggleBtn = document.getElementById('radio-master-toggle');
   if (!toggleBtn) return;
@@ -13023,13 +13050,7 @@ function _renderRadioOverlay() {
     toggleBtn.setAttribute('aria-checked', next ? 'true' : 'false');
   };
 
-  // Transport buttons (idempotent wiring).
-  const prev = document.getElementById('rp-prev');
-  const play = document.getElementById('rp-play');
-  const next = document.getElementById('rp-next');
-  if (prev && !prev._wired) { prev._wired = true; prev.addEventListener('click', (e) => { e.stopPropagation(); _stepRadioTrack(-1); }); }
-  if (next && !next._wired) { next._wired = true; next.addEventListener('click', (e) => { e.stopPropagation(); _stepRadioTrack(1); }); }
-  if (play && !play._wired) { play._wired = true; play.addEventListener('click', (e) => { e.stopPropagation(); _togglePlayPause(); }); }
+  _wirePlayerTransport('rp');
 
   // Refresh icon state on existing <audio> events (once per element).
   if (radioMusic && !radioMusic._rpHooked) {
@@ -13047,10 +13068,7 @@ function _renderRadioOverlay() {
 
   _updatePlayerMeta();
   _updatePlayIcon();
-
-  // Start the rAF loop for progress + EQ while overlay is open.
-  if (_rpRAF) cancelAnimationFrame(_rpRAF);
-  _rpRAF = requestAnimationFrame(_radioPlayerTick);
+  _startPlayerLoop();
 }
 
 // Stop the rAF loop when overlay closes.
@@ -13058,38 +13076,32 @@ function _stopRadioPlayerLoop() {
   if (_rpRAF) { cancelAnimationFrame(_rpRAF); _rpRAF = 0; }
 }
 
-// ── UI: pause-menu now-playing row ──────────────────────────────────────
+// ── UI: pause-menu music player ─────────────────────────────────────────
+// Show the player iff the radio is on and a track is selected. Wires the
+// 'pp-' transport (idempotent) and starts the shared rAF loop.
 function updatePauseRadioRow() {
-  const row  = document.getElementById('pause-radio-row');
-  const name = document.getElementById('pause-radio-name');
-  if (!row || !name) return;
-  if (isRadioOn() && _radioCurrentIdx >= 0) {
+  const row = document.getElementById('pause-radio-row');
+  if (!row) return;
+  const visible = isRadioOn() && _radioCurrentIdx >= 0;
+  if (visible) {
     row.classList.remove('hidden');
-    name.textContent = currentRadioTrackName();
+    _wirePlayerTransport('pp');
+    if (radioMusic && !radioMusic._rpHooked) {
+      radioMusic._rpHooked = true;
+      radioMusic.addEventListener('play', _updatePlayIcon);
+      radioMusic.addEventListener('pause', _updatePlayIcon);
+    }
+    _updatePlayerMeta();
+    _updatePlayIcon();
+    _startPlayerLoop();
   } else {
     row.classList.add('hidden');
+    // If the radio overlay isn't open either, the loop is wasted work.
+    const ov = document.getElementById('radio-overlay');
+    if (!ov || ov.classList.contains('hidden')) _stopRadioPlayerLoop();
   }
 }
 window.updatePauseRadioRow = updatePauseRadioRow;
-
-// Wire pause skip button once DOM is parsed.
-(function wirePauseRadioSkip() {
-  function _wire() {
-    const skipBtn = document.getElementById('pause-radio-skip');
-    if (!skipBtn || skipBtn._wired) return;
-    skipBtn._wired = true;
-    skipBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (typeof skipRadioTrack === 'function') skipRadioTrack();
-      updatePauseRadioRow();
-    });
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', _wire);
-  } else {
-    _wire();
-  }
-})();
 
 // Refresh the title button on load (in case it was already unlocked).
 // Defensive: fire on multiple lifecycle hooks because the single-shot

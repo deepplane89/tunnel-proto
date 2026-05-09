@@ -6448,15 +6448,24 @@ html.platform-ios-native body {
   box-shadow: 0 0 8px rgba(34, 211, 238, 0.7);
 }
 
-/* Pause-menu now-playing strip */
-.pause-radio-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 12px;
-  margin: 8px 0 12px 0;
+/* Pause-menu music player (mirrors the title-screen radio player) */
+.pause-radio-player {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 16px;
+  margin: 8px 0 14px 0;
   background: rgba(0, 14, 28, 0.55);
   border: 1px solid rgba(34, 211, 238, 0.30);
-  border-radius: 4px;
+  border-radius: 6px;
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.10);
 }
+.pause-radio-player.hidden { display: none; }
+.pause-radio-player .rp-title { font-size: 18px; }
+.pause-radio-player .rp-transport { gap: 18px; padding: 2px 0; }
+.pause-radio-player .rp-btn { width: 36px; height: 36px; }
+.pause-radio-player .rp-btn-play { width: 48px; height: 48px; }
+.pause-radio-player .rp-btn svg { width: 14px; height: 14px; }
+.pause-radio-player .rp-btn-play svg { width: 18px; height: 18px; }
+/* legacy alias — some code paths still reference .pause-radio-row */
 .pause-radio-row.hidden { display: none; }
 .pause-radio-icon {
   font-size: 16px;
