@@ -15,6 +15,7 @@
     { id: 'thruster-overlay', close: 'closeThrusterPanel' },
     { id: 'missions-overlay', close: 'closeMissions'      },
     { id: 'settings-overlay', close: 'closeSettings'      },
+    { id: 'radio-overlay',    close: 'closeRadio'         },
   ];
 
   const COMMIT_PX   = 100;

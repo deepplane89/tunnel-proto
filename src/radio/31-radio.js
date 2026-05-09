@@ -156,8 +156,22 @@ function startRadio() {
     try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
     return;
   }
-  const idx = (_radioCurrentIdx >= 0) ? _radioCurrentIdx : _nextRadioIdx();
-  _playRadioIdx(idx);
+  // If the same track is already loaded (just paused — e.g. death→retry,
+  // gameplay→pause→continue), resume from currentTime instead of restarting.
+  // _playRadioIdx always slams currentTime=0, so calling it here would lose
+  // the listener's spot in the song.
+  const idx = (_radioCurrentIdx >= 0) ? _radioCurrentIdx : -1;
+  const tr = (idx >= 0) ? RADIO_TRACKS[idx] : null;
+  const sameTrackLoaded = !!(tr && radioMusic.src && radioMusic.src.indexOf(tr.src) !== -1);
+  if (sameTrackLoaded) {
+    try { radioMusic.play().catch(() => {}); } catch(_) {}
+    try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+    try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_) {}
+    return;
+  }
+  // First-time start (or src cleared): pick a track and play from 0.
+  const playIdx = (idx >= 0) ? idx : _nextRadioIdx();
+  _playRadioIdx(playIdx);
   try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
 }
 window.startRadio = startRadio;
