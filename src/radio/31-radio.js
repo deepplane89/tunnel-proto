@@ -443,8 +443,15 @@ function _togglePlayPause() {
   if (typeof initAudio === 'function') initAudio();
   if (!radioMusic) radioMusic = document.getElementById('radio-music');
   if (!radioMusic) return;
+  // In gameplay, hitting PLAY also flips the shuffle station ON — the player
+  // explicitly asked for music, so we treat it as opting in. The interceptor
+  // is gated by isRadioOn() so this is the user's consent moment.
+  const inGame = state && state.phase === 'playing';
   if (radioMusic.paused) {
-    // No source yet → start at first track (or last preview).
+    if (inGame && !isRadioOn()) {
+      enableRadioInGame();
+      return;
+    }
     if (!radioMusic.src) {
       const i = (_radioPreviewIdx >= 0) ? _radioPreviewIdx : 0;
       _previewRadioTrack(i);
@@ -462,14 +469,89 @@ function _togglePlayPause() {
   _updatePlayIcon();
 }
 
+// Mid-run: turn the shuffle station ON, duck/pause the gameplay zone track,
+// fade radio in. Mirrors radioInterceptMusicFade but always runs (no gate).
+function enableRadioInGame() {
+  if (typeof initAudio === 'function') initAudio();
+  setRadioOn(true);
+  try {
+    const all = (typeof allTracks === 'function') ? allTracks() : {};
+    Object.entries(all).forEach(([k, el]) => {
+      if (!el || k === 'radio') return;
+      if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, 0.6);
+      setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, 700);
+    });
+  } catch(_) {}
+  startRadio();
+  if (typeof rampTrackVol === 'function' && radioMusic) {
+    try { rampTrackVol('radio', 0, 0); rampTrackVol('radio', TRACK_VOL.radio, 0.6); } catch(_) {}
+  }
+  _updatePlayerMeta();
+  _updatePlayIcon();
+  _refreshShuffleSwitches();
+}
+window.enableRadioInGame = enableRadioInGame;
+
+// Mid-run: turn the shuffle station OFF, fade radio out, rebring the
+// current zone's gameplay track.
+function disableRadioInGame() {
+  setRadioOn(false);
+  try { if (typeof rampTrackVol === 'function') rampTrackVol('radio', 0, 0.5); } catch(_) {}
+  setTimeout(() => { try { if (radioMusic && !radioMusic.paused) radioMusic.pause(); } catch(_) {} }, 600);
+  // Re-bring the appropriate gameplay zone track.
+  try {
+    if (state && state.phase === 'playing' && !state.muted) {
+      const lvl = state.currentLevelIdx || 0;
+      const k = (lvl >= 2) ? 'l3' : 'bg';
+      const el = (typeof allTracks === 'function') ? allTracks()[k] : null;
+      if (el) {
+        if (el.paused) { try { el.currentTime = el.currentTime || 0; el.play().catch(() => {}); } catch(_) {} }
+        if (typeof rampTrackVol === 'function') rampTrackVol(k, TRACK_VOL[k], 0.6);
+        else setTrackVol(k, TRACK_VOL[k]);
+      }
+    }
+  } catch(_) {}
+  _updatePlayIcon();
+  _refreshShuffleSwitches();
+}
+window.disableRadioInGame = disableRadioInGame;
+
+function _refreshShuffleSwitches() {
+  const on = isRadioOn();
+  ['radio-master-toggle', 'pp-shuffle-toggle'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+}
+
 // Wire transport buttons for one prefix (idempotent).
+// In gameplay, PREV/NEXT only step when shuffle is ON — they never sneak
+// the radio on. PLAY auto-enables shuffle (it's the user's consent moment).
 function _wirePlayerTransport(prefix) {
   const prev = document.getElementById(prefix + '-prev');
   const play = document.getElementById(prefix + '-play');
   const next = document.getElementById(prefix + '-next');
-  if (prev && !prev._wired) { prev._wired = true; prev.addEventListener('click', (e) => { e.stopPropagation(); _stepRadioTrack(-1); }); }
-  if (next && !next._wired) { next._wired = true; next.addEventListener('click', (e) => { e.stopPropagation(); _stepRadioTrack(1); }); }
-  if (play && !play._wired) { play._wired = true; play.addEventListener('click', (e) => { e.stopPropagation(); _togglePlayPause(); }); }
+  const inGame = () => state && state.phase === 'playing';
+  if (prev && !prev._wired) {
+    prev._wired = true;
+    prev.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (inGame() && !isRadioOn()) return;
+      _stepRadioTrack(-1);
+    });
+  }
+  if (next && !next._wired) {
+    next._wired = true;
+    next.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (inGame() && !isRadioOn()) return;
+      _stepRadioTrack(1);
+    });
+  }
+  if (play && !play._wired) {
+    play._wired = true;
+    play.addEventListener('click', (e) => { e.stopPropagation(); _togglePlayPause(); });
+  }
 }
 
 function _startPlayerLoop() {
@@ -481,13 +563,15 @@ function _renderRadioOverlay() {
   const toggleBtn = document.getElementById('radio-master-toggle');
   if (!toggleBtn) return;
 
-  // Shuffle pill switch state.
+  // Shuffle pill switch state. On the title screen we just flip the bit —
+  // mid-run the pause-screen pill calls enable/disableRadioInGame instead.
   toggleBtn.setAttribute('aria-checked', isRadioOn() ? 'true' : 'false');
   toggleBtn.onclick = (e) => {
     e.stopPropagation();
     const next = !isRadioOn();
     setRadioOn(next);
     toggleBtn.setAttribute('aria-checked', next ? 'true' : 'false');
+    if (!next) _stopRadioPreview();
   };
 
   _wirePlayerTransport('rp');
@@ -517,15 +601,17 @@ function _stopRadioPlayerLoop() {
 }
 
 // ── UI: pause-menu music player ─────────────────────────────────────────
-// Show the player iff the radio is on and a track is selected. Wires the
-// 'pp-' transport (idempotent) and starts the shared rAF loop.
+// Show the player whenever radio is unlocked. The pill switch is the
+// gate that decides whether radio actually plays during the run — if
+// it's OFF the rest of the UI is just a preview surface.
 function updatePauseRadioRow() {
   const row = document.getElementById('pause-radio-row');
   if (!row) return;
-  const visible = isRadioOn() && _radioCurrentIdx >= 0;
+  const visible = (typeof isRadioUnlocked === 'function') ? isRadioUnlocked() : false;
   if (visible) {
     row.classList.remove('hidden');
     _wirePlayerTransport('pp');
+    _wirePauseShuffleSwitch();
     if (radioMusic && !radioMusic._rpHooked) {
       radioMusic._rpHooked = true;
       radioMusic.addEventListener('play', _updatePlayIcon);
@@ -533,15 +619,26 @@ function updatePauseRadioRow() {
     }
     _updatePlayerMeta();
     _updatePlayIcon();
+    _refreshShuffleSwitches();
     _startPlayerLoop();
   } else {
     row.classList.add('hidden');
-    // If the radio overlay isn't open either, the loop is wasted work.
     const ov = document.getElementById('radio-overlay');
     if (!ov || ov.classList.contains('hidden')) _stopRadioPlayerLoop();
   }
 }
 window.updatePauseRadioRow = updatePauseRadioRow;
+
+function _wirePauseShuffleSwitch() {
+  const sw = document.getElementById('pp-shuffle-toggle');
+  if (!sw || sw._wired) return;
+  sw._wired = true;
+  sw.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (isRadioOn()) disableRadioInGame();
+    else             enableRadioInGame();
+  });
+}
 
 // Refresh the title button on load (in case it was already unlocked).
 // Defensive: fire on multiple lifecycle hooks because the single-shot
