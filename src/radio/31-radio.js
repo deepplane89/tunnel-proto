@@ -254,6 +254,14 @@ function _stopRadioPreview() {
     try { setTrackVol('radio', 0); } catch(_) {}
   }
   _radioPreviewIdx = -1;
+  // Restore title music if we ducked it for the preview (title-screen only).
+  if (state && state.phase === 'title' && titleMusic && !state.muted) {
+    try {
+      if (titleMusic.paused) { titleMusic.play().catch(() => {}); }
+      if (typeof rampTrackVol === 'function') rampTrackVol('title', TRACK_VOL.title, 0.20);
+      else setTrackVol('title', TRACK_VOL.title);
+    } catch(_) {}
+  }
   // Refresh play buttons in list.
   const list = document.getElementById('radio-track-list');
   if (list) list.querySelectorAll('.radio-row-play').forEach(b => b.textContent = '\u25B6');
@@ -271,6 +279,11 @@ function _previewRadioTrack(idx) {
   if (!tr) return;
   if (radioMusic.src.indexOf(tr.src) === -1) radioMusic.src = tr.src;
   try { radioMusic.currentTime = 0; } catch(_) {}
+  // Duck title music while previewing so they don't overlap on the title screen.
+  if (titleMusic && !titleMusic.paused) {
+    try { if (typeof rampTrackVol === 'function') rampTrackVol('title', 0, 0.18); else setTrackVol('title', 0); } catch(_) {}
+    setTimeout(() => { try { if (titleMusic && !titleMusic.paused) titleMusic.pause(); } catch(_) {} }, 220);
+  }
   try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
   radioMusic.play().catch(() => {});
   _radioPreviewIdx = idx;
