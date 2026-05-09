@@ -6132,16 +6132,21 @@ function _initTrackGains() {
   _gainsReady = true;
 }
 
-// Set a track's gain instantly (no ramp).
+// Set a track's gain instantly (no ramp). Apply music mute/volume here so
+// every call site (including ones that pass raw TRACK_VOL[k]) is gated by
+// the user's music mute toggle without having to remember to multiply.
 function setTrackVol(name, vol) {
+  let m = 1;
+  try { if (typeof musicMult === 'function') m = musicMult(); } catch(_) {}
+  const out = vol * m;
   const g = trackGains[name];
   if (g && audioCtx) {
     g.gain.cancelScheduledValues(audioCtx.currentTime);
-    g.gain.setValueAtTime(vol, audioCtx.currentTime);
+    g.gain.setValueAtTime(out, audioCtx.currentTime);
   } else {
     // Fallback before gains are wired (pre-gesture)
     const el = allTracks()[name];
-    if (el) el.volume = vol;
+    if (el) el.volume = out;
   }
 }
 function getTrackVol(name) {
@@ -6151,11 +6156,14 @@ function getTrackVol(name) {
   return el ? el.volume : 0;
 }
 function rampTrackVol(name, vol, sec) {
+  let m = 1;
+  try { if (typeof musicMult === 'function') m = musicMult(); } catch(_) {}
+  const out = vol * m;
   const g = trackGains[name];
   if (!g || !audioCtx) { setTrackVol(name, vol); return; }
   g.gain.cancelScheduledValues(audioCtx.currentTime);
   g.gain.setValueAtTime(g.gain.value, audioCtx.currentTime);
-  g.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + sec);
+  g.gain.linearRampToValueAtTime(out, audioCtx.currentTime + sec);
 }
 
 // Hard-stop all tracks and immediately start one (no crossfade).
@@ -20094,13 +20102,27 @@ loadSettings();
 function musicMult() { return _settings.musicMuted ? 0 : _settings.musicVol / 100; }
 function sfxMult()   { return _settings.sfxMuted   ? 0 : _settings.sfxVol   / 100; }
 
-// Apply music volume to all active tracks
+// Apply music volume to all active tracks. setTrackVol applies musicMult()
+// itself, so pass the raw TRACK_VOL base — don't double-multiply.
 function applyMusicVolume() {
-  const m = musicMult();
-  state.muted = m === 0 && sfxMult() === 0;
+  state.muted = musicMult() === 0 && sfxMult() === 0;
   Object.entries(TRACK_VOL).forEach(([k, base]) => {
-    setTrackVol(k, base * m);
+    setTrackVol(k, base);
   });
+}
+
+// Apply SFX mute live: pause every tracked gameplay <audio> SFX element so
+// looped SFX (engine, laser, unibeam, invincible, etc.) stop immediately
+// when the user mutes mid-run. Buffer-played SFX already gate on sfxMult()
+// inside _playBuffer, so they need no per-element handling.
+function applySfxMute() {
+  state.muted = musicMult() === 0 && sfxMult() === 0;
+  if (!_settings.sfxMuted) return;
+  if (typeof window.stopAllGameplaySFX === 'function') {
+    // Re-use the death kill-switch — same behavior: cancel scheduled SFX,
+    // ramp+stop Web Audio sources, pause every tracked gameplay <audio>.
+    window.stopAllGameplaySFX();
+  }
 }
 
 // Open / close settings
@@ -20365,6 +20387,7 @@ function closeSettings() {
     _settings.sfxMuted = false;
     document.getElementById('mute-sfx').classList.remove('muted');
     document.getElementById('mute-sfx').textContent = '♪';
+    applySfxMute(); // refresh state.muted (and no-op live stop since not muted)
     saveSettings();
   });
 
@@ -20382,6 +20405,7 @@ function closeSettings() {
     _settings.sfxMuted = !_settings.sfxMuted;
     document.getElementById('mute-sfx').classList.toggle('muted', _settings.sfxMuted);
     document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '♪';
+    applySfxMute(); // immediately silence looping <audio> SFX when muting
     saveSettings();
   });
 

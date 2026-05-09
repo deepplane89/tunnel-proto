@@ -5383,16 +5383,21 @@ function _initTrackGains() {
   _gainsReady = true;
 }
 
-// Set a track's gain instantly (no ramp).
+// Set a track's gain instantly (no ramp). Apply music mute/volume here so
+// every call site (including ones that pass raw TRACK_VOL[k]) is gated by
+// the user's music mute toggle without having to remember to multiply.
 function setTrackVol(name, vol) {
+  let m = 1;
+  try { if (typeof musicMult === 'function') m = musicMult(); } catch(_) {}
+  const out = vol * m;
   const g = trackGains[name];
   if (g && audioCtx) {
     g.gain.cancelScheduledValues(audioCtx.currentTime);
-    g.gain.setValueAtTime(vol, audioCtx.currentTime);
+    g.gain.setValueAtTime(out, audioCtx.currentTime);
   } else {
     // Fallback before gains are wired (pre-gesture)
     const el = allTracks()[name];
-    if (el) el.volume = vol;
+    if (el) el.volume = out;
   }
 }
 function getTrackVol(name) {
@@ -5402,11 +5407,14 @@ function getTrackVol(name) {
   return el ? el.volume : 0;
 }
 function rampTrackVol(name, vol, sec) {
+  let m = 1;
+  try { if (typeof musicMult === 'function') m = musicMult(); } catch(_) {}
+  const out = vol * m;
   const g = trackGains[name];
   if (!g || !audioCtx) { setTrackVol(name, vol); return; }
   g.gain.cancelScheduledValues(audioCtx.currentTime);
   g.gain.setValueAtTime(g.gain.value, audioCtx.currentTime);
-  g.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + sec);
+  g.gain.linearRampToValueAtTime(out, audioCtx.currentTime + sec);
 }
 
 // Hard-stop all tracks and immediately start one (no crossfade).
