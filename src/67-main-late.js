@@ -3409,6 +3409,12 @@ function killPlayer() {
   if (lakeMusic) { lakeMusic.pause(); lakeMusic.currentTime = 0; setTrackVol('lake', 0); }
   musicFadeTo('title', 2500);
 
+  // ── Defer UI prep + persistence + ladder/XP off the impact frame ──
+  // The game-over overlay is hidden behind _gameOverDelayTimer (~_EXP_DURATION s),
+  // so all of this work — DOM textContent on .hidden elements, localStorage writes,
+  // ladder check, XP calc, leaderboard submit — was needlessly blocking the
+  // explosion's first frame. Wrap it and run it just before the overlay reveal.
+  const _runGameOverPrep = () => {
   // Player-facing score — apply distance multiplier
   const _rawScore = Math.floor(state.playerScore);
   const _dist = state.distance || 0;
@@ -3760,23 +3766,6 @@ function killPlayer() {
       _bestWrap.classList.add('hidden');
     }
   }
-  document.getElementById('hud').classList.add('hidden');
-  // Delay game over screen so explosion plays first
-  if (_gameOverDelayTimer) clearTimeout(_gameOverDelayTimer);
-  _gameOverTapReady = false; // block taps until cooldown
-  if (_gameOverTapTimer) clearTimeout(_gameOverTapTimer);
-  _gameOverDelayTimer = setTimeout(() => {
-    _gameOverDelayTimer = null;
-    document.getElementById('gameover-screen').classList.remove('hidden');
-    // Re-trigger staggered animations by forcing reflow
-    document.querySelectorAll('.go-anim').forEach(el => {
-      el.style.animation = 'none';
-      el.offsetHeight; // force reflow
-      el.style.animation = '';
-    });
-    // Start tap cooldown AFTER screen appears
-    _gameOverTapTimer = setTimeout(() => { _gameOverTapReady = true; }, _GO_TAP_COOLDOWN);
-  }, _EXP_DURATION * 1000);
 
   // ── UPGRADES UNLOCKED banner (one-time, game over screen) ──
   if (!localStorage.getItem('jh_upgrades_unlocked_shown')) {
@@ -3872,6 +3861,30 @@ function killPlayer() {
     }
     } // end else (startedFromL1)
   }
+  }; // end _runGameOverPrep
+
+  // Hide the HUD immediately on death — cheap, must happen on the impact frame.
+  document.getElementById('hud').classList.add('hidden');
+
+  // Delay game over screen so explosion plays first.
+  // Run the prep work just-in-time, inside the timer, so the impact frame stays
+  // light. The overlay is hidden until this timer fires anyway.
+  if (_gameOverDelayTimer) clearTimeout(_gameOverDelayTimer);
+  _gameOverTapReady = false; // block taps until cooldown
+  if (_gameOverTapTimer) clearTimeout(_gameOverTapTimer);
+  _gameOverDelayTimer = setTimeout(() => {
+    _gameOverDelayTimer = null;
+    _runGameOverPrep();
+    document.getElementById('gameover-screen').classList.remove('hidden');
+    // Re-trigger staggered animations by forcing reflow
+    document.querySelectorAll('.go-anim').forEach(el => {
+      el.style.animation = 'none';
+      el.offsetHeight; // force reflow
+      el.style.animation = '';
+    });
+    // Start tap cooldown AFTER screen appears
+    _gameOverTapTimer = setTimeout(() => { _gameOverTapReady = true; }, _GO_TAP_COOLDOWN);
+  }, _EXP_DURATION * 1000);
 }
 
 // Tint the neon gradient on an obstacle group to a given hex color
