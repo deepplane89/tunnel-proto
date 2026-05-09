@@ -12982,6 +12982,7 @@ function _drawRadioEq() {
   RP_PREFIXES.forEach(p => _drawRadioEqOnCanvas(document.getElementById(p + '-eq')));
 }
 
+let _rpSeeking = false;  // true while user is dragging the progress track
 function _radioPlayerTick() {
   let d = 0, t = 0;
   if (radioMusic) {
@@ -12993,8 +12994,11 @@ function _radioPlayerTick() {
     const cur  = document.getElementById(p + '-time-cur');
     const tot  = document.getElementById(p + '-time-tot');
     if (!fill || !cur || !tot) return;
-    fill.style.width = (d > 0 ? (t / d * 100) : 0) + '%';
-    cur.textContent = _fmtTime(t);
+    // Don't fight the user's finger while seeking — handler owns fill+time.
+    if (!_rpSeeking) {
+      fill.style.width = (d > 0 ? (t / d * 100) : 0) + '%';
+      cur.textContent = _fmtTime(t);
+    }
     tot.textContent = _fmtTime(d);
   });
   _drawRadioEq();
@@ -13137,6 +13141,59 @@ function _wirePlayerTransport(prefix) {
   if (play && !play._wired) {
     play._wired = true;
     play.addEventListener('click', (e) => { e.stopPropagation(); _togglePlayPause(); });
+  }
+
+  // Tap/drag the progress track to seek. Single pointer capture model so it
+  // works for mouse + touch + pen with one code path. Live-update fill +
+  // current-time text during drag (rAF tick is suppressed via _rpSeeking),
+  // commit radioMusic.currentTime on release.
+  const track = document.getElementById(prefix + '-progress-track');
+  if (track && !track._wired) {
+    track._wired = true;
+    const fill = document.getElementById(prefix + '-progress-fill');
+    const cur  = document.getElementById(prefix + '-time-cur');
+    const ratioFromEvent = (e) => {
+      const r = track.getBoundingClientRect();
+      if (r.width <= 0) return 0;
+      const x = (e.clientX != null ? e.clientX : 0) - r.left;
+      return Math.max(0, Math.min(1, x / r.width));
+    };
+    let pendingT = 0;
+    const onMove = (e) => {
+      if (!_rpSeeking) return;
+      const d = (radioMusic && isFinite(radioMusic.duration)) ? radioMusic.duration : 0;
+      const ratio = ratioFromEvent(e);
+      pendingT = d * ratio;
+      RP_PREFIXES.forEach(p => {
+        const f = document.getElementById(p + '-progress-fill');
+        const c = document.getElementById(p + '-time-cur');
+        if (f) f.style.width = (ratio * 100) + '%';
+        if (c) c.textContent = _fmtTime(pendingT);
+      });
+    };
+    const onUp = (e) => {
+      if (!_rpSeeking) return;
+      _rpSeeking = false;
+      try { track.releasePointerCapture(e.pointerId); } catch(_){}
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      try { if (radioMusic && isFinite(pendingT)) radioMusic.currentTime = pendingT; } catch(_){}
+    };
+    track.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      if (!radioMusic || !isFinite(radioMusic.duration) || radioMusic.duration <= 0) return;
+      _rpSeeking = true;
+      try { track.setPointerCapture(e.pointerId); } catch(_){}
+      // Initial position (tap-to-seek without drag).
+      const ratio = ratioFromEvent(e);
+      pendingT = radioMusic.duration * ratio;
+      if (fill) fill.style.width = (ratio * 100) + '%';
+      if (cur)  cur.textContent  = _fmtTime(pendingT);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+    });
   }
 }
 

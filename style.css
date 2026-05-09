@@ -6352,14 +6352,25 @@ html.platform-ios-native body {
   background: rgba(255,255,255,0.10);
   border-radius: 1px;
   overflow: hidden;
+  /* Enlarge tap target without changing visual height. */
+  padding: 14px 0;
+  background-clip: content-box;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .rp-progress-fill {
-  position: absolute; top: 0; left: 0; bottom: 0;
+  position: absolute; top: 50%; left: 0;
+  height: 2px;
+  transform: translateY(-50%);
   width: 0%;
   background: linear-gradient(90deg, rgba(34, 211, 238, 0.55), #0ff);
   box-shadow: 0 0 6px rgba(34, 211, 238, 0.55);
   transition: width 0.20s linear;
+  pointer-events: none;
 }
+/* Snap to finger — disable smoothing while user drags. */
+.rp-progress-track:active .rp-progress-fill { transition: none; }
 .rp-time-row {
   display: flex; align-items: center; justify-content: space-between;
 }
