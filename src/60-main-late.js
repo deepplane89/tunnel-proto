@@ -278,34 +278,26 @@ function returnToTitle() {
   });
   // Stop lake ambience on return to title
   if (lakeMusic) { lakeMusic.pause(); lakeMusic.currentTime = 0; setTrackVol('lake', 0); }
-  // Stop engine SFX
-  const _engR = document.getElementById('engine-start');
-  const _roarR = document.getElementById('engine-roar');
-  const _roarLR = document.getElementById('engine-roar-layer');
-  if (_engR) { _engR.pause(); _engR.currentTime = 0; }
-  if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
-  if (_roarLR) { _roarLR.pause(); _roarLR.currentTime = 0; }
+  // Central kill-switch: cancels pending SFX timeouts, ramps + stops Web Audio
+  // sources, pauses every tracked gameplay <audio> element. UI sounds (shop,
+  // menu, etc.) routed through _playBufferUI are NOT tracked and survive.
+  if (typeof stopAllGameplaySFX === 'function') stopAllGameplaySFX();
   stopEngineBaseline({ reset: true });
+  // Argon ambient uses a dedicated BufferSource path — clean its non-element
+  // state separately (the <audio> tag was already paused by the kill-switch).
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
   state._argonPath = null;
   state._argonPlayCount = 0;
-  const _argonR = document.getElementById('argon-ambient-sfx');
-  if (_argonR) { try { _argonR.pause(); _argonR.currentTime = 0; _argonR.volume = 0; } catch (_) {} }
   state._argonSteering = false;
   state._argonOpen = 0;
   _stopMagnetWhir();
-  const _invR = document.getElementById('invincible-loop-sfx');
-  if (_invR) { _invR.pause(); _invR.currentTime = 0; _invR.loop = false; }
-  // Stop looped weapon SFX on return to title.
-  const _laserR = document.getElementById('laser-beam-sfx');
-  if (_laserR) { _laserR.loop = false; _laserR.pause(); _laserR.currentTime = 0; }
+  // Laser intervals/timeouts use module-local handles — clear them here so
+  // the loop can't re-trigger after the kill-switch ran.
   if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
   if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
-  const _ubeamR = document.getElementById('unibeam-sfx');
-  if (_ubeamR) { _ubeamR.loop = false; _ubeamR.pause(); _ubeamR.currentTime = 0; }
-  // Kill in-flight thunder rumble on title.
+  // Thunder uses a one-shot BufferSource held in _thunderActiveSrc.
   if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
     try { _thunderActiveSrc.stop(); } catch (_) {}
     _thunderActiveSrc = null;

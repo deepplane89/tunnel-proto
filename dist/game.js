@@ -12240,11 +12240,95 @@ function _playArgonOnce(targetVol, fadeInSec) {
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
 const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx', 'reject': 'reject-sfx' };
-// Play a pre-decoded buffer with gain + optional pan + playbackRate
-function _playBuffer(name, volume, rate, panVal) {
+
+// ── Gameplay SFX kill-switch infrastructure ─────────────────────────────
+// _playBuffer fires-and-forgets AudioBufferSourceNodes. With no tracking
+// there's no way to stop an already-started source on death, so klaxons,
+// thunder, etc. ring through the gameover screen. We track every active
+// source + gain here and provide stopAllGameplaySFX() to kill them all.
+//
+// Tracking is gated by a per-call category. UI sounds (menus, title taps,
+// shop) pass { ui:true } via _playBufferUI so they survive the death
+// kill-switch — only gameplay SFX get tracked into _activeSFXSources.
+const _activeSFXSources   = new Set();   // { src, gain } for Web Audio sources
+const _activeSFXClones    = new Set();   // <audio> cloneNode fallbacks
+const _activeSFXTimeouts  = new Set();   // setTimeout IDs for scheduled SFX
+// IDs for every gameplay <audio> element we want killed on death/exit. Keep
+// in sync with index.html. UI sounds (menu-cycle, title-exit, pause-exit,
+// shop-purchase, reject, start-interference, start-sound) are intentionally
+// excluded because they fire on transition screens.
+const _GAMEPLAY_SFX_ELEMENT_IDS = [
+  'engine-start', 'engine-roar', 'engine-roar-layer',
+  'argon-ambient-sfx', 'invincible-loop-sfx', 'speed-dip-sfx',
+  'laser-beam-sfx', 'unibeam-sfx',
+  'shield-activate-sfx', 'shield-hit-sfx', 'shield-expire-sfx',
+  'nearmiss-sfx', 'whoosh1', 'whoosh-release',
+  'thruster-impact-sfx', 'powerup-burst-sfx', 'droplet-sfx',
+  'crash-sound', 'crash-layer-sound',
+  'retry-tech-sfx', 'retry-warp-sfx',
+];
+
+// Schedule an SFX-related setTimeout that gets cancelled on death. Use this
+// instead of plain setTimeout for any audio scheduling that must not fire
+// after the player dies (klaxon countdown, beep chains, layered SFX delays).
+function _sfxTimeout(fn, delayMs) {
+  const id = setTimeout(() => {
+    _activeSFXTimeouts.delete(id);
+    try { fn(); } catch(_) {}
+  }, delayMs);
+  _activeSFXTimeouts.add(id);
+  return id;
+}
+window._sfxTimeout = _sfxTimeout;
+
+// Kill every tracked gameplay SFX. Called from death + returnToTitle.
+function stopAllGameplaySFX() {
+  // 1. Cancel scheduled SFX timeouts (klaxon chains, etc.)
+  _activeSFXTimeouts.forEach(id => { try { clearTimeout(id); } catch(_) {} });
+  _activeSFXTimeouts.clear();
+  // 2. Stop every active Web Audio buffer source. Ramp gain to 0 first so we
+  // don't get a click. Stop after a short tail so the ramp can complete.
+  _activeSFXSources.forEach(entry => {
+    try {
+      const now = audioCtx ? audioCtx.currentTime : 0;
+      if (entry.gain && entry.gain.gain) {
+        entry.gain.gain.cancelScheduledValues(now);
+        entry.gain.gain.setValueAtTime(entry.gain.gain.value || 0, now);
+        entry.gain.gain.linearRampToValueAtTime(0, now + 0.03);
+      }
+      if (entry.src) {
+        // stop() throws if the source has already ended — swallow.
+        try { entry.src.stop(now + 0.04); } catch(_) {}
+      }
+    } catch(_) {}
+  });
+  _activeSFXSources.clear();
+  // 3. Stop element-clone fallbacks.
+  _activeSFXClones.forEach(clone => {
+    try { clone.pause(); clone.currentTime = 0; } catch(_) {}
+    try { clone.remove(); } catch(_) {}
+  });
+  _activeSFXClones.clear();
+  // 4. Pause every gameplay <audio> SFX element (engine, looping SFX, etc.)
+  for (const id of _GAMEPLAY_SFX_ELEMENT_IDS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    try {
+      if (!el.paused) el.pause();
+      el.currentTime = 0;
+      el.loop = false;
+    } catch(_) {}
+  }
+}
+window.stopAllGameplaySFX = stopAllGameplaySFX;
+
+// Play a pre-decoded buffer with gain + optional pan + playbackRate.
+// opts.ui = true marks this as a UI sound (not tracked, survives death kill).
+function _playBuffer(name, volume, rate, panVal, opts) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (!audioCtx || state.muted || volume <= 0) return;
   _ensureCtxRunning();
+  const isUI = !!(opts && opts.ui);
   // Preferred: AudioBufferSourceNode (zero-latency, no DOM)
   if (_sfxBuffers[name]) {
     const src = audioCtx.createBufferSource();
@@ -12261,6 +12345,12 @@ function _playBuffer(name, volume, rate, panVal) {
       gain.connect(audioCtx.destination);
     }
     src.start();
+    if (!isUI) {
+      const entry = { src: src, gain: gain };
+      _activeSFXSources.add(entry);
+      // Auto-untrack when the source finishes naturally.
+      src.onended = () => { _activeSFXSources.delete(entry); };
+    }
     return;
   }
   // Fallback: cloneNode from <audio> element (slower but works if buffer not ready)
@@ -12271,8 +12361,17 @@ function _playBuffer(name, volume, rate, panVal) {
   clone.playbackRate = rate || 1;
   clone.volume = Math.min(1, volume);
   clone.play().catch(() => {});
-  clone.addEventListener('ended', () => clone.remove());
+  if (!isUI) _activeSFXClones.add(clone);
+  clone.addEventListener('ended', () => {
+    _activeSFXClones.delete(clone);
+    try { clone.remove(); } catch(_) {}
+  });
 }
+// Convenience: UI sounds that should survive the death kill-switch.
+function _playBufferUI(name, volume, rate, panVal) {
+  return _playBuffer(name, volume, rate, panVal, { ui: true });
+}
+window._playBufferUI = _playBufferUI;
 
 function playNearMissSFX() {
   if (state.muted) return;
@@ -12321,14 +12420,14 @@ function playLevelUp() {
 }
 
 function playShopPurchase() {
-  _playBuffer('shop-purchase', 0.6, 1.0, null);
+  _playBufferUI('shop-purchase', 0.6, 1.0, null);
 }
 
 // Played when the player taps something they can't interact with: a locked
 // upgrade card, a fully-maxed power-up they can't enter the tier menu of, a
 // locked thruster preset, etc. Short "computer reject" blip.
 function playReject() {
-  _playBuffer('reject', 0.55, 1.0, null);
+  _playBufferUI('reject', 0.55, 1.0, null);
 }
 window.playReject = playReject;
 
@@ -12340,33 +12439,33 @@ window.playGarageOpen  = playGarageOpen;
 window.playGarageClose = playGarageClose;
 
 // Title-screen menu taps, Exit/Resume, garage open/close on title — VR clicker.
-function playMenuCycle() { _playBuffer('menu-cycle', 0.6, 1.0, null); }
+function playMenuCycle() { _playBufferUI('menu-cycle', 0.6, 1.0, null); }
 window.playMenuCycle = playMenuCycle;
 
 // Garage card cycling (Showroom internal nav) — pinball pip.
-function playGarageCycle() { _playBuffer('garage-cycle', 0.5, 1.0, null); }
+function playGarageCycle() { _playBufferUI('garage-cycle', 0.5, 1.0, null); }
 window.playGarageCycle = playGarageCycle;
 
 // Garage SELECT confirm — VR transform contacts. Plays when player picks an
 // unlocked ship/thruster/mod/handling-preset, or opens tier-list/upgrade view.
-function playGarageSelect() { _playBuffer('garage-select', 0.55, 1.0, null); }
+function playGarageSelect() { _playBufferUI('garage-select', 0.55, 1.0, null); }
 window.playGarageSelect = playGarageSelect;
 
 // Title-screen "start death run" press.
-function playStartInterference() { _playBuffer('start-interference', 0.7, 1.0, null); }
+function playStartInterference() { _playBufferUI('start-interference', 0.7, 1.0, null); }
 window.playStartInterference = playStartInterference;
 
 // Pause-menu EXIT during gameplay — VR compute interference.
-function playPauseExit() { _playBuffer('pause-exit', 0.7, 1.0, null); }
+function playPauseExit() { _playBufferUI('pause-exit', 0.7, 1.0, null); }
 window.playPauseExit = playPauseExit;
 
 // Title-screen UI exits (garage/settings/etc back) — VR mecha interlock.
-function playTitleExit() { _playBuffer('title-exit', 0.7, 1.0, null); }
+function playTitleExit() { _playBufferUI('title-exit', 0.7, 1.0, null); }
 window.playTitleExit = playTitleExit;
 
 // Tap-to-play on title screen — uses the same title-tap cue as other UI taps.
 // (Was a 25.7s whoosh — way too long for a tap cue, sounded like a stuck loop.)
-function playTapToPlay() { _playBuffer('title-exit', 0.7, 1.0, null); }
+function playTapToPlay() { _playBufferUI('title-exit', 0.7, 1.0, null); }
 window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
@@ -18849,34 +18948,26 @@ function returnToTitle() {
   });
   // Stop lake ambience on return to title
   if (lakeMusic) { lakeMusic.pause(); lakeMusic.currentTime = 0; setTrackVol('lake', 0); }
-  // Stop engine SFX
-  const _engR = document.getElementById('engine-start');
-  const _roarR = document.getElementById('engine-roar');
-  const _roarLR = document.getElementById('engine-roar-layer');
-  if (_engR) { _engR.pause(); _engR.currentTime = 0; }
-  if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
-  if (_roarLR) { _roarLR.pause(); _roarLR.currentTime = 0; }
+  // Central kill-switch: cancels pending SFX timeouts, ramps + stops Web Audio
+  // sources, pauses every tracked gameplay <audio> element. UI sounds (shop,
+  // menu, etc.) routed through _playBufferUI are NOT tracked and survive.
+  if (typeof stopAllGameplaySFX === 'function') stopAllGameplaySFX();
   stopEngineBaseline({ reset: true });
+  // Argon ambient uses a dedicated BufferSource path — clean its non-element
+  // state separately (the <audio> tag was already paused by the kill-switch).
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
   state._argonPath = null;
   state._argonPlayCount = 0;
-  const _argonR = document.getElementById('argon-ambient-sfx');
-  if (_argonR) { try { _argonR.pause(); _argonR.currentTime = 0; _argonR.volume = 0; } catch (_) {} }
   state._argonSteering = false;
   state._argonOpen = 0;
   _stopMagnetWhir();
-  const _invR = document.getElementById('invincible-loop-sfx');
-  if (_invR) { _invR.pause(); _invR.currentTime = 0; _invR.loop = false; }
-  // Stop looped weapon SFX on return to title.
-  const _laserR = document.getElementById('laser-beam-sfx');
-  if (_laserR) { _laserR.loop = false; _laserR.pause(); _laserR.currentTime = 0; }
+  // Laser intervals/timeouts use module-local handles — clear them here so
+  // the loop can't re-trigger after the kill-switch ran.
   if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
   if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
-  const _ubeamR = document.getElementById('unibeam-sfx');
-  if (_ubeamR) { _ubeamR.loop = false; _ubeamR.pause(); _ubeamR.currentTime = 0; }
-  // Kill in-flight thunder rumble on title.
+  // Thunder uses a one-shot BufferSource held in _thunderActiveSrc.
   if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
     try { _thunderActiveSrc.stop(); } catch (_) {}
     _thunderActiveSrc = null;
@@ -21817,12 +21908,12 @@ function _drSequencerTick(dt) {
         // which is the exact moment _drSeqAdvance() bumps the speed tier.
         // Sequence: beep0, beep500, beep1000, ROAR1500 (= speed change beat).
         _playBuffer('klaxon', 0.18, 1.0, null);
-        setTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
-        setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         // Speed-up burst fires right as speed kicks in (beat 4 of the countdown).
         // Use retry-warp sound for the speed-up surge.
         // Speed-up surge — plasma-punch on its own (no warp, no roar).
-        setTimeout(() => { playThrusterImpact(0.7); }, 1500);
+        _sfxTimeout(() => { playThrusterImpact(0.7); }, 1500);
       }
     }
     if (state.seqStageElapsed >= stage.duration) {
@@ -22137,10 +22228,10 @@ function _drSequencerTick(dt) {
         // Klaxon countdown — 500ms grid (120 BPM), roar lands on the
         // speed-change beat. Same cadence as the corridor handler above.
         _playBuffer('klaxon', 0.18, 1.0, null);
-        setTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
-        setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         // Speed-up surge — plasma-punch on its own (no warp, no roar).
-        setTimeout(() => { playThrusterImpact(0.7); }, 1500);
+        _sfxTimeout(() => { playThrusterImpact(0.7); }, 1500);
       }
     }
   }
@@ -23747,34 +23838,26 @@ function killPlayer() {
   if (state.score > state.bestScore) state.bestScore = state.score;
 
   hapticHeavy(); // death
-  // Stop engine SFX
-  const _engD = document.getElementById('engine-start');
-  const _roarD = document.getElementById('engine-roar');
-  const _roarLD = document.getElementById('engine-roar-layer');
-  if (_engD && !_engD.paused) { _engD.pause(); _engD.currentTime = 0; }
-  if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
-  if (_roarLD && !_roarLD.paused) { _roarLD.pause(); _roarLD.currentTime = 0; }
+  // Central kill-switch: cancels pending SFX timeouts, ramps + stops Web Audio
+  // sources, pauses every tracked gameplay <audio> element. UI sounds (shop,
+  // menu, etc.) routed through _playBufferUI are NOT tracked and survive.
+  stopAllGameplaySFX();
   stopEngineBaseline({ reset: true });
+  // Argon ambient uses a dedicated BufferSource path — clean its non-element
+  // state separately (the <audio> tag was already paused by the kill-switch).
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
   state._argonPath = null;
   state._argonPlayCount = 0;
-  const _argonD = document.getElementById('argon-ambient-sfx');
-  if (_argonD && !_argonD.paused) { try { _argonD.pause(); _argonD.currentTime = 0; _argonD.volume = 0; } catch (_) {} }
   state._argonSteering = false;
   state._argonOpen = 0;
   _stopMagnetWhir();
-  const _invD = document.getElementById('invincible-loop-sfx');
-  if (_invD && !_invD.paused) { _invD.pause(); _invD.currentTime = 0; _invD.loop = false; }
-  // Stop looped weapon SFX on game over.
-  const _laserD = document.getElementById('laser-beam-sfx');
-  if (_laserD && !_laserD.paused) { _laserD.loop = false; _laserD.pause(); _laserD.currentTime = 0; }
+  // Laser intervals/timeouts use module-local handles — clear them here so
+  // the loop can't re-trigger after the kill-switch ran.
   if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
   if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
-  const _ubeamD = document.getElementById('unibeam-sfx');
-  if (_ubeamD && !_ubeamD.paused) { _ubeamD.loop = false; _ubeamD.pause(); _ubeamD.currentTime = 0; }
-  // Kill in-flight thunder rumble so it doesn't ring through gameover screen.
+  // Thunder uses a one-shot BufferSource held in _thunderActiveSrc.
   if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
     try { _thunderActiveSrc.stop(); } catch (_) {}
     _thunderActiveSrc = null;
