@@ -82,7 +82,15 @@ loadSettings();
 
 // Derived volume multipliers (0-1)
 function musicMult() { return _settings.musicMuted ? 0 : _settings.musicVol / 100; }
-function sfxMult()   { return _settings.sfxMuted   ? 0 : _settings.sfxVol   / 100; }
+// When the shuffle station is on, duck every gameplay SFX/VFX through the
+// global sfxMult() so the music stays foreground and the player can groove.
+// 0.60 = -4.4 dB — noticeably quieter without going inaudible. The lateral
+// whoosh has its own _lateralDuck on top of this.
+const _SFX_RADIO_DUCK = 0.60;
+function _sfxRadioDuck() {
+  try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _SFX_RADIO_DUCK : 1; } catch(_) { return 1; }
+}
+function sfxMult()   { return (_settings.sfxMuted ? 0 : _settings.sfxVol / 100) * _sfxRadioDuck(); }
 
 // Apply music volume to all active tracks. setTrackVol applies musicMult()
 // itself, so pass the raw TRACK_VOL base — don't double-multiply.

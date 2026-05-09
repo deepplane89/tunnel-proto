@@ -157,6 +157,14 @@ function returnToTitle() {
   const _radioRolling = (typeof isRadioOn === 'function') && isRadioOn();
   if (!_radioRolling) {
     try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  } else {
+    // Restore radio to full vol on title return — covers exit-from-pause
+    // (which ducked it) and any other path that left the gain low.
+    try {
+      if (typeof rampTrackVol === 'function' && typeof TRACK_VOL !== 'undefined') {
+        rampTrackVol('radio', TRACK_VOL.radio, 0.25);
+      }
+    } catch(_) {}
   }
   // Defensive: refresh radio button visibility on every title return so an
   // earlier load-time race that left it hidden self-heals.

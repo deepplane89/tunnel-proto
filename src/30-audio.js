@@ -471,9 +471,11 @@ function initWhoosh() {
 }
 let lastWhooshTime = 0;
 // When the radio is on, the lateral whoosh layer fights the music. Duck it
-// so the track stays foreground. 0.55 chosen to keep the whoosh audible as a
-// tactile cue without stomping on the radio mix.
-const _RADIO_LATERAL_DUCK = 0.55;
+// hard so the track stays foreground — the whoosh is still audible as a
+// tactile cue. Note: this stacks multiplicatively with the global SFX duck
+// inside sfxMult() (also active under radio), so net lateral level is even
+// lower than the multiplier here would suggest.
+const _RADIO_LATERAL_DUCK = 0.40;
 function _lateralDuck() {
   try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _RADIO_LATERAL_DUCK : 1; } catch(_) { return 1; }
 }

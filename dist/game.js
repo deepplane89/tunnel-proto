@@ -6287,6 +6287,12 @@ function pauseGameTrackInPlace(track) {
     rampTrackVol(k, 0, 0.09);
     setTimeout(() => { try { if (!el.paused) el.pause(); } catch (_) {} }, 110);
   });
+  // Duck the radio while paused so the pause overlay feels calmer; the SFX
+  // duck (sfxMult) doesn't help here because the player isn't generating
+  // SFX while paused. Restore in resumeGameTrackInPlace.
+  if (radioActive) {
+    rampTrackVol('radio', TRACK_VOL.radio * 0.55, 0.20);
+  }
   if (titleMusic) {
     if (radioActive) {
       // Radio is the pause music — don't intro title.
@@ -6308,6 +6314,13 @@ function pauseGameTrackInPlace(track) {
 function resumeGameTrackInPlace(track) {
   initAudio();
   _ensureCtxRunning();
+  // Restore radio to full volume on resume — it was ducked in
+  // pauseGameTrackInPlace. If radio isn't active this is a harmless no-op
+  // because the gain is zero anyway and rampTrackVol clamps via musicMult.
+  const _radioBackOn = (typeof isRadioOn === 'function') && isRadioOn() && radioMusic && !radioMusic.paused;
+  if (_radioBackOn) {
+    rampTrackVol('radio', TRACK_VOL.radio, 0.25);
+  }
   // iOS interruption belt: if we came back from a backgrounding event,
   // _rewireTrackGains plays the silent-buffer sample-rate kick. It does NOT
   // recreate MediaElementSource nodes (one-per-element rule — recreating
@@ -12487,9 +12500,11 @@ function initWhoosh() {
 }
 let lastWhooshTime = 0;
 // When the radio is on, the lateral whoosh layer fights the music. Duck it
-// so the track stays foreground. 0.55 chosen to keep the whoosh audible as a
-// tactile cue without stomping on the radio mix.
-const _RADIO_LATERAL_DUCK = 0.55;
+// hard so the track stays foreground — the whoosh is still audible as a
+// tactile cue. Note: this stacks multiplicatively with the global SFX duck
+// inside sfxMult() (also active under radio), so net lateral level is even
+// lower than the multiplier here would suggest.
+const _RADIO_LATERAL_DUCK = 0.40;
 function _lateralDuck() {
   try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _RADIO_LATERAL_DUCK : 1; } catch(_) { return 1; }
 }
@@ -19376,6 +19391,14 @@ function returnToTitle() {
   const _radioRolling = (typeof isRadioOn === 'function') && isRadioOn();
   if (!_radioRolling) {
     try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  } else {
+    // Restore radio to full vol on title return — covers exit-from-pause
+    // (which ducked it) and any other path that left the gain low.
+    try {
+      if (typeof rampTrackVol === 'function' && typeof TRACK_VOL !== 'undefined') {
+        rampTrackVol('radio', TRACK_VOL.radio, 0.25);
+      }
+    } catch(_) {}
   }
   // Defensive: refresh radio button visibility on every title return so an
   // earlier load-time race that left it hidden self-heals.
@@ -20686,7 +20709,15 @@ loadSettings();
 
 // Derived volume multipliers (0-1)
 function musicMult() { return _settings.musicMuted ? 0 : _settings.musicVol / 100; }
-function sfxMult()   { return _settings.sfxMuted   ? 0 : _settings.sfxVol   / 100; }
+// When the shuffle station is on, duck every gameplay SFX/VFX through the
+// global sfxMult() so the music stays foreground and the player can groove.
+// 0.60 = -4.4 dB — noticeably quieter without going inaudible. The lateral
+// whoosh has its own _lateralDuck on top of this.
+const _SFX_RADIO_DUCK = 0.60;
+function _sfxRadioDuck() {
+  try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _SFX_RADIO_DUCK : 1; } catch(_) { return 1; }
+}
+function sfxMult()   { return (_settings.sfxMuted ? 0 : _settings.sfxVol / 100) * _sfxRadioDuck(); }
 
 // Apply music volume to all active tracks. setTrackVol applies musicMult()
 // itself, so pass the raw TRACK_VOL base — don't double-multiply.

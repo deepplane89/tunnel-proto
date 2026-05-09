@@ -5473,6 +5473,12 @@ function pauseGameTrackInPlace(track) {
     rampTrackVol(k, 0, 0.09);
     setTimeout(() => { try { if (!el.paused) el.pause(); } catch (_) {} }, 110);
   });
+  // Duck the radio while paused so the pause overlay feels calmer; the SFX
+  // duck (sfxMult) doesn't help here because the player isn't generating
+  // SFX while paused. Restore in resumeGameTrackInPlace.
+  if (radioActive) {
+    rampTrackVol('radio', TRACK_VOL.radio * 0.55, 0.20);
+  }
   if (titleMusic) {
     if (radioActive) {
       // Radio is the pause music — don't intro title.
@@ -5494,6 +5500,13 @@ function pauseGameTrackInPlace(track) {
 function resumeGameTrackInPlace(track) {
   initAudio();
   _ensureCtxRunning();
+  // Restore radio to full volume on resume — it was ducked in
+  // pauseGameTrackInPlace. If radio isn't active this is a harmless no-op
+  // because the gain is zero anyway and rampTrackVol clamps via musicMult.
+  const _radioBackOn = (typeof isRadioOn === 'function') && isRadioOn() && radioMusic && !radioMusic.paused;
+  if (_radioBackOn) {
+    rampTrackVol('radio', TRACK_VOL.radio, 0.25);
+  }
   // iOS interruption belt: if we came back from a backgrounding event,
   // _rewireTrackGains plays the silent-buffer sample-rate kick. It does NOT
   // recreate MediaElementSource nodes (one-per-element rule — recreating
