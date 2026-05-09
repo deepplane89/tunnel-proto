@@ -1060,40 +1060,41 @@ html, body {
    display + controls, right column = sync + reset + footer. Widen the
    panel so each column has comfortable breathing room. */
 @media (max-height: 500px) and (orientation: landscape) {
+  /* Single-column scrollable panel. Lock the panel to the visible viewport
+     so it never clips, then let the body scroll inside. Sticky header keeps
+     the close button reachable while scrolling. */
   .settings-panel {
-    /* Stay inside the safe area: 92vw is plenty on every iPhone landscape
-       viewport (e.g. 844 → 776, 667 → 614) and never clips at the edges. */
-    width: min(560px, 92vw);
+    width: 320px;
     max-width: 92vw;
     max-height: 88vh;
-    padding: 14px 18px 12px;
+    padding: 0;
     box-sizing: border-box;
-  }
-  .settings-header { margin-bottom: 10px; font-size: 13px; }
-  .settings-body {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: 18px;
-    row-gap: 0;
-    align-items: start;
-  }
-  .settings-col {
     display: flex;
     flex-direction: column;
-    min-width: 0; /* let flex children shrink instead of overflowing */
+    overflow: hidden; /* outer panel doesn't scroll — body does */
   }
-  /* Tighter labels so the slider/button half has more room. */
-  .settings-row { margin-bottom: 8px; gap: 8px; }
-  .settings-row label { width: 64px; font-size: 11px; }
-  .settings-section-divider { margin: 8px 0 6px 0; padding-top: 6px; }
+  .settings-header {
+    margin: 0;
+    padding: 12px 18px 10px;
+    background: rgba(8,12,28,0.96);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    flex-shrink: 0;
+  }
+  .settings-body {
+    display: block;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 18px 14px;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .settings-col { display: block; }
+  .settings-row { margin-bottom: 10px; }
+  .settings-section-divider { margin: 10px 0 8px 0; padding-top: 8px; }
   .settings-col > .settings-section-divider:first-child {
     margin-top: 0; padding-top: 0; border-top: none;
   }
-  .settings-footer { margin-top: 8px; padding-top: 8px; }
-  .settings-tutorial-btn { margin-bottom: 4px; padding: 5px 10px; font-size: 10px; }
-  /* Sync code/input get a hair tighter so they fit next to a 64px button. */
-  .sync-code-display { font-size: 12px; }
-  .sync-code-input { font-size: 12px; }
+  .settings-footer { margin-top: 12px; padding-top: 10px; }
 }
 .settings-link {
   font: 400 11px/1 'Rajdhani', sans-serif;
