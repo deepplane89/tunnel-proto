@@ -1061,27 +1061,39 @@ html, body {
    panel so each column has comfortable breathing room. */
 @media (max-height: 500px) and (orientation: landscape) {
   .settings-panel {
-    width: 620px;
-    max-width: 94vw;
-    max-height: 92vh;
-    padding: 16px 22px 14px;
+    /* Stay inside the safe area: 92vw is plenty on every iPhone landscape
+       viewport (e.g. 844 → 776, 667 → 614) and never clips at the edges. */
+    width: min(560px, 92vw);
+    max-width: 92vw;
+    max-height: 88vh;
+    padding: 14px 18px 12px;
+    box-sizing: border-box;
   }
-  .settings-header { margin-bottom: 12px; }
+  .settings-header { margin-bottom: 10px; font-size: 13px; }
   .settings-body {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    column-gap: 28px;
+    column-gap: 18px;
     row-gap: 0;
     align-items: start;
   }
   .settings-col {
     display: flex;
     flex-direction: column;
+    min-width: 0; /* let flex children shrink instead of overflowing */
   }
-  .settings-row { margin-bottom: 10px; }
-  .settings-section-divider { margin-top: 0; }
-  .settings-footer { margin-top: 12px; padding-top: 10px; }
-  .settings-tutorial-btn { margin-bottom: 6px; padding: 6px 12px; }
+  /* Tighter labels so the slider/button half has more room. */
+  .settings-row { margin-bottom: 8px; gap: 8px; }
+  .settings-row label { width: 64px; font-size: 11px; }
+  .settings-section-divider { margin: 8px 0 6px 0; padding-top: 6px; }
+  .settings-col > .settings-section-divider:first-child {
+    margin-top: 0; padding-top: 0; border-top: none;
+  }
+  .settings-footer { margin-top: 8px; padding-top: 8px; }
+  .settings-tutorial-btn { margin-bottom: 4px; padding: 5px 10px; font-size: 10px; }
+  /* Sync code/input get a hair tighter so they fit next to a 64px button. */
+  .sync-code-display { font-size: 12px; }
+  .sync-code-input { font-size: 12px; }
 }
 .settings-link {
   font: 400 11px/1 'Rajdhani', sans-serif;
