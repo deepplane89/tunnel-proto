@@ -6479,3 +6479,27 @@ html.platform-ios-native body {
 .sync-status.ok    { color: #6effa8; }
 .sync-status.err   { color: #ff8080; }
 .sync-status.busy  { color: rgba(0,238,255,0.8); }
+
+/* ── iOS safe-area patches (post viewport-fit=cover) ──────────────────────
+ * With viewport-fit=cover + contentInset:never, the page now extends
+ * edge-to-edge on iPhones with a notch / Dynamic Island. Title and garage
+ * top regions need explicit safe-area padding so their content doesn't
+ * collide with the status bar. Scoped to platform-ios-native so web is
+ * untouched. */
+html.platform-ios-native #title-screen .title-content,
+html.platform-ios-native .title-content {
+  /* Force at least 24px top padding, growing with the notch height.
+   * Replaces the previous env(...) shorthand which could collapse to 0
+   * under viewport-fit=cover on certain device configs. */
+  padding-top: max(env(safe-area-inset-top, 24px), 24px);
+}
+
+html.platform-ios-native .sr-overlay {
+  /* Garage overlay: pad the top by the safe-area height plus a baseline,
+   * left/right by safe-area, bottom keeps its 16px (home indicator already
+   * handled by the .sr-panel internal padding). */
+  padding-top: max(env(safe-area-inset-top, 16px), 16px);
+  padding-left: max(env(safe-area-inset-left, 16px), 16px);
+  padding-right: max(env(safe-area-inset-right, 16px), 16px);
+  padding-bottom: 16px;
+}
