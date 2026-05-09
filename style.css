@@ -1512,6 +1512,15 @@ html, body {
   animation: introTitleFade 4.5s ease-in-out forwards;
 }
 
+/* Pause-during-prologue: freeze line + title fades + skip-hint where they
+   are. Pairs with togglePause()'s freezeIntroForPause() which also stops
+   the JS setTimeout chain for thruster spurts and engine-start SFX. */
+#intro-overlay.intro-paused .intro-line,
+#intro-overlay.intro-paused .intro-title,
+#intro-overlay.intro-paused .intro-skip-hint {
+  animation-play-state: paused !important;
+}
+
 /* Intro skip hint — bottom of screen, always visible during sequence */
 .intro-skip-hint {
   position: fixed;

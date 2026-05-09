@@ -59,11 +59,23 @@ function currentGameTrack() {
 function togglePause() {
   if (state.phase === 'playing') {
     state.phase = 'paused';
-    // Kill any in-flight intro text
-    clearIntroTimers();
-    const _introOv = document.getElementById('intro-overlay');
-    if (_introOv) { fadeOutIntroOverlay(_introOv); }
-    state.introActive = false;
+    // If we're mid-prologue, freeze it instead of nuking it. Without this,
+    // pausing during the cinematic killed all timers + faded the overlay,
+    // dumping the player into gameplay as if the prologue had finished.
+    // freezeIntroForPause snapshots remaining time on each pending timer
+    // and resumeIntroAfterPause re-arms them on continue.
+    const _introWasActive = !!state.introActive;
+    if (_introWasActive && typeof freezeIntroForPause === 'function') {
+      freezeIntroForPause();
+      state._introWasFrozen = true;
+      // Leave state.introActive = true so the resumed timers' guards still pass.
+    } else {
+      // Not in prologue — normal teardown.
+      clearIntroTimers();
+      const _introOv = document.getElementById('intro-overlay');
+      if (_introOv) { fadeOutIntroOverlay(_introOv); }
+      state.introActive = false;
+    }
     killThrusterSputter();
     // Central kill-switch: cancels pending _sfxTimeout chains (klaxon countdown,
     // queued thruster-impact punch), ramps + stops Web Audio buffer sources,
@@ -98,6 +110,11 @@ function togglePause() {
   } else if (state.phase === 'paused') {
     state.phase = 'playing';
     setPauseOverlay(false);
+    // Resume the cinematic if we paused during the prologue.
+    if (state._introWasFrozen && typeof resumeIntroAfterPause === 'function') {
+      state._introWasFrozen = false;
+      resumeIntroAfterPause();
+    }
     // iOS interruption recovery: this branch runs from a user gesture (tap/key)
     // so it's the right moment to resume the AudioContext and rewire the music
     // MediaElementSource graph if a backgrounding event severed it.
@@ -1014,12 +1031,14 @@ fetchLeaderboard();
 // kept as no-ops so any stray callers don't throw — and so the inline
 // onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
 function playStartSound() {
-  // TAP TO PLAY on title — low whoosh.
+  // TAP TO PLAY on title — unified with ACCESS GRANTED so the gate-tap and
+  // the start-game tap feel identical (both go through playTitleTap →
+  // playTitleExit → title-exit buffer / fallback element).
   if (state.muted) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
-  try { if (typeof window.playTapToPlay === 'function') window.playTapToPlay(); } catch(_){}
+  try { if (typeof window.playTitleTap === 'function') window.playTitleTap(); } catch(_){}
 }
 function playResumeSound() {
   // CONTINUE from pause — keep the existing menu-cycle click.

@@ -12478,6 +12478,13 @@ function initWhoosh() {
   whooshReady = true;
 }
 let lastWhooshTime = 0;
+// When the radio is on, the lateral whoosh layer fights the music. Duck it
+// so the track stays foreground. 0.55 chosen to keep the whoosh audible as a
+// tactile cue without stomping on the radio mix.
+const _RADIO_LATERAL_DUCK = 0.55;
+function _lateralDuck() {
+  try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _RADIO_LATERAL_DUCK : 1; } catch(_) { return 1; }
+}
 function playWhoosh(direction, intensity) {
   if (!whooshReady || state.muted) return;
   const now = performance.now();
@@ -12487,7 +12494,7 @@ function playWhoosh(direction, intensity) {
   const rate = 0.88 + Math.random() * 0.24 + speedNorm * 0.08;
   // Bumped 2026-05-02: argon ambient gone, whoosh now carries the strafe layer alone.
   // Was 0.06 + 0.14*intensity (0.06–0.20). Now 0.14 + 0.30*intensity (0.14–0.44).
-  const vol = 0.14 + intensity * 0.30;
+  const vol = (0.14 + intensity * 0.30) * _lateralDuck();
   const pan = direction * (0.3 + intensity * 0.4);
   _playBuffer('whoosh', vol, rate, pan);
 }
@@ -12498,7 +12505,7 @@ function playWhooshRelease(direction, holdTime) {
   const rate = 0.90 + Math.random() * 0.15 + intensity * 0.1;
   // Bumped 2026-05-02: matched scale-up with playWhoosh.
   // Was 0.08 + 0.18*intensity (0.08–0.26). Now 0.18 + 0.38*intensity (0.18–0.56).
-  const vol = 0.18 + intensity * 0.38;
+  const vol = (0.18 + intensity * 0.38) * _lateralDuck();
   const pan = direction * (0.2 + intensity * 0.3);
   _playBuffer('whoosh-release', vol, rate, pan);
 }
@@ -19189,11 +19196,23 @@ function currentGameTrack() {
 function togglePause() {
   if (state.phase === 'playing') {
     state.phase = 'paused';
-    // Kill any in-flight intro text
-    clearIntroTimers();
-    const _introOv = document.getElementById('intro-overlay');
-    if (_introOv) { fadeOutIntroOverlay(_introOv); }
-    state.introActive = false;
+    // If we're mid-prologue, freeze it instead of nuking it. Without this,
+    // pausing during the cinematic killed all timers + faded the overlay,
+    // dumping the player into gameplay as if the prologue had finished.
+    // freezeIntroForPause snapshots remaining time on each pending timer
+    // and resumeIntroAfterPause re-arms them on continue.
+    const _introWasActive = !!state.introActive;
+    if (_introWasActive && typeof freezeIntroForPause === 'function') {
+      freezeIntroForPause();
+      state._introWasFrozen = true;
+      // Leave state.introActive = true so the resumed timers' guards still pass.
+    } else {
+      // Not in prologue — normal teardown.
+      clearIntroTimers();
+      const _introOv = document.getElementById('intro-overlay');
+      if (_introOv) { fadeOutIntroOverlay(_introOv); }
+      state.introActive = false;
+    }
     killThrusterSputter();
     // Central kill-switch: cancels pending _sfxTimeout chains (klaxon countdown,
     // queued thruster-impact punch), ramps + stops Web Audio buffer sources,
@@ -19228,6 +19247,11 @@ function togglePause() {
   } else if (state.phase === 'paused') {
     state.phase = 'playing';
     setPauseOverlay(false);
+    // Resume the cinematic if we paused during the prologue.
+    if (state._introWasFrozen && typeof resumeIntroAfterPause === 'function') {
+      state._introWasFrozen = false;
+      resumeIntroAfterPause();
+    }
     // iOS interruption recovery: this branch runs from a user gesture (tap/key)
     // so it's the right moment to resume the AudioContext and rewire the music
     // MediaElementSource graph if a backgrounding event severed it.
@@ -20144,12 +20168,14 @@ fetchLeaderboard();
 // kept as no-ops so any stray callers don't throw — and so the inline
 // onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
 function playStartSound() {
-  // TAP TO PLAY on title — low whoosh.
+  // TAP TO PLAY on title — unified with ACCESS GRANTED so the gate-tap and
+  // the start-game tap feel identical (both go through playTitleTap →
+  // playTitleExit → title-exit buffer / fallback element).
   if (state.muted) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
-  try { if (typeof window.playTapToPlay === 'function') window.playTapToPlay(); } catch(_){}
+  try { if (typeof window.playTitleTap === 'function') window.playTitleTap(); } catch(_){}
 }
 function playResumeSound() {
   // CONTINUE from pause — keep the existing menu-cycle click.
@@ -21921,12 +21947,13 @@ function startDeathRun() {
     overlay.appendChild(lineC);
     overlay.appendChild(skipHint);
 
-    // Line A fades in at 3s
-    _introTimers.push(setTimeout(() => { lineA.classList.add('playing'); }, 3000));
+    // Line A fades in at 3s. All intro timeouts go through
+    // _introScheduleTimeout so togglePause can freeze + resume the prologue.
+    _introScheduleTimeout(() => { lineA.classList.add('playing'); }, 3000);
     // Line B at 8.5s
-    _introTimers.push(setTimeout(() => { lineB.classList.add('playing'); }, 8500));
+    _introScheduleTimeout(() => { lineB.classList.add('playing'); }, 8500);
     // Engine startup SFX at 8.5s
-    _introTimers.push(setTimeout(() => {
+    _introScheduleTimeout(() => {
       const eng = document.getElementById('engine-start');
       if (eng && !state.muted) {
         _ensureCtxRunning();
@@ -21934,10 +21961,10 @@ function startDeathRun() {
         eng.volume = 0.55;
         eng.play().catch(() => {});
       }
-    }, 8500));
+    }, 8500);
     // Pre-spurts — thruster flickers
     function _preSpurt(delay, peak, dur) {
-      _introTimers.push(setTimeout(() => {
+      _introScheduleTimeout(() => {
         if (!state.introActive) return;
         const _start = performance.now();
         const _iv = setInterval(() => {
@@ -21947,7 +21974,7 @@ function startDeathRun() {
           state.thrusterPower = env * peak;
         }, 16);
         _introTimers.push(_iv);
-      }, delay));
+      }, delay);
     }
     _preSpurt(10000, 0.45, 125);
     _preSpurt(10175, 0.35, 110);
@@ -21957,9 +21984,9 @@ function startDeathRun() {
     _preSpurt(13500, 0.4, 125);
     _preSpurt(13675, 0.3, 110);
     // JET HORIZON title at 14s
-    _introTimers.push(setTimeout(() => { lineC.classList.add('playing'); }, 14000));
+    _introScheduleTimeout(() => { lineC.classList.add('playing'); }, 14000);
     // Auto-launch at 18.5s
-    _introTimers.push(setTimeout(() => { _launchDeathRun(); }, 18500));
+    _introScheduleTimeout(() => { _launchDeathRun(); }, 18500);
 
     function _launchDeathRun(e) {
       if (!state.introActive) return; // already launched
@@ -23835,13 +23862,74 @@ function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
 //   - playThrusterImpact(0.7) speed-tier-up surge SFX (same: BAND-only path)
 
 let _introTimers = [];
+// Parallel registry of pending intro setTimeouts so we can pause/resume the
+// prologue (otherwise pausing during the cinematic kills it and we land in
+// gameplay with the prologue already "played"). Entries: {id, fireAt, fn}.
+let _introTimerSpecs = [];
+let _introPausedSpecs = [];   // [{remaining, fn}] while paused
+let _introPausedAt = 0;
+function _introScheduleTimeout(fn, delay) {
+  const fireAt = performance.now() + delay;
+  const wrapped = () => {
+    // self-remove from spec registry on natural fire
+    const i = _introTimerSpecs.findIndex(s => s.id === id);
+    if (i >= 0) _introTimerSpecs.splice(i, 1);
+    fn();
+  };
+  const id = setTimeout(wrapped, delay);
+  _introTimers.push(id);
+  _introTimerSpecs.push({ id, fireAt, fn });
+  return id;
+}
+window._introScheduleTimeout = _introScheduleTimeout;
+// Pause-friendly snapshot. Called from togglePause when state.introActive.
+// Captures remaining time on each pending timer, cancels the live timeouts,
+// and pauses CSS animations on the intro overlay.
+function freezeIntroForPause() {
+  _introPausedAt = performance.now();
+  _introPausedSpecs = [];
+  _introTimerSpecs.forEach(s => {
+    clearTimeout(s.id);
+    const remaining = Math.max(0, s.fireAt - _introPausedAt);
+    _introPausedSpecs.push({ remaining, fn: s.fn });
+  });
+  _introTimerSpecs = [];
+  // Drop any active spurt setIntervals — mid-spurt thruster flicker resets
+  // cleanly to 0 and the next spurt timeout (re-armed on resume) recreates
+  // the interval naturally.
+  _introTimers.forEach(id => { clearInterval(id); });
+  _introTimers = [];
+  state.thrusterPower = 0;
+  // Pause engine startup SFX without resetting currentTime so it resumes.
+  const eng = document.getElementById('engine-start');
+  if (eng && !eng.paused) { try { eng.pause(); } catch(_){} eng._jhPausedDuringIntro = true; }
+  // Pause overlay CSS animations.
+  const ov = document.getElementById('intro-overlay');
+  if (ov) ov.classList.add('intro-paused');
+}
+window.freezeIntroForPause = freezeIntroForPause;
+// Inverse of freezeIntroForPause.
+function resumeIntroAfterPause() {
+  _introPausedSpecs.forEach(s => { _introScheduleTimeout(s.fn, s.remaining); });
+  _introPausedSpecs = [];
+  const eng = document.getElementById('engine-start');
+  if (eng && eng._jhPausedDuringIntro && !state.muted) {
+    eng._jhPausedDuringIntro = false;
+    try { eng.play().catch(()=>{}); } catch(_){}
+  }
+  const ov = document.getElementById('intro-overlay');
+  if (ov) ov.classList.remove('intro-paused');
+}
+window.resumeIntroAfterPause = resumeIntroAfterPause;
 function clearIntroTimers() {
   _introTimers.forEach(id => { clearTimeout(id); clearInterval(id); cancelAnimationFrame(id); });
   _introTimers = [];
+  _introTimerSpecs = [];
+  _introPausedSpecs = [];
   state.thrusterPower = 0;  // kill any mid-spurt flicker
   // Stop engine startup SFX if playing
   const eng = document.getElementById('engine-start');
-  if (eng) { eng.pause(); eng.currentTime = 0; }
+  if (eng) { eng.pause(); eng.currentTime = 0; eng._jhPausedDuringIntro = false; }
 }
 
 // ── Thruster sputter-on animation ──

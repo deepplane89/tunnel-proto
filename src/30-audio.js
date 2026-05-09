@@ -470,6 +470,13 @@ function initWhoosh() {
   whooshReady = true;
 }
 let lastWhooshTime = 0;
+// When the radio is on, the lateral whoosh layer fights the music. Duck it
+// so the track stays foreground. 0.55 chosen to keep the whoosh audible as a
+// tactile cue without stomping on the radio mix.
+const _RADIO_LATERAL_DUCK = 0.55;
+function _lateralDuck() {
+  try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _RADIO_LATERAL_DUCK : 1; } catch(_) { return 1; }
+}
 function playWhoosh(direction, intensity) {
   if (!whooshReady || state.muted) return;
   const now = performance.now();
@@ -479,7 +486,7 @@ function playWhoosh(direction, intensity) {
   const rate = 0.88 + Math.random() * 0.24 + speedNorm * 0.08;
   // Bumped 2026-05-02: argon ambient gone, whoosh now carries the strafe layer alone.
   // Was 0.06 + 0.14*intensity (0.06–0.20). Now 0.14 + 0.30*intensity (0.14–0.44).
-  const vol = 0.14 + intensity * 0.30;
+  const vol = (0.14 + intensity * 0.30) * _lateralDuck();
   const pan = direction * (0.3 + intensity * 0.4);
   _playBuffer('whoosh', vol, rate, pan);
 }
@@ -490,7 +497,7 @@ function playWhooshRelease(direction, holdTime) {
   const rate = 0.90 + Math.random() * 0.15 + intensity * 0.1;
   // Bumped 2026-05-02: matched scale-up with playWhoosh.
   // Was 0.08 + 0.18*intensity (0.08–0.26). Now 0.18 + 0.38*intensity (0.18–0.56).
-  const vol = 0.18 + intensity * 0.38;
+  const vol = (0.18 + intensity * 0.38) * _lateralDuck();
   const pan = direction * (0.2 + intensity * 0.3);
   _playBuffer('whoosh-release', vol, rate, pan);
 }
