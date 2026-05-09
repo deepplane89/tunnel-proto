@@ -220,6 +220,11 @@ window._jhWakeLock = (function _wakeLockFactory() {
       try {
         if (typeof window.initTitleAudio === 'function') window.initTitleAudio();
       } catch (_) {}
+      // Play the standard title-tap SFX now that audio is unlocked, so the
+      // ACCESS GRANTED gate feels consistent with the rest of the title HUD.
+      try {
+        if (typeof window.playTitleTap === 'function') window.playTitleTap();
+      } catch (_) {}
       // First-time-ever load: show the graphics-quality picker before fading
       // the gate. The picker handles its own dismissal + gate hide.
       const _firstLoad = !window._LS.getItem('jh_gfx_picked');

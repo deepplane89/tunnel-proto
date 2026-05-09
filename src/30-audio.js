@@ -243,8 +243,6 @@ function _initSFXBuffers() {
   // Title-screen UI exits (garage close, settings close, daily streak close,
   // any back/exit on title) — VR mecha interlock.
   _loadSFXBuffer('title-exit',      './assets/audio/title-exit.mp3');
-  // Tap-to-play on title screen — low whoosh.
-  _loadSFXBuffer('tap-to-play',     './assets/audio/tap-to-play.mp3');
   // Garage open/close audio removed — no sample needed.
 }
 
@@ -321,12 +319,99 @@ function _playArgonOnce(targetVol, fadeInSec) {
   return src;
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx', 'reject': 'reject-sfx' };
-// Play a pre-decoded buffer with gain + optional pan + playbackRate
-function _playBuffer(name, volume, rate, panVal) {
+// 'title-exit' is the cue used by playTitleTap — needed as a fallback for the
+// ACCESS GRANTED first tap, where the AudioContext is initialized in the
+// SAME gesture and the decoded buffer isn't ready yet.
+const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx', 'reject': 'reject-sfx', 'title-exit': 'title-exit-sfx' };
+
+// ── Gameplay SFX kill-switch infrastructure ─────────────────────────────
+// _playBuffer fires-and-forgets AudioBufferSourceNodes. With no tracking
+// there's no way to stop an already-started source on death, so klaxons,
+// thunder, etc. ring through the gameover screen. We track every active
+// source + gain here and provide stopAllGameplaySFX() to kill them all.
+//
+// Tracking is gated by a per-call category. UI sounds (menus, title taps,
+// shop) pass { ui:true } via _playBufferUI so they survive the death
+// kill-switch — only gameplay SFX get tracked into _activeSFXSources.
+const _activeSFXSources   = new Set();   // { src, gain } for Web Audio sources
+const _activeSFXClones    = new Set();   // <audio> cloneNode fallbacks
+const _activeSFXTimeouts  = new Set();   // setTimeout IDs for scheduled SFX
+// IDs for every gameplay <audio> element we want killed on death/exit. Keep
+// in sync with index.html. UI sounds (menu-cycle, title-exit, pause-exit,
+// shop-purchase, reject, start-interference, start-sound) are intentionally
+// excluded because they fire on transition screens.
+const _GAMEPLAY_SFX_ELEMENT_IDS = [
+  'engine-start', 'engine-roar', 'engine-roar-layer',
+  'argon-ambient-sfx', 'invincible-loop-sfx', 'speed-dip-sfx',
+  'laser-beam-sfx', 'unibeam-sfx',
+  'shield-activate-sfx', 'shield-hit-sfx', 'shield-expire-sfx',
+  'nearmiss-sfx', 'whoosh1', 'whoosh-release',
+  'thruster-impact-sfx', 'powerup-burst-sfx', 'droplet-sfx',
+  'crash-sound', 'crash-layer-sound',
+  'retry-tech-sfx', 'retry-warp-sfx',
+];
+
+// Schedule an SFX-related setTimeout that gets cancelled on death. Use this
+// instead of plain setTimeout for any audio scheduling that must not fire
+// after the player dies (klaxon countdown, beep chains, layered SFX delays).
+function _sfxTimeout(fn, delayMs) {
+  const id = setTimeout(() => {
+    _activeSFXTimeouts.delete(id);
+    try { fn(); } catch(_) {}
+  }, delayMs);
+  _activeSFXTimeouts.add(id);
+  return id;
+}
+window._sfxTimeout = _sfxTimeout;
+
+// Kill every tracked gameplay SFX. Called from death + returnToTitle.
+function stopAllGameplaySFX() {
+  // 1. Cancel scheduled SFX timeouts (klaxon chains, etc.)
+  _activeSFXTimeouts.forEach(id => { try { clearTimeout(id); } catch(_) {} });
+  _activeSFXTimeouts.clear();
+  // 2. Stop every active Web Audio buffer source. Ramp gain to 0 first so we
+  // don't get a click. Stop after a short tail so the ramp can complete.
+  _activeSFXSources.forEach(entry => {
+    try {
+      const now = audioCtx ? audioCtx.currentTime : 0;
+      if (entry.gain && entry.gain.gain) {
+        entry.gain.gain.cancelScheduledValues(now);
+        entry.gain.gain.setValueAtTime(entry.gain.gain.value || 0, now);
+        entry.gain.gain.linearRampToValueAtTime(0, now + 0.03);
+      }
+      if (entry.src) {
+        // stop() throws if the source has already ended — swallow.
+        try { entry.src.stop(now + 0.04); } catch(_) {}
+      }
+    } catch(_) {}
+  });
+  _activeSFXSources.clear();
+  // 3. Stop element-clone fallbacks.
+  _activeSFXClones.forEach(clone => {
+    try { clone.pause(); clone.currentTime = 0; } catch(_) {}
+    try { clone.remove(); } catch(_) {}
+  });
+  _activeSFXClones.clear();
+  // 4. Pause every gameplay <audio> SFX element (engine, looping SFX, etc.)
+  for (const id of _GAMEPLAY_SFX_ELEMENT_IDS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    try {
+      if (!el.paused) el.pause();
+      el.currentTime = 0;
+      el.loop = false;
+    } catch(_) {}
+  }
+}
+window.stopAllGameplaySFX = stopAllGameplaySFX;
+
+// Play a pre-decoded buffer with gain + optional pan + playbackRate.
+// opts.ui = true marks this as a UI sound (not tracked, survives death kill).
+function _playBuffer(name, volume, rate, panVal, opts) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (!audioCtx || state.muted || volume <= 0) return;
   _ensureCtxRunning();
+  const isUI = !!(opts && opts.ui);
   // Preferred: AudioBufferSourceNode (zero-latency, no DOM)
   if (_sfxBuffers[name]) {
     const src = audioCtx.createBufferSource();
@@ -343,6 +428,12 @@ function _playBuffer(name, volume, rate, panVal) {
       gain.connect(audioCtx.destination);
     }
     src.start();
+    if (!isUI) {
+      const entry = { src: src, gain: gain };
+      _activeSFXSources.add(entry);
+      // Auto-untrack when the source finishes naturally.
+      src.onended = () => { _activeSFXSources.delete(entry); };
+    }
     return;
   }
   // Fallback: cloneNode from <audio> element (slower but works if buffer not ready)
@@ -353,8 +444,17 @@ function _playBuffer(name, volume, rate, panVal) {
   clone.playbackRate = rate || 1;
   clone.volume = Math.min(1, volume);
   clone.play().catch(() => {});
-  clone.addEventListener('ended', () => clone.remove());
+  if (!isUI) _activeSFXClones.add(clone);
+  clone.addEventListener('ended', () => {
+    _activeSFXClones.delete(clone);
+    try { clone.remove(); } catch(_) {}
+  });
 }
+// Convenience: UI sounds that should survive the death kill-switch.
+function _playBufferUI(name, volume, rate, panVal) {
+  return _playBuffer(name, volume, rate, panVal, { ui: true });
+}
+window._playBufferUI = _playBufferUI;
 
 function playNearMissSFX() {
   if (state.muted) return;
@@ -370,6 +470,13 @@ function initWhoosh() {
   whooshReady = true;
 }
 let lastWhooshTime = 0;
+// When the radio is on, the lateral whoosh layer fights the music. Duck it
+// so the track stays foreground. 0.55 chosen to keep the whoosh audible as a
+// tactile cue without stomping on the radio mix.
+const _RADIO_LATERAL_DUCK = 0.55;
+function _lateralDuck() {
+  try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _RADIO_LATERAL_DUCK : 1; } catch(_) { return 1; }
+}
 function playWhoosh(direction, intensity) {
   if (!whooshReady || state.muted) return;
   const now = performance.now();
@@ -379,7 +486,7 @@ function playWhoosh(direction, intensity) {
   const rate = 0.88 + Math.random() * 0.24 + speedNorm * 0.08;
   // Bumped 2026-05-02: argon ambient gone, whoosh now carries the strafe layer alone.
   // Was 0.06 + 0.14*intensity (0.06–0.20). Now 0.14 + 0.30*intensity (0.14–0.44).
-  const vol = 0.14 + intensity * 0.30;
+  const vol = (0.14 + intensity * 0.30) * _lateralDuck();
   const pan = direction * (0.3 + intensity * 0.4);
   _playBuffer('whoosh', vol, rate, pan);
 }
@@ -390,7 +497,7 @@ function playWhooshRelease(direction, holdTime) {
   const rate = 0.90 + Math.random() * 0.15 + intensity * 0.1;
   // Bumped 2026-05-02: matched scale-up with playWhoosh.
   // Was 0.08 + 0.18*intensity (0.08–0.26). Now 0.18 + 0.38*intensity (0.18–0.56).
-  const vol = 0.18 + intensity * 0.38;
+  const vol = (0.18 + intensity * 0.38) * _lateralDuck();
   const pan = direction * (0.2 + intensity * 0.3);
   _playBuffer('whoosh-release', vol, rate, pan);
 }
@@ -403,14 +510,14 @@ function playLevelUp() {
 }
 
 function playShopPurchase() {
-  _playBuffer('shop-purchase', 0.6, 1.0, null);
+  _playBufferUI('shop-purchase', 0.6, 1.0, null);
 }
 
 // Played when the player taps something they can't interact with: a locked
 // upgrade card, a fully-maxed power-up they can't enter the tier menu of, a
 // locked thruster preset, etc. Short "computer reject" blip.
 function playReject() {
-  _playBuffer('reject', 0.55, 1.0, null);
+  _playBufferUI('reject', 0.55, 1.0, null);
 }
 window.playReject = playReject;
 
@@ -422,32 +529,41 @@ window.playGarageOpen  = playGarageOpen;
 window.playGarageClose = playGarageClose;
 
 // Title-screen menu taps, Exit/Resume, garage open/close on title — VR clicker.
-function playMenuCycle() { _playBuffer('menu-cycle', 0.6, 1.0, null); }
+function playMenuCycle() { _playBufferUI('menu-cycle', 0.6, 1.0, null); }
 window.playMenuCycle = playMenuCycle;
 
 // Garage card cycling (Showroom internal nav) — pinball pip.
-function playGarageCycle() { _playBuffer('garage-cycle', 0.5, 1.0, null); }
+function playGarageCycle() { _playBufferUI('garage-cycle', 0.5, 1.0, null); }
 window.playGarageCycle = playGarageCycle;
 
 // Garage SELECT confirm — VR transform contacts. Plays when player picks an
 // unlocked ship/thruster/mod/handling-preset, or opens tier-list/upgrade view.
-function playGarageSelect() { _playBuffer('garage-select', 0.55, 1.0, null); }
+function playGarageSelect() { _playBufferUI('garage-select', 0.55, 1.0, null); }
 window.playGarageSelect = playGarageSelect;
 
 // Title-screen "start death run" press.
-function playStartInterference() { _playBuffer('start-interference', 0.7, 1.0, null); }
+function playStartInterference() { _playBufferUI('start-interference', 0.7, 1.0, null); }
 window.playStartInterference = playStartInterference;
 
 // Pause-menu EXIT during gameplay — VR compute interference.
-function playPauseExit() { _playBuffer('pause-exit', 0.7, 1.0, null); }
+function playPauseExit() { _playBufferUI('pause-exit', 0.7, 1.0, null); }
 window.playPauseExit = playPauseExit;
 
 // Title-screen UI exits (garage/settings/etc back) — VR mecha interlock.
-function playTitleExit() { _playBuffer('title-exit', 0.7, 1.0, null); }
+function playTitleExit() { _playBufferUI('title-exit', 0.7, 1.0, null); }
 window.playTitleExit = playTitleExit;
 
-// Tap-to-play on title screen — low whoosh.
-function playTapToPlay() { _playBuffer('tap-to-play', 0.7, 1.0, null); }
+// Tap-to-play on title screen — uses the same title-tap cue as other UI taps.
+// (Was a 25.7s whoosh — way too long for a tap cue, sounded like a stuck loop.)
+function playTapToPlay() { _playBufferUI('title-exit', 0.7, 1.0, null); }
 window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
+  if (state.muted) return;
+  _ensureCtxRunning();
+  const sfx = document.getElementById('crash-sound');
+  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.25; sfx.play().catch(() => {}); }
+  // Layered crash-impact sample — same gate as base crash, matched volume.
+  const _cl = document.getElementById('crash-layer-sound');
+  if (_cl) { try { _cl.currentTime = 0; _cl.volume = 0.25; _cl.play().catch(() => {}); } catch (_) {} }
+}

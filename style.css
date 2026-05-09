@@ -123,7 +123,12 @@ html, body {
   flex-direction: column;
   align-items: center;
   gap: var(--space-4);
-  padding: env(safe-area-inset-top, 16px) var(--space-4) env(safe-area-inset-bottom, 24px);
+  /* Use max() so the X-pixel baseline always wins over a 0-valued env
+   * (which can happen on iOS under viewport-fit=cover even when env is
+   * defined). The plain env(..., 16px) shorthand only falls back when
+   * env is *undefined*, not when it's 0 — a subtle bug that hides
+   * content under the status bar on notched iPhones. */
+  padding: max(env(safe-area-inset-top, 16px), 16px) var(--space-4) max(env(safe-area-inset-bottom, 24px), 24px);
   margin: auto;
   width: 100%;
 }
@@ -959,7 +964,54 @@ html, body {
   border-radius: 14px;
   padding: 24px 28px;
   width: 300px; max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
+/* Settings body holds collapsible accordion sections. */
+.settings-body { display: block; }
+
+/* ── Accordion sections (<details> + <summary>) ──────────────── */
+.settings-section {
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.settings-section:last-of-type {
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.settings-section-head {
+  list-style: none; /* hide default disclosure triangle */
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 2px;
+  font: 600 11px/1 'Rajdhani', sans-serif;
+  letter-spacing: 2.5px;
+  color: rgba(0,238,255,0.65);
+  text-transform: uppercase;
+}
+.settings-section-head::-webkit-details-marker { display: none; }
+.settings-section-head:hover { color: rgba(0,238,255,0.9); }
+.settings-chevron {
+  font: 400 18px/1 'Rajdhani', sans-serif;
+  color: rgba(255,255,255,0.4);
+  transition: transform 0.18s ease;
+  transform: rotate(0deg);
+}
+.settings-section[open] > .settings-section-head .settings-chevron {
+  transform: rotate(90deg);
+  color: rgba(0,238,255,0.7);
+}
+.settings-section-content {
+  padding: 6px 2px 12px;
+}
+/* First row inside an open section sits flush with the header. */
+.settings-section-content .settings-row:first-child { margin-top: 2px; }
+/* Last row inside a section drops its bottom margin so the section closes
+   tight against the next divider. */
+.settings-section-content .settings-row:last-child { margin-bottom: 0; }
 .settings-header {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 20px;
@@ -978,9 +1030,13 @@ html, body {
 }
 .settings-row label {
   font: 400 12px/1 'Rajdhani', sans-serif;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.8px;
   color: rgba(255,255,255,0.6);
-  width: 60px; flex-shrink: 0;
+  width: 92px; flex-shrink: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .vol-slider {
   flex: 1;
@@ -1024,6 +1080,39 @@ html, body {
   margin-top: 18px; padding-top: 14px;
   border-top: 1px solid rgba(255,255,255,0.06);
   text-align: center;
+}
+.settings-tutorial-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.5);
+  font-family: monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 100%;
+  margin-bottom: 10px;
+}
+.gfx-row {
+  display: flex; gap: 6px; flex: 1; justify-content: flex-end;
+}
+
+/* ── Landscape mobile: keep panel inside viewport, scroll if needed ───
+   Accordion keeps things short (only one section open at a time) so most
+   of the time no scroll is needed. Cap height as a safety net for when a
+   long section like PROGRESS is open. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .settings-panel {
+    width: 360px;
+    max-width: 92vw;
+    max-height: 88vh;
+    padding: 14px 20px 14px;
+    box-sizing: border-box;
+  }
+  .settings-header { margin-bottom: 10px; }
+  .settings-section-head { padding: 10px 2px; }
+  .settings-section-content { padding: 4px 2px 10px; }
 }
 .settings-link {
   font: 400 11px/1 'Rajdhani', sans-serif;
@@ -1214,8 +1303,8 @@ html, body {
 }
 .pause-gear {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: max(env(safe-area-inset-top, 16px), 16px);
+  right: max(env(safe-area-inset-right, 16px), 16px);
   background: none;
   border: none;
   color: rgba(255,255,255,0.35);
@@ -1328,8 +1417,8 @@ html, body {
      z-index participates in the root stacking context and escapes the
      prologue overlay (z:500) reliably. */
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: max(env(safe-area-inset-top, 16px), 16px);
+  right: max(env(safe-area-inset-right, 16px), 16px);
   width: 48px;
   height: 48px;
   border-radius: 50%;
@@ -1421,6 +1510,15 @@ html, body {
 }
 .intro-title.playing {
   animation: introTitleFade 4.5s ease-in-out forwards;
+}
+
+/* Pause-during-prologue: freeze line + title fades + skip-hint where they
+   are. Pairs with togglePause()'s freezeIntroForPause() which also stops
+   the JS setTimeout chain for thruster spurts and engine-start SFX. */
+#intro-overlay.intro-paused .intro-line,
+#intro-overlay.intro-paused .intro-title,
+#intro-overlay.intro-paused .intro-skip-hint {
+  animation-play-state: paused !important;
 }
 
 /* Intro skip hint — bottom of screen, always visible during sequence */
@@ -6139,7 +6237,32 @@ html.platform-ios-native body {
   color: #0ff;
   line-height: 1;
 }
+.radio-icon-svg {
+  width: 22px; height: 22px;
+  color: #0ff;
+  filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.45));
+}
 .radio-icon-btn.hidden { display: none; }
+
+/* NEW indicator — pulsing red dot + outer glow until the player opens the
+ * overlay for the first time after unlock. Mirrors the pattern used by the
+ * showroom tab .has-new but uses red so it reads as a fresh notification. */
+.radio-icon-btn.has-new {
+  border-color: rgba(255, 70, 90, 0.75);
+  box-shadow: 0 0 10px rgba(255, 70, 90, 0.55);
+  animation: srNewPulse 1.4s ease-in-out infinite;
+}
+.radio-icon-btn.has-new::after {
+  content: '';
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 70, 90, 1);
+  box-shadow: 0 0 8px rgba(255, 70, 90, 0.9);
+  animation: srNewPulse 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
 
 /* RADIO overlay — same visual family as settings-overlay */
 .radio-overlay {
@@ -6180,81 +6303,189 @@ html.platform-ios-native body {
   cursor: pointer;
 }
 .radio-close:hover { background: rgba(255,255,255,0.08); }
-.radio-toggle-row {
+/* ── Premium music player layout ────────────────────────────── */
+.radio-player { gap: 14px; padding: 18px; }
+.rp-meta-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 4px;
+  gap: 14px;
+  padding-top: 4px;
 }
-.radio-toggle-lbl {
+.rp-eq {
+  width: 80px; height: 24px;
+  display: block;
+}
+.rp-meta-text {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: 2px;
+}
+.rp-label {
   font-family: var(--font-display, 'Rajdhani', sans-serif);
-  font-size: 12px; letter-spacing: 0.15em;
-  color: rgba(255,255,255,0.6);
+  font-size: 9px; letter-spacing: 0.30em; font-weight: 600;
+  color: rgba(34, 211, 238, 0.75);
   text-transform: uppercase;
 }
-.radio-toggle-btn {
-  background: rgba(0, 14, 28, 0.55);
-  border: 1px solid rgba(255,255,255,0.20);
-  border-radius: 4px;
-  color: rgba(255,255,255,0.7);
+.rp-index {
+  font-family: 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 11px; letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.55);
+  font-variant-numeric: tabular-nums;
+}
+.rp-title-wrap {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.18);
+  padding-bottom: 12px;
+}
+.rp-title {
   font-family: var(--font-display, 'Rajdhani', sans-serif);
-  font-size: 12px; font-weight: 700; letter-spacing: 0.15em;
-  padding: 6px 16px;
-  cursor: pointer;
+  font-size: 22px; font-weight: 600; letter-spacing: 0.08em;
+  color: #fff;
   text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: 0 0 8px rgba(34, 211, 238, 0.25);
 }
-.radio-toggle-btn.on {
-  border-color: #0ff;
-  color: #0ff;
-  background: rgba(34, 211, 238, 0.10);
-  box-shadow: 0 0 10px rgba(34, 211, 238, 0.30);
+.rp-title.scroll {
+  animation: rpMarquee 14s linear infinite;
+  padding-right: 40px;
 }
-.radio-track-list {
-  display: flex; flex-direction: column; gap: 4px;
-  overflow-y: auto;
-  max-height: 50vh;
-  padding: 4px 0;
+@keyframes rpMarquee {
+  0%   { transform: translateX(0); }
+  10%  { transform: translateX(0); }
+  90%  { transform: translateX(calc(-100% + 100vw - 100px)); }
+  100% { transform: translateX(calc(-100% + 100vw - 100px)); }
 }
-.radio-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px;
-  background: rgba(0, 14, 28, 0.40);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 4px;
-}
-.radio-row-play {
-  width: 28px; height: 28px;
-  background: rgba(34, 211, 238, 0.10);
-  border: 1px solid rgba(34, 211, 238, 0.40);
-  border-radius: 4px;
-  color: #0ff;
-  font-size: 11px;
+.rp-progress { display: flex; flex-direction: column; gap: 6px; }
+.rp-progress-track {
+  position: relative;
+  height: 2px;
+  background: rgba(255,255,255,0.10);
+  border-radius: 1px;
+  overflow: hidden;
+  /* Enlarge tap target without changing visual height. */
+  padding: 14px 0;
+  background-clip: content-box;
   cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
-.radio-row-play:hover { background: rgba(34, 211, 238, 0.20); }
-.radio-row-name {
-  font-family: var(--font-display, 'Rajdhani', sans-serif);
-  font-size: 13px; letter-spacing: 0.08em;
-  color: rgba(255,255,255,0.85);
-  flex: 1;
+.rp-progress-fill {
+  position: absolute; top: 50%; left: 0;
+  height: 2px;
+  transform: translateY(-50%);
+  width: 0%;
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.55), #0ff);
+  box-shadow: 0 0 6px rgba(34, 211, 238, 0.55);
+  transition: width 0.20s linear;
+  pointer-events: none;
 }
-.radio-footer {
-  font-family: var(--font-display, 'Rajdhani', sans-serif);
+/* Snap to finger — disable smoothing while user drags. */
+.rp-progress-track:active .rp-progress-fill { transition: none; }
+.rp-time-row {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.rp-time {
+  font-family: 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
   font-size: 10px; letter-spacing: 0.10em;
-  color: rgba(255,255,255,0.40);
-  text-align: center;
-  padding: 4px 0 0 0;
+  color: rgba(255,255,255,0.50);
+  font-variant-numeric: tabular-nums;
+}
+.rp-transport {
+  display: flex; align-items: center; justify-content: center;
+  gap: 22px;
+  padding: 6px 0 4px 0;
+}
+.rp-btn {
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 999px;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.10s;
+}
+.rp-btn svg { width: 16px; height: 16px; }
+.rp-btn:hover {
+  border-color: rgba(34, 211, 238, 0.65);
+  color: #0ff;
+  background: rgba(34, 211, 238, 0.06);
+}
+.rp-btn:active { transform: scale(0.94); }
+.rp-btn-play {
+  width: 56px; height: 56px;
+  border-color: rgba(34, 211, 238, 0.55);
+  color: #0ff;
+  background: rgba(34, 211, 238, 0.08);
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.22), inset 0 0 12px rgba(34, 211, 238, 0.10);
+}
+.rp-btn-play svg { width: 22px; height: 22px; }
+.rp-btn-play:hover {
+  background: rgba(34, 211, 238, 0.14);
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.40), inset 0 0 14px rgba(34, 211, 238, 0.16);
+}
+.rp-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 2px 2px 2px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  margin-top: 4px;
+}
+.rp-shuffle-lbl {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 10px; letter-spacing: 0.22em; font-weight: 600;
+  color: rgba(255,255,255,0.55);
   text-transform: uppercase;
+}
+/* iOS-style pill switch */
+.rp-switch {
+  position: relative;
+  width: 42px; height: 24px;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 999px;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.20s, border-color 0.20s, box-shadow 0.20s;
+}
+.rp-switch-knob {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 18px; height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  transition: left 0.20s, background 0.20s;
+}
+.rp-switch[aria-checked="true"] {
+  background: rgba(34, 211, 238, 0.30);
+  border-color: rgba(34, 211, 238, 0.65);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.35);
+}
+.rp-switch[aria-checked="true"] .rp-switch-knob {
+  left: 21px;
+  background: #0ff;
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.7);
 }
 
-/* Pause-menu now-playing strip */
-.pause-radio-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 12px;
-  margin: 8px 0 12px 0;
+/* Pause-menu music player (mirrors the title-screen radio player) */
+.pause-radio-player {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 16px;
+  margin: 8px 0 14px 0;
   background: rgba(0, 14, 28, 0.55);
   border: 1px solid rgba(34, 211, 238, 0.30);
-  border-radius: 4px;
+  border-radius: 6px;
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.10);
 }
+.pause-radio-player.hidden { display: none; }
+.pause-radio-player .rp-title { font-size: 18px; }
+.pause-radio-player .rp-transport { gap: 18px; padding: 2px 0; }
+.pause-radio-player .rp-btn { width: 36px; height: 36px; }
+.pause-radio-player .rp-btn-play { width: 48px; height: 48px; }
+.pause-radio-player .rp-btn svg { width: 14px; height: 14px; }
+.pause-radio-player .rp-btn-play svg { width: 18px; height: 18px; }
+/* legacy alias — some code paths still reference .pause-radio-row */
 .pause-radio-row.hidden { display: none; }
 .pause-radio-icon {
   font-size: 16px;
@@ -6301,4 +6532,93 @@ html.platform-ios-native body {
 .radio-unlock-toast.show {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
+}
+
+
+/* RESET GAME button — neutral by default, red when armed for confirm */
+.settings-reset-btn {
+  border: 1px solid rgba(255, 80, 80, 0.45);
+  color: rgba(255, 140, 140, 0.95);
+}
+.settings-reset-btn:hover { background: rgba(255, 80, 80, 0.10); }
+.settings-reset-btn.armed {
+  background: rgba(255, 50, 50, 0.18);
+  border-color: rgba(255, 80, 80, 0.85);
+  color: #ff6464;
+  animation: settings-reset-pulse 0.9s ease-in-out infinite;
+}
+@keyframes settings-reset-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 80, 80, 0.45); }
+  50%      { box-shadow: 0 0 8px 2px rgba(255, 80, 80, 0.55); }
+}
+
+
+/* ── Cross-device sync section ──────────────────────────────────── */
+.settings-section-divider {
+  margin: 14px 0 10px 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font: 600 10px/1 'Rajdhani', sans-serif;
+  letter-spacing: 2.5px;
+  color: rgba(0,238,255,0.55);
+  text-align: left;
+}
+.settings-row .settings-row-actions {
+  display: flex; gap: 6px; flex: 1; justify-content: flex-end;
+}
+.sync-code-display {
+  flex: 1;
+  font: 600 14px/1 'Rajdhani', sans-serif;
+  letter-spacing: 2px;
+  color: #00eeff;
+  background: rgba(0,238,255,0.08);
+  border: 1px dashed rgba(0,238,255,0.35);
+  padding: 6px 10px;
+  border-radius: 4px;
+  text-align: center;
+  user-select: all;
+  -webkit-user-select: all;
+}
+.sync-code-input {
+  flex: 1;
+  font: 600 13px/1 'Rajdhani', sans-serif;
+  letter-spacing: 2px;
+  color: #fff;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.20);
+  padding: 6px 10px;
+  border-radius: 4px;
+  text-align: center;
+  text-transform: uppercase;
+  outline: none;
+}
+.sync-code-input:focus {
+  border-color: rgba(0,238,255,0.5);
+  background: rgba(0,238,255,0.06);
+}
+.sync-status {
+  font: 400 11px/1.4 'Rajdhani', sans-serif;
+  letter-spacing: 0.6px;
+  color: rgba(255,255,255,0.55);
+  margin: -6px 0 10px 0;
+  min-height: 14px;
+}
+.sync-status.ok    { color: #6effa8; }
+.sync-status.err   { color: #ff8080; }
+.sync-status.busy  { color: rgba(0,238,255,0.8); }
+
+/* ── iOS safe-area patches (post viewport-fit=cover) ──────────────────────
+ * With viewport-fit=cover + contentInset:never, the page now extends
+ * edge-to-edge on iPhones with a notch / Dynamic Island. Title and garage
+ * top regions need explicit safe-area padding so their content doesn't
+ * collide with the status bar. Scoped to platform-ios-native so web is
+ * untouched. */
+html.platform-ios-native .sr-overlay {
+  /* Garage overlay: pad the top by the safe-area height plus a baseline,
+   * left/right by safe-area, bottom keeps its 16px (home indicator already
+   * handled by the .sr-panel internal padding). */
+  padding-top: max(env(safe-area-inset-top, 16px), 16px);
+  padding-left: max(env(safe-area-inset-left, 16px), 16px);
+  padding-right: max(env(safe-area-inset-right, 16px), 16px);
+  padding-bottom: 16px;
 }

@@ -91,6 +91,67 @@ window.nativePlugin = nativePlugin;
     if (PLATFORM.name)         root.classList.add('platform-' + PLATFORM.name);
   } catch (_) {}
 })();
+// Capacitor iOS lifecycle bridge. Capacitor's native App plugin emits
+// app-state events that the WKWebView's standard `visibilitychange` event
+// doesn't always reflect on iOS — meaning swipe-to-App-Switcher,
+// background-tap return, lock-screen, and notification-center pulls can
+// silently fail to pause/resume the game's audio + RAF loop.
+//
+// We listen for those Capacitor events and dispatch a synthetic
+// `visibilitychange` so the existing handler in 72-main-late-mid.js (which
+// already does pause/snapshot/resume correctly for desktop browsers) just
+// works on iOS Capacitor builds.
+//
+// Native-only: this file is a no-op on web/Android. Only fires when the
+// page is running inside Capacitor's iOS WebView (detected via the
+// `platform-ios-native` class set by 01-platform.js).
+
+(function () {
+  // Bail early on non-iOS-native (web, Android, dev server in browser).
+  if (!document.documentElement.classList.contains('platform-ios-native')) return;
+
+  // Capacitor 8 exposes the App plugin via the global Capacitor.Plugins.App
+  // (after @capacitor/app is bundled). If it's not available, we can still
+  // fall back to pagehide/pageshow which fire reasonably on iOS WKWebView.
+  const Plugins = (window.Capacitor && window.Capacitor.Plugins) || {};
+  const App = Plugins.App;
+
+  let lastHiddenState = null;
+
+  function fireVisibility(hidden, source) {
+    if (lastHiddenState === hidden) return;       // dedupe
+    lastHiddenState = hidden;
+    try {
+      // Some browsers won't let us redefine document.hidden; we just
+      // dispatch the event and let listeners read document.hidden as-is.
+      // The handler in 72-main-late-mid.js checks document.hidden, which
+      // WKWebView updates based on its own page-lifecycle signals — and
+      // for cases where it doesn't, the synthetic dispatch + our own
+      // tracking is enough to trigger the pause/resume flow.
+      console.log('[ios-lifecycle]', source, 'hidden=' + hidden);
+      window.dispatchEvent(new Event('visibilitychange'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    } catch (e) {
+      console.warn('[ios-lifecycle] dispatch failed', e);
+    }
+  }
+
+  if (App && App.addListener) {
+    App.addListener('appStateChange', (state) => {
+      // state.isActive: true when foreground, false when backgrounded.
+      fireVisibility(!state.isActive, 'appStateChange');
+    });
+    App.addListener('pause', () => fireVisibility(true, 'pause'));
+    App.addListener('resume', () => fireVisibility(false, 'resume'));
+  } else {
+    console.warn('[ios-lifecycle] @capacitor/app not available; using pagehide/pageshow fallback');
+  }
+
+  // Always wire pagehide/pageshow — these fire on iOS WKWebView and are
+  // a useful belt-and-suspenders alongside the App plugin events.
+  window.addEventListener('pagehide', () => fireVisibility(true, 'pagehide'));
+  window.addEventListener('pageshow', () => fireVisibility(false, 'pageshow'));
+})();
 // Menu open animation origin tracker.
 // On any pointer/click/touch, capture the screen coordinates and write them
 // as CSS custom properties (--menu-ox, --menu-oy) on :root. The shared
@@ -372,6 +433,7 @@ window._THRUSTER_COLOR_PALETTE = {
     { id: 'thruster-overlay', close: 'closeThrusterPanel' },
     { id: 'missions-overlay', close: 'closeMissions'      },
     { id: 'settings-overlay', close: 'closeSettings'      },
+    { id: 'radio-overlay',    close: 'closeRadio'         },
   ];
 
   const COMMIT_PX   = 100;
@@ -384,7 +446,10 @@ window._THRUSTER_COLOR_PALETTE = {
     // gesture, which translateY's the whole overlay and looks like the menu
     // is closing on its own.
     '.shop-handling-bar, .fm-head, .fm-menu, .fm-row, .fm-row *, ' +
-    '.shop-card, .shop-detail, .shop-detail-tier, .shop-upgrade-btn, .btn-upgrade';
+    '.shop-card, .shop-detail, .shop-detail-tier, .shop-upgrade-btn, .btn-upgrade, ' +
+    // Radio progress bar: tap/drag to seek must not be hijacked by the
+    // swipe-to-dismiss gesture on the radio overlay.
+    '.rp-progress-track, .rp-progress, .rp-progress *, .pp-progress-track, .pp-progress, .pp-progress *';
 
   let active = false;
   let startX = 0, startY = 0, lastY = 0;
@@ -6125,23 +6190,40 @@ function _initTrackGains() {
     catch (_) { return; }
     const gain = audioCtx.createGain();
     gain.gain.value = el.volume; // inherit current volume (e.g. title already playing)
-    src.connect(gain).connect(audioCtx.destination);
+    src.connect(gain);
+    // Tap an AnalyserNode off the radio gain so the player UI can show a live
+    // FFT visualizer. Analyser is a passthrough — gain still goes to dest.
+    if (k === 'radio') {
+      try {
+        const an = audioCtx.createAnalyser();
+        an.fftSize = 64;
+        an.smoothingTimeConstant = 0.78;
+        gain.connect(an); // analyser sees post-gain signal
+        window._radioAnalyser = an;
+      } catch(_) {}
+    }
+    gain.connect(audioCtx.destination);
     trackGains[k] = gain;
     el.volume = 1;  // max HTML volume — gain node controls actual level
   });
   _gainsReady = true;
 }
 
-// Set a track's gain instantly (no ramp).
+// Set a track's gain instantly (no ramp). Apply music mute/volume here so
+// every call site (including ones that pass raw TRACK_VOL[k]) is gated by
+// the user's music mute toggle without having to remember to multiply.
 function setTrackVol(name, vol) {
+  let m = 1;
+  try { if (typeof musicMult === 'function') m = musicMult(); } catch(_) {}
+  const out = vol * m;
   const g = trackGains[name];
   if (g && audioCtx) {
     g.gain.cancelScheduledValues(audioCtx.currentTime);
-    g.gain.setValueAtTime(vol, audioCtx.currentTime);
+    g.gain.setValueAtTime(out, audioCtx.currentTime);
   } else {
     // Fallback before gains are wired (pre-gesture)
     const el = allTracks()[name];
-    if (el) el.volume = vol;
+    if (el) el.volume = out;
   }
 }
 function getTrackVol(name) {
@@ -6151,11 +6233,14 @@ function getTrackVol(name) {
   return el ? el.volume : 0;
 }
 function rampTrackVol(name, vol, sec) {
+  let m = 1;
+  try { if (typeof musicMult === 'function') m = musicMult(); } catch(_) {}
+  const out = vol * m;
   const g = trackGains[name];
   if (!g || !audioCtx) { setTrackVol(name, vol); return; }
   g.gain.cancelScheduledValues(audioCtx.currentTime);
   g.gain.setValueAtTime(g.gain.value, audioCtx.currentTime);
-  g.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + sec);
+  g.gain.linearRampToValueAtTime(out, audioCtx.currentTime + sec);
 }
 
 // Hard-stop all tracks and immediately start one (no crossfade).
@@ -6192,24 +6277,31 @@ function setActiveMusic(track) {
 function pauseGameTrackInPlace(track) {
   initAudio();
   const all = allTracks();
-  // Fast fade-out (90ms) on every non-title track, then pause once silent.
-  // 90ms is short enough that the player perceives an instant pause but long
-  // enough to drain Safari's MediaElementSource pipeline cleanly.
+  // If the shuffle station is on, radio IS the pause music — keep it
+  // playing, don't fade title music in over it. Otherwise: fade gameplay
+  // tracks out and bring title music up as the pause underscore.
+  const radioActive = (typeof isRadioOn === 'function') && isRadioOn() && radioMusic && !radioMusic.paused;
   Object.entries(all).forEach(([k, el]) => {
     if (!el || k === 'title' || el.paused) return;
+    if (radioActive && k === 'radio') return; // keep radio playing under pause
     rampTrackVol(k, 0, 0.09);
     setTimeout(() => { try { if (!el.paused) el.pause(); } catch (_) {} }, 110);
   });
   if (titleMusic) {
-    titleMusic.currentTime = 0;
-    if (!state.muted) {
-      // Fade title in over 180ms (start at 0, ramp up) so it doesn't slam in
-      // while the gameplay tail is still draining.
+    if (radioActive) {
+      // Radio is the pause music — don't intro title.
       setTrackVol('title', 0);
-      titleMusic.play().catch(() => {});
-      rampTrackVol('title', TRACK_VOL.title, 0.20);
     } else {
-      setTrackVol('title', 0);
+      titleMusic.currentTime = 0;
+      if (!state.muted) {
+        // Fade title in over 180ms (start at 0, ramp up) so it doesn't slam in
+        // while the gameplay tail is still draining.
+        setTrackVol('title', 0);
+        titleMusic.play().catch(() => {});
+        rampTrackVol('title', TRACK_VOL.title, 0.20);
+      } else {
+        setTrackVol('title', 0);
+      }
     }
   }
 }
@@ -12163,8 +12255,6 @@ function _initSFXBuffers() {
   // Title-screen UI exits (garage close, settings close, daily streak close,
   // any back/exit on title) — VR mecha interlock.
   _loadSFXBuffer('title-exit',      './assets/audio/title-exit.mp3');
-  // Tap-to-play on title screen — low whoosh.
-  _loadSFXBuffer('tap-to-play',     './assets/audio/tap-to-play.mp3');
   // Garage open/close audio removed — no sample needed.
 }
 
@@ -12241,12 +12331,99 @@ function _playArgonOnce(targetVol, fadeInSec) {
   return src;
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx', 'reject': 'reject-sfx' };
-// Play a pre-decoded buffer with gain + optional pan + playbackRate
-function _playBuffer(name, volume, rate, panVal) {
+// 'title-exit' is the cue used by playTitleTap — needed as a fallback for the
+// ACCESS GRANTED first tap, where the AudioContext is initialized in the
+// SAME gesture and the decoded buffer isn't ready yet.
+const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx', 'reject': 'reject-sfx', 'title-exit': 'title-exit-sfx' };
+
+// ── Gameplay SFX kill-switch infrastructure ─────────────────────────────
+// _playBuffer fires-and-forgets AudioBufferSourceNodes. With no tracking
+// there's no way to stop an already-started source on death, so klaxons,
+// thunder, etc. ring through the gameover screen. We track every active
+// source + gain here and provide stopAllGameplaySFX() to kill them all.
+//
+// Tracking is gated by a per-call category. UI sounds (menus, title taps,
+// shop) pass { ui:true } via _playBufferUI so they survive the death
+// kill-switch — only gameplay SFX get tracked into _activeSFXSources.
+const _activeSFXSources   = new Set();   // { src, gain } for Web Audio sources
+const _activeSFXClones    = new Set();   // <audio> cloneNode fallbacks
+const _activeSFXTimeouts  = new Set();   // setTimeout IDs for scheduled SFX
+// IDs for every gameplay <audio> element we want killed on death/exit. Keep
+// in sync with index.html. UI sounds (menu-cycle, title-exit, pause-exit,
+// shop-purchase, reject, start-interference, start-sound) are intentionally
+// excluded because they fire on transition screens.
+const _GAMEPLAY_SFX_ELEMENT_IDS = [
+  'engine-start', 'engine-roar', 'engine-roar-layer',
+  'argon-ambient-sfx', 'invincible-loop-sfx', 'speed-dip-sfx',
+  'laser-beam-sfx', 'unibeam-sfx',
+  'shield-activate-sfx', 'shield-hit-sfx', 'shield-expire-sfx',
+  'nearmiss-sfx', 'whoosh1', 'whoosh-release',
+  'thruster-impact-sfx', 'powerup-burst-sfx', 'droplet-sfx',
+  'crash-sound', 'crash-layer-sound',
+  'retry-tech-sfx', 'retry-warp-sfx',
+];
+
+// Schedule an SFX-related setTimeout that gets cancelled on death. Use this
+// instead of plain setTimeout for any audio scheduling that must not fire
+// after the player dies (klaxon countdown, beep chains, layered SFX delays).
+function _sfxTimeout(fn, delayMs) {
+  const id = setTimeout(() => {
+    _activeSFXTimeouts.delete(id);
+    try { fn(); } catch(_) {}
+  }, delayMs);
+  _activeSFXTimeouts.add(id);
+  return id;
+}
+window._sfxTimeout = _sfxTimeout;
+
+// Kill every tracked gameplay SFX. Called from death + returnToTitle.
+function stopAllGameplaySFX() {
+  // 1. Cancel scheduled SFX timeouts (klaxon chains, etc.)
+  _activeSFXTimeouts.forEach(id => { try { clearTimeout(id); } catch(_) {} });
+  _activeSFXTimeouts.clear();
+  // 2. Stop every active Web Audio buffer source. Ramp gain to 0 first so we
+  // don't get a click. Stop after a short tail so the ramp can complete.
+  _activeSFXSources.forEach(entry => {
+    try {
+      const now = audioCtx ? audioCtx.currentTime : 0;
+      if (entry.gain && entry.gain.gain) {
+        entry.gain.gain.cancelScheduledValues(now);
+        entry.gain.gain.setValueAtTime(entry.gain.gain.value || 0, now);
+        entry.gain.gain.linearRampToValueAtTime(0, now + 0.03);
+      }
+      if (entry.src) {
+        // stop() throws if the source has already ended — swallow.
+        try { entry.src.stop(now + 0.04); } catch(_) {}
+      }
+    } catch(_) {}
+  });
+  _activeSFXSources.clear();
+  // 3. Stop element-clone fallbacks.
+  _activeSFXClones.forEach(clone => {
+    try { clone.pause(); clone.currentTime = 0; } catch(_) {}
+    try { clone.remove(); } catch(_) {}
+  });
+  _activeSFXClones.clear();
+  // 4. Pause every gameplay <audio> SFX element (engine, looping SFX, etc.)
+  for (const id of _GAMEPLAY_SFX_ELEMENT_IDS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    try {
+      if (!el.paused) el.pause();
+      el.currentTime = 0;
+      el.loop = false;
+    } catch(_) {}
+  }
+}
+window.stopAllGameplaySFX = stopAllGameplaySFX;
+
+// Play a pre-decoded buffer with gain + optional pan + playbackRate.
+// opts.ui = true marks this as a UI sound (not tracked, survives death kill).
+function _playBuffer(name, volume, rate, panVal, opts) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (!audioCtx || state.muted || volume <= 0) return;
   _ensureCtxRunning();
+  const isUI = !!(opts && opts.ui);
   // Preferred: AudioBufferSourceNode (zero-latency, no DOM)
   if (_sfxBuffers[name]) {
     const src = audioCtx.createBufferSource();
@@ -12263,6 +12440,12 @@ function _playBuffer(name, volume, rate, panVal) {
       gain.connect(audioCtx.destination);
     }
     src.start();
+    if (!isUI) {
+      const entry = { src: src, gain: gain };
+      _activeSFXSources.add(entry);
+      // Auto-untrack when the source finishes naturally.
+      src.onended = () => { _activeSFXSources.delete(entry); };
+    }
     return;
   }
   // Fallback: cloneNode from <audio> element (slower but works if buffer not ready)
@@ -12273,8 +12456,17 @@ function _playBuffer(name, volume, rate, panVal) {
   clone.playbackRate = rate || 1;
   clone.volume = Math.min(1, volume);
   clone.play().catch(() => {});
-  clone.addEventListener('ended', () => clone.remove());
+  if (!isUI) _activeSFXClones.add(clone);
+  clone.addEventListener('ended', () => {
+    _activeSFXClones.delete(clone);
+    try { clone.remove(); } catch(_) {}
+  });
 }
+// Convenience: UI sounds that should survive the death kill-switch.
+function _playBufferUI(name, volume, rate, panVal) {
+  return _playBuffer(name, volume, rate, panVal, { ui: true });
+}
+window._playBufferUI = _playBufferUI;
 
 function playNearMissSFX() {
   if (state.muted) return;
@@ -12290,6 +12482,13 @@ function initWhoosh() {
   whooshReady = true;
 }
 let lastWhooshTime = 0;
+// When the radio is on, the lateral whoosh layer fights the music. Duck it
+// so the track stays foreground. 0.55 chosen to keep the whoosh audible as a
+// tactile cue without stomping on the radio mix.
+const _RADIO_LATERAL_DUCK = 0.55;
+function _lateralDuck() {
+  try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _RADIO_LATERAL_DUCK : 1; } catch(_) { return 1; }
+}
 function playWhoosh(direction, intensity) {
   if (!whooshReady || state.muted) return;
   const now = performance.now();
@@ -12299,7 +12498,7 @@ function playWhoosh(direction, intensity) {
   const rate = 0.88 + Math.random() * 0.24 + speedNorm * 0.08;
   // Bumped 2026-05-02: argon ambient gone, whoosh now carries the strafe layer alone.
   // Was 0.06 + 0.14*intensity (0.06–0.20). Now 0.14 + 0.30*intensity (0.14–0.44).
-  const vol = 0.14 + intensity * 0.30;
+  const vol = (0.14 + intensity * 0.30) * _lateralDuck();
   const pan = direction * (0.3 + intensity * 0.4);
   _playBuffer('whoosh', vol, rate, pan);
 }
@@ -12310,7 +12509,7 @@ function playWhooshRelease(direction, holdTime) {
   const rate = 0.90 + Math.random() * 0.15 + intensity * 0.1;
   // Bumped 2026-05-02: matched scale-up with playWhoosh.
   // Was 0.08 + 0.18*intensity (0.08–0.26). Now 0.18 + 0.38*intensity (0.18–0.56).
-  const vol = 0.18 + intensity * 0.38;
+  const vol = (0.18 + intensity * 0.38) * _lateralDuck();
   const pan = direction * (0.2 + intensity * 0.3);
   _playBuffer('whoosh-release', vol, rate, pan);
 }
@@ -12323,14 +12522,14 @@ function playLevelUp() {
 }
 
 function playShopPurchase() {
-  _playBuffer('shop-purchase', 0.6, 1.0, null);
+  _playBufferUI('shop-purchase', 0.6, 1.0, null);
 }
 
 // Played when the player taps something they can't interact with: a locked
 // upgrade card, a fully-maxed power-up they can't enter the tier menu of, a
 // locked thruster preset, etc. Short "computer reject" blip.
 function playReject() {
-  _playBuffer('reject', 0.55, 1.0, null);
+  _playBufferUI('reject', 0.55, 1.0, null);
 }
 window.playReject = playReject;
 
@@ -12342,35 +12541,44 @@ window.playGarageOpen  = playGarageOpen;
 window.playGarageClose = playGarageClose;
 
 // Title-screen menu taps, Exit/Resume, garage open/close on title — VR clicker.
-function playMenuCycle() { _playBuffer('menu-cycle', 0.6, 1.0, null); }
+function playMenuCycle() { _playBufferUI('menu-cycle', 0.6, 1.0, null); }
 window.playMenuCycle = playMenuCycle;
 
 // Garage card cycling (Showroom internal nav) — pinball pip.
-function playGarageCycle() { _playBuffer('garage-cycle', 0.5, 1.0, null); }
+function playGarageCycle() { _playBufferUI('garage-cycle', 0.5, 1.0, null); }
 window.playGarageCycle = playGarageCycle;
 
 // Garage SELECT confirm — VR transform contacts. Plays when player picks an
 // unlocked ship/thruster/mod/handling-preset, or opens tier-list/upgrade view.
-function playGarageSelect() { _playBuffer('garage-select', 0.55, 1.0, null); }
+function playGarageSelect() { _playBufferUI('garage-select', 0.55, 1.0, null); }
 window.playGarageSelect = playGarageSelect;
 
 // Title-screen "start death run" press.
-function playStartInterference() { _playBuffer('start-interference', 0.7, 1.0, null); }
+function playStartInterference() { _playBufferUI('start-interference', 0.7, 1.0, null); }
 window.playStartInterference = playStartInterference;
 
 // Pause-menu EXIT during gameplay — VR compute interference.
-function playPauseExit() { _playBuffer('pause-exit', 0.7, 1.0, null); }
+function playPauseExit() { _playBufferUI('pause-exit', 0.7, 1.0, null); }
 window.playPauseExit = playPauseExit;
 
 // Title-screen UI exits (garage/settings/etc back) — VR mecha interlock.
-function playTitleExit() { _playBuffer('title-exit', 0.7, 1.0, null); }
+function playTitleExit() { _playBufferUI('title-exit', 0.7, 1.0, null); }
 window.playTitleExit = playTitleExit;
 
-// Tap-to-play on title screen — low whoosh.
-function playTapToPlay() { _playBuffer('tap-to-play', 0.7, 1.0, null); }
+// Tap-to-play on title screen — uses the same title-tap cue as other UI taps.
+// (Was a 25.7s whoosh — way too long for a tap cue, sounded like a stuck loop.)
+function playTapToPlay() { _playBufferUI('title-exit', 0.7, 1.0, null); }
 window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
+  if (state.muted) return;
+  _ensureCtxRunning();
+  const sfx = document.getElementById('crash-sound');
+  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.25; sfx.play().catch(() => {}); }
+  // Layered crash-impact sample — same gate as base crash, matched volume.
+  const _cl = document.getElementById('crash-layer-sound');
+  if (_cl) { try { _cl.currentTime = 0; _cl.volume = 0.25; _cl.play().catch(() => {}); } catch (_) {} }
+}
 // ═══════════════════════════════════════════════════
 //  RADIO — unlockable shuffle station that replaces zone music in gameplay.
 //
@@ -12384,12 +12592,16 @@ function playCrash() {
 const RADIO_TRACKS = [
   { id: 'neon-underworld',   name: 'NEON UNDERWORLD',       src: './assets/audio/l4music.mp3' },
   { id: 'brazilian-street',  name: 'BRAZILIAN STREET FIGHT',src: './assets/audio/l3music.mp3' },
-  { id: 'keep-going',        name: 'KEEP GOING',            src: './assets/audio/keep-going.mp3' },
   { id: 'synesthetic-gears', name: 'SYNESTHETIC GEARS',     src: './assets/audio/radio-gears-1.mp3' },
   { id: 'synthetic-gears-2', name: 'SYNTHETIC GEARS II',    src: './assets/audio/radio-gears-2.mp3' },
   { id: 'funk-of-the-night', name: 'FUNK OF THE NIGHT',     src: './assets/audio/radio-funk.mp3' },
   { id: 'orbital-ordinance', name: 'ORBITAL ORDINANCE',     src: './assets/audio/radio-orbital.mp3' },
   { id: 'neon-mountain',     name: 'NEON MOUNTAIN',         src: './assets/audio/radio-neon-mtn.mp3' },
+  { id: 'house-of-fuel',     name: 'HOUSE OF FUEL',         src: './assets/audio/radio-house-of-fuel.mp3' },
+  { id: 'grannies-synth',    name: 'GRANNIES SYNTH',        src: './assets/audio/radio-grannies-synth.mp3' },
+  { id: 'andracid',          name: 'ANDRACID',              src: './assets/audio/radio-andracid.mp3' },
+  { id: 'cosmic-relay',      name: 'COSMIC RELAY',          src: './assets/audio/radio-cosmic-relay.mp3' },
+  { id: 'cosmic-relay-2',    name: 'COSMIC RELAY II',       src: './assets/audio/radio-cosmic-relay-2.mp3' },
 ];
 window.RADIO_TRACKS = RADIO_TRACKS;
 
@@ -12397,6 +12609,7 @@ const RADIO_LS = {
   unlocked:  'jh_radio_unlocked',
   on:        'jh_radio_on',
   runCount:  'jh_radio_run_count',
+  seen:      'jh_radio_seen',     // cleared on first unlock; set when overlay opened
 };
 const RADIO_UNLOCK_AT = 3;  // unlock on/after death of run #3
 
@@ -12435,12 +12648,13 @@ window.incrementRadioRunCount = incrementRadioRunCount;
 
 // Called from death handler. If unlock threshold met and not yet unlocked,
 // flip the flag and queue the toast for after the death screen settles.
+// Radio stays OFF on unlock — player turns it on themselves from the overlay.
 function tryUnlockRadioOnDeath() {
   if (isRadioUnlocked()) return false;
   if (getRadioRunCount() < RADIO_UNLOCK_AT) return false;
   setRadioUnlocked(true);
-  // Default to ON the first time it unlocks so the player notices it next run.
-  try { localStorage.setItem(RADIO_LS.on, '1'); } catch(_) {}
+  // Mark unseen so the title button shows a NEW dot until the player opens it.
+  try { localStorage.removeItem(RADIO_LS.seen); } catch(_) {}
   showRadioUnlockToast();
   // Refresh title-screen UI so the RADIO button appears next time we hit title.
   try { if (typeof refreshRadioButton === 'function') refreshRadioButton(); } catch(_) {}
@@ -12523,8 +12737,22 @@ function startRadio() {
     try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
     return;
   }
-  const idx = (_radioCurrentIdx >= 0) ? _radioCurrentIdx : _nextRadioIdx();
-  _playRadioIdx(idx);
+  // If the same track is already loaded (just paused — e.g. death→retry,
+  // gameplay→pause→continue), resume from currentTime instead of restarting.
+  // _playRadioIdx always slams currentTime=0, so calling it here would lose
+  // the listener's spot in the song.
+  const idx = (_radioCurrentIdx >= 0) ? _radioCurrentIdx : -1;
+  const tr = (idx >= 0) ? RADIO_TRACKS[idx] : null;
+  const sameTrackLoaded = !!(tr && radioMusic.src && radioMusic.src.indexOf(tr.src) !== -1);
+  if (sameTrackLoaded) {
+    try { radioMusic.play().catch(() => {}); } catch(_) {}
+    try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+    try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_) {}
+    return;
+  }
+  // First-time start (or src cleared): pick a track and play from 0.
+  const playIdx = (idx >= 0) ? idx : _nextRadioIdx();
+  _playRadioIdx(playIdx);
   try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
 }
 window.startRadio = startRadio;
@@ -12552,6 +12780,8 @@ window.currentRadioTrackName = currentRadioTrackName;
 // ── musicFadeTo divert helper ────────────────────────────────────────────
 // Called from musicFadeTo() (in 20-main-early.js) when radio is ON and the
 // requested track is a gameplay zone. Returns true if it took over the fade.
+// Fades EVERYTHING but radio down — including title — so hitting play from
+// the title screen actually silences title music as radio takes over.
 const _RADIO_GAMEPLAY_TRACKS = { bg: 1, l3: 1, l4: 1, lake: 1, keepgoing: 1 };
 function radioInterceptMusicFade(toTrack, durationMs) {
   if (!isRadioOn()) return false;
@@ -12561,7 +12791,7 @@ function radioInterceptMusicFade(toTrack, durationMs) {
     const durSec = (durationMs || 1500) / 1000;
     Object.entries(all).forEach(([k, el]) => {
       if (!el) return;
-      if (k === 'title' || k === 'radio') return;
+      if (k === 'radio') return;
       if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, durSec);
       setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, (durationMs || 1500) + 50);
     });
@@ -12575,12 +12805,20 @@ function radioInterceptMusicFade(toTrack, durationMs) {
 }
 window.radioInterceptMusicFade = radioInterceptMusicFade;
 
-// ── UI: title-screen RADIO button visibility ────────────────────────────
+// ── UI: title-screen RADIO button visibility + NEW dot ──────────────────
+function _isRadioSeen() {
+  try { return localStorage.getItem(RADIO_LS.seen) === '1'; } catch(_) { return false; }
+}
+function _markRadioSeen() {
+  try { localStorage.setItem(RADIO_LS.seen, '1'); } catch(_) {}
+}
 function refreshRadioButton() {
   const btn = document.getElementById('radio-btn');
   if (!btn) return;
   if (isRadioUnlocked()) btn.classList.remove('hidden');
   else                   btn.classList.add('hidden');
+  // Pulse a NEW dot until the player opens the overlay for the first time.
+  btn.classList.toggle('has-new', isRadioUnlocked() && !_isRadioSeen());
 }
 window.refreshRadioButton = refreshRadioButton;
 
@@ -12593,6 +12831,9 @@ function openRadio() {
   const ov = document.getElementById('radio-overlay');
   if (!ov) return;
   ov.classList.remove('hidden');
+  // Acknowledge the NEW dot the moment the overlay opens.
+  _markRadioSeen();
+  try { refreshRadioButton(); } catch(_) {}
   _renderRadioOverlay();
 }
 window.openRadio = openRadio;
@@ -12601,9 +12842,27 @@ function closeRadio() {
   try { if (typeof playTitleClose === 'function') playTitleClose(); } catch(_) {}
   const ov = document.getElementById('radio-overlay');
   if (ov) ov.classList.add('hidden');
-  _stopRadioPreview();
+  try { _stopRadioPlayerLoop(); } catch(_) {}
+  // Intentionally DO NOT stop the preview here. If the player started a track
+  // they want it to keep playing on the title screen after they close the
+  // overlay. _stopRadioPreview is called from startGame and on death so the
+  // preview never bleeds into gameplay or game-over.
 }
 window.closeRadio = closeRadio;
+window._stopRadioPreview = _stopRadioPreview;
+
+// Called from startGame() when radio is OFF — forces any title-screen
+// preview to stop so it doesn't bleed into gameplay. Bypasses the
+// phase-aware guard inside _stopRadioPreview (which by design refuses to
+// pause radio mid-run).
+function stopRadioPreviewForce() {
+  if (_radioPreviewIdx < 0 && (!radioMusic || radioMusic.paused)) return;
+  try { if (radioMusic && !radioMusic.paused) radioMusic.pause(); } catch(_) {}
+  try { setTrackVol('radio', 0); } catch(_) {}
+  _radioPreviewIdx = -1;
+  try { _updatePlayIcon(); } catch(_) {}
+}
+window.stopRadioPreviewForce = stopRadioPreviewForce;
 
 function _stopRadioPreview() {
   if (_radioPreviewIdx < 0) return;
@@ -12612,120 +12871,494 @@ function _stopRadioPreview() {
     try { setTrackVol('radio', 0); } catch(_) {}
   }
   _radioPreviewIdx = -1;
-  // Refresh play buttons in list.
-  const list = document.getElementById('radio-track-list');
-  if (list) list.querySelectorAll('.radio-row-play').forEach(b => b.textContent = '\u25B6');
+  // Restore title music if we ducked it for the preview (title-screen only).
+  if (state && state.phase === 'title' && titleMusic && !state.muted) {
+    try {
+      if (titleMusic.paused) { titleMusic.play().catch(() => {}); }
+      if (typeof rampTrackVol === 'function') rampTrackVol('title', TRACK_VOL.title, 0.20);
+      else setTrackVol('title', TRACK_VOL.title);
+    } catch(_) {}
+  }
+  try { _updatePlayIcon(); } catch(_) {}
 }
 
 function _previewRadioTrack(idx) {
   if (typeof initAudio === 'function') initAudio();
   if (!radioMusic) radioMusic = document.getElementById('radio-music');
   if (!radioMusic) return;
-  // If tapping the row that's already previewing, stop.
-  if (_radioPreviewIdx === idx) { _stopRadioPreview(); return; }
-  // Stop previous preview.
-  _stopRadioPreview();
   const tr = RADIO_TRACKS[idx];
   if (!tr) return;
   if (radioMusic.src.indexOf(tr.src) === -1) radioMusic.src = tr.src;
   try { radioMusic.currentTime = 0; } catch(_) {}
+  // Duck title music while previewing so they don't overlap on the title screen.
+  if (titleMusic && !titleMusic.paused) {
+    try { if (typeof rampTrackVol === 'function') rampTrackVol('title', 0, 0.18); else setTrackVol('title', 0); } catch(_) {}
+    setTimeout(() => { try { if (titleMusic && !titleMusic.paused) titleMusic.pause(); } catch(_) {} }, 220);
+  }
   try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
   radioMusic.play().catch(() => {});
   _radioPreviewIdx = idx;
-  // Update play button glyph.
-  const list = document.getElementById('radio-track-list');
-  if (list) {
-    list.querySelectorAll('.radio-row-play').forEach(b => b.textContent = '\u25B6');
-    const btn = list.querySelector('.radio-row[data-idx="' + idx + '"] .radio-row-play');
-    if (btn) btn.textContent = '\u25A0';
+  _updatePlayerMeta();
+  _updatePlayIcon();
+}
+
+// ── New premium player UI ─────────────────────────────────────────────
+// Two players share the same audio + analyser:
+//   'rp-' prefix = title-screen radio overlay
+//   'pp-' prefix = in-game pause-menu player
+let _rpRAF = 0;
+const _rpEqCtxs = {};   // keyed by canvas id
+let _rpEqBuf = null;
+const RP_PREFIXES = ['rp', 'pp'];
+
+function _fmtTime(s) {
+  if (!isFinite(s) || s < 0) s = 0;
+  const m = Math.floor(s / 60);
+  const ss = Math.floor(s % 60).toString().padStart(2, '0');
+  return m + ':' + ss;
+}
+function _pad2(n) { return n.toString().padStart(2, '0'); }
+
+function _updatePlayerMeta() {
+  const total = RADIO_TRACKS.length;
+  const i = (_radioPreviewIdx >= 0) ? _radioPreviewIdx
+          : (_radioCurrentIdx >= 0) ? _radioCurrentIdx
+          : 0;
+  const tr = RADIO_TRACKS[i];
+  if (!tr) return;
+  RP_PREFIXES.forEach(p => {
+    const titleEl = document.getElementById(p + '-title');
+    const idxEl   = document.getElementById(p + '-index');
+    if (!titleEl || !idxEl) return;
+    titleEl.textContent = tr.name;
+    idxEl.textContent = _pad2(i + 1) + ' / ' + _pad2(total);
+    requestAnimationFrame(() => {
+      if (titleEl.scrollWidth > titleEl.clientWidth + 4) titleEl.classList.add('scroll');
+      else titleEl.classList.remove('scroll');
+    });
+  });
+}
+
+function _updatePlayIcon() {
+  const playing = !!(radioMusic && !radioMusic.paused);
+  RP_PREFIXES.forEach(p => {
+    const icon = document.getElementById(p + '-play-icon');
+    const btn  = document.getElementById(p + '-play');
+    if (!icon || !btn) return;
+    if (playing) {
+      icon.innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+      btn.setAttribute('aria-label', 'Pause');
+    } else {
+      icon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+      btn.setAttribute('aria-label', 'Play');
+    }
+  });
+}
+
+function _drawRadioEqOnCanvas(cv) {
+  if (!cv || cv.offsetParent === null) return; // skip if hidden
+  let ctx = _rpEqCtxs[cv.id];
+  if (!ctx) { ctx = cv.getContext('2d'); _rpEqCtxs[cv.id] = ctx; }
+  if (!ctx) return;
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  const an = window._radioAnalyser;
+  const bars = 8;
+  const gap = 2;
+  const bw = (W - gap * (bars - 1)) / bars;
+  let levels = new Array(bars).fill(0);
+  const playing = !!(radioMusic && !radioMusic.paused);
+  if (an && playing) {
+    if (!_rpEqBuf || _rpEqBuf.length !== an.frequencyBinCount) {
+      _rpEqBuf = new Uint8Array(an.frequencyBinCount);
+    }
+    an.getByteFrequencyData(_rpEqBuf);
+    // Map 32 bins down to 8 bars (skip top half — usually empty).
+    const usable = Math.floor(_rpEqBuf.length * 0.85);
+    const per = Math.max(1, Math.floor(usable / bars));
+    for (let i = 0; i < bars; i++) {
+      let s = 0;
+      for (let j = 0; j < per; j++) s += _rpEqBuf[i * per + j];
+      levels[i] = (s / per) / 255;
+    }
+  } else if (playing) {
+    // Analyser unavailable — gentle pseudo-random fallback.
+    const t = performance.now() / 240;
+    for (let i = 0; i < bars; i++) {
+      levels[i] = 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(t + i * 0.7));
+    }
+  } else {
+    // Idle — flat baseline.
+    for (let i = 0; i < bars; i++) levels[i] = 0.06;
+  }
+  // Draw bars bottom-up with a cyan gradient.
+  const grad = ctx.createLinearGradient(0, H, 0, 0);
+  grad.addColorStop(0, 'rgba(34, 211, 238, 0.55)');
+  grad.addColorStop(1, '#0ff');
+  ctx.fillStyle = grad;
+  ctx.shadowColor = 'rgba(34, 211, 238, 0.55)';
+  ctx.shadowBlur = 4;
+  for (let i = 0; i < bars; i++) {
+    const h = Math.max(2, levels[i] * (H - 2));
+    const x = i * (bw + gap);
+    const y = H - h;
+    ctx.fillRect(x, y, bw, h);
+  }
+  ctx.shadowBlur = 0;
+}
+function _drawRadioEq() {
+  RP_PREFIXES.forEach(p => _drawRadioEqOnCanvas(document.getElementById(p + '-eq')));
+}
+
+let _rpSeeking = false;  // true while user is dragging the progress track
+function _radioPlayerTick() {
+  let d = 0, t = 0;
+  if (radioMusic) {
+    d = isFinite(radioMusic.duration) ? radioMusic.duration : 0;
+    t = radioMusic.currentTime || 0;
+  }
+  RP_PREFIXES.forEach(p => {
+    const fill = document.getElementById(p + '-progress-fill');
+    const cur  = document.getElementById(p + '-time-cur');
+    const tot  = document.getElementById(p + '-time-tot');
+    if (!fill || !cur || !tot) return;
+    // Don't fight the user's finger while seeking — handler owns fill+time.
+    if (!_rpSeeking) {
+      fill.style.width = (d > 0 ? (t / d * 100) : 0) + '%';
+      cur.textContent = _fmtTime(t);
+    }
+    tot.textContent = _fmtTime(d);
+  });
+  _drawRadioEq();
+  _rpRAF = requestAnimationFrame(_radioPlayerTick);
+}
+
+function _stepRadioTrack(dir) {
+  if (typeof initAudio === 'function') initAudio();
+  let i = (_radioPreviewIdx >= 0) ? _radioPreviewIdx
+        : (_radioCurrentIdx >= 0) ? _radioCurrentIdx
+        : 0;
+  i = (i + dir + RADIO_TRACKS.length) % RADIO_TRACKS.length;
+  _previewRadioTrack(i);
+}
+
+function _togglePlayPause() {
+  if (typeof initAudio === 'function') initAudio();
+  if (!radioMusic) radioMusic = document.getElementById('radio-music');
+  if (!radioMusic) return;
+  // In gameplay (playing or paused), the play/pause button is the radio's
+  // master switch — PLAY enables radio (and starts diverting gameplay zones
+  // to it via the interceptor); PAUSE fully disables radio so the proper
+  // gameplay music resumes on continue. This matches user expectation that
+  // "pausing the radio" means the game music should come back.
+  const inGame = state && (state.phase === 'playing' || state.phase === 'paused');
+  if (radioMusic.paused) {
+    if (inGame && !isRadioOn()) {
+      enableRadioInGame();
+      return;
+    }
+    if (!radioMusic.src) {
+      const i = (_radioPreviewIdx >= 0) ? _radioPreviewIdx : 0;
+      _previewRadioTrack(i);
+      return;
+    }
+    try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+    if (titleMusic && !titleMusic.paused) {
+      try { if (typeof rampTrackVol === 'function') rampTrackVol('title', 0, 0.18); else setTrackVol('title', 0); } catch(_) {}
+      setTimeout(() => { try { if (titleMusic && !titleMusic.paused) titleMusic.pause(); } catch(_) {} }, 220);
+    }
+    radioMusic.play().catch(() => {});
+  } else {
+    // In-game pause = full disable so the zone music comes back. Title-screen
+    // pause is just an audio-element pause (radio stays unlocked, no game
+    // music to swap to).
+    if (inGame && isRadioOn()) {
+      disableRadioInGame();
+    } else {
+      try { radioMusic.pause(); } catch(_) {}
+    }
+  }
+  _updatePlayIcon();
+}
+
+// Mid-run: turn the shuffle station ON, duck/pause every other track
+// (including the title-music pause underscore), fade radio in.
+function enableRadioInGame() {
+  if (typeof initAudio === 'function') initAudio();
+  setRadioOn(true);
+  try {
+    const all = (typeof allTracks === 'function') ? allTracks() : {};
+    Object.entries(all).forEach(([k, el]) => {
+      if (!el || k === 'radio') return;
+      if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, 0.6);
+      setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, 700);
+    });
+  } catch(_) {}
+  startRadio();
+  if (typeof rampTrackVol === 'function' && radioMusic) {
+    try { rampTrackVol('radio', 0, 0); rampTrackVol('radio', TRACK_VOL.radio, 0.6); } catch(_) {}
+  }
+  _updatePlayerMeta();
+  _updatePlayIcon();
+  _refreshShuffleSwitches();
+}
+window.enableRadioInGame = enableRadioInGame;
+
+// Mid-run: turn the shuffle station OFF and bring the current zone's
+// gameplay music back. Works whether we're 'playing' or 'paused'.
+function disableRadioInGame() {
+  setRadioOn(false);
+  // Hard-stop the radio synchronously so it can't bleed through.
+  try { if (typeof setTrackVol === 'function') setTrackVol('radio', 0); } catch(_) {}
+  try { if (radioMusic && !radioMusic.paused) radioMusic.pause(); } catch(_) {}
+  // What track should fill the silence depends on phase:
+  //   - paused : title music is the pause underscore. resumeGameTrackInPlace
+  //              will swap title → zone on CONTINUE.
+  //   - playing: bring the zone gameplay track straight back.
+  // currentGameTrack() is campaign + DR sequence aware.
+  try {
+    if (state && !state.muted) {
+      const k = (state.phase === 'paused' && titleMusic) ? 'title'
+              : ((typeof currentGameTrack === 'function') ? currentGameTrack() : 'bg');
+      const el = (typeof allTracks === 'function') ? allTracks()[k] : null;
+      if (el) {
+        if (k === 'title') { try { el.currentTime = 0; } catch(_) {} }
+        if (el.paused) { try { el.play().catch(() => {}); } catch(_) {} }
+        if (typeof rampTrackVol === 'function') rampTrackVol(k, TRACK_VOL[k], 0.6);
+        else setTrackVol(k, TRACK_VOL[k]);
+      }
+    }
+  } catch(_) {}
+  _updatePlayIcon();
+  _refreshShuffleSwitches();
+}
+window.disableRadioInGame = disableRadioInGame;
+
+function _refreshShuffleSwitches() {
+  const on = isRadioOn();
+  ['radio-master-toggle', 'pp-shuffle-toggle'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+}
+
+// Wire transport buttons for one prefix (idempotent).
+// In gameplay, PREV/NEXT only step when shuffle is ON — they never sneak
+// the radio on. PLAY auto-enables shuffle (it's the user's consent moment).
+function _wirePlayerTransport(prefix) {
+  const prev = document.getElementById(prefix + '-prev');
+  const play = document.getElementById(prefix + '-play');
+  const next = document.getElementById(prefix + '-next');
+  const inGame = () => state && (state.phase === 'playing' || state.phase === 'paused');
+  if (prev && !prev._wired) {
+    prev._wired = true;
+    prev.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (inGame() && !isRadioOn()) return;
+      _stepRadioTrack(-1);
+    });
+  }
+  if (next && !next._wired) {
+    next._wired = true;
+    next.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (inGame() && !isRadioOn()) return;
+      _stepRadioTrack(1);
+    });
+  }
+  if (play && !play._wired) {
+    play._wired = true;
+    play.addEventListener('click', (e) => { e.stopPropagation(); _togglePlayPause(); });
+  }
+
+  // Tap/drag the progress track to seek. iOS Safari + iOS PWA needs explicit
+  // touch handlers — pointer events alone get hijacked by gesture systems
+  // (rubber-band, native scroll), so we wire BOTH paths and gate against
+  // double-fire via a single _rpSeeking flag.
+  const track = document.getElementById(prefix + '-progress-track');
+  if (track && !track._wired) {
+    track._wired = true;
+    let pendingT = 0;
+    const ratioFromXY = (clientX) => {
+      const r = track.getBoundingClientRect();
+      if (r.width <= 0) return 0;
+      return Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    };
+    const updateUI = (ratio, t) => {
+      RP_PREFIXES.forEach(p => {
+        const f = document.getElementById(p + '-progress-fill');
+        const c = document.getElementById(p + '-time-cur');
+        if (f) f.style.width = (ratio * 100) + '%';
+        if (c) c.textContent = _fmtTime(t);
+      });
+    };
+    const begin = (clientX) => {
+      if (!radioMusic || !isFinite(radioMusic.duration) || radioMusic.duration <= 0) return false;
+      _rpSeeking = true;
+      const ratio = ratioFromXY(clientX);
+      pendingT = radioMusic.duration * ratio;
+      updateUI(ratio, pendingT);
+      return true;
+    };
+    const move = (clientX) => {
+      if (!_rpSeeking) return;
+      const d = (radioMusic && isFinite(radioMusic.duration)) ? radioMusic.duration : 0;
+      const ratio = ratioFromXY(clientX);
+      pendingT = d * ratio;
+      updateUI(ratio, pendingT);
+    };
+    const commit = () => {
+      if (!_rpSeeking) return;
+      _rpSeeking = false;
+      try { if (radioMusic && isFinite(pendingT)) radioMusic.currentTime = pendingT; } catch(_){}
+    };
+
+    // ── Pointer Events path (desktop + Android Chrome). On iOS Safari we
+    //    suppress this path because Touch Events fire first and we don't
+    //    want both to begin().
+    track.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') return;  // touch path handles it
+      e.stopPropagation();
+      if (!begin(e.clientX)) return;
+      try { track.setPointerCapture(e.pointerId); } catch(_){}
+    });
+    track.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch') return;
+      if (_rpSeeking) move(e.clientX);
+    });
+    const ptrEnd = (e) => {
+      if (e.pointerType === 'touch') return;
+      commit();
+      try { track.releasePointerCapture(e.pointerId); } catch(_){}
+    };
+    track.addEventListener('pointerup', ptrEnd);
+    track.addEventListener('pointercancel', ptrEnd);
+
+    // ── Touch Events path (iOS Safari, iOS PWA, fallback). Non-passive so
+    //    we can preventDefault to stop scroll/rubber-band stealing the drag.
+    track.addEventListener('touchstart', (e) => {
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      if (!begin(t.clientX)) return;
+      e.stopPropagation();
+      if (e.cancelable) { try { e.preventDefault(); } catch(_){} }
+    }, { passive: false });
+    track.addEventListener('touchmove', (e) => {
+      if (!_rpSeeking) return;
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      move(t.clientX);
+      e.stopPropagation();
+      if (e.cancelable) { try { e.preventDefault(); } catch(_){} }
+    }, { passive: false });
+    const touchEnd = (e) => {
+      if (!_rpSeeking) return;
+      commit();
+      e.stopPropagation();
+    };
+    track.addEventListener('touchend', touchEnd);
+    track.addEventListener('touchcancel', touchEnd);
   }
 }
 
+function _startPlayerLoop() {
+  if (_rpRAF) cancelAnimationFrame(_rpRAF);
+  _rpRAF = requestAnimationFrame(_radioPlayerTick);
+}
+
 function _renderRadioOverlay() {
-  const list = document.getElementById('radio-track-list');
   const toggleBtn = document.getElementById('radio-master-toggle');
-  if (!list || !toggleBtn) return;
-  toggleBtn.textContent = isRadioOn() ? 'ON' : 'OFF';
-  toggleBtn.classList.toggle('on', isRadioOn());
-  list.innerHTML = RADIO_TRACKS.map((t, i) =>
-    '<div class="radio-row" data-idx="' + i + '">' +
-      '<button class="radio-row-play" aria-label="Preview">\u25B6</button>' +
-      '<span class="radio-row-name">' + t.name + '</span>' +
-    '</div>'
-  ).join('');
-  // Wire rows.
-  list.querySelectorAll('.radio-row-play').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const row = btn.closest('.radio-row');
-      const idx = parseInt(row.getAttribute('data-idx'), 10);
-      _previewRadioTrack(idx);
-    });
-  });
-  // Wire master toggle.
-  toggleBtn.onclick = () => {
+  if (!toggleBtn) return;
+
+  // Shuffle pill switch state. On the title screen we just flip the bit —
+  // mid-run the pause-screen pill calls enable/disableRadioInGame instead.
+  toggleBtn.setAttribute('aria-checked', isRadioOn() ? 'true' : 'false');
+  toggleBtn.onclick = (e) => {
+    e.stopPropagation();
     const next = !isRadioOn();
     setRadioOn(next);
-    toggleBtn.textContent = next ? 'ON' : 'OFF';
-    toggleBtn.classList.toggle('on', next);
+    toggleBtn.setAttribute('aria-checked', next ? 'true' : 'false');
     if (!next) _stopRadioPreview();
   };
-  // Wire close button (idempotent).
+
+  _wirePlayerTransport('rp');
+
+  // Refresh icon state on existing <audio> events (once per element).
+  if (radioMusic && !radioMusic._rpHooked) {
+    radioMusic._rpHooked = true;
+    radioMusic.addEventListener('play', _updatePlayIcon);
+    radioMusic.addEventListener('pause', _updatePlayIcon);
+  }
+
+  // Close button (idempotent).
   const closeBtn = document.getElementById('radio-close');
   if (closeBtn && !closeBtn._wired) {
     closeBtn._wired = true;
     closeBtn.addEventListener('click', () => closeRadio());
   }
+
+  _updatePlayerMeta();
+  _updatePlayIcon();
+  _startPlayerLoop();
 }
 
-// ── UI: pause-menu now-playing row ──────────────────────────────────────
+// Stop the rAF loop when overlay closes.
+function _stopRadioPlayerLoop() {
+  if (_rpRAF) { cancelAnimationFrame(_rpRAF); _rpRAF = 0; }
+}
+
+// ── UI: pause-menu music player ─────────────────────────────────────────
+// Show the player whenever radio is unlocked. The pill switch is the
+// gate that decides whether radio actually plays during the run — if
+// it's OFF the rest of the UI is just a preview surface.
 function updatePauseRadioRow() {
-  const row  = document.getElementById('pause-radio-row');
-  const name = document.getElementById('pause-radio-name');
-  if (!row || !name) return;
-  if (isRadioOn() && _radioCurrentIdx >= 0) {
+  const row = document.getElementById('pause-radio-row');
+  if (!row) return;
+  const visible = (typeof isRadioUnlocked === 'function') ? isRadioUnlocked() : false;
+  if (visible) {
     row.classList.remove('hidden');
-    name.textContent = currentRadioTrackName();
+    _wirePlayerTransport('pp');
+    _wirePauseShuffleSwitch();
+    if (radioMusic && !radioMusic._rpHooked) {
+      radioMusic._rpHooked = true;
+      radioMusic.addEventListener('play', _updatePlayIcon);
+      radioMusic.addEventListener('pause', _updatePlayIcon);
+    }
+    _updatePlayerMeta();
+    _updatePlayIcon();
+    _refreshShuffleSwitches();
+    _startPlayerLoop();
   } else {
     row.classList.add('hidden');
+    const ov = document.getElementById('radio-overlay');
+    if (!ov || ov.classList.contains('hidden')) _stopRadioPlayerLoop();
   }
 }
 window.updatePauseRadioRow = updatePauseRadioRow;
 
-// Wire pause skip button once DOM is parsed.
-(function wirePauseRadioSkip() {
-  function _wire() {
-    const skipBtn = document.getElementById('pause-radio-skip');
-    if (!skipBtn || skipBtn._wired) return;
-    skipBtn._wired = true;
-    skipBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (typeof skipRadioTrack === 'function') skipRadioTrack();
-      updatePauseRadioRow();
-    });
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', _wire);
-  } else {
-    _wire();
-  }
-})();
+function _wirePauseShuffleSwitch() {
+  const sw = document.getElementById('pp-shuffle-toggle');
+  if (!sw || sw._wired) return;
+  sw._wired = true;
+  sw.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (isRadioOn()) disableRadioInGame();
+    else             enableRadioInGame();
+  });
+}
 
 // Refresh the title button on load (in case it was already unlocked).
+// Defensive: fire on multiple lifecycle hooks because the single-shot
+// DOMContentLoaded path was racing on iOS — sometimes radio-btn was
+// still hidden until the player ran a round and returned to title.
 (function refreshOnLoad() {
   function _go() { try { refreshRadioButton(); } catch(_) {} }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _go);
   else _go();
+  // Also retry on next rAF (after layout) and on window load (after assets).
+  try { requestAnimationFrame(_go); } catch(_) {}
+  try { window.addEventListener('load', _go, { once: true }); } catch(_) {}
 })();
-  if (state.muted) return;
-  _ensureCtxRunning();
-  const sfx = document.getElementById('crash-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.25; sfx.play().catch(() => {}); }
-  // Layered crash-impact sample — same gate as base crash, matched volume.
-  const _cl = document.getElementById('crash-layer-sound');
-  if (_cl) { try { _cl.currentTime = 0; _cl.volume = 0.25; _cl.play().catch(() => {}); } catch (_) {} }
-}
-
 // Plasma-punch impact layered alongside engine-roar ignition.
 function playThrusterImpact(vol) {
   if (state.muted) return;
@@ -18581,41 +19214,45 @@ function currentGameTrack() {
 function togglePause() {
   if (state.phase === 'playing') {
     state.phase = 'paused';
-    // Kill any in-flight intro text
-    clearIntroTimers();
-    const _introOv = document.getElementById('intro-overlay');
-    if (_introOv) { fadeOutIntroOverlay(_introOv); }
-    state.introActive = false;
+    // If we're mid-prologue, freeze it instead of nuking it. Without this,
+    // pausing during the cinematic killed all timers + faded the overlay,
+    // dumping the player into gameplay as if the prologue had finished.
+    // freezeIntroForPause snapshots remaining time on each pending timer
+    // and resumeIntroAfterPause re-arms them on continue.
+    const _introWasActive = !!state.introActive;
+    if (_introWasActive && typeof freezeIntroForPause === 'function') {
+      freezeIntroForPause();
+      state._introWasFrozen = true;
+      // Leave state.introActive = true so the resumed timers' guards still pass.
+    } else {
+      // Not in prologue — normal teardown.
+      clearIntroTimers();
+      const _introOv = document.getElementById('intro-overlay');
+      if (_introOv) { fadeOutIntroOverlay(_introOv); }
+      state.introActive = false;
+    }
     killThrusterSputter();
-    // Pause engine SFX
-    const _engP = document.getElementById('engine-start');
-    const _roarP = document.getElementById('engine-roar');
-    const _roarLP = document.getElementById('engine-roar-layer');
-    if (_engP && !_engP.paused) _engP.pause();
-    if (_roarP && !_roarP.paused) _roarP.pause();
-    if (_roarLP && !_roarLP.paused) _roarLP.pause();
+    // Central kill-switch: cancels pending _sfxTimeout chains (klaxon countdown,
+    // queued thruster-impact punch), ramps + stops Web Audio buffer sources,
+    // and pauses every tracked gameplay <audio> element. Without this, an SFX
+    // fired one frame before pause keeps ringing into the pause overlay.
+    if (typeof stopAllGameplaySFX === 'function') stopAllGameplaySFX();
     stopEngineBaseline();
+    // Argon BufferSource path — non-element cleanup (the <audio> tag was
+    // already paused by the kill-switch).
     if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
     if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
     if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
     state._argonPath = null;
     state._argonPlayCount = 0;
-    const _argonP = document.getElementById('argon-ambient-sfx');
-    if (_argonP && !_argonP.paused) { try { _argonP.pause(); _argonP.currentTime = 0; _argonP.volume = 0; } catch (_) {} }
     state._argonSteering = false;
     state._argonOpen = 0;
     _stopMagnetWhir();
-    const _invP = document.getElementById('invincible-loop-sfx');
-    if (_invP && !_invP.paused) _invP.pause();
-    // Pause looped weapon SFX so they don't bleed through pause.
-    // currentTime preserved so they pick up where they left off on resume.
-    const _laserP = document.getElementById('laser-beam-sfx');
-    if (_laserP && !_laserP.paused) _laserP.pause();
+    // Laser intervals/timeouts (module-local handles) so the loop can't re-
+    // trigger the laser SFX during pause.
     if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
     if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
-    const _ubeamP = document.getElementById('unibeam-sfx');
-    if (_ubeamP && !_ubeamP.paused) _ubeamP.pause();
-    // Kill in-flight thunder rumble so it doesn't ring through pause.
+    // Thunder one-shot BufferSource.
     if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
       try { _thunderActiveSrc.stop(); } catch (_) {}
       _thunderActiveSrc = null;
@@ -18628,6 +19265,11 @@ function togglePause() {
   } else if (state.phase === 'paused') {
     state.phase = 'playing';
     setPauseOverlay(false);
+    // Resume the cinematic if we paused during the prologue.
+    if (state._introWasFrozen && typeof resumeIntroAfterPause === 'function') {
+      state._introWasFrozen = false;
+      resumeIntroAfterPause();
+    }
     // iOS interruption recovery: this branch runs from a user gesture (tap/key)
     // so it's the right moment to resume the AudioContext and rewire the music
     // MediaElementSource graph if a backgrounding event severed it.
@@ -18640,18 +19282,21 @@ function togglePause() {
     // Resume baseline whir on unpause (smooth fade-in)
     startEngineBaseline(0.5);
     // Argon is edge-triggered — will fire on next steer input, nothing to resume
-    // Resume invincible loop if active
+    // Resume invincible loop if active. The kill-switch on pause cleared the
+    // loop flag, so re-set it before play().
     const _invU = document.getElementById('invincible-loop-sfx');
-    if (_invU && state.invincibleTimer > 0 && !state.muted) { _invU.play().catch(()=>{}); }
+    if (_invU && state.invincibleTimer > 0 && !state.muted) {
+      _invU.loop = true; _invU.play().catch(()=>{});
+    }
     // Resume looped weapon SFX if their power-up timer is still running.
     if (state.laserActive && !state.muted) {
       const _tier = state.laserTier || 1;
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
-        if (_laserU) _laserU.play().catch(()=>{});
+        if (_laserU) { _laserU.loop = true; _laserU.play().catch(()=>{}); }
       } else {
         const _ubeamU = document.getElementById('unibeam-sfx');
-        if (_ubeamU) _ubeamU.play().catch(()=>{});
+        if (_ubeamU) { _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
       }
     }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
@@ -18662,6 +19307,9 @@ function returnToTitle() {
   state.phase = 'title';
   // Radio: ensure shuffle station is fully stopped before title music kicks in.
   try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  // Defensive: refresh radio button visibility on every title return so an
+  // earlier load-time race that left it hidden self-heals.
+  try { if (typeof refreshRadioButton === 'function') refreshRadioButton(); } catch(_) {}
   // Release the screen wake lock — not needed on title/garage.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Release the thruster color lock so the title vibe (and the title
@@ -18797,34 +19445,26 @@ function returnToTitle() {
   });
   // Stop lake ambience on return to title
   if (lakeMusic) { lakeMusic.pause(); lakeMusic.currentTime = 0; setTrackVol('lake', 0); }
-  // Stop engine SFX
-  const _engR = document.getElementById('engine-start');
-  const _roarR = document.getElementById('engine-roar');
-  const _roarLR = document.getElementById('engine-roar-layer');
-  if (_engR) { _engR.pause(); _engR.currentTime = 0; }
-  if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
-  if (_roarLR) { _roarLR.pause(); _roarLR.currentTime = 0; }
+  // Central kill-switch: cancels pending SFX timeouts, ramps + stops Web Audio
+  // sources, pauses every tracked gameplay <audio> element. UI sounds (shop,
+  // menu, etc.) routed through _playBufferUI are NOT tracked and survive.
+  if (typeof stopAllGameplaySFX === 'function') stopAllGameplaySFX();
   stopEngineBaseline({ reset: true });
+  // Argon ambient uses a dedicated BufferSource path — clean its non-element
+  // state separately (the <audio> tag was already paused by the kill-switch).
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
   state._argonPath = null;
   state._argonPlayCount = 0;
-  const _argonR = document.getElementById('argon-ambient-sfx');
-  if (_argonR) { try { _argonR.pause(); _argonR.currentTime = 0; _argonR.volume = 0; } catch (_) {} }
   state._argonSteering = false;
   state._argonOpen = 0;
   _stopMagnetWhir();
-  const _invR = document.getElementById('invincible-loop-sfx');
-  if (_invR) { _invR.pause(); _invR.currentTime = 0; _invR.loop = false; }
-  // Stop looped weapon SFX on return to title.
-  const _laserR = document.getElementById('laser-beam-sfx');
-  if (_laserR) { _laserR.loop = false; _laserR.pause(); _laserR.currentTime = 0; }
+  // Laser intervals/timeouts use module-local handles — clear them here so
+  // the loop can't re-trigger after the kill-switch ran.
   if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
   if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
-  const _ubeamR = document.getElementById('unibeam-sfx');
-  if (_ubeamR) { _ubeamR.loop = false; _ubeamR.pause(); _ubeamR.currentTime = 0; }
-  // Kill in-flight thunder rumble on title.
+  // Thunder uses a one-shot BufferSource held in _thunderActiveSrc.
   if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
     try { _thunderActiveSrc.stop(); } catch (_) {}
     _thunderActiveSrc = null;
@@ -19546,12 +20186,14 @@ fetchLeaderboard();
 // kept as no-ops so any stray callers don't throw — and so the inline
 // onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
 function playStartSound() {
-  // TAP TO PLAY on title — low whoosh.
+  // TAP TO PLAY on title — unified with ACCESS GRANTED so the gate-tap and
+  // the start-game tap feel identical (both go through playTitleTap →
+  // playTitleExit → title-exit buffer / fallback element).
   if (state.muted) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
-  try { if (typeof window.playTapToPlay === 'function') window.playTapToPlay(); } catch(_){}
+  try { if (typeof window.playTitleTap === 'function') window.playTitleTap(); } catch(_){}
 }
 function playResumeSound() {
   // CONTINUE from pause — keep the existing menu-cycle click.
@@ -19566,6 +20208,10 @@ function playTitleTap()    {
   // — VR mecha interlock.
   try { if (typeof window.playTitleExit === 'function') window.playTitleExit(); } catch(_){}
 }
+// Expose on window so callers in other modules + the access-grant tap handler
+// (82-main-late-tail.js) can fire the sound — module scope alone made this a
+// silent no-op for the first-tap gate.
+window.playTitleTap = playTitleTap;
 function playTitleClose() {
   // Title-screen UI CLOSE — the legacy tap-to-play cue (start.mp3) so open
   // and close don't share the same sound.
@@ -19951,13 +20597,27 @@ loadSettings();
 function musicMult() { return _settings.musicMuted ? 0 : _settings.musicVol / 100; }
 function sfxMult()   { return _settings.sfxMuted   ? 0 : _settings.sfxVol   / 100; }
 
-// Apply music volume to all active tracks
+// Apply music volume to all active tracks. setTrackVol applies musicMult()
+// itself, so pass the raw TRACK_VOL base — don't double-multiply.
 function applyMusicVolume() {
-  const m = musicMult();
-  state.muted = m === 0 && sfxMult() === 0;
+  state.muted = musicMult() === 0 && sfxMult() === 0;
   Object.entries(TRACK_VOL).forEach(([k, base]) => {
-    setTrackVol(k, base * m);
+    setTrackVol(k, base);
   });
+}
+
+// Apply SFX mute live: pause every tracked gameplay <audio> SFX element so
+// looped SFX (engine, laser, unibeam, invincible, etc.) stop immediately
+// when the user mutes mid-run. Buffer-played SFX already gate on sfxMult()
+// inside _playBuffer, so they need no per-element handling.
+function applySfxMute() {
+  state.muted = musicMult() === 0 && sfxMult() === 0;
+  if (!_settings.sfxMuted) return;
+  if (typeof window.stopAllGameplaySFX === 'function') {
+    // Re-use the death kill-switch — same behavior: cancel scheduled SFX,
+    // ramp+stop Web Audio sources, pause every tracked gameplay <audio>.
+    window.stopAllGameplaySFX();
+  }
 }
 
 // Open / close settings
@@ -19988,8 +20648,22 @@ function closeSettings() {
   document.getElementById('settings-overlay').classList.add('hidden');
 }
 
+// Single-open accordion: when one <details> opens, close the others.
+// Wired here once at module init; <details> elements fire 'toggle' on change.
+function _initSettingsAccordion() {
+  const sections = document.querySelectorAll('#settings-overlay .settings-section');
+  sections.forEach(s => {
+    s.addEventListener('toggle', () => {
+      if (s.open) {
+        sections.forEach(other => { if (other !== s) other.open = false; });
+      }
+    });
+  });
+}
+
 // Wire up settings UI
 (function initSettings() {
+  _initSettingsAccordion();
   const gearBtn = document.getElementById('settings-btn');
   if (gearBtn) _tapBind(gearBtn, () => { initAudio(); openSettings(); });
 
@@ -20030,6 +20704,182 @@ function closeSettings() {
     if (e.target.id === 'settings-overlay') closeSettings();
   });
 
+  // ── SYNC PROGRESS (cross-device save codes) ─────────────────────────
+  // Backend: /api/save (POST → upload, returns {code}; GET ?code=... → keys).
+  // On Capacitor (iOS native, file://) relative /api/... won't resolve, so we
+  // fall back to the production Vercel URL. Web build uses the same origin.
+  const SYNC_API_BASE = (function() {
+    try {
+      const proto = window.location && window.location.protocol;
+      if (proto === 'http:' || proto === 'https:') return '/api/save';
+    } catch (_) {}
+    return 'https://tunnel-proto.vercel.app/api/save';
+  })();
+  // Keys that count as "player progress" — backed up on GET CODE.
+  function _collectSyncKeys() {
+    const out = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k.startsWith('jh_') || k.startsWith('jet-horizon') || k.startsWith('jetslide')) {
+          out[k] = localStorage.getItem(k);
+        }
+      }
+    } catch(_) {}
+    return out;
+  }
+  function _setSyncStatus(msg, kind) {
+    const el = document.getElementById('sync-status');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.classList.remove('ok', 'err', 'busy');
+    if (kind) el.classList.add(kind);
+  }
+  const getCodeBtn = document.getElementById('sync-get-code-btn');
+  if (getCodeBtn) {
+    _tapBind(getCodeBtn, async () => {
+      _setSyncStatus('Uploading save…', 'busy');
+      getCodeBtn.disabled = true;
+      try {
+        const keys = _collectSyncKeys();
+        if (Object.keys(keys).length === 0) {
+          _setSyncStatus('Nothing to back up yet.', 'err');
+          return;
+        }
+        const r = await fetch(SYNC_API_BASE, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keys }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.code) {
+          _setSyncStatus(data.error || 'Upload failed.', 'err');
+          return;
+        }
+        const row     = document.getElementById('sync-code-row');
+        const display = document.getElementById('sync-code-display');
+        if (row && display) {
+          display.textContent = data.code;
+          row.style.display = '';
+        }
+        _setSyncStatus('Saved. Use this code on another device to restore.', 'ok');
+      } catch (e) {
+        _setSyncStatus('Network error — check connection.', 'err');
+      } finally {
+        getCodeBtn.disabled = false;
+      }
+    });
+  }
+  const copyBtn = document.getElementById('sync-copy-btn');
+  if (copyBtn) {
+    _tapBind(copyBtn, async () => {
+      const display = document.getElementById('sync-code-display');
+      const code = display && display.textContent;
+      if (!code || code === '—') return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(code);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = code; document.body.appendChild(ta);
+          ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        }
+        _setSyncStatus('Code copied.', 'ok');
+      } catch (_) {
+        _setSyncStatus('Could not copy — select & copy manually.', 'err');
+      }
+    });
+  }
+  const restoreInput = document.getElementById('sync-restore-input');
+  const restoreBtn   = document.getElementById('sync-restore-btn');
+  if (restoreBtn && restoreInput) {
+    _tapBind(restoreBtn, async () => {
+      const raw = (restoreInput.value || '').trim();
+      if (!raw) { _setSyncStatus('Enter a code first.', 'err'); return; }
+      _setSyncStatus('Looking up code…', 'busy');
+      restoreBtn.disabled = true;
+      try {
+        const url = SYNC_API_BASE + '?code=' + encodeURIComponent(raw);
+        const r = await fetch(url);
+        const data = await r.json().catch(() => ({}));
+        if (r.status === 404) {
+          _setSyncStatus('Code not found or expired.', 'err');
+          return;
+        }
+        if (!r.ok || !data.keys) {
+          _setSyncStatus(data.error || 'Restore failed.', 'err');
+          return;
+        }
+        // Wipe current progress keys, then write restored ones, then reload.
+        try {
+          const toRemove = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (!k) continue;
+            if (k.startsWith('jh_') || k.startsWith('jet-horizon') || k.startsWith('jetslide')) {
+              toRemove.push(k);
+            }
+          }
+          toRemove.forEach(k => { try { localStorage.removeItem(k); } catch(_) {} });
+          Object.keys(data.keys).forEach(k => {
+            try { localStorage.setItem(k, data.keys[k]); } catch(_) {}
+          });
+        } catch(_) {}
+        _setSyncStatus('Progress restored. Reloading…', 'ok');
+        setTimeout(() => { try { location.reload(); } catch(_) {} }, 600);
+      } catch (e) {
+        _setSyncStatus('Network error — check connection.', 'err');
+      } finally {
+        restoreBtn.disabled = false;
+      }
+    });
+    // Auto-uppercase as user types; keep cursor sane.
+    restoreInput.addEventListener('input', () => {
+      const v = restoreInput.value.toUpperCase();
+      if (v !== restoreInput.value) restoreInput.value = v;
+    });
+  }
+
+  // Reset Game button — wipes all local progress (skins, missions, fuel cells,
+  // thrusters, upgrades, headstarts, tutorial flag, radio unlock, etc.).
+  // Two-tap confirm: first tap arms (button turns red, label CONFIRM?), second
+  // tap within 4s actually wipes. Tap anywhere else (or wait) to cancel.
+  const resetBtn = document.getElementById('settings-reset-btn');
+  if (resetBtn) {
+    let _armed = false;
+    let _armTimer = null;
+    function disarm() {
+      _armed = false;
+      resetBtn.textContent = 'RESET GAME';
+      resetBtn.classList.remove('armed');
+      if (_armTimer) { clearTimeout(_armTimer); _armTimer = null; }
+    }
+    _tapBind(resetBtn, () => {
+      if (!_armed) {
+        _armed = true;
+        resetBtn.textContent = 'CONFIRM?';
+        resetBtn.classList.add('armed');
+        _armTimer = setTimeout(disarm, 4000);
+        return;
+      }
+      // Confirmed — wipe.
+      try {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k) continue;
+          if (k.startsWith('jh_') || k.startsWith('jet-horizon') || k.startsWith('jetslide')) {
+            keys.push(k);
+          }
+        }
+        keys.forEach(k => { try { localStorage.removeItem(k); } catch(_) {} });
+      } catch(_) {}
+      // Hard reload to fully reinit state with cleared storage.
+      try { location.reload(); } catch(_) { window.location.href = window.location.href; }
+    });
+  }
+
   // Music volume slider
   document.getElementById('vol-music').addEventListener('input', (e) => {
     _settings.musicVol = parseInt(e.target.value);
@@ -20046,6 +20896,7 @@ function closeSettings() {
     _settings.sfxMuted = false;
     document.getElementById('mute-sfx').classList.remove('muted');
     document.getElementById('mute-sfx').textContent = '♪';
+    applySfxMute(); // refresh state.muted (and no-op live stop since not muted)
     saveSettings();
   });
 
@@ -20063,6 +20914,7 @@ function closeSettings() {
     _settings.sfxMuted = !_settings.sfxMuted;
     document.getElementById('mute-sfx').classList.toggle('muted', _settings.sfxMuted);
     document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '♪';
+    applySfxMute(); // immediately silence looping <audio> SFX when muting
     saveSettings();
   });
 
@@ -20627,6 +21479,13 @@ function startGame() {
     el.currentTime = 0;
     setTrackVol(k, 0);
   });
+  // If radio is OFF but the player left a title-screen preview running, kill
+  // it now so it doesn't bleed into gameplay. (When radio is ON, the
+  // musicFadeTo interceptor below takes over and keeps radio continuous.)
+  if (typeof isRadioOn === 'function' && !isRadioOn()
+      && typeof stopRadioPreviewForce === 'function') {
+    stopRadioPreviewForce();
+  }
   // Short fade-in for gameplay track (title already silenced above)
   const _startTrack = state.currentLevelIdx >= 2 ? 'l3' : 'bg';
   const _startEl = _startTrack === 'l3' ? l3Music : bgMusic;
@@ -21106,12 +21965,13 @@ function startDeathRun() {
     overlay.appendChild(lineC);
     overlay.appendChild(skipHint);
 
-    // Line A fades in at 3s
-    _introTimers.push(setTimeout(() => { lineA.classList.add('playing'); }, 3000));
+    // Line A fades in at 3s. All intro timeouts go through
+    // _introScheduleTimeout so togglePause can freeze + resume the prologue.
+    _introScheduleTimeout(() => { lineA.classList.add('playing'); }, 3000);
     // Line B at 8.5s
-    _introTimers.push(setTimeout(() => { lineB.classList.add('playing'); }, 8500));
+    _introScheduleTimeout(() => { lineB.classList.add('playing'); }, 8500);
     // Engine startup SFX at 8.5s
-    _introTimers.push(setTimeout(() => {
+    _introScheduleTimeout(() => {
       const eng = document.getElementById('engine-start');
       if (eng && !state.muted) {
         _ensureCtxRunning();
@@ -21119,10 +21979,10 @@ function startDeathRun() {
         eng.volume = 0.55;
         eng.play().catch(() => {});
       }
-    }, 8500));
+    }, 8500);
     // Pre-spurts — thruster flickers
     function _preSpurt(delay, peak, dur) {
-      _introTimers.push(setTimeout(() => {
+      _introScheduleTimeout(() => {
         if (!state.introActive) return;
         const _start = performance.now();
         const _iv = setInterval(() => {
@@ -21132,7 +21992,7 @@ function startDeathRun() {
           state.thrusterPower = env * peak;
         }, 16);
         _introTimers.push(_iv);
-      }, delay));
+      }, delay);
     }
     _preSpurt(10000, 0.45, 125);
     _preSpurt(10175, 0.35, 110);
@@ -21142,9 +22002,9 @@ function startDeathRun() {
     _preSpurt(13500, 0.4, 125);
     _preSpurt(13675, 0.3, 110);
     // JET HORIZON title at 14s
-    _introTimers.push(setTimeout(() => { lineC.classList.add('playing'); }, 14000));
+    _introScheduleTimeout(() => { lineC.classList.add('playing'); }, 14000);
     // Auto-launch at 18.5s
-    _introTimers.push(setTimeout(() => { _launchDeathRun(); }, 18500));
+    _introScheduleTimeout(() => { _launchDeathRun(); }, 18500);
 
     function _launchDeathRun(e) {
       if (!state.introActive) return; // already launched
@@ -21582,12 +22442,12 @@ function _drSequencerTick(dt) {
         // which is the exact moment _drSeqAdvance() bumps the speed tier.
         // Sequence: beep0, beep500, beep1000, ROAR1500 (= speed change beat).
         _playBuffer('klaxon', 0.18, 1.0, null);
-        setTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
-        setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         // Speed-up burst fires right as speed kicks in (beat 4 of the countdown).
         // Use retry-warp sound for the speed-up surge.
         // Speed-up surge — plasma-punch on its own (no warp, no roar).
-        setTimeout(() => { playThrusterImpact(0.7); }, 1500);
+        _sfxTimeout(() => { playThrusterImpact(0.7); }, 1500);
       }
     }
     if (state.seqStageElapsed >= stage.duration) {
@@ -21902,10 +22762,10 @@ function _drSequencerTick(dt) {
         // Klaxon countdown — 500ms grid (120 BPM), roar lands on the
         // speed-change beat. Same cadence as the corridor handler above.
         _playBuffer('klaxon', 0.18, 1.0, null);
-        setTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
-        setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         // Speed-up surge — plasma-punch on its own (no warp, no roar).
-        setTimeout(() => { playThrusterImpact(0.7); }, 1500);
+        _sfxTimeout(() => { playThrusterImpact(0.7); }, 1500);
       }
     }
   }
@@ -23020,13 +23880,74 @@ function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
 //   - playThrusterImpact(0.7) speed-tier-up surge SFX (same: BAND-only path)
 
 let _introTimers = [];
+// Parallel registry of pending intro setTimeouts so we can pause/resume the
+// prologue (otherwise pausing during the cinematic kills it and we land in
+// gameplay with the prologue already "played"). Entries: {id, fireAt, fn}.
+let _introTimerSpecs = [];
+let _introPausedSpecs = [];   // [{remaining, fn}] while paused
+let _introPausedAt = 0;
+function _introScheduleTimeout(fn, delay) {
+  const fireAt = performance.now() + delay;
+  const wrapped = () => {
+    // self-remove from spec registry on natural fire
+    const i = _introTimerSpecs.findIndex(s => s.id === id);
+    if (i >= 0) _introTimerSpecs.splice(i, 1);
+    fn();
+  };
+  const id = setTimeout(wrapped, delay);
+  _introTimers.push(id);
+  _introTimerSpecs.push({ id, fireAt, fn });
+  return id;
+}
+window._introScheduleTimeout = _introScheduleTimeout;
+// Pause-friendly snapshot. Called from togglePause when state.introActive.
+// Captures remaining time on each pending timer, cancels the live timeouts,
+// and pauses CSS animations on the intro overlay.
+function freezeIntroForPause() {
+  _introPausedAt = performance.now();
+  _introPausedSpecs = [];
+  _introTimerSpecs.forEach(s => {
+    clearTimeout(s.id);
+    const remaining = Math.max(0, s.fireAt - _introPausedAt);
+    _introPausedSpecs.push({ remaining, fn: s.fn });
+  });
+  _introTimerSpecs = [];
+  // Drop any active spurt setIntervals — mid-spurt thruster flicker resets
+  // cleanly to 0 and the next spurt timeout (re-armed on resume) recreates
+  // the interval naturally.
+  _introTimers.forEach(id => { clearInterval(id); });
+  _introTimers = [];
+  state.thrusterPower = 0;
+  // Pause engine startup SFX without resetting currentTime so it resumes.
+  const eng = document.getElementById('engine-start');
+  if (eng && !eng.paused) { try { eng.pause(); } catch(_){} eng._jhPausedDuringIntro = true; }
+  // Pause overlay CSS animations.
+  const ov = document.getElementById('intro-overlay');
+  if (ov) ov.classList.add('intro-paused');
+}
+window.freezeIntroForPause = freezeIntroForPause;
+// Inverse of freezeIntroForPause.
+function resumeIntroAfterPause() {
+  _introPausedSpecs.forEach(s => { _introScheduleTimeout(s.fn, s.remaining); });
+  _introPausedSpecs = [];
+  const eng = document.getElementById('engine-start');
+  if (eng && eng._jhPausedDuringIntro && !state.muted) {
+    eng._jhPausedDuringIntro = false;
+    try { eng.play().catch(()=>{}); } catch(_){}
+  }
+  const ov = document.getElementById('intro-overlay');
+  if (ov) ov.classList.remove('intro-paused');
+}
+window.resumeIntroAfterPause = resumeIntroAfterPause;
 function clearIntroTimers() {
   _introTimers.forEach(id => { clearTimeout(id); clearInterval(id); cancelAnimationFrame(id); });
   _introTimers = [];
+  _introTimerSpecs = [];
+  _introPausedSpecs = [];
   state.thrusterPower = 0;  // kill any mid-spurt flicker
   // Stop engine startup SFX if playing
   const eng = document.getElementById('engine-start');
-  if (eng) { eng.pause(); eng.currentTime = 0; }
+  if (eng) { eng.pause(); eng.currentTime = 0; eng._jhPausedDuringIntro = false; }
 }
 
 // ── Thruster sputter-on animation ──
@@ -23512,34 +24433,26 @@ function killPlayer() {
   if (state.score > state.bestScore) state.bestScore = state.score;
 
   hapticHeavy(); // death
-  // Stop engine SFX
-  const _engD = document.getElementById('engine-start');
-  const _roarD = document.getElementById('engine-roar');
-  const _roarLD = document.getElementById('engine-roar-layer');
-  if (_engD && !_engD.paused) { _engD.pause(); _engD.currentTime = 0; }
-  if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
-  if (_roarLD && !_roarLD.paused) { _roarLD.pause(); _roarLD.currentTime = 0; }
+  // Central kill-switch: cancels pending SFX timeouts, ramps + stops Web Audio
+  // sources, pauses every tracked gameplay <audio> element. UI sounds (shop,
+  // menu, etc.) routed through _playBufferUI are NOT tracked and survive.
+  stopAllGameplaySFX();
   stopEngineBaseline({ reset: true });
+  // Argon ambient uses a dedicated BufferSource path — clean its non-element
+  // state separately (the <audio> tag was already paused by the kill-switch).
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
   state._argonPath = null;
   state._argonPlayCount = 0;
-  const _argonD = document.getElementById('argon-ambient-sfx');
-  if (_argonD && !_argonD.paused) { try { _argonD.pause(); _argonD.currentTime = 0; _argonD.volume = 0; } catch (_) {} }
   state._argonSteering = false;
   state._argonOpen = 0;
   _stopMagnetWhir();
-  const _invD = document.getElementById('invincible-loop-sfx');
-  if (_invD && !_invD.paused) { _invD.pause(); _invD.currentTime = 0; _invD.loop = false; }
-  // Stop looped weapon SFX on game over.
-  const _laserD = document.getElementById('laser-beam-sfx');
-  if (_laserD && !_laserD.paused) { _laserD.loop = false; _laserD.pause(); _laserD.currentTime = 0; }
+  // Laser intervals/timeouts use module-local handles — clear them here so
+  // the loop can't re-trigger after the kill-switch ran.
   if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
   if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
-  const _ubeamD = document.getElementById('unibeam-sfx');
-  if (_ubeamD && !_ubeamD.paused) { _ubeamD.loop = false; _ubeamD.pause(); _ubeamD.currentTime = 0; }
-  // Kill in-flight thunder rumble so it doesn't ring through gameover screen.
+  // Thunder uses a one-shot BufferSource held in _thunderActiveSrc.
   if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
     try { _thunderActiveSrc.stop(); } catch (_) {}
     _thunderActiveSrc = null;
@@ -33331,6 +34244,11 @@ window._jhWakeLock = (function _wakeLockFactory() {
       // wired up in 60-main-late.js and idempotent if already called.
       try {
         if (typeof window.initTitleAudio === 'function') window.initTitleAudio();
+      } catch (_) {}
+      // Play the standard title-tap SFX now that audio is unlocked, so the
+      // ACCESS GRANTED gate feels consistent with the rest of the title HUD.
+      try {
+        if (typeof window.playTitleTap === 'function') window.playTitleTap();
       } catch (_) {}
       // First-time-ever load: show the graphics-quality picker before fading
       // the gate. The picker handles its own dismissal + gate hide.

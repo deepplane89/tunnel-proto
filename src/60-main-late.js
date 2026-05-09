@@ -59,41 +59,45 @@ function currentGameTrack() {
 function togglePause() {
   if (state.phase === 'playing') {
     state.phase = 'paused';
-    // Kill any in-flight intro text
-    clearIntroTimers();
-    const _introOv = document.getElementById('intro-overlay');
-    if (_introOv) { fadeOutIntroOverlay(_introOv); }
-    state.introActive = false;
+    // If we're mid-prologue, freeze it instead of nuking it. Without this,
+    // pausing during the cinematic killed all timers + faded the overlay,
+    // dumping the player into gameplay as if the prologue had finished.
+    // freezeIntroForPause snapshots remaining time on each pending timer
+    // and resumeIntroAfterPause re-arms them on continue.
+    const _introWasActive = !!state.introActive;
+    if (_introWasActive && typeof freezeIntroForPause === 'function') {
+      freezeIntroForPause();
+      state._introWasFrozen = true;
+      // Leave state.introActive = true so the resumed timers' guards still pass.
+    } else {
+      // Not in prologue — normal teardown.
+      clearIntroTimers();
+      const _introOv = document.getElementById('intro-overlay');
+      if (_introOv) { fadeOutIntroOverlay(_introOv); }
+      state.introActive = false;
+    }
     killThrusterSputter();
-    // Pause engine SFX
-    const _engP = document.getElementById('engine-start');
-    const _roarP = document.getElementById('engine-roar');
-    const _roarLP = document.getElementById('engine-roar-layer');
-    if (_engP && !_engP.paused) _engP.pause();
-    if (_roarP && !_roarP.paused) _roarP.pause();
-    if (_roarLP && !_roarLP.paused) _roarLP.pause();
+    // Central kill-switch: cancels pending _sfxTimeout chains (klaxon countdown,
+    // queued thruster-impact punch), ramps + stops Web Audio buffer sources,
+    // and pauses every tracked gameplay <audio> element. Without this, an SFX
+    // fired one frame before pause keeps ringing into the pause overlay.
+    if (typeof stopAllGameplaySFX === 'function') stopAllGameplaySFX();
     stopEngineBaseline();
+    // Argon BufferSource path — non-element cleanup (the <audio> tag was
+    // already paused by the kill-switch).
     if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
     if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
     if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
     state._argonPath = null;
     state._argonPlayCount = 0;
-    const _argonP = document.getElementById('argon-ambient-sfx');
-    if (_argonP && !_argonP.paused) { try { _argonP.pause(); _argonP.currentTime = 0; _argonP.volume = 0; } catch (_) {} }
     state._argonSteering = false;
     state._argonOpen = 0;
     _stopMagnetWhir();
-    const _invP = document.getElementById('invincible-loop-sfx');
-    if (_invP && !_invP.paused) _invP.pause();
-    // Pause looped weapon SFX so they don't bleed through pause.
-    // currentTime preserved so they pick up where they left off on resume.
-    const _laserP = document.getElementById('laser-beam-sfx');
-    if (_laserP && !_laserP.paused) _laserP.pause();
+    // Laser intervals/timeouts (module-local handles) so the loop can't re-
+    // trigger the laser SFX during pause.
     if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
     if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
-    const _ubeamP = document.getElementById('unibeam-sfx');
-    if (_ubeamP && !_ubeamP.paused) _ubeamP.pause();
-    // Kill in-flight thunder rumble so it doesn't ring through pause.
+    // Thunder one-shot BufferSource.
     if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
       try { _thunderActiveSrc.stop(); } catch (_) {}
       _thunderActiveSrc = null;
@@ -106,6 +110,11 @@ function togglePause() {
   } else if (state.phase === 'paused') {
     state.phase = 'playing';
     setPauseOverlay(false);
+    // Resume the cinematic if we paused during the prologue.
+    if (state._introWasFrozen && typeof resumeIntroAfterPause === 'function') {
+      state._introWasFrozen = false;
+      resumeIntroAfterPause();
+    }
     // iOS interruption recovery: this branch runs from a user gesture (tap/key)
     // so it's the right moment to resume the AudioContext and rewire the music
     // MediaElementSource graph if a backgrounding event severed it.
@@ -118,18 +127,21 @@ function togglePause() {
     // Resume baseline whir on unpause (smooth fade-in)
     startEngineBaseline(0.5);
     // Argon is edge-triggered — will fire on next steer input, nothing to resume
-    // Resume invincible loop if active
+    // Resume invincible loop if active. The kill-switch on pause cleared the
+    // loop flag, so re-set it before play().
     const _invU = document.getElementById('invincible-loop-sfx');
-    if (_invU && state.invincibleTimer > 0 && !state.muted) { _invU.play().catch(()=>{}); }
+    if (_invU && state.invincibleTimer > 0 && !state.muted) {
+      _invU.loop = true; _invU.play().catch(()=>{});
+    }
     // Resume looped weapon SFX if their power-up timer is still running.
     if (state.laserActive && !state.muted) {
       const _tier = state.laserTier || 1;
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
-        if (_laserU) _laserU.play().catch(()=>{});
+        if (_laserU) { _laserU.loop = true; _laserU.play().catch(()=>{}); }
       } else {
         const _ubeamU = document.getElementById('unibeam-sfx');
-        if (_ubeamU) _ubeamU.play().catch(()=>{});
+        if (_ubeamU) { _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
       }
     }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
@@ -140,6 +152,9 @@ function returnToTitle() {
   state.phase = 'title';
   // Radio: ensure shuffle station is fully stopped before title music kicks in.
   try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  // Defensive: refresh radio button visibility on every title return so an
+  // earlier load-time race that left it hidden self-heals.
+  try { if (typeof refreshRadioButton === 'function') refreshRadioButton(); } catch(_) {}
   // Release the screen wake lock — not needed on title/garage.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Release the thruster color lock so the title vibe (and the title
@@ -275,34 +290,26 @@ function returnToTitle() {
   });
   // Stop lake ambience on return to title
   if (lakeMusic) { lakeMusic.pause(); lakeMusic.currentTime = 0; setTrackVol('lake', 0); }
-  // Stop engine SFX
-  const _engR = document.getElementById('engine-start');
-  const _roarR = document.getElementById('engine-roar');
-  const _roarLR = document.getElementById('engine-roar-layer');
-  if (_engR) { _engR.pause(); _engR.currentTime = 0; }
-  if (_roarR) { _roarR.pause(); _roarR.currentTime = 0; }
-  if (_roarLR) { _roarLR.pause(); _roarLR.currentTime = 0; }
+  // Central kill-switch: cancels pending SFX timeouts, ramps + stops Web Audio
+  // sources, pauses every tracked gameplay <audio> element. UI sounds (shop,
+  // menu, etc.) routed through _playBufferUI are NOT tracked and survive.
+  if (typeof stopAllGameplaySFX === 'function') stopAllGameplaySFX();
   stopEngineBaseline({ reset: true });
+  // Argon ambient uses a dedicated BufferSource path — clean its non-element
+  // state separately (the <audio> tag was already paused by the kill-switch).
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
   state._argonPath = null;
   state._argonPlayCount = 0;
-  const _argonR = document.getElementById('argon-ambient-sfx');
-  if (_argonR) { try { _argonR.pause(); _argonR.currentTime = 0; _argonR.volume = 0; } catch (_) {} }
   state._argonSteering = false;
   state._argonOpen = 0;
   _stopMagnetWhir();
-  const _invR = document.getElementById('invincible-loop-sfx');
-  if (_invR) { _invR.pause(); _invR.currentTime = 0; _invR.loop = false; }
-  // Stop looped weapon SFX on return to title.
-  const _laserR = document.getElementById('laser-beam-sfx');
-  if (_laserR) { _laserR.loop = false; _laserR.pause(); _laserR.currentTime = 0; }
+  // Laser intervals/timeouts use module-local handles — clear them here so
+  // the loop can't re-trigger after the kill-switch ran.
   if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
   if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
-  const _ubeamR = document.getElementById('unibeam-sfx');
-  if (_ubeamR) { _ubeamR.loop = false; _ubeamR.pause(); _ubeamR.currentTime = 0; }
-  // Kill in-flight thunder rumble on title.
+  // Thunder uses a one-shot BufferSource held in _thunderActiveSrc.
   if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
     try { _thunderActiveSrc.stop(); } catch (_) {}
     _thunderActiveSrc = null;
@@ -1024,12 +1031,14 @@ fetchLeaderboard();
 // kept as no-ops so any stray callers don't throw — and so the inline
 // onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
 function playStartSound() {
-  // TAP TO PLAY on title — low whoosh.
+  // TAP TO PLAY on title — unified with ACCESS GRANTED so the gate-tap and
+  // the start-game tap feel identical (both go through playTitleTap →
+  // playTitleExit → title-exit buffer / fallback element).
   if (state.muted) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
-  try { if (typeof window.playTapToPlay === 'function') window.playTapToPlay(); } catch(_){}
+  try { if (typeof window.playTitleTap === 'function') window.playTitleTap(); } catch(_){}
 }
 function playResumeSound() {
   // CONTINUE from pause — keep the existing menu-cycle click.
@@ -1044,6 +1053,10 @@ function playTitleTap()    {
   // — VR mecha interlock.
   try { if (typeof window.playTitleExit === 'function') window.playTitleExit(); } catch(_){}
 }
+// Expose on window so callers in other modules + the access-grant tap handler
+// (82-main-late-tail.js) can fire the sound — module scope alone made this a
+// silent no-op for the first-tap gate.
+window.playTitleTap = playTitleTap;
 function playTitleClose() {
   // Title-screen UI CLOSE — the legacy tap-to-play cue (start.mp3) so open
   // and close don't share the same sound.

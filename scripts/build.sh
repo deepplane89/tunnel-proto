@@ -41,14 +41,67 @@ if [[ ! -d "$SRC_DIR" ]]; then
   exit 0
 fi
 
-# Find all .js files under src/, sorted alphabetically (which honors numeric
-# prefixes). `sort` is defensive against shells with weird glob ordering.
+# Find all .js files under src/ (and one level of subdirs, e.g. src/radio/),
+# ordered by BASENAME so a file's numeric prefix controls placement regardless
+# of which subdir it lives in. e.g. src/radio/31-radio.js slots between
+# src/30-audio.js and src/40-main-late.js because basename '31-radio.js' sorts
+# between '30-audio.js' and '40-main-late.js'.
+#
+# Portable across macOS (BSD find) and Linux (GNU find): we don't use -printf.
+# Instead we awk the basename to the front, sort, then strip it back off.
+# Skip any directory whose name starts with `_` (e.g. src/_archived/) so
+# experimental / parked code doesn't get pulled into the build.
 FILES=()
-while IFS= read -r f; do FILES+=("$f"); done < <(find "$SRC_DIR" -maxdepth 1 -type f -name '*.js' | sort)
+while IFS= read -r line; do
+  FILES+=("${line#*$'\t'}")
+done < <(
+  find "$SRC_DIR" -type d -name '_*' -prune -o -type f -name '*.js' -print \
+    | awk -F/ '{print $NF "\t" $0}' \
+    | sort
+)
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
   echo "No .js files found in $SRC_DIR" >&2
   exit 1
+fi
+
+# ── Per-file syntax check ───────────────────────────────────────────────
+# Each src/*.js MUST be a self-contained, syntactically-valid JS module on
+# its own — balanced braces, no half-open functions, no truncated strings.
+#
+# Why: this is a concat build. A file that ends mid-statement (e.g. an
+# unterminated `function foo() {`) silently swallows the next file into its
+# body when concatenated. The combined dist/game.js still parses fine, so
+# `node --check dist/game.js` does NOT catch it. We caught one such bug
+# (radio module nested inside playCrash) only after a runtime symptom.
+#
+# `node --check --input-type=module` validates SYNTAX only, not references,
+# so shared-scope globals (`state`, `audioCtx`, etc.) declared in sibling
+# files don't trigger false failures. Module mode tolerates top-level
+# `import`/`export` (only 00-imports.js uses these) without breaking
+# anything in plain-script files.
+#
+# If you ever legitimately need a file to span a function across boundaries,
+# rethink it — it's the exact footgun this guard exists to prevent.
+if command -v node >/dev/null 2>&1; then
+  echo "Per-file syntax check (node --check)..."
+  SC_FAIL=0
+  for f in "${FILES[@]}"; do
+    if ! node --check --input-type=module < "$f" 2>/tmp/_jh_syntax_err; then
+      echo "  FAIL: ${f#$REPO_ROOT/}" >&2
+      sed 's/^/    /' /tmp/_jh_syntax_err >&2
+      SC_FAIL=1
+    fi
+  done
+  rm -f /tmp/_jh_syntax_err
+  if [[ "$SC_FAIL" -ne 0 ]]; then
+    echo "" >&2
+    echo "Build aborted: one or more src/*.js files are not self-contained." >&2
+    echo "Fix the file(s) above so each parses standalone, then rerun build." >&2
+    exit 1
+  fi
+else
+  echo "Warning: node not found, skipping per-file syntax check." >&2
 fi
 
 # Concatenate with no added separators — each src file must be self-contained

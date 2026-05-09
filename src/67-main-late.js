@@ -423,6 +423,13 @@ function startGame() {
     el.currentTime = 0;
     setTrackVol(k, 0);
   });
+  // If radio is OFF but the player left a title-screen preview running, kill
+  // it now so it doesn't bleed into gameplay. (When radio is ON, the
+  // musicFadeTo interceptor below takes over and keeps radio continuous.)
+  if (typeof isRadioOn === 'function' && !isRadioOn()
+      && typeof stopRadioPreviewForce === 'function') {
+    stopRadioPreviewForce();
+  }
   // Short fade-in for gameplay track (title already silenced above)
   const _startTrack = state.currentLevelIdx >= 2 ? 'l3' : 'bg';
   const _startEl = _startTrack === 'l3' ? l3Music : bgMusic;
@@ -902,12 +909,13 @@ function startDeathRun() {
     overlay.appendChild(lineC);
     overlay.appendChild(skipHint);
 
-    // Line A fades in at 3s
-    _introTimers.push(setTimeout(() => { lineA.classList.add('playing'); }, 3000));
+    // Line A fades in at 3s. All intro timeouts go through
+    // _introScheduleTimeout so togglePause can freeze + resume the prologue.
+    _introScheduleTimeout(() => { lineA.classList.add('playing'); }, 3000);
     // Line B at 8.5s
-    _introTimers.push(setTimeout(() => { lineB.classList.add('playing'); }, 8500));
+    _introScheduleTimeout(() => { lineB.classList.add('playing'); }, 8500);
     // Engine startup SFX at 8.5s
-    _introTimers.push(setTimeout(() => {
+    _introScheduleTimeout(() => {
       const eng = document.getElementById('engine-start');
       if (eng && !state.muted) {
         _ensureCtxRunning();
@@ -915,10 +923,10 @@ function startDeathRun() {
         eng.volume = 0.55;
         eng.play().catch(() => {});
       }
-    }, 8500));
+    }, 8500);
     // Pre-spurts — thruster flickers
     function _preSpurt(delay, peak, dur) {
-      _introTimers.push(setTimeout(() => {
+      _introScheduleTimeout(() => {
         if (!state.introActive) return;
         const _start = performance.now();
         const _iv = setInterval(() => {
@@ -928,7 +936,7 @@ function startDeathRun() {
           state.thrusterPower = env * peak;
         }, 16);
         _introTimers.push(_iv);
-      }, delay));
+      }, delay);
     }
     _preSpurt(10000, 0.45, 125);
     _preSpurt(10175, 0.35, 110);
@@ -938,9 +946,9 @@ function startDeathRun() {
     _preSpurt(13500, 0.4, 125);
     _preSpurt(13675, 0.3, 110);
     // JET HORIZON title at 14s
-    _introTimers.push(setTimeout(() => { lineC.classList.add('playing'); }, 14000));
+    _introScheduleTimeout(() => { lineC.classList.add('playing'); }, 14000);
     // Auto-launch at 18.5s
-    _introTimers.push(setTimeout(() => { _launchDeathRun(); }, 18500));
+    _introScheduleTimeout(() => { _launchDeathRun(); }, 18500);
 
     function _launchDeathRun(e) {
       if (!state.introActive) return; // already launched
@@ -1378,12 +1386,12 @@ function _drSequencerTick(dt) {
         // which is the exact moment _drSeqAdvance() bumps the speed tier.
         // Sequence: beep0, beep500, beep1000, ROAR1500 (= speed change beat).
         _playBuffer('klaxon', 0.18, 1.0, null);
-        setTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
-        setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         // Speed-up burst fires right as speed kicks in (beat 4 of the countdown).
         // Use retry-warp sound for the speed-up surge.
         // Speed-up surge — plasma-punch on its own (no warp, no roar).
-        setTimeout(() => { playThrusterImpact(0.7); }, 1500);
+        _sfxTimeout(() => { playThrusterImpact(0.7); }, 1500);
       }
     }
     if (state.seqStageElapsed >= stage.duration) {
@@ -1698,10 +1706,10 @@ function _drSequencerTick(dt) {
         // Klaxon countdown — 500ms grid (120 BPM), roar lands on the
         // speed-change beat. Same cadence as the corridor handler above.
         _playBuffer('klaxon', 0.18, 1.0, null);
-        setTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
-        setTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
         // Speed-up surge — plasma-punch on its own (no warp, no roar).
-        setTimeout(() => { playThrusterImpact(0.7); }, 1500);
+        _sfxTimeout(() => { playThrusterImpact(0.7); }, 1500);
       }
     }
   }
@@ -2816,13 +2824,74 @@ function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
 //   - playThrusterImpact(0.7) speed-tier-up surge SFX (same: BAND-only path)
 
 let _introTimers = [];
+// Parallel registry of pending intro setTimeouts so we can pause/resume the
+// prologue (otherwise pausing during the cinematic kills it and we land in
+// gameplay with the prologue already "played"). Entries: {id, fireAt, fn}.
+let _introTimerSpecs = [];
+let _introPausedSpecs = [];   // [{remaining, fn}] while paused
+let _introPausedAt = 0;
+function _introScheduleTimeout(fn, delay) {
+  const fireAt = performance.now() + delay;
+  const wrapped = () => {
+    // self-remove from spec registry on natural fire
+    const i = _introTimerSpecs.findIndex(s => s.id === id);
+    if (i >= 0) _introTimerSpecs.splice(i, 1);
+    fn();
+  };
+  const id = setTimeout(wrapped, delay);
+  _introTimers.push(id);
+  _introTimerSpecs.push({ id, fireAt, fn });
+  return id;
+}
+window._introScheduleTimeout = _introScheduleTimeout;
+// Pause-friendly snapshot. Called from togglePause when state.introActive.
+// Captures remaining time on each pending timer, cancels the live timeouts,
+// and pauses CSS animations on the intro overlay.
+function freezeIntroForPause() {
+  _introPausedAt = performance.now();
+  _introPausedSpecs = [];
+  _introTimerSpecs.forEach(s => {
+    clearTimeout(s.id);
+    const remaining = Math.max(0, s.fireAt - _introPausedAt);
+    _introPausedSpecs.push({ remaining, fn: s.fn });
+  });
+  _introTimerSpecs = [];
+  // Drop any active spurt setIntervals — mid-spurt thruster flicker resets
+  // cleanly to 0 and the next spurt timeout (re-armed on resume) recreates
+  // the interval naturally.
+  _introTimers.forEach(id => { clearInterval(id); });
+  _introTimers = [];
+  state.thrusterPower = 0;
+  // Pause engine startup SFX without resetting currentTime so it resumes.
+  const eng = document.getElementById('engine-start');
+  if (eng && !eng.paused) { try { eng.pause(); } catch(_){} eng._jhPausedDuringIntro = true; }
+  // Pause overlay CSS animations.
+  const ov = document.getElementById('intro-overlay');
+  if (ov) ov.classList.add('intro-paused');
+}
+window.freezeIntroForPause = freezeIntroForPause;
+// Inverse of freezeIntroForPause.
+function resumeIntroAfterPause() {
+  _introPausedSpecs.forEach(s => { _introScheduleTimeout(s.fn, s.remaining); });
+  _introPausedSpecs = [];
+  const eng = document.getElementById('engine-start');
+  if (eng && eng._jhPausedDuringIntro && !state.muted) {
+    eng._jhPausedDuringIntro = false;
+    try { eng.play().catch(()=>{}); } catch(_){}
+  }
+  const ov = document.getElementById('intro-overlay');
+  if (ov) ov.classList.remove('intro-paused');
+}
+window.resumeIntroAfterPause = resumeIntroAfterPause;
 function clearIntroTimers() {
   _introTimers.forEach(id => { clearTimeout(id); clearInterval(id); cancelAnimationFrame(id); });
   _introTimers = [];
+  _introTimerSpecs = [];
+  _introPausedSpecs = [];
   state.thrusterPower = 0;  // kill any mid-spurt flicker
   // Stop engine startup SFX if playing
   const eng = document.getElementById('engine-start');
-  if (eng) { eng.pause(); eng.currentTime = 0; }
+  if (eng) { eng.pause(); eng.currentTime = 0; eng._jhPausedDuringIntro = false; }
 }
 
 // ── Thruster sputter-on animation ──
@@ -3308,34 +3377,26 @@ function killPlayer() {
   if (state.score > state.bestScore) state.bestScore = state.score;
 
   hapticHeavy(); // death
-  // Stop engine SFX
-  const _engD = document.getElementById('engine-start');
-  const _roarD = document.getElementById('engine-roar');
-  const _roarLD = document.getElementById('engine-roar-layer');
-  if (_engD && !_engD.paused) { _engD.pause(); _engD.currentTime = 0; }
-  if (_roarD && !_roarD.paused) { _roarD.pause(); _roarD.currentTime = 0; }
-  if (_roarLD && !_roarLD.paused) { _roarLD.pause(); _roarLD.currentTime = 0; }
+  // Central kill-switch: cancels pending SFX timeouts, ramps + stops Web Audio
+  // sources, pauses every tracked gameplay <audio> element. UI sounds (shop,
+  // menu, etc.) routed through _playBufferUI are NOT tracked and survive.
+  stopAllGameplaySFX();
   stopEngineBaseline({ reset: true });
+  // Argon ambient uses a dedicated BufferSource path — clean its non-element
+  // state separately (the <audio> tag was already paused by the kill-switch).
   if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
   if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
   if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
   state._argonPath = null;
   state._argonPlayCount = 0;
-  const _argonD = document.getElementById('argon-ambient-sfx');
-  if (_argonD && !_argonD.paused) { try { _argonD.pause(); _argonD.currentTime = 0; _argonD.volume = 0; } catch (_) {} }
   state._argonSteering = false;
   state._argonOpen = 0;
   _stopMagnetWhir();
-  const _invD = document.getElementById('invincible-loop-sfx');
-  if (_invD && !_invD.paused) { _invD.pause(); _invD.currentTime = 0; _invD.loop = false; }
-  // Stop looped weapon SFX on game over.
-  const _laserD = document.getElementById('laser-beam-sfx');
-  if (_laserD && !_laserD.paused) { _laserD.loop = false; _laserD.pause(); _laserD.currentTime = 0; }
+  // Laser intervals/timeouts use module-local handles — clear them here so
+  // the loop can't re-trigger after the kill-switch ran.
   if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
   if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
-  const _ubeamD = document.getElementById('unibeam-sfx');
-  if (_ubeamD && !_ubeamD.paused) { _ubeamD.loop = false; _ubeamD.pause(); _ubeamD.currentTime = 0; }
-  // Kill in-flight thunder rumble so it doesn't ring through gameover screen.
+  // Thunder uses a one-shot BufferSource held in _thunderActiveSrc.
   if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
     try { _thunderActiveSrc.stop(); } catch (_) {}
     _thunderActiveSrc = null;

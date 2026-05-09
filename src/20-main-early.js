@@ -5376,23 +5376,40 @@ function _initTrackGains() {
     catch (_) { return; }
     const gain = audioCtx.createGain();
     gain.gain.value = el.volume; // inherit current volume (e.g. title already playing)
-    src.connect(gain).connect(audioCtx.destination);
+    src.connect(gain);
+    // Tap an AnalyserNode off the radio gain so the player UI can show a live
+    // FFT visualizer. Analyser is a passthrough — gain still goes to dest.
+    if (k === 'radio') {
+      try {
+        const an = audioCtx.createAnalyser();
+        an.fftSize = 64;
+        an.smoothingTimeConstant = 0.78;
+        gain.connect(an); // analyser sees post-gain signal
+        window._radioAnalyser = an;
+      } catch(_) {}
+    }
+    gain.connect(audioCtx.destination);
     trackGains[k] = gain;
     el.volume = 1;  // max HTML volume — gain node controls actual level
   });
   _gainsReady = true;
 }
 
-// Set a track's gain instantly (no ramp).
+// Set a track's gain instantly (no ramp). Apply music mute/volume here so
+// every call site (including ones that pass raw TRACK_VOL[k]) is gated by
+// the user's music mute toggle without having to remember to multiply.
 function setTrackVol(name, vol) {
+  let m = 1;
+  try { if (typeof musicMult === 'function') m = musicMult(); } catch(_) {}
+  const out = vol * m;
   const g = trackGains[name];
   if (g && audioCtx) {
     g.gain.cancelScheduledValues(audioCtx.currentTime);
-    g.gain.setValueAtTime(vol, audioCtx.currentTime);
+    g.gain.setValueAtTime(out, audioCtx.currentTime);
   } else {
     // Fallback before gains are wired (pre-gesture)
     const el = allTracks()[name];
-    if (el) el.volume = vol;
+    if (el) el.volume = out;
   }
 }
 function getTrackVol(name) {
@@ -5402,11 +5419,14 @@ function getTrackVol(name) {
   return el ? el.volume : 0;
 }
 function rampTrackVol(name, vol, sec) {
+  let m = 1;
+  try { if (typeof musicMult === 'function') m = musicMult(); } catch(_) {}
+  const out = vol * m;
   const g = trackGains[name];
   if (!g || !audioCtx) { setTrackVol(name, vol); return; }
   g.gain.cancelScheduledValues(audioCtx.currentTime);
   g.gain.setValueAtTime(g.gain.value, audioCtx.currentTime);
-  g.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + sec);
+  g.gain.linearRampToValueAtTime(out, audioCtx.currentTime + sec);
 }
 
 // Hard-stop all tracks and immediately start one (no crossfade).
@@ -5443,24 +5463,31 @@ function setActiveMusic(track) {
 function pauseGameTrackInPlace(track) {
   initAudio();
   const all = allTracks();
-  // Fast fade-out (90ms) on every non-title track, then pause once silent.
-  // 90ms is short enough that the player perceives an instant pause but long
-  // enough to drain Safari's MediaElementSource pipeline cleanly.
+  // If the shuffle station is on, radio IS the pause music — keep it
+  // playing, don't fade title music in over it. Otherwise: fade gameplay
+  // tracks out and bring title music up as the pause underscore.
+  const radioActive = (typeof isRadioOn === 'function') && isRadioOn() && radioMusic && !radioMusic.paused;
   Object.entries(all).forEach(([k, el]) => {
     if (!el || k === 'title' || el.paused) return;
+    if (radioActive && k === 'radio') return; // keep radio playing under pause
     rampTrackVol(k, 0, 0.09);
     setTimeout(() => { try { if (!el.paused) el.pause(); } catch (_) {} }, 110);
   });
   if (titleMusic) {
-    titleMusic.currentTime = 0;
-    if (!state.muted) {
-      // Fade title in over 180ms (start at 0, ramp up) so it doesn't slam in
-      // while the gameplay tail is still draining.
+    if (radioActive) {
+      // Radio is the pause music — don't intro title.
       setTrackVol('title', 0);
-      titleMusic.play().catch(() => {});
-      rampTrackVol('title', TRACK_VOL.title, 0.20);
     } else {
-      setTrackVol('title', 0);
+      titleMusic.currentTime = 0;
+      if (!state.muted) {
+        // Fade title in over 180ms (start at 0, ramp up) so it doesn't slam in
+        // while the gameplay tail is still draining.
+        setTrackVol('title', 0);
+        titleMusic.play().catch(() => {});
+        rampTrackVol('title', TRACK_VOL.title, 0.20);
+      } else {
+        setTrackVol('title', 0);
+      }
     }
   }
 }

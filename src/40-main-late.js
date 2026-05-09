@@ -1,12 +1,3 @@
-  if (state.muted) return;
-  _ensureCtxRunning();
-  const sfx = document.getElementById('crash-sound');
-  if (sfx) { sfx.currentTime = 0; sfx.volume = 0.25; sfx.play().catch(() => {}); }
-  // Layered crash-impact sample — same gate as base crash, matched volume.
-  const _cl = document.getElementById('crash-layer-sound');
-  if (_cl) { try { _cl.currentTime = 0; _cl.volume = 0.25; _cl.play().catch(() => {}); } catch (_) {} }
-}
-
 // Plasma-punch impact layered alongside engine-roar ignition.
 function playThrusterImpact(vol) {
   if (state.muted) return;
