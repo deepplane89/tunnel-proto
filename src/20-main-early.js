@@ -5492,6 +5492,7 @@ function pauseGameTrackInPlace(track) {
   }
 }
 function resumeGameTrackInPlace(track) {
+  console.log('[RADIO-DIAG] resumeGameTrackInPlace ENTER track=', track, 'isRadioOn=', (typeof isRadioOn==='function')?isRadioOn():'?', 'radioMusic.paused=', (typeof radioMusic!=='undefined')?(radioMusic && radioMusic.paused):'?');
   initAudio();
   _ensureCtxRunning();
   // iOS interruption belt: if we came back from a backgrounding event,
@@ -5530,9 +5531,11 @@ function resumeGameTrackInPlace(track) {
 // Smooth crossfade using Web Audio gain ramps — no JS timers for volume.
 function musicFadeTo(toTrack, durationMs, outFadeMult) {
   initAudio();
+  console.log('[RADIO-DIAG] musicFadeTo ENTER toTrack=', toTrack, 'durMs=', durationMs);
   // Radio override: when the unlockable shuffle station is ON and the caller
   // is targeting a gameplay zone (bg/l3/l4/lake/keepgoing), divert to radio.
-  if (typeof radioInterceptMusicFade === 'function' && radioInterceptMusicFade(toTrack, durationMs)) return;
+  if (typeof radioInterceptMusicFade === 'function' && radioInterceptMusicFade(toTrack, durationMs)) { console.log('[RADIO-DIAG] musicFadeTo DIVERTED to radio'); return; }
+  console.log('[RADIO-DIAG] musicFadeTo proceeding to ramp toTrack=', toTrack);
   const all = allTracks();
   const toEl = all[toTrack];
   if (!toEl) return;

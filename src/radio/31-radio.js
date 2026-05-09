@@ -185,8 +185,10 @@ window.currentRadioTrackName = currentRadioTrackName;
 // the title screen actually silences title music as radio takes over.
 const _RADIO_GAMEPLAY_TRACKS = { bg: 1, l3: 1, l4: 1, lake: 1, keepgoing: 1 };
 function radioInterceptMusicFade(toTrack, durationMs) {
+  console.log('[RADIO-DIAG] radioInterceptMusicFade CALLED toTrack=', toTrack, 'isRadioOn=', isRadioOn(), 'gameplayMatch=', !!_RADIO_GAMEPLAY_TRACKS[toTrack]);
   if (!isRadioOn()) return false;
   if (!_RADIO_GAMEPLAY_TRACKS[toTrack]) return false;
+  console.log('[RADIO-DIAG] radioInterceptMusicFade DIVERTING to radio for toTrack=', toTrack);
   try {
     const all = (typeof allTracks === 'function') ? allTracks() : {};
     const durSec = (durationMs || 1500) / 1000;
@@ -496,25 +498,33 @@ window.enableRadioInGame = enableRadioInGame;
 // Mid-run: turn the shuffle station OFF and bring the current zone's
 // gameplay music back. Works whether we're 'playing' or 'paused'.
 function disableRadioInGame() {
+  console.log('[RADIO-DIAG] disableRadioInGame ENTER. isRadioOn(before)=', isRadioOn(), 'phase=', state && state.phase, 'radioMusic.paused=', radioMusic && radioMusic.paused);
   setRadioOn(false);
+  console.log('[RADIO-DIAG] after setRadioOn(false). isRadioOn=', isRadioOn(), 'radioMusic.paused=', radioMusic && radioMusic.paused);
   // Hard-stop the radio synchronously so it can't bleed through.
   try { if (typeof setTrackVol === 'function') setTrackVol('radio', 0); } catch(_) {}
   try { if (radioMusic && !radioMusic.paused) radioMusic.pause(); } catch(_) {}
+  console.log('[RADIO-DIAG] after hard-stop. radioMusic.paused=', radioMusic && radioMusic.paused, 'radio gain=', (typeof getTrackVol==='function')?getTrackVol('radio'):'?');
   // Bring the current zone track back. Use currentGameTrack() (campaign +
   // DR sequence aware) instead of guessing from currentLevelIdx.
   try {
     if (state && !state.muted) {
       const k = (typeof currentGameTrack === 'function') ? currentGameTrack() : 'bg';
       const el = (typeof allTracks === 'function') ? allTracks()[k] : null;
+      console.log('[RADIO-DIAG] zone resume target k=', k, 'el?=', !!el, 'el.paused(before)=', el && el.paused, 'gain(before)=', (typeof getTrackVol==='function')?getTrackVol(k):'?');
       if (el) {
-        if (el.paused) { try { el.play().catch(() => {}); } catch(_) {} }
+        if (el.paused) { try { el.play().then(()=>console.log('[RADIO-DIAG] zone el.play() RESOLVED for', k)).catch((err) => console.log('[RADIO-DIAG] zone el.play() REJECTED for', k, err && err.name, err && err.message)); } catch(e) { console.log('[RADIO-DIAG] zone el.play() THREW', e); } }
         if (typeof rampTrackVol === 'function') rampTrackVol(k, TRACK_VOL[k], 0.6);
         else setTrackVol(k, TRACK_VOL[k]);
+        console.log('[RADIO-DIAG] zone resume ramped. el.paused(after)=', el.paused);
       }
+    } else {
+      console.log('[RADIO-DIAG] zone resume SKIPPED (state.muted=', state && state.muted, ')');
     }
-  } catch(_) {}
+  } catch(e) { console.log('[RADIO-DIAG] zone resume THREW', e); }
   _updatePlayIcon();
   _refreshShuffleSwitches();
+  console.log('[RADIO-DIAG] disableRadioInGame EXIT');
 }
 window.disableRadioInGame = disableRadioInGame;
 
