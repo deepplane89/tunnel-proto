@@ -11188,25 +11188,29 @@ function _updateCanyonWalls(dt, speed) {
     const shipHalfL = 1.0;             // ship Z half-length
     const shipMinZ = shipZ - shipHalfL, shipMaxZ = shipZ + shipHalfL;
     const shipMaxX = shipX + shipHalfW, shipMinX = shipX - shipHalfW;
-    // 0.3u grace buffer — matches pre-Push-4 feel (ship can kiss wall without insta-die)
+    // 0.3u grace buffer — ship can kiss the wall (overlap up to 0.3u) without
+    // dying. Collision fires only when penetration > GRACE. Previous code had
+    // the sign inverted, killing 0.3u BEFORE contact — the phantom-death bug.
     const GRACE = 0.3;
 
     let hit = false;
-    // Right wall: wall occupies X >= bakedX. Ship collides if shipMaxX >= bakedX - GRACE.
+    // Right wall: wall occupies X >= bakedX. Ship collides only if its right
+    // edge has pushed PAST bakedX by more than GRACE → shipMaxX >= bakedX + GRACE.
     for (const pivot of _canyonWalls.right) {
       if (!pivot.visible || pivot.userData.bakedX === undefined) continue;
       // Z overlap: slab Z range = [pivot.z, pivot.z + spacing]
       if (pivot.position.z + spacing < shipMinZ) continue;
       if (pivot.position.z > shipMaxZ) continue;
-      if (shipMaxX >= pivot.userData.bakedX - GRACE) { hit = true; break; }
+      if (shipMaxX >= pivot.userData.bakedX + GRACE) { hit = true; break; }
     }
-    // Left wall: wall occupies X <= bakedX. Ship collides if shipMinX <= bakedX + GRACE.
+    // Left wall: wall occupies X <= bakedX. Ship collides only if its left edge
+    // has pushed past bakedX by more than GRACE → shipMinX <= bakedX - GRACE.
     if (!hit) {
       for (const pivot of _canyonWalls.left) {
         if (!pivot.visible || pivot.userData.bakedX === undefined) continue;
         if (pivot.position.z + spacing < shipMinZ) continue;
         if (pivot.position.z > shipMaxZ) continue;
-        if (shipMinX <= pivot.userData.bakedX + GRACE) { hit = true; break; }
+        if (shipMinX <= pivot.userData.bakedX - GRACE) { hit = true; break; }
       }
     }
 
