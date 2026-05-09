@@ -423,6 +423,13 @@ function startGame() {
     el.currentTime = 0;
     setTrackVol(k, 0);
   });
+  // If radio is OFF but the player left a title-screen preview running, kill
+  // it now so it doesn't bleed into gameplay. (When radio is ON, the
+  // musicFadeTo interceptor below takes over and keeps radio continuous.)
+  if (typeof isRadioOn === 'function' && !isRadioOn()
+      && typeof stopRadioPreviewForce === 'function') {
+    stopRadioPreviewForce();
+  }
   // Short fade-in for gameplay track (title already silenced above)
   const _startTrack = state.currentLevelIdx >= 2 ? 'l3' : 'bg';
   const _startEl = _startTrack === 'l3' ? l3Music : bgMusic;

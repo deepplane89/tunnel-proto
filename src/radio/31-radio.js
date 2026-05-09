@@ -11,7 +11,6 @@
 const RADIO_TRACKS = [
   { id: 'neon-underworld',   name: 'NEON UNDERWORLD',       src: './assets/audio/l4music.mp3' },
   { id: 'brazilian-street',  name: 'BRAZILIAN STREET FIGHT',src: './assets/audio/l3music.mp3' },
-  { id: 'keep-going',        name: 'KEEP GOING',            src: './assets/audio/keep-going.mp3' },
   { id: 'synesthetic-gears', name: 'SYNESTHETIC GEARS',     src: './assets/audio/radio-gears-1.mp3' },
   { id: 'synthetic-gears-2', name: 'SYNTHETIC GEARS II',    src: './assets/audio/radio-gears-2.mp3' },
   { id: 'funk-of-the-night', name: 'FUNK OF THE NIGHT',     src: './assets/audio/radio-funk.mp3' },
@@ -243,9 +242,27 @@ function closeRadio() {
   try { if (typeof playTitleClose === 'function') playTitleClose(); } catch(_) {}
   const ov = document.getElementById('radio-overlay');
   if (ov) ov.classList.add('hidden');
-  _stopRadioPreview();
+  // Intentionally DO NOT stop the preview here. If the player started a track
+  // they want it to keep playing on the title screen after they close the
+  // overlay. _stopRadioPreview is called from startGame and on death so the
+  // preview never bleeds into gameplay or game-over.
 }
 window.closeRadio = closeRadio;
+window._stopRadioPreview = _stopRadioPreview;
+
+// Called from startGame() when radio is OFF — forces any title-screen
+// preview to stop so it doesn't bleed into gameplay. Bypasses the
+// phase-aware guard inside _stopRadioPreview (which by design refuses to
+// pause radio mid-run).
+function stopRadioPreviewForce() {
+  if (_radioPreviewIdx < 0 && (!radioMusic || radioMusic.paused)) return;
+  try { if (radioMusic && !radioMusic.paused) radioMusic.pause(); } catch(_) {}
+  try { setTrackVol('radio', 0); } catch(_) {}
+  _radioPreviewIdx = -1;
+  const list = document.getElementById('radio-track-list');
+  if (list) list.querySelectorAll('.radio-row-play').forEach(b => b.textContent = '\u25B6');
+}
+window.stopRadioPreviewForce = stopRadioPreviewForce;
 
 function _stopRadioPreview() {
   if (_radioPreviewIdx < 0) return;
