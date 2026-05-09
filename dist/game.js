@@ -6302,7 +6302,6 @@ function pauseGameTrackInPlace(track) {
   }
 }
 function resumeGameTrackInPlace(track) {
-  console.log('[RADIO-DIAG] resumeGameTrackInPlace ENTER track=', track, 'isRadioOn=', (typeof isRadioOn==='function')?isRadioOn():'?', 'radioMusic.paused=', (typeof radioMusic!=='undefined')?(radioMusic && radioMusic.paused):'?');
   initAudio();
   _ensureCtxRunning();
   // iOS interruption belt: if we came back from a backgrounding event,
@@ -6341,11 +6340,9 @@ function resumeGameTrackInPlace(track) {
 // Smooth crossfade using Web Audio gain ramps — no JS timers for volume.
 function musicFadeTo(toTrack, durationMs, outFadeMult) {
   initAudio();
-  console.log('[RADIO-DIAG] musicFadeTo ENTER toTrack=', toTrack, 'durMs=', durationMs);
   // Radio override: when the unlockable shuffle station is ON and the caller
   // is targeting a gameplay zone (bg/l3/l4/lake/keepgoing), divert to radio.
-  if (typeof radioInterceptMusicFade === 'function' && radioInterceptMusicFade(toTrack, durationMs)) { console.log('[RADIO-DIAG] musicFadeTo DIVERTED to radio'); return; }
-  console.log('[RADIO-DIAG] musicFadeTo proceeding to ramp toTrack=', toTrack);
+  if (typeof radioInterceptMusicFade === 'function' && radioInterceptMusicFade(toTrack, durationMs)) return;
   const all = allTracks();
   const toEl = all[toTrack];
   if (!toEl) return;
@@ -12755,10 +12752,8 @@ window.currentRadioTrackName = currentRadioTrackName;
 // the title screen actually silences title music as radio takes over.
 const _RADIO_GAMEPLAY_TRACKS = { bg: 1, l3: 1, l4: 1, lake: 1, keepgoing: 1 };
 function radioInterceptMusicFade(toTrack, durationMs) {
-  console.log('[RADIO-DIAG] radioInterceptMusicFade CALLED toTrack=', toTrack, 'isRadioOn=', isRadioOn(), 'gameplayMatch=', !!_RADIO_GAMEPLAY_TRACKS[toTrack]);
   if (!isRadioOn()) return false;
   if (!_RADIO_GAMEPLAY_TRACKS[toTrack]) return false;
-  console.log('[RADIO-DIAG] radioInterceptMusicFade DIVERTING to radio for toTrack=', toTrack);
   try {
     const all = (typeof allTracks === 'function') ? allTracks() : {};
     const durSec = (durationMs || 1500) / 1000;
@@ -13015,10 +13010,11 @@ function _togglePlayPause() {
   if (typeof initAudio === 'function') initAudio();
   if (!radioMusic) radioMusic = document.getElementById('radio-music');
   if (!radioMusic) return;
-  // In gameplay (playing or paused), hitting PLAY also flips the shuffle
-  // station ON — the player explicitly asked for music, so we treat it as
-  // opting in. The interceptor is gated by isRadioOn() so this is the
-  // user's consent moment.
+  // In gameplay (playing or paused), the play/pause button is the radio's
+  // master switch — PLAY enables radio (and starts diverting gameplay zones
+  // to it via the interceptor); PAUSE fully disables radio so the proper
+  // gameplay music resumes on continue. This matches user expectation that
+  // "pausing the radio" means the game music should come back.
   const inGame = state && (state.phase === 'playing' || state.phase === 'paused');
   if (radioMusic.paused) {
     if (inGame && !isRadioOn()) {
@@ -13037,7 +13033,14 @@ function _togglePlayPause() {
     }
     radioMusic.play().catch(() => {});
   } else {
-    try { radioMusic.pause(); } catch(_) {}
+    // In-game pause = full disable so the zone music comes back. Title-screen
+    // pause is just an audio-element pause (radio stays unlocked, no game
+    // music to swap to).
+    if (inGame && isRadioOn()) {
+      disableRadioInGame();
+    } else {
+      try { radioMusic.pause(); } catch(_) {}
+    }
   }
   _updatePlayIcon();
 }
@@ -13068,33 +13071,30 @@ window.enableRadioInGame = enableRadioInGame;
 // Mid-run: turn the shuffle station OFF and bring the current zone's
 // gameplay music back. Works whether we're 'playing' or 'paused'.
 function disableRadioInGame() {
-  console.log('[RADIO-DIAG] disableRadioInGame ENTER. isRadioOn(before)=', isRadioOn(), 'phase=', state && state.phase, 'radioMusic.paused=', radioMusic && radioMusic.paused);
   setRadioOn(false);
-  console.log('[RADIO-DIAG] after setRadioOn(false). isRadioOn=', isRadioOn(), 'radioMusic.paused=', radioMusic && radioMusic.paused);
   // Hard-stop the radio synchronously so it can't bleed through.
   try { if (typeof setTrackVol === 'function') setTrackVol('radio', 0); } catch(_) {}
   try { if (radioMusic && !radioMusic.paused) radioMusic.pause(); } catch(_) {}
-  console.log('[RADIO-DIAG] after hard-stop. radioMusic.paused=', radioMusic && radioMusic.paused, 'radio gain=', (typeof getTrackVol==='function')?getTrackVol('radio'):'?');
-  // Bring the current zone track back. Use currentGameTrack() (campaign +
-  // DR sequence aware) instead of guessing from currentLevelIdx.
+  // What track should fill the silence depends on phase:
+  //   - paused : title music is the pause underscore. resumeGameTrackInPlace
+  //              will swap title → zone on CONTINUE.
+  //   - playing: bring the zone gameplay track straight back.
+  // currentGameTrack() is campaign + DR sequence aware.
   try {
     if (state && !state.muted) {
-      const k = (typeof currentGameTrack === 'function') ? currentGameTrack() : 'bg';
+      const k = (state.phase === 'paused' && titleMusic) ? 'title'
+              : ((typeof currentGameTrack === 'function') ? currentGameTrack() : 'bg');
       const el = (typeof allTracks === 'function') ? allTracks()[k] : null;
-      console.log('[RADIO-DIAG] zone resume target k=', k, 'el?=', !!el, 'el.paused(before)=', el && el.paused, 'gain(before)=', (typeof getTrackVol==='function')?getTrackVol(k):'?');
       if (el) {
-        if (el.paused) { try { el.play().then(()=>console.log('[RADIO-DIAG] zone el.play() RESOLVED for', k)).catch((err) => console.log('[RADIO-DIAG] zone el.play() REJECTED for', k, err && err.name, err && err.message)); } catch(e) { console.log('[RADIO-DIAG] zone el.play() THREW', e); } }
+        if (k === 'title') { try { el.currentTime = 0; } catch(_) {} }
+        if (el.paused) { try { el.play().catch(() => {}); } catch(_) {} }
         if (typeof rampTrackVol === 'function') rampTrackVol(k, TRACK_VOL[k], 0.6);
         else setTrackVol(k, TRACK_VOL[k]);
-        console.log('[RADIO-DIAG] zone resume ramped. el.paused(after)=', el.paused);
       }
-    } else {
-      console.log('[RADIO-DIAG] zone resume SKIPPED (state.muted=', state && state.muted, ')');
     }
-  } catch(e) { console.log('[RADIO-DIAG] zone resume THREW', e); }
+  } catch(_) {}
   _updatePlayIcon();
   _refreshShuffleSwitches();
-  console.log('[RADIO-DIAG] disableRadioInGame EXIT');
 }
 window.disableRadioInGame = disableRadioInGame;
 
@@ -13213,18 +13213,13 @@ window.updatePauseRadioRow = updatePauseRadioRow;
 
 function _wirePauseShuffleSwitch() {
   const sw = document.getElementById('pp-shuffle-toggle');
-  console.log('[RADIO-DIAG] _wirePauseShuffleSwitch sw?=', !!sw, 'wired?=', sw && sw._wired);
   if (!sw || sw._wired) return;
   sw._wired = true;
   sw.addEventListener('click', (e) => {
-    console.log('[RADIO-DIAG] pp-shuffle-toggle CLICKED isRadioOn=', isRadioOn());
     e.stopPropagation();
     if (isRadioOn()) disableRadioInGame();
     else             enableRadioInGame();
   });
-  // Also log pointerdown to see if the gesture is even reaching the element.
-  sw.addEventListener('pointerdown', () => console.log('[RADIO-DIAG] pp-shuffle-toggle POINTERDOWN'));
-  console.log('[RADIO-DIAG] _wirePauseShuffleSwitch listener attached');
 }
 
 // Refresh the title button on load (in case it was already unlocked).
