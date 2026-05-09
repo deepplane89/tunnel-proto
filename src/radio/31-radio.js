@@ -203,13 +203,42 @@ function currentRadioTrackName() {
 window.currentRadioTrackName = currentRadioTrackName;
 
 // ── musicFadeTo divert helper ────────────────────────────────────────────
-// Called from musicFadeTo() (in 20-main-early.js) when radio is ON and the
-// requested track is a gameplay zone. Returns true if it took over the fade.
-// Fades EVERYTHING but radio down — including title — so hitting play from
-// the title screen actually silences title music as radio takes over.
+// Called from musicFadeTo() (in 20-main-early.js) when radio is ON. Returns
+// true if it took over the fade.
+//
+// Two flavors:
+//  • Gameplay target (bg/l3/l4/lake/keepgoing): fade EVERYTHING but radio
+//    down — including title — so hitting play from the title screen actually
+//    silences title music as radio takes over.
+//  • Title target: keep radio rolling untouched. The death → title and L5
+//    ending → title transitions both call musicFadeTo('title'), and there's
+//    no reason for the radio to drop out — the player explicitly turned it on
+//    and never asked for it to stop. Make sure title music itself stays
+//    silent in that window.
 const _RADIO_GAMEPLAY_TRACKS = { bg: 1, l3: 1, l4: 1, lake: 1, keepgoing: 1 };
 function radioInterceptMusicFade(toTrack, durationMs) {
   if (!isRadioOn()) return false;
+  if (toTrack === 'title') {
+    // Keep radio playing seamlessly through gameplay → title transitions.
+    try {
+      const all = (typeof allTracks === 'function') ? allTracks() : {};
+      const durSec = (durationMs || 1500) / 1000;
+      Object.entries(all).forEach(([k, el]) => {
+        if (!el) return;
+        if (k === 'radio') return;
+        if (k === 'lake') return; // lake is its own ambience; leave as-is
+        if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, durSec);
+        setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, (durationMs || 1500) + 50);
+      });
+      // Make sure radio is actually rolling at full vol (it may have been
+      // paused mid-run by some other path).
+      startRadio();
+      if (typeof rampTrackVol === 'function' && radioMusic) {
+        rampTrackVol('radio', TRACK_VOL.radio, Math.min(durSec, 0.4));
+      }
+      return true;
+    } catch(_) { return false; }
+  }
   if (!_RADIO_GAMEPLAY_TRACKS[toTrack]) return false;
   try {
     const all = (typeof allTracks === 'function') ? allTracks() : {};

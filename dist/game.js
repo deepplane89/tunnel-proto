@@ -12788,13 +12788,42 @@ function currentRadioTrackName() {
 window.currentRadioTrackName = currentRadioTrackName;
 
 // ── musicFadeTo divert helper ────────────────────────────────────────────
-// Called from musicFadeTo() (in 20-main-early.js) when radio is ON and the
-// requested track is a gameplay zone. Returns true if it took over the fade.
-// Fades EVERYTHING but radio down — including title — so hitting play from
-// the title screen actually silences title music as radio takes over.
+// Called from musicFadeTo() (in 20-main-early.js) when radio is ON. Returns
+// true if it took over the fade.
+//
+// Two flavors:
+//  • Gameplay target (bg/l3/l4/lake/keepgoing): fade EVERYTHING but radio
+//    down — including title — so hitting play from the title screen actually
+//    silences title music as radio takes over.
+//  • Title target: keep radio rolling untouched. The death → title and L5
+//    ending → title transitions both call musicFadeTo('title'), and there's
+//    no reason for the radio to drop out — the player explicitly turned it on
+//    and never asked for it to stop. Make sure title music itself stays
+//    silent in that window.
 const _RADIO_GAMEPLAY_TRACKS = { bg: 1, l3: 1, l4: 1, lake: 1, keepgoing: 1 };
 function radioInterceptMusicFade(toTrack, durationMs) {
   if (!isRadioOn()) return false;
+  if (toTrack === 'title') {
+    // Keep radio playing seamlessly through gameplay → title transitions.
+    try {
+      const all = (typeof allTracks === 'function') ? allTracks() : {};
+      const durSec = (durationMs || 1500) / 1000;
+      Object.entries(all).forEach(([k, el]) => {
+        if (!el) return;
+        if (k === 'radio') return;
+        if (k === 'lake') return; // lake is its own ambience; leave as-is
+        if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, durSec);
+        setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, (durationMs || 1500) + 50);
+      });
+      // Make sure radio is actually rolling at full vol (it may have been
+      // paused mid-run by some other path).
+      startRadio();
+      if (typeof rampTrackVol === 'function' && radioMusic) {
+        rampTrackVol('radio', TRACK_VOL.radio, Math.min(durSec, 0.4));
+      }
+      return true;
+    } catch(_) { return false; }
+  }
   if (!_RADIO_GAMEPLAY_TRACKS[toTrack]) return false;
   try {
     const all = (typeof allTracks === 'function') ? allTracks() : {};
@@ -19340,8 +19369,14 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
-  // Radio: ensure shuffle station is fully stopped before title music kicks in.
-  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  // Radio: when the shuffle station is on the player explicitly opted into it
+  // and never asked for it to stop. Keep it rolling seamlessly across
+  // exit → title. The title-music restart below is also gated on radio-off
+  // so the two tracks don't double up.
+  const _radioRolling = (typeof isRadioOn === 'function') && isRadioOn();
+  if (!_radioRolling) {
+    try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  }
   // Defensive: refresh radio button visibility on every title return so an
   // earlier load-time race that left it hidden self-heals.
   try { if (typeof refreshRadioButton === 'function') refreshRadioButton(); } catch(_) {}
@@ -19504,7 +19539,9 @@ function returnToTitle() {
     try { _thunderActiveSrc.stop(); } catch (_) {}
     _thunderActiveSrc = null;
   }
-  if (titleMusic) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
+  // Skip title-music restart when radio is on — it would double up with the
+  // shuffle station and immediately get ducked again.
+  if (titleMusic && !_radioRolling) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
   updateTitleCoins();
   updateTitleFuelCells();
   updateTitleLevel();
@@ -24399,8 +24436,9 @@ function killPlayer() {
                            : null;
 
   state.phase = 'dead';
-  // Radio: stop playback on death + try to unlock the shuffle station.
-  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  // Radio: keep the shuffle station rolling across death → game-over → title.
+  // The player explicitly turned it on; only the user should stop it.
+  // (Previously stopRadio() was called here. Lock-in unlock still fires.)
   try { if (typeof tryUnlockRadioOnDeath === 'function') tryUnlockRadioOnDeath(); } catch(_) {}
   // Release the screen wake lock on death — game-over screen doesn't need it.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}

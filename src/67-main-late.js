@@ -3289,8 +3289,9 @@ function killPlayer() {
                            : null;
 
   state.phase = 'dead';
-  // Radio: stop playback on death + try to unlock the shuffle station.
-  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  // Radio: keep the shuffle station rolling across death → game-over → title.
+  // The player explicitly turned it on; only the user should stop it.
+  // (Previously stopRadio() was called here. Lock-in unlock still fires.)
   try { if (typeof tryUnlockRadioOnDeath === 'function') tryUnlockRadioOnDeath(); } catch(_) {}
   // Release the screen wake lock on death — game-over screen doesn't need it.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
