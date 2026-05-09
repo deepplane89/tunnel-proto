@@ -446,7 +446,10 @@ window._THRUSTER_COLOR_PALETTE = {
     // gesture, which translateY's the whole overlay and looks like the menu
     // is closing on its own.
     '.shop-handling-bar, .fm-head, .fm-menu, .fm-row, .fm-row *, ' +
-    '.shop-card, .shop-detail, .shop-detail-tier, .shop-upgrade-btn, .btn-upgrade';
+    '.shop-card, .shop-detail, .shop-detail-tier, .shop-upgrade-btn, .btn-upgrade, ' +
+    // Radio progress bar: tap/drag to seek must not be hijacked by the
+    // swipe-to-dismiss gesture on the radio overlay.
+    '.rp-progress-track, .rp-progress, .rp-progress *, .pp-progress-track, .pp-progress, .pp-progress *';
 
   let active = false;
   let startX = 0, startY = 0, lastY = 0;
