@@ -65,35 +65,27 @@ function togglePause() {
     if (_introOv) { fadeOutIntroOverlay(_introOv); }
     state.introActive = false;
     killThrusterSputter();
-    // Pause engine SFX
-    const _engP = document.getElementById('engine-start');
-    const _roarP = document.getElementById('engine-roar');
-    const _roarLP = document.getElementById('engine-roar-layer');
-    if (_engP && !_engP.paused) _engP.pause();
-    if (_roarP && !_roarP.paused) _roarP.pause();
-    if (_roarLP && !_roarLP.paused) _roarLP.pause();
+    // Central kill-switch: cancels pending _sfxTimeout chains (klaxon countdown,
+    // queued thruster-impact punch), ramps + stops Web Audio buffer sources,
+    // and pauses every tracked gameplay <audio> element. Without this, an SFX
+    // fired one frame before pause keeps ringing into the pause overlay.
+    if (typeof stopAllGameplaySFX === 'function') stopAllGameplaySFX();
     stopEngineBaseline();
+    // Argon BufferSource path — non-element cleanup (the <audio> tag was
+    // already paused by the kill-switch).
     if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
     if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
     if (state._argonSrc) { try { state._argonSrc.stop(); } catch (_) {} state._argonSrc = null; }
     state._argonPath = null;
     state._argonPlayCount = 0;
-    const _argonP = document.getElementById('argon-ambient-sfx');
-    if (_argonP && !_argonP.paused) { try { _argonP.pause(); _argonP.currentTime = 0; _argonP.volume = 0; } catch (_) {} }
     state._argonSteering = false;
     state._argonOpen = 0;
     _stopMagnetWhir();
-    const _invP = document.getElementById('invincible-loop-sfx');
-    if (_invP && !_invP.paused) _invP.pause();
-    // Pause looped weapon SFX so they don't bleed through pause.
-    // currentTime preserved so they pick up where they left off on resume.
-    const _laserP = document.getElementById('laser-beam-sfx');
-    if (_laserP && !_laserP.paused) _laserP.pause();
+    // Laser intervals/timeouts (module-local handles) so the loop can't re-
+    // trigger the laser SFX during pause.
     if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
     if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
-    const _ubeamP = document.getElementById('unibeam-sfx');
-    if (_ubeamP && !_ubeamP.paused) _ubeamP.pause();
-    // Kill in-flight thunder rumble so it doesn't ring through pause.
+    // Thunder one-shot BufferSource.
     if (typeof _thunderActiveSrc !== 'undefined' && _thunderActiveSrc) {
       try { _thunderActiveSrc.stop(); } catch (_) {}
       _thunderActiveSrc = null;
@@ -118,18 +110,21 @@ function togglePause() {
     // Resume baseline whir on unpause (smooth fade-in)
     startEngineBaseline(0.5);
     // Argon is edge-triggered — will fire on next steer input, nothing to resume
-    // Resume invincible loop if active
+    // Resume invincible loop if active. The kill-switch on pause cleared the
+    // loop flag, so re-set it before play().
     const _invU = document.getElementById('invincible-loop-sfx');
-    if (_invU && state.invincibleTimer > 0 && !state.muted) { _invU.play().catch(()=>{}); }
+    if (_invU && state.invincibleTimer > 0 && !state.muted) {
+      _invU.loop = true; _invU.play().catch(()=>{});
+    }
     // Resume looped weapon SFX if their power-up timer is still running.
     if (state.laserActive && !state.muted) {
       const _tier = state.laserTier || 1;
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
-        if (_laserU) _laserU.play().catch(()=>{});
+        if (_laserU) { _laserU.loop = true; _laserU.play().catch(()=>{}); }
       } else {
         const _ubeamU = document.getElementById('unibeam-sfx');
-        if (_ubeamU) _ubeamU.play().catch(()=>{});
+        if (_ubeamU) { _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
       }
     }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
