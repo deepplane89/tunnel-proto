@@ -27370,8 +27370,39 @@ window._perfDiag = _perfDiag;
 // haze nozzle→screen-UV projection. Avoids per-frame allocation / GC churn.
 const _hazeProjScratch = new THREE.Vector3();
 
-function animate() {
+// Soft 60fps cap. ProMotion iPhones (14/15/16/17 Pro) drive rAF at 120Hz,
+// which doubles GPU work for no visual gain (game logic is fixed dt = 1/60).
+// Skip rAF ticks that arrive faster than the budget. Subtract 1.5ms slack so
+// we don't accidentally land on every other tick (which would cap us at 30).
+const _FRAME_BUDGET_MS = 1000 / 60;
+let _lastFrameMs = 0;
+
+// Lights whose intensity ramps to/from 0 frequently. When intensity is 0 the
+// light still costs fragment-shader cycles unless `visible` is also false
+// (Three.js skips invisible lights from the per-material lights uniform).
+// Keeping `visible` in sync with `intensity > 0` is a free mobile GPU win.
+const _OPTIONAL_LIGHTS = [];
+function _registerOptionalLight(L) { if (L && _OPTIONAL_LIGHTS.indexOf(L) === -1) _OPTIONAL_LIGHTS.push(L); }
+function _syncOptionalLightVisibility() {
+  for (let i = 0; i < _OPTIONAL_LIGHTS.length; i++) {
+    const L = _OPTIONAL_LIGHTS[i];
+    const want = L.intensity > 0.0001;
+    if (L.visible !== want) L.visible = want;
+  }
+}
+try {
+  if (typeof _flashLight       !== 'undefined') _registerOptionalLight(_flashLight);
+  if (typeof shieldLight       !== 'undefined') _registerOptionalLight(shieldLight);
+  if (typeof magnetLight       !== 'undefined') _registerOptionalLight(magnetLight);
+  if (typeof shipUnderlightWarm!== 'undefined') _registerOptionalLight(shipUnderlightWarm);
+} catch(_) {}
+
+function animate(now) {
   requestAnimationFrame(animate);
+  if (typeof now === 'number') {
+    if (now - _lastFrameMs < _FRAME_BUDGET_MS - 1.5) return;
+    _lastFrameMs = now;
+  }
   _perfDiag.frameStart();
   // FPS + draw call measurement
   if (_fpsOn) {
@@ -27389,6 +27420,7 @@ function animate() {
   // Single guard at the top — obviates per-system pause gates throughout
   // update() and the visual phase. Composer renders so the screen isn't black.
   if (state.phase === 'paused') {
+    _syncOptionalLightVisibility();
     _perfDiag.markRenderStart();
     composer.render();
     _perfDiag.markRenderEnd();
@@ -27593,6 +27625,7 @@ function animate() {
       _thrusterHazePass.uniforms.uAspect.value = window.innerWidth / window.innerHeight;
     }
   }
+  _syncOptionalLightVisibility();
   _perfDiag.markRenderStart();
   composer.render();
   _perfDiag.markRenderEnd();
