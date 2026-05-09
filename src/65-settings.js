@@ -19,7 +19,7 @@ let _settings = {
 
 // Returns the DPR cap for the current graphics quality setting.
 // Used by renderer.setPixelRatio() and the starfield shader uPixelRatio uniform.
-function _targetDPR() {
+function _baseTargetDPR() {
   const native = window.devicePixelRatio || 1;
   switch (_settings.graphicsQuality) {
     case 'performance': return 1.0;
@@ -28,7 +28,26 @@ function _targetDPR() {
     default:            return Math.min(native, 1.5);
   }
 }
+
+// Adaptive DPR scale (0.5–1.0). When the rAF frame loop detects sustained
+// slow frames (thermal throttling on iOS, or just a struggling device), it
+// drops this scale in 0.85x steps so the renderer paints fewer pixels. The
+// floor of 0.5 means we won't go below half the chosen quality. Recovers
+// slowly when frames stabilize.
+let _adaptiveDPRScale = 1.0;
+window._setAdaptiveDPRScale = function(s) {
+  s = Math.max(0.5, Math.min(1.0, s));
+  if (Math.abs(s - _adaptiveDPRScale) < 0.001) return;
+  _adaptiveDPRScale = s;
+  applyGraphicsQuality();
+};
+window._getAdaptiveDPRScale = function() { return _adaptiveDPRScale; };
+
+function _targetDPR() {
+  return _baseTargetDPR() * _adaptiveDPRScale;
+}
 window._targetDPR = _targetDPR;
+window._baseTargetDPR = _baseTargetDPR;
 
 // Apply current graphics quality → update renderer DPR + shader uniforms.
 // Safe to call before renderer/composer exist (guarded).

@@ -274,6 +274,56 @@ const _hazeProjScratch = new THREE.Vector3();
 const _FRAME_BUDGET_MS = 1000 / 60;
 let _lastFrameMs = 0;
 
+// ── Adaptive DPR (thermal/perf throttle defense) ──────────────────────────
+// Watches the recent frame budget. When > 35% of the last ~120 frames blew
+// past 22ms (i.e. consistently below 45fps), drop renderer pixel ratio one
+// step (0.85x). When < 5% are slow over a longer window, recover one step.
+// Step floor = 0.5 of base DPR so we never go below half-quality.
+// Cooldown after each step prevents oscillation.
+const _ADAPT_WINDOW       = 120;     // frames considered
+const _ADAPT_SLOW_MS       = 22;     // frame considered slow above this
+const _ADAPT_DOWN_RATIO   = 0.35;    // > this fraction slow → drop quality
+const _ADAPT_UP_RATIO     = 0.05;    // < this fraction slow → recover
+const _ADAPT_STEP         = 0.85;    // multiplicative step
+const _ADAPT_MIN          = 0.5;
+const _ADAPT_MAX          = 1.0;
+const _ADAPT_DOWN_COOLDOWN = 180;    // frames after dropping before another check
+const _ADAPT_UP_COOLDOWN  = 600;     // longer cooldown before recovering (~10s)
+let _adaptSlowBuf = new Uint8Array(_ADAPT_WINDOW);
+let _adaptIdx = 0;
+let _adaptFilled = 0;
+let _adaptCooldown = 240;            // initial grace period after boot
+function _tickAdaptiveDPR(frameMs) {
+  // Don't run if disabled or if we're paused / not in gameplay.
+  if (typeof window._setAdaptiveDPRScale !== 'function') return;
+  if (state && (state.phase === 'paused' || state.phase === 'title' || state.phase === 'dead')) return;
+  if (_adaptCooldown > 0) { _adaptCooldown--; return; }
+  // Append slow/fast bit.
+  const isSlow = frameMs > _ADAPT_SLOW_MS ? 1 : 0;
+  _adaptSlowBuf[_adaptIdx] = isSlow;
+  _adaptIdx = (_adaptIdx + 1) % _ADAPT_WINDOW;
+  if (_adaptFilled < _ADAPT_WINDOW) _adaptFilled++;
+  if (_adaptFilled < _ADAPT_WINDOW) return;
+  // Sum.
+  let slow = 0;
+  for (let i = 0; i < _ADAPT_WINDOW; i++) slow += _adaptSlowBuf[i];
+  const ratio = slow / _ADAPT_WINDOW;
+  const cur = window._getAdaptiveDPRScale ? window._getAdaptiveDPRScale() : 1.0;
+  if (ratio > _ADAPT_DOWN_RATIO && cur > _ADAPT_MIN + 0.001) {
+    const next = Math.max(_ADAPT_MIN, cur * _ADAPT_STEP);
+    window._setAdaptiveDPRScale(next);
+    _adaptCooldown = _ADAPT_DOWN_COOLDOWN;
+    _adaptFilled = 0; // reset window after a change
+    if (window._fpsOn) console.log('[adaptive-dpr] DROP', cur.toFixed(2), '→', next.toFixed(2), 'slow ratio', ratio.toFixed(2));
+  } else if (ratio < _ADAPT_UP_RATIO && cur < _ADAPT_MAX - 0.001) {
+    const next = Math.min(_ADAPT_MAX, cur / _ADAPT_STEP);
+    window._setAdaptiveDPRScale(next);
+    _adaptCooldown = _ADAPT_UP_COOLDOWN;
+    _adaptFilled = 0;
+    if (window._fpsOn) console.log('[adaptive-dpr] UP', cur.toFixed(2), '→', next.toFixed(2), 'slow ratio', ratio.toFixed(2));
+  }
+}
+
 // Lights whose intensity ramps to/from 0 frequently. When intensity is 0 the
 // light still costs fragment-shader cycles unless `visible` is also false
 // (Three.js skips invisible lights from the per-material lights uniform).
@@ -296,10 +346,13 @@ try {
 
 function animate(now) {
   requestAnimationFrame(animate);
+  let _frameDeltaMs = 0;
   if (typeof now === 'number') {
     if (now - _lastFrameMs < _FRAME_BUDGET_MS - 1.5) return;
+    _frameDeltaMs = _lastFrameMs > 0 ? (now - _lastFrameMs) : 0;
     _lastFrameMs = now;
   }
+  if (_frameDeltaMs > 0) _tickAdaptiveDPR(_frameDeltaMs);
   _perfDiag.frameStart();
   // FPS + draw call measurement
   if (_fpsOn) {
