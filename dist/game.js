@@ -6186,7 +6186,19 @@ function _initTrackGains() {
     catch (_) { return; }
     const gain = audioCtx.createGain();
     gain.gain.value = el.volume; // inherit current volume (e.g. title already playing)
-    src.connect(gain).connect(audioCtx.destination);
+    src.connect(gain);
+    // Tap an AnalyserNode off the radio gain so the player UI can show a live
+    // FFT visualizer. Analyser is a passthrough — gain still goes to dest.
+    if (k === 'radio') {
+      try {
+        const an = audioCtx.createAnalyser();
+        an.fftSize = 64;
+        an.smoothingTimeConstant = 0.78;
+        gain.connect(an); // analyser sees post-gain signal
+        window._radioAnalyser = an;
+      } catch(_) {}
+    }
+    gain.connect(audioCtx.destination);
     trackGains[k] = gain;
     el.volume = 1;  // max HTML volume — gain node controls actual level
   });
@@ -12791,6 +12803,7 @@ function closeRadio() {
   try { if (typeof playTitleClose === 'function') playTitleClose(); } catch(_) {}
   const ov = document.getElementById('radio-overlay');
   if (ov) ov.classList.add('hidden');
+  try { _stopRadioPlayerLoop(); } catch(_) {}
   // Intentionally DO NOT stop the preview here. If the player started a track
   // they want it to keep playing on the title screen after they close the
   // overlay. _stopRadioPreview is called from startGame and on death so the
@@ -12808,8 +12821,7 @@ function stopRadioPreviewForce() {
   try { if (radioMusic && !radioMusic.paused) radioMusic.pause(); } catch(_) {}
   try { setTrackVol('radio', 0); } catch(_) {}
   _radioPreviewIdx = -1;
-  const list = document.getElementById('radio-track-list');
-  if (list) list.querySelectorAll('.radio-row-play').forEach(b => b.textContent = '\u25B6');
+  try { _updatePlayIcon(); } catch(_) {}
 }
 window.stopRadioPreviewForce = stopRadioPreviewForce;
 
@@ -12828,19 +12840,13 @@ function _stopRadioPreview() {
       else setTrackVol('title', TRACK_VOL.title);
     } catch(_) {}
   }
-  // Refresh play buttons in list.
-  const list = document.getElementById('radio-track-list');
-  if (list) list.querySelectorAll('.radio-row-play').forEach(b => b.textContent = '\u25B6');
+  try { _updatePlayIcon(); } catch(_) {}
 }
 
 function _previewRadioTrack(idx) {
   if (typeof initAudio === 'function') initAudio();
   if (!radioMusic) radioMusic = document.getElementById('radio-music');
   if (!radioMusic) return;
-  // If tapping the row that's already previewing, stop.
-  if (_radioPreviewIdx === idx) { _stopRadioPreview(); return; }
-  // Stop previous preview.
-  _stopRadioPreview();
   const tr = RADIO_TRACKS[idx];
   if (!tr) return;
   if (radioMusic.src.indexOf(tr.src) === -1) radioMusic.src = tr.src;
@@ -12853,50 +12859,203 @@ function _previewRadioTrack(idx) {
   try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
   radioMusic.play().catch(() => {});
   _radioPreviewIdx = idx;
-  // Update play button glyph.
-  const list = document.getElementById('radio-track-list');
-  if (list) {
-    list.querySelectorAll('.radio-row-play').forEach(b => b.textContent = '\u25B6');
-    const btn = list.querySelector('.radio-row[data-idx="' + idx + '"] .radio-row-play');
-    if (btn) btn.textContent = '\u25A0';
+  _updatePlayerMeta();
+  _updatePlayIcon();
+}
+
+// ── New premium player UI ─────────────────────────────────────────────
+let _rpRAF = 0;
+let _rpEqCtx = null;
+let _rpEqBuf = null;
+
+function _fmtTime(s) {
+  if (!isFinite(s) || s < 0) s = 0;
+  const m = Math.floor(s / 60);
+  const ss = Math.floor(s % 60).toString().padStart(2, '0');
+  return m + ':' + ss;
+}
+function _pad2(n) { return n.toString().padStart(2, '0'); }
+
+function _updatePlayerMeta() {
+  const titleEl = document.getElementById('rp-title');
+  const idxEl   = document.getElementById('rp-index');
+  if (!titleEl || !idxEl) return;
+  const total = RADIO_TRACKS.length;
+  const i = (_radioPreviewIdx >= 0) ? _radioPreviewIdx
+          : (_radioCurrentIdx >= 0) ? _radioCurrentIdx
+          : 0;
+  const tr = RADIO_TRACKS[i];
+  if (!tr) return;
+  titleEl.textContent = tr.name;
+  idxEl.textContent = _pad2(i + 1) + ' / ' + _pad2(total);
+  // Marquee if the title overflows its container.
+  requestAnimationFrame(() => {
+    if (titleEl.scrollWidth > titleEl.clientWidth + 4) titleEl.classList.add('scroll');
+    else titleEl.classList.remove('scroll');
+  });
+}
+
+function _updatePlayIcon() {
+  const icon = document.getElementById('rp-play-icon');
+  const btn  = document.getElementById('rp-play');
+  if (!icon || !btn) return;
+  const playing = !!(radioMusic && !radioMusic.paused);
+  if (playing) {
+    icon.innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+    btn.setAttribute('aria-label', 'Pause');
+  } else {
+    icon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+    btn.setAttribute('aria-label', 'Play');
   }
 }
 
+function _drawRadioEq() {
+  const cv = document.getElementById('rp-eq');
+  if (!cv) return;
+  if (!_rpEqCtx) _rpEqCtx = cv.getContext('2d');
+  const ctx = _rpEqCtx;
+  if (!ctx) return;
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  const an = window._radioAnalyser;
+  const bars = 8;
+  const gap = 2;
+  const bw = (W - gap * (bars - 1)) / bars;
+  let levels = new Array(bars).fill(0);
+  const playing = !!(radioMusic && !radioMusic.paused);
+  if (an && playing) {
+    if (!_rpEqBuf || _rpEqBuf.length !== an.frequencyBinCount) {
+      _rpEqBuf = new Uint8Array(an.frequencyBinCount);
+    }
+    an.getByteFrequencyData(_rpEqBuf);
+    // Map 32 bins down to 8 bars (skip top half — usually empty).
+    const usable = Math.floor(_rpEqBuf.length * 0.85);
+    const per = Math.max(1, Math.floor(usable / bars));
+    for (let i = 0; i < bars; i++) {
+      let s = 0;
+      for (let j = 0; j < per; j++) s += _rpEqBuf[i * per + j];
+      levels[i] = (s / per) / 255;
+    }
+  } else if (playing) {
+    // Analyser unavailable — gentle pseudo-random fallback.
+    const t = performance.now() / 240;
+    for (let i = 0; i < bars; i++) {
+      levels[i] = 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(t + i * 0.7));
+    }
+  } else {
+    // Idle — flat baseline.
+    for (let i = 0; i < bars; i++) levels[i] = 0.06;
+  }
+  // Draw bars bottom-up with a cyan gradient.
+  const grad = ctx.createLinearGradient(0, H, 0, 0);
+  grad.addColorStop(0, 'rgba(34, 211, 238, 0.55)');
+  grad.addColorStop(1, '#0ff');
+  ctx.fillStyle = grad;
+  ctx.shadowColor = 'rgba(34, 211, 238, 0.55)';
+  ctx.shadowBlur = 4;
+  for (let i = 0; i < bars; i++) {
+    const h = Math.max(2, levels[i] * (H - 2));
+    const x = i * (bw + gap);
+    const y = H - h;
+    ctx.fillRect(x, y, bw, h);
+  }
+  ctx.shadowBlur = 0;
+}
+
+function _radioPlayerTick() {
+  // Progress bar + timecode.
+  const fill = document.getElementById('rp-progress-fill');
+  const cur  = document.getElementById('rp-time-cur');
+  const tot  = document.getElementById('rp-time-tot');
+  if (radioMusic && fill && cur && tot) {
+    const d = isFinite(radioMusic.duration) ? radioMusic.duration : 0;
+    const t = radioMusic.currentTime || 0;
+    fill.style.width = (d > 0 ? (t / d * 100) : 0) + '%';
+    cur.textContent = _fmtTime(t);
+    tot.textContent = _fmtTime(d);
+  }
+  _drawRadioEq();
+  _rpRAF = requestAnimationFrame(_radioPlayerTick);
+}
+
+function _stepRadioTrack(dir) {
+  if (typeof initAudio === 'function') initAudio();
+  let i = (_radioPreviewIdx >= 0) ? _radioPreviewIdx
+        : (_radioCurrentIdx >= 0) ? _radioCurrentIdx
+        : 0;
+  i = (i + dir + RADIO_TRACKS.length) % RADIO_TRACKS.length;
+  _previewRadioTrack(i);
+}
+
+function _togglePlayPause() {
+  if (typeof initAudio === 'function') initAudio();
+  if (!radioMusic) radioMusic = document.getElementById('radio-music');
+  if (!radioMusic) return;
+  if (radioMusic.paused) {
+    // No source yet → start at first track (or last preview).
+    if (!radioMusic.src) {
+      const i = (_radioPreviewIdx >= 0) ? _radioPreviewIdx : 0;
+      _previewRadioTrack(i);
+      return;
+    }
+    try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+    if (titleMusic && !titleMusic.paused) {
+      try { if (typeof rampTrackVol === 'function') rampTrackVol('title', 0, 0.18); else setTrackVol('title', 0); } catch(_) {}
+      setTimeout(() => { try { if (titleMusic && !titleMusic.paused) titleMusic.pause(); } catch(_) {} }, 220);
+    }
+    radioMusic.play().catch(() => {});
+  } else {
+    try { radioMusic.pause(); } catch(_) {}
+  }
+  _updatePlayIcon();
+}
+
 function _renderRadioOverlay() {
-  const list = document.getElementById('radio-track-list');
   const toggleBtn = document.getElementById('radio-master-toggle');
-  if (!list || !toggleBtn) return;
-  toggleBtn.textContent = isRadioOn() ? 'ON' : 'OFF';
-  toggleBtn.classList.toggle('on', isRadioOn());
-  list.innerHTML = RADIO_TRACKS.map((t, i) =>
-    '<div class="radio-row" data-idx="' + i + '">' +
-      '<button class="radio-row-play" aria-label="Preview">\u25B6</button>' +
-      '<span class="radio-row-name">' + t.name + '</span>' +
-    '</div>'
-  ).join('');
-  // Wire rows.
-  list.querySelectorAll('.radio-row-play').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const row = btn.closest('.radio-row');
-      const idx = parseInt(row.getAttribute('data-idx'), 10);
-      _previewRadioTrack(idx);
-    });
-  });
-  // Wire master toggle.
-  toggleBtn.onclick = () => {
+  if (!toggleBtn) return;
+
+  // Shuffle pill switch state.
+  toggleBtn.setAttribute('aria-checked', isRadioOn() ? 'true' : 'false');
+  toggleBtn.onclick = (e) => {
+    e.stopPropagation();
     const next = !isRadioOn();
     setRadioOn(next);
-    toggleBtn.textContent = next ? 'ON' : 'OFF';
-    toggleBtn.classList.toggle('on', next);
-    if (!next) _stopRadioPreview();
+    toggleBtn.setAttribute('aria-checked', next ? 'true' : 'false');
   };
-  // Wire close button (idempotent).
+
+  // Transport buttons (idempotent wiring).
+  const prev = document.getElementById('rp-prev');
+  const play = document.getElementById('rp-play');
+  const next = document.getElementById('rp-next');
+  if (prev && !prev._wired) { prev._wired = true; prev.addEventListener('click', (e) => { e.stopPropagation(); _stepRadioTrack(-1); }); }
+  if (next && !next._wired) { next._wired = true; next.addEventListener('click', (e) => { e.stopPropagation(); _stepRadioTrack(1); }); }
+  if (play && !play._wired) { play._wired = true; play.addEventListener('click', (e) => { e.stopPropagation(); _togglePlayPause(); }); }
+
+  // Refresh icon state on existing <audio> events (once per element).
+  if (radioMusic && !radioMusic._rpHooked) {
+    radioMusic._rpHooked = true;
+    radioMusic.addEventListener('play', _updatePlayIcon);
+    radioMusic.addEventListener('pause', _updatePlayIcon);
+  }
+
+  // Close button (idempotent).
   const closeBtn = document.getElementById('radio-close');
   if (closeBtn && !closeBtn._wired) {
     closeBtn._wired = true;
     closeBtn.addEventListener('click', () => closeRadio());
   }
+
+  _updatePlayerMeta();
+  _updatePlayIcon();
+
+  // Start the rAF loop for progress + EQ while overlay is open.
+  if (_rpRAF) cancelAnimationFrame(_rpRAF);
+  _rpRAF = requestAnimationFrame(_radioPlayerTick);
+}
+
+// Stop the rAF loop when overlay closes.
+function _stopRadioPlayerLoop() {
+  if (_rpRAF) { cancelAnimationFrame(_rpRAF); _rpRAF = 0; }
 }
 
 // ── UI: pause-menu now-playing row ──────────────────────────────────────

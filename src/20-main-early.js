@@ -5376,7 +5376,19 @@ function _initTrackGains() {
     catch (_) { return; }
     const gain = audioCtx.createGain();
     gain.gain.value = el.volume; // inherit current volume (e.g. title already playing)
-    src.connect(gain).connect(audioCtx.destination);
+    src.connect(gain);
+    // Tap an AnalyserNode off the radio gain so the player UI can show a live
+    // FFT visualizer. Analyser is a passthrough — gain still goes to dest.
+    if (k === 'radio') {
+      try {
+        const an = audioCtx.createAnalyser();
+        an.fftSize = 64;
+        an.smoothingTimeConstant = 0.78;
+        gain.connect(an); // analyser sees post-gain signal
+        window._radioAnalyser = an;
+      } catch(_) {}
+    }
+    gain.connect(audioCtx.destination);
     trackGains[k] = gain;
     el.volume = 1;  // max HTML volume — gain node controls actual level
   });
