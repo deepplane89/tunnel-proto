@@ -1034,6 +1034,10 @@ function playTitleTap()    {
   // — VR mecha interlock.
   try { if (typeof window.playTitleExit === 'function') window.playTitleExit(); } catch(_){}
 }
+// Expose on window so callers in other modules + the access-grant tap handler
+// (82-main-late-tail.js) can fire the sound — module scope alone made this a
+// silent no-op for the first-tap gate.
+window.playTitleTap = playTitleTap;
 function playTitleClose() {
   // Title-screen UI CLOSE — the legacy tap-to-play cue (start.mp3) so open
   // and close don't share the same sound.

@@ -12327,7 +12327,10 @@ function _playArgonOnce(targetVol, fadeInSec) {
   return src;
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx', 'reject': 'reject-sfx' };
+// 'title-exit' is the cue used by playTitleTap — needed as a fallback for the
+// ACCESS GRANTED first tap, where the AudioContext is initialized in the
+// SAME gesture and the decoded buffer isn't ready yet.
+const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx', 'reject': 'reject-sfx', 'title-exit': 'title-exit-sfx' };
 
 // ── Gameplay SFX kill-switch infrastructure ─────────────────────────────
 // _playBuffer fires-and-forgets AudioBufferSourceNodes. With no tracking
@@ -20125,6 +20128,10 @@ function playTitleTap()    {
   // — VR mecha interlock.
   try { if (typeof window.playTitleExit === 'function') window.playTitleExit(); } catch(_){}
 }
+// Expose on window so callers in other modules + the access-grant tap handler
+// (82-main-late-tail.js) can fire the sound — module scope alone made this a
+// silent no-op for the first-tap gate.
+window.playTitleTap = playTitleTap;
 function playTitleClose() {
   // Title-screen UI CLOSE — the legacy tap-to-play cue (start.mp3) so open
   // and close don't share the same sound.
@@ -34095,6 +34102,11 @@ window._jhWakeLock = (function _wakeLockFactory() {
       // wired up in 60-main-late.js and idempotent if already called.
       try {
         if (typeof window.initTitleAudio === 'function') window.initTitleAudio();
+      } catch (_) {}
+      // Play the standard title-tap SFX now that audio is unlocked, so the
+      // ACCESS GRANTED gate feels consistent with the rest of the title HUD.
+      try {
+        if (typeof window.playTitleTap === 'function') window.playTitleTap();
       } catch (_) {}
       // First-time-ever load: show the graphics-quality picker before fading
       // the gate. The picker handles its own dismissal + gate hide.

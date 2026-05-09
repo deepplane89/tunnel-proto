@@ -319,7 +319,10 @@ function _playArgonOnce(targetVol, fadeInSec) {
   return src;
 }
 // SFX element fallback map — used when AudioBuffer hasn't decoded yet
-const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx', 'reject': 'reject-sfx' };
+// 'title-exit' is the cue used by playTitleTap — needed as a fallback for the
+// ACCESS GRANTED first tap, where the AudioContext is initialized in the
+// SAME gesture and the decoded buffer isn't ready yet.
+const _sfxFallbackIds = { 'nearmiss': 'nearmiss-sfx', 'whoosh': 'whoosh1', 'whoosh-release': 'whoosh-release', 'laser-mg': 'laser-beam-sfx', 'shop-purchase': 'shop-purchase-sfx', 'reject': 'reject-sfx', 'title-exit': 'title-exit-sfx' };
 
 // ── Gameplay SFX kill-switch infrastructure ─────────────────────────────
 // _playBuffer fires-and-forgets AudioBufferSourceNodes. With no tracking
