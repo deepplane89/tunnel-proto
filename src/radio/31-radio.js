@@ -498,8 +498,11 @@ window.enableRadioInGame = enableRadioInGame;
 // title music as the pause underscore (matching pauseGameTrackInPlace).
 function disableRadioInGame() {
   setRadioOn(false);
-  try { if (typeof rampTrackVol === 'function') rampTrackVol('radio', 0, 0.5); } catch(_) {}
-  setTimeout(() => { try { if (radioMusic && !radioMusic.paused) radioMusic.pause(); } catch(_) {} }, 600);
+  // Hard-stop synchronously so any subsequent resume / musicFadeTo can't see
+  // the radio still playing and overlap with the gameplay zone track. The
+  // ramp + delayed pause we used before raced with togglePause()'s resume path.
+  try { if (typeof setTrackVol === 'function') setTrackVol('radio', 0); } catch(_) {}
+  try { if (radioMusic && !radioMusic.paused) radioMusic.pause(); } catch(_) {}
   try {
     if (!state || state.muted) {
       // nothing
