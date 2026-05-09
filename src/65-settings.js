@@ -116,8 +116,22 @@ function closeSettings() {
   document.getElementById('settings-overlay').classList.add('hidden');
 }
 
+// Single-open accordion: when one <details> opens, close the others.
+// Wired here once at module init; <details> elements fire 'toggle' on change.
+function _initSettingsAccordion() {
+  const sections = document.querySelectorAll('#settings-overlay .settings-section');
+  sections.forEach(s => {
+    s.addEventListener('toggle', () => {
+      if (s.open) {
+        sections.forEach(other => { if (other !== s) other.open = false; });
+      }
+    });
+  });
+}
+
 // Wire up settings UI
 (function initSettings() {
+  _initSettingsAccordion();
   const gearBtn = document.getElementById('settings-btn');
   if (gearBtn) _tapBind(gearBtn, () => { initAudio(); openSettings(); });
 

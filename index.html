@@ -415,69 +415,83 @@
       <button id="settings-close" class="settings-close">✕</button>
     </div>
     <div class="settings-body">
-      <div class="settings-col">
-        <div class="settings-section-divider">AUDIO</div>
-        <div class="settings-row">
-          <label>Music</label>
-          <input type="range" id="vol-music" min="0" max="100" value="80" class="vol-slider">
-          <button id="mute-music" class="mute-toggle">♪</button>
-        </div>
-        <div class="settings-row">
-          <label>SFX</label>
-          <input type="range" id="vol-sfx" min="0" max="100" value="80" class="vol-slider">
-          <button id="mute-sfx" class="mute-toggle">♪</button>
-        </div>
-        <div class="settings-section-divider">DISPLAY</div>
-        <div class="settings-row">
-          <label>Graphics</label>
-          <div class="gfx-row">
-            <button id="gfx-performance" class="toggle-btn gfx-btn">PERF</button>
-            <button id="gfx-balanced"    class="toggle-btn gfx-btn active">BAL</button>
-            <button id="gfx-sharp"       class="toggle-btn gfx-btn">SHARP</button>
+      <details class="settings-section" open>
+        <summary class="settings-section-head"><span>AUDIO</span><span class="settings-chevron">›</span></summary>
+        <div class="settings-section-content">
+          <div class="settings-row">
+            <label>Music</label>
+            <input type="range" id="vol-music" min="0" max="100" value="80" class="vol-slider">
+            <button id="mute-music" class="mute-toggle">♪</button>
+          </div>
+          <div class="settings-row">
+            <label>SFX</label>
+            <input type="range" id="vol-sfx" min="0" max="100" value="80" class="vol-slider">
+            <button id="mute-sfx" class="mute-toggle">♪</button>
           </div>
         </div>
-        <div class="settings-row">
-          <label>Haptics</label>
-          <button id="haptic-toggle" class="toggle-btn on">ON</button>
-        </div>
-        <div class="settings-section-divider">HELP</div>
-        <div class="settings-row">
-          <label>Controls</label>
-          <button id="show-tutorial-btn" class="toggle-btn">HOW TO PLAY</button>
-        </div>
-        <div class="settings-row">
-          <label>Leaderboard</label>
-          <button id="settings-leaderboard-btn" class="toggle-btn">VIEW</button>
-        </div>
-      </div>
-      <div class="settings-col">
-        <div class="settings-section-divider">SYNC PROGRESS</div>
-        <div class="settings-row">
-          <label>Backup</label>
-          <div class="settings-row-actions">
-            <button id="sync-get-code-btn" class="toggle-btn">GET CODE</button>
+      </details>
+      <details class="settings-section">
+        <summary class="settings-section-head"><span>DISPLAY</span><span class="settings-chevron">›</span></summary>
+        <div class="settings-section-content">
+          <div class="settings-row">
+            <label>Graphics</label>
+            <div class="gfx-row">
+              <button id="gfx-performance" class="toggle-btn gfx-btn">PERF</button>
+              <button id="gfx-balanced"    class="toggle-btn gfx-btn active">BAL</button>
+              <button id="gfx-sharp"       class="toggle-btn gfx-btn">SHARP</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <label>Haptics</label>
+            <button id="haptic-toggle" class="toggle-btn on">ON</button>
           </div>
         </div>
-        <div class="settings-row" id="sync-code-row" style="display:none;">
-          <label>Code</label>
-          <span id="sync-code-display" class="sync-code-display">—</span>
-          <button id="sync-copy-btn" class="toggle-btn" style="width:64px;">COPY</button>
+      </details>
+      <details class="settings-section">
+        <summary class="settings-section-head"><span>GAMEPLAY</span><span class="settings-chevron">›</span></summary>
+        <div class="settings-section-content">
+          <div class="settings-row">
+            <label>Controls</label>
+            <button id="show-tutorial-btn" class="toggle-btn">HOW TO PLAY</button>
+          </div>
+          <div class="settings-row">
+            <label>Tutorial</label>
+            <button id="replay-tutorial-btn" class="toggle-btn">REPLAY</button>
+          </div>
+          <div class="settings-row">
+            <label>Leaderboard</label>
+            <button id="settings-leaderboard-btn" class="toggle-btn">VIEW</button>
+          </div>
         </div>
-        <div class="settings-row">
-          <label>Restore</label>
-          <input id="sync-restore-input" class="sync-code-input" type="text" maxlength="12" placeholder="JH-XXXX-XX" autocapitalize="characters" autocorrect="off" spellcheck="false">
-          <button id="sync-restore-btn" class="toggle-btn" style="width:64px;">LOAD</button>
+      </details>
+      <details class="settings-section">
+        <summary class="settings-section-head"><span>ACCOUNT</span><span class="settings-chevron">›</span></summary>
+        <div class="settings-section-content">
+          <div class="settings-row">
+            <label>Backup</label>
+            <div class="settings-row-actions">
+              <button id="sync-get-code-btn" class="toggle-btn">GET CODE</button>
+            </div>
+          </div>
+          <div class="settings-row" id="sync-code-row" style="display:none;">
+            <label>Code</label>
+            <span id="sync-code-display" class="sync-code-display">—</span>
+            <button id="sync-copy-btn" class="toggle-btn" style="width:64px;">COPY</button>
+          </div>
+          <div class="settings-row">
+            <label>Restore</label>
+            <input id="sync-restore-input" class="sync-code-input" type="text" maxlength="12" placeholder="JH-XXXX-XX" autocapitalize="characters" autocorrect="off" spellcheck="false">
+            <button id="sync-restore-btn" class="toggle-btn" style="width:64px;">LOAD</button>
+          </div>
+          <div id="sync-status" class="sync-status"></div>
+          <div class="settings-row">
+            <label>Reset</label>
+            <button id="settings-reset-btn" class="toggle-btn settings-reset-btn">RESET GAME</button>
+          </div>
         </div>
-        <div id="sync-status" class="sync-status"></div>
-        <div class="settings-section-divider">DANGER ZONE</div>
-        <div class="settings-row">
-          <label>Reset</label>
-          <button id="settings-reset-btn" class="toggle-btn settings-reset-btn">RESET GAME</button>
-        </div>
-        <div class="settings-footer">
-          <button id="replay-tutorial-btn" class="settings-tutorial-btn">TUTORIAL</button>
-          <a href="./privacy.html" target="_blank" class="settings-link">Privacy Policy</a>
-        </div>
+      </details>
+      <div class="settings-footer">
+        <a href="./privacy.html" target="_blank" class="settings-link">Privacy Policy</a>
       </div>
     </div>
   </div>
@@ -648,6 +662,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1778292154"></script>
+<script type="module" src="./dist/game.js?v=1778292291"></script>
 </body>
 </html>
