@@ -643,13 +643,18 @@ window.updatePauseRadioRow = updatePauseRadioRow;
 
 function _wirePauseShuffleSwitch() {
   const sw = document.getElementById('pp-shuffle-toggle');
+  console.log('[RADIO-DIAG] _wirePauseShuffleSwitch sw?=', !!sw, 'wired?=', sw && sw._wired);
   if (!sw || sw._wired) return;
   sw._wired = true;
   sw.addEventListener('click', (e) => {
+    console.log('[RADIO-DIAG] pp-shuffle-toggle CLICKED isRadioOn=', isRadioOn());
     e.stopPropagation();
     if (isRadioOn()) disableRadioInGame();
     else             enableRadioInGame();
   });
+  // Also log pointerdown to see if the gesture is even reaching the element.
+  sw.addEventListener('pointerdown', () => console.log('[RADIO-DIAG] pp-shuffle-toggle POINTERDOWN'));
+  console.log('[RADIO-DIAG] _wirePauseShuffleSwitch listener attached');
 }
 
 // Refresh the title button on load (in case it was already unlocked).
