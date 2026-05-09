@@ -5463,24 +5463,31 @@ function setActiveMusic(track) {
 function pauseGameTrackInPlace(track) {
   initAudio();
   const all = allTracks();
-  // Fast fade-out (90ms) on every non-title track, then pause once silent.
-  // 90ms is short enough that the player perceives an instant pause but long
-  // enough to drain Safari's MediaElementSource pipeline cleanly.
+  // If the shuffle station is on, radio IS the pause music — keep it
+  // playing, don't fade title music in over it. Otherwise: fade gameplay
+  // tracks out and bring title music up as the pause underscore.
+  const radioActive = (typeof isRadioOn === 'function') && isRadioOn() && radioMusic && !radioMusic.paused;
   Object.entries(all).forEach(([k, el]) => {
     if (!el || k === 'title' || el.paused) return;
+    if (radioActive && k === 'radio') return; // keep radio playing under pause
     rampTrackVol(k, 0, 0.09);
     setTimeout(() => { try { if (!el.paused) el.pause(); } catch (_) {} }, 110);
   });
   if (titleMusic) {
-    titleMusic.currentTime = 0;
-    if (!state.muted) {
-      // Fade title in over 180ms (start at 0, ramp up) so it doesn't slam in
-      // while the gameplay tail is still draining.
+    if (radioActive) {
+      // Radio is the pause music — don't intro title.
       setTrackVol('title', 0);
-      titleMusic.play().catch(() => {});
-      rampTrackVol('title', TRACK_VOL.title, 0.20);
     } else {
-      setTrackVol('title', 0);
+      titleMusic.currentTime = 0;
+      if (!state.muted) {
+        // Fade title in over 180ms (start at 0, ramp up) so it doesn't slam in
+        // while the gameplay tail is still draining.
+        setTrackVol('title', 0);
+        titleMusic.play().catch(() => {});
+        rampTrackVol('title', TRACK_VOL.title, 0.20);
+      } else {
+        setTrackVol('title', 0);
+      }
     }
   }
 }

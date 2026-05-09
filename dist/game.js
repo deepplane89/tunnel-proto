@@ -6273,24 +6273,31 @@ function setActiveMusic(track) {
 function pauseGameTrackInPlace(track) {
   initAudio();
   const all = allTracks();
-  // Fast fade-out (90ms) on every non-title track, then pause once silent.
-  // 90ms is short enough that the player perceives an instant pause but long
-  // enough to drain Safari's MediaElementSource pipeline cleanly.
+  // If the shuffle station is on, radio IS the pause music — keep it
+  // playing, don't fade title music in over it. Otherwise: fade gameplay
+  // tracks out and bring title music up as the pause underscore.
+  const radioActive = (typeof isRadioOn === 'function') && isRadioOn() && radioMusic && !radioMusic.paused;
   Object.entries(all).forEach(([k, el]) => {
     if (!el || k === 'title' || el.paused) return;
+    if (radioActive && k === 'radio') return; // keep radio playing under pause
     rampTrackVol(k, 0, 0.09);
     setTimeout(() => { try { if (!el.paused) el.pause(); } catch (_) {} }, 110);
   });
   if (titleMusic) {
-    titleMusic.currentTime = 0;
-    if (!state.muted) {
-      // Fade title in over 180ms (start at 0, ramp up) so it doesn't slam in
-      // while the gameplay tail is still draining.
+    if (radioActive) {
+      // Radio is the pause music — don't intro title.
       setTrackVol('title', 0);
-      titleMusic.play().catch(() => {});
-      rampTrackVol('title', TRACK_VOL.title, 0.20);
     } else {
-      setTrackVol('title', 0);
+      titleMusic.currentTime = 0;
+      if (!state.muted) {
+        // Fade title in over 180ms (start at 0, ramp up) so it doesn't slam in
+        // while the gameplay tail is still draining.
+        setTrackVol('title', 0);
+        titleMusic.play().catch(() => {});
+        rampTrackVol('title', TRACK_VOL.title, 0.20);
+      } else {
+        setTrackVol('title', 0);
+      }
     }
   }
 }
@@ -13003,10 +13010,11 @@ function _togglePlayPause() {
   if (typeof initAudio === 'function') initAudio();
   if (!radioMusic) radioMusic = document.getElementById('radio-music');
   if (!radioMusic) return;
-  // In gameplay, hitting PLAY also flips the shuffle station ON — the player
-  // explicitly asked for music, so we treat it as opting in. The interceptor
-  // is gated by isRadioOn() so this is the user's consent moment.
-  const inGame = state && state.phase === 'playing';
+  // In gameplay (playing or paused), hitting PLAY also flips the shuffle
+  // station ON — the player explicitly asked for music, so we treat it as
+  // opting in. The interceptor is gated by isRadioOn() so this is the
+  // user's consent moment.
+  const inGame = state && (state.phase === 'playing' || state.phase === 'paused');
   if (radioMusic.paused) {
     if (inGame && !isRadioOn()) {
       enableRadioInGame();
@@ -13029,8 +13037,8 @@ function _togglePlayPause() {
   _updatePlayIcon();
 }
 
-// Mid-run: turn the shuffle station ON, duck/pause the gameplay zone track,
-// fade radio in. Mirrors radioInterceptMusicFade but always runs (no gate).
+// Mid-run: turn the shuffle station ON, duck/pause every other track
+// (including the title-music pause underscore), fade radio in.
 function enableRadioInGame() {
   if (typeof initAudio === 'function') initAudio();
   setRadioOn(true);
@@ -13052,23 +13060,32 @@ function enableRadioInGame() {
 }
 window.enableRadioInGame = enableRadioInGame;
 
-// Mid-run: turn the shuffle station OFF, fade radio out, rebring the
-// current zone's gameplay track.
+// Mid-run: turn the shuffle station OFF, fade radio out. If we're playing,
+// re-bring the current zone's gameplay track. If we're paused, bring up
+// title music as the pause underscore (matching pauseGameTrackInPlace).
 function disableRadioInGame() {
   setRadioOn(false);
   try { if (typeof rampTrackVol === 'function') rampTrackVol('radio', 0, 0.5); } catch(_) {}
   setTimeout(() => { try { if (radioMusic && !radioMusic.paused) radioMusic.pause(); } catch(_) {} }, 600);
-  // Re-bring the appropriate gameplay zone track.
   try {
-    if (state && state.phase === 'playing' && !state.muted) {
+    if (!state || state.muted) {
+      // nothing
+    } else if (state.phase === 'playing') {
       const lvl = state.currentLevelIdx || 0;
       const k = (lvl >= 2) ? 'l3' : 'bg';
       const el = (typeof allTracks === 'function') ? allTracks()[k] : null;
       if (el) {
-        if (el.paused) { try { el.currentTime = el.currentTime || 0; el.play().catch(() => {}); } catch(_) {} }
+        if (el.paused) { try { el.play().catch(() => {}); } catch(_) {} }
         if (typeof rampTrackVol === 'function') rampTrackVol(k, TRACK_VOL[k], 0.6);
         else setTrackVol(k, TRACK_VOL[k]);
       }
+    } else if (state.phase === 'paused' && titleMusic) {
+      try {
+        titleMusic.currentTime = 0;
+        setTrackVol('title', 0);
+        titleMusic.play().catch(() => {});
+        if (typeof rampTrackVol === 'function') rampTrackVol('title', TRACK_VOL.title, 0.5);
+      } catch(_) {}
     }
   } catch(_) {}
   _updatePlayIcon();
@@ -13091,7 +13108,7 @@ function _wirePlayerTransport(prefix) {
   const prev = document.getElementById(prefix + '-prev');
   const play = document.getElementById(prefix + '-play');
   const next = document.getElementById(prefix + '-next');
-  const inGame = () => state && state.phase === 'playing';
+  const inGame = () => state && (state.phase === 'playing' || state.phase === 'paused');
   if (prev && !prev._wired) {
     prev._wired = true;
     prev.addEventListener('click', (e) => {
