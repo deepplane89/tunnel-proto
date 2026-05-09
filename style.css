@@ -6145,6 +6145,26 @@ html.platform-ios-native body {
 }
 .radio-icon-btn.hidden { display: none; }
 
+/* NEW indicator — pulsing red dot + outer glow until the player opens the
+ * overlay for the first time after unlock. Mirrors the pattern used by the
+ * showroom tab .has-new but uses red so it reads as a fresh notification. */
+.radio-icon-btn.has-new {
+  border-color: rgba(255, 70, 90, 0.75);
+  box-shadow: 0 0 10px rgba(255, 70, 90, 0.55);
+  animation: srNewPulse 1.4s ease-in-out infinite;
+}
+.radio-icon-btn.has-new::after {
+  content: '';
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 70, 90, 1);
+  box-shadow: 0 0 8px rgba(255, 70, 90, 0.9);
+  animation: srNewPulse 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
 /* RADIO overlay — same visual family as settings-overlay */
 .radio-overlay {
   position: fixed; inset: 0;

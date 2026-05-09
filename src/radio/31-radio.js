@@ -24,6 +24,7 @@ const RADIO_LS = {
   unlocked:  'jh_radio_unlocked',
   on:        'jh_radio_on',
   runCount:  'jh_radio_run_count',
+  seen:      'jh_radio_seen',     // cleared on first unlock; set when overlay opened
 };
 const RADIO_UNLOCK_AT = 3;  // unlock on/after death of run #3
 
@@ -62,12 +63,13 @@ window.incrementRadioRunCount = incrementRadioRunCount;
 
 // Called from death handler. If unlock threshold met and not yet unlocked,
 // flip the flag and queue the toast for after the death screen settles.
+// Radio stays OFF on unlock — player turns it on themselves from the overlay.
 function tryUnlockRadioOnDeath() {
   if (isRadioUnlocked()) return false;
   if (getRadioRunCount() < RADIO_UNLOCK_AT) return false;
   setRadioUnlocked(true);
-  // Default to ON the first time it unlocks so the player notices it next run.
-  try { localStorage.setItem(RADIO_LS.on, '1'); } catch(_) {}
+  // Mark unseen so the title button shows a NEW dot until the player opens it.
+  try { localStorage.removeItem(RADIO_LS.seen); } catch(_) {}
   showRadioUnlockToast();
   // Refresh title-screen UI so the RADIO button appears next time we hit title.
   try { if (typeof refreshRadioButton === 'function') refreshRadioButton(); } catch(_) {}
@@ -179,6 +181,8 @@ window.currentRadioTrackName = currentRadioTrackName;
 // ── musicFadeTo divert helper ────────────────────────────────────────────
 // Called from musicFadeTo() (in 20-main-early.js) when radio is ON and the
 // requested track is a gameplay zone. Returns true if it took over the fade.
+// Fades EVERYTHING but radio down — including title — so hitting play from
+// the title screen actually silences title music as radio takes over.
 const _RADIO_GAMEPLAY_TRACKS = { bg: 1, l3: 1, l4: 1, lake: 1, keepgoing: 1 };
 function radioInterceptMusicFade(toTrack, durationMs) {
   if (!isRadioOn()) return false;
@@ -188,7 +192,7 @@ function radioInterceptMusicFade(toTrack, durationMs) {
     const durSec = (durationMs || 1500) / 1000;
     Object.entries(all).forEach(([k, el]) => {
       if (!el) return;
-      if (k === 'title' || k === 'radio') return;
+      if (k === 'radio') return;
       if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, durSec);
       setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, (durationMs || 1500) + 50);
     });
@@ -202,12 +206,20 @@ function radioInterceptMusicFade(toTrack, durationMs) {
 }
 window.radioInterceptMusicFade = radioInterceptMusicFade;
 
-// ── UI: title-screen RADIO button visibility ────────────────────────────
+// ── UI: title-screen RADIO button visibility + NEW dot ──────────────────
+function _isRadioSeen() {
+  try { return localStorage.getItem(RADIO_LS.seen) === '1'; } catch(_) { return false; }
+}
+function _markRadioSeen() {
+  try { localStorage.setItem(RADIO_LS.seen, '1'); } catch(_) {}
+}
 function refreshRadioButton() {
   const btn = document.getElementById('radio-btn');
   if (!btn) return;
   if (isRadioUnlocked()) btn.classList.remove('hidden');
   else                   btn.classList.add('hidden');
+  // Pulse a NEW dot until the player opens the overlay for the first time.
+  btn.classList.toggle('has-new', isRadioUnlocked() && !_isRadioSeen());
 }
 window.refreshRadioButton = refreshRadioButton;
 
@@ -220,6 +232,9 @@ function openRadio() {
   const ov = document.getElementById('radio-overlay');
   if (!ov) return;
   ov.classList.remove('hidden');
+  // Acknowledge the NEW dot the moment the overlay opens.
+  _markRadioSeen();
+  try { refreshRadioButton(); } catch(_) {}
   _renderRadioOverlay();
 }
 window.openRadio = openRadio;
