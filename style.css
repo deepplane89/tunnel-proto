@@ -1705,27 +1705,58 @@ html, body {
     padding: 8px 24px;
     width: 220px;
   }
-  /* Radio player: match the action-button width so it doesn't dominate */
+  /* Radio player: wide horizontal pill so it doesn't push other UI offscreen.
+     Re-flow into a 2-column row — left: EQ + title + progress, right: transport. */
   .pause-radio-player {
-    width: 220px;
-    max-width: 220px;
+    width: 340px;
+    max-width: 90vw;
     box-sizing: border-box;
-    padding: 8px 10px;
-    gap: 6px;
-    margin: 4px 0 6px 0;
+    padding: 6px 10px;
+    margin: 2px 0 4px 0;
+    flex-direction: row !important;
+    align-items: center;
+    gap: 10px;
   }
-  .pause-radio-player .rp-meta-row { gap: 8px; }
-  .pause-radio-player .rp-eq { width: 90px !important; height: 28px !important; }
-  .pause-radio-player .rp-label { font-size: 9px; }
-  .pause-radio-player .rp-title { font-size: 13px; }
-  .pause-radio-player .rp-progress-track { height: 3px; }
-  .pause-radio-player .rp-time { font-size: 9px; }
-  .pause-radio-player .rp-transport { gap: 12px; padding: 0; }
-  .pause-radio-player .rp-btn { width: 26px; height: 26px; }
-  .pause-radio-player .rp-btn-play { width: 34px; height: 34px; }
-  .pause-radio-player .rp-btn svg { width: 11px; height: 11px; }
-  .pause-radio-player .rp-btn-play svg { width: 14px; height: 14px; }
-  .pause-radio-player .rp-footer { font-size: 10px; }
+  /* Left column — EQ + label + title + progress stack */
+  .pause-radio-player .rp-meta-row,
+  .pause-radio-player .rp-title-wrap,
+  .pause-radio-player .rp-progress {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .pause-radio-player > .rp-meta-row { order: 1; }
+  .pause-radio-player > .rp-title-wrap { order: 2; }
+  .pause-radio-player > .rp-progress { order: 3; }
+  .pause-radio-player > .rp-transport { order: 4; }
+  .pause-radio-player > .rp-footer { order: 5; }
+  /* Group left items via wrapping into a column on the left */
+  .pause-radio-player {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "meta     transport"
+      "title    transport"
+      "progress footer";
+    column-gap: 10px;
+    row-gap: 2px;
+  }
+  .pause-radio-player > .rp-meta-row  { grid-area: meta; gap: 6px; align-items: center; }
+  .pause-radio-player > .rp-title-wrap{ grid-area: title; }
+  .pause-radio-player > .rp-progress  { grid-area: progress; }
+  .pause-radio-player > .rp-transport { grid-area: transport; padding: 0; gap: 8px; align-self: center; }
+  .pause-radio-player > .rp-footer    { grid-area: footer; justify-content: flex-end; gap: 6px; }
+  .pause-radio-player .rp-eq { width: 72px !important; height: 22px !important; }
+  .pause-radio-player .rp-label { font-size: 8px; letter-spacing: 0.08em; }
+  .pause-radio-player .rp-title { font-size: 11px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pause-radio-player .rp-progress-track { height: 2px; }
+  .pause-radio-player .rp-time { font-size: 8px; }
+  .pause-radio-player .rp-time-row { margin-top: 1px; }
+  .pause-radio-player .rp-btn { width: 22px; height: 22px; }
+  .pause-radio-player .rp-btn-play { width: 28px; height: 28px; }
+  .pause-radio-player .rp-btn svg { width: 10px; height: 10px; }
+  .pause-radio-player .rp-btn-play svg { width: 12px; height: 12px; }
+  .pause-radio-player .rp-shuffle-lbl { font-size: 8px; letter-spacing: 0.08em; }
+  .pause-radio-player .rp-switch { transform: scale(0.75); transform-origin: right center; }
 
   /* ── GAME OVER SCREEN — landscape side-stacked layout ──────────────────
    * Mobile landscape height ~430-500px overflows the single-column stack.
