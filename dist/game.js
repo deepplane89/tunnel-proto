@@ -6291,7 +6291,7 @@ function pauseGameTrackInPlace(track) {
   // duck (sfxMult) doesn't help here because the player isn't generating
   // SFX while paused. Restore in resumeGameTrackInPlace.
   if (radioActive) {
-    rampTrackVol('radio', TRACK_VOL.radio * 0.55, 0.20);
+    rampTrackVol('radio', TRACK_VOL.radio * 0.35, 0.20);
   }
   if (titleMusic) {
     if (radioActive) {
@@ -21336,6 +21336,13 @@ function _triggerRetryWithSweep() {
   if (_retrySweepActive || _retryPending) return; // debounce
   _retryPending = true;
   _retryIsFromDead = true;
+  // Restore radio volume — it was ducked on death entry.
+  try {
+    if (typeof isRadioOn === 'function' && isRadioOn() &&
+        typeof rampTrackVol === 'function' && typeof TRACK_VOL !== 'undefined') {
+      rampTrackVol('radio', TRACK_VOL.radio, 0.30);
+    }
+  } catch(_) {}
   const fadeEl = document.getElementById('retry-fade');
   fadeEl.style.opacity = '1'; // fade to black (CSS 0.15s transition)
   const _wasDeathRun = state.isDeathRun;
@@ -24626,6 +24633,14 @@ function killPlayer() {
   // The player explicitly turned it on; only the user should stop it.
   // (Previously stopRadio() was called here. Lock-in unlock still fires.)
   try { if (typeof tryUnlockRadioOnDeath === 'function') tryUnlockRadioOnDeath(); } catch(_) {}
+  // Duck the radio under the death/game-over UI sounds so they read clearly.
+  // Restored on retry (handled in retry path) and on title return (60-main-late.js).
+  try {
+    if (typeof isRadioOn === 'function' && isRadioOn() &&
+        typeof rampTrackVol === 'function' && typeof TRACK_VOL !== 'undefined') {
+      rampTrackVol('radio', TRACK_VOL.radio * 0.30, 0.30);
+    }
+  } catch(_) {}
   // Release the screen wake lock on death — game-over screen doesn't need it.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Defensive: release transition reentry locks so an in-flight startGame /

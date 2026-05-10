@@ -5477,7 +5477,7 @@ function pauseGameTrackInPlace(track) {
   // duck (sfxMult) doesn't help here because the player isn't generating
   // SFX while paused. Restore in resumeGameTrackInPlace.
   if (radioActive) {
-    rampTrackVol('radio', TRACK_VOL.radio * 0.55, 0.20);
+    rampTrackVol('radio', TRACK_VOL.radio * 0.35, 0.20);
   }
   if (titleMusic) {
     if (radioActive) {
