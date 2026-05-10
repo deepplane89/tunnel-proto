@@ -2695,7 +2695,23 @@ let camTargetX = 0;
 // ═══════════════════════════════════════════════════
 //  POST-PROCESSING
 // ═══════════════════════════════════════════════════
-const composer = new EffectComposer(renderer);
+// MSAA in the composer render target. EffectComposer renders to an offscreen
+// FBO, so the renderer's `antialias` flag does nothing — we need to ask the
+// FBO for multisamples directly. On Sharp we use 4x (great edges, ~10–15% GPU
+// hit on iPhone); on Balanced 2x; Performance stays 0 to save fill rate.
+let _composerSamples = 0;
+try {
+  const _gq = (window._settings && window._settings.graphicsQuality) ||
+              ((window._LS && JSON.parse(window._LS.getItem('jh_settings')||'{}').graphicsQuality)) ||
+              'balanced';
+  _composerSamples = _gq === 'sharp' ? 4 : _gq === 'balanced' ? 2 : 0;
+} catch(_) { _composerSamples = 2; }
+const _composerRT = new THREE.WebGLRenderTarget(
+  Math.max(1, window.innerWidth),
+  Math.max(1, window.innerHeight),
+  { samples: _composerSamples, type: THREE.HalfFloatType }
+);
+const composer = new EffectComposer(renderer, _composerRT);
 composer.addPass(new RenderPass(scene, camera));
 
 // Bloom resolution: /2 on both desktop and mobile. Previously /3 on mobile,
@@ -27680,6 +27696,19 @@ function _tickAdaptiveDPR(frameMs) {
   // Don't run if disabled or if we're paused / not in gameplay.
   if (typeof window._setAdaptiveDPRScale !== 'function') return;
   if (state && (state.phase === 'paused' || state.phase === 'title' || state.phase === 'dead')) return;
+  // SHARP means "don't downgrade my image" — user opted into max DPR, leave it alone.
+  // Adaptive only runs on Balanced/Performance where the user accepted trade-offs.
+  try {
+    const _gq = (typeof getSetting === 'function') ? getSetting('graphicsQuality') :
+                (window._settings && window._settings.graphicsQuality);
+    if (_gq === 'sharp') {
+      // Pin to full while on Sharp so prior drops don't linger.
+      if (window._getAdaptiveDPRScale && window._getAdaptiveDPRScale() < 1.0) {
+        window._setAdaptiveDPRScale(1.0);
+      }
+      return;
+    }
+  } catch(_) {}
   if (_adaptCooldown > 0) { _adaptCooldown--; return; }
   // Append slow/fast bit.
   const isSlow = frameMs > _ADAPT_SLOW_MS ? 1 : 0;

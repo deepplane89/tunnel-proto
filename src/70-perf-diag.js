@@ -297,6 +297,19 @@ function _tickAdaptiveDPR(frameMs) {
   // Don't run if disabled or if we're paused / not in gameplay.
   if (typeof window._setAdaptiveDPRScale !== 'function') return;
   if (state && (state.phase === 'paused' || state.phase === 'title' || state.phase === 'dead')) return;
+  // SHARP means "don't downgrade my image" — user opted into max DPR, leave it alone.
+  // Adaptive only runs on Balanced/Performance where the user accepted trade-offs.
+  try {
+    const _gq = (typeof getSetting === 'function') ? getSetting('graphicsQuality') :
+                (window._settings && window._settings.graphicsQuality);
+    if (_gq === 'sharp') {
+      // Pin to full while on Sharp so prior drops don't linger.
+      if (window._getAdaptiveDPRScale && window._getAdaptiveDPRScale() < 1.0) {
+        window._setAdaptiveDPRScale(1.0);
+      }
+      return;
+    }
+  } catch(_) {}
   if (_adaptCooldown > 0) { _adaptCooldown--; return; }
   // Append slow/fast bit.
   const isSlow = frameMs > _ADAPT_SLOW_MS ? 1 : 0;

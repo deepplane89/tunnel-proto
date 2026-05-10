@@ -1881,7 +1881,23 @@ let camTargetX = 0;
 // ═══════════════════════════════════════════════════
 //  POST-PROCESSING
 // ═══════════════════════════════════════════════════
-const composer = new EffectComposer(renderer);
+// MSAA in the composer render target. EffectComposer renders to an offscreen
+// FBO, so the renderer's `antialias` flag does nothing — we need to ask the
+// FBO for multisamples directly. On Sharp we use 4x (great edges, ~10–15% GPU
+// hit on iPhone); on Balanced 2x; Performance stays 0 to save fill rate.
+let _composerSamples = 0;
+try {
+  const _gq = (window._settings && window._settings.graphicsQuality) ||
+              ((window._LS && JSON.parse(window._LS.getItem('jh_settings')||'{}').graphicsQuality)) ||
+              'balanced';
+  _composerSamples = _gq === 'sharp' ? 4 : _gq === 'balanced' ? 2 : 0;
+} catch(_) { _composerSamples = 2; }
+const _composerRT = new THREE.WebGLRenderTarget(
+  Math.max(1, window.innerWidth),
+  Math.max(1, window.innerHeight),
+  { samples: _composerSamples, type: THREE.HalfFloatType }
+);
+const composer = new EffectComposer(renderer, _composerRT);
 composer.addPass(new RenderPass(scene, camera));
 
 // Bloom resolution: /2 on both desktop and mobile. Previously /3 on mobile,
