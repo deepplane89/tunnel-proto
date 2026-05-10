@@ -250,7 +250,11 @@ function radioInterceptMusicFade(toTrack, durationMs) {
       // paused mid-run by some other path).
       startRadio();
       if (typeof rampTrackVol === 'function' && radioMusic) {
-        rampTrackVol('radio', TRACK_VOL.radio, Math.min(durSec, 0.4));
+        // If we're transitioning into death/game-over, keep radio ducked so
+        // the death SFX + game-over UI sit on top. Restored on retry/title.
+        const _isDead = (typeof state !== 'undefined') && state && state.phase === 'dead';
+        const _target = _isDead ? TRACK_VOL.radio * 0.30 : TRACK_VOL.radio;
+        rampTrackVol('radio', _target, Math.min(durSec, 0.4));
       }
       return true;
     } catch(_) { return false; }
