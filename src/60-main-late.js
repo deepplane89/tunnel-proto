@@ -150,8 +150,22 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
-  // Radio: ensure shuffle station is fully stopped before title music kicks in.
-  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  // Radio: when the shuffle station is on the player explicitly opted into it
+  // and never asked for it to stop. Keep it rolling seamlessly across
+  // exit → title. The title-music restart below is also gated on radio-off
+  // so the two tracks don't double up.
+  const _radioRolling = (typeof isRadioOn === 'function') && isRadioOn();
+  if (!_radioRolling) {
+    try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  } else {
+    // Restore radio to full vol on title return — covers exit-from-pause
+    // (which ducked it) and any other path that left the gain low.
+    try {
+      if (typeof rampTrackVol === 'function' && typeof TRACK_VOL !== 'undefined') {
+        rampTrackVol('radio', TRACK_VOL.radio, 0.25);
+      }
+    } catch(_) {}
+  }
   // Defensive: refresh radio button visibility on every title return so an
   // earlier load-time race that left it hidden self-heals.
   try { if (typeof refreshRadioButton === 'function') refreshRadioButton(); } catch(_) {}
@@ -314,7 +328,9 @@ function returnToTitle() {
     try { _thunderActiveSrc.stop(); } catch (_) {}
     _thunderActiveSrc = null;
   }
-  if (titleMusic) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
+  // Skip title-music restart when radio is on — it would double up with the
+  // shuffle station and immediately get ducked again.
+  if (titleMusic && !_radioRolling) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
   updateTitleCoins();
   updateTitleFuelCells();
   updateTitleLevel();

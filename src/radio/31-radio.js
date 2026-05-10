@@ -21,6 +21,7 @@ const RADIO_TRACKS = [
   { id: 'andracid',          name: 'ANDRACID',              src: './assets/audio/radio-andracid.mp3' },
   { id: 'cosmic-relay',      name: 'COSMIC RELAY',          src: './assets/audio/radio-cosmic-relay.mp3' },
   { id: 'cosmic-relay-2',    name: 'COSMIC RELAY II',       src: './assets/audio/radio-cosmic-relay-2.mp3' },
+  { id: 'drum-n-space',      name: 'DRUM N SPACE',          src: './assets/audio/radio-drum-n-space.mp3' },
 ];
 window.RADIO_TRACKS = RADIO_TRACKS;
 
@@ -32,9 +33,11 @@ const RADIO_LS = {
 };
 const RADIO_UNLOCK_AT = 3;  // unlock on/after death of run #3
 
-let _radioShuffleQueue = [];   // upcoming track indexes
+let _radioShuffleQueue = [];   // upcoming track indexes (shuffled)
+let _radioHistory      = [];   // played-track history for PREV (most recent at end)
 let _radioCurrentIdx   = -1;   // currently playing index into RADIO_TRACKS
 let _radioEndedHooked  = false;
+const _RADIO_HISTORY_MAX = 24;
 
 function isRadioUnlocked() {
   try { return localStorage.getItem(RADIO_LS.unlocked) === '1'; } catch(_) { return false; }
@@ -119,10 +122,29 @@ function _hookRadioEnded() {
   if (_radioEndedHooked || !radioMusic) return;
   _radioEndedHooked = true;
   radioMusic.addEventListener('ended', () => {
-    // Only auto-advance if we're still meant to be playing (not paused/dead).
-    if (!isRadioOn()) return;
-    if (state && (state.phase === 'paused' || state.phase === 'dead' || state.phase === 'title')) return;
-    _playRadioIdx(_nextRadioIdx());
+    // Auto-advance gate. Two valid cases:
+    //   1. Shuffle is ON and we're in gameplay/pause/dead — normal session.
+    //   2. Shuffle is OFF but a title-screen preview just ended — the user
+    //      explicitly picked a track and is on the title screen, they want
+    //      the next one queued up the same way it would in-game.
+    // We bail only on title-with-no-preview (radio overlay closed/idle).
+    const onTitle = !!(state && state.phase === 'title');
+    const previewActive = (_radioPreviewIdx >= 0);
+    if (!isRadioOn() && !(onTitle && previewActive)) return;
+    if (state && (state.phase === 'paused' || state.phase === 'dead')) return;
+    if (_radioCurrentIdx >= 0) {
+      _radioHistory.push(_radioCurrentIdx);
+      if (_radioHistory.length > _RADIO_HISTORY_MAX) _radioHistory.shift();
+    }
+    const nextIdx = _nextRadioIdx();
+    // On title-screen preview auto-advance, route through _previewRadioTrack
+    // so _radioPreviewIdx tracks the new track and any in-flight
+    // startGame()-time promotion still sees a live preview.
+    if (onTitle && previewActive) {
+      _previewRadioTrack(nextIdx);
+    } else {
+      _playRadioIdx(nextIdx);
+    }
   });
 }
 
@@ -197,13 +219,46 @@ function currentRadioTrackName() {
 window.currentRadioTrackName = currentRadioTrackName;
 
 // ── musicFadeTo divert helper ────────────────────────────────────────────
-// Called from musicFadeTo() (in 20-main-early.js) when radio is ON and the
-// requested track is a gameplay zone. Returns true if it took over the fade.
-// Fades EVERYTHING but radio down — including title — so hitting play from
-// the title screen actually silences title music as radio takes over.
+// Called from musicFadeTo() (in 20-main-early.js) when radio is ON. Returns
+// true if it took over the fade.
+//
+// Two flavors:
+//  • Gameplay target (bg/l3/l4/lake/keepgoing): fade EVERYTHING but radio
+//    down — including title — so hitting play from the title screen actually
+//    silences title music as radio takes over.
+//  • Title target: keep radio rolling untouched. The death → title and L5
+//    ending → title transitions both call musicFadeTo('title'), and there's
+//    no reason for the radio to drop out — the player explicitly turned it on
+//    and never asked for it to stop. Make sure title music itself stays
+//    silent in that window.
 const _RADIO_GAMEPLAY_TRACKS = { bg: 1, l3: 1, l4: 1, lake: 1, keepgoing: 1 };
 function radioInterceptMusicFade(toTrack, durationMs) {
   if (!isRadioOn()) return false;
+  if (toTrack === 'title') {
+    // Keep radio playing seamlessly through gameplay → title transitions.
+    try {
+      const all = (typeof allTracks === 'function') ? allTracks() : {};
+      const durSec = (durationMs || 1500) / 1000;
+      Object.entries(all).forEach(([k, el]) => {
+        if (!el) return;
+        if (k === 'radio') return;
+        if (k === 'lake') return; // lake is its own ambience; leave as-is
+        if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, durSec);
+        setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, (durationMs || 1500) + 50);
+      });
+      // Make sure radio is actually rolling at full vol (it may have been
+      // paused mid-run by some other path).
+      startRadio();
+      if (typeof rampTrackVol === 'function' && radioMusic) {
+        // If we're transitioning into death/game-over, keep radio ducked so
+        // the death SFX + game-over UI sit on top. Restored on retry/title.
+        const _isDead = (typeof state !== 'undefined') && state && state.phase === 'dead';
+        const _target = _isDead ? TRACK_VOL.radio * 0.30 : TRACK_VOL.radio;
+        rampTrackVol('radio', _target, Math.min(durSec, 0.4));
+      }
+      return true;
+    } catch(_) { return false; }
+  }
   if (!_RADIO_GAMEPLAY_TRACKS[toTrack]) return false;
   try {
     const all = (typeof allTracks === 'function') ? allTracks() : {};
@@ -317,6 +372,15 @@ function _previewRadioTrack(idx) {
   try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
   radioMusic.play().catch(() => {});
   _radioPreviewIdx = idx;
+  // Keep _radioCurrentIdx in sync so the 'ended' handler (and any later
+  // preview→session promotion in startGame) knows what's playing. Previously
+  // only _playRadioIdx wrote to _radioCurrentIdx, which left previews invisible
+  // to the auto-advance path — track would end and nothing would happen.
+  _radioCurrentIdx = idx;
+  // Attach the 'ended' listener if we haven't already. Without this, a track
+  // started from the title-screen preview would simply stop at end-of-file
+  // because the auto-advance hook is only wired here and inside _playRadioIdx.
+  _hookRadioEnded();
   _updatePlayerMeta();
   _updatePlayIcon();
 }
@@ -347,10 +411,8 @@ function _updatePlayerMeta() {
   if (!tr) return;
   RP_PREFIXES.forEach(p => {
     const titleEl = document.getElementById(p + '-title');
-    const idxEl   = document.getElementById(p + '-index');
-    if (!titleEl || !idxEl) return;
+    if (!titleEl) return;
     titleEl.textContent = tr.name;
-    idxEl.textContent = _pad2(i + 1) + ' / ' + _pad2(total);
     requestAnimationFrame(() => {
       if (titleEl.scrollWidth > titleEl.clientWidth + 4) titleEl.classList.add('scroll');
       else titleEl.classList.remove('scroll');
@@ -454,11 +516,38 @@ function _radioPlayerTick() {
 
 function _stepRadioTrack(dir) {
   if (typeof initAudio === 'function') initAudio();
-  let i = (_radioPreviewIdx >= 0) ? _radioPreviewIdx
-        : (_radioCurrentIdx >= 0) ? _radioCurrentIdx
-        : 0;
-  i = (i + dir + RADIO_TRACKS.length) % RADIO_TRACKS.length;
-  _previewRadioTrack(i);
+  const cur = (_radioPreviewIdx >= 0) ? _radioPreviewIdx
+            : (_radioCurrentIdx >= 0) ? _radioCurrentIdx
+            : -1;
+  let nextIdx;
+  if (dir > 0) {
+    // NEXT: pull from the shuffle queue. Push current onto history.
+    if (cur >= 0) {
+      _radioHistory.push(cur);
+      if (_radioHistory.length > _RADIO_HISTORY_MAX) _radioHistory.shift();
+    }
+    nextIdx = _nextRadioIdx();
+    // Avoid landing on the same track we're already on (small playlists).
+    if (nextIdx === cur && RADIO_TRACKS.length > 1) {
+      if (_radioShuffleQueue.length === 0) _refillShuffleQueue();
+      const swap = _radioShuffleQueue.shift();
+      if (typeof swap === 'number') nextIdx = swap;
+    }
+  } else {
+    // PREV: pop history. If empty, pick a fresh shuffle pick (still random).
+    if (_radioHistory.length > 0) {
+      nextIdx = _radioHistory.pop();
+    } else {
+      nextIdx = _nextRadioIdx();
+      if (nextIdx === cur && RADIO_TRACKS.length > 1) {
+        if (_radioShuffleQueue.length === 0) _refillShuffleQueue();
+        const swap = _radioShuffleQueue.shift();
+        if (typeof swap === 'number') nextIdx = swap;
+      }
+    }
+  }
+  if (typeof nextIdx !== 'number' || nextIdx < 0) return;
+  _previewRadioTrack(nextIdx);
 }
 
 function _togglePlayPause() {

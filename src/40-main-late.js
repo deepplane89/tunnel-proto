@@ -22,6 +22,62 @@ function playThrusterImpact(vol) {
       _erl.play().catch(() => {});
     } catch (_) {}
   }
+  // Visual flare pulse: simulate the thruster cones flaring for an instant
+  // when the engine kicks off (retry, repair, speed-tier-up, takeoff). The
+  // PointsMaterial.size is the per-particle screen-space radius — bump it
+  // by +0.03 above each system's current preset size, then ease back to
+  // baseline. Per-system snapshot so DEFAULT/BLINK/SHORT/LIGHT/FAT-ION
+  // presets each ease back to their own configured size correctly.
+  _pulseThrusterPointSize();
+}
+
+// Module-scoped so concurrent calls (rapid speed-tier-ups during DR) don't
+// stack pulses — the most recent kick wins, the previous one's tween is
+// abandoned harmlessly when its timer fires (size has already been overwritten).
+let _thrPulseRAF = 0;
+function _pulseThrusterPointSize() {
+  // Resolve systems lazily — they're created later in 20-main-early.js, so
+  // this function may be called before they exist (very unlikely but cheap).
+  const main = (typeof thrusterSystems !== 'undefined') ? thrusterSystems : null;
+  const mini = (typeof miniThrusterSystems !== 'undefined') ? miniThrusterSystems : null;
+  if (!main && !mini) return;
+  // Snapshot per-system preset size (the value set by the active thruster
+  // preset — main systems usually 0.13, mini systems 0.06, but any preset
+  // can override). We will ease back to these.
+  const snap = [];
+  if (main) for (const s of main) {
+    if (s && s.points && s.points.material) snap.push({ mat: s.points.material, target: s.points.material.size });
+  }
+  if (mini) for (const s of mini) {
+    if (s && s.points && s.points.material) snap.push({ mat: s.points.material, target: s.points.material.size });
+  }
+  if (snap.length === 0) return;
+  // Spike each system to (preset size + 0.03) — a flare relative to baseline,
+  // so a small mini-thruster (0.06) bumps to 0.09 and a main thruster (0.13)
+  // bumps to 0.16. Keeps the visual proportion of main vs mini thrusters.
+  const SPIKE_DELTA = 0.03;
+  for (const e of snap) e.mat.size = e.target + SPIKE_DELTA;
+  // Ease back over 250ms with an ease-out (fast initial bloom, soft tail).
+  // requestAnimationFrame so the easing is frame-rate adaptive without
+  // claiming a slot in the main update() loop.
+  if (_thrPulseRAF) cancelAnimationFrame(_thrPulseRAF);
+  const start = performance.now();
+  const PULSE_MS = 250;
+  const tick = () => {
+    const t = (performance.now() - start) / PULSE_MS;
+    if (t >= 1) {
+      for (const e of snap) e.mat.size = e.target;
+      _thrPulseRAF = 0;
+      return;
+    }
+    // ease-out cubic: 1 - (1-t)^3 — size lerps from (target+SPIKE_DELTA)
+    // back down to target. u=0 at t=0 (full spike), u=1 at t=1 (back to baseline).
+    const u = 1 - Math.pow(1 - t, 3);
+    const remaining = SPIKE_DELTA * (1 - u);
+    for (const e of snap) e.mat.size = e.target + remaining;
+    _thrPulseRAF = requestAnimationFrame(tick);
+  };
+  _thrPulseRAF = requestAnimationFrame(tick);
 }
 
 // ── engine-baseline removed: continuous whir was unwanted. ──
@@ -166,12 +222,14 @@ function _playAsteroidImpact() {
 function playPickup(typeIdx) {
   if (!audioCtx || state.muted) return;
   const freqs = [880, 1100, 660, 990, 770, 660];
-  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.45);
-  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.35), 80);
-  // Quiet electron-burst layer on power-up smash.
+  // Lowered 2026-05-10 (user request): pickup smash was too loud relative to
+  // engine + radio mix. ~50% drop on all three layers — synth tone + harmonic
+  // overtone + electron-burst sample.
+  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.22);          // was 0.45
+  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.18), 80); // was 0.35
   const _pb = document.getElementById('powerup-burst-sfx');
   if (_pb) {
-    try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {}
+    try { _pb.currentTime = 0; _pb.volume = 0.09; _pb.play().catch(() => {}); } catch (_) {}  // was 0.18
   }
 }
 
@@ -1132,7 +1190,10 @@ function _drNextGapCenter(diffOverride) {
   // separately on the read below to avoid OOB at tier 4/5.
   const physIdx = Math.min(tier + 1, 6);
   const _lvlT = physIdx / (LEVELS.length - 1);
-  const _snap = _lvlT * _lvlT;
+  // Mirror the steering path's locked _snap (see 67-main-late.js). Corridor
+  // gap placement must use the SAME maxVel the player can actually hit, or
+  // gaps end up unreachable / trivial. Keep these two in lockstep.
+  const _snap = 0.5625;
   const maxVel = 9 + _snap * 13;
   const fwdSpeed = state.speed || (BASE_SPEED * LEVELS[Math.min(physIdx, LEVELS.length - 1)].speedMult);
   const tRow = 7 / fwdSpeed; // time between rows
@@ -2248,19 +2309,22 @@ function spawnObstacles() {
 
   // Possibly spawn a power-up in a free lane
   framesSinceLastPowerup++;
+  // Pre-compute unlocked count so spawn rate scales with variety.
+  // With only 1 type unlocked, spam is brutal — stretch cooldown + cap concurrent to 1.
+  const _availPU = POWERUP_TYPES.map((p, idx) => ({ idx, id: p.id })).filter(p => isPowerupUnlocked(p.id));
+  if (_availPU.length === 0) _availPU.push({ idx: 0, id: 'shield' });
+  const _unlockScale = POWERUP_TYPES.length / _availPU.length; // 1 unlocked of 4 → 4x rarer
   const _puRate = powerupSpawnRate * (1 + getStatValue('spawnrate'));
-  const _puThresh = _puRate > 0 ? Math.max(4, Math.round(12 / _puRate)) : Infinity;
-  const _puProb   = Math.min(0.9, 0.35 * _puRate);
-  if (powerupSpawnRate > 0 && framesSinceLastPowerup > _puThresh && activePowerups.length < 2 && Math.random() < _puProb) {
+  const _puThresh = _puRate > 0 ? Math.max(4, Math.round((12 / _puRate) * _unlockScale)) : Infinity;
+  const _puProb   = Math.min(0.9, 0.35 * _puRate / _unlockScale);
+  const _puConcurrentCap = _availPU.length === 1 ? 1 : 2;
+  if (powerupSpawnRate > 0 && framesSinceLastPowerup > _puThresh && activePowerups.length < _puConcurrentCap && Math.random() < _puProb) {
     framesSinceLastPowerup = 0;
     const freeLanes = lanes.filter(l => !blocked.includes(l));
     if (freeLanes.length > 0) {
       const lane  = freeLanes[Math.floor(Math.random() * freeLanes.length)];
       const laneX = shipX + (lane - (LANE_COUNT - 1) / 2) * LANE_WIDTH;
 
-      // Build available powerup types (only unlocked ones)
-      const _availPU = POWERUP_TYPES.map((p, idx) => ({ idx, id: p.id })).filter(p => isPowerupUnlocked(p.id));
-      if (_availPU.length === 0) _availPU.push({ idx: 0, id: 'shield' }); // fallback
       const typeIdx = _availPU[Math.floor(Math.random() * _availPU.length)].idx;
 
       const pu = getPooledPowerup(typeIdx);

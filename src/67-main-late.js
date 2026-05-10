@@ -31,6 +31,13 @@ function _triggerRetryWithSweep() {
   if (_retrySweepActive || _retryPending) return; // debounce
   _retryPending = true;
   _retryIsFromDead = true;
+  // Restore radio volume — it was ducked on death entry.
+  try {
+    if (typeof isRadioOn === 'function' && isRadioOn() &&
+        typeof rampTrackVol === 'function' && typeof TRACK_VOL !== 'undefined') {
+      rampTrackVol('radio', TRACK_VOL.radio, 0.30);
+    }
+  } catch(_) {}
   const fadeEl = document.getElementById('retry-fade');
   fadeEl.style.opacity = '1'; // fade to black (CSS 0.15s transition)
   const _wasDeathRun = state.isDeathRun;
@@ -423,17 +430,45 @@ function startGame() {
     el.currentTime = 0;
     setTrackVol(k, 0);
   });
-  // If radio is OFF but the player left a title-screen preview running, kill
-  // it now so it doesn't bleed into gameplay. (When radio is ON, the
-  // musicFadeTo interceptor below takes over and keeps radio continuous.)
-  if (typeof isRadioOn === 'function' && !isRadioOn()
-      && typeof stopRadioPreviewForce === 'function') {
+  // Radio handoff into gameplay. Three cases:
+  //  1. Shuffle ON  — musicFadeTo interceptor below takes over, radio stays
+  //                  continuous, no zone track plays.
+  //  2. Shuffle OFF + a title-screen preview is currently playing — the user
+  //                  picked a track and clearly wants to keep listening.
+  //                  Promote the preview to a full radio session: flip
+  //                  shuffle ON so the interceptor adopts the radio, and
+  //                  skip the zone-track fade-in so we don't double-stack.
+  //  3. Shuffle OFF + no preview — normal path, fade in zone track.
+  const _radioMusicEl = (typeof radioMusic !== 'undefined') ? radioMusic
+                       : document.getElementById('radio-music');
+  const _previewPlaying = !!(_radioMusicEl && !_radioMusicEl.paused
+                             && _radioMusicEl.currentTime > 0);
+  let _radioWillTakeOver = (typeof isRadioOn === 'function') && isRadioOn();
+  if (!_radioWillTakeOver && _previewPlaying
+      && typeof setRadioOn === 'function'
+      && typeof startRadio === 'function') {
+    // Promote preview → active radio session. setRadioOn(true) flips the
+    // master switch; startRadio() wires the gameplay-track interceptor so
+    // every level swap routes through the radio instead of zone music.
+    try { setRadioOn(true); } catch(_) {}
+    try { startRadio(); } catch(_) {}
+    try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+    if (typeof _refreshShuffleSwitches === 'function') {
+      try { _refreshShuffleSwitches(); } catch(_) {}
+    }
+    _radioWillTakeOver = true;
+  } else if (!_radioWillTakeOver && typeof stopRadioPreviewForce === 'function') {
+    // No preview was running OR we couldn't promote it — ensure radio is
+    // fully silent so it can't bleed into gameplay.
     stopRadioPreviewForce();
   }
-  // Short fade-in for gameplay track (title already silenced above)
+
+  // Short fade-in for gameplay track — ONLY if radio isn't taking over.
+  // Otherwise we'd start a zone track underneath the radio and the
+  // interceptor would have to fight to silence it.
   const _startTrack = state.currentLevelIdx >= 2 ? 'l3' : 'bg';
   const _startEl = _startTrack === 'l3' ? l3Music : bgMusic;
-  if (_startEl && !state.muted) {
+  if (_startEl && !state.muted && !_radioWillTakeOver) {
     _startEl.currentTime = 0;
     setTrackVol(_startTrack, 0);
     _startEl.play().catch(() => {});
@@ -3289,9 +3324,18 @@ function killPlayer() {
                            : null;
 
   state.phase = 'dead';
-  // Radio: stop playback on death + try to unlock the shuffle station.
-  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  // Radio: keep the shuffle station rolling across death → game-over → title.
+  // The player explicitly turned it on; only the user should stop it.
+  // (Previously stopRadio() was called here. Lock-in unlock still fires.)
   try { if (typeof tryUnlockRadioOnDeath === 'function') tryUnlockRadioOnDeath(); } catch(_) {}
+  // Duck the radio under the death/game-over UI sounds so they read clearly.
+  // Restored on retry (handled in retry path) and on title return (60-main-late.js).
+  try {
+    if (typeof isRadioOn === 'function' && isRadioOn() &&
+        typeof rampTrackVol === 'function' && typeof TRACK_VOL !== 'undefined') {
+      rampTrackVol('radio', TRACK_VOL.radio * 0.30, 0.30);
+    }
+  } catch(_) {}
   // Release the screen wake lock on death — game-over screen doesn't need it.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Defensive: release transition reentry locks so an in-flight startGame /
@@ -3409,6 +3453,12 @@ function killPlayer() {
   if (lakeMusic) { lakeMusic.pause(); lakeMusic.currentTime = 0; setTrackVol('lake', 0); }
   musicFadeTo('title', 2500);
 
+  // ── Defer UI prep + persistence + ladder/XP off the impact frame ──
+  // The game-over overlay is hidden behind _gameOverDelayTimer (~_EXP_DURATION s),
+  // so all of this work — DOM textContent on .hidden elements, localStorage writes,
+  // ladder check, XP calc, leaderboard submit — was needlessly blocking the
+  // explosion's first frame. Wrap it and run it just before the overlay reveal.
+  const _runGameOverPrep = () => {
   // Player-facing score — apply distance multiplier
   const _rawScore = Math.floor(state.playerScore);
   const _dist = state.distance || 0;
@@ -3760,23 +3810,6 @@ function killPlayer() {
       _bestWrap.classList.add('hidden');
     }
   }
-  document.getElementById('hud').classList.add('hidden');
-  // Delay game over screen so explosion plays first
-  if (_gameOverDelayTimer) clearTimeout(_gameOverDelayTimer);
-  _gameOverTapReady = false; // block taps until cooldown
-  if (_gameOverTapTimer) clearTimeout(_gameOverTapTimer);
-  _gameOverDelayTimer = setTimeout(() => {
-    _gameOverDelayTimer = null;
-    document.getElementById('gameover-screen').classList.remove('hidden');
-    // Re-trigger staggered animations by forcing reflow
-    document.querySelectorAll('.go-anim').forEach(el => {
-      el.style.animation = 'none';
-      el.offsetHeight; // force reflow
-      el.style.animation = '';
-    });
-    // Start tap cooldown AFTER screen appears
-    _gameOverTapTimer = setTimeout(() => { _gameOverTapReady = true; }, _GO_TAP_COOLDOWN);
-  }, _EXP_DURATION * 1000);
 
   // ── UPGRADES UNLOCKED banner (one-time, game over screen) ──
   if (!localStorage.getItem('jh_upgrades_unlocked_shown')) {
@@ -3872,6 +3905,30 @@ function killPlayer() {
     }
     } // end else (startedFromL1)
   }
+  }; // end _runGameOverPrep
+
+  // Hide the HUD immediately on death — cheap, must happen on the impact frame.
+  document.getElementById('hud').classList.add('hidden');
+
+  // Delay game over screen so explosion plays first.
+  // Run the prep work just-in-time, inside the timer, so the impact frame stays
+  // light. The overlay is hidden until this timer fires anyway.
+  if (_gameOverDelayTimer) clearTimeout(_gameOverDelayTimer);
+  _gameOverTapReady = false; // block taps until cooldown
+  if (_gameOverTapTimer) clearTimeout(_gameOverTapTimer);
+  _gameOverDelayTimer = setTimeout(() => {
+    _gameOverDelayTimer = null;
+    _runGameOverPrep();
+    document.getElementById('gameover-screen').classList.remove('hidden');
+    // Re-trigger staggered animations by forcing reflow
+    document.querySelectorAll('.go-anim').forEach(el => {
+      el.style.animation = 'none';
+      el.offsetHeight; // force reflow
+      el.style.animation = '';
+    });
+    // Start tap cooldown AFTER screen appears
+    _gameOverTapTimer = setTimeout(() => { _gameOverTapReady = true; }, _GO_TAP_COOLDOWN);
+  }, _EXP_DURATION * 1000);
 }
 
 // Tint the neon gradient on an obstacle group to a given hex color
@@ -3937,7 +3994,9 @@ function update(dt) {
 
   state.elapsed += dt;  // real-time accumulator for smooth animations
   _tickHoloMaterials(state.elapsed);  // animate holographic powerup cubes & shatter fragments
-  _updatePowerupShatter();  // tick active shatter effects
+  // Pass real dt so shatter motion is frame-rate independent and immune to
+  // wall-clock jumps (paused tabs, GC stalls). See _updatePowerupShatter docstring.
+  _updatePowerupShatter(dt);
   _drUpdateDebugHud();
   state.levelElapsed = (state.levelElapsed || 0) + dt;  // time spent in current level
 
@@ -3950,19 +4009,18 @@ function update(dt) {
   if (_introBlock) { state.shipX = 0; state.shipVelX = 0; shipGroup.position.x = 0; }
   const steerLeft  = !_introBlock && (keys['ArrowLeft']  || keys['a'] || keys['A'] || touch.left);
   const steerRight = !_introBlock && (keys['ArrowRight'] || keys['d'] || keys['D'] || touch.right);
-  // Physics ramp: starts floaty at L1, gradually snappier all the way up. The
-  // ease-in curve (_snap = _lvlT*_lvlT) keeps tier-to-tier ratios consistent:
-  // each step gets ~30-35% more MAX_VEL than the previous one.
-  // Death Run: lateral physics tracks state.deathRunSpeedTier (set by sequencer).
-  //   physTier 1 → _physIdx 2 (L3,            _lvlT 0.50)
-  //   physTier 2 → _physIdx 3 (L4,            _lvlT 0.75)
-  //   physTier 3 → _physIdx 4 (L5 baseline,   _lvlT 1.00)
-  //   physTier 4 → _physIdx 5 (final-act,     _lvlT 1.25)
-  //   physTier 5 → _physIdx 6 (ENDLESS peak,  _lvlT 1.50)
+  // Lateral physics: LOCKED to a constant feel across all levels. Difficulty
+  // is driven by forward speed (state.speed / LEVELS[].speedMult), not by
+  // changing how the ship steers. Endless-runner convention — Subway Surfers,
+  // Temple Run, Driftforce all keep lane-change feel constant and let speed
+  // do the work. Players build muscle memory once.
+  // _snap = 0.5625 ≈ L4 feel (ACCEL ~116, MAX_VEL ~26 with current 60/100/13/23
+  // tunables). Slightly snappier baseline than the old L1-L3 floaty zone.
+  // _physIdx still computed for any downstream consumers, but _snap ignores it.
   const _physIdx = _physLevelOverride >= 0 ? _physLevelOverride
     : state.isDeathRun ? Math.min(state.deathRunSpeedTier + 1, 6) : state.currentLevelIdx;
-  const _lvlT   = _physIdx / (LEVELS.length - 1); // 0 at L1, 1 at L5, up to 1.5 at physTier 5
-  const _snap   = _lvlT * _lvlT;  // ease-in so early levels stay floaty longer
+  const _lvlT   = _physIdx / (LEVELS.length - 1); // kept for any downstream reads
+  const _snap   = 0.5625;  // L4-equivalent locked baseline
   // Handling tier: 0.0 at max upgrade (crisp), 1.0 at stock (loose)
   const _handlingDrift = getHandlingDrift();
   // Low handling = HIGH ACCEL (over-responsive, hard to control)
@@ -4551,7 +4609,10 @@ function update(dt) {
     // Player level score bonus
     const _pLvl = loadPlayerLevel();
     const _lvlScoreMult = _pLvl >= 15 ? 1.6 : _pLvl >= 10 ? 1.5 : _pLvl >= 5 ? 1.2 : 1.0;
-    state.playerScore += 8 * lvlMult * _lvlScoreMult * dt;
+    // Boost-tier reward: faster ship → faster HUD score climb. Floor at 1x so
+    // a dipped/slowed ship never undertickrates, mirrors internal state.score.
+    const _boostScoreMult = Math.max(1.0, state.speed / BASE_SPEED);
+    state.playerScore += 8 * lvlMult * _lvlScoreMult * _boostScoreMult * dt;
   }
   document.getElementById('hud-score').textContent = Math.floor(state.playerScore);
 
@@ -5787,7 +5848,8 @@ function update(dt) {
       applyPowerup(pu.userData.typeIdx);
       // Spawn shatter at the cube's current position, with a live ship-tracking target.
       // Icon zips to the ship's nose (slightly forward of pivot) and absorbs in ~350ms.
-      _spawnPowerupShatter(pu, () => new THREE.Vector3(state.shipX, shipGroup.position.y, shipGroup.position.z));
+      // Callback writes into a caller-provided scratch vector — zero allocation per frame.
+      _spawnPowerupShatter(pu, (out) => out.set(state.shipX, shipGroup.position.y, shipGroup.position.z));
       returnPowerupToPool(pu);
       activePowerups.splice(i, 1);
     }

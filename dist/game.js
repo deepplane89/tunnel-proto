@@ -6287,6 +6287,12 @@ function pauseGameTrackInPlace(track) {
     rampTrackVol(k, 0, 0.09);
     setTimeout(() => { try { if (!el.paused) el.pause(); } catch (_) {} }, 110);
   });
+  // Duck the radio while paused so the pause overlay feels calmer; the SFX
+  // duck (sfxMult) doesn't help here because the player isn't generating
+  // SFX while paused. Restore in resumeGameTrackInPlace.
+  if (radioActive) {
+    rampTrackVol('radio', TRACK_VOL.radio * 0.35, 0.20);
+  }
   if (titleMusic) {
     if (radioActive) {
       // Radio is the pause music — don't intro title.
@@ -6308,6 +6314,13 @@ function pauseGameTrackInPlace(track) {
 function resumeGameTrackInPlace(track) {
   initAudio();
   _ensureCtxRunning();
+  // Restore radio to full volume on resume — it was ducked in
+  // pauseGameTrackInPlace. If radio isn't active this is a harmless no-op
+  // because the gain is zero anyway and rampTrackVol clamps via musicMult.
+  const _radioBackOn = (typeof isRadioOn === 'function') && isRadioOn() && radioMusic && !radioMusic.paused;
+  if (_radioBackOn) {
+    rampTrackVol('radio', TRACK_VOL.radio, 0.25);
+  }
   // iOS interruption belt: if we came back from a backgrounding event,
   // _rewireTrackGains plays the silent-buffer sample-rate kick. It does NOT
   // recreate MediaElementSource nodes (one-per-element rule — recreating
@@ -11188,25 +11201,29 @@ function _updateCanyonWalls(dt, speed) {
     const shipHalfL = 1.0;             // ship Z half-length
     const shipMinZ = shipZ - shipHalfL, shipMaxZ = shipZ + shipHalfL;
     const shipMaxX = shipX + shipHalfW, shipMinX = shipX - shipHalfW;
-    // 0.3u grace buffer — matches pre-Push-4 feel (ship can kiss wall without insta-die)
+    // 0.3u grace buffer — ship can kiss the wall (overlap up to 0.3u) without
+    // dying. Collision fires only when penetration > GRACE. Previous code had
+    // the sign inverted, killing 0.3u BEFORE contact — the phantom-death bug.
     const GRACE = 0.3;
 
     let hit = false;
-    // Right wall: wall occupies X >= bakedX. Ship collides if shipMaxX >= bakedX - GRACE.
+    // Right wall: wall occupies X >= bakedX. Ship collides only if its right
+    // edge has pushed PAST bakedX by more than GRACE → shipMaxX >= bakedX + GRACE.
     for (const pivot of _canyonWalls.right) {
       if (!pivot.visible || pivot.userData.bakedX === undefined) continue;
       // Z overlap: slab Z range = [pivot.z, pivot.z + spacing]
       if (pivot.position.z + spacing < shipMinZ) continue;
       if (pivot.position.z > shipMaxZ) continue;
-      if (shipMaxX >= pivot.userData.bakedX - GRACE) { hit = true; break; }
+      if (shipMaxX >= pivot.userData.bakedX + GRACE) { hit = true; break; }
     }
-    // Left wall: wall occupies X <= bakedX. Ship collides if shipMinX <= bakedX + GRACE.
+    // Left wall: wall occupies X <= bakedX. Ship collides only if its left edge
+    // has pushed past bakedX by more than GRACE → shipMinX <= bakedX - GRACE.
     if (!hit) {
       for (const pivot of _canyonWalls.left) {
         if (!pivot.visible || pivot.userData.bakedX === undefined) continue;
         if (pivot.position.z + spacing < shipMinZ) continue;
         if (pivot.position.z > shipMaxZ) continue;
-        if (shipMinX <= pivot.userData.bakedX + GRACE) { hit = true; break; }
+        if (shipMinX <= pivot.userData.bakedX - GRACE) { hit = true; break; }
       }
     }
 
@@ -11716,7 +11733,24 @@ const POWERUP_SHATTER_DURATION = 0.35;       // seconds
 const POWERUP_SHATTER_FRAGMENT_POOL_SIZE = 60; // 10 powerups * 6 faces, plenty of headroom
 const _powerupShatterFragmentPool = [];
 const _powerupShatterIconPool = [];
-const _activeShatterEffects = [];  // each: {fragments[6], icon, startT, endT, shipTargetFn}
+const _activeShatterEffects = [];  // each: {fragments[6], icon, age, shipTargetFn}
+
+// Scratch vector reused by every shatter tick — avoids per-frame Vector3
+// allocation in the hot path (was new Vector3 per active shatter per frame).
+const _shatterScratchVec = new THREE.Vector3();
+
+// Pre-baked icon geometries — one per shape variant. Previously every pickup
+// allocated and disposed a fresh geometry, which on iOS can produce a 5-15ms
+// GC hitch right at the moment of the smash (worst possible timing). Now we
+// build them once at module load and just swap the .geometry reference.
+const _SHATTER_ICON_GEOS = (() => {
+  return {
+    oct:    new THREE.OctahedronGeometry(POWERUP_ICON_SIZE),
+    torus:  new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.85, POWERUP_ICON_SIZE * 0.30, 10, 20),
+    ring:   new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.95, POWERUP_ICON_SIZE * 0.18, 10, 28),
+    sphere: new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16),
+  };
+})();
 
 function _createShatterFragment() {
   // PlaneGeometry oriented per-face. We'll set the orientation when activated.
@@ -11805,13 +11839,14 @@ const _CUBE_FACES = (() => {
 })();
 
 // Spawn shatter at a powerup's current world position.
-// shipTargetFn: () => THREE.Vector3 returning current ship world pos (live-updates each frame).
+// shipTargetFn: (outVec3) => writes current ship world pos into outVec3.
+// Caller MUST mutate the supplied vector — we never allocate per frame.
 function _spawnPowerupShatter(pu, shipTargetFn) {
   const def = POWERUP_TYPES[pu.userData.typeIdx];
   const colorHex = def.color;
+  // Origin: copy into a fresh vector ONCE per spawn (cheap; bounded by
+  // pickup events). Per-frame work below uses the scratch vector.
   const origin = pu.position.clone();
-  const startT = state.elapsed;
-  const endT = startT + POWERUP_SHATTER_DURATION;
 
   // 6 face fragments — explode outward along face normals + spin.
   const fragments = [];
@@ -11824,7 +11859,7 @@ function _spawnPowerupShatter(pu, shipTargetFn) {
     frag.scale.setScalar(1);
     frag.userData._mat.uniforms.hologramColor.value.setHex(colorHex);
     frag.userData._mat.uniforms.hologramOpacity.value = 0.9;
-    // Outward velocity along face normal (in world space, derived from local offset since cube is axis-aligned).
+    // Outward velocity along face normal (world-space; cube is axis-aligned).
     const len = Math.sqrt(px*px + py*py + pz*pz) || 1;
     frag.userData._vx = (px / len) * 14;  // ~5u over 0.35s
     frag.userData._vy = (py / len) * 14;
@@ -11837,18 +11872,16 @@ function _spawnPowerupShatter(pu, shipTargetFn) {
     fragments.push(frag);
   }
 
-  // Icon — zip toward ship.
+  // If we couldn't get ANY fragment AND no icon, the entire effect is a
+  // no-op — don't push it. (Pool exhaustion is rare — 60-slot pool, 6 per
+  // pickup, 10s of duration max — but be defensive.)
   const icon = _getShatterIcon();
   if (icon) {
-    // Replace geometry to match this powerup's icon shape.
-    const oldGeo = icon.geometry;
-    let iconGeo;
-    if (def.shape === 'oct')        iconGeo = new THREE.OctahedronGeometry(POWERUP_ICON_SIZE);
-    else if (def.shape === 'torus') iconGeo = new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.85, POWERUP_ICON_SIZE * 0.30, 10, 20);
-    else if (def.shape === 'ring')  iconGeo = new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.95, POWERUP_ICON_SIZE * 0.18, 10, 28);
-    else                            iconGeo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
-    icon.geometry = iconGeo;
-    if (oldGeo) oldGeo.dispose();
+    // Swap to the pre-baked geometry for this icon shape — NO allocation.
+    // Previously we built a fresh THREE.OctahedronGeometry / TorusGeometry
+    // per pickup which caused GC hitches on iOS right at the smash moment.
+    const baked = _SHATTER_ICON_GEOS[def.shape] || _SHATTER_ICON_GEOS.sphere;
+    icon.geometry = baked;
     icon.position.copy(origin);
     icon.scale.setScalar(1);
     icon.userData._mat.uniforms.hologramColor.value.setHex(colorHex);
@@ -11856,45 +11889,67 @@ function _spawnPowerupShatter(pu, shipTargetFn) {
     icon.visible = true;
   }
 
-  _activeShatterEffects.push({ fragments, icon, origin, startT, endT, shipTargetFn });
+  if (fragments.length === 0 && !icon) return; // nothing to animate
+
+  // Track effect age in REAL DT (passed into _updatePowerupShatter), not
+  // wall-clock derived from state.elapsed snapshots. This means a paused or
+  // throttled tab can never produce a giant 'u' jump on resume — the effect
+  // simply progresses at game-time rate, frame by frame, like every other
+  // animation in the game.
+  _activeShatterEffects.push({ fragments, icon, origin, age: 0, shipTargetFn });
 }
 
-// Per-frame tick. Called from main update loop.
-function _updatePowerupShatter() {
+// Per-frame tick. Called from main update loop with the SAME dt that drives
+// the rest of the game. Receiving real dt fixes two glitches:
+//   1. Position drift was hard-coded to 1/60s regardless of frame rate, so
+//      shatter motion ran slower at <60fps and faster at >60fps. Now
+//      everything moves at its intended units/second on every device.
+//   2. The progress fraction `u` was derived from state.elapsed snapshots,
+//      which can include time the game was logically paused if elapsed is
+//      driven elsewhere. Using accumulated dt guarantees u advances ONLY
+//      while the game is running.
+function _updatePowerupShatter(dt) {
   if (_activeShatterEffects.length === 0) return;
-  const now = state.elapsed;
+  // Clamp dt against frame stalls (tab backgrounded, GC pause). 1/15s cap
+  // means a 500ms hitch advances the effect by at most one frame's worth,
+  // never teleporting fragments/icon mid-animation.
+  const safeDt = (dt > 0 && dt < 1 / 15) ? dt : 1 / 60;
+  const invDur = 1 / POWERUP_SHATTER_DURATION;
   for (let i = _activeShatterEffects.length - 1; i >= 0; i--) {
     const fx = _activeShatterEffects[i];
-    const u = Math.min(1, (now - fx.startT) / POWERUP_SHATTER_DURATION);
-    const dt = 1 / 60;  // approximate; shatter is short and visual-only
+    fx.age += safeDt;
+    const u = fx.age >= POWERUP_SHATTER_DURATION ? 1 : (fx.age * invDur);
     // Fragments: drift outward, spin, fade.
     for (const frag of fx.fragments) {
-      frag.position.x += frag.userData._vx * dt;
-      frag.position.y += frag.userData._vy * dt;
-      frag.position.z += frag.userData._vz * dt;
-      frag.rotation.x += frag.userData._spinX * dt;
-      frag.rotation.y += frag.userData._spinY * dt;
-      frag.rotation.z += frag.userData._spinZ * dt;
+      const ud = frag.userData;
+      frag.position.x += ud._vx * safeDt;
+      frag.position.y += ud._vy * safeDt;
+      frag.position.z += ud._vz * safeDt;
+      frag.rotation.x += ud._spinX * safeDt;
+      frag.rotation.y += ud._spinY * safeDt;
+      frag.rotation.z += ud._spinZ * safeDt;
       const fade = 1 - u;
-      frag.userData._mat.uniforms.hologramOpacity.value = 0.9 * fade;
+      ud._mat.uniforms.hologramOpacity.value = 0.9 * fade;
       frag.scale.setScalar(1 - u * 0.6);
     }
-    // Icon: ease toward live ship position.
+    // Icon: ease toward live ship position. Caller writes into our scratch
+    // vector — no Vector3 allocation per frame.
     if (fx.icon && fx.shipTargetFn) {
-      const target = fx.shipTargetFn();
+      fx.shipTargetFn(_shatterScratchVec);
       // smootherstep ease for a snappy lock-in feel
       const e = u * u * (3 - 2 * u);
-      fx.icon.position.x = fx.origin.x + (target.x - fx.origin.x) * e;
-      fx.icon.position.y = fx.origin.y + (target.y - fx.origin.y) * e;
-      fx.icon.position.z = fx.origin.z + (target.z - fx.origin.z) * e;
-      fx.icon.rotation.x += 8 * dt;
-      fx.icon.rotation.y += 6 * dt;
+      const ix = fx.origin.x + (_shatterScratchVec.x - fx.origin.x) * e;
+      const iy = fx.origin.y + (_shatterScratchVec.y - fx.origin.y) * e;
+      const iz = fx.origin.z + (_shatterScratchVec.z - fx.origin.z) * e;
+      fx.icon.position.set(ix, iy, iz);
+      fx.icon.rotation.x += 8 * safeDt;
+      fx.icon.rotation.y += 6 * safeDt;
       const fade = 1 - u * u;  // icon stays bright longer
       fx.icon.userData._mat.uniforms.hologramOpacity.value = fade;
       fx.icon.scale.setScalar(1 - u * 0.5);
     }
     // End — return all to pool.
-    if (now >= fx.endT) {
+    if (fx.age >= POWERUP_SHATTER_DURATION) {
       for (const frag of fx.fragments) {
         frag.visible = false;
         frag.userData._active = false;
@@ -12483,9 +12538,11 @@ function initWhoosh() {
 }
 let lastWhooshTime = 0;
 // When the radio is on, the lateral whoosh layer fights the music. Duck it
-// so the track stays foreground. 0.55 chosen to keep the whoosh audible as a
-// tactile cue without stomping on the radio mix.
-const _RADIO_LATERAL_DUCK = 0.55;
+// hard so the track stays foreground — the whoosh is still audible as a
+// tactile cue. Note: this stacks multiplicatively with the global SFX duck
+// inside sfxMult() (also active under radio), so net lateral level is even
+// lower than the multiplier here would suggest.
+const _RADIO_LATERAL_DUCK = 0.40;
 function _lateralDuck() {
   try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _RADIO_LATERAL_DUCK : 1; } catch(_) { return 1; }
 }
@@ -12602,6 +12659,7 @@ const RADIO_TRACKS = [
   { id: 'andracid',          name: 'ANDRACID',              src: './assets/audio/radio-andracid.mp3' },
   { id: 'cosmic-relay',      name: 'COSMIC RELAY',          src: './assets/audio/radio-cosmic-relay.mp3' },
   { id: 'cosmic-relay-2',    name: 'COSMIC RELAY II',       src: './assets/audio/radio-cosmic-relay-2.mp3' },
+  { id: 'drum-n-space',      name: 'DRUM N SPACE',          src: './assets/audio/radio-drum-n-space.mp3' },
 ];
 window.RADIO_TRACKS = RADIO_TRACKS;
 
@@ -12613,9 +12671,11 @@ const RADIO_LS = {
 };
 const RADIO_UNLOCK_AT = 3;  // unlock on/after death of run #3
 
-let _radioShuffleQueue = [];   // upcoming track indexes
+let _radioShuffleQueue = [];   // upcoming track indexes (shuffled)
+let _radioHistory      = [];   // played-track history for PREV (most recent at end)
 let _radioCurrentIdx   = -1;   // currently playing index into RADIO_TRACKS
 let _radioEndedHooked  = false;
+const _RADIO_HISTORY_MAX = 24;
 
 function isRadioUnlocked() {
   try { return localStorage.getItem(RADIO_LS.unlocked) === '1'; } catch(_) { return false; }
@@ -12700,10 +12760,29 @@ function _hookRadioEnded() {
   if (_radioEndedHooked || !radioMusic) return;
   _radioEndedHooked = true;
   radioMusic.addEventListener('ended', () => {
-    // Only auto-advance if we're still meant to be playing (not paused/dead).
-    if (!isRadioOn()) return;
-    if (state && (state.phase === 'paused' || state.phase === 'dead' || state.phase === 'title')) return;
-    _playRadioIdx(_nextRadioIdx());
+    // Auto-advance gate. Two valid cases:
+    //   1. Shuffle is ON and we're in gameplay/pause/dead — normal session.
+    //   2. Shuffle is OFF but a title-screen preview just ended — the user
+    //      explicitly picked a track and is on the title screen, they want
+    //      the next one queued up the same way it would in-game.
+    // We bail only on title-with-no-preview (radio overlay closed/idle).
+    const onTitle = !!(state && state.phase === 'title');
+    const previewActive = (_radioPreviewIdx >= 0);
+    if (!isRadioOn() && !(onTitle && previewActive)) return;
+    if (state && (state.phase === 'paused' || state.phase === 'dead')) return;
+    if (_radioCurrentIdx >= 0) {
+      _radioHistory.push(_radioCurrentIdx);
+      if (_radioHistory.length > _RADIO_HISTORY_MAX) _radioHistory.shift();
+    }
+    const nextIdx = _nextRadioIdx();
+    // On title-screen preview auto-advance, route through _previewRadioTrack
+    // so _radioPreviewIdx tracks the new track and any in-flight
+    // startGame()-time promotion still sees a live preview.
+    if (onTitle && previewActive) {
+      _previewRadioTrack(nextIdx);
+    } else {
+      _playRadioIdx(nextIdx);
+    }
   });
 }
 
@@ -12778,13 +12857,46 @@ function currentRadioTrackName() {
 window.currentRadioTrackName = currentRadioTrackName;
 
 // ── musicFadeTo divert helper ────────────────────────────────────────────
-// Called from musicFadeTo() (in 20-main-early.js) when radio is ON and the
-// requested track is a gameplay zone. Returns true if it took over the fade.
-// Fades EVERYTHING but radio down — including title — so hitting play from
-// the title screen actually silences title music as radio takes over.
+// Called from musicFadeTo() (in 20-main-early.js) when radio is ON. Returns
+// true if it took over the fade.
+//
+// Two flavors:
+//  • Gameplay target (bg/l3/l4/lake/keepgoing): fade EVERYTHING but radio
+//    down — including title — so hitting play from the title screen actually
+//    silences title music as radio takes over.
+//  • Title target: keep radio rolling untouched. The death → title and L5
+//    ending → title transitions both call musicFadeTo('title'), and there's
+//    no reason for the radio to drop out — the player explicitly turned it on
+//    and never asked for it to stop. Make sure title music itself stays
+//    silent in that window.
 const _RADIO_GAMEPLAY_TRACKS = { bg: 1, l3: 1, l4: 1, lake: 1, keepgoing: 1 };
 function radioInterceptMusicFade(toTrack, durationMs) {
   if (!isRadioOn()) return false;
+  if (toTrack === 'title') {
+    // Keep radio playing seamlessly through gameplay → title transitions.
+    try {
+      const all = (typeof allTracks === 'function') ? allTracks() : {};
+      const durSec = (durationMs || 1500) / 1000;
+      Object.entries(all).forEach(([k, el]) => {
+        if (!el) return;
+        if (k === 'radio') return;
+        if (k === 'lake') return; // lake is its own ambience; leave as-is
+        if (typeof rampTrackVol === 'function') rampTrackVol(k, 0, durSec);
+        setTimeout(() => { try { if (!el.paused) el.pause(); } catch(_){} }, (durationMs || 1500) + 50);
+      });
+      // Make sure radio is actually rolling at full vol (it may have been
+      // paused mid-run by some other path).
+      startRadio();
+      if (typeof rampTrackVol === 'function' && radioMusic) {
+        // If we're transitioning into death/game-over, keep radio ducked so
+        // the death SFX + game-over UI sit on top. Restored on retry/title.
+        const _isDead = (typeof state !== 'undefined') && state && state.phase === 'dead';
+        const _target = _isDead ? TRACK_VOL.radio * 0.30 : TRACK_VOL.radio;
+        rampTrackVol('radio', _target, Math.min(durSec, 0.4));
+      }
+      return true;
+    } catch(_) { return false; }
+  }
   if (!_RADIO_GAMEPLAY_TRACKS[toTrack]) return false;
   try {
     const all = (typeof allTracks === 'function') ? allTracks() : {};
@@ -12898,6 +13010,15 @@ function _previewRadioTrack(idx) {
   try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
   radioMusic.play().catch(() => {});
   _radioPreviewIdx = idx;
+  // Keep _radioCurrentIdx in sync so the 'ended' handler (and any later
+  // preview→session promotion in startGame) knows what's playing. Previously
+  // only _playRadioIdx wrote to _radioCurrentIdx, which left previews invisible
+  // to the auto-advance path — track would end and nothing would happen.
+  _radioCurrentIdx = idx;
+  // Attach the 'ended' listener if we haven't already. Without this, a track
+  // started from the title-screen preview would simply stop at end-of-file
+  // because the auto-advance hook is only wired here and inside _playRadioIdx.
+  _hookRadioEnded();
   _updatePlayerMeta();
   _updatePlayIcon();
 }
@@ -12928,10 +13049,8 @@ function _updatePlayerMeta() {
   if (!tr) return;
   RP_PREFIXES.forEach(p => {
     const titleEl = document.getElementById(p + '-title');
-    const idxEl   = document.getElementById(p + '-index');
-    if (!titleEl || !idxEl) return;
+    if (!titleEl) return;
     titleEl.textContent = tr.name;
-    idxEl.textContent = _pad2(i + 1) + ' / ' + _pad2(total);
     requestAnimationFrame(() => {
       if (titleEl.scrollWidth > titleEl.clientWidth + 4) titleEl.classList.add('scroll');
       else titleEl.classList.remove('scroll');
@@ -13035,11 +13154,38 @@ function _radioPlayerTick() {
 
 function _stepRadioTrack(dir) {
   if (typeof initAudio === 'function') initAudio();
-  let i = (_radioPreviewIdx >= 0) ? _radioPreviewIdx
-        : (_radioCurrentIdx >= 0) ? _radioCurrentIdx
-        : 0;
-  i = (i + dir + RADIO_TRACKS.length) % RADIO_TRACKS.length;
-  _previewRadioTrack(i);
+  const cur = (_radioPreviewIdx >= 0) ? _radioPreviewIdx
+            : (_radioCurrentIdx >= 0) ? _radioCurrentIdx
+            : -1;
+  let nextIdx;
+  if (dir > 0) {
+    // NEXT: pull from the shuffle queue. Push current onto history.
+    if (cur >= 0) {
+      _radioHistory.push(cur);
+      if (_radioHistory.length > _RADIO_HISTORY_MAX) _radioHistory.shift();
+    }
+    nextIdx = _nextRadioIdx();
+    // Avoid landing on the same track we're already on (small playlists).
+    if (nextIdx === cur && RADIO_TRACKS.length > 1) {
+      if (_radioShuffleQueue.length === 0) _refillShuffleQueue();
+      const swap = _radioShuffleQueue.shift();
+      if (typeof swap === 'number') nextIdx = swap;
+    }
+  } else {
+    // PREV: pop history. If empty, pick a fresh shuffle pick (still random).
+    if (_radioHistory.length > 0) {
+      nextIdx = _radioHistory.pop();
+    } else {
+      nextIdx = _nextRadioIdx();
+      if (nextIdx === cur && RADIO_TRACKS.length > 1) {
+        if (_radioShuffleQueue.length === 0) _refillShuffleQueue();
+        const swap = _radioShuffleQueue.shift();
+        if (typeof swap === 'number') nextIdx = swap;
+      }
+    }
+  }
+  if (typeof nextIdx !== 'number' || nextIdx < 0) return;
+  _previewRadioTrack(nextIdx);
 }
 
 function _togglePlayPause() {
@@ -13383,6 +13529,62 @@ function playThrusterImpact(vol) {
       _erl.play().catch(() => {});
     } catch (_) {}
   }
+  // Visual flare pulse: simulate the thruster cones flaring for an instant
+  // when the engine kicks off (retry, repair, speed-tier-up, takeoff). The
+  // PointsMaterial.size is the per-particle screen-space radius — bump it
+  // by +0.03 above each system's current preset size, then ease back to
+  // baseline. Per-system snapshot so DEFAULT/BLINK/SHORT/LIGHT/FAT-ION
+  // presets each ease back to their own configured size correctly.
+  _pulseThrusterPointSize();
+}
+
+// Module-scoped so concurrent calls (rapid speed-tier-ups during DR) don't
+// stack pulses — the most recent kick wins, the previous one's tween is
+// abandoned harmlessly when its timer fires (size has already been overwritten).
+let _thrPulseRAF = 0;
+function _pulseThrusterPointSize() {
+  // Resolve systems lazily — they're created later in 20-main-early.js, so
+  // this function may be called before they exist (very unlikely but cheap).
+  const main = (typeof thrusterSystems !== 'undefined') ? thrusterSystems : null;
+  const mini = (typeof miniThrusterSystems !== 'undefined') ? miniThrusterSystems : null;
+  if (!main && !mini) return;
+  // Snapshot per-system preset size (the value set by the active thruster
+  // preset — main systems usually 0.13, mini systems 0.06, but any preset
+  // can override). We will ease back to these.
+  const snap = [];
+  if (main) for (const s of main) {
+    if (s && s.points && s.points.material) snap.push({ mat: s.points.material, target: s.points.material.size });
+  }
+  if (mini) for (const s of mini) {
+    if (s && s.points && s.points.material) snap.push({ mat: s.points.material, target: s.points.material.size });
+  }
+  if (snap.length === 0) return;
+  // Spike each system to (preset size + 0.03) — a flare relative to baseline,
+  // so a small mini-thruster (0.06) bumps to 0.09 and a main thruster (0.13)
+  // bumps to 0.16. Keeps the visual proportion of main vs mini thrusters.
+  const SPIKE_DELTA = 0.03;
+  for (const e of snap) e.mat.size = e.target + SPIKE_DELTA;
+  // Ease back over 250ms with an ease-out (fast initial bloom, soft tail).
+  // requestAnimationFrame so the easing is frame-rate adaptive without
+  // claiming a slot in the main update() loop.
+  if (_thrPulseRAF) cancelAnimationFrame(_thrPulseRAF);
+  const start = performance.now();
+  const PULSE_MS = 250;
+  const tick = () => {
+    const t = (performance.now() - start) / PULSE_MS;
+    if (t >= 1) {
+      for (const e of snap) e.mat.size = e.target;
+      _thrPulseRAF = 0;
+      return;
+    }
+    // ease-out cubic: 1 - (1-t)^3 — size lerps from (target+SPIKE_DELTA)
+    // back down to target. u=0 at t=0 (full spike), u=1 at t=1 (back to baseline).
+    const u = 1 - Math.pow(1 - t, 3);
+    const remaining = SPIKE_DELTA * (1 - u);
+    for (const e of snap) e.mat.size = e.target + remaining;
+    _thrPulseRAF = requestAnimationFrame(tick);
+  };
+  _thrPulseRAF = requestAnimationFrame(tick);
 }
 
 // ── engine-baseline removed: continuous whir was unwanted. ──
@@ -13527,12 +13729,14 @@ function _playAsteroidImpact() {
 function playPickup(typeIdx) {
   if (!audioCtx || state.muted) return;
   const freqs = [880, 1100, 660, 990, 770, 660];
-  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.45);
-  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.35), 80);
-  // Quiet electron-burst layer on power-up smash.
+  // Lowered 2026-05-10 (user request): pickup smash was too loud relative to
+  // engine + radio mix. ~50% drop on all three layers — synth tone + harmonic
+  // overtone + electron-burst sample.
+  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.22);          // was 0.45
+  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.18), 80); // was 0.35
   const _pb = document.getElementById('powerup-burst-sfx');
   if (_pb) {
-    try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {}
+    try { _pb.currentTime = 0; _pb.volume = 0.09; _pb.play().catch(() => {}); } catch (_) {}  // was 0.18
   }
 }
 
@@ -14493,7 +14697,10 @@ function _drNextGapCenter(diffOverride) {
   // separately on the read below to avoid OOB at tier 4/5.
   const physIdx = Math.min(tier + 1, 6);
   const _lvlT = physIdx / (LEVELS.length - 1);
-  const _snap = _lvlT * _lvlT;
+  // Mirror the steering path's locked _snap (see 67-main-late.js). Corridor
+  // gap placement must use the SAME maxVel the player can actually hit, or
+  // gaps end up unreachable / trivial. Keep these two in lockstep.
+  const _snap = 0.5625;
   const maxVel = 9 + _snap * 13;
   const fwdSpeed = state.speed || (BASE_SPEED * LEVELS[Math.min(physIdx, LEVELS.length - 1)].speedMult);
   const tRow = 7 / fwdSpeed; // time between rows
@@ -15609,19 +15816,22 @@ function spawnObstacles() {
 
   // Possibly spawn a power-up in a free lane
   framesSinceLastPowerup++;
+  // Pre-compute unlocked count so spawn rate scales with variety.
+  // With only 1 type unlocked, spam is brutal — stretch cooldown + cap concurrent to 1.
+  const _availPU = POWERUP_TYPES.map((p, idx) => ({ idx, id: p.id })).filter(p => isPowerupUnlocked(p.id));
+  if (_availPU.length === 0) _availPU.push({ idx: 0, id: 'shield' });
+  const _unlockScale = POWERUP_TYPES.length / _availPU.length; // 1 unlocked of 4 → 4x rarer
   const _puRate = powerupSpawnRate * (1 + getStatValue('spawnrate'));
-  const _puThresh = _puRate > 0 ? Math.max(4, Math.round(12 / _puRate)) : Infinity;
-  const _puProb   = Math.min(0.9, 0.35 * _puRate);
-  if (powerupSpawnRate > 0 && framesSinceLastPowerup > _puThresh && activePowerups.length < 2 && Math.random() < _puProb) {
+  const _puThresh = _puRate > 0 ? Math.max(4, Math.round((12 / _puRate) * _unlockScale)) : Infinity;
+  const _puProb   = Math.min(0.9, 0.35 * _puRate / _unlockScale);
+  const _puConcurrentCap = _availPU.length === 1 ? 1 : 2;
+  if (powerupSpawnRate > 0 && framesSinceLastPowerup > _puThresh && activePowerups.length < _puConcurrentCap && Math.random() < _puProb) {
     framesSinceLastPowerup = 0;
     const freeLanes = lanes.filter(l => !blocked.includes(l));
     if (freeLanes.length > 0) {
       const lane  = freeLanes[Math.floor(Math.random() * freeLanes.length)];
       const laneX = shipX + (lane - (LANE_COUNT - 1) / 2) * LANE_WIDTH;
 
-      // Build available powerup types (only unlocked ones)
-      const _availPU = POWERUP_TYPES.map((p, idx) => ({ idx, id: p.id })).filter(p => isPowerupUnlocked(p.id));
-      if (_availPU.length === 0) _availPU.push({ idx: 0, id: 'shield' }); // fallback
       const typeIdx = _availPU[Math.floor(Math.random() * _availPU.length)].idx;
 
       const pu = getPooledPowerup(typeIdx);
@@ -19305,8 +19515,22 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
-  // Radio: ensure shuffle station is fully stopped before title music kicks in.
-  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  // Radio: when the shuffle station is on the player explicitly opted into it
+  // and never asked for it to stop. Keep it rolling seamlessly across
+  // exit → title. The title-music restart below is also gated on radio-off
+  // so the two tracks don't double up.
+  const _radioRolling = (typeof isRadioOn === 'function') && isRadioOn();
+  if (!_radioRolling) {
+    try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  } else {
+    // Restore radio to full vol on title return — covers exit-from-pause
+    // (which ducked it) and any other path that left the gain low.
+    try {
+      if (typeof rampTrackVol === 'function' && typeof TRACK_VOL !== 'undefined') {
+        rampTrackVol('radio', TRACK_VOL.radio, 0.25);
+      }
+    } catch(_) {}
+  }
   // Defensive: refresh radio button visibility on every title return so an
   // earlier load-time race that left it hidden self-heals.
   try { if (typeof refreshRadioButton === 'function') refreshRadioButton(); } catch(_) {}
@@ -19469,7 +19693,9 @@ function returnToTitle() {
     try { _thunderActiveSrc.stop(); } catch (_) {}
     _thunderActiveSrc = null;
   }
-  if (titleMusic) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
+  // Skip title-music restart when radio is on — it would double up with the
+  // shuffle station and immediately get ducked again.
+  if (titleMusic && !_radioRolling) { titleMusic.currentTime = 0; setTrackVol('title', state.muted ? 0 : TRACK_VOL.title); if (!state.muted) titleMusic.play().catch(() => {}); }
   updateTitleCoins();
   updateTitleFuelCells();
   updateTitleLevel();
@@ -20551,7 +20777,7 @@ let _settings = {
 
 // Returns the DPR cap for the current graphics quality setting.
 // Used by renderer.setPixelRatio() and the starfield shader uPixelRatio uniform.
-function _targetDPR() {
+function _baseTargetDPR() {
   const native = window.devicePixelRatio || 1;
   switch (_settings.graphicsQuality) {
     case 'performance': return 1.0;
@@ -20560,7 +20786,26 @@ function _targetDPR() {
     default:            return Math.min(native, 1.5);
   }
 }
+
+// Adaptive DPR scale (0.5–1.0). When the rAF frame loop detects sustained
+// slow frames (thermal throttling on iOS, or just a struggling device), it
+// drops this scale in 0.85x steps so the renderer paints fewer pixels. The
+// floor of 0.5 means we won't go below half the chosen quality. Recovers
+// slowly when frames stabilize.
+let _adaptiveDPRScale = 1.0;
+window._setAdaptiveDPRScale = function(s) {
+  s = Math.max(0.5, Math.min(1.0, s));
+  if (Math.abs(s - _adaptiveDPRScale) < 0.001) return;
+  _adaptiveDPRScale = s;
+  applyGraphicsQuality();
+};
+window._getAdaptiveDPRScale = function() { return _adaptiveDPRScale; };
+
+function _targetDPR() {
+  return _baseTargetDPR() * _adaptiveDPRScale;
+}
 window._targetDPR = _targetDPR;
+window._baseTargetDPR = _baseTargetDPR;
 
 // Apply current graphics quality → update renderer DPR + shader uniforms.
 // Safe to call before renderer/composer exist (guarded).
@@ -20595,7 +20840,15 @@ loadSettings();
 
 // Derived volume multipliers (0-1)
 function musicMult() { return _settings.musicMuted ? 0 : _settings.musicVol / 100; }
-function sfxMult()   { return _settings.sfxMuted   ? 0 : _settings.sfxVol   / 100; }
+// When the shuffle station is on, duck every gameplay SFX/VFX through the
+// global sfxMult() so the music stays foreground and the player can groove.
+// 0.60 = -4.4 dB — noticeably quieter without going inaudible. The lateral
+// whoosh has its own _lateralDuck on top of this.
+const _SFX_RADIO_DUCK = 0.60;
+function _sfxRadioDuck() {
+  try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _SFX_RADIO_DUCK : 1; } catch(_) { return 1; }
+}
+function sfxMult()   { return (_settings.sfxMuted ? 0 : _settings.sfxVol / 100) * _sfxRadioDuck(); }
 
 // Apply music volume to all active tracks. setTrackVol applies musicMult()
 // itself, so pass the raw TRACK_VOL base — don't double-multiply.
@@ -21087,6 +21340,13 @@ function _triggerRetryWithSweep() {
   if (_retrySweepActive || _retryPending) return; // debounce
   _retryPending = true;
   _retryIsFromDead = true;
+  // Restore radio volume — it was ducked on death entry.
+  try {
+    if (typeof isRadioOn === 'function' && isRadioOn() &&
+        typeof rampTrackVol === 'function' && typeof TRACK_VOL !== 'undefined') {
+      rampTrackVol('radio', TRACK_VOL.radio, 0.30);
+    }
+  } catch(_) {}
   const fadeEl = document.getElementById('retry-fade');
   fadeEl.style.opacity = '1'; // fade to black (CSS 0.15s transition)
   const _wasDeathRun = state.isDeathRun;
@@ -21479,17 +21739,45 @@ function startGame() {
     el.currentTime = 0;
     setTrackVol(k, 0);
   });
-  // If radio is OFF but the player left a title-screen preview running, kill
-  // it now so it doesn't bleed into gameplay. (When radio is ON, the
-  // musicFadeTo interceptor below takes over and keeps radio continuous.)
-  if (typeof isRadioOn === 'function' && !isRadioOn()
-      && typeof stopRadioPreviewForce === 'function') {
+  // Radio handoff into gameplay. Three cases:
+  //  1. Shuffle ON  — musicFadeTo interceptor below takes over, radio stays
+  //                  continuous, no zone track plays.
+  //  2. Shuffle OFF + a title-screen preview is currently playing — the user
+  //                  picked a track and clearly wants to keep listening.
+  //                  Promote the preview to a full radio session: flip
+  //                  shuffle ON so the interceptor adopts the radio, and
+  //                  skip the zone-track fade-in so we don't double-stack.
+  //  3. Shuffle OFF + no preview — normal path, fade in zone track.
+  const _radioMusicEl = (typeof radioMusic !== 'undefined') ? radioMusic
+                       : document.getElementById('radio-music');
+  const _previewPlaying = !!(_radioMusicEl && !_radioMusicEl.paused
+                             && _radioMusicEl.currentTime > 0);
+  let _radioWillTakeOver = (typeof isRadioOn === 'function') && isRadioOn();
+  if (!_radioWillTakeOver && _previewPlaying
+      && typeof setRadioOn === 'function'
+      && typeof startRadio === 'function') {
+    // Promote preview → active radio session. setRadioOn(true) flips the
+    // master switch; startRadio() wires the gameplay-track interceptor so
+    // every level swap routes through the radio instead of zone music.
+    try { setRadioOn(true); } catch(_) {}
+    try { startRadio(); } catch(_) {}
+    try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+    if (typeof _refreshShuffleSwitches === 'function') {
+      try { _refreshShuffleSwitches(); } catch(_) {}
+    }
+    _radioWillTakeOver = true;
+  } else if (!_radioWillTakeOver && typeof stopRadioPreviewForce === 'function') {
+    // No preview was running OR we couldn't promote it — ensure radio is
+    // fully silent so it can't bleed into gameplay.
     stopRadioPreviewForce();
   }
-  // Short fade-in for gameplay track (title already silenced above)
+
+  // Short fade-in for gameplay track — ONLY if radio isn't taking over.
+  // Otherwise we'd start a zone track underneath the radio and the
+  // interceptor would have to fight to silence it.
   const _startTrack = state.currentLevelIdx >= 2 ? 'l3' : 'bg';
   const _startEl = _startTrack === 'l3' ? l3Music : bgMusic;
-  if (_startEl && !state.muted) {
+  if (_startEl && !state.muted && !_radioWillTakeOver) {
     _startEl.currentTime = 0;
     setTrackVol(_startTrack, 0);
     _startEl.play().catch(() => {});
@@ -24345,9 +24633,18 @@ function killPlayer() {
                            : null;
 
   state.phase = 'dead';
-  // Radio: stop playback on death + try to unlock the shuffle station.
-  try { if (typeof stopRadio === 'function') stopRadio(); } catch(_) {}
+  // Radio: keep the shuffle station rolling across death → game-over → title.
+  // The player explicitly turned it on; only the user should stop it.
+  // (Previously stopRadio() was called here. Lock-in unlock still fires.)
   try { if (typeof tryUnlockRadioOnDeath === 'function') tryUnlockRadioOnDeath(); } catch(_) {}
+  // Duck the radio under the death/game-over UI sounds so they read clearly.
+  // Restored on retry (handled in retry path) and on title return (60-main-late.js).
+  try {
+    if (typeof isRadioOn === 'function' && isRadioOn() &&
+        typeof rampTrackVol === 'function' && typeof TRACK_VOL !== 'undefined') {
+      rampTrackVol('radio', TRACK_VOL.radio * 0.30, 0.30);
+    }
+  } catch(_) {}
   // Release the screen wake lock on death — game-over screen doesn't need it.
   try { window._jhWakeLock && window._jhWakeLock.release(); } catch(_) {}
   // Defensive: release transition reentry locks so an in-flight startGame /
@@ -24465,6 +24762,12 @@ function killPlayer() {
   if (lakeMusic) { lakeMusic.pause(); lakeMusic.currentTime = 0; setTrackVol('lake', 0); }
   musicFadeTo('title', 2500);
 
+  // ── Defer UI prep + persistence + ladder/XP off the impact frame ──
+  // The game-over overlay is hidden behind _gameOverDelayTimer (~_EXP_DURATION s),
+  // so all of this work — DOM textContent on .hidden elements, localStorage writes,
+  // ladder check, XP calc, leaderboard submit — was needlessly blocking the
+  // explosion's first frame. Wrap it and run it just before the overlay reveal.
+  const _runGameOverPrep = () => {
   // Player-facing score — apply distance multiplier
   const _rawScore = Math.floor(state.playerScore);
   const _dist = state.distance || 0;
@@ -24816,23 +25119,6 @@ function killPlayer() {
       _bestWrap.classList.add('hidden');
     }
   }
-  document.getElementById('hud').classList.add('hidden');
-  // Delay game over screen so explosion plays first
-  if (_gameOverDelayTimer) clearTimeout(_gameOverDelayTimer);
-  _gameOverTapReady = false; // block taps until cooldown
-  if (_gameOverTapTimer) clearTimeout(_gameOverTapTimer);
-  _gameOverDelayTimer = setTimeout(() => {
-    _gameOverDelayTimer = null;
-    document.getElementById('gameover-screen').classList.remove('hidden');
-    // Re-trigger staggered animations by forcing reflow
-    document.querySelectorAll('.go-anim').forEach(el => {
-      el.style.animation = 'none';
-      el.offsetHeight; // force reflow
-      el.style.animation = '';
-    });
-    // Start tap cooldown AFTER screen appears
-    _gameOverTapTimer = setTimeout(() => { _gameOverTapReady = true; }, _GO_TAP_COOLDOWN);
-  }, _EXP_DURATION * 1000);
 
   // ── UPGRADES UNLOCKED banner (one-time, game over screen) ──
   if (!localStorage.getItem('jh_upgrades_unlocked_shown')) {
@@ -24928,6 +25214,30 @@ function killPlayer() {
     }
     } // end else (startedFromL1)
   }
+  }; // end _runGameOverPrep
+
+  // Hide the HUD immediately on death — cheap, must happen on the impact frame.
+  document.getElementById('hud').classList.add('hidden');
+
+  // Delay game over screen so explosion plays first.
+  // Run the prep work just-in-time, inside the timer, so the impact frame stays
+  // light. The overlay is hidden until this timer fires anyway.
+  if (_gameOverDelayTimer) clearTimeout(_gameOverDelayTimer);
+  _gameOverTapReady = false; // block taps until cooldown
+  if (_gameOverTapTimer) clearTimeout(_gameOverTapTimer);
+  _gameOverDelayTimer = setTimeout(() => {
+    _gameOverDelayTimer = null;
+    _runGameOverPrep();
+    document.getElementById('gameover-screen').classList.remove('hidden');
+    // Re-trigger staggered animations by forcing reflow
+    document.querySelectorAll('.go-anim').forEach(el => {
+      el.style.animation = 'none';
+      el.offsetHeight; // force reflow
+      el.style.animation = '';
+    });
+    // Start tap cooldown AFTER screen appears
+    _gameOverTapTimer = setTimeout(() => { _gameOverTapReady = true; }, _GO_TAP_COOLDOWN);
+  }, _EXP_DURATION * 1000);
 }
 
 // Tint the neon gradient on an obstacle group to a given hex color
@@ -24993,7 +25303,9 @@ function update(dt) {
 
   state.elapsed += dt;  // real-time accumulator for smooth animations
   _tickHoloMaterials(state.elapsed);  // animate holographic powerup cubes & shatter fragments
-  _updatePowerupShatter();  // tick active shatter effects
+  // Pass real dt so shatter motion is frame-rate independent and immune to
+  // wall-clock jumps (paused tabs, GC stalls). See _updatePowerupShatter docstring.
+  _updatePowerupShatter(dt);
   _drUpdateDebugHud();
   state.levelElapsed = (state.levelElapsed || 0) + dt;  // time spent in current level
 
@@ -25006,19 +25318,18 @@ function update(dt) {
   if (_introBlock) { state.shipX = 0; state.shipVelX = 0; shipGroup.position.x = 0; }
   const steerLeft  = !_introBlock && (keys['ArrowLeft']  || keys['a'] || keys['A'] || touch.left);
   const steerRight = !_introBlock && (keys['ArrowRight'] || keys['d'] || keys['D'] || touch.right);
-  // Physics ramp: starts floaty at L1, gradually snappier all the way up. The
-  // ease-in curve (_snap = _lvlT*_lvlT) keeps tier-to-tier ratios consistent:
-  // each step gets ~30-35% more MAX_VEL than the previous one.
-  // Death Run: lateral physics tracks state.deathRunSpeedTier (set by sequencer).
-  //   physTier 1 → _physIdx 2 (L3,            _lvlT 0.50)
-  //   physTier 2 → _physIdx 3 (L4,            _lvlT 0.75)
-  //   physTier 3 → _physIdx 4 (L5 baseline,   _lvlT 1.00)
-  //   physTier 4 → _physIdx 5 (final-act,     _lvlT 1.25)
-  //   physTier 5 → _physIdx 6 (ENDLESS peak,  _lvlT 1.50)
+  // Lateral physics: LOCKED to a constant feel across all levels. Difficulty
+  // is driven by forward speed (state.speed / LEVELS[].speedMult), not by
+  // changing how the ship steers. Endless-runner convention — Subway Surfers,
+  // Temple Run, Driftforce all keep lane-change feel constant and let speed
+  // do the work. Players build muscle memory once.
+  // _snap = 0.5625 ≈ L4 feel (ACCEL ~116, MAX_VEL ~26 with current 60/100/13/23
+  // tunables). Slightly snappier baseline than the old L1-L3 floaty zone.
+  // _physIdx still computed for any downstream consumers, but _snap ignores it.
   const _physIdx = _physLevelOverride >= 0 ? _physLevelOverride
     : state.isDeathRun ? Math.min(state.deathRunSpeedTier + 1, 6) : state.currentLevelIdx;
-  const _lvlT   = _physIdx / (LEVELS.length - 1); // 0 at L1, 1 at L5, up to 1.5 at physTier 5
-  const _snap   = _lvlT * _lvlT;  // ease-in so early levels stay floaty longer
+  const _lvlT   = _physIdx / (LEVELS.length - 1); // kept for any downstream reads
+  const _snap   = 0.5625;  // L4-equivalent locked baseline
   // Handling tier: 0.0 at max upgrade (crisp), 1.0 at stock (loose)
   const _handlingDrift = getHandlingDrift();
   // Low handling = HIGH ACCEL (over-responsive, hard to control)
@@ -25607,7 +25918,10 @@ function update(dt) {
     // Player level score bonus
     const _pLvl = loadPlayerLevel();
     const _lvlScoreMult = _pLvl >= 15 ? 1.6 : _pLvl >= 10 ? 1.5 : _pLvl >= 5 ? 1.2 : 1.0;
-    state.playerScore += 8 * lvlMult * _lvlScoreMult * dt;
+    // Boost-tier reward: faster ship → faster HUD score climb. Floor at 1x so
+    // a dipped/slowed ship never undertickrates, mirrors internal state.score.
+    const _boostScoreMult = Math.max(1.0, state.speed / BASE_SPEED);
+    state.playerScore += 8 * lvlMult * _lvlScoreMult * _boostScoreMult * dt;
   }
   document.getElementById('hud-score').textContent = Math.floor(state.playerScore);
 
@@ -26843,7 +27157,8 @@ function update(dt) {
       applyPowerup(pu.userData.typeIdx);
       // Spawn shatter at the cube's current position, with a live ship-tracking target.
       // Icon zips to the ship's nose (slightly forward of pivot) and absorbs in ~350ms.
-      _spawnPowerupShatter(pu, () => new THREE.Vector3(state.shipX, shipGroup.position.y, shipGroup.position.z));
+      // Callback writes into a caller-provided scratch vector — zero allocation per frame.
+      _spawnPowerupShatter(pu, (out) => out.set(state.shipX, shipGroup.position.y, shipGroup.position.z));
       returnPowerupToPool(pu);
       activePowerups.splice(i, 1);
     }
@@ -27335,8 +27650,92 @@ window._perfDiag = _perfDiag;
 // haze nozzle→screen-UV projection. Avoids per-frame allocation / GC churn.
 const _hazeProjScratch = new THREE.Vector3();
 
-function animate() {
+// Soft 60fps cap. ProMotion iPhones (14/15/16/17 Pro) drive rAF at 120Hz,
+// which doubles GPU work for no visual gain (game logic is fixed dt = 1/60).
+// Skip rAF ticks that arrive faster than the budget. Subtract 1.5ms slack so
+// we don't accidentally land on every other tick (which would cap us at 30).
+const _FRAME_BUDGET_MS = 1000 / 60;
+let _lastFrameMs = 0;
+
+// ── Adaptive DPR (thermal/perf throttle defense) ──────────────────────────
+// Watches the recent frame budget. When > 35% of the last ~120 frames blew
+// past 22ms (i.e. consistently below 45fps), drop renderer pixel ratio one
+// step (0.85x). When < 5% are slow over a longer window, recover one step.
+// Step floor = 0.5 of base DPR so we never go below half-quality.
+// Cooldown after each step prevents oscillation.
+const _ADAPT_WINDOW       = 120;     // frames considered
+const _ADAPT_SLOW_MS       = 22;     // frame considered slow above this
+const _ADAPT_DOWN_RATIO   = 0.35;    // > this fraction slow → drop quality
+const _ADAPT_UP_RATIO     = 0.05;    // < this fraction slow → recover
+const _ADAPT_STEP         = 0.85;    // multiplicative step
+const _ADAPT_MIN          = 0.5;
+const _ADAPT_MAX          = 1.0;
+const _ADAPT_DOWN_COOLDOWN = 180;    // frames after dropping before another check
+const _ADAPT_UP_COOLDOWN  = 600;     // longer cooldown before recovering (~10s)
+let _adaptSlowBuf = new Uint8Array(_ADAPT_WINDOW);
+let _adaptIdx = 0;
+let _adaptFilled = 0;
+let _adaptCooldown = 240;            // initial grace period after boot
+function _tickAdaptiveDPR(frameMs) {
+  // Don't run if disabled or if we're paused / not in gameplay.
+  if (typeof window._setAdaptiveDPRScale !== 'function') return;
+  if (state && (state.phase === 'paused' || state.phase === 'title' || state.phase === 'dead')) return;
+  if (_adaptCooldown > 0) { _adaptCooldown--; return; }
+  // Append slow/fast bit.
+  const isSlow = frameMs > _ADAPT_SLOW_MS ? 1 : 0;
+  _adaptSlowBuf[_adaptIdx] = isSlow;
+  _adaptIdx = (_adaptIdx + 1) % _ADAPT_WINDOW;
+  if (_adaptFilled < _ADAPT_WINDOW) _adaptFilled++;
+  if (_adaptFilled < _ADAPT_WINDOW) return;
+  // Sum.
+  let slow = 0;
+  for (let i = 0; i < _ADAPT_WINDOW; i++) slow += _adaptSlowBuf[i];
+  const ratio = slow / _ADAPT_WINDOW;
+  const cur = window._getAdaptiveDPRScale ? window._getAdaptiveDPRScale() : 1.0;
+  if (ratio > _ADAPT_DOWN_RATIO && cur > _ADAPT_MIN + 0.001) {
+    const next = Math.max(_ADAPT_MIN, cur * _ADAPT_STEP);
+    window._setAdaptiveDPRScale(next);
+    _adaptCooldown = _ADAPT_DOWN_COOLDOWN;
+    _adaptFilled = 0; // reset window after a change
+    if (window._fpsOn) console.log('[adaptive-dpr] DROP', cur.toFixed(2), '→', next.toFixed(2), 'slow ratio', ratio.toFixed(2));
+  } else if (ratio < _ADAPT_UP_RATIO && cur < _ADAPT_MAX - 0.001) {
+    const next = Math.min(_ADAPT_MAX, cur / _ADAPT_STEP);
+    window._setAdaptiveDPRScale(next);
+    _adaptCooldown = _ADAPT_UP_COOLDOWN;
+    _adaptFilled = 0;
+    if (window._fpsOn) console.log('[adaptive-dpr] UP', cur.toFixed(2), '→', next.toFixed(2), 'slow ratio', ratio.toFixed(2));
+  }
+}
+
+// Lights whose intensity ramps to/from 0 frequently. When intensity is 0 the
+// light still costs fragment-shader cycles unless `visible` is also false
+// (Three.js skips invisible lights from the per-material lights uniform).
+// Keeping `visible` in sync with `intensity > 0` is a free mobile GPU win.
+const _OPTIONAL_LIGHTS = [];
+function _registerOptionalLight(L) { if (L && _OPTIONAL_LIGHTS.indexOf(L) === -1) _OPTIONAL_LIGHTS.push(L); }
+function _syncOptionalLightVisibility() {
+  for (let i = 0; i < _OPTIONAL_LIGHTS.length; i++) {
+    const L = _OPTIONAL_LIGHTS[i];
+    const want = L.intensity > 0.0001;
+    if (L.visible !== want) L.visible = want;
+  }
+}
+try {
+  if (typeof _flashLight       !== 'undefined') _registerOptionalLight(_flashLight);
+  if (typeof shieldLight       !== 'undefined') _registerOptionalLight(shieldLight);
+  if (typeof magnetLight       !== 'undefined') _registerOptionalLight(magnetLight);
+  if (typeof shipUnderlightWarm!== 'undefined') _registerOptionalLight(shipUnderlightWarm);
+} catch(_) {}
+
+function animate(now) {
   requestAnimationFrame(animate);
+  let _frameDeltaMs = 0;
+  if (typeof now === 'number') {
+    if (now - _lastFrameMs < _FRAME_BUDGET_MS - 1.5) return;
+    _frameDeltaMs = _lastFrameMs > 0 ? (now - _lastFrameMs) : 0;
+    _lastFrameMs = now;
+  }
+  if (_frameDeltaMs > 0) _tickAdaptiveDPR(_frameDeltaMs);
   _perfDiag.frameStart();
   // FPS + draw call measurement
   if (_fpsOn) {
@@ -27354,6 +27753,7 @@ function animate() {
   // Single guard at the top — obviates per-system pause gates throughout
   // update() and the visual phase. Composer renders so the screen isn't black.
   if (state.phase === 'paused') {
+    _syncOptionalLightVisibility();
     _perfDiag.markRenderStart();
     composer.render();
     _perfDiag.markRenderEnd();
@@ -27558,6 +27958,7 @@ function animate() {
       _thrusterHazePass.uniforms.uAspect.value = window.innerWidth / window.innerHeight;
     }
   }
+  _syncOptionalLightVisibility();
   _perfDiag.markRenderStart();
   composer.render();
   _perfDiag.markRenderEnd();
