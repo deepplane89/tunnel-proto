@@ -20486,7 +20486,7 @@ function playTitleClose() {
     const sfx = document.getElementById('start-sound');
     if (sfx) {
       sfx.currentTime = 0;
-      sfx.volume = Math.min(1, 0.85 * _sM);
+      sfx.volume = Math.min(1, 0.40 * _sM);
       sfx.play().catch(() => {});
     }
   } catch(_){}
