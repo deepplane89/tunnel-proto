@@ -14572,7 +14572,10 @@ function _drNextGapCenter(diffOverride) {
   // separately on the read below to avoid OOB at tier 4/5.
   const physIdx = Math.min(tier + 1, 6);
   const _lvlT = physIdx / (LEVELS.length - 1);
-  const _snap = _lvlT * _lvlT;
+  // Mirror the steering path's locked _snap (see 67-main-late.js). Corridor
+  // gap placement must use the SAME maxVel the player can actually hit, or
+  // gaps end up unreachable / trivial. Keep these two in lockstep.
+  const _snap = 0.5625;
   const maxVel = 9 + _snap * 13;
   const fwdSpeed = state.speed || (BASE_SPEED * LEVELS[Math.min(physIdx, LEVELS.length - 1)].speedMult);
   const tRow = 7 / fwdSpeed; // time between rows
@@ -25142,19 +25145,18 @@ function update(dt) {
   if (_introBlock) { state.shipX = 0; state.shipVelX = 0; shipGroup.position.x = 0; }
   const steerLeft  = !_introBlock && (keys['ArrowLeft']  || keys['a'] || keys['A'] || touch.left);
   const steerRight = !_introBlock && (keys['ArrowRight'] || keys['d'] || keys['D'] || touch.right);
-  // Physics ramp: starts floaty at L1, gradually snappier all the way up. The
-  // ease-in curve (_snap = _lvlT*_lvlT) keeps tier-to-tier ratios consistent:
-  // each step gets ~30-35% more MAX_VEL than the previous one.
-  // Death Run: lateral physics tracks state.deathRunSpeedTier (set by sequencer).
-  //   physTier 1 → _physIdx 2 (L3,            _lvlT 0.50)
-  //   physTier 2 → _physIdx 3 (L4,            _lvlT 0.75)
-  //   physTier 3 → _physIdx 4 (L5 baseline,   _lvlT 1.00)
-  //   physTier 4 → _physIdx 5 (final-act,     _lvlT 1.25)
-  //   physTier 5 → _physIdx 6 (ENDLESS peak,  _lvlT 1.50)
+  // Lateral physics: LOCKED to a constant feel across all levels. Difficulty
+  // is driven by forward speed (state.speed / LEVELS[].speedMult), not by
+  // changing how the ship steers. Endless-runner convention — Subway Surfers,
+  // Temple Run, Driftforce all keep lane-change feel constant and let speed
+  // do the work. Players build muscle memory once.
+  // _snap = 0.5625 ≈ L4 feel (ACCEL ~116, MAX_VEL ~26 with current 60/100/13/23
+  // tunables). Slightly snappier baseline than the old L1-L3 floaty zone.
+  // _physIdx still computed for any downstream consumers, but _snap ignores it.
   const _physIdx = _physLevelOverride >= 0 ? _physLevelOverride
     : state.isDeathRun ? Math.min(state.deathRunSpeedTier + 1, 6) : state.currentLevelIdx;
-  const _lvlT   = _physIdx / (LEVELS.length - 1); // 0 at L1, 1 at L5, up to 1.5 at physTier 5
-  const _snap   = _lvlT * _lvlT;  // ease-in so early levels stay floaty longer
+  const _lvlT   = _physIdx / (LEVELS.length - 1); // kept for any downstream reads
+  const _snap   = 0.5625;  // L4-equivalent locked baseline
   // Handling tier: 0.0 at max upgrade (crisp), 1.0 at stock (loose)
   const _handlingDrift = getHandlingDrift();
   // Low handling = HIGH ACCEL (over-responsive, hard to control)

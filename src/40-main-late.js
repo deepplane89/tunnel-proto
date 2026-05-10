@@ -1132,7 +1132,10 @@ function _drNextGapCenter(diffOverride) {
   // separately on the read below to avoid OOB at tier 4/5.
   const physIdx = Math.min(tier + 1, 6);
   const _lvlT = physIdx / (LEVELS.length - 1);
-  const _snap = _lvlT * _lvlT;
+  // Mirror the steering path's locked _snap (see 67-main-late.js). Corridor
+  // gap placement must use the SAME maxVel the player can actually hit, or
+  // gaps end up unreachable / trivial. Keep these two in lockstep.
+  const _snap = 0.5625;
   const maxVel = 9 + _snap * 13;
   const fwdSpeed = state.speed || (BASE_SPEED * LEVELS[Math.min(physIdx, LEVELS.length - 1)].speedMult);
   const tRow = 7 / fwdSpeed; // time between rows
