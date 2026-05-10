@@ -21,6 +21,7 @@ const RADIO_TRACKS = [
   { id: 'andracid',          name: 'ANDRACID',              src: './assets/audio/radio-andracid.mp3' },
   { id: 'cosmic-relay',      name: 'COSMIC RELAY',          src: './assets/audio/radio-cosmic-relay.mp3' },
   { id: 'cosmic-relay-2',    name: 'COSMIC RELAY II',       src: './assets/audio/radio-cosmic-relay-2.mp3' },
+  { id: 'drum-n-space',      name: 'DRUM N SPACE',          src: './assets/audio/radio-drum-n-space.mp3' },
 ];
 window.RADIO_TRACKS = RADIO_TRACKS;
 
