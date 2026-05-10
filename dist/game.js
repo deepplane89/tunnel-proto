@@ -13526,10 +13526,10 @@ function playThrusterImpact(vol) {
   }
   // Visual flare pulse: simulate the thruster cones flaring for an instant
   // when the engine kicks off (retry, repair, speed-tier-up, takeoff). The
-  // PointsMaterial.size is the per-particle screen-space radius — spike it
-  // to 0.03 and ease back to whatever the active thruster preset configured
-  // it to. We snapshot per-system current size so DEFAULT/BLINK/SHORT/LIGHT/
-  // FAT-ION presets each ease back to their own sizes correctly.
+  // PointsMaterial.size is the per-particle screen-space radius — bump it
+  // by +0.03 above each system's current preset size, then ease back to
+  // baseline. Per-system snapshot so DEFAULT/BLINK/SHORT/LIGHT/FAT-ION
+  // presets each ease back to their own configured size correctly.
   _pulseThrusterPointSize();
 }
 
@@ -13554,17 +13554,17 @@ function _pulseThrusterPointSize() {
     if (s && s.points && s.points.material) snap.push({ mat: s.points.material, target: s.points.material.size });
   }
   if (snap.length === 0) return;
-  // Spike to 0.03 — user-requested flare size. NOTE: we set the same value on
-  // both main and mini systems even though their preset baselines differ; the
-  // ease-back-to-target step is what restores each system's correct preset.
-  for (const e of snap) e.mat.size = 0.03;
+  // Spike each system to (preset size + 0.03) — a flare relative to baseline,
+  // so a small mini-thruster (0.06) bumps to 0.09 and a main thruster (0.13)
+  // bumps to 0.16. Keeps the visual proportion of main vs mini thrusters.
+  const SPIKE_DELTA = 0.03;
+  for (const e of snap) e.mat.size = e.target + SPIKE_DELTA;
   // Ease back over 250ms with an ease-out (fast initial bloom, soft tail).
   // requestAnimationFrame so the easing is frame-rate adaptive without
   // claiming a slot in the main update() loop.
   if (_thrPulseRAF) cancelAnimationFrame(_thrPulseRAF);
   const start = performance.now();
   const PULSE_MS = 250;
-  const SPIKE = 0.03;
   const tick = () => {
     const t = (performance.now() - start) / PULSE_MS;
     if (t >= 1) {
@@ -13572,9 +13572,11 @@ function _pulseThrusterPointSize() {
       _thrPulseRAF = 0;
       return;
     }
-    // ease-out cubic: 1 - (1-t)^3
+    // ease-out cubic: 1 - (1-t)^3 — size lerps from (target+SPIKE_DELTA)
+    // back down to target. u=0 at t=0 (full spike), u=1 at t=1 (back to baseline).
     const u = 1 - Math.pow(1 - t, 3);
-    for (const e of snap) e.mat.size = SPIKE + (e.target - SPIKE) * u;
+    const remaining = SPIKE_DELTA * (1 - u);
+    for (const e of snap) e.mat.size = e.target + remaining;
     _thrPulseRAF = requestAnimationFrame(tick);
   };
   _thrPulseRAF = requestAnimationFrame(tick);
