@@ -15,7 +15,11 @@ let _settings = {
   // (stars, thruster particles) to oversaturate via bloom — 1.5→3 is 4x the
   // framebuffer pixels and the visible glow grows beyond what looks crisp.
   graphicsQuality: 'sharp',
+  // Battery saver options — both default OFF so existing players see no change.
+  fpsCap30: false,     // cap framerate at 30fps to cut sustained GPU power ~50%
+  liteBloom: false,    // drop bloom resolution /2 → /3 + 1 fewer mip level
 };
+window.getSetting = function(k) { return _settings[k]; };
 
 // Returns the DPR cap for the current graphics quality setting.
 // Used by renderer.setPixelRatio() and the starfield shader uPixelRatio uniform.
@@ -130,6 +134,10 @@ function openSettings() {
   const hBtn = document.getElementById('haptic-toggle');
   hBtn.textContent = _settings.hapticsOn ? 'ON' : 'OFF';
   hBtn.classList.toggle('off', !_settings.hapticsOn);
+  const fpsBtn = document.getElementById('fpscap-toggle');
+  if (fpsBtn) { fpsBtn.textContent = _settings.fpsCap30 ? 'ON' : 'OFF'; fpsBtn.classList.toggle('off', !_settings.fpsCap30); }
+  const lbBtn2 = document.getElementById('litebloom-toggle');
+  if (lbBtn2) { lbBtn2.textContent = _settings.liteBloom ? 'ON' : 'OFF'; lbBtn2.classList.toggle('off', !_settings.liteBloom); }
   // Sync graphics quality button states
   ['performance','balanced','sharp'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
@@ -435,6 +443,25 @@ function _initSettingsAccordion() {
     btn.textContent = _settings.hapticsOn ? 'ON' : 'OFF';
     btn.classList.toggle('off', !_settings.hapticsOn);
     if (_settings.hapticsOn) hapticTap();  // demo buzz
+    saveSettings();
+  });
+
+  // 30 FPS cap toggle — caps framerate at 30 to reduce GPU power ~50%.
+  _tapBind(document.getElementById('fpscap-toggle'), () => {
+    _settings.fpsCap30 = !_settings.fpsCap30;
+    const btn = document.getElementById('fpscap-toggle');
+    btn.textContent = _settings.fpsCap30 ? 'ON' : 'OFF';
+    btn.classList.toggle('off', !_settings.fpsCap30);
+    saveSettings();
+  });
+
+  // Lite Bloom toggle — drops bloom resolution /2 → /3 for big mobile savings.
+  _tapBind(document.getElementById('litebloom-toggle'), () => {
+    _settings.liteBloom = !_settings.liteBloom;
+    const btn = document.getElementById('litebloom-toggle');
+    btn.textContent = _settings.liteBloom ? 'ON' : 'OFF';
+    btn.classList.toggle('off', !_settings.liteBloom);
+    if (typeof window.applyLiteBloom === 'function') window.applyLiteBloom();
     saveSettings();
   });
 

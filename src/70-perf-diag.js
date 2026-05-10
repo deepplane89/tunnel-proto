@@ -271,7 +271,14 @@ const _hazeProjScratch = new THREE.Vector3();
 // which doubles GPU work for no visual gain (game logic is fixed dt = 1/60).
 // Skip rAF ticks that arrive faster than the budget. Subtract 1.5ms slack so
 // we don't accidentally land on every other tick (which would cap us at 30).
-const _FRAME_BUDGET_MS = 1000 / 60;
+const _FRAME_BUDGET_60 = 1000 / 60;
+const _FRAME_BUDGET_30 = 1000 / 30;
+function _frameBudgetMs() {
+  try {
+    if (typeof getSetting === 'function' && getSetting('fpsCap30')) return _FRAME_BUDGET_30;
+  } catch(_) {}
+  return _FRAME_BUDGET_60;
+}
 let _lastFrameMs = 0;
 
 // ── Adaptive DPR (thermal/perf throttle defense) ──────────────────────────
@@ -297,6 +304,19 @@ function _tickAdaptiveDPR(frameMs) {
   // Don't run if disabled or if we're paused / not in gameplay.
   if (typeof window._setAdaptiveDPRScale !== 'function') return;
   if (state && (state.phase === 'paused' || state.phase === 'title' || state.phase === 'dead')) return;
+  // SHARP means "don't downgrade my image" — user opted into max DPR, leave it alone.
+  // Adaptive only runs on Balanced/Performance where the user accepted trade-offs.
+  try {
+    const _gq = (typeof getSetting === 'function') ? getSetting('graphicsQuality') :
+                (window._settings && window._settings.graphicsQuality);
+    if (_gq === 'sharp') {
+      // Pin to full while on Sharp so prior drops don't linger.
+      if (window._getAdaptiveDPRScale && window._getAdaptiveDPRScale() < 1.0) {
+        window._setAdaptiveDPRScale(1.0);
+      }
+      return;
+    }
+  } catch(_) {}
   if (_adaptCooldown > 0) { _adaptCooldown--; return; }
   // Append slow/fast bit.
   const isSlow = frameMs > _ADAPT_SLOW_MS ? 1 : 0;
@@ -348,7 +368,7 @@ function animate(now) {
   requestAnimationFrame(animate);
   let _frameDeltaMs = 0;
   if (typeof now === 'number') {
-    if (now - _lastFrameMs < _FRAME_BUDGET_MS - 1.5) return;
+    if (now - _lastFrameMs < _frameBudgetMs() - 1.5) return;
     _frameDeltaMs = _lastFrameMs > 0 ? (now - _lastFrameMs) : 0;
     _lastFrameMs = now;
   }

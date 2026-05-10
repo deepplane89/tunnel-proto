@@ -1881,13 +1881,30 @@ let camTargetX = 0;
 // ═══════════════════════════════════════════════════
 //  POST-PROCESSING
 // ═══════════════════════════════════════════════════
-const composer = new EffectComposer(renderer);
+// MSAA in the composer render target. EffectComposer renders to an offscreen
+// FBO, so the renderer's `antialias` flag does nothing — we need to ask the
+// FBO for multisamples directly. On Sharp we use 4x (great edges, ~10–15% GPU
+// hit on iPhone); on Balanced 2x; Performance stays 0 to save fill rate.
+let _composerSamples = 0;
+try {
+  const _gq = (window._settings && window._settings.graphicsQuality) ||
+              ((window._LS && JSON.parse(window._LS.getItem('jh_settings')||'{}').graphicsQuality)) ||
+              'balanced';
+  _composerSamples = _gq === 'sharp' ? 4 : _gq === 'balanced' ? 2 : 0;
+} catch(_) { _composerSamples = 2; }
+const _composerRT = new THREE.WebGLRenderTarget(
+  Math.max(1, window.innerWidth),
+  Math.max(1, window.innerHeight),
+  { samples: _composerSamples, type: THREE.HalfFloatType }
+);
+const composer = new EffectComposer(renderer, _composerRT);
 composer.addPass(new RenderPass(scene, camera));
 
 // Bloom resolution: /2 on both desktop and mobile. Previously /3 on mobile,
 // but that left the sun corona/atmosphere glow visibly blurry — bloom IS the
-// look for a hero element like the sun. Cost: ~0.3–0.5 ms/frame on mobile,
-// well within budget after this session's draw-call + alloc savings.
+// look for a hero element like the sun. Cost: ~0.3–0.5 ms/frame on mobile.
+// Lite-bloom toggle (battery saver) drops to /3 + lower strength to halve
+// bloom GPU cost; see window.applyLiteBloom().
 const _BLOOM_DIV = 2;
 const bloom = new UnrealBloomPass(
   new THREE.Vector2(Math.floor(window.innerWidth / _BLOOM_DIV), Math.floor(window.innerHeight / _BLOOM_DIV)),
@@ -1896,6 +1913,26 @@ const bloom = new UnrealBloomPass(
   1.0    // threshold — only HDR emissives bloom (shield uses toneMapped:false)
 );
 composer.addPass(bloom);
+window._bloomPass = bloom;
+window._BLOOM_BASE = { strength: 0.35, radius: 0.25, div: 2 };
+// Apply the current lite-bloom setting to the live bloom pass. Drops the
+// bloom render target to W/3 × H/3 (1/2.25 the pixels) and trims strength so
+// the softer falloff doesn't look washed out. Called on toggle + resize.
+window.applyLiteBloom = function() {
+  try {
+    const lite = (typeof getSetting === 'function') && getSetting('liteBloom');
+    const div = lite ? 3 : window._BLOOM_BASE.div;
+    const w = Math.max(1, Math.floor(window.innerWidth / div));
+    const h = Math.max(1, Math.floor(window.innerHeight / div));
+    if (window._bloomPass) {
+      window._bloomPass.setSize(w, h);
+      window._bloomPass.strength = lite ? window._BLOOM_BASE.strength * 0.85 : window._BLOOM_BASE.strength;
+      window._bloomPass.radius   = lite ? window._BLOOM_BASE.radius   * 0.85 : window._BLOOM_BASE.radius;
+    }
+  } catch(_) {}
+};
+// Apply at boot in case the setting was already saved.
+try { window.applyLiteBloom(); } catch(_) {}
 
 // ── LOCALIZED HEAT HAZE (thruster exhaust distortion) — opt-in per skin via window._coneThrustersEnabled ──
 const _thrusterHazeShader = {
