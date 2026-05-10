@@ -1902,8 +1902,9 @@ composer.addPass(new RenderPass(scene, camera));
 
 // Bloom resolution: /2 on both desktop and mobile. Previously /3 on mobile,
 // but that left the sun corona/atmosphere glow visibly blurry — bloom IS the
-// look for a hero element like the sun. Cost: ~0.3–0.5 ms/frame on mobile,
-// well within budget after this session's draw-call + alloc savings.
+// look for a hero element like the sun. Cost: ~0.3–0.5 ms/frame on mobile.
+// Lite-bloom toggle (battery saver) drops to /3 + lower strength to halve
+// bloom GPU cost; see window.applyLiteBloom().
 const _BLOOM_DIV = 2;
 const bloom = new UnrealBloomPass(
   new THREE.Vector2(Math.floor(window.innerWidth / _BLOOM_DIV), Math.floor(window.innerHeight / _BLOOM_DIV)),
@@ -1912,6 +1913,26 @@ const bloom = new UnrealBloomPass(
   1.0    // threshold — only HDR emissives bloom (shield uses toneMapped:false)
 );
 composer.addPass(bloom);
+window._bloomPass = bloom;
+window._BLOOM_BASE = { strength: 0.35, radius: 0.25, div: 2 };
+// Apply the current lite-bloom setting to the live bloom pass. Drops the
+// bloom render target to W/3 × H/3 (1/2.25 the pixels) and trims strength so
+// the softer falloff doesn't look washed out. Called on toggle + resize.
+window.applyLiteBloom = function() {
+  try {
+    const lite = (typeof getSetting === 'function') && getSetting('liteBloom');
+    const div = lite ? 3 : window._BLOOM_BASE.div;
+    const w = Math.max(1, Math.floor(window.innerWidth / div));
+    const h = Math.max(1, Math.floor(window.innerHeight / div));
+    if (window._bloomPass) {
+      window._bloomPass.setSize(w, h);
+      window._bloomPass.strength = lite ? window._BLOOM_BASE.strength * 0.85 : window._BLOOM_BASE.strength;
+      window._bloomPass.radius   = lite ? window._BLOOM_BASE.radius   * 0.85 : window._BLOOM_BASE.radius;
+    }
+  } catch(_) {}
+};
+// Apply at boot in case the setting was already saved.
+try { window.applyLiteBloom(); } catch(_) {}
 
 // ── LOCALIZED HEAT HAZE (thruster exhaust distortion) — opt-in per skin via window._coneThrustersEnabled ──
 const _thrusterHazeShader = {

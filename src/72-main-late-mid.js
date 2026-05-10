@@ -56,7 +56,10 @@ function _doResize() {
   updateCameraFOV();
   renderer.setSize(w, h);
   composer.setSize(w, h);
-  bloom.resolution.set(Math.floor(w / 2), Math.floor(h / 2));
+  // Reapply lite-bloom — sets bloom render target to the right div for the
+  // current setting (overrides the /2 default when liteBloom is ON).
+  if (typeof window.applyLiteBloom === 'function') window.applyLiteBloom();
+  else bloom.resolution.set(Math.floor(w / 2), Math.floor(h / 2));
   reflectRT.setSize(Math.floor(w * 0.5), Math.floor(h * 0.5));
   mirrorCamera.aspect = w / h;
   mirrorCamera.updateProjectionMatrix();

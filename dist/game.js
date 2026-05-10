@@ -2716,8 +2716,9 @@ composer.addPass(new RenderPass(scene, camera));
 
 // Bloom resolution: /2 on both desktop and mobile. Previously /3 on mobile,
 // but that left the sun corona/atmosphere glow visibly blurry — bloom IS the
-// look for a hero element like the sun. Cost: ~0.3–0.5 ms/frame on mobile,
-// well within budget after this session's draw-call + alloc savings.
+// look for a hero element like the sun. Cost: ~0.3–0.5 ms/frame on mobile.
+// Lite-bloom toggle (battery saver) drops to /3 + lower strength to halve
+// bloom GPU cost; see window.applyLiteBloom().
 const _BLOOM_DIV = 2;
 const bloom = new UnrealBloomPass(
   new THREE.Vector2(Math.floor(window.innerWidth / _BLOOM_DIV), Math.floor(window.innerHeight / _BLOOM_DIV)),
@@ -2726,6 +2727,26 @@ const bloom = new UnrealBloomPass(
   1.0    // threshold — only HDR emissives bloom (shield uses toneMapped:false)
 );
 composer.addPass(bloom);
+window._bloomPass = bloom;
+window._BLOOM_BASE = { strength: 0.35, radius: 0.25, div: 2 };
+// Apply the current lite-bloom setting to the live bloom pass. Drops the
+// bloom render target to W/3 × H/3 (1/2.25 the pixels) and trims strength so
+// the softer falloff doesn't look washed out. Called on toggle + resize.
+window.applyLiteBloom = function() {
+  try {
+    const lite = (typeof getSetting === 'function') && getSetting('liteBloom');
+    const div = lite ? 3 : window._BLOOM_BASE.div;
+    const w = Math.max(1, Math.floor(window.innerWidth / div));
+    const h = Math.max(1, Math.floor(window.innerHeight / div));
+    if (window._bloomPass) {
+      window._bloomPass.setSize(w, h);
+      window._bloomPass.strength = lite ? window._BLOOM_BASE.strength * 0.85 : window._BLOOM_BASE.strength;
+      window._bloomPass.radius   = lite ? window._BLOOM_BASE.radius   * 0.85 : window._BLOOM_BASE.radius;
+    }
+  } catch(_) {}
+};
+// Apply at boot in case the setting was already saved.
+try { window.applyLiteBloom(); } catch(_) {}
 
 // ── LOCALIZED HEAT HAZE (thruster exhaust distortion) — opt-in per skin via window._coneThrustersEnabled ──
 const _thrusterHazeShader = {
@@ -20789,7 +20810,11 @@ let _settings = {
   // (stars, thruster particles) to oversaturate via bloom — 1.5→3 is 4x the
   // framebuffer pixels and the visible glow grows beyond what looks crisp.
   graphicsQuality: 'sharp',
+  // Battery saver options — both default OFF so existing players see no change.
+  fpsCap30: false,     // cap framerate at 30fps to cut sustained GPU power ~50%
+  liteBloom: false,    // drop bloom resolution /2 → /3 + 1 fewer mip level
 };
+window.getSetting = function(k) { return _settings[k]; };
 
 // Returns the DPR cap for the current graphics quality setting.
 // Used by renderer.setPixelRatio() and the starfield shader uPixelRatio uniform.
@@ -20904,6 +20929,10 @@ function openSettings() {
   const hBtn = document.getElementById('haptic-toggle');
   hBtn.textContent = _settings.hapticsOn ? 'ON' : 'OFF';
   hBtn.classList.toggle('off', !_settings.hapticsOn);
+  const fpsBtn = document.getElementById('fpscap-toggle');
+  if (fpsBtn) { fpsBtn.textContent = _settings.fpsCap30 ? 'ON' : 'OFF'; fpsBtn.classList.toggle('off', !_settings.fpsCap30); }
+  const lbBtn2 = document.getElementById('litebloom-toggle');
+  if (lbBtn2) { lbBtn2.textContent = _settings.liteBloom ? 'ON' : 'OFF'; lbBtn2.classList.toggle('off', !_settings.liteBloom); }
   // Sync graphics quality button states
   ['performance','balanced','sharp'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
@@ -21209,6 +21238,25 @@ function _initSettingsAccordion() {
     btn.textContent = _settings.hapticsOn ? 'ON' : 'OFF';
     btn.classList.toggle('off', !_settings.hapticsOn);
     if (_settings.hapticsOn) hapticTap();  // demo buzz
+    saveSettings();
+  });
+
+  // 30 FPS cap toggle — caps framerate at 30 to reduce GPU power ~50%.
+  _tapBind(document.getElementById('fpscap-toggle'), () => {
+    _settings.fpsCap30 = !_settings.fpsCap30;
+    const btn = document.getElementById('fpscap-toggle');
+    btn.textContent = _settings.fpsCap30 ? 'ON' : 'OFF';
+    btn.classList.toggle('off', !_settings.fpsCap30);
+    saveSettings();
+  });
+
+  // Lite Bloom toggle — drops bloom resolution /2 → /3 for big mobile savings.
+  _tapBind(document.getElementById('litebloom-toggle'), () => {
+    _settings.liteBloom = !_settings.liteBloom;
+    const btn = document.getElementById('litebloom-toggle');
+    btn.textContent = _settings.liteBloom ? 'ON' : 'OFF';
+    btn.classList.toggle('off', !_settings.liteBloom);
+    if (typeof window.applyLiteBloom === 'function') window.applyLiteBloom();
     saveSettings();
   });
 
@@ -27670,7 +27718,14 @@ const _hazeProjScratch = new THREE.Vector3();
 // which doubles GPU work for no visual gain (game logic is fixed dt = 1/60).
 // Skip rAF ticks that arrive faster than the budget. Subtract 1.5ms slack so
 // we don't accidentally land on every other tick (which would cap us at 30).
-const _FRAME_BUDGET_MS = 1000 / 60;
+const _FRAME_BUDGET_60 = 1000 / 60;
+const _FRAME_BUDGET_30 = 1000 / 30;
+function _frameBudgetMs() {
+  try {
+    if (typeof getSetting === 'function' && getSetting('fpsCap30')) return _FRAME_BUDGET_30;
+  } catch(_) {}
+  return _FRAME_BUDGET_60;
+}
 let _lastFrameMs = 0;
 
 // ── Adaptive DPR (thermal/perf throttle defense) ──────────────────────────
@@ -27760,7 +27815,7 @@ function animate(now) {
   requestAnimationFrame(animate);
   let _frameDeltaMs = 0;
   if (typeof now === 'number') {
-    if (now - _lastFrameMs < _FRAME_BUDGET_MS - 1.5) return;
+    if (now - _lastFrameMs < _frameBudgetMs() - 1.5) return;
     _frameDeltaMs = _lastFrameMs > 0 ? (now - _lastFrameMs) : 0;
     _lastFrameMs = now;
   }
@@ -28054,7 +28109,10 @@ function _doResize() {
   updateCameraFOV();
   renderer.setSize(w, h);
   composer.setSize(w, h);
-  bloom.resolution.set(Math.floor(w / 2), Math.floor(h / 2));
+  // Reapply lite-bloom — sets bloom render target to the right div for the
+  // current setting (overrides the /2 default when liteBloom is ON).
+  if (typeof window.applyLiteBloom === 'function') window.applyLiteBloom();
+  else bloom.resolution.set(Math.floor(w / 2), Math.floor(h / 2));
   reflectRT.setSize(Math.floor(w * 0.5), Math.floor(h * 0.5));
   mirrorCamera.aspect = w / h;
   mirrorCamera.updateProjectionMatrix();

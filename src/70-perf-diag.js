@@ -271,7 +271,14 @@ const _hazeProjScratch = new THREE.Vector3();
 // which doubles GPU work for no visual gain (game logic is fixed dt = 1/60).
 // Skip rAF ticks that arrive faster than the budget. Subtract 1.5ms slack so
 // we don't accidentally land on every other tick (which would cap us at 30).
-const _FRAME_BUDGET_MS = 1000 / 60;
+const _FRAME_BUDGET_60 = 1000 / 60;
+const _FRAME_BUDGET_30 = 1000 / 30;
+function _frameBudgetMs() {
+  try {
+    if (typeof getSetting === 'function' && getSetting('fpsCap30')) return _FRAME_BUDGET_30;
+  } catch(_) {}
+  return _FRAME_BUDGET_60;
+}
 let _lastFrameMs = 0;
 
 // ── Adaptive DPR (thermal/perf throttle defense) ──────────────────────────
@@ -361,7 +368,7 @@ function animate(now) {
   requestAnimationFrame(animate);
   let _frameDeltaMs = 0;
   if (typeof now === 'number') {
-    if (now - _lastFrameMs < _FRAME_BUDGET_MS - 1.5) return;
+    if (now - _lastFrameMs < _frameBudgetMs() - 1.5) return;
     _frameDeltaMs = _lastFrameMs > 0 ? (now - _lastFrameMs) : 0;
     _lastFrameMs = now;
   }
