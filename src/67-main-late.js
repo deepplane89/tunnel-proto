@@ -4609,7 +4609,10 @@ function update(dt) {
     // Player level score bonus
     const _pLvl = loadPlayerLevel();
     const _lvlScoreMult = _pLvl >= 15 ? 1.6 : _pLvl >= 10 ? 1.5 : _pLvl >= 5 ? 1.2 : 1.0;
-    state.playerScore += 8 * lvlMult * _lvlScoreMult * dt;
+    // Boost-tier reward: faster ship → faster HUD score climb. Floor at 1x so
+    // a dipped/slowed ship never undertickrates, mirrors internal state.score.
+    const _boostScoreMult = Math.max(1.0, state.speed / BASE_SPEED);
+    state.playerScore += 8 * lvlMult * _lvlScoreMult * _boostScoreMult * dt;
   }
   document.getElementById('hud-score').textContent = Math.floor(state.playerScore);
 
