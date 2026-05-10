@@ -12759,14 +12759,29 @@ function _hookRadioEnded() {
   if (_radioEndedHooked || !radioMusic) return;
   _radioEndedHooked = true;
   radioMusic.addEventListener('ended', () => {
-    // Only auto-advance if we're still meant to be playing (not paused/dead).
-    if (!isRadioOn()) return;
-    if (state && (state.phase === 'paused' || state.phase === 'dead' || state.phase === 'title')) return;
+    // Auto-advance gate. Two valid cases:
+    //   1. Shuffle is ON and we're in gameplay/pause/dead — normal session.
+    //   2. Shuffle is OFF but a title-screen preview just ended — the user
+    //      explicitly picked a track and is on the title screen, they want
+    //      the next one queued up the same way it would in-game.
+    // We bail only on title-with-no-preview (radio overlay closed/idle).
+    const onTitle = !!(state && state.phase === 'title');
+    const previewActive = (_radioPreviewIdx >= 0);
+    if (!isRadioOn() && !(onTitle && previewActive)) return;
+    if (state && (state.phase === 'paused' || state.phase === 'dead')) return;
     if (_radioCurrentIdx >= 0) {
       _radioHistory.push(_radioCurrentIdx);
       if (_radioHistory.length > _RADIO_HISTORY_MAX) _radioHistory.shift();
     }
-    _playRadioIdx(_nextRadioIdx());
+    const nextIdx = _nextRadioIdx();
+    // On title-screen preview auto-advance, route through _previewRadioTrack
+    // so _radioPreviewIdx tracks the new track and any in-flight
+    // startGame()-time promotion still sees a live preview.
+    if (onTitle && previewActive) {
+      _previewRadioTrack(nextIdx);
+    } else {
+      _playRadioIdx(nextIdx);
+    }
   });
 }
 
@@ -12990,6 +13005,15 @@ function _previewRadioTrack(idx) {
   try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
   radioMusic.play().catch(() => {});
   _radioPreviewIdx = idx;
+  // Keep _radioCurrentIdx in sync so the 'ended' handler (and any later
+  // preview→session promotion in startGame) knows what's playing. Previously
+  // only _playRadioIdx wrote to _radioCurrentIdx, which left previews invisible
+  // to the auto-advance path — track would end and nothing would happen.
+  _radioCurrentIdx = idx;
+  // Attach the 'ended' listener if we haven't already. Without this, a track
+  // started from the title-screen preview would simply stop at end-of-file
+  // because the auto-advance hook is only wired here and inside _playRadioIdx.
+  _hookRadioEnded();
   _updatePlayerMeta();
   _updatePlayIcon();
 }
