@@ -13524,6 +13524,60 @@ function playThrusterImpact(vol) {
       _erl.play().catch(() => {});
     } catch (_) {}
   }
+  // Visual flare pulse: simulate the thruster cones flaring for an instant
+  // when the engine kicks off (retry, repair, speed-tier-up, takeoff). The
+  // PointsMaterial.size is the per-particle screen-space radius — spike it
+  // to 0.03 and ease back to whatever the active thruster preset configured
+  // it to. We snapshot per-system current size so DEFAULT/BLINK/SHORT/LIGHT/
+  // FAT-ION presets each ease back to their own sizes correctly.
+  _pulseThrusterPointSize();
+}
+
+// Module-scoped so concurrent calls (rapid speed-tier-ups during DR) don't
+// stack pulses — the most recent kick wins, the previous one's tween is
+// abandoned harmlessly when its timer fires (size has already been overwritten).
+let _thrPulseRAF = 0;
+function _pulseThrusterPointSize() {
+  // Resolve systems lazily — they're created later in 20-main-early.js, so
+  // this function may be called before they exist (very unlikely but cheap).
+  const main = (typeof thrusterSystems !== 'undefined') ? thrusterSystems : null;
+  const mini = (typeof miniThrusterSystems !== 'undefined') ? miniThrusterSystems : null;
+  if (!main && !mini) return;
+  // Snapshot per-system preset size (the value set by the active thruster
+  // preset — main systems usually 0.13, mini systems 0.06, but any preset
+  // can override). We will ease back to these.
+  const snap = [];
+  if (main) for (const s of main) {
+    if (s && s.points && s.points.material) snap.push({ mat: s.points.material, target: s.points.material.size });
+  }
+  if (mini) for (const s of mini) {
+    if (s && s.points && s.points.material) snap.push({ mat: s.points.material, target: s.points.material.size });
+  }
+  if (snap.length === 0) return;
+  // Spike to 0.03 — user-requested flare size. NOTE: we set the same value on
+  // both main and mini systems even though their preset baselines differ; the
+  // ease-back-to-target step is what restores each system's correct preset.
+  for (const e of snap) e.mat.size = 0.03;
+  // Ease back over 250ms with an ease-out (fast initial bloom, soft tail).
+  // requestAnimationFrame so the easing is frame-rate adaptive without
+  // claiming a slot in the main update() loop.
+  if (_thrPulseRAF) cancelAnimationFrame(_thrPulseRAF);
+  const start = performance.now();
+  const PULSE_MS = 250;
+  const SPIKE = 0.03;
+  const tick = () => {
+    const t = (performance.now() - start) / PULSE_MS;
+    if (t >= 1) {
+      for (const e of snap) e.mat.size = e.target;
+      _thrPulseRAF = 0;
+      return;
+    }
+    // ease-out cubic: 1 - (1-t)^3
+    const u = 1 - Math.pow(1 - t, 3);
+    for (const e of snap) e.mat.size = SPIKE + (e.target - SPIKE) * u;
+    _thrPulseRAF = requestAnimationFrame(tick);
+  };
+  _thrPulseRAF = requestAnimationFrame(tick);
 }
 
 // ── engine-baseline removed: continuous whir was unwanted. ──
@@ -13668,12 +13722,14 @@ function _playAsteroidImpact() {
 function playPickup(typeIdx) {
   if (!audioCtx || state.muted) return;
   const freqs = [880, 1100, 660, 990, 770, 660];
-  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.45);
-  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.35), 80);
-  // Quiet electron-burst layer on power-up smash.
+  // Lowered 2026-05-10 (user request): pickup smash was too loud relative to
+  // engine + radio mix. ~50% drop on all three layers — synth tone + harmonic
+  // overtone + electron-burst sample.
+  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.22);          // was 0.45
+  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.18), 80); // was 0.35
   const _pb = document.getElementById('powerup-burst-sfx');
   if (_pb) {
-    try { _pb.currentTime = 0; _pb.volume = 0.18; _pb.play().catch(() => {}); } catch (_) {}
+    try { _pb.currentTime = 0; _pb.volume = 0.09; _pb.play().catch(() => {}); } catch (_) {}  // was 0.18
   }
 }
 
