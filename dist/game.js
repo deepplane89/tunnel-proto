@@ -11733,7 +11733,24 @@ const POWERUP_SHATTER_DURATION = 0.35;       // seconds
 const POWERUP_SHATTER_FRAGMENT_POOL_SIZE = 60; // 10 powerups * 6 faces, plenty of headroom
 const _powerupShatterFragmentPool = [];
 const _powerupShatterIconPool = [];
-const _activeShatterEffects = [];  // each: {fragments[6], icon, startT, endT, shipTargetFn}
+const _activeShatterEffects = [];  // each: {fragments[6], icon, age, shipTargetFn}
+
+// Scratch vector reused by every shatter tick — avoids per-frame Vector3
+// allocation in the hot path (was new Vector3 per active shatter per frame).
+const _shatterScratchVec = new THREE.Vector3();
+
+// Pre-baked icon geometries — one per shape variant. Previously every pickup
+// allocated and disposed a fresh geometry, which on iOS can produce a 5-15ms
+// GC hitch right at the moment of the smash (worst possible timing). Now we
+// build them once at module load and just swap the .geometry reference.
+const _SHATTER_ICON_GEOS = (() => {
+  return {
+    oct:    new THREE.OctahedronGeometry(POWERUP_ICON_SIZE),
+    torus:  new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.85, POWERUP_ICON_SIZE * 0.30, 10, 20),
+    ring:   new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.95, POWERUP_ICON_SIZE * 0.18, 10, 28),
+    sphere: new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16),
+  };
+})();
 
 function _createShatterFragment() {
   // PlaneGeometry oriented per-face. We'll set the orientation when activated.
@@ -11822,13 +11839,14 @@ const _CUBE_FACES = (() => {
 })();
 
 // Spawn shatter at a powerup's current world position.
-// shipTargetFn: () => THREE.Vector3 returning current ship world pos (live-updates each frame).
+// shipTargetFn: (outVec3) => writes current ship world pos into outVec3.
+// Caller MUST mutate the supplied vector — we never allocate per frame.
 function _spawnPowerupShatter(pu, shipTargetFn) {
   const def = POWERUP_TYPES[pu.userData.typeIdx];
   const colorHex = def.color;
+  // Origin: copy into a fresh vector ONCE per spawn (cheap; bounded by
+  // pickup events). Per-frame work below uses the scratch vector.
   const origin = pu.position.clone();
-  const startT = state.elapsed;
-  const endT = startT + POWERUP_SHATTER_DURATION;
 
   // 6 face fragments — explode outward along face normals + spin.
   const fragments = [];
@@ -11841,7 +11859,7 @@ function _spawnPowerupShatter(pu, shipTargetFn) {
     frag.scale.setScalar(1);
     frag.userData._mat.uniforms.hologramColor.value.setHex(colorHex);
     frag.userData._mat.uniforms.hologramOpacity.value = 0.9;
-    // Outward velocity along face normal (in world space, derived from local offset since cube is axis-aligned).
+    // Outward velocity along face normal (world-space; cube is axis-aligned).
     const len = Math.sqrt(px*px + py*py + pz*pz) || 1;
     frag.userData._vx = (px / len) * 14;  // ~5u over 0.35s
     frag.userData._vy = (py / len) * 14;
@@ -11854,18 +11872,16 @@ function _spawnPowerupShatter(pu, shipTargetFn) {
     fragments.push(frag);
   }
 
-  // Icon — zip toward ship.
+  // If we couldn't get ANY fragment AND no icon, the entire effect is a
+  // no-op — don't push it. (Pool exhaustion is rare — 60-slot pool, 6 per
+  // pickup, 10s of duration max — but be defensive.)
   const icon = _getShatterIcon();
   if (icon) {
-    // Replace geometry to match this powerup's icon shape.
-    const oldGeo = icon.geometry;
-    let iconGeo;
-    if (def.shape === 'oct')        iconGeo = new THREE.OctahedronGeometry(POWERUP_ICON_SIZE);
-    else if (def.shape === 'torus') iconGeo = new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.85, POWERUP_ICON_SIZE * 0.30, 10, 20);
-    else if (def.shape === 'ring')  iconGeo = new THREE.TorusGeometry(POWERUP_ICON_SIZE * 0.95, POWERUP_ICON_SIZE * 0.18, 10, 28);
-    else                            iconGeo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
-    icon.geometry = iconGeo;
-    if (oldGeo) oldGeo.dispose();
+    // Swap to the pre-baked geometry for this icon shape — NO allocation.
+    // Previously we built a fresh THREE.OctahedronGeometry / TorusGeometry
+    // per pickup which caused GC hitches on iOS right at the smash moment.
+    const baked = _SHATTER_ICON_GEOS[def.shape] || _SHATTER_ICON_GEOS.sphere;
+    icon.geometry = baked;
     icon.position.copy(origin);
     icon.scale.setScalar(1);
     icon.userData._mat.uniforms.hologramColor.value.setHex(colorHex);
@@ -11873,45 +11889,67 @@ function _spawnPowerupShatter(pu, shipTargetFn) {
     icon.visible = true;
   }
 
-  _activeShatterEffects.push({ fragments, icon, origin, startT, endT, shipTargetFn });
+  if (fragments.length === 0 && !icon) return; // nothing to animate
+
+  // Track effect age in REAL DT (passed into _updatePowerupShatter), not
+  // wall-clock derived from state.elapsed snapshots. This means a paused or
+  // throttled tab can never produce a giant 'u' jump on resume — the effect
+  // simply progresses at game-time rate, frame by frame, like every other
+  // animation in the game.
+  _activeShatterEffects.push({ fragments, icon, origin, age: 0, shipTargetFn });
 }
 
-// Per-frame tick. Called from main update loop.
-function _updatePowerupShatter() {
+// Per-frame tick. Called from main update loop with the SAME dt that drives
+// the rest of the game. Receiving real dt fixes two glitches:
+//   1. Position drift was hard-coded to 1/60s regardless of frame rate, so
+//      shatter motion ran slower at <60fps and faster at >60fps. Now
+//      everything moves at its intended units/second on every device.
+//   2. The progress fraction `u` was derived from state.elapsed snapshots,
+//      which can include time the game was logically paused if elapsed is
+//      driven elsewhere. Using accumulated dt guarantees u advances ONLY
+//      while the game is running.
+function _updatePowerupShatter(dt) {
   if (_activeShatterEffects.length === 0) return;
-  const now = state.elapsed;
+  // Clamp dt against frame stalls (tab backgrounded, GC pause). 1/15s cap
+  // means a 500ms hitch advances the effect by at most one frame's worth,
+  // never teleporting fragments/icon mid-animation.
+  const safeDt = (dt > 0 && dt < 1 / 15) ? dt : 1 / 60;
+  const invDur = 1 / POWERUP_SHATTER_DURATION;
   for (let i = _activeShatterEffects.length - 1; i >= 0; i--) {
     const fx = _activeShatterEffects[i];
-    const u = Math.min(1, (now - fx.startT) / POWERUP_SHATTER_DURATION);
-    const dt = 1 / 60;  // approximate; shatter is short and visual-only
+    fx.age += safeDt;
+    const u = fx.age >= POWERUP_SHATTER_DURATION ? 1 : (fx.age * invDur);
     // Fragments: drift outward, spin, fade.
     for (const frag of fx.fragments) {
-      frag.position.x += frag.userData._vx * dt;
-      frag.position.y += frag.userData._vy * dt;
-      frag.position.z += frag.userData._vz * dt;
-      frag.rotation.x += frag.userData._spinX * dt;
-      frag.rotation.y += frag.userData._spinY * dt;
-      frag.rotation.z += frag.userData._spinZ * dt;
+      const ud = frag.userData;
+      frag.position.x += ud._vx * safeDt;
+      frag.position.y += ud._vy * safeDt;
+      frag.position.z += ud._vz * safeDt;
+      frag.rotation.x += ud._spinX * safeDt;
+      frag.rotation.y += ud._spinY * safeDt;
+      frag.rotation.z += ud._spinZ * safeDt;
       const fade = 1 - u;
-      frag.userData._mat.uniforms.hologramOpacity.value = 0.9 * fade;
+      ud._mat.uniforms.hologramOpacity.value = 0.9 * fade;
       frag.scale.setScalar(1 - u * 0.6);
     }
-    // Icon: ease toward live ship position.
+    // Icon: ease toward live ship position. Caller writes into our scratch
+    // vector — no Vector3 allocation per frame.
     if (fx.icon && fx.shipTargetFn) {
-      const target = fx.shipTargetFn();
+      fx.shipTargetFn(_shatterScratchVec);
       // smootherstep ease for a snappy lock-in feel
       const e = u * u * (3 - 2 * u);
-      fx.icon.position.x = fx.origin.x + (target.x - fx.origin.x) * e;
-      fx.icon.position.y = fx.origin.y + (target.y - fx.origin.y) * e;
-      fx.icon.position.z = fx.origin.z + (target.z - fx.origin.z) * e;
-      fx.icon.rotation.x += 8 * dt;
-      fx.icon.rotation.y += 6 * dt;
+      const ix = fx.origin.x + (_shatterScratchVec.x - fx.origin.x) * e;
+      const iy = fx.origin.y + (_shatterScratchVec.y - fx.origin.y) * e;
+      const iz = fx.origin.z + (_shatterScratchVec.z - fx.origin.z) * e;
+      fx.icon.position.set(ix, iy, iz);
+      fx.icon.rotation.x += 8 * safeDt;
+      fx.icon.rotation.y += 6 * safeDt;
       const fade = 1 - u * u;  // icon stays bright longer
       fx.icon.userData._mat.uniforms.hologramOpacity.value = fade;
       fx.icon.scale.setScalar(1 - u * 0.5);
     }
     // End — return all to pool.
-    if (now >= fx.endT) {
+    if (fx.age >= POWERUP_SHATTER_DURATION) {
       for (const frag of fx.fragments) {
         frag.visible = false;
         frag.userData._active = false;
@@ -25132,7 +25170,9 @@ function update(dt) {
 
   state.elapsed += dt;  // real-time accumulator for smooth animations
   _tickHoloMaterials(state.elapsed);  // animate holographic powerup cubes & shatter fragments
-  _updatePowerupShatter();  // tick active shatter effects
+  // Pass real dt so shatter motion is frame-rate independent and immune to
+  // wall-clock jumps (paused tabs, GC stalls). See _updatePowerupShatter docstring.
+  _updatePowerupShatter(dt);
   _drUpdateDebugHud();
   state.levelElapsed = (state.levelElapsed || 0) + dt;  // time spent in current level
 
@@ -26981,7 +27021,8 @@ function update(dt) {
       applyPowerup(pu.userData.typeIdx);
       // Spawn shatter at the cube's current position, with a live ship-tracking target.
       // Icon zips to the ship's nose (slightly forward of pivot) and absorbs in ~350ms.
-      _spawnPowerupShatter(pu, () => new THREE.Vector3(state.shipX, shipGroup.position.y, shipGroup.position.z));
+      // Callback writes into a caller-provided scratch vector — zero allocation per frame.
+      _spawnPowerupShatter(pu, (out) => out.set(state.shipX, shipGroup.position.y, shipGroup.position.z));
       returnPowerupToPool(pu);
       activePowerups.splice(i, 1);
     }

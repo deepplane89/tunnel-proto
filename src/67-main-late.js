@@ -3951,7 +3951,9 @@ function update(dt) {
 
   state.elapsed += dt;  // real-time accumulator for smooth animations
   _tickHoloMaterials(state.elapsed);  // animate holographic powerup cubes & shatter fragments
-  _updatePowerupShatter();  // tick active shatter effects
+  // Pass real dt so shatter motion is frame-rate independent and immune to
+  // wall-clock jumps (paused tabs, GC stalls). See _updatePowerupShatter docstring.
+  _updatePowerupShatter(dt);
   _drUpdateDebugHud();
   state.levelElapsed = (state.levelElapsed || 0) + dt;  // time spent in current level
 
@@ -5800,7 +5802,8 @@ function update(dt) {
       applyPowerup(pu.userData.typeIdx);
       // Spawn shatter at the cube's current position, with a live ship-tracking target.
       // Icon zips to the ship's nose (slightly forward of pivot) and absorbs in ~350ms.
-      _spawnPowerupShatter(pu, () => new THREE.Vector3(state.shipX, shipGroup.position.y, shipGroup.position.z));
+      // Callback writes into a caller-provided scratch vector — zero allocation per frame.
+      _spawnPowerupShatter(pu, (out) => out.set(state.shipX, shipGroup.position.y, shipGroup.position.z));
       returnPowerupToPool(pu);
       activePowerups.splice(i, 1);
     }
