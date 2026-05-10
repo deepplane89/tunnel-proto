@@ -423,17 +423,45 @@ function startGame() {
     el.currentTime = 0;
     setTrackVol(k, 0);
   });
-  // If radio is OFF but the player left a title-screen preview running, kill
-  // it now so it doesn't bleed into gameplay. (When radio is ON, the
-  // musicFadeTo interceptor below takes over and keeps radio continuous.)
-  if (typeof isRadioOn === 'function' && !isRadioOn()
-      && typeof stopRadioPreviewForce === 'function') {
+  // Radio handoff into gameplay. Three cases:
+  //  1. Shuffle ON  — musicFadeTo interceptor below takes over, radio stays
+  //                  continuous, no zone track plays.
+  //  2. Shuffle OFF + a title-screen preview is currently playing — the user
+  //                  picked a track and clearly wants to keep listening.
+  //                  Promote the preview to a full radio session: flip
+  //                  shuffle ON so the interceptor adopts the radio, and
+  //                  skip the zone-track fade-in so we don't double-stack.
+  //  3. Shuffle OFF + no preview — normal path, fade in zone track.
+  const _radioMusicEl = (typeof radioMusic !== 'undefined') ? radioMusic
+                       : document.getElementById('radio-music');
+  const _previewPlaying = !!(_radioMusicEl && !_radioMusicEl.paused
+                             && _radioMusicEl.currentTime > 0);
+  let _radioWillTakeOver = (typeof isRadioOn === 'function') && isRadioOn();
+  if (!_radioWillTakeOver && _previewPlaying
+      && typeof setRadioOn === 'function'
+      && typeof startRadio === 'function') {
+    // Promote preview → active radio session. setRadioOn(true) flips the
+    // master switch; startRadio() wires the gameplay-track interceptor so
+    // every level swap routes through the radio instead of zone music.
+    try { setRadioOn(true); } catch(_) {}
+    try { startRadio(); } catch(_) {}
+    try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+    if (typeof _refreshShuffleSwitches === 'function') {
+      try { _refreshShuffleSwitches(); } catch(_) {}
+    }
+    _radioWillTakeOver = true;
+  } else if (!_radioWillTakeOver && typeof stopRadioPreviewForce === 'function') {
+    // No preview was running OR we couldn't promote it — ensure radio is
+    // fully silent so it can't bleed into gameplay.
     stopRadioPreviewForce();
   }
-  // Short fade-in for gameplay track (title already silenced above)
+
+  // Short fade-in for gameplay track — ONLY if radio isn't taking over.
+  // Otherwise we'd start a zone track underneath the radio and the
+  // interceptor would have to fight to silence it.
   const _startTrack = state.currentLevelIdx >= 2 ? 'l3' : 'bg';
   const _startEl = _startTrack === 'l3' ? l3Music : bgMusic;
-  if (_startEl && !state.muted) {
+  if (_startEl && !state.muted && !_radioWillTakeOver) {
     _startEl.currentTime = 0;
     setTrackVol(_startTrack, 0);
     _startEl.play().catch(() => {});
