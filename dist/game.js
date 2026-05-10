@@ -15811,19 +15811,22 @@ function spawnObstacles() {
 
   // Possibly spawn a power-up in a free lane
   framesSinceLastPowerup++;
+  // Pre-compute unlocked count so spawn rate scales with variety.
+  // With only 1 type unlocked, spam is brutal — stretch cooldown + cap concurrent to 1.
+  const _availPU = POWERUP_TYPES.map((p, idx) => ({ idx, id: p.id })).filter(p => isPowerupUnlocked(p.id));
+  if (_availPU.length === 0) _availPU.push({ idx: 0, id: 'shield' });
+  const _unlockScale = POWERUP_TYPES.length / _availPU.length; // 1 unlocked of 4 → 4x rarer
   const _puRate = powerupSpawnRate * (1 + getStatValue('spawnrate'));
-  const _puThresh = _puRate > 0 ? Math.max(4, Math.round(12 / _puRate)) : Infinity;
-  const _puProb   = Math.min(0.9, 0.35 * _puRate);
-  if (powerupSpawnRate > 0 && framesSinceLastPowerup > _puThresh && activePowerups.length < 2 && Math.random() < _puProb) {
+  const _puThresh = _puRate > 0 ? Math.max(4, Math.round((12 / _puRate) * _unlockScale)) : Infinity;
+  const _puProb   = Math.min(0.9, 0.35 * _puRate / _unlockScale);
+  const _puConcurrentCap = _availPU.length === 1 ? 1 : 2;
+  if (powerupSpawnRate > 0 && framesSinceLastPowerup > _puThresh && activePowerups.length < _puConcurrentCap && Math.random() < _puProb) {
     framesSinceLastPowerup = 0;
     const freeLanes = lanes.filter(l => !blocked.includes(l));
     if (freeLanes.length > 0) {
       const lane  = freeLanes[Math.floor(Math.random() * freeLanes.length)];
       const laneX = shipX + (lane - (LANE_COUNT - 1) / 2) * LANE_WIDTH;
 
-      // Build available powerup types (only unlocked ones)
-      const _availPU = POWERUP_TYPES.map((p, idx) => ({ idx, id: p.id })).filter(p => isPowerupUnlocked(p.id));
-      if (_availPU.length === 0) _availPU.push({ idx: 0, id: 'shield' }); // fallback
       const typeIdx = _availPU[Math.floor(Math.random() * _availPU.length)].idx;
 
       const pu = getPooledPowerup(typeIdx);
