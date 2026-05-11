@@ -3366,7 +3366,7 @@ function _spawnExplosion(shipPos, obstaclePos, shipSpeed, palette) {
     }
 
     // ── Particle roles: core explosion (0-799), streams (800+) ──
-    const CORE_COUNT = 800;
+    const CORE_COUNT = 0; // TEMP: kill thick center fireball to test visual
     const isCore = i < CORE_COUNT;
 
     // ── 6 forward-shooting streams with tight angular clustering ──
