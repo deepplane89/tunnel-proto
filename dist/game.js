@@ -4180,7 +4180,7 @@ function _spawnExplosion(shipPos, obstaclePos, shipSpeed, palette) {
     }
 
     // ── Particle roles: core explosion (0-799), streams (800+) ──
-    const CORE_COUNT = 0; // TEMP: kill thick center fireball to test visual
+    const CORE_COUNT = 800;
     const isCore = i < CORE_COUNT;
 
     // ── 6 forward-shooting streams with tight angular clustering ──
@@ -24923,11 +24923,12 @@ function killPlayer() {
     // _triggerShockwave(_sPos);
     // _triggerSparks(_sPos);
     // Face explosion: ship triangles fly apart from impact
-    const _faceExpModel = _altShipActive ? _altShipModel : window._shipModel;
-    if (_faceExpModel) {
-      const _impDir = new THREE.Vector3().subVectors(_sPos, _obstPos).normalize();
-      _triggerFaceExplosion(_faceExpModel, _impDir);
-    }
+    // TEMP-DISABLED to preview crash without ship-shatter (testing what 'thick forward fireball' is)
+    // const _faceExpModel = _altShipActive ? _altShipModel : window._shipModel;
+    // if (_faceExpModel) {
+    //   const _impDir = new THREE.Vector3().subVectors(_sPos, _obstPos).normalize();
+    //   _triggerFaceExplosion(_faceExpModel, _impDir);
+    // }
     // Camera zoom-out + lateral orbit to profile view
     _expDeathZoomTarget = _baseFOV + 15; // less FOV zoom since camera rises instead
     _expDeathZoomActive = true;
