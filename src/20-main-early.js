@@ -9098,8 +9098,14 @@ const activeObstacles = [];
     if (_renderHookInstalled) return;
     if (typeof composer === 'undefined' || !composer || !composer.render) return;
     if (typeof renderer === 'undefined' || !renderer) return;
+    // EffectComposer runs multiple internal renders; renderer.info auto-resets
+    // between them, so reading info AFTER composer.render() only sees the last
+    // pass (1 draw call). Disable autoReset and we'll manually reset before
+    // each composer.render — info then accumulates across all passes.
+    try { renderer.info.autoReset = false; } catch (_) {}
     const _origRender = composer.render.bind(composer);
     composer.render = function (...args) {
+      try { renderer.info.reset(); } catch (_) {}
       const r = _origRender(...args);
       try {
         _lastDrawCalls = renderer.info.render.calls || 0;
