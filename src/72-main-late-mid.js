@@ -311,7 +311,7 @@ if (_origAdminToggle) {
   // Desktop defaults
   // titleY adjusted 2026-05-07 (final): user-tuned to -130 to sit higher under
   // the HUD; leaderboard offset -30px from auto-anchor (set via lbYOffset below).
-  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: -130, lbYOffset: -30 };
+  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: -130, lbYOffset: 6 };
 
   let shipX, shipY, shipSize, platX, platY, platSize, labelX, labelY, titleSize, titleY;
 

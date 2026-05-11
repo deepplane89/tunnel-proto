@@ -187,7 +187,7 @@ const GRID_TILE_DEPTH    = 4;
 const GRID_TILES         = 40;
 const SPAWN_Z            = -160;  // spawn further out so cones fade in from deep horizon
 const DESPAWN_Z          = 6;
-const OBSTACLE_POOL_SIZE = 3000;
+const OBSTACLE_POOL_SIZE = 500;  // measured peak 318 active in god-mode; was 3000 (10x oversized)
 const POWERUP_POOL_SIZE  = 10;
 const STAR_COUNT         = 1800;
 

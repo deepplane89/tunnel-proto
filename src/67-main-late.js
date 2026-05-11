@@ -5759,7 +5759,8 @@ function update(dt) {
     const lr = _lethalRingActive[i];
     lr.position.z += effectiveSpeed * dt;
     const fadeT = Math.max(0, Math.min(1, (lr.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
-    lr.userData._ringMesh.material.uniforms.uOpacity.value = fadeT * 0.92;
+    // Per-ring opacity; onBeforeRender pushes it into the shared uniform.
+    lr.userData._ringMesh.userData._opacity = fadeT * 0.92;
     // Laser destroys lethal rings
     if (state.laserActive) {
       let _ringHit = false;

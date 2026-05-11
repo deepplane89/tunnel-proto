@@ -1001,7 +1001,7 @@ const GRID_TILE_DEPTH    = 4;
 const GRID_TILES         = 40;
 const SPAWN_Z            = -160;  // spawn further out so cones fade in from deep horizon
 const DESPAWN_Z          = 6;
-const OBSTACLE_POOL_SIZE = 3000;
+const OBSTACLE_POOL_SIZE = 500;  // measured peak 318 active in god-mode; was 3000 (10x oversized)
 const POWERUP_POOL_SIZE  = 10;
 const STAR_COUNT         = 1800;
 
@@ -15709,7 +15709,13 @@ const _lethalRingActive = [];
 const LETHAL_RING_POOL_SIZE = 20;
 const _LR_SIDES = 8, _LR_R = 5.25, _LR_Y = 2, _LR_TUBE = 2.2;
 let _lrGeo = null;
-let _lrMatTemplate = null;
+let _LR_SHARED_MAT = null;
+// onBeforeRender: push per-ring opacity into the shared uniform right before
+// each draw. Same pattern as the angled walls fix — one shader program for
+// the whole pool, but per-ring fade-in preserved.
+function _lrMeshBeforeRender() {
+  _LR_SHARED_MAT.uniforms.uOpacity.value = this.userData._opacity || 0;
+}
 // Exposed on window so the global prewarm pass can force-init the pool at
 // startup instead of letting the first ring spawn pay the shader-compile cost.
 function _initLethalRings() {
@@ -15722,7 +15728,11 @@ function _initLethalRings() {
   }
   const path = new THREE.CatmullRomCurve3(pathPts, true);
   _lrGeo = new THREE.TubeGeometry(path, _LR_SIDES * 4, _LR_TUBE, 8, true);
-  _lrMatTemplate = new THREE.ShaderMaterial({
+  // SHARED material across all 20 pool slots. Previously each slot cloned the
+  // template — 20 distinct shader programs that the driver had to validate on
+  // every render. With one shared program, ring spawns no longer add to the
+  // per-frame validation cost on iOS.
+  _LR_SHARED_MAT = new THREE.ShaderMaterial({
     uniforms: {
       uNeon:    { value: new THREE.Color(0xff1a1a) },
       uObsidian:{ value: new THREE.Color(0x0a0a0f) },
@@ -15752,9 +15762,10 @@ function _initLethalRings() {
     depthWrite: false,
   });
   for (let i = 0; i < LETHAL_RING_POOL_SIZE; i++) {
-    const mat = _lrMatTemplate.clone();
-    const mesh = new THREE.Mesh(_lrGeo, mat);
+    const mesh = new THREE.Mesh(_lrGeo, _LR_SHARED_MAT);
     mesh.position.y = _LR_Y;
+    mesh.userData._opacity = 0;
+    mesh.onBeforeRender = _lrMeshBeforeRender;
     const group = new THREE.Group();
     group.add(mesh);
     group.visible = false;
@@ -15774,7 +15785,7 @@ function _spawnLethalRing(x, z) {
       r.userData.active = true;
       r.visible = true;
       r.position.set(x, 0, z);
-      r.userData._ringMesh.material.uniforms.uOpacity.value = 0;
+      r.userData._ringMesh.userData._opacity = 0;
       _lethalRingActive.push(r);
       return;
     }
@@ -27464,7 +27475,8 @@ function update(dt) {
     const lr = _lethalRingActive[i];
     lr.position.z += effectiveSpeed * dt;
     const fadeT = Math.max(0, Math.min(1, (lr.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
-    lr.userData._ringMesh.material.uniforms.uOpacity.value = fadeT * 0.92;
+    // Per-ring opacity; onBeforeRender pushes it into the shared uniform.
+    lr.userData._ringMesh.userData._opacity = fadeT * 0.92;
     // Laser destroys lethal rings
     if (state.laserActive) {
       let _ringHit = false;
@@ -28709,7 +28721,7 @@ if (_origAdminToggle) {
   // Desktop defaults
   // titleY adjusted 2026-05-07 (final): user-tuned to -130 to sit higher under
   // the HUD; leaderboard offset -30px from auto-anchor (set via lbYOffset below).
-  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: -130, lbYOffset: -30 };
+  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: -130, lbYOffset: 6 };
 
   let shipX, shipY, shipSize, platX, platY, platSize, labelX, labelY, titleSize, titleY;
 
