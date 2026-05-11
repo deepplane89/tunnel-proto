@@ -11793,11 +11793,16 @@ const _SHATTER_ICON_GEOS = (() => {
   };
 })();
 
-function _createShatterFragment() {
-  // PlaneGeometry oriented per-face. We'll set the orientation when activated.
-  const geo = new THREE.PlaneGeometry(POWERUP_CUBE_SIZE, POWERUP_CUBE_SIZE);
-  const mat = new HolographicMaterial({
-    hologramColor:      '#00d5ff',  // overwritten on activate
+// SHARED holographic materials — one for ALL fragments, one for ALL icons.
+// Previously each pool slot had its own material (60 frag + 10 icon = 70
+// distinct shader programs). Showing many hidden meshes at once forced the
+// GPU driver to validate/upload uniforms for every program in the same
+// frame, producing a 30–60ms hitch on iOS right at the smash moment.
+// One material = one program = one validate per frame, no matter how many
+// fragments. Concurrent shatters share a tint briefly (overlap is rare).
+const _SHATTER_FRAG_MAT = (() => {
+  const m = new HolographicMaterial({
+    hologramColor:      '#00d5ff',  // overwritten on each spawn
     fresnelAmount:      0.70,
     fresnelOpacity:     1.00,
     scanlineSize:       3.70,
@@ -11809,20 +11814,11 @@ function _createShatterFragment() {
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });
-  _registerHoloMaterial(mat);
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.visible = false;
-  mesh.userData._mat = mat;
-  mesh.userData._active = false;
-  scene.add(mesh);
-  return mesh;
-}
-
-function _createShatterIcon() {
-  // Simple sphere placeholder; actual geometry is swapped on activate to match icon shape.
-  // We keep one mat per pool slot to avoid material churn.
-  const geo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
-  const mat = new HolographicMaterial({
+  _registerHoloMaterial(m);
+  return m;
+})();
+const _SHATTER_ICON_MAT = (() => {
+  const m = new HolographicMaterial({
     hologramColor:      '#00d5ff',
     fresnelAmount:      0.70,
     fresnelOpacity:     1.00,
@@ -11835,10 +11831,25 @@ function _createShatterIcon() {
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });
-  _registerHoloMaterial(mat);
-  const mesh = new THREE.Mesh(geo, mat);
+  _registerHoloMaterial(m);
+  return m;
+})();
+
+function _createShatterFragment() {
+  const geo = new THREE.PlaneGeometry(POWERUP_CUBE_SIZE, POWERUP_CUBE_SIZE);
+  const mesh = new THREE.Mesh(geo, _SHATTER_FRAG_MAT);
   mesh.visible = false;
-  mesh.userData._mat = mat;
+  mesh.userData._mat = _SHATTER_FRAG_MAT;
+  mesh.userData._active = false;
+  scene.add(mesh);
+  return mesh;
+}
+
+function _createShatterIcon() {
+  const geo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
+  const mesh = new THREE.Mesh(geo, _SHATTER_ICON_MAT);
+  mesh.visible = false;
+  mesh.userData._mat = _SHATTER_ICON_MAT;
   mesh.userData._active = false;
   scene.add(mesh);
   return mesh;
