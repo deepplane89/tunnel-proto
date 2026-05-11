@@ -9897,39 +9897,131 @@ shipGroup.add(magnetLight);
 // ═══════════════════════════════════════════════════
 const obstaclePool = [];
 const activeObstacles = [];
-// DevTools instrumentation: window._coneStats() returns { current, peak10s, peakAllTime, poolSize }.
-// Call repeatedly while playing; peak10s resets every 10s automatically.
+// DevTools session recorder — see window._perfReport() docstring below.
 (function () {
-  let _peakAllTime = 0;
-  let _peak10s = 0;
-  let _window10sStart = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const _frames = []; // each entry: { t, dt, cones, walls, coins, asteroids, forcefields, lethalRings, powerups, drawCalls, triangles }
+  const _MAX_FRAMES = 60 * 60 * 5; // ~5 min @ 60fps
+  let _recording = false;
+  let _lastT = 0;
+  // Pool conventions vary across the codebase:
+  //   activeObstacles, activeCoins, activePowerups, _lethalRingActive → separate active list (length = count)
+  //   _awPool, _ffPool, _lethalRingPool → each obj has userData.active
+  //   _asteroidPool → each obj has .active directly
+  // _countActive handles all three.
+  function _countActive(arr) {
+    if (!arr) return 0;
+    let n = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const o = arr[i];
+      if (!o) continue;
+      if (o.active === true) { n++; continue; }
+      if (o.userData && o.userData.active === true) { n++; continue; }
+    }
+    return n;
+  }
   function _sample() {
+    if (!_recording) return;
+    if (_frames.length >= _MAX_FRAMES) return;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const dt = _lastT ? (now - _lastT) : 16.67;
+    _lastT = now;
+    let drawCalls = 0, triangles = 0;
     try {
-      const n = activeObstacles.length;
-      if (n > _peakAllTime) _peakAllTime = n;
-      if (n > _peak10s) _peak10s = n;
-      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-      if (now - _window10sStart > 10000) {
-        _peak10s = n;
-        _window10sStart = now;
+      if (typeof renderer !== 'undefined' && renderer && renderer.info) {
+        drawCalls = renderer.info.render.calls || 0;
+        triangles = renderer.info.render.triangles || 0;
       }
     } catch (_) {}
+    // Active counts — pools use various conventions, so we count multiple ways
+    let walls = 0, coins = 0, asteroids = 0, forcefields = 0, lethalRings = 0, powerups = 0;
+    try { if (typeof _awPool !== 'undefined') walls = _countActive(_awPool); } catch (_) {}
+    // Coins and powerups have dedicated 'active*' arrays — use those directly
+    try { if (typeof activeCoins !== 'undefined') coins = activeCoins.length; } catch (_) {}
+    try { if (typeof activePowerups !== 'undefined') powerups = activePowerups.length; } catch (_) {}
+    try { if (typeof _asteroidPool !== 'undefined') asteroids = _countActive(_asteroidPool); } catch (_) {}
+    try { if (typeof _ffPool !== 'undefined') forcefields = _countActive(_ffPool); } catch (_) {}
+    try { if (typeof _lethalRingPool !== 'undefined') lethalRings = _countActive(_lethalRingPool); } catch (_) {}
+    _frames.push({
+      t: now, dt,
+      cones: activeObstacles.length,
+      walls, coins, asteroids, lightning, forcefields, lethalRings, powerups,
+      drawCalls, triangles,
+    });
   }
-  // sample every animation frame
   function _loop() {
     _sample();
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_loop);
   }
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_loop);
-  window._coneStats = function () {
+
+  function _percentile(sorted, p) {
+    if (!sorted.length) return 0;
+    const idx = Math.min(sorted.length - 1, Math.floor(sorted.length * p));
+    return sorted[idx];
+  }
+  function _summary(values) {
+    if (!values.length) return { avg: 0, p50: 0, p90: 0, p99: 0, max: 0 };
+    const sorted = values.slice().sort((a, b) => a - b);
+    const sum = sorted.reduce((a, b) => a + b, 0);
     return {
-      current: activeObstacles.length,
-      peak10s: _peak10s,
-      peakAllTime: _peakAllTime,
-      poolSize: obstaclePool.length,
+      avg: +(sum / sorted.length).toFixed(2),
+      p50: _percentile(sorted, 0.5),
+      p90: _percentile(sorted, 0.9),
+      p99: _percentile(sorted, 0.99),
+      max: sorted[sorted.length - 1],
     };
+  }
+
+  /**
+   * window._perfStart()  — begin recording (call when entering gameplay).
+   * window._perfStop()   — stop recording.
+   * window._perfReport() — print a full summary table (no console.log filtering needed; use console.table).
+   *                        Returns the raw frames array too for further analysis.
+   */
+  window._perfStart = function () {
+    _frames.length = 0;
+    _lastT = 0;
+    _recording = true;
+    console.log('[PERF] recording started — play through, then call _perfReport()');
   };
-  window._resetConeStats = function () { _peakAllTime = 0; _peak10s = 0; _window10sStart = (typeof performance !== 'undefined' ? performance.now() : Date.now()); };
+  window._perfStop = function () {
+    _recording = false;
+    console.log('[PERF] recording stopped — ' + _frames.length + ' frames captured');
+  };
+  window._perfReport = function () {
+    _recording = false;
+    const n = _frames.length;
+    if (!n) { console.warn('[PERF] no frames recorded — call _perfStart() first'); return null; }
+    const fields = ['dt', 'cones', 'walls', 'coins', 'asteroids', 'forcefields', 'lethalRings', 'powerups', 'drawCalls', 'triangles'];
+    // (lightning omitted — pool is created inside a closure and not introspectable from here)
+    const summary = {};
+    for (const f of fields) {
+      const vals = _frames.map(fr => fr[f] || 0);
+      summary[f] = _summary(vals);
+    }
+    // Derive fps from dt
+    const fpsVals = _frames.map(fr => fr.dt > 0 ? 1000 / fr.dt : 0);
+    summary.fps = _summary(fpsVals);
+    console.log('[PERF] === summary over ' + n + ' frames (' + ((_frames[n-1].t - _frames[0].t) / 1000).toFixed(1) + 's) ===');
+    try { console.table(summary); } catch (_) { console.log(JSON.stringify(summary, null, 2)); }
+    // Hitches: frames where dt > 33ms (sub-30fps spike)
+    const hitches = _frames.filter(fr => fr.dt > 33);
+    console.log('[PERF] hitches (dt > 33ms): ' + hitches.length + ' / ' + n + ' frames');
+    if (hitches.length && hitches.length < 50) {
+      console.log('[PERF] hitch frames (showing all):');
+      try { console.table(hitches.map(fr => ({ t: +(fr.t).toFixed(0), dt: +fr.dt.toFixed(1), cones: fr.cones, walls: fr.walls, drawCalls: fr.drawCalls, triangles: fr.triangles }))); } catch (_) {}
+    }
+    return { summary, frames: _frames.slice(), hitches };
+  };
+  // Auto-start when gameplay phase begins
+  setInterval(() => {
+    try {
+      if (!_recording && typeof state !== 'undefined' && state && state.phase === 'playing') {
+        console.log('[PERF] auto-started on gameplay phase');
+        window._perfStart();
+      }
+    } catch (_) {}
+  }, 500);
 })();
 
 function createObstacleMesh(type) {
