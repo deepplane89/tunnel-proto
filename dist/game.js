@@ -2706,10 +2706,14 @@ try {
               'balanced';
   _composerSamples = _gq === 'sharp' ? 4 : _gq === 'balanced' ? 2 : 0;
 } catch(_) { _composerSamples = 2; }
+// NOTE: We do NOT set `type: HalfFloatType` here. Half-float FBOs caused a
+// visible horizon banding/artifact on iOS (Apple GPU + tonemapping). MSAA
+// (`samples`) is what makes Sharp actually look sharp — keep that, default
+// type stays at UnsignedByteType.
 const _composerRT = new THREE.WebGLRenderTarget(
   Math.max(1, window.innerWidth),
   Math.max(1, window.innerHeight),
-  { samples: _composerSamples, type: THREE.HalfFloatType }
+  { samples: _composerSamples }
 );
 const composer = new EffectComposer(renderer, _composerRT);
 composer.addPass(new RenderPass(scene, camera));
