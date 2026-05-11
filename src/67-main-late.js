@@ -5568,15 +5568,17 @@ function update(dt) {
       const baseOp = child.material.userData.baseOpacity ?? 1.0;
       if (child.material.uniforms && child.material.uniforms.uOpacity) {
         child.material.uniforms.uOpacity.value = fadeT * baseOp;
-        // Once fully opaque, switch to solid for depth buffer (blocks corona)
+        // Once fully opaque, swap to pre-compiled opaque sibling (no recompile).
+        // Falls back to in-place mutation if no sibling was built.
+        const _ud = child.material.userData;
         if (fullyOpaque && child.material.transparent) {
-          child.material.transparent = false;
-          child.material.depthWrite = true;
-          child.material.needsUpdate = true;
+          const sib = _ud && _ud._opaqueSibling;
+          if (sib) { child.material = sib; }
+          else { child.material.transparent = false; child.material.depthWrite = true; child.material.needsUpdate = true; }
         } else if (!fullyOpaque && !child.material.transparent) {
-          child.material.transparent = true;
-          child.material.depthWrite = false;
-          child.material.needsUpdate = true;
+          const sib = _ud && _ud._transparentSibling;
+          if (sib) { child.material = sib; }
+          else { child.material.transparent = true; child.material.depthWrite = false; child.material.needsUpdate = true; }
         }
       } else {
         const wantTransparent = !fullyOpaque;

@@ -7212,6 +7212,12 @@ normal = _dbn;`;
           if (!m.material || _seenMats.has(m.material)) continue;
           _seenMats.add(m.material);
           _coneWarmScene.add(new THREE.Mesh(m.geometry, m.material));
+          // Also compile the opaque sibling so the fadeT=1 swap is hitch-free.
+          const sib = m.material.userData && m.material.userData._opaqueSibling;
+          if (sib && !_seenMats.has(sib)) {
+            _seenMats.add(sib);
+            _coneWarmScene.add(new THREE.Mesh(m.geometry, sib));
+          }
         }
       }
       renderer.compile(_coneWarmScene, _coneWarmCam);
@@ -10104,6 +10110,16 @@ function createObstacleMesh(type) {
   });
   bodyMat.userData.baseOpacity = 1.0;
   bodyMat.userData.baseColor   = CONE_COLORS[type];
+  // Pre-built opaque sibling: same shader/uniforms (shared by reference) but
+  // transparent:false / depthWrite:true. Swapped in at fadeT=1 to avoid the
+  // shader-recompile that material.needsUpdate=true triggers.
+  const bodyMatOpaque = bodyMat.clone();
+  bodyMatOpaque.transparent = false;
+  bodyMatOpaque.depthWrite  = true;
+  bodyMatOpaque.uniforms    = bodyMat.uniforms; // share uniforms so uOpacity stays in sync
+  bodyMatOpaque.userData    = bodyMat.userData; // share userData (baseOpacity, baseColor)
+  bodyMat.userData._opaqueSibling = bodyMatOpaque;
+  bodyMatOpaque.userData._transparentSibling = bodyMat;
   const bodyMesh = new THREE.Mesh(new THREE.ConeGeometry(1.6, totalH, SEGS), bodyMat);
   bodyMesh.position.y = totalH / 2 - SINK;
   group.add(bodyMesh);
@@ -27284,15 +27300,17 @@ function update(dt) {
       const baseOp = child.material.userData.baseOpacity ?? 1.0;
       if (child.material.uniforms && child.material.uniforms.uOpacity) {
         child.material.uniforms.uOpacity.value = fadeT * baseOp;
-        // Once fully opaque, switch to solid for depth buffer (blocks corona)
+        // Once fully opaque, swap to pre-compiled opaque sibling (no recompile).
+        // Falls back to in-place mutation if no sibling was built.
+        const _ud = child.material.userData;
         if (fullyOpaque && child.material.transparent) {
-          child.material.transparent = false;
-          child.material.depthWrite = true;
-          child.material.needsUpdate = true;
+          const sib = _ud && _ud._opaqueSibling;
+          if (sib) { child.material = sib; }
+          else { child.material.transparent = false; child.material.depthWrite = true; child.material.needsUpdate = true; }
         } else if (!fullyOpaque && !child.material.transparent) {
-          child.material.transparent = true;
-          child.material.depthWrite = false;
-          child.material.needsUpdate = true;
+          const sib = _ud && _ud._transparentSibling;
+          if (sib) { child.material = sib; }
+          else { child.material.transparent = true; child.material.depthWrite = false; child.material.needsUpdate = true; }
         }
       } else {
         const wantTransparent = !fullyOpaque;
@@ -29805,7 +29823,7 @@ void main(){
 }`;
 
 // ── Pool + state ─────────────────────────────────────────────────────────────
-const _AST_POOL_SIZE = 12;
+const _AST_POOL_SIZE = 0; // disabled — asteroids not currently used as an obstacle (was 12)
 const _asteroidPool  = [];      // { group, rockMesh, fireMesh, light, tailGeo, tailPts, warnMesh, warnMat, active, ... }
 let   _asteroidActive = [];     // refs into pool currently in flight
 let   _astTimer = 0;            // time until next spawn

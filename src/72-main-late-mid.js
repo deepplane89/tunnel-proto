@@ -1388,7 +1388,7 @@ void main(){
 }`;
 
 // ── Pool + state ─────────────────────────────────────────────────────────────
-const _AST_POOL_SIZE = 12;
+const _AST_POOL_SIZE = 0; // disabled — asteroids not currently used as an obstacle (was 12)
 const _asteroidPool  = [];      // { group, rockMesh, fireMesh, light, tailGeo, tailPts, warnMesh, warnMat, active, ... }
 let   _asteroidActive = [];     // refs into pool currently in flight
 let   _astTimer = 0;            // time until next spawn
