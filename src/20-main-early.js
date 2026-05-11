@@ -9130,7 +9130,7 @@ const activeObstacles = [];
     _frames.push({
       t: now, dt,
       cones: activeObstacles.length,
-      walls, coins, asteroids, lightning, forcefields, lethalRings, powerups,
+      walls, coins, asteroids, forcefields, lethalRings, powerups,
       drawCalls, triangles,
     });
   }

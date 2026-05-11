@@ -9944,7 +9944,7 @@ const activeObstacles = [];
     _frames.push({
       t: now, dt,
       cones: activeObstacles.length,
-      walls, coins, asteroids, lightning, forcefields, lethalRings, powerups,
+      walls, coins, asteroids, forcefields, lethalRings, powerups,
       drawCalls, triangles,
     });
   }
@@ -21650,6 +21650,10 @@ function hapticHeavy() {
     navigator.vibrate([40, 30, 40]);
   }
 }
+// Stub for legacy dangling reference (god-mode lethal-ring shield flash)
+// Real impl was removed during split; keep as no-op to prevent update() throws.
+function _triggerCrashFlash() {}
+
 // ═══════════════════════════════════════════════════════
 //  ONBOARDING (first play only)
 // ═══════════════════════════════════════════════════════

@@ -1,3 +1,7 @@
+// Stub for legacy dangling reference (god-mode lethal-ring shield flash)
+// Real impl was removed during split; keep as no-op to prevent update() throws.
+function _triggerCrashFlash() {}
+
 // ═══════════════════════════════════════════════════════
 //  ONBOARDING (first play only)
 // ═══════════════════════════════════════════════════════
