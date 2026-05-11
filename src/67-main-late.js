@@ -4314,6 +4314,13 @@ function update(dt) {
     // horizon (Star Fox / X-Wing barrel-roll look). The HORIZON COUPLING /
     // _camRollAmt slider still applies to normal steering bank in the else branch.
     cameraRoll = 0;
+    // CRITICAL: keep _shipBankNoWobble pinned to 0 while rolling. Otherwise it
+    // sits at whatever pre-roll bank value it had, and on the first frame
+    // after roll ends the lerp jumps from that stale value to the new target,
+    // producing a one-frame camera-roll snap that reads as a screen shake on
+    // recovery (X-Wing→flat). Pinning to 0 matches what the camera is showing
+    // during the roll, so exit is seamless.
+    state._shipBankNoWobble = 0;
   } else {
     // Lerp the BANK toward target. Wobble is intentionally excluded from the
     // lerp target — the lerp acts as a low-pass filter, and feeding a 2.5Hz
