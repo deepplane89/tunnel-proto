@@ -3400,13 +3400,14 @@ function killPlayer() {
     // _triggerFlash(_sPos);
     // _triggerShockwave(_sPos);
     // _triggerSparks(_sPos);
-    // Face explosion: ship triangles fly apart from impact
-    // TEMP-DISABLED to preview crash without ship-shatter (testing what 'thick forward fireball' is)
-    // const _faceExpModel = _altShipActive ? _altShipModel : window._shipModel;
-    // if (_faceExpModel) {
-    //   const _impDir = new THREE.Vector3().subVectors(_sPos, _obstPos).normalize();
-    //   _triggerFaceExplosion(_faceExpModel, _impDir);
-    // }
+    // Face explosion (ship triangles fly apart from impact) — disabled: was the main crash-frame hitch source.
+    if (window._FACE_EXP_ENABLED) {
+      const _faceExpModel = _altShipActive ? _altShipModel : window._shipModel;
+      if (_faceExpModel) {
+        const _impDir = new THREE.Vector3().subVectors(_sPos, _obstPos).normalize();
+        _triggerFaceExplosion(_faceExpModel, _impDir);
+      }
+    }
     // Camera zoom-out + lateral orbit to profile view
     _expDeathZoomTarget = _baseFOV + 15; // less FOV zoom since camera rises instead
     _expDeathZoomActive = true;

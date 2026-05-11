@@ -6947,8 +6947,10 @@ gltfLoader.load('./assets/ships/default_ship.glb', (gltf) => {
 
   // ── SKIN SYSTEM: store model ref and pre-build material sets ──────────────
   window._shipModel = model;
-  // Eager-bake face-explosion geometry off the critical path (cached for crash hitch fix)
-  try { setTimeout(() => { try { _getFaceExpBaked(model); } catch(_){} }, 0); } catch(_){}
+  // Eager-bake face-explosion geometry off the critical path (only if feature is enabled).
+  if (window._FACE_EXP_ENABLED) {
+    try { setTimeout(() => { try { _getFaceExpBaked(model); } catch(_){} }, 0); } catch(_){}
+  }
 
   // Store references to default materials (skin 0) by mesh
   // Note: _origMatName was already set by the pre-cache traverse above (preserves GLB names)
@@ -8257,8 +8259,10 @@ function _loadAltShip(glbFile, skinDef, skinIdx, callback) {
     _altShipMixer = mixer;
     _altShipClips = clips;
     _altShipCurrentFile = glbFile;
-    // Eager-bake face-explosion geometry off the critical path (cached for crash hitch fix)
-    try { setTimeout(() => { try { _getFaceExpBaked(model); } catch(_){} }, 0); } catch(_){}
+    // Eager-bake face-explosion geometry off the critical path (only if feature is enabled).
+    if (window._FACE_EXP_ENABLED) {
+      try { setTimeout(() => { try { _getFaceExpBaked(model); } catch(_){} }, 0); } catch(_){}
+    }
     // Prewarm: compile this alt ship's shaders NOW (model is in scene graph
     // but invisible) so the materials don't compile lazily on first render at
     // gameplay-start — lazy compilation showed up as a black silhouette frame
@@ -24922,13 +24926,14 @@ function killPlayer() {
     // _triggerFlash(_sPos);
     // _triggerShockwave(_sPos);
     // _triggerSparks(_sPos);
-    // Face explosion: ship triangles fly apart from impact
-    // TEMP-DISABLED to preview crash without ship-shatter (testing what 'thick forward fireball' is)
-    // const _faceExpModel = _altShipActive ? _altShipModel : window._shipModel;
-    // if (_faceExpModel) {
-    //   const _impDir = new THREE.Vector3().subVectors(_sPos, _obstPos).normalize();
-    //   _triggerFaceExplosion(_faceExpModel, _impDir);
-    // }
+    // Face explosion (ship triangles fly apart from impact) — disabled: was the main crash-frame hitch source.
+    if (window._FACE_EXP_ENABLED) {
+      const _faceExpModel = _altShipActive ? _altShipModel : window._shipModel;
+      if (_faceExpModel) {
+        const _impDir = new THREE.Vector3().subVectors(_sPos, _obstPos).normalize();
+        _triggerFaceExplosion(_faceExpModel, _impDir);
+      }
+    }
     // Camera zoom-out + lateral orbit to profile view
     _expDeathZoomTarget = _baseFOV + 15; // less FOV zoom since camera rises instead
     _expDeathZoomActive = true;
