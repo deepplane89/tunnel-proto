@@ -9897,6 +9897,40 @@ shipGroup.add(magnetLight);
 // ═══════════════════════════════════════════════════
 const obstaclePool = [];
 const activeObstacles = [];
+// DevTools instrumentation: window._coneStats() returns { current, peak10s, peakAllTime, poolSize }.
+// Call repeatedly while playing; peak10s resets every 10s automatically.
+(function () {
+  let _peakAllTime = 0;
+  let _peak10s = 0;
+  let _window10sStart = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  function _sample() {
+    try {
+      const n = activeObstacles.length;
+      if (n > _peakAllTime) _peakAllTime = n;
+      if (n > _peak10s) _peak10s = n;
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      if (now - _window10sStart > 10000) {
+        _peak10s = n;
+        _window10sStart = now;
+      }
+    } catch (_) {}
+  }
+  // sample every animation frame
+  function _loop() {
+    _sample();
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_loop);
+  }
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_loop);
+  window._coneStats = function () {
+    return {
+      current: activeObstacles.length,
+      peak10s: _peak10s,
+      peakAllTime: _peakAllTime,
+      poolSize: obstaclePool.length,
+    };
+  };
+  window._resetConeStats = function () { _peakAllTime = 0; _peak10s = 0; _window10sStart = (typeof performance !== 'undefined' ? performance.now() : Date.now()); };
+})();
 
 function createObstacleMesh(type) {
   const group = new THREE.Group();
