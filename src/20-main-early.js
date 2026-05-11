@@ -3183,7 +3183,7 @@ function updateShards(dt) {
 //  Particles spawn from actual ship mesh vertices,
 //  per-particle speed/life ranges, TSL-style fade.
 // ═══════════════════════════════════════════════════
-const _EXP_COUNT = 20000;
+const _EXP_COUNT = 8000; // was 20000 — cut sync-init cost ~2.5x on crash frame; visually identical at sub-second flash
 const _expPositions  = new Float32Array(_EXP_COUNT * 3);
 const _expColors     = new Float32Array(_EXP_COUNT * 3);
 const _expAlphas     = new Float32Array(_EXP_COUNT);
@@ -3803,20 +3803,23 @@ let _faceExpGroup = null;       // THREE.Group holding exploding face meshes
 let _faceExpActive = false;
 let _faceExpT = 0;
 const _FACE_EXP_DUR = 0.6;      // how long the faces fly apart
+// Single shared material across ALL ship meshes (was: clone per mesh -> N draw calls + N uniforms).
+// Per-mesh base color is now baked into the 'baseColor' vertex attribute, so one merged geometry suffices.
 const _FACE_EXP_MAT = new THREE.ShaderMaterial({
   uniforms: {
     uProgress:  { value: 0.0 },
     uImpactDir: { value: new THREE.Vector3(0, 0, -1) },
-    uColor:     { value: new THREE.Color(0.15, 0.15, 0.18) },
     uHotColor:  { value: new THREE.Color(1.0, 0.6, 0.2) },
   },
   vertexShader: `
     attribute vec3 faceCentroid;
     attribute vec3 faceNormal;
+    attribute vec3 baseColor;
     uniform float uProgress;
     uniform vec3 uImpactDir;
     varying float vHeat;
     varying float vAlpha;
+    varying vec3 vBaseColor;
     void main() {
       // Hard initial kick: sqrt gives instant pop then decelerates
       float t = uProgress;
@@ -3848,16 +3851,17 @@ const _FACE_EXP_MAT = new THREE.ShaderMaterial({
       vHeat = max(0.0, 1.0 - t * 2.5);
       // Fade out at end
       vAlpha = smoothstep(1.0, 0.7, t);
+      vBaseColor = baseColor;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(finalPos, 1.0);
     }
   `,
   fragmentShader: `
-    uniform vec3 uColor;
     uniform vec3 uHotColor;
     varying float vHeat;
     varying float vAlpha;
+    varying vec3 vBaseColor;
     void main() {
-      vec3 col = mix(uColor, uHotColor, vHeat);
+      vec3 col = mix(vBaseColor, uHotColor, vHeat);
       // Emissive boost when hot
       col += uHotColor * vHeat * 1.5;
       gl_FragColor = vec4(col, vAlpha);
@@ -3869,15 +3873,15 @@ const _FACE_EXP_MAT = new THREE.ShaderMaterial({
   toneMapped: false,
 });
 
+// Reusable scratch (no per-call allocation in hot path)
+const _FE_DEFAULT_COLOR = new THREE.Color(0.15, 0.15, 0.18);
 function _triggerFaceExplosion(shipModel, impactDir) {
   // Clean up previous
   if (_faceExpGroup) {
     scene.remove(_faceExpGroup);
-    _faceExpGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+    if (_faceExpGroup.geometry) _faceExpGroup.geometry.dispose();
     _faceExpGroup = null;
   }
-  _faceExpGroup = new THREE.Group();
-  // Group lives at scene root — no transform, geometry is baked to world space
 
   _FACE_EXP_MAT.uniforms.uImpactDir.value.copy(impactDir).normalize();
   _FACE_EXP_MAT.uniforms.uProgress.value = 0;
@@ -3885,52 +3889,112 @@ function _triggerFaceExplosion(shipModel, impactDir) {
   // Force ship world matrices to be current before we read them
   shipModel.parent.updateMatrixWorld(true);
 
+  // ── Pass 1: gather candidate meshes + world-space non-indexed positions, count total verts ──
+  const meshEntries = []; // { positions: Float32Array, color: THREE.Color }
+  let totalVerts = 0;
   shipModel.traverse(child => {
     if (!child.isMesh) return;
     const name = (child.userData._origMatName || child.name || '').toLowerCase();
     if (name.includes('fire')) return; // skip flame meshes
-    // Clone and toNonIndexed
-    let geo = child.geometry.clone();
-    if (geo.index) geo = geo.toNonIndexed();
-    // Bake FULL world transform into geometry (scene root = identity)
-    geo.applyMatrix4(child.matrixWorld);
-    const posAttr = geo.attributes.position;
-    const count = posAttr.count;
-    const triCount = Math.floor(count / 3);
-    // Compute per-face centroid + normal (stored per vertex, same for 3 verts of each tri)
-    const centroids = new Float32Array(count * 3);
-    const faceNormals = new Float32Array(count * 3);
-    const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
-    const _cb = new THREE.Vector3(), _ab = new THREE.Vector3();
+    let geo = child.geometry;
+    let positions;
+    if (geo.index) {
+      // Need to expand to non-indexed in world space. Do it manually to avoid full clone+toNonIndexed cost.
+      const idx = geo.index.array;
+      const srcPos = geo.attributes.position.array;
+      const expanded = new Float32Array(idx.length * 3);
+      for (let i = 0; i < idx.length; i++) {
+        const sIdx = idx[i] * 3;
+        const dIdx = i * 3;
+        expanded[dIdx]     = srcPos[sIdx];
+        expanded[dIdx + 1] = srcPos[sIdx + 1];
+        expanded[dIdx + 2] = srcPos[sIdx + 2];
+      }
+      positions = expanded;
+    } else {
+      // Non-indexed: copy the array (we will mutate via world transform)
+      positions = new Float32Array(geo.attributes.position.array);
+    }
+    // Apply world transform in-place
+    const m = child.matrixWorld.elements;
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i], y = positions[i + 1], z = positions[i + 2];
+      positions[i]     = m[0] * x + m[4] * y + m[8]  * z + m[12];
+      positions[i + 1] = m[1] * x + m[5] * y + m[9]  * z + m[13];
+      positions[i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+    }
+    const color = (child.material && child.material.color) ? child.material.color : _FE_DEFAULT_COLOR;
+    meshEntries.push({ positions, color });
+    totalVerts += positions.length / 3;
+  });
+
+  if (totalVerts < 3 || meshEntries.length === 0) {
+    _faceExpActive = false;
+    _faceExpT = 0;
+    return;
+  }
+
+  // ── Pass 2: allocate one big set of buffers + fill in linear pass ──
+  const totalFloats = totalVerts * 3;
+  const mergedPos       = new Float32Array(totalFloats);
+  const mergedCentroids = new Float32Array(totalFloats);
+  const mergedNormals   = new Float32Array(totalFloats);
+  const mergedColors    = new Float32Array(totalFloats);
+
+  let writeOff = 0;
+  for (let m = 0; m < meshEntries.length; m++) {
+    const { positions, color } = meshEntries[m];
+    const cr = color.r, cg = color.g, cb = color.b;
+    const vertLen = positions.length / 3;
+    // Bulk-copy positions
+    mergedPos.set(positions, writeOff * 3);
+    // Per-triangle: compute centroid + face normal (stored per-vertex, same value for 3 verts)
+    const triCount = Math.floor(vertLen / 3);
     for (let tri = 0; tri < triCount; tri++) {
-      const i0 = tri * 3, i1 = i0 + 1, i2 = i0 + 2;
-      vA.set(posAttr.getX(i0), posAttr.getY(i0), posAttr.getZ(i0));
-      vB.set(posAttr.getX(i1), posAttr.getY(i1), posAttr.getZ(i1));
-      vC.set(posAttr.getX(i2), posAttr.getY(i2), posAttr.getZ(i2));
-      const cx = (vA.x + vB.x + vC.x) / 3;
-      const cy = (vA.y + vB.y + vC.y) / 3;
-      const cz = (vA.z + vB.z + vC.z) / 3;
-      _cb.subVectors(vC, vB);
-      _ab.subVectors(vA, vB);
-      _cb.cross(_ab).normalize();
+      const base = (writeOff + tri * 3) * 3;
+      const localBase = tri * 9; // 3 verts × 3 floats
+      const ax = positions[localBase],     ay = positions[localBase + 1], az = positions[localBase + 2];
+      const bx = positions[localBase + 3], by = positions[localBase + 4], bz = positions[localBase + 5];
+      const cx = positions[localBase + 6], cy = positions[localBase + 7], cz = positions[localBase + 8];
+      const ccx = (ax + bx + cx) / 3;
+      const ccy = (ay + by + cy) / 3;
+      const ccz = (az + bz + cz) / 3;
+      // Face normal: (C - B) × (A - B), then normalize
+      const ux = cx - bx, uy = cy - by, uz = cz - bz;
+      const vx = ax - bx, vy = ay - by, vz = az - bz;
+      let nx = uy * vz - uz * vy;
+      let ny = uz * vx - ux * vz;
+      let nz = ux * vy - uy * vx;
+      const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      nx /= nLen; ny /= nLen; nz /= nLen;
+      // Write per-vertex (3 verts)
       for (let v = 0; v < 3; v++) {
-        const idx = (i0 + v) * 3;
-        centroids[idx] = cx; centroids[idx + 1] = cy; centroids[idx + 2] = cz;
-        faceNormals[idx] = _cb.x; faceNormals[idx + 1] = _cb.y; faceNormals[idx + 2] = _cb.z;
+        const o = base + v * 3;
+        mergedCentroids[o]     = ccx;
+        mergedCentroids[o + 1] = ccy;
+        mergedCentroids[o + 2] = ccz;
+        mergedNormals[o]     = nx;
+        mergedNormals[o + 1] = ny;
+        mergedNormals[o + 2] = nz;
+        mergedColors[o]     = cr;
+        mergedColors[o + 1] = cg;
+        mergedColors[o + 2] = cb;
       }
     }
-    geo.setAttribute('faceCentroid', new THREE.BufferAttribute(centroids, 3));
-    geo.setAttribute('faceNormal', new THREE.BufferAttribute(faceNormals, 3));
-    // Get base color from the original material
-    const matClone = _FACE_EXP_MAT.clone();
-    if (child.material && child.material.color) {
-      matClone.uniforms.uColor.value.copy(child.material.color);
-    }
-    const mesh = new THREE.Mesh(geo, matClone);
-    mesh.frustumCulled = false; // faces fly far, don't cull
-    _faceExpGroup.add(mesh);
-  });
-  scene.add(_faceExpGroup);
+    writeOff += vertLen;
+  }
+
+  // ── Build single merged geometry + single mesh ──
+  const mergedGeo = new THREE.BufferGeometry();
+  mergedGeo.setAttribute('position',     new THREE.BufferAttribute(mergedPos, 3));
+  mergedGeo.setAttribute('faceCentroid', new THREE.BufferAttribute(mergedCentroids, 3));
+  mergedGeo.setAttribute('faceNormal',   new THREE.BufferAttribute(mergedNormals, 3));
+  mergedGeo.setAttribute('baseColor',    new THREE.BufferAttribute(mergedColors, 3));
+
+  const mesh = new THREE.Mesh(mergedGeo, _FACE_EXP_MAT);
+  mesh.frustumCulled = false; // faces fly far, don't cull
+  scene.add(mesh);
+  _faceExpGroup = mesh; // now a single mesh, not a Group (kept var name for compat)
   _faceExpActive = true;
   _faceExpT = 0;
 }
@@ -3940,18 +4004,13 @@ function _updateFaceExplosion(dt) {
   const faceTs = _expActive ? _getExpTimescale(_expSlomoAge) : 1.0;
   _faceExpT += dt * faceTs;
   const t = Math.min(1, _faceExpT / _FACE_EXP_DUR);
-  if (_faceExpGroup) {
-    _faceExpGroup.traverse(c => {
-      if (c.isMesh && c.material.uniforms) {
-        c.material.uniforms.uProgress.value = t;
-      }
-    });
-  }
+  // Single shared material — just write the uniform once
+  _FACE_EXP_MAT.uniforms.uProgress.value = t;
   if (t >= 1) {
     _faceExpActive = false;
     if (_faceExpGroup) {
       scene.remove(_faceExpGroup);
-      _faceExpGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+      if (_faceExpGroup.geometry) _faceExpGroup.geometry.dispose();
       _faceExpGroup = null;
     }
   }
@@ -3962,7 +4021,7 @@ function _killFaceExplosion() {
   _faceExpT = 0;
   if (_faceExpGroup) {
     scene.remove(_faceExpGroup);
-    _faceExpGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+    if (_faceExpGroup.geometry) _faceExpGroup.geometry.dispose();
     _faceExpGroup = null;
   }
 }
