@@ -3803,22 +3803,21 @@ let _faceExpGroup = null;       // THREE.Group holding exploding face meshes
 let _faceExpActive = false;
 let _faceExpT = 0;
 const _FACE_EXP_DUR = 0.6;      // how long the faces fly apart
-// Single shared material across ALL ship meshes — base color baked into 'baseColor' vertex attribute.
+// Single shared material across ALL ship meshes — fixed dark base color (skin-independent).
 const _FACE_EXP_MAT = new THREE.ShaderMaterial({
   uniforms: {
     uProgress:  { value: 0.0 },
     uImpactDir: { value: new THREE.Vector3(0, 0, -1) },
+    uColor:     { value: new THREE.Color(0.15, 0.15, 0.18) },
     uHotColor:  { value: new THREE.Color(1.0, 0.6, 0.2) },
   },
   vertexShader: `
     attribute vec3 faceCentroid;
     attribute vec3 faceNormal;
-    attribute vec3 baseColor;
     uniform float uProgress;
     uniform vec3 uImpactDir;
     varying float vHeat;
     varying float vAlpha;
-    varying vec3 vBaseColor;
     void main() {
       // Hard initial kick: sqrt gives instant pop then decelerates
       float t = uProgress;
@@ -3850,17 +3849,16 @@ const _FACE_EXP_MAT = new THREE.ShaderMaterial({
       vHeat = max(0.0, 1.0 - t * 2.5);
       // Fade out at end
       vAlpha = smoothstep(1.0, 0.7, t);
-      vBaseColor = baseColor;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(finalPos, 1.0);
     }
   `,
   fragmentShader: `
+    uniform vec3 uColor;
     uniform vec3 uHotColor;
     varying float vHeat;
     varying float vAlpha;
-    varying vec3 vBaseColor;
     void main() {
-      vec3 col = mix(vBaseColor, uHotColor, vHeat);
+      vec3 col = mix(uColor, uHotColor, vHeat);
       // Emissive boost when hot
       col += uHotColor * vHeat * 1.5;
       gl_FragColor = vec4(col, vAlpha);
@@ -3873,11 +3871,11 @@ const _FACE_EXP_MAT = new THREE.ShaderMaterial({
 });
 
 // ── Pre-bake cache for face-explosion ship topology ──
-// Keyed by ship model UUID. Holds local-space positions/centroids/normals + per-vertex baseColor,
-// a single merged BufferGeometry, and a reusable mesh. The only per-crash work is transforming
-// local positions → world (one matrix), uploading the position buffer, and adding the mesh.
+// Keyed by ship model UUID. Holds ship-local positions/centroids/normals, a single merged
+// BufferGeometry, and a reusable mesh. The only per-crash work is transforming local positions
+// → world (one matrix), uploading the position buffer, and adding the mesh. Color is a uniform
+// (dark dust) so the bake is skin-independent and never needs invalidation.
 const _faceExpCache = new Map(); // uuid -> { localPos, localCentroids, localNormals, geo, mesh }
-const _FE_DEFAULT_COLOR = new THREE.Color(0.15, 0.15, 0.18);
 
 function _bakeFaceExplosion(shipModel) {
   // Make sure ship + descendants have up-to-date world matrices before we sample them.
@@ -3922,8 +3920,7 @@ function _bakeFaceExplosion(shipModel) {
       meshLocal[i + 1] = r10 * x + r11 * y + r12 * z + ty;
       meshLocal[i + 2] = r20 * x + r21 * y + r22 * z + tz;
     }
-    const color = (child.material && child.material.color) ? child.material.color : _FE_DEFAULT_COLOR;
-    meshes.push({ localPos: meshLocal, color });
+    meshes.push({ localPos: meshLocal });
     totalVerts += meshLocal.length / 3;
   });
 
@@ -3934,12 +3931,10 @@ function _bakeFaceExplosion(shipModel) {
   const localPos       = new Float32Array(totalFloats);
   const localCentroids = new Float32Array(totalFloats);
   const localNormals   = new Float32Array(totalFloats);
-  const baseColors     = new Float32Array(totalFloats);
 
   let off = 0;
   for (let m = 0; m < meshes.length; m++) {
-    const { localPos: src, color } = meshes[m];
-    const cr = color.r, cg = color.g, cb = color.b;
+    const { localPos: src } = meshes[m];
     const vertLen = src.length / 3;
     localPos.set(src, off * 3);
     const triCount = Math.floor(vertLen / 3);
@@ -3964,13 +3959,12 @@ function _bakeFaceExplosion(shipModel) {
         const o = baseOut + v * 3;
         localCentroids[o]     = ccx; localCentroids[o + 1] = ccy; localCentroids[o + 2] = ccz;
         localNormals[o]       = nx;  localNormals[o + 1]   = ny;  localNormals[o + 2]   = nz;
-        baseColors[o]         = cr;  baseColors[o + 1]     = cg;  baseColors[o + 2]     = cb;
       }
     }
     off += vertLen;
   }
 
-  // Reusable BufferGeometry. Position buffer is dynamic (updated each crash), others are static.
+  // Reusable BufferGeometry. All three buffers are dynamic (updated each crash from ship-local arrays).
   const worldPos       = new Float32Array(totalFloats);
   const worldCentroids = new Float32Array(totalFloats);
   const worldNormals   = new Float32Array(totalFloats);
@@ -3978,11 +3972,9 @@ function _bakeFaceExplosion(shipModel) {
   const posAttr       = new THREE.BufferAttribute(worldPos, 3);       posAttr.setUsage(THREE.DynamicDrawUsage);
   const centroidAttr  = new THREE.BufferAttribute(worldCentroids, 3); centroidAttr.setUsage(THREE.DynamicDrawUsage);
   const normalAttr    = new THREE.BufferAttribute(worldNormals, 3);   normalAttr.setUsage(THREE.DynamicDrawUsage);
-  const colorAttr     = new THREE.BufferAttribute(baseColors, 3); // static, never changes
   geo.setAttribute('position',     posAttr);
   geo.setAttribute('faceCentroid', centroidAttr);
   geo.setAttribute('faceNormal',   normalAttr);
-  geo.setAttribute('baseColor',    colorAttr);
 
   const mesh = new THREE.Mesh(geo, _FACE_EXP_MAT);
   mesh.frustumCulled = false;
@@ -6939,8 +6931,6 @@ function applyTitleSkin(skinIndex) {
 
 // ── SKIN SYSTEM: applySkin function (uses _prebuiltSkins declared above gltf callback) ───
 function applySkin(skinIndex) {
-  // Skin switch may change child material colors — invalidate the face-explosion bake cache.
-  try { if (_faceExpCache) _faceExpCache.clear(); } catch(_){}
   try {
     const _stack = (new Error()).stack ? (new Error()).stack.split('\n').slice(2,6).map(s=>s.trim().replace(/^at\s+/,'').replace(/\s*\(.*$/,'')).join(' ← ') : '?';
     const _selStored = (typeof loadSkinData === 'function') ? loadSkinData().selected : '?';
