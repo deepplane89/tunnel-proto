@@ -531,7 +531,9 @@ function applyPowerup(typeIdx) {
   if (def.id === 'laser') state.sessionLasers++;
   if (def.id === 'invincible') state.sessionInvincibles++;
   playPickup(typeIdx); // pickup smash for ALL powerups; shield also layers shield-activate-sfx below
-  addCrashFlash(def.color);
+  // (was: addCrashFlash(def.color) — removed. The full-screen radial overlay
+  //  triggers a layout+paint+composite hitch on mobile every pickup, and it
+  //  also visually obscures the shatter animation we already spawn.)
 
   switch (def.id) {
     case 'shield': {
