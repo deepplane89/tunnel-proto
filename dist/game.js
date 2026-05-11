@@ -3997,7 +3997,7 @@ function updateShards(dt) {
 //  Particles spawn from actual ship mesh vertices,
 //  per-particle speed/life ranges, TSL-style fade.
 // ═══════════════════════════════════════════════════
-const _EXP_COUNT = 20000;
+const _EXP_COUNT = 6000; // was 20000 — sub-second flash hides the count; ~3x faster sync-init on crash frame
 const _expPositions  = new Float32Array(_EXP_COUNT * 3);
 const _expColors     = new Float32Array(_EXP_COUNT * 3);
 const _expAlphas     = new Float32Array(_EXP_COUNT);
@@ -4617,20 +4617,22 @@ let _faceExpGroup = null;       // THREE.Group holding exploding face meshes
 let _faceExpActive = false;
 let _faceExpT = 0;
 const _FACE_EXP_DUR = 0.6;      // how long the faces fly apart
+// Single shared material across ALL ship meshes — base color baked into 'baseColor' vertex attribute.
 const _FACE_EXP_MAT = new THREE.ShaderMaterial({
   uniforms: {
     uProgress:  { value: 0.0 },
     uImpactDir: { value: new THREE.Vector3(0, 0, -1) },
-    uColor:     { value: new THREE.Color(0.15, 0.15, 0.18) },
     uHotColor:  { value: new THREE.Color(1.0, 0.6, 0.2) },
   },
   vertexShader: `
     attribute vec3 faceCentroid;
     attribute vec3 faceNormal;
+    attribute vec3 baseColor;
     uniform float uProgress;
     uniform vec3 uImpactDir;
     varying float vHeat;
     varying float vAlpha;
+    varying vec3 vBaseColor;
     void main() {
       // Hard initial kick: sqrt gives instant pop then decelerates
       float t = uProgress;
@@ -4662,16 +4664,17 @@ const _FACE_EXP_MAT = new THREE.ShaderMaterial({
       vHeat = max(0.0, 1.0 - t * 2.5);
       // Fade out at end
       vAlpha = smoothstep(1.0, 0.7, t);
+      vBaseColor = baseColor;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(finalPos, 1.0);
     }
   `,
   fragmentShader: `
-    uniform vec3 uColor;
     uniform vec3 uHotColor;
     varying float vHeat;
     varying float vAlpha;
+    varying vec3 vBaseColor;
     void main() {
-      vec3 col = mix(uColor, uHotColor, vHeat);
+      vec3 col = mix(vBaseColor, uHotColor, vHeat);
       // Emissive boost when hot
       col += uHotColor * vHeat * 1.5;
       gl_FragColor = vec4(col, vAlpha);
@@ -4683,15 +4686,142 @@ const _FACE_EXP_MAT = new THREE.ShaderMaterial({
   toneMapped: false,
 });
 
+// ── Pre-bake cache for face-explosion ship topology ──
+// Keyed by ship model UUID. Holds local-space positions/centroids/normals + per-vertex baseColor,
+// a single merged BufferGeometry, and a reusable mesh. The only per-crash work is transforming
+// local positions → world (one matrix), uploading the position buffer, and adding the mesh.
+const _faceExpCache = new Map(); // uuid -> { localPos, localCentroids, localNormals, geo, mesh }
+const _FE_DEFAULT_COLOR = new THREE.Color(0.15, 0.15, 0.18);
+
+function _bakeFaceExplosion(shipModel) {
+  // Make sure ship + descendants have up-to-date world matrices before we sample them.
+  shipModel.updateMatrixWorld(true);
+  // Per-child positions are stored in SHIP-LOCAL space so we can re-transform by the ship's
+  // matrixWorld at crash time. relM = shipInverse * child.matrixWorld
+  const _shipInverse = new THREE.Matrix4().copy(shipModel.matrixWorld).invert();
+  const _relM = new THREE.Matrix4();
+
+  // Pass 1: collect each child mesh's expanded ship-local positions + base color, count totals
+  const meshes = []; // { localPos: Float32Array, color: THREE.Color }
+  let totalVerts = 0;
+  shipModel.traverse(child => {
+    if (!child.isMesh) return;
+    const name = (child.userData._origMatName || child.name || '').toLowerCase();
+    if (name.includes('fire')) return; // skip flame meshes
+    const geo = child.geometry;
+    // Expand to non-indexed in mesh-local space first
+    let meshLocal;
+    if (geo.index) {
+      const idx = geo.index.array;
+      const src = geo.attributes.position.array;
+      const out = new Float32Array(idx.length * 3);
+      for (let i = 0; i < idx.length; i++) {
+        const s = idx[i] * 3, d = i * 3;
+        out[d] = src[s]; out[d + 1] = src[s + 1]; out[d + 2] = src[s + 2];
+      }
+      meshLocal = out;
+    } else {
+      meshLocal = new Float32Array(geo.attributes.position.array);
+    }
+    // Transform mesh-local → ship-local via _relM = shipInverse * child.matrixWorld
+    _relM.multiplyMatrices(_shipInverse, child.matrixWorld);
+    const m = _relM.elements;
+    const r00 = m[0], r01 = m[4], r02 = m[8];
+    const r10 = m[1], r11 = m[5], r12 = m[9];
+    const r20 = m[2], r21 = m[6], r22 = m[10];
+    const tx = m[12], ty = m[13], tz = m[14];
+    for (let i = 0; i < meshLocal.length; i += 3) {
+      const x = meshLocal[i], y = meshLocal[i + 1], z = meshLocal[i + 2];
+      meshLocal[i]     = r00 * x + r01 * y + r02 * z + tx;
+      meshLocal[i + 1] = r10 * x + r11 * y + r12 * z + ty;
+      meshLocal[i + 2] = r20 * x + r21 * y + r22 * z + tz;
+    }
+    const color = (child.material && child.material.color) ? child.material.color : _FE_DEFAULT_COLOR;
+    meshes.push({ localPos: meshLocal, color });
+    totalVerts += meshLocal.length / 3;
+  });
+
+  if (totalVerts < 3) return null;
+
+  // Pass 2: build one merged set of buffers
+  const totalFloats = totalVerts * 3;
+  const localPos       = new Float32Array(totalFloats);
+  const localCentroids = new Float32Array(totalFloats);
+  const localNormals   = new Float32Array(totalFloats);
+  const baseColors     = new Float32Array(totalFloats);
+
+  let off = 0;
+  for (let m = 0; m < meshes.length; m++) {
+    const { localPos: src, color } = meshes[m];
+    const cr = color.r, cg = color.g, cb = color.b;
+    const vertLen = src.length / 3;
+    localPos.set(src, off * 3);
+    const triCount = Math.floor(vertLen / 3);
+    for (let tri = 0; tri < triCount; tri++) {
+      const baseOut = (off + tri * 3) * 3;
+      const baseSrc = tri * 9;
+      const ax = src[baseSrc],     ay = src[baseSrc + 1], az = src[baseSrc + 2];
+      const bx = src[baseSrc + 3], by = src[baseSrc + 4], bz = src[baseSrc + 5];
+      const cx = src[baseSrc + 6], cy = src[baseSrc + 7], cz = src[baseSrc + 8];
+      const ccx = (ax + bx + cx) / 3;
+      const ccy = (ay + by + cy) / 3;
+      const ccz = (az + bz + cz) / 3;
+      // Face normal = (C - B) × (A - B)
+      const ux = cx - bx, uy = cy - by, uz = cz - bz;
+      const vx = ax - bx, vy = ay - by, vz = az - bz;
+      let nx = uy * vz - uz * vy;
+      let ny = uz * vx - ux * vz;
+      let nz = ux * vy - uy * vx;
+      const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      nx /= nLen; ny /= nLen; nz /= nLen;
+      for (let v = 0; v < 3; v++) {
+        const o = baseOut + v * 3;
+        localCentroids[o]     = ccx; localCentroids[o + 1] = ccy; localCentroids[o + 2] = ccz;
+        localNormals[o]       = nx;  localNormals[o + 1]   = ny;  localNormals[o + 2]   = nz;
+        baseColors[o]         = cr;  baseColors[o + 1]     = cg;  baseColors[o + 2]     = cb;
+      }
+    }
+    off += vertLen;
+  }
+
+  // Reusable BufferGeometry. Position buffer is dynamic (updated each crash), others are static.
+  const worldPos       = new Float32Array(totalFloats);
+  const worldCentroids = new Float32Array(totalFloats);
+  const worldNormals   = new Float32Array(totalFloats);
+  const geo = new THREE.BufferGeometry();
+  const posAttr       = new THREE.BufferAttribute(worldPos, 3);       posAttr.setUsage(THREE.DynamicDrawUsage);
+  const centroidAttr  = new THREE.BufferAttribute(worldCentroids, 3); centroidAttr.setUsage(THREE.DynamicDrawUsage);
+  const normalAttr    = new THREE.BufferAttribute(worldNormals, 3);   normalAttr.setUsage(THREE.DynamicDrawUsage);
+  const colorAttr     = new THREE.BufferAttribute(baseColors, 3); // static, never changes
+  geo.setAttribute('position',     posAttr);
+  geo.setAttribute('faceCentroid', centroidAttr);
+  geo.setAttribute('faceNormal',   normalAttr);
+  geo.setAttribute('baseColor',    colorAttr);
+
+  const mesh = new THREE.Mesh(geo, _FACE_EXP_MAT);
+  mesh.frustumCulled = false;
+
+  return { localPos, localCentroids, localNormals, worldPos, worldCentroids, worldNormals, totalFloats, geo, mesh };
+}
+
+function _getFaceExpBaked(shipModel) {
+  let entry = _faceExpCache.get(shipModel.uuid);
+  if (!entry) {
+    entry = _bakeFaceExplosion(shipModel);
+    if (entry) _faceExpCache.set(shipModel.uuid, entry);
+  }
+  return entry;
+}
+
 function _triggerFaceExplosion(shipModel, impactDir) {
-  // Clean up previous
+  // Clean up previous (mesh + geometry are CACHED — don't dispose; just remove from scene)
   if (_faceExpGroup) {
     scene.remove(_faceExpGroup);
-    _faceExpGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
     _faceExpGroup = null;
   }
-  _faceExpGroup = new THREE.Group();
-  // Group lives at scene root — no transform, geometry is baked to world space
+
+  const entry = _getFaceExpBaked(shipModel);
+  if (!entry) return;
 
   _FACE_EXP_MAT.uniforms.uImpactDir.value.copy(impactDir).normalize();
   _FACE_EXP_MAT.uniforms.uProgress.value = 0;
@@ -4699,52 +4829,43 @@ function _triggerFaceExplosion(shipModel, impactDir) {
   // Force ship world matrices to be current before we read them
   shipModel.parent.updateMatrixWorld(true);
 
-  shipModel.traverse(child => {
-    if (!child.isMesh) return;
-    const name = (child.userData._origMatName || child.name || '').toLowerCase();
-    if (name.includes('fire')) return; // skip flame meshes
-    // Clone and toNonIndexed
-    let geo = child.geometry.clone();
-    if (geo.index) geo = geo.toNonIndexed();
-    // Bake FULL world transform into geometry (scene root = identity)
-    geo.applyMatrix4(child.matrixWorld);
-    const posAttr = geo.attributes.position;
-    const count = posAttr.count;
-    const triCount = Math.floor(count / 3);
-    // Compute per-face centroid + normal (stored per vertex, same for 3 verts of each tri)
-    const centroids = new Float32Array(count * 3);
-    const faceNormals = new Float32Array(count * 3);
-    const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
-    const _cb = new THREE.Vector3(), _ab = new THREE.Vector3();
-    for (let tri = 0; tri < triCount; tri++) {
-      const i0 = tri * 3, i1 = i0 + 1, i2 = i0 + 2;
-      vA.set(posAttr.getX(i0), posAttr.getY(i0), posAttr.getZ(i0));
-      vB.set(posAttr.getX(i1), posAttr.getY(i1), posAttr.getZ(i1));
-      vC.set(posAttr.getX(i2), posAttr.getY(i2), posAttr.getZ(i2));
-      const cx = (vA.x + vB.x + vC.x) / 3;
-      const cy = (vA.y + vB.y + vC.y) / 3;
-      const cz = (vA.z + vB.z + vC.z) / 3;
-      _cb.subVectors(vC, vB);
-      _ab.subVectors(vA, vB);
-      _cb.cross(_ab).normalize();
-      for (let v = 0; v < 3; v++) {
-        const idx = (i0 + v) * 3;
-        centroids[idx] = cx; centroids[idx + 1] = cy; centroids[idx + 2] = cz;
-        faceNormals[idx] = _cb.x; faceNormals[idx + 1] = _cb.y; faceNormals[idx + 2] = _cb.z;
-      }
-    }
-    geo.setAttribute('faceCentroid', new THREE.BufferAttribute(centroids, 3));
-    geo.setAttribute('faceNormal', new THREE.BufferAttribute(faceNormals, 3));
-    // Get base color from the original material
-    const matClone = _FACE_EXP_MAT.clone();
-    if (child.material && child.material.color) {
-      matClone.uniforms.uColor.value.copy(child.material.color);
-    }
-    const mesh = new THREE.Mesh(geo, matClone);
-    mesh.frustumCulled = false; // faces fly far, don't cull
-    _faceExpGroup.add(mesh);
-  });
-  scene.add(_faceExpGroup);
+  // Transform local positions / centroids / face normals into world space using the SHIP's matrixWorld.
+  // (This assumes all baked verts share the ship's transform, which is fine for our use — the ship is
+  // a single rigid Group from the player's POV; child mesh transforms are already merged into local-space
+  // bake since each child's world == ship's world for the duration of the crash frame.)
+  // To be correct for nested child transforms, we'd bake child-relative; for now, bake is mesh-local and
+  // the original code path already treated the GLB as a flat rigid body. This matches that.
+  const me = shipModel.matrixWorld.elements;
+  // 3x3 rotation part for normals
+  const r00 = me[0], r01 = me[4], r02 = me[8];
+  const r10 = me[1], r11 = me[5], r12 = me[9];
+  const r20 = me[2], r21 = me[6], r22 = me[10];
+  const tx = me[12], ty = me[13], tz = me[14];
+
+  const lp = entry.localPos, lc = entry.localCentroids, ln = entry.localNormals;
+  const wp = entry.worldPos, wc = entry.worldCentroids, wn = entry.worldNormals;
+  const N = entry.totalFloats;
+  // Positions + centroids: full affine
+  for (let i = 0; i < N; i += 3) {
+    const px = lp[i], py = lp[i + 1], pz = lp[i + 2];
+    wp[i]     = r00 * px + r01 * py + r02 * pz + tx;
+    wp[i + 1] = r10 * px + r11 * py + r12 * pz + ty;
+    wp[i + 2] = r20 * px + r21 * py + r22 * pz + tz;
+    const cx = lc[i], cy = lc[i + 1], cz = lc[i + 2];
+    wc[i]     = r00 * cx + r01 * cy + r02 * cz + tx;
+    wc[i + 1] = r10 * cx + r11 * cy + r12 * cz + ty;
+    wc[i + 2] = r20 * cx + r21 * cy + r22 * cz + tz;
+    const nx = ln[i], ny = ln[i + 1], nz = ln[i + 2];
+    wn[i]     = r00 * nx + r01 * ny + r02 * nz;
+    wn[i + 1] = r10 * nx + r11 * ny + r12 * nz;
+    wn[i + 2] = r20 * nx + r21 * ny + r22 * nz;
+  }
+  entry.geo.attributes.position.needsUpdate     = true;
+  entry.geo.attributes.faceCentroid.needsUpdate = true;
+  entry.geo.attributes.faceNormal.needsUpdate   = true;
+
+  scene.add(entry.mesh);
+  _faceExpGroup = entry.mesh; // single mesh — not a Group; legacy var name kept
   _faceExpActive = true;
   _faceExpT = 0;
 }
@@ -4754,19 +4875,13 @@ function _updateFaceExplosion(dt) {
   const faceTs = _expActive ? _getExpTimescale(_expSlomoAge) : 1.0;
   _faceExpT += dt * faceTs;
   const t = Math.min(1, _faceExpT / _FACE_EXP_DUR);
-  if (_faceExpGroup) {
-    _faceExpGroup.traverse(c => {
-      if (c.isMesh && c.material.uniforms) {
-        c.material.uniforms.uProgress.value = t;
-      }
-    });
-  }
+  // Shared material — one uniform write
+  _FACE_EXP_MAT.uniforms.uProgress.value = t;
   if (t >= 1) {
     _faceExpActive = false;
     if (_faceExpGroup) {
       scene.remove(_faceExpGroup);
-      _faceExpGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
-      _faceExpGroup = null;
+      _faceExpGroup = null; // geometry/mesh are cached, do NOT dispose
     }
   }
 }
@@ -4776,8 +4891,7 @@ function _killFaceExplosion() {
   _faceExpT = 0;
   if (_faceExpGroup) {
     scene.remove(_faceExpGroup);
-    _faceExpGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
-    _faceExpGroup = null;
+    _faceExpGroup = null; // geometry/mesh are cached, do NOT dispose
   }
 }
 
@@ -6841,6 +6955,8 @@ gltfLoader.load('./assets/ships/default_ship.glb', (gltf) => {
 
   // ── SKIN SYSTEM: store model ref and pre-build material sets ──────────────
   window._shipModel = model;
+  // Eager-bake face-explosion geometry off the critical path (cached for crash hitch fix)
+  try { setTimeout(() => { try { _getFaceExpBaked(model); } catch(_){} }, 0); } catch(_){}
 
   // Store references to default materials (skin 0) by mesh
   // Note: _origMatName was already set by the pre-cache traverse above (preserves GLB names)
@@ -7637,6 +7753,8 @@ function applyTitleSkin(skinIndex) {
 
 // ── SKIN SYSTEM: applySkin function (uses _prebuiltSkins declared above gltf callback) ───
 function applySkin(skinIndex) {
+  // Skin switch may change child material colors — invalidate the face-explosion bake cache.
+  try { if (_faceExpCache) _faceExpCache.clear(); } catch(_){}
   try {
     const _stack = (new Error()).stack ? (new Error()).stack.split('\n').slice(2,6).map(s=>s.trim().replace(/^at\s+/,'').replace(/\s*\(.*$/,'')).join(' ← ') : '?';
     const _selStored = (typeof loadSkinData === 'function') ? loadSkinData().selected : '?';
@@ -8149,6 +8267,8 @@ function _loadAltShip(glbFile, skinDef, skinIdx, callback) {
     _altShipMixer = mixer;
     _altShipClips = clips;
     _altShipCurrentFile = glbFile;
+    // Eager-bake face-explosion geometry off the critical path (cached for crash hitch fix)
+    try { setTimeout(() => { try { _getFaceExpBaked(model); } catch(_){} }, 0); } catch(_){}
     // Prewarm: compile this alt ship's shaders NOW (model is in scene graph
     // but invisible) so the materials don't compile lazily on first render at
     // gameplay-start — lazy compilation showed up as a black silhouette frame
