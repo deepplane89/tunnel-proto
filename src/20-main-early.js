@@ -1636,7 +1636,7 @@ function _bootDPR() {
 }
 const _initialDPR = _bootDPR();
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_mobAA, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_mobAA, powerPreference: 'high-performance', stencil: false });
 renderer.setPixelRatio(_initialDPR);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
