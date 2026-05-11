@@ -9903,6 +9903,26 @@ const activeObstacles = [];
   const _MAX_FRAMES = 60 * 60 * 5; // ~5 min @ 60fps
   let _recording = false;
   let _lastT = 0;
+  let _lastDrawCalls = 0;
+  let _lastTriangles = 0;
+  let _renderHookInstalled = false;
+  // Install render hook lazily once composer exists. renderer.info auto-resets each
+  // frame, so we must read it AFTER render completes.
+  function _installRenderHook() {
+    if (_renderHookInstalled) return;
+    if (typeof composer === 'undefined' || !composer || !composer.render) return;
+    if (typeof renderer === 'undefined' || !renderer) return;
+    const _origRender = composer.render.bind(composer);
+    composer.render = function (...args) {
+      const r = _origRender(...args);
+      try {
+        _lastDrawCalls = renderer.info.render.calls || 0;
+        _lastTriangles = renderer.info.render.triangles || 0;
+      } catch (_) {}
+      return r;
+    };
+    _renderHookInstalled = true;
+  }
   // Pool conventions vary across the codebase:
   //   activeObstacles, activeCoins, activePowerups, _lethalRingActive → separate active list (length = count)
   //   _awPool, _ffPool, _lethalRingPool → each obj has userData.active
@@ -9925,13 +9945,9 @@ const activeObstacles = [];
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const dt = _lastT ? (now - _lastT) : 16.67;
     _lastT = now;
-    let drawCalls = 0, triangles = 0;
-    try {
-      if (typeof renderer !== 'undefined' && renderer && renderer.info) {
-        drawCalls = renderer.info.render.calls || 0;
-        triangles = renderer.info.render.triangles || 0;
-      }
-    } catch (_) {}
+    _installRenderHook();
+    const drawCalls = _lastDrawCalls;
+    const triangles = _lastTriangles;
     // Active counts — pools use various conventions, so we count multiple ways
     let walls = 0, coins = 0, asteroids = 0, forcefields = 0, lethalRings = 0, powerups = 0;
     try { if (typeof _awPool !== 'undefined') walls = _countActive(_awPool); } catch (_) {}
