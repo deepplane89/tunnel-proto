@@ -246,6 +246,28 @@ function returnToTitle() {
   dismissHeadStart();
   // Clear all in-flight objects and mechanic state
   _clearAllMechanics();
+  // Deep state wipe — nukes sequencer timers, one-shot fired flags, zipper
+  // substate, canyon flags, L3/L4/L5 entry markers, endless rotation state.
+  // Without this, exit-to-title → tap-to-play left state._seqRampT01 /
+  // _seqZipFired / corridor row counters in a stale state, which gated the
+  // normal cone spawner and produced "no initial cones" on the next run.
+  if (typeof _drFullStateWipe === 'function') _drFullStateWipe();
+  // Kill any in-flight powerup shatter effects (fragments + icon meshes) so
+  // they don't keep animating onto the title screen and don't leave their
+  // pool slots stuck _active=true on the next run.
+  try {
+    if (typeof _activeShatterEffects !== 'undefined' && _activeShatterEffects.length) {
+      for (const fx of _activeShatterEffects) {
+        if (fx && fx.fragments) {
+          for (const frag of fx.fragments) {
+            if (frag) { frag.visible = false; frag.userData._active = false; }
+          }
+        }
+        if (fx && fx.icon) { fx.icon.visible = false; fx.icon.userData._active = false; }
+      }
+      _activeShatterEffects.length = 0;
+    }
+  } catch(_) {}
   // Lightning + asteroids are pool-based and not in _clearAllMechanics; both
   // can leak past death/exit (lightning bolts freeze visible mid-strike, and
   // _updateAsteroids ticks every frame regardless of phase so rocks keep
