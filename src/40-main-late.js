@@ -1974,8 +1974,8 @@ function _spawnLateralEchoes(baseX, z, kind, opts) {
         wall.userData._mesh.position.y = 2;
         wall.userData._edges.position.y = 2;
         wall.rotation.y = angleSign * (25 + Math.random() * 20) * Math.PI / 180;
-        wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-        wall.userData._edges.material.opacity = 0;
+        wall.userData._mesh.userData._opacity = 0;
+        wall.userData._edges.userData._opacity = 0;
         wall.userData.isEcho = true;
         wall.userData.echoOpacity = echoOpacity; // wall fade handled separately
         _awActive.push(wall);
@@ -2169,8 +2169,8 @@ function spawnObstacles() {
           wall.userData._mesh.position.y = 2;
           wall.userData._edges.position.y = 2;
           wall.rotation.y = angleSign * (25 + Math.random() * 20) * Math.PI / 180;
-          wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-          wall.userData._edges.material.opacity = 0;
+          wall.userData._mesh.userData._opacity = 0;
+          wall.userData._edges.userData._opacity = 0;
           _awActive.push(wall);
           _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
         }
@@ -2234,8 +2234,8 @@ function spawnObstacles() {
         m.position.y = wallH / 2;
         e.position.y = wallH / 2;
         wall.rotation.y = angleSign * angleDeg * Math.PI / 180;
-        wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-        wall.userData._edges.material.opacity = 0;
+        wall.userData._mesh.userData._opacity = 0;
+        wall.userData._edges.userData._opacity = 0;
         _awActive.push(wall);
         _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
         return;

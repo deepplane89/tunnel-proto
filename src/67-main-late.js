@@ -2,6 +2,11 @@
 // Real impl was removed during split; keep as no-op to prevent update() throws.
 function _triggerCrashFlash() {}
 
+// Scratch Vector3 reused by angled-wall collision check — avoids per-frame
+// `new THREE.Vector3()` allocation in the active-walls loop (~1200 allocs/sec
+// during walls phase).
+const _awCollisionScratch = new THREE.Vector3();
+
 // ═══════════════════════════════════════════════════════
 //  ONBOARDING (first play only)
 // ═══════════════════════════════════════════════════════
@@ -5683,8 +5688,10 @@ function update(dt) {
     if (!_awTunerPaused) {
       const awFadeT = Math.max(0, Math.min(1, (w.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
       const awEchoMul = w.userData.echoOpacity ?? 1.0;
-      w.userData._mesh.material.uniforms.uOpacity.value = awFadeT * _awTuner.opacity * awEchoMul;
-      w.userData._edges.material.opacity = awFadeT * _awTuner.opacity * 0.9 * awEchoMul;
+      // Write per-mesh opacity; onBeforeRender pushes it into the shared
+      // material uniform right before each draw call.
+      w.userData._mesh.userData._opacity = awFadeT * _awTuner.opacity * awEchoMul;
+      w.userData._edges.userData._opacity = awFadeT * _awTuner.opacity * 0.9 * awEchoMul;
     }
     // Laser destroys walls
     if (state.laserActive) {
@@ -5716,7 +5723,7 @@ function update(dt) {
       w.updateMatrixWorld(true);
       const wm = w.userData._mesh;
       wm.updateMatrixWorld(true);
-      const wc = new THREE.Vector3();
+      const wc = _awCollisionScratch;
       wm.getWorldPosition(wc);
       // Delta in world space
       const dx = sx - wc.x;

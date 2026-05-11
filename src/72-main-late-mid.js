@@ -600,8 +600,8 @@ if (_origAdminToggle) {
                     rowZ - halfZs + iz * _awTuner.spacingZ
                   );
                   _applyWallTuner(w, angleSign);
-                  w.userData._mesh.material.uniforms.uOpacity.value = _awTuner.opacity;
-                  w.userData._edges.material.opacity = _awTuner.opacity * 0.9;
+                  w.userData._mesh.userData._opacity = _awTuner.opacity;
+                  w.userData._edges.userData._opacity = _awTuner.opacity * 0.9;
                 }
                 wi++;
               }
@@ -651,8 +651,8 @@ if (_origAdminToggle) {
           _awActive.forEach((w, idx) => {
             const sign = (idx % 2 === 0) ? 1 : -1;
             _applyWallTuner(w, sign);
-            w.userData._mesh.material.uniforms.uOpacity.value = _awTuner.opacity;
-            w.userData._edges.material.opacity = _awTuner.opacity * 0.9;
+            w.userData._mesh.userData._opacity = _awTuner.opacity;
+            w.userData._edges.userData._opacity = _awTuner.opacity * 0.9;
           });
         }
       });

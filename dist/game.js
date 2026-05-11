@@ -11645,8 +11645,8 @@ window._awFire = function() {
       m.position.y = T.wallH / 2;
       e.position.y = T.wallH / 2;
       wall.rotation.y = angleSign * angleDeg * Math.PI / 180;
-      m.material.uniforms.uOpacity.value = 0;
-      e.material.opacity = 0;
+      m.userData._opacity = 0;
+      e.userData._opacity = 0;
       _awActive.push(wall);
     });
   }
@@ -11683,58 +11683,75 @@ const AW_POOL_SIZE = 300;
 const _awPool = [];
 const _awActive = [];
 
+// Shared geometries — built once, reused across the whole pool.
+const _AW_BOX_GEO = new THREE.BoxGeometry(1, 1, 1);
+const _AW_EDGES_GEO = new THREE.EdgesGeometry(_AW_BOX_GEO);
+
+// SHARED materials across all 300 walls. Previously each pool slot owned its
+// own ShaderMaterial + LineBasicMaterial — 600 distinct shader programs. When
+// a row spawned and many walls became visible at once, the GL driver had to
+// validate every program in the same frame, producing iOS hitches (same class
+// of bug fixed in the powerup shell). Per-wall fade-in opacity is preserved
+// via onBeforeRender: each mesh writes its own opacity into the shared uniform
+// just before it draws, so one program services every wall with no batch
+// validation cost and no last-write-wins flicker.
+const _AW_SHARED_MAT = new THREE.ShaderMaterial({
+  uniforms: {
+    uColor: { value: new THREE.Color(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB) },
+    uEmissive: { value: _awTuner.emissive },
+    uOpacity: { value: 0.0 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 uColor;
+    uniform float uEmissive;
+    uniform float uOpacity;
+    varying vec2 vUv;
+    void main() {
+      float grad = 1.0 - vUv.y * 0.4;
+      float edgeDist = min(vUv.x, 1.0 - vUv.x);
+      float edge = smoothstep(0.0, 0.08, edgeDist);
+      float edgeGlow = (1.0 - edge) * 2.0;
+      vec3 col = uColor * (grad + edgeGlow) * uEmissive;
+      col = mix(col * 0.15, col, 0.3 + edge * 0.7);
+      gl_FragColor = vec4(col, uOpacity);
+    }
+  `,
+  transparent: true,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+});
+const _AW_SHARED_EDGES_MAT = new THREE.LineBasicMaterial({
+  color: new THREE.Color(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB),
+  transparent: true,
+  opacity: 0,
+  linewidth: 1,
+});
+// onBeforeRender callbacks — read per-mesh opacity and push it into the
+// shared uniforms RIGHT BEFORE the draw call. This is the standard three.js
+// pattern for per-instance opacity with a shared material.
+function _awMeshBeforeRender() {
+  _AW_SHARED_MAT.uniforms.uOpacity.value = this.userData._opacity || 0;
+}
+function _awEdgesBeforeRender() {
+  _AW_SHARED_EDGES_MAT.opacity = this.userData._opacity || 0;
+}
+
 function _createAngledWall() {
   const group = new THREE.Group();
-
-  // Main wall body — BoxGeometry for thickness
-  const geo = new THREE.BoxGeometry(1, 1, 1);
-  const mat = new THREE.ShaderMaterial({
-    uniforms: {
-      uColor: { value: new THREE.Color(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB) },
-      uEmissive: { value: _awTuner.emissive },
-      uOpacity: { value: 0.0 },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 uColor;
-      uniform float uEmissive;
-      uniform float uOpacity;
-      varying vec2 vUv;
-      void main() {
-        // Vertical gradient: bright at bottom, fading up
-        float grad = 1.0 - vUv.y * 0.4;
-        // Edge glow on left/right sides of the wall
-        float edgeDist = min(vUv.x, 1.0 - vUv.x);
-        float edge = smoothstep(0.0, 0.08, edgeDist);
-        float edgeGlow = (1.0 - edge) * 2.0;
-        vec3 col = uColor * (grad + edgeGlow) * uEmissive;
-        // Darken core slightly for depth
-        col = mix(col * 0.15, col, 0.3 + edge * 0.7);
-        gl_FragColor = vec4(col, uOpacity);
-      }
-    `,
-    transparent: true,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh = new THREE.Mesh(_AW_BOX_GEO, _AW_SHARED_MAT);
+  mesh.userData._opacity = 0;
+  mesh.onBeforeRender = _awMeshBeforeRender;
   group.add(mesh);
-
-  // Edge lines for that neon outline look
-  const edgesGeo = new THREE.EdgesGeometry(geo);
-  const edgesMat = new THREE.LineBasicMaterial({
-    color: new THREE.Color(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB),
-    transparent: true,
-    opacity: 0,
-    linewidth: 1,
-  });
-  const edges = new THREE.LineSegments(edgesGeo, edgesMat);
+  const edges = new THREE.LineSegments(_AW_EDGES_GEO, _AW_SHARED_EDGES_MAT);
+  edges.userData._opacity = 0;
+  edges.onBeforeRender = _awEdgesBeforeRender;
   group.add(edges);
 
   group.userData.active = false;
@@ -11747,6 +11764,9 @@ function _createAngledWall() {
 }
 
 for (let i = 0; i < AW_POOL_SIZE; i++) _awPool.push(_createAngledWall());
+
+// Scratch Color reused by _applyWallTuner — no per-spawn THREE.Color alloc.
+const _awScratchColor = new THREE.Color();
 
 function _getPooledWall() {
   for (let i = 0; i < _awPool.length; i++) {
@@ -11783,11 +11803,13 @@ function _applyWallTuner(w, angleSign) {
     (angleSign * _awTuner.angle + _awTuner.rotY) * deg,
     _awTuner.rotZ * deg
   );
-  // Update material
-  const col = new THREE.Color(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB);
-  m.material.uniforms.uColor.value.copy(col);
-  m.material.uniforms.uEmissive.value = _awTuner.emissive;
-  e.material.color.copy(col);
+  // Update SHARED material — reuse scratch color. Color/emissive are global
+  // (every wall reads the same _awTuner), so writing the shared uniform once
+  // per spawn is correct. No per-call THREE.Color allocation.
+  _awScratchColor.setRGB(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB);
+  _AW_SHARED_MAT.uniforms.uColor.value.copy(_awScratchColor);
+  _AW_SHARED_MAT.uniforms.uEmissive.value = _awTuner.emissive;
+  _AW_SHARED_EDGES_MAT.color.copy(_awScratchColor);
 }
 
 function spawnAngledWallRow() {
@@ -11820,11 +11842,11 @@ function spawnAngledWallRow() {
         _applyWallTuner(wall, angleSign);
         // Start transparent for fade-in (skip if paused — show immediately)
         if (_awTunerPaused) {
-          wall.userData._mesh.material.uniforms.uOpacity.value = _awTuner.opacity;
-          wall.userData._edges.material.opacity = _awTuner.opacity * 0.9;
+          wall.userData._mesh.userData._opacity = _awTuner.opacity;
+          wall.userData._edges.userData._opacity = _awTuner.opacity * 0.9;
         } else {
-          wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-          wall.userData._edges.material.opacity = 0;
+          wall.userData._mesh.userData._opacity = 0;
+          wall.userData._edges.userData._opacity = 0;
         }
         _awActive.push(wall);
       }
@@ -15804,8 +15826,8 @@ function _spawnLateralEchoes(baseX, z, kind, opts) {
         wall.userData._mesh.position.y = 2;
         wall.userData._edges.position.y = 2;
         wall.rotation.y = angleSign * (25 + Math.random() * 20) * Math.PI / 180;
-        wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-        wall.userData._edges.material.opacity = 0;
+        wall.userData._mesh.userData._opacity = 0;
+        wall.userData._edges.userData._opacity = 0;
         wall.userData.isEcho = true;
         wall.userData.echoOpacity = echoOpacity; // wall fade handled separately
         _awActive.push(wall);
@@ -15999,8 +16021,8 @@ function spawnObstacles() {
           wall.userData._mesh.position.y = 2;
           wall.userData._edges.position.y = 2;
           wall.rotation.y = angleSign * (25 + Math.random() * 20) * Math.PI / 180;
-          wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-          wall.userData._edges.material.opacity = 0;
+          wall.userData._mesh.userData._opacity = 0;
+          wall.userData._edges.userData._opacity = 0;
           _awActive.push(wall);
           _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
         }
@@ -16064,8 +16086,8 @@ function spawnObstacles() {
         m.position.y = wallH / 2;
         e.position.y = wallH / 2;
         wall.rotation.y = angleSign * angleDeg * Math.PI / 180;
-        wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-        wall.userData._edges.material.opacity = 0;
+        wall.userData._mesh.userData._opacity = 0;
+        wall.userData._edges.userData._opacity = 0;
         _awActive.push(wall);
         _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
         return;
@@ -21684,6 +21706,11 @@ function hapticHeavy() {
 // Stub for legacy dangling reference (god-mode lethal-ring shield flash)
 // Real impl was removed during split; keep as no-op to prevent update() throws.
 function _triggerCrashFlash() {}
+
+// Scratch Vector3 reused by angled-wall collision check — avoids per-frame
+// `new THREE.Vector3()` allocation in the active-walls loop (~1200 allocs/sec
+// during walls phase).
+const _awCollisionScratch = new THREE.Vector3();
 
 // ═══════════════════════════════════════════════════════
 //  ONBOARDING (first play only)
@@ -27366,8 +27393,10 @@ function update(dt) {
     if (!_awTunerPaused) {
       const awFadeT = Math.max(0, Math.min(1, (w.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
       const awEchoMul = w.userData.echoOpacity ?? 1.0;
-      w.userData._mesh.material.uniforms.uOpacity.value = awFadeT * _awTuner.opacity * awEchoMul;
-      w.userData._edges.material.opacity = awFadeT * _awTuner.opacity * 0.9 * awEchoMul;
+      // Write per-mesh opacity; onBeforeRender pushes it into the shared
+      // material uniform right before each draw call.
+      w.userData._mesh.userData._opacity = awFadeT * _awTuner.opacity * awEchoMul;
+      w.userData._edges.userData._opacity = awFadeT * _awTuner.opacity * 0.9 * awEchoMul;
     }
     // Laser destroys walls
     if (state.laserActive) {
@@ -27399,7 +27428,7 @@ function update(dt) {
       w.updateMatrixWorld(true);
       const wm = w.userData._mesh;
       wm.updateMatrixWorld(true);
-      const wc = new THREE.Vector3();
+      const wc = _awCollisionScratch;
       wm.getWorldPosition(wc);
       // Delta in world space
       const dx = sx - wc.x;
@@ -28969,8 +28998,8 @@ if (_origAdminToggle) {
                     rowZ - halfZs + iz * _awTuner.spacingZ
                   );
                   _applyWallTuner(w, angleSign);
-                  w.userData._mesh.material.uniforms.uOpacity.value = _awTuner.opacity;
-                  w.userData._edges.material.opacity = _awTuner.opacity * 0.9;
+                  w.userData._mesh.userData._opacity = _awTuner.opacity;
+                  w.userData._edges.userData._opacity = _awTuner.opacity * 0.9;
                 }
                 wi++;
               }
@@ -29020,8 +29049,8 @@ if (_origAdminToggle) {
           _awActive.forEach((w, idx) => {
             const sign = (idx % 2 === 0) ? 1 : -1;
             _applyWallTuner(w, sign);
-            w.userData._mesh.material.uniforms.uOpacity.value = _awTuner.opacity;
-            w.userData._edges.material.opacity = _awTuner.opacity * 0.9;
+            w.userData._mesh.userData._opacity = _awTuner.opacity;
+            w.userData._edges.userData._opacity = _awTuner.opacity * 0.9;
           });
         }
       });
