@@ -9142,16 +9142,25 @@ const activeObstacles = [];
     const triangles = _lastTriangles;
     // Active counts — pools use various conventions, so we count multiple ways
     let walls = 0, coins = 0, asteroids = 0, forcefields = 0, lethalRings = 0, powerups = 0;
-    try { if (typeof _awPool !== 'undefined') walls = _countActive(_awPool); } catch (_) {}
+    // Walls use a separate _awActive array (length = count), not userData.active on pool
+    try { if (typeof _awActive !== 'undefined') walls = _awActive.length; } catch (_) {}
     // Coins and powerups have dedicated 'active*' arrays — use those directly
     try { if (typeof activeCoins !== 'undefined') coins = activeCoins.length; } catch (_) {}
     try { if (typeof activePowerups !== 'undefined') powerups = activePowerups.length; } catch (_) {}
     try { if (typeof _asteroidPool !== 'undefined') asteroids = _countActive(_asteroidPool); } catch (_) {}
     try { if (typeof _ffPool !== 'undefined') forcefields = _countActive(_ffPool); } catch (_) {}
     try { if (typeof _lethalRingPool !== 'undefined') lethalRings = _countActive(_lethalRingPool); } catch (_) {}
+    // Split fat cones from regular cones (both share activeObstacles)
+    let fatCones = 0;
+    try {
+      for (let i = 0; i < activeObstacles.length; i++) {
+        if (activeObstacles[i].userData && activeObstacles[i].userData.isFatCone) fatCones++;
+      }
+    } catch (_) {}
     _frames.push({
       t: now, dt,
-      cones: activeObstacles.length,
+      cones: activeObstacles.length - fatCones,
+      fatCones,
       walls, coins, asteroids, forcefields, lethalRings, powerups,
       drawCalls, triangles,
     });
@@ -9200,7 +9209,7 @@ const activeObstacles = [];
     _recording = false;
     const n = _frames.length;
     if (!n) { console.warn('[PERF] no frames recorded — call _perfStart() first'); return null; }
-    const fields = ['dt', 'cones', 'walls', 'coins', 'asteroids', 'forcefields', 'lethalRings', 'powerups', 'drawCalls', 'triangles'];
+    const fields = ['dt', 'cones', 'fatCones', 'walls', 'coins', 'asteroids', 'forcefields', 'lethalRings', 'powerups', 'drawCalls', 'triangles'];
     // (lightning omitted — pool is created inside a closure and not introspectable from here)
     const summary = {};
     for (const f of fields) {
