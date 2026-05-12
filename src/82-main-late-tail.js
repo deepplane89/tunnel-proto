@@ -76,15 +76,9 @@ function _compileAllIncludingInvisible(rootScene, cam) {
     // so without this the FIRST in-game draw of each pool mesh pays the
     // upload cost (~270ms on iOS for the lightning tube geos).
     _uploadAllBuffers(rootScene, cam);
-    // 2C) Render one frame at REAL canvas size with everything visible.
-    // iOS Safari (PowerVR/Apple GPU) defers final shader program LINK and
-    // viewport-specific specialization until first real-resolution draw.
-    // The 2x2 offscreen pass uploads buffers but doesn't trigger the
-    // viewport-spec'd link. Doing one full-res frame here pays that cost
-    // during loading (covered by #app-loader DOM overlay, z=99999) instead
-    // of mid-gameplay on first activation. This is what kills the 116ms
-    // first-shield-pickup hitch — same fix family for laser/magnet/etc.
-    _fullResRenderPass(rootScene, cam);
+    // 2C) Full-res composer.render() pass REVERTED — it caused the bottom
+    // edge of the canvas to be cut off (likely renderer.setSize / viewport
+    // state pollution). Re-investigate before re-enabling.
   } catch (e) {
     console.warn('[PREWARM] compile-all failed:', e && e.message);
   }

@@ -76,9 +76,25 @@ function _hitchArm(label) {
   _armedFramesLeft = _HITCH_ARM_FRAMES;
 }
 
+// Frames over this are NOT hitches — they're tab-resume / debugger-pause /
+// system-stall events. We don't want them poisoning the worst-in-30s display.
+const _HITCH_SANITY_MAX_MS = 500;  // anything bigger = system event, ignore
+// After a visibility-resume we skip the next few frames entirely because
+// the very first tick after resume still carries the giant dt.
+let _hitchSkipFrames = 0;
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') _hitchSkipFrames = 5;
+  });
+}
+
 // Called once per frame from animate() with the just-elapsed frame delta.
 function _hitchFrameTick(frameDeltaMs) {
   if (!window._hitchMeterOn) return;
+  // Drop the post-resume frames so a 29s backgrounded gap doesn't get logged.
+  if (_hitchSkipFrames > 0) { _hitchSkipFrames--; return; }
+  // Drop obvious system events (tab pause, debugger, OS scheduler hiccup).
+  if (frameDeltaMs > _HITCH_SANITY_MAX_MS) return;
   if (frameDeltaMs >= _HITCH_FRAME_THRESHOLD_MS) {
     // Attribute to armed label if present, else generic 'frame'.
     const name = _armedLabel || 'frame';

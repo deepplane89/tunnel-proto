@@ -27663,9 +27663,25 @@ function _hitchArm(label) {
   _armedFramesLeft = _HITCH_ARM_FRAMES;
 }
 
+// Frames over this are NOT hitches — they're tab-resume / debugger-pause /
+// system-stall events. We don't want them poisoning the worst-in-30s display.
+const _HITCH_SANITY_MAX_MS = 500;  // anything bigger = system event, ignore
+// After a visibility-resume we skip the next few frames entirely because
+// the very first tick after resume still carries the giant dt.
+let _hitchSkipFrames = 0;
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') _hitchSkipFrames = 5;
+  });
+}
+
 // Called once per frame from animate() with the just-elapsed frame delta.
 function _hitchFrameTick(frameDeltaMs) {
   if (!window._hitchMeterOn) return;
+  // Drop the post-resume frames so a 29s backgrounded gap doesn't get logged.
+  if (_hitchSkipFrames > 0) { _hitchSkipFrames--; return; }
+  // Drop obvious system events (tab pause, debugger, OS scheduler hiccup).
+  if (frameDeltaMs > _HITCH_SANITY_MAX_MS) return;
   if (frameDeltaMs >= _HITCH_FRAME_THRESHOLD_MS) {
     // Attribute to armed label if present, else generic 'frame'.
     const name = _armedLabel || 'frame';
@@ -32469,15 +32485,9 @@ function _compileAllIncludingInvisible(rootScene, cam) {
     // so without this the FIRST in-game draw of each pool mesh pays the
     // upload cost (~270ms on iOS for the lightning tube geos).
     _uploadAllBuffers(rootScene, cam);
-    // 2C) Render one frame at REAL canvas size with everything visible.
-    // iOS Safari (PowerVR/Apple GPU) defers final shader program LINK and
-    // viewport-specific specialization until first real-resolution draw.
-    // The 2x2 offscreen pass uploads buffers but doesn't trigger the
-    // viewport-spec'd link. Doing one full-res frame here pays that cost
-    // during loading (covered by #app-loader DOM overlay, z=99999) instead
-    // of mid-gameplay on first activation. This is what kills the 116ms
-    // first-shield-pickup hitch — same fix family for laser/magnet/etc.
-    _fullResRenderPass(rootScene, cam);
+    // 2C) Full-res composer.render() pass REVERTED — it caused the bottom
+    // edge of the canvas to be cut off (likely renderer.setSize / viewport
+    // state pollution). Re-investigate before re-enabling.
   } catch (e) {
     console.warn('[PREWARM] compile-all failed:', e && e.message);
   }
