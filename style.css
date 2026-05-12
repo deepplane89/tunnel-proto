@@ -5695,8 +5695,8 @@ body.sr-open #title-leaderboard {
   grid-template-columns: 1fr;
   align-items: stretch;
   justify-items: stretch;
-  padding: 8px;
-  gap: 8px;
+  padding: 4px;
+  gap: 6px;
   height: 100%;
   min-height: 0;
 }
