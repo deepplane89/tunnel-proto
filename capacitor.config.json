@@ -17,7 +17,7 @@
     }
   },
   "ios": {
-    "contentInset": "never",
+    "contentInset": "always",
     "scrollEnabled": false,
     "limitsNavigationsToAppBoundDomains": true,
     "allowsLinkPreview": false,
