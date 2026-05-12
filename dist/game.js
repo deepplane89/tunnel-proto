@@ -11797,8 +11797,7 @@ function _getPooledWall() {
 
 function _returnWallToPool(w) {
   w.userData.active = false;
-  w.userData.isEcho = false;
-  w.userData.echoOpacity = 1.0;
+  // echo system removed; flags no longer needed
   w.visible = false;
   w.position.set(0, -9999, 0);
 }
@@ -15732,63 +15731,10 @@ function _spawnLethalRing(x, z) {
   }
 }
 
-// ── Lateral echo helper — spawns matching obstacle copies at lateral offsets ──
-// Tiles the same obstacle type outward to fill peripheral vision.
-const _ECHO_SHIFT = LANE_COUNT * LANE_WIDTH; // one full road width per copy (~67.2)
-const _ECHO_COPIES = 2; // copies per side (2 left + 2 right)
-const _ECHOES_ENABLED = false; // toggle — off until obstacle redesign
-function _spawnLateralEchoes(baseX, z, kind, opts) {
-  if (!_ECHOES_ENABLED) return;
-  // kind: 'cone' | 'wall' | 'ring' | 'fatcone'
-  for (let c = 1; c <= _ECHO_COPIES; c++) {
-    const echoOpacity = 1 / Math.pow(2, c); // 0.5 for copy 1, 0.25 for copy 2
-    for (const sign of [-1, 1]) {
-      const ex = baseX + sign * c * _ECHO_SHIFT;
-      if (kind === 'cone') {
-        const obs = getPooledObstacle(Math.floor(Math.random() * 3));
-        if (!obs) continue;
-        obs.position.set(ex + (Math.random() - 0.5) * 0.6, 0, z);
-        obs.userData.velX = 0;
-        obs.userData.isEcho = true;
-        // Cap max opacity so echoes fade with distance
-        const _mc = obs.userData._meshes;
-        for (let mi = 0; mi < _mc.length; mi++) _mc[mi].material.userData.baseOpacity = echoOpacity;
-        activeObstacles.push(obs);
-      } else if (kind === 'fatcone') {
-        const obs = getPooledObstacle(Math.floor(Math.random() * 3));
-        if (!obs) continue;
-        obs.position.set(ex + (Math.random() - 0.5) * 0.6, 0, z);
-        obs.scale.set(4, 1, 4);
-        obs.userData.velX = 0;
-        obs.userData.slalomScaled = true;
-        obs.userData.isFatCone = true;
-        obs.userData.isEcho = true;
-        const _mc = obs.userData._meshes;
-        for (let mi = 0; mi < _mc.length; mi++) _mc[mi].material.userData.baseOpacity = echoOpacity;
-        activeObstacles.push(obs);
-      } else if (kind === 'wall') {
-        const wall = _getPooledWall();
-        if (!wall) continue;
-        const angleSign = (opts && opts.angleSign) || (Math.random() < 0.5 ? 1 : -1);
-        wall.position.set(ex + (Math.random() - 0.5) * 0.6, 0, z);
-        wall.rotation.set(0, 0, 0);
-        wall.userData._mesh.scale.set(8, 4, 0.3);
-        wall.userData._edges.scale.set(8, 4, 0.3);
-        wall.userData._mesh.position.y = 2;
-        wall.userData._edges.position.y = 2;
-        wall.rotation.y = angleSign * (25 + Math.random() * 20) * Math.PI / 180;
-        wall.userData._mesh.userData._opacity = 0;
-        wall.userData._edges.userData._opacity = 0;
-        wall.userData.isEcho = true;
-        wall.userData.echoOpacity = echoOpacity; // wall fade handled separately
-        _awActive.push(wall);
-      } else if (kind === 'ring') {
-        _spawnLethalRing(ex + (Math.random() - 0.5) * 0.6, z);
-        // rings fade via their own system — no baseOpacity hook available
-      }
-    }
-  }
-}
+// ── Lateral echo helper — REMOVED ──
+// Was a planned visual-only obstacle tile system for peripheral vision.
+// Gated off via _ECHOES_ENABLED=false since obstacle redesign and never
+// reactivated. Function deleted; call sites no-op'd in spawnObstacles below.
 
 function spawnObstacles() {
   state._invObstaclesSpawned = (state._invObstaclesSpawned || 0) + 1;
@@ -15960,7 +15906,7 @@ function spawnObstacles() {
       const roll = Math.random();
       if (roll < 0.25) {
         _spawnLethalRing(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z);
-        _spawnLateralEchoes(laneX, SPAWN_Z, 'ring');
+        /* echoes removed */
       } else if (roll < 0.5) {
         const wall = _getPooledWall();
         if (wall) {
@@ -15975,7 +15921,7 @@ function spawnObstacles() {
           wall.userData._mesh.userData._opacity = 0;
           wall.userData._edges.userData._opacity = 0;
           _awActive.push(wall);
-          _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
+          /* echoes removed */
         }
       } else if (roll < 0.75) {
         const type = Math.floor(Math.random() * 3);
@@ -15986,7 +15932,7 @@ function spawnObstacles() {
           obs.userData.velX = 0;
           obs.userData.slalomScaled = true;
           activeObstacles.push(obs);
-          _spawnLateralEchoes(laneX, SPAWN_Z, 'fatcone');
+          /* echoes removed */
         }
       } else {
         const type = Math.floor(Math.random() * 3);
@@ -15995,7 +15941,7 @@ function spawnObstacles() {
           obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
           obs.userData.velX = 0;
           activeObstacles.push(obs);
-          _spawnLateralEchoes(laneX, SPAWN_Z, 'cone');
+          /* echoes removed */
         }
       }
       return;
@@ -16015,7 +15961,7 @@ function spawnObstacles() {
       obs.userData.slalomScaled = true;
       obs.userData.isFatCone = true;
       activeObstacles.push(obs);
-      _spawnLateralEchoes(laneX, SPAWN_Z, 'fatcone');
+      /* echoes removed */
       return;
     }
     if (_isWallBand) {
@@ -16040,7 +15986,7 @@ function spawnObstacles() {
         wall.userData._mesh.userData._opacity = 0;
         wall.userData._edges.userData._opacity = 0;
         _awActive.push(wall);
-        _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
+        /* echoes removed */
         return;
       }
     }
@@ -16050,7 +15996,7 @@ function spawnObstacles() {
     obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
     obs.userData.velX = 0;
     activeObstacles.push(obs);
-    _spawnLateralEchoes(laneX, SPAWN_Z, 'cone');
+    /* echoes removed */
   });
 
   // ── Coin spawn — random singles + arc patterns (DR spawns more)
@@ -25625,7 +25571,7 @@ function resetObsColor(obs) {
 
 function returnObstacleToPool(obs) {
   obs.userData.isCorridor = false;
-  obs.userData.isEcho = false;
+  // echo system removed
   obs.userData.active = false;
   obs.visible = false;
   if (obs.userData.slalomScaled) {
@@ -27279,7 +27225,7 @@ function update(dt) {
     }
 
     // ── Collision with ship
-    if (obs.userData.isEcho) continue; // echo cones are visual only — no collision
+    // echo system removed — no skip needed
     // Rotation-aware hitbox: wings (±2.1) point sideways when flat, up/down when rolled 90°
     // Roll angle from shipGroup.rotation.z — at 0 = flat (full wing width), at ±PI/2 = vertical (fuselage only)
     const roll = shipGroup.rotation.z || 0;

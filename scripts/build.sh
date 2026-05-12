@@ -10,8 +10,13 @@
 # rather than 00, 01, 02) so new files can slot in without renumbering.
 #
 # Usage:
-#   ./scripts/build.sh           # writes ./dist/game.js
-#   ./scripts/build.sh -o out.js # writes ./out.js
+#   ./scripts/build.sh                 # dev build with all dev tools
+#   ./scripts/build.sh -o out.js       # writes ./out.js
+#   ./scripts/build.sh --prod          # PROD build: omits dev tooling files
+#                                      # (49-tuner-hud, 70-perf-diag,
+#                                      # 78-tuner-panels) and concatenates
+#                                      # src/_dev-stubs.js in their place.
+#                                      # Output: ./dist/game.js (same path).
 #
 # Exit 0 on success, nonzero on failure.
 
@@ -22,14 +27,16 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 SRC_DIR="$REPO_ROOT/src"
 OUT_PATH="$REPO_ROOT/dist/game.js"
+PROD_BUILD=0
 mkdir -p "$(dirname "$OUT_PATH")"
 
 # --output / -o flag override
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -o|--output) OUT_PATH="$2"; shift 2 ;;
+    --prod)      PROD_BUILD=1; shift ;;
     -h|--help)
-      echo "Usage: $0 [-o OUT_PATH]"; exit 0 ;;
+      echo "Usage: $0 [-o OUT_PATH] [--prod]"; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -51,14 +58,48 @@ fi
 # Instead we awk the basename to the front, sort, then strip it back off.
 # Skip any directory whose name starts with `_` (e.g. src/_archived/) so
 # experimental / parked code doesn't get pulled into the build.
+# Dev-only files swapped out in --prod builds. Stays the same in dev builds.
+# Stub file _dev-stubs.js provides no-op replacements for the few unguarded
+# globals these files export.
+DEV_ONLY_FILES=(
+  "$SRC_DIR/49-tuner-hud.js"
+  "$SRC_DIR/70-perf-diag.js"
+  "$SRC_DIR/78-tuner-panels.js"
+)
+DEV_STUB_FILE="$SRC_DIR/_dev-stubs.js"
+
 FILES=()
 while IFS= read -r line; do
-  FILES+=("${line#*$'\t'}")
+  f="${line#*$'\t'}"
+  # Skip files starting with `_` (e.g. _dev-stubs.js) — they're conditional.
+  base="$(basename "$f")"
+  if [[ "$base" == _* ]]; then continue; fi
+  # In --prod mode, drop the dev-only files from the normal stream.
+  if [[ "$PROD_BUILD" -eq 1 ]]; then
+    skip=0
+    for dev in "${DEV_ONLY_FILES[@]}"; do
+      if [[ "$f" == "$dev" ]]; then skip=1; break; fi
+    done
+    if [[ "$skip" -eq 1 ]]; then continue; fi
+  fi
+  FILES+=("$f")
 done < <(
   find "$SRC_DIR" -type d -name '_*' -prune -o -type f -name '*.js' -print \
     | awk -F/ '{print $NF "\t" $0}' \
     | sort
 )
+
+# In --prod mode, inject the stub file at position ~49 (between 48-showroom
+# and 50-shop). Simplest: append at end — stubs only set window.* + a couple
+# top-level functions, runs after every gameplay file is loaded. Callers are
+# all on user input (hotkeys), so by the time they fire the stubs are in place.
+if [[ "$PROD_BUILD" -eq 1 ]]; then
+  if [[ ! -f "$DEV_STUB_FILE" ]]; then
+    echo "--prod requested but $DEV_STUB_FILE not found" >&2
+    exit 1
+  fi
+  FILES+=("$DEV_STUB_FILE")
+fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
   echo "No .js files found in $SRC_DIR" >&2
@@ -111,7 +152,11 @@ fi
 # Source files MUST end with a newline. `scripts/verify.sh` catches this.
 cat "${FILES[@]}" > "$OUT_PATH"
 
-echo "Built $OUT_PATH from ${#FILES[@]} source file(s):"
+if [[ "$PROD_BUILD" -eq 1 ]]; then
+  echo "Built $OUT_PATH (PROD) from ${#FILES[@]} source file(s):"
+else
+  echo "Built $OUT_PATH from ${#FILES[@]} source file(s):"
+fi
 for f in "${FILES[@]}"; do
   echo "  - ${f#$REPO_ROOT/}"
 done

@@ -10983,8 +10983,7 @@ function _getPooledWall() {
 
 function _returnWallToPool(w) {
   w.userData.active = false;
-  w.userData.isEcho = false;
-  w.userData.echoOpacity = 1.0;
+  // echo system removed; flags no longer needed
   w.visible = false;
   w.position.set(0, -9999, 0);
 }

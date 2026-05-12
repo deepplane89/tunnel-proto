@@ -3969,7 +3969,7 @@ function resetObsColor(obs) {
 
 function returnObstacleToPool(obs) {
   obs.userData.isCorridor = false;
-  obs.userData.isEcho = false;
+  // echo system removed
   obs.userData.active = false;
   obs.visible = false;
   if (obs.userData.slalomScaled) {
@@ -5623,7 +5623,7 @@ function update(dt) {
     }
 
     // ── Collision with ship
-    if (obs.userData.isEcho) continue; // echo cones are visual only — no collision
+    // echo system removed — no skip needed
     // Rotation-aware hitbox: wings (±2.1) point sideways when flat, up/down when rolled 90°
     // Roll angle from shipGroup.rotation.z — at 0 = flat (full wing width), at ±PI/2 = vertical (fuselage only)
     const roll = shipGroup.rotation.z || 0;
