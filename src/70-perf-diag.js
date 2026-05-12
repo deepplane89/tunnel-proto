@@ -375,6 +375,10 @@ function animate(now) {
     _lastFrameMs = now;
   }
   if (_frameDeltaMs > 0) _tickAdaptiveDPR(_frameDeltaMs);
+  // Feed the hitch meter the just-elapsed frame delta so it can catch any
+  // long frame (shader compile, texture upload, GC pause) — not just
+  // code we explicitly bracketed.
+  if (_frameDeltaMs > 0 && typeof _hitchFrameTick === 'function') _hitchFrameTick(_frameDeltaMs);
   _perfDiag.frameStart();
   // FPS + draw call measurement
   if (_fpsOn) {

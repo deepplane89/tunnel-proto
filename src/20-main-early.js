@@ -10359,6 +10359,9 @@ function _createCanyonWalls() {
     console.warn('[CANYON PREWARM] failed:', e.message);
   }
   if (typeof _hitchEnd === 'function') _hitchEnd('canyon', _hT0);
+  // Also arm the frame-path detector — a canyon's hidden cost can be the
+  // very next render frame (texture upload, atlas decode, lighting recompute).
+  if (typeof _hitchArm === 'function') _hitchArm('canyon-rndr');
 }
 
 function _destroyCanyonWalls() {

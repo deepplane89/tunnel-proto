@@ -5895,15 +5895,23 @@ function update(dt) {
     const dxP = Math.abs(pu.position.x - state.shipX);
     const dzP = Math.abs(pu.position.z - shipGroup.position.z);
     if (dxP < 2.5 && dzP < 2.5) {
-      const _hT0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
+      // Sub-bracket each phase of the pickup so the hitch meter can tell us
+      // WHICH part is slow: applyPowerup (flags + banner + <audio>.play),
+      // shatter spawn, or the post-pickup render (shader compile / upload).
+      const _puTypeId = (POWERUP_TYPES[pu.userData.typeIdx] || {}).id || 'unk';
+      const _hT0a = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
       applyPowerup(pu.userData.typeIdx);
+      if (typeof _hitchEnd === 'function') _hitchEnd('pickup-app', _hT0a);
+      const _hT0b = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
       // Spawn shatter at the cube's current position, with a live ship-tracking target.
-      // Icon zips to the ship's nose (slightly forward of pivot) and absorbs in ~350ms.
-      // Callback writes into a caller-provided scratch vector — zero allocation per frame.
       _spawnPowerupShatter(pu, (out) => out.set(state.shipX, shipGroup.position.y, shipGroup.position.z));
+      if (typeof _hitchEnd === 'function') _hitchEnd('pickup-shat', _hT0b);
       returnPowerupToPool(pu);
       activePowerups.splice(i, 1);
-      if (typeof _hitchEnd === 'function') _hitchEnd('pickup', _hT0);
+      // Arm the frame-path detector so any hitch in the next ~3 frames
+      // (which is where shader compile / texture upload typically lands)
+      // is attributed to the specific powerup type that was picked up.
+      if (typeof _hitchArm === 'function') _hitchArm('pickup-' + _puTypeId);
     }
   }
 
