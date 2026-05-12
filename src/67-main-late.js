@@ -1077,19 +1077,30 @@ function startDeathRun() {
           // triggers ~100-300ms compile hitch on first-frame render.
           const _warmScene = new THREE.Scene();
           const _warmCam   = new THREE.PerspectiveCamera();
+          // Match real canyon mat exactly: transparent:false explicit, flat-shading
+          // parity (cyan=true, dark=false), and use the REAL slab geometry — not a
+          // BoxGeometry. Three.js compiles program by (material flags + vertex
+          // attribute layout). Slab geo is non-indexed triangle soup with custom
+          // normals — different program hash than indexed BoxGeometry — so the old
+          // warm missed completely on first real spawn.
           const _warmCyanMat = new THREE.MeshPhysicalMaterial({
             color: 0x04d4f0, metalness: 0.0, roughness: 0.65, ior: 1.22,
             reflectivity: 0.55, clearcoat: 0.65, clearcoatRoughness: 0.22,
             emissive: 0x6ef2ff, emissiveMap: _canyonTexCache.cyanTex,
-            emissiveIntensity: 2, flatShading: true, side: THREE.DoubleSide,
+            emissiveIntensity: 2, transparent: false, flatShading: true, side: THREE.DoubleSide,
           });
           const _warmDarkMat = new THREE.MeshPhysicalMaterial({
             color: 0x080810, roughness: 0.62, metalness: 0.0,
             clearcoat: 0.4, clearcoatRoughness: 0.08, reflectivity: 0.7,
             emissive: 0xff00cc, emissiveMap: _canyonTexCache.darkTex,
-            emissiveIntensity: 0.9, side: THREE.DoubleSide,
+            emissiveIntensity: 0.9, transparent: false, flatShading: false, side: THREE.DoubleSide,
           });
-          const _warmGeo = new THREE.BoxGeometry(1,1,1);
+          // Build a real slab geometry (any seed/params — what matters is the
+          // attribute layout matches the runtime path). _buildCanyonSlabGeo is
+          // defined in 20-main-early.js and exposed on window.
+          const _warmGeo = (typeof _buildCanyonSlabGeo === 'function')
+            ? _buildCanyonSlabGeo(1, undefined, undefined, undefined)
+            : new THREE.BoxGeometry(1,1,1);
           _warmScene.add(new THREE.Mesh(_warmGeo, _warmCyanMat));
           _warmScene.add(new THREE.Mesh(_warmGeo, _warmDarkMat));
           renderer.compile(_warmScene, _warmCam);
@@ -5884,6 +5895,7 @@ function update(dt) {
     const dxP = Math.abs(pu.position.x - state.shipX);
     const dzP = Math.abs(pu.position.z - shipGroup.position.z);
     if (dxP < 2.5 && dzP < 2.5) {
+      const _hT0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
       applyPowerup(pu.userData.typeIdx);
       // Spawn shatter at the cube's current position, with a live ship-tracking target.
       // Icon zips to the ship's nose (slightly forward of pivot) and absorbs in ~350ms.
@@ -5891,6 +5903,7 @@ function update(dt) {
       _spawnPowerupShatter(pu, (out) => out.set(state.shipX, shipGroup.position.y, shipGroup.position.z));
       returnPowerupToPool(pu);
       activePowerups.splice(i, 1);
+      if (typeof _hitchEnd === 'function') _hitchEnd('pickup', _hT0);
     }
   }
 

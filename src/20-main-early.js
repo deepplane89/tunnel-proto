@@ -10093,6 +10093,7 @@ function _buildCanyonSlabGeo(seed, thickOverride, snapOverride, wOverride) {
 
 function _createCanyonWalls() {
   if (_canyonWalls) return;
+  const _hT0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   _canyonDbgFrame = 0; _canyonDbgLastNearestRot = null; _canyonDbgStartTime = null;
   const T = _canyonTuner;
   // Defensive clamp: canyons must never have more than 1 entry slab. Some
@@ -10357,6 +10358,7 @@ function _createCanyonWalls() {
   } catch(e) {
     console.warn('[CANYON PREWARM] failed:', e.message);
   }
+  if (typeof _hitchEnd === 'function') _hitchEnd('canyon', _hT0);
 }
 
 function _destroyCanyonWalls() {
@@ -11270,6 +11272,15 @@ const _activeShatterEffects = [];  // each: {fragments[6], icon, age, shipTarget
 // allocation in the hot path (was new Vector3 per active shatter per frame).
 const _shatterScratchVec = new THREE.Vector3();
 
+// Pool of origin Vector3s reused across pickup events. Each active shatter
+// effect borrows one for its lifetime (~0.6s) and returns it on completion.
+// Cap of 8 covers worst-case rapid pickups; if exhausted we fall back to a
+// fresh allocation (defensive — should never happen in practice).
+const _shatterOriginPool = [];
+for (let i = 0; i < 8; i++) _shatterOriginPool.push(new THREE.Vector3());
+function _acquireShatterOrigin() { return _shatterOriginPool.pop() || new THREE.Vector3(); }
+function _releaseShatterOrigin(v) { if (v && _shatterOriginPool.length < 16) _shatterOriginPool.push(v); }
+
 // Pre-baked icon geometries — one per shape variant. Previously every pickup
 // allocated and disposed a fresh geometry, which on iOS can produce a 5-15ms
 // GC hitch right at the moment of the smash (worst possible timing). Now we
@@ -11386,9 +11397,9 @@ const _CUBE_FACES = (() => {
 function _spawnPowerupShatter(pu, shipTargetFn) {
   const def = POWERUP_TYPES[pu.userData.typeIdx];
   const colorHex = def.color;
-  // Origin: copy into a fresh vector ONCE per spawn (cheap; bounded by
-  // pickup events). Per-frame work below uses the scratch vector.
-  const origin = pu.position.clone();
+  // Origin: borrow a pooled Vector3 (zero alloc on warm path). Released back
+  // to the pool when the effect ends.
+  const origin = _acquireShatterOrigin().copy(pu.position);
 
   // 6 face fragments — explode outward along face normals + spin.
   const fragments = [];
@@ -11500,6 +11511,8 @@ function _updatePowerupShatter(dt) {
         fx.icon.visible = false;
         fx.icon.userData._active = false;
       }
+      _releaseShatterOrigin(fx.origin);
+      fx.origin = null;
       _activeShatterEffects.splice(i, 1);
     }
   }

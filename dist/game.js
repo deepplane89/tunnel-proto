@@ -10908,6 +10908,7 @@ function _buildCanyonSlabGeo(seed, thickOverride, snapOverride, wOverride) {
 
 function _createCanyonWalls() {
   if (_canyonWalls) return;
+  const _hT0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   _canyonDbgFrame = 0; _canyonDbgLastNearestRot = null; _canyonDbgStartTime = null;
   const T = _canyonTuner;
   // Defensive clamp: canyons must never have more than 1 entry slab. Some
@@ -11172,6 +11173,7 @@ function _createCanyonWalls() {
   } catch(e) {
     console.warn('[CANYON PREWARM] failed:', e.message);
   }
+  if (typeof _hitchEnd === 'function') _hitchEnd('canyon', _hT0);
 }
 
 function _destroyCanyonWalls() {
@@ -12085,6 +12087,15 @@ const _activeShatterEffects = [];  // each: {fragments[6], icon, age, shipTarget
 // allocation in the hot path (was new Vector3 per active shatter per frame).
 const _shatterScratchVec = new THREE.Vector3();
 
+// Pool of origin Vector3s reused across pickup events. Each active shatter
+// effect borrows one for its lifetime (~0.6s) and returns it on completion.
+// Cap of 8 covers worst-case rapid pickups; if exhausted we fall back to a
+// fresh allocation (defensive — should never happen in practice).
+const _shatterOriginPool = [];
+for (let i = 0; i < 8; i++) _shatterOriginPool.push(new THREE.Vector3());
+function _acquireShatterOrigin() { return _shatterOriginPool.pop() || new THREE.Vector3(); }
+function _releaseShatterOrigin(v) { if (v && _shatterOriginPool.length < 16) _shatterOriginPool.push(v); }
+
 // Pre-baked icon geometries — one per shape variant. Previously every pickup
 // allocated and disposed a fresh geometry, which on iOS can produce a 5-15ms
 // GC hitch right at the moment of the smash (worst possible timing). Now we
@@ -12201,9 +12212,9 @@ const _CUBE_FACES = (() => {
 function _spawnPowerupShatter(pu, shipTargetFn) {
   const def = POWERUP_TYPES[pu.userData.typeIdx];
   const colorHex = def.color;
-  // Origin: copy into a fresh vector ONCE per spawn (cheap; bounded by
-  // pickup events). Per-frame work below uses the scratch vector.
-  const origin = pu.position.clone();
+  // Origin: borrow a pooled Vector3 (zero alloc on warm path). Released back
+  // to the pool when the effect ends.
+  const origin = _acquireShatterOrigin().copy(pu.position);
 
   // 6 face fragments — explode outward along face normals + spin.
   const fragments = [];
@@ -12315,6 +12326,8 @@ function _updatePowerupShatter(dt) {
         fx.icon.visible = false;
         fx.icon.userData._active = false;
       }
+      _releaseShatterOrigin(fx.origin);
+      fx.origin = null;
       _activeShatterEffects.splice(i, 1);
     }
   }
@@ -22511,19 +22524,30 @@ function startDeathRun() {
           // triggers ~100-300ms compile hitch on first-frame render.
           const _warmScene = new THREE.Scene();
           const _warmCam   = new THREE.PerspectiveCamera();
+          // Match real canyon mat exactly: transparent:false explicit, flat-shading
+          // parity (cyan=true, dark=false), and use the REAL slab geometry — not a
+          // BoxGeometry. Three.js compiles program by (material flags + vertex
+          // attribute layout). Slab geo is non-indexed triangle soup with custom
+          // normals — different program hash than indexed BoxGeometry — so the old
+          // warm missed completely on first real spawn.
           const _warmCyanMat = new THREE.MeshPhysicalMaterial({
             color: 0x04d4f0, metalness: 0.0, roughness: 0.65, ior: 1.22,
             reflectivity: 0.55, clearcoat: 0.65, clearcoatRoughness: 0.22,
             emissive: 0x6ef2ff, emissiveMap: _canyonTexCache.cyanTex,
-            emissiveIntensity: 2, flatShading: true, side: THREE.DoubleSide,
+            emissiveIntensity: 2, transparent: false, flatShading: true, side: THREE.DoubleSide,
           });
           const _warmDarkMat = new THREE.MeshPhysicalMaterial({
             color: 0x080810, roughness: 0.62, metalness: 0.0,
             clearcoat: 0.4, clearcoatRoughness: 0.08, reflectivity: 0.7,
             emissive: 0xff00cc, emissiveMap: _canyonTexCache.darkTex,
-            emissiveIntensity: 0.9, side: THREE.DoubleSide,
+            emissiveIntensity: 0.9, transparent: false, flatShading: false, side: THREE.DoubleSide,
           });
-          const _warmGeo = new THREE.BoxGeometry(1,1,1);
+          // Build a real slab geometry (any seed/params — what matters is the
+          // attribute layout matches the runtime path). _buildCanyonSlabGeo is
+          // defined in 20-main-early.js and exposed on window.
+          const _warmGeo = (typeof _buildCanyonSlabGeo === 'function')
+            ? _buildCanyonSlabGeo(1, undefined, undefined, undefined)
+            : new THREE.BoxGeometry(1,1,1);
           _warmScene.add(new THREE.Mesh(_warmGeo, _warmCyanMat));
           _warmScene.add(new THREE.Mesh(_warmGeo, _warmDarkMat));
           renderer.compile(_warmScene, _warmCam);
@@ -27318,6 +27342,7 @@ function update(dt) {
     const dxP = Math.abs(pu.position.x - state.shipX);
     const dzP = Math.abs(pu.position.z - shipGroup.position.z);
     if (dxP < 2.5 && dzP < 2.5) {
+      const _hT0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
       applyPowerup(pu.userData.typeIdx);
       // Spawn shatter at the cube's current position, with a live ship-tracking target.
       // Icon zips to the ship's nose (slightly forward of pivot) and absorbs in ~350ms.
@@ -27325,6 +27350,7 @@ function update(dt) {
       _spawnPowerupShatter(pu, (out) => out.set(state.shipX, shipGroup.position.y, shipGroup.position.z));
       returnPowerupToPool(pu);
       activePowerups.splice(i, 1);
+      if (typeof _hitchEnd === 'function') _hitchEnd('pickup', _hT0);
     }
   }
 
@@ -27525,6 +27551,94 @@ const _fpsEl = document.getElementById('fps-overlay');
   });
 })();
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  HITCH METER — dev-only on-screen readout for one-frame stalls.
+//
+//  Tracks the worst recent hitch by category (canyon, pickup, obstacle-spawn,
+//  ring-spawn). Always shows "worst in last N seconds + how long ago" so the
+//  user doesn't need to screenshot at the exact moment of the hitch.
+//
+//  Usage from instrumented code:
+//    const t0 = _hitchStart();   // returns performance.now()
+//    // ...work to measure...
+//    _hitchEnd('canyon', t0);
+//
+//  Toggled from the pause-menu HITCH METER button (gated to dev mode).
+//  When window._hitchMeterOn=false, _hitchStart/_hitchEnd are near-zero cost.
+// ═══════════════════════════════════════════════════════════════════════════
+
+window._hitchMeterOn = false;
+
+const _HITCH_WINDOW_MS = 30000; // remember worst hitch for 30s
+const _HITCH_THRESHOLD_MS = 8;  // ignore anything under 8ms (60fps frame budget = 16.7ms)
+
+// worst hitch per category: { ms, t, name }
+let _hitchWorst = null;
+// most recent over-threshold hitch (for "30s ago" display)
+let _hitchLast  = null;
+
+function _hitchStart() {
+  if (!window._hitchMeterOn) return 0;
+  return performance.now();
+}
+
+function _hitchEnd(category, t0) {
+  if (!window._hitchMeterOn || !t0) return;
+  const dt = performance.now() - t0;
+  if (dt < _HITCH_THRESHOLD_MS) return;
+  const now = performance.now();
+  _hitchLast = { ms: dt, t: now, name: category };
+  // keep worst over rolling window; expire old ones
+  if (!_hitchWorst || dt > _hitchWorst.ms || (now - _hitchWorst.t) > _HITCH_WINDOW_MS) {
+    _hitchWorst = { ms: dt, t: now, name: category };
+  }
+}
+
+// Render the overlay text. Called from the existing FPS update tick in
+// 70-perf-diag.js so we don't add another timer.
+function _renderHitchOverlay() {
+  const el = document.getElementById('hitch-overlay');
+  if (!el) return;
+  if (!window._hitchMeterOn) {
+    if (!el.classList.contains('hidden')) el.classList.add('hidden');
+    return;
+  }
+  el.classList.remove('hidden');
+  const now = performance.now();
+  // Expire worst if older than window
+  if (_hitchWorst && (now - _hitchWorst.t) > _HITCH_WINDOW_MS) _hitchWorst = null;
+
+  if (!_hitchWorst) {
+    el.textContent = 'hitch: clean';
+    el.classList.remove('warn', 'bad');
+    return;
+  }
+  const agoSec = Math.floor((now - _hitchWorst.t) / 1000);
+  const ms = Math.round(_hitchWorst.ms);
+  el.textContent = 'worst: ' + ms + 'ms ' + _hitchWorst.name + ' (' + agoSec + 's ago)';
+  el.classList.toggle('warn', ms >= 20 && ms < 50);
+  el.classList.toggle('bad',  ms >= 50);
+}
+
+window._hitchStart = _hitchStart;
+window._hitchEnd = _hitchEnd;
+window._renderHitchOverlay = _renderHitchOverlay;
+
+// Wire up the pause-menu toggle button. Visible only in dev mode.
+// Runs after DOM is ready (this file is loaded after index.html parses).
+(function _setupHitchToggle() {
+  const btn = document.getElementById('pause-hitch-toggle');
+  if (!btn) return;
+  // Gate visibility: dev only.
+  if (window.__JH_DEV__) btn.classList.remove('hidden');
+  btn.addEventListener('click', () => {
+    window._hitchMeterOn = !window._hitchMeterOn;
+    btn.textContent = 'HITCH METER: ' + (window._hitchMeterOn ? 'ON' : 'OFF');
+    // Reset state so toggle-on starts from a clean slate.
+    if (window._hitchMeterOn) { _hitchWorst = null; _hitchLast = null; }
+    _renderHitchOverlay();
+  });
+})();
 // ═══════════════════════════════════════════════════════════════════════════
 //  PERF DIAGNOSTIC — per-frame timing + event tags + first-render detection
 //  Purpose: pinpoint source of freeze (shader compile vs geo upload vs GC vs
@@ -27913,6 +28027,9 @@ function animate(now) {
       _fpsFrames = 0; _fpsLastTime = now;
     }
   }
+  // Hitch meter overlay — dev only, gated by window._hitchMeterOn.
+  // Cheap: function early-returns when meter is off.
+  if (typeof _renderHitchOverlay === 'function') _renderHitchOverlay();
   const rawDt = Math.min(clock.getDelta(), 0.05);
 
   // ── PAUSE: render last frame, skip ALL ticks (sim, FOV lerp, shaders) ──

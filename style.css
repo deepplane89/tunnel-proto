@@ -4218,8 +4218,31 @@ html, body {
   border-radius: 4px;
   pointer-events: none;
   letter-spacing: 0.05em;
+  white-space: pre;
 }
 .fps-overlay.hidden { display: none; }
+
+/* Hitch readout — dev only, second line under FPS */
+.hitch-overlay {
+  position: fixed;
+  top: 28px;
+  right: 8px;
+  z-index: 9999;
+  font-family: 'JetBrains Mono', monospace, system-ui;
+  font-size: 10px;
+  font-weight: 700;
+  color: #ff8;
+  background: rgba(0,0,0,0.55);
+  padding: 2px 7px;
+  border-radius: 4px;
+  pointer-events: none;
+  letter-spacing: 0.05em;
+  white-space: pre;
+  max-width: 220px;
+}
+.hitch-overlay.hidden { display: none; }
+.hitch-overlay.warn { color: #ff5; }
+.hitch-overlay.bad  { color: #f55; }
 
 /* ── Universal button press-in effect ── */
 .btn-mode,

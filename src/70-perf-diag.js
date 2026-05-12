@@ -386,6 +386,9 @@ function animate(now) {
       _fpsFrames = 0; _fpsLastTime = now;
     }
   }
+  // Hitch meter overlay — dev only, gated by window._hitchMeterOn.
+  // Cheap: function early-returns when meter is off.
+  if (typeof _renderHitchOverlay === 'function') _renderHitchOverlay();
   const rawDt = Math.min(clock.getDelta(), 0.05);
 
   // ── PAUSE: render last frame, skip ALL ticks (sim, FOV lerp, shaders) ──
