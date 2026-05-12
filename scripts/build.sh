@@ -80,6 +80,7 @@ fi
 # of inert code in prod but nothing runs unless explicitly toggled on.
 DEV_ONLY_FILES=(
   "$SRC_DIR/49-tuner-hud.js"
+  "$SRC_DIR/68-hitch-meter.js"
   "$SRC_DIR/78-tuner-panels.js"
 )
 DEV_STUB_FILE="$SRC_DIR/_dev-stubs.js"
