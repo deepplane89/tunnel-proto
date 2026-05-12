@@ -1857,7 +1857,13 @@ const _lethalRingActive = [];
 const LETHAL_RING_POOL_SIZE = 20;
 const _LR_SIDES = 8, _LR_R = 5.25, _LR_Y = 2, _LR_TUBE = 2.2;
 let _lrGeo = null;
-let _lrMatTemplate = null;
+let _LR_SHARED_MAT = null;
+// onBeforeRender: push per-ring opacity into the shared uniform right before
+// each draw. Same pattern as the angled walls fix — one shader program for
+// the whole pool, but per-ring fade-in preserved.
+function _lrMeshBeforeRender() {
+  _LR_SHARED_MAT.uniforms.uOpacity.value = this.userData._opacity || 0;
+}
 // Exposed on window so the global prewarm pass can force-init the pool at
 // startup instead of letting the first ring spawn pay the shader-compile cost.
 function _initLethalRings() {
@@ -1870,7 +1876,11 @@ function _initLethalRings() {
   }
   const path = new THREE.CatmullRomCurve3(pathPts, true);
   _lrGeo = new THREE.TubeGeometry(path, _LR_SIDES * 4, _LR_TUBE, 8, true);
-  _lrMatTemplate = new THREE.ShaderMaterial({
+  // SHARED material across all 20 pool slots. Previously each slot cloned the
+  // template — 20 distinct shader programs that the driver had to validate on
+  // every render. With one shared program, ring spawns no longer add to the
+  // per-frame validation cost on iOS.
+  _LR_SHARED_MAT = new THREE.ShaderMaterial({
     uniforms: {
       uNeon:    { value: new THREE.Color(0xff1a1a) },
       uObsidian:{ value: new THREE.Color(0x0a0a0f) },
@@ -1900,9 +1910,10 @@ function _initLethalRings() {
     depthWrite: false,
   });
   for (let i = 0; i < LETHAL_RING_POOL_SIZE; i++) {
-    const mat = _lrMatTemplate.clone();
-    const mesh = new THREE.Mesh(_lrGeo, mat);
+    const mesh = new THREE.Mesh(_lrGeo, _LR_SHARED_MAT);
     mesh.position.y = _LR_Y;
+    mesh.userData._opacity = 0;
+    mesh.onBeforeRender = _lrMeshBeforeRender;
     const group = new THREE.Group();
     group.add(mesh);
     group.visible = false;
@@ -1922,7 +1933,7 @@ function _spawnLethalRing(x, z) {
       r.userData.active = true;
       r.visible = true;
       r.position.set(x, 0, z);
-      r.userData._ringMesh.material.uniforms.uOpacity.value = 0;
+      r.userData._ringMesh.userData._opacity = 0;
       _lethalRingActive.push(r);
       return;
     }
@@ -1974,8 +1985,8 @@ function _spawnLateralEchoes(baseX, z, kind, opts) {
         wall.userData._mesh.position.y = 2;
         wall.userData._edges.position.y = 2;
         wall.rotation.y = angleSign * (25 + Math.random() * 20) * Math.PI / 180;
-        wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-        wall.userData._edges.material.opacity = 0;
+        wall.userData._mesh.userData._opacity = 0;
+        wall.userData._edges.userData._opacity = 0;
         wall.userData.isEcho = true;
         wall.userData.echoOpacity = echoOpacity; // wall fade handled separately
         _awActive.push(wall);
@@ -2169,8 +2180,8 @@ function spawnObstacles() {
           wall.userData._mesh.position.y = 2;
           wall.userData._edges.position.y = 2;
           wall.rotation.y = angleSign * (25 + Math.random() * 20) * Math.PI / 180;
-          wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-          wall.userData._edges.material.opacity = 0;
+          wall.userData._mesh.userData._opacity = 0;
+          wall.userData._edges.userData._opacity = 0;
           _awActive.push(wall);
           _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
         }
@@ -2234,8 +2245,8 @@ function spawnObstacles() {
         m.position.y = wallH / 2;
         e.position.y = wallH / 2;
         wall.rotation.y = angleSign * angleDeg * Math.PI / 180;
-        wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-        wall.userData._edges.material.opacity = 0;
+        wall.userData._mesh.userData._opacity = 0;
+        wall.userData._edges.userData._opacity = 0;
         _awActive.push(wall);
         _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
         return;

@@ -1001,7 +1001,7 @@ const GRID_TILE_DEPTH    = 4;
 const GRID_TILES         = 40;
 const SPAWN_Z            = -160;  // spawn further out so cones fade in from deep horizon
 const DESPAWN_Z          = 6;
-const OBSTACLE_POOL_SIZE = 3000;
+const OBSTACLE_POOL_SIZE = 500;  // measured peak 318 active in god-mode; was 3000 (10x oversized)
 const POWERUP_POOL_SIZE  = 10;
 const STAR_COUNT         = 1800;
 
@@ -2450,7 +2450,7 @@ function _bootDPR() {
 }
 const _initialDPR = _bootDPR();
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_mobAA, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_mobAA, powerPreference: 'high-performance', stencil: false });
 renderer.setPixelRatio(_initialDPR);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -2706,10 +2706,14 @@ try {
               'balanced';
   _composerSamples = _gq === 'sharp' ? 4 : _gq === 'balanced' ? 2 : 0;
 } catch(_) { _composerSamples = 2; }
+// NOTE: We do NOT set `type: HalfFloatType` here. Half-float FBOs caused a
+// visible horizon banding/artifact on iOS (Apple GPU + tonemapping). MSAA
+// (`samples`) is what makes Sharp actually look sharp — keep that, default
+// type stays at UnsignedByteType.
 const _composerRT = new THREE.WebGLRenderTarget(
   Math.max(1, window.innerWidth),
   Math.max(1, window.innerHeight),
-  { samples: _composerSamples, type: THREE.HalfFloatType }
+  { samples: _composerSamples }
 );
 const composer = new EffectComposer(renderer, _composerRT);
 composer.addPass(new RenderPass(scene, camera));
@@ -3993,7 +3997,7 @@ function updateShards(dt) {
 //  Particles spawn from actual ship mesh vertices,
 //  per-particle speed/life ranges, TSL-style fade.
 // ═══════════════════════════════════════════════════
-const _EXP_COUNT = 20000;
+const _EXP_COUNT = 6000; // was 20000 — sub-second flash hides the count; ~3x faster sync-init on crash frame
 const _expPositions  = new Float32Array(_EXP_COUNT * 3);
 const _expColors     = new Float32Array(_EXP_COUNT * 3);
 const _expAlphas     = new Float32Array(_EXP_COUNT);
@@ -4613,6 +4617,7 @@ let _faceExpGroup = null;       // THREE.Group holding exploding face meshes
 let _faceExpActive = false;
 let _faceExpT = 0;
 const _FACE_EXP_DUR = 0.6;      // how long the faces fly apart
+// Single shared material across ALL ship meshes — fixed dark base color (skin-independent).
 const _FACE_EXP_MAT = new THREE.ShaderMaterial({
   uniforms: {
     uProgress:  { value: 0.0 },
@@ -4679,15 +4684,136 @@ const _FACE_EXP_MAT = new THREE.ShaderMaterial({
   toneMapped: false,
 });
 
+// ── Pre-bake cache for face-explosion ship topology ──
+// Keyed by ship model UUID. Holds ship-local positions/centroids/normals, a single merged
+// BufferGeometry, and a reusable mesh. The only per-crash work is transforming local positions
+// → world (one matrix), uploading the position buffer, and adding the mesh. Color is a uniform
+// (dark dust) so the bake is skin-independent and never needs invalidation.
+const _faceExpCache = new Map(); // uuid -> { localPos, localCentroids, localNormals, geo, mesh }
+
+function _bakeFaceExplosion(shipModel) {
+  // Make sure ship + descendants have up-to-date world matrices before we sample them.
+  shipModel.updateMatrixWorld(true);
+  // Per-child positions are stored in SHIP-LOCAL space so we can re-transform by the ship's
+  // matrixWorld at crash time. relM = shipInverse * child.matrixWorld
+  const _shipInverse = new THREE.Matrix4().copy(shipModel.matrixWorld).invert();
+  const _relM = new THREE.Matrix4();
+
+  // Pass 1: collect each child mesh's expanded ship-local positions + base color, count totals
+  const meshes = []; // { localPos: Float32Array, color: THREE.Color }
+  let totalVerts = 0;
+  shipModel.traverse(child => {
+    if (!child.isMesh) return;
+    const name = (child.userData._origMatName || child.name || '').toLowerCase();
+    if (name.includes('fire')) return; // skip flame meshes
+    const geo = child.geometry;
+    // Expand to non-indexed in mesh-local space first
+    let meshLocal;
+    if (geo.index) {
+      const idx = geo.index.array;
+      const src = geo.attributes.position.array;
+      const out = new Float32Array(idx.length * 3);
+      for (let i = 0; i < idx.length; i++) {
+        const s = idx[i] * 3, d = i * 3;
+        out[d] = src[s]; out[d + 1] = src[s + 1]; out[d + 2] = src[s + 2];
+      }
+      meshLocal = out;
+    } else {
+      meshLocal = new Float32Array(geo.attributes.position.array);
+    }
+    // Transform mesh-local → ship-local via _relM = shipInverse * child.matrixWorld
+    _relM.multiplyMatrices(_shipInverse, child.matrixWorld);
+    const m = _relM.elements;
+    const r00 = m[0], r01 = m[4], r02 = m[8];
+    const r10 = m[1], r11 = m[5], r12 = m[9];
+    const r20 = m[2], r21 = m[6], r22 = m[10];
+    const tx = m[12], ty = m[13], tz = m[14];
+    for (let i = 0; i < meshLocal.length; i += 3) {
+      const x = meshLocal[i], y = meshLocal[i + 1], z = meshLocal[i + 2];
+      meshLocal[i]     = r00 * x + r01 * y + r02 * z + tx;
+      meshLocal[i + 1] = r10 * x + r11 * y + r12 * z + ty;
+      meshLocal[i + 2] = r20 * x + r21 * y + r22 * z + tz;
+    }
+    meshes.push({ localPos: meshLocal });
+    totalVerts += meshLocal.length / 3;
+  });
+
+  if (totalVerts < 3) return null;
+
+  // Pass 2: build one merged set of buffers
+  const totalFloats = totalVerts * 3;
+  const localPos       = new Float32Array(totalFloats);
+  const localCentroids = new Float32Array(totalFloats);
+  const localNormals   = new Float32Array(totalFloats);
+
+  let off = 0;
+  for (let m = 0; m < meshes.length; m++) {
+    const { localPos: src } = meshes[m];
+    const vertLen = src.length / 3;
+    localPos.set(src, off * 3);
+    const triCount = Math.floor(vertLen / 3);
+    for (let tri = 0; tri < triCount; tri++) {
+      const baseOut = (off + tri * 3) * 3;
+      const baseSrc = tri * 9;
+      const ax = src[baseSrc],     ay = src[baseSrc + 1], az = src[baseSrc + 2];
+      const bx = src[baseSrc + 3], by = src[baseSrc + 4], bz = src[baseSrc + 5];
+      const cx = src[baseSrc + 6], cy = src[baseSrc + 7], cz = src[baseSrc + 8];
+      const ccx = (ax + bx + cx) / 3;
+      const ccy = (ay + by + cy) / 3;
+      const ccz = (az + bz + cz) / 3;
+      // Face normal = (C - B) × (A - B)
+      const ux = cx - bx, uy = cy - by, uz = cz - bz;
+      const vx = ax - bx, vy = ay - by, vz = az - bz;
+      let nx = uy * vz - uz * vy;
+      let ny = uz * vx - ux * vz;
+      let nz = ux * vy - uy * vx;
+      const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      nx /= nLen; ny /= nLen; nz /= nLen;
+      for (let v = 0; v < 3; v++) {
+        const o = baseOut + v * 3;
+        localCentroids[o]     = ccx; localCentroids[o + 1] = ccy; localCentroids[o + 2] = ccz;
+        localNormals[o]       = nx;  localNormals[o + 1]   = ny;  localNormals[o + 2]   = nz;
+      }
+    }
+    off += vertLen;
+  }
+
+  // Reusable BufferGeometry. All three buffers are dynamic (updated each crash from ship-local arrays).
+  const worldPos       = new Float32Array(totalFloats);
+  const worldCentroids = new Float32Array(totalFloats);
+  const worldNormals   = new Float32Array(totalFloats);
+  const geo = new THREE.BufferGeometry();
+  const posAttr       = new THREE.BufferAttribute(worldPos, 3);       posAttr.setUsage(THREE.DynamicDrawUsage);
+  const centroidAttr  = new THREE.BufferAttribute(worldCentroids, 3); centroidAttr.setUsage(THREE.DynamicDrawUsage);
+  const normalAttr    = new THREE.BufferAttribute(worldNormals, 3);   normalAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position',     posAttr);
+  geo.setAttribute('faceCentroid', centroidAttr);
+  geo.setAttribute('faceNormal',   normalAttr);
+
+  const mesh = new THREE.Mesh(geo, _FACE_EXP_MAT);
+  mesh.frustumCulled = false;
+
+  return { localPos, localCentroids, localNormals, worldPos, worldCentroids, worldNormals, totalFloats, geo, mesh };
+}
+
+function _getFaceExpBaked(shipModel) {
+  let entry = _faceExpCache.get(shipModel.uuid);
+  if (!entry) {
+    entry = _bakeFaceExplosion(shipModel);
+    if (entry) _faceExpCache.set(shipModel.uuid, entry);
+  }
+  return entry;
+}
+
 function _triggerFaceExplosion(shipModel, impactDir) {
-  // Clean up previous
+  // Clean up previous (mesh + geometry are CACHED — don't dispose; just remove from scene)
   if (_faceExpGroup) {
     scene.remove(_faceExpGroup);
-    _faceExpGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
     _faceExpGroup = null;
   }
-  _faceExpGroup = new THREE.Group();
-  // Group lives at scene root — no transform, geometry is baked to world space
+
+  const entry = _getFaceExpBaked(shipModel);
+  if (!entry) return;
 
   _FACE_EXP_MAT.uniforms.uImpactDir.value.copy(impactDir).normalize();
   _FACE_EXP_MAT.uniforms.uProgress.value = 0;
@@ -4695,52 +4821,43 @@ function _triggerFaceExplosion(shipModel, impactDir) {
   // Force ship world matrices to be current before we read them
   shipModel.parent.updateMatrixWorld(true);
 
-  shipModel.traverse(child => {
-    if (!child.isMesh) return;
-    const name = (child.userData._origMatName || child.name || '').toLowerCase();
-    if (name.includes('fire')) return; // skip flame meshes
-    // Clone and toNonIndexed
-    let geo = child.geometry.clone();
-    if (geo.index) geo = geo.toNonIndexed();
-    // Bake FULL world transform into geometry (scene root = identity)
-    geo.applyMatrix4(child.matrixWorld);
-    const posAttr = geo.attributes.position;
-    const count = posAttr.count;
-    const triCount = Math.floor(count / 3);
-    // Compute per-face centroid + normal (stored per vertex, same for 3 verts of each tri)
-    const centroids = new Float32Array(count * 3);
-    const faceNormals = new Float32Array(count * 3);
-    const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
-    const _cb = new THREE.Vector3(), _ab = new THREE.Vector3();
-    for (let tri = 0; tri < triCount; tri++) {
-      const i0 = tri * 3, i1 = i0 + 1, i2 = i0 + 2;
-      vA.set(posAttr.getX(i0), posAttr.getY(i0), posAttr.getZ(i0));
-      vB.set(posAttr.getX(i1), posAttr.getY(i1), posAttr.getZ(i1));
-      vC.set(posAttr.getX(i2), posAttr.getY(i2), posAttr.getZ(i2));
-      const cx = (vA.x + vB.x + vC.x) / 3;
-      const cy = (vA.y + vB.y + vC.y) / 3;
-      const cz = (vA.z + vB.z + vC.z) / 3;
-      _cb.subVectors(vC, vB);
-      _ab.subVectors(vA, vB);
-      _cb.cross(_ab).normalize();
-      for (let v = 0; v < 3; v++) {
-        const idx = (i0 + v) * 3;
-        centroids[idx] = cx; centroids[idx + 1] = cy; centroids[idx + 2] = cz;
-        faceNormals[idx] = _cb.x; faceNormals[idx + 1] = _cb.y; faceNormals[idx + 2] = _cb.z;
-      }
-    }
-    geo.setAttribute('faceCentroid', new THREE.BufferAttribute(centroids, 3));
-    geo.setAttribute('faceNormal', new THREE.BufferAttribute(faceNormals, 3));
-    // Get base color from the original material
-    const matClone = _FACE_EXP_MAT.clone();
-    if (child.material && child.material.color) {
-      matClone.uniforms.uColor.value.copy(child.material.color);
-    }
-    const mesh = new THREE.Mesh(geo, matClone);
-    mesh.frustumCulled = false; // faces fly far, don't cull
-    _faceExpGroup.add(mesh);
-  });
-  scene.add(_faceExpGroup);
+  // Transform local positions / centroids / face normals into world space using the SHIP's matrixWorld.
+  // (This assumes all baked verts share the ship's transform, which is fine for our use — the ship is
+  // a single rigid Group from the player's POV; child mesh transforms are already merged into local-space
+  // bake since each child's world == ship's world for the duration of the crash frame.)
+  // To be correct for nested child transforms, we'd bake child-relative; for now, bake is mesh-local and
+  // the original code path already treated the GLB as a flat rigid body. This matches that.
+  const me = shipModel.matrixWorld.elements;
+  // 3x3 rotation part for normals
+  const r00 = me[0], r01 = me[4], r02 = me[8];
+  const r10 = me[1], r11 = me[5], r12 = me[9];
+  const r20 = me[2], r21 = me[6], r22 = me[10];
+  const tx = me[12], ty = me[13], tz = me[14];
+
+  const lp = entry.localPos, lc = entry.localCentroids, ln = entry.localNormals;
+  const wp = entry.worldPos, wc = entry.worldCentroids, wn = entry.worldNormals;
+  const N = entry.totalFloats;
+  // Positions + centroids: full affine
+  for (let i = 0; i < N; i += 3) {
+    const px = lp[i], py = lp[i + 1], pz = lp[i + 2];
+    wp[i]     = r00 * px + r01 * py + r02 * pz + tx;
+    wp[i + 1] = r10 * px + r11 * py + r12 * pz + ty;
+    wp[i + 2] = r20 * px + r21 * py + r22 * pz + tz;
+    const cx = lc[i], cy = lc[i + 1], cz = lc[i + 2];
+    wc[i]     = r00 * cx + r01 * cy + r02 * cz + tx;
+    wc[i + 1] = r10 * cx + r11 * cy + r12 * cz + ty;
+    wc[i + 2] = r20 * cx + r21 * cy + r22 * cz + tz;
+    const nx = ln[i], ny = ln[i + 1], nz = ln[i + 2];
+    wn[i]     = r00 * nx + r01 * ny + r02 * nz;
+    wn[i + 1] = r10 * nx + r11 * ny + r12 * nz;
+    wn[i + 2] = r20 * nx + r21 * ny + r22 * nz;
+  }
+  entry.geo.attributes.position.needsUpdate     = true;
+  entry.geo.attributes.faceCentroid.needsUpdate = true;
+  entry.geo.attributes.faceNormal.needsUpdate   = true;
+
+  scene.add(entry.mesh);
+  _faceExpGroup = entry.mesh; // single mesh — not a Group; legacy var name kept
   _faceExpActive = true;
   _faceExpT = 0;
 }
@@ -4750,19 +4867,13 @@ function _updateFaceExplosion(dt) {
   const faceTs = _expActive ? _getExpTimescale(_expSlomoAge) : 1.0;
   _faceExpT += dt * faceTs;
   const t = Math.min(1, _faceExpT / _FACE_EXP_DUR);
-  if (_faceExpGroup) {
-    _faceExpGroup.traverse(c => {
-      if (c.isMesh && c.material.uniforms) {
-        c.material.uniforms.uProgress.value = t;
-      }
-    });
-  }
+  // Shared material — one uniform write
+  _FACE_EXP_MAT.uniforms.uProgress.value = t;
   if (t >= 1) {
     _faceExpActive = false;
     if (_faceExpGroup) {
       scene.remove(_faceExpGroup);
-      _faceExpGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
-      _faceExpGroup = null;
+      _faceExpGroup = null; // geometry/mesh are cached, do NOT dispose
     }
   }
 }
@@ -4772,8 +4883,7 @@ function _killFaceExplosion() {
   _faceExpT = 0;
   if (_faceExpGroup) {
     scene.remove(_faceExpGroup);
-    _faceExpGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
-    _faceExpGroup = null;
+    _faceExpGroup = null; // geometry/mesh are cached, do NOT dispose
   }
 }
 
@@ -6837,6 +6947,10 @@ gltfLoader.load('./assets/ships/default_ship.glb', (gltf) => {
 
   // ── SKIN SYSTEM: store model ref and pre-build material sets ──────────────
   window._shipModel = model;
+  // Eager-bake face-explosion geometry off the critical path (only if feature is enabled).
+  if (window._FACE_EXP_ENABLED) {
+    try { setTimeout(() => { try { _getFaceExpBaked(model); } catch(_){} }, 0); } catch(_){}
+  }
 
   // Store references to default materials (skin 0) by mesh
   // Note: _origMatName was already set by the pre-cache traverse above (preserves GLB names)
@@ -7098,6 +7212,12 @@ normal = _dbn;`;
           if (!m.material || _seenMats.has(m.material)) continue;
           _seenMats.add(m.material);
           _coneWarmScene.add(new THREE.Mesh(m.geometry, m.material));
+          // Also compile the opaque sibling so the fadeT=1 swap is hitch-free.
+          const sib = m.material.userData && m.material.userData._opaqueSibling;
+          if (sib && !_seenMats.has(sib)) {
+            _seenMats.add(sib);
+            _coneWarmScene.add(new THREE.Mesh(m.geometry, sib));
+          }
         }
       }
       renderer.compile(_coneWarmScene, _coneWarmCam);
@@ -8145,6 +8265,10 @@ function _loadAltShip(glbFile, skinDef, skinIdx, callback) {
     _altShipMixer = mixer;
     _altShipClips = clips;
     _altShipCurrentFile = glbFile;
+    // Eager-bake face-explosion geometry off the critical path (only if feature is enabled).
+    if (window._FACE_EXP_ENABLED) {
+      try { setTimeout(() => { try { _getFaceExpBaked(model); } catch(_){} }, 0); } catch(_){}
+    }
     // Prewarm: compile this alt ship's shaders NOW (model is in scene graph
     // but invisible) so the materials don't compile lazily on first render at
     // gameplay-start — lazy compilation showed up as a black silhouette frame
@@ -9779,6 +9903,163 @@ shipGroup.add(magnetLight);
 // ═══════════════════════════════════════════════════
 const obstaclePool = [];
 const activeObstacles = [];
+// DevTools session recorder — see window._perfReport() docstring below.
+(function () {
+  const _frames = []; // each entry: { t, dt, cones, walls, coins, asteroids, forcefields, lethalRings, powerups, drawCalls, triangles }
+  const _MAX_FRAMES = 60 * 60 * 5; // ~5 min @ 60fps
+  let _recording = false;
+  let _lastT = 0;
+  let _lastDrawCalls = 0;
+  let _lastTriangles = 0;
+  let _renderHookInstalled = false;
+  // Install render hook lazily once composer exists. renderer.info auto-resets each
+  // frame, so we must read it AFTER render completes.
+  function _installRenderHook() {
+    if (_renderHookInstalled) return;
+    if (typeof composer === 'undefined' || !composer || !composer.render) return;
+    if (typeof renderer === 'undefined' || !renderer) return;
+    // EffectComposer runs multiple internal renders; renderer.info auto-resets
+    // between them, so reading info AFTER composer.render() only sees the last
+    // pass (1 draw call). Disable autoReset and we'll manually reset before
+    // each composer.render — info then accumulates across all passes.
+    try { renderer.info.autoReset = false; } catch (_) {}
+    const _origRender = composer.render.bind(composer);
+    composer.render = function (...args) {
+      try { renderer.info.reset(); } catch (_) {}
+      const r = _origRender(...args);
+      try {
+        _lastDrawCalls = renderer.info.render.calls || 0;
+        _lastTriangles = renderer.info.render.triangles || 0;
+      } catch (_) {}
+      return r;
+    };
+    _renderHookInstalled = true;
+  }
+  // Pool conventions vary across the codebase:
+  //   activeObstacles, activeCoins, activePowerups, _lethalRingActive → separate active list (length = count)
+  //   _awPool, _ffPool, _lethalRingPool → each obj has userData.active
+  //   _asteroidPool → each obj has .active directly
+  // _countActive handles all three.
+  function _countActive(arr) {
+    if (!arr) return 0;
+    let n = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const o = arr[i];
+      if (!o) continue;
+      if (o.active === true) { n++; continue; }
+      if (o.userData && o.userData.active === true) { n++; continue; }
+    }
+    return n;
+  }
+  function _sample() {
+    if (!_recording) return;
+    if (_frames.length >= _MAX_FRAMES) return;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const dt = _lastT ? (now - _lastT) : 16.67;
+    _lastT = now;
+    _installRenderHook();
+    const drawCalls = _lastDrawCalls;
+    const triangles = _lastTriangles;
+    // Active counts — pools use various conventions, so we count multiple ways
+    let walls = 0, coins = 0, asteroids = 0, forcefields = 0, lethalRings = 0, powerups = 0;
+    // Walls use a separate _awActive array (length = count), not userData.active on pool
+    try { if (typeof _awActive !== 'undefined') walls = _awActive.length; } catch (_) {}
+    // Coins and powerups have dedicated 'active*' arrays — use those directly
+    try { if (typeof activeCoins !== 'undefined') coins = activeCoins.length; } catch (_) {}
+    try { if (typeof activePowerups !== 'undefined') powerups = activePowerups.length; } catch (_) {}
+    try { if (typeof _asteroidPool !== 'undefined') asteroids = _countActive(_asteroidPool); } catch (_) {}
+    try { if (typeof _ffPool !== 'undefined') forcefields = _countActive(_ffPool); } catch (_) {}
+    try { if (typeof _lethalRingPool !== 'undefined') lethalRings = _countActive(_lethalRingPool); } catch (_) {}
+    // Split fat cones from regular cones (both share activeObstacles)
+    let fatCones = 0;
+    try {
+      for (let i = 0; i < activeObstacles.length; i++) {
+        if (activeObstacles[i].userData && activeObstacles[i].userData.isFatCone) fatCones++;
+      }
+    } catch (_) {}
+    _frames.push({
+      t: now, dt,
+      cones: activeObstacles.length - fatCones,
+      fatCones,
+      walls, coins, asteroids, forcefields, lethalRings, powerups,
+      drawCalls, triangles,
+    });
+  }
+  function _loop() {
+    _sample();
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_loop);
+  }
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_loop);
+
+  function _percentile(sorted, p) {
+    if (!sorted.length) return 0;
+    const idx = Math.min(sorted.length - 1, Math.floor(sorted.length * p));
+    return sorted[idx];
+  }
+  function _summary(values) {
+    if (!values.length) return { avg: 0, p50: 0, p90: 0, p99: 0, max: 0 };
+    const sorted = values.slice().sort((a, b) => a - b);
+    const sum = sorted.reduce((a, b) => a + b, 0);
+    return {
+      avg: +(sum / sorted.length).toFixed(2),
+      p50: _percentile(sorted, 0.5),
+      p90: _percentile(sorted, 0.9),
+      p99: _percentile(sorted, 0.99),
+      max: sorted[sorted.length - 1],
+    };
+  }
+
+  /**
+   * window._perfStart()  — begin recording (call when entering gameplay).
+   * window._perfStop()   — stop recording.
+   * window._perfReport() — print a full summary table (no console.log filtering needed; use console.table).
+   *                        Returns the raw frames array too for further analysis.
+   */
+  window._perfStart = function () {
+    _frames.length = 0;
+    _lastT = 0;
+    _recording = true;
+    console.log('[PERF] recording started — play through, then call _perfReport()');
+  };
+  window._perfStop = function () {
+    _recording = false;
+    console.log('[PERF] recording stopped — ' + _frames.length + ' frames captured');
+  };
+  window._perfReport = function () {
+    _recording = false;
+    const n = _frames.length;
+    if (!n) { console.warn('[PERF] no frames recorded — call _perfStart() first'); return null; }
+    const fields = ['dt', 'cones', 'fatCones', 'walls', 'coins', 'asteroids', 'forcefields', 'lethalRings', 'powerups', 'drawCalls', 'triangles'];
+    // (lightning omitted — pool is created inside a closure and not introspectable from here)
+    const summary = {};
+    for (const f of fields) {
+      const vals = _frames.map(fr => fr[f] || 0);
+      summary[f] = _summary(vals);
+    }
+    // Derive fps from dt
+    const fpsVals = _frames.map(fr => fr.dt > 0 ? 1000 / fr.dt : 0);
+    summary.fps = _summary(fpsVals);
+    console.log('[PERF] === summary over ' + n + ' frames (' + ((_frames[n-1].t - _frames[0].t) / 1000).toFixed(1) + 's) ===');
+    try { console.table(summary); } catch (_) { console.log(JSON.stringify(summary, null, 2)); }
+    // Hitches: frames where dt > 33ms (sub-30fps spike)
+    const hitches = _frames.filter(fr => fr.dt > 33);
+    console.log('[PERF] hitches (dt > 33ms): ' + hitches.length + ' / ' + n + ' frames');
+    if (hitches.length && hitches.length < 50) {
+      console.log('[PERF] hitch frames (showing all):');
+      try { console.table(hitches.map(fr => ({ t: +(fr.t).toFixed(0), dt: +fr.dt.toFixed(1), cones: fr.cones, walls: fr.walls, drawCalls: fr.drawCalls, triangles: fr.triangles }))); } catch (_) {}
+    }
+    return { summary, frames: _frames.slice(), hitches };
+  };
+  // Auto-start when gameplay phase begins
+  setInterval(() => {
+    try {
+      if (!_recording && typeof state !== 'undefined' && state && state.phase === 'playing') {
+        console.log('[PERF] auto-started on gameplay phase');
+        window._perfStart();
+      }
+    } catch (_) {}
+  }, 500);
+})();
 
 function createObstacleMesh(type) {
   const group = new THREE.Group();
@@ -9829,6 +10110,16 @@ function createObstacleMesh(type) {
   });
   bodyMat.userData.baseOpacity = 1.0;
   bodyMat.userData.baseColor   = CONE_COLORS[type];
+  // Pre-built opaque sibling: same shader/uniforms (shared by reference) but
+  // transparent:false / depthWrite:true. Swapped in at fadeT=1 to avoid the
+  // shader-recompile that material.needsUpdate=true triggers.
+  const bodyMatOpaque = bodyMat.clone();
+  bodyMatOpaque.transparent = false;
+  bodyMatOpaque.depthWrite  = true;
+  bodyMatOpaque.uniforms    = bodyMat.uniforms; // share uniforms so uOpacity stays in sync
+  bodyMatOpaque.userData    = bodyMat.userData; // share userData (baseOpacity, baseColor)
+  bodyMat.userData._opaqueSibling = bodyMatOpaque;
+  bodyMatOpaque.userData._transparentSibling = bodyMat;
   const bodyMesh = new THREE.Mesh(new THREE.ConeGeometry(1.6, totalH, SEGS), bodyMat);
   bodyMesh.position.y = totalH / 2 - SINK;
   group.add(bodyMesh);
@@ -11370,8 +11661,8 @@ window._awFire = function() {
       m.position.y = T.wallH / 2;
       e.position.y = T.wallH / 2;
       wall.rotation.y = angleSign * angleDeg * Math.PI / 180;
-      m.material.uniforms.uOpacity.value = 0;
-      e.material.opacity = 0;
+      m.userData._opacity = 0;
+      e.userData._opacity = 0;
       _awActive.push(wall);
     });
   }
@@ -11408,58 +11699,75 @@ const AW_POOL_SIZE = 300;
 const _awPool = [];
 const _awActive = [];
 
+// Shared geometries — built once, reused across the whole pool.
+const _AW_BOX_GEO = new THREE.BoxGeometry(1, 1, 1);
+const _AW_EDGES_GEO = new THREE.EdgesGeometry(_AW_BOX_GEO);
+
+// SHARED materials across all 300 walls. Previously each pool slot owned its
+// own ShaderMaterial + LineBasicMaterial — 600 distinct shader programs. When
+// a row spawned and many walls became visible at once, the GL driver had to
+// validate every program in the same frame, producing iOS hitches (same class
+// of bug fixed in the powerup shell). Per-wall fade-in opacity is preserved
+// via onBeforeRender: each mesh writes its own opacity into the shared uniform
+// just before it draws, so one program services every wall with no batch
+// validation cost and no last-write-wins flicker.
+const _AW_SHARED_MAT = new THREE.ShaderMaterial({
+  uniforms: {
+    uColor: { value: new THREE.Color(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB) },
+    uEmissive: { value: _awTuner.emissive },
+    uOpacity: { value: 0.0 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 uColor;
+    uniform float uEmissive;
+    uniform float uOpacity;
+    varying vec2 vUv;
+    void main() {
+      float grad = 1.0 - vUv.y * 0.4;
+      float edgeDist = min(vUv.x, 1.0 - vUv.x);
+      float edge = smoothstep(0.0, 0.08, edgeDist);
+      float edgeGlow = (1.0 - edge) * 2.0;
+      vec3 col = uColor * (grad + edgeGlow) * uEmissive;
+      col = mix(col * 0.15, col, 0.3 + edge * 0.7);
+      gl_FragColor = vec4(col, uOpacity);
+    }
+  `,
+  transparent: true,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+});
+const _AW_SHARED_EDGES_MAT = new THREE.LineBasicMaterial({
+  color: new THREE.Color(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB),
+  transparent: true,
+  opacity: 0,
+  linewidth: 1,
+});
+// onBeforeRender callbacks — read per-mesh opacity and push it into the
+// shared uniforms RIGHT BEFORE the draw call. This is the standard three.js
+// pattern for per-instance opacity with a shared material.
+function _awMeshBeforeRender() {
+  _AW_SHARED_MAT.uniforms.uOpacity.value = this.userData._opacity || 0;
+}
+function _awEdgesBeforeRender() {
+  _AW_SHARED_EDGES_MAT.opacity = this.userData._opacity || 0;
+}
+
 function _createAngledWall() {
   const group = new THREE.Group();
-
-  // Main wall body — BoxGeometry for thickness
-  const geo = new THREE.BoxGeometry(1, 1, 1);
-  const mat = new THREE.ShaderMaterial({
-    uniforms: {
-      uColor: { value: new THREE.Color(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB) },
-      uEmissive: { value: _awTuner.emissive },
-      uOpacity: { value: 0.0 },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 uColor;
-      uniform float uEmissive;
-      uniform float uOpacity;
-      varying vec2 vUv;
-      void main() {
-        // Vertical gradient: bright at bottom, fading up
-        float grad = 1.0 - vUv.y * 0.4;
-        // Edge glow on left/right sides of the wall
-        float edgeDist = min(vUv.x, 1.0 - vUv.x);
-        float edge = smoothstep(0.0, 0.08, edgeDist);
-        float edgeGlow = (1.0 - edge) * 2.0;
-        vec3 col = uColor * (grad + edgeGlow) * uEmissive;
-        // Darken core slightly for depth
-        col = mix(col * 0.15, col, 0.3 + edge * 0.7);
-        gl_FragColor = vec4(col, uOpacity);
-      }
-    `,
-    transparent: true,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh = new THREE.Mesh(_AW_BOX_GEO, _AW_SHARED_MAT);
+  mesh.userData._opacity = 0;
+  mesh.onBeforeRender = _awMeshBeforeRender;
   group.add(mesh);
-
-  // Edge lines for that neon outline look
-  const edgesGeo = new THREE.EdgesGeometry(geo);
-  const edgesMat = new THREE.LineBasicMaterial({
-    color: new THREE.Color(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB),
-    transparent: true,
-    opacity: 0,
-    linewidth: 1,
-  });
-  const edges = new THREE.LineSegments(edgesGeo, edgesMat);
+  const edges = new THREE.LineSegments(_AW_EDGES_GEO, _AW_SHARED_EDGES_MAT);
+  edges.userData._opacity = 0;
+  edges.onBeforeRender = _awEdgesBeforeRender;
   group.add(edges);
 
   group.userData.active = false;
@@ -11472,6 +11780,9 @@ function _createAngledWall() {
 }
 
 for (let i = 0; i < AW_POOL_SIZE; i++) _awPool.push(_createAngledWall());
+
+// Scratch Color reused by _applyWallTuner — no per-spawn THREE.Color alloc.
+const _awScratchColor = new THREE.Color();
 
 function _getPooledWall() {
   for (let i = 0; i < _awPool.length; i++) {
@@ -11508,11 +11819,13 @@ function _applyWallTuner(w, angleSign) {
     (angleSign * _awTuner.angle + _awTuner.rotY) * deg,
     _awTuner.rotZ * deg
   );
-  // Update material
-  const col = new THREE.Color(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB);
-  m.material.uniforms.uColor.value.copy(col);
-  m.material.uniforms.uEmissive.value = _awTuner.emissive;
-  e.material.color.copy(col);
+  // Update SHARED material — reuse scratch color. Color/emissive are global
+  // (every wall reads the same _awTuner), so writing the shared uniform once
+  // per spawn is correct. No per-call THREE.Color allocation.
+  _awScratchColor.setRGB(_awTuner.colorR, _awTuner.colorG, _awTuner.colorB);
+  _AW_SHARED_MAT.uniforms.uColor.value.copy(_awScratchColor);
+  _AW_SHARED_MAT.uniforms.uEmissive.value = _awTuner.emissive;
+  _AW_SHARED_EDGES_MAT.color.copy(_awScratchColor);
 }
 
 function spawnAngledWallRow() {
@@ -11545,11 +11858,11 @@ function spawnAngledWallRow() {
         _applyWallTuner(wall, angleSign);
         // Start transparent for fade-in (skip if paused — show immediately)
         if (_awTunerPaused) {
-          wall.userData._mesh.material.uniforms.uOpacity.value = _awTuner.opacity;
-          wall.userData._edges.material.opacity = _awTuner.opacity * 0.9;
+          wall.userData._mesh.userData._opacity = _awTuner.opacity;
+          wall.userData._edges.userData._opacity = _awTuner.opacity * 0.9;
         } else {
-          wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-          wall.userData._edges.material.opacity = 0;
+          wall.userData._mesh.userData._opacity = 0;
+          wall.userData._edges.userData._opacity = 0;
         }
         _awActive.push(wall);
       }
@@ -11789,11 +12102,16 @@ const _SHATTER_ICON_GEOS = (() => {
   };
 })();
 
-function _createShatterFragment() {
-  // PlaneGeometry oriented per-face. We'll set the orientation when activated.
-  const geo = new THREE.PlaneGeometry(POWERUP_CUBE_SIZE, POWERUP_CUBE_SIZE);
-  const mat = new HolographicMaterial({
-    hologramColor:      '#00d5ff',  // overwritten on activate
+// SHARED holographic materials — one for ALL fragments, one for ALL icons.
+// Previously each pool slot had its own material (60 frag + 10 icon = 70
+// distinct shader programs). Showing many hidden meshes at once forced the
+// GPU driver to validate/upload uniforms for every program in the same
+// frame, producing a 30–60ms hitch on iOS right at the smash moment.
+// One material = one program = one validate per frame, no matter how many
+// fragments. Concurrent shatters share a tint briefly (overlap is rare).
+const _SHATTER_FRAG_MAT = (() => {
+  const m = new HolographicMaterial({
+    hologramColor:      '#00d5ff',  // overwritten on each spawn
     fresnelAmount:      0.70,
     fresnelOpacity:     1.00,
     scanlineSize:       3.70,
@@ -11805,20 +12123,11 @@ function _createShatterFragment() {
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });
-  _registerHoloMaterial(mat);
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.visible = false;
-  mesh.userData._mat = mat;
-  mesh.userData._active = false;
-  scene.add(mesh);
-  return mesh;
-}
-
-function _createShatterIcon() {
-  // Simple sphere placeholder; actual geometry is swapped on activate to match icon shape.
-  // We keep one mat per pool slot to avoid material churn.
-  const geo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
-  const mat = new HolographicMaterial({
+  _registerHoloMaterial(m);
+  return m;
+})();
+const _SHATTER_ICON_MAT = (() => {
+  const m = new HolographicMaterial({
     hologramColor:      '#00d5ff',
     fresnelAmount:      0.70,
     fresnelOpacity:     1.00,
@@ -11831,10 +12140,25 @@ function _createShatterIcon() {
     side:               THREE.DoubleSide,
     blendMode:          THREE.AdditiveBlending,
   });
-  _registerHoloMaterial(mat);
-  const mesh = new THREE.Mesh(geo, mat);
+  _registerHoloMaterial(m);
+  return m;
+})();
+
+function _createShatterFragment() {
+  const geo = new THREE.PlaneGeometry(POWERUP_CUBE_SIZE, POWERUP_CUBE_SIZE);
+  const mesh = new THREE.Mesh(geo, _SHATTER_FRAG_MAT);
   mesh.visible = false;
-  mesh.userData._mat = mat;
+  mesh.userData._mat = _SHATTER_FRAG_MAT;
+  mesh.userData._active = false;
+  scene.add(mesh);
+  return mesh;
+}
+
+function _createShatterIcon() {
+  const geo = new THREE.SphereGeometry(POWERUP_ICON_SIZE * 0.9, 16, 16);
+  const mesh = new THREE.Mesh(geo, _SHATTER_ICON_MAT);
+  mesh.visible = false;
+  mesh.userData._mat = _SHATTER_ICON_MAT;
   mesh.userData._active = false;
   scene.add(mesh);
   return mesh;
@@ -15401,7 +15725,13 @@ const _lethalRingActive = [];
 const LETHAL_RING_POOL_SIZE = 20;
 const _LR_SIDES = 8, _LR_R = 5.25, _LR_Y = 2, _LR_TUBE = 2.2;
 let _lrGeo = null;
-let _lrMatTemplate = null;
+let _LR_SHARED_MAT = null;
+// onBeforeRender: push per-ring opacity into the shared uniform right before
+// each draw. Same pattern as the angled walls fix — one shader program for
+// the whole pool, but per-ring fade-in preserved.
+function _lrMeshBeforeRender() {
+  _LR_SHARED_MAT.uniforms.uOpacity.value = this.userData._opacity || 0;
+}
 // Exposed on window so the global prewarm pass can force-init the pool at
 // startup instead of letting the first ring spawn pay the shader-compile cost.
 function _initLethalRings() {
@@ -15414,7 +15744,11 @@ function _initLethalRings() {
   }
   const path = new THREE.CatmullRomCurve3(pathPts, true);
   _lrGeo = new THREE.TubeGeometry(path, _LR_SIDES * 4, _LR_TUBE, 8, true);
-  _lrMatTemplate = new THREE.ShaderMaterial({
+  // SHARED material across all 20 pool slots. Previously each slot cloned the
+  // template — 20 distinct shader programs that the driver had to validate on
+  // every render. With one shared program, ring spawns no longer add to the
+  // per-frame validation cost on iOS.
+  _LR_SHARED_MAT = new THREE.ShaderMaterial({
     uniforms: {
       uNeon:    { value: new THREE.Color(0xff1a1a) },
       uObsidian:{ value: new THREE.Color(0x0a0a0f) },
@@ -15444,9 +15778,10 @@ function _initLethalRings() {
     depthWrite: false,
   });
   for (let i = 0; i < LETHAL_RING_POOL_SIZE; i++) {
-    const mat = _lrMatTemplate.clone();
-    const mesh = new THREE.Mesh(_lrGeo, mat);
+    const mesh = new THREE.Mesh(_lrGeo, _LR_SHARED_MAT);
     mesh.position.y = _LR_Y;
+    mesh.userData._opacity = 0;
+    mesh.onBeforeRender = _lrMeshBeforeRender;
     const group = new THREE.Group();
     group.add(mesh);
     group.visible = false;
@@ -15466,7 +15801,7 @@ function _spawnLethalRing(x, z) {
       r.userData.active = true;
       r.visible = true;
       r.position.set(x, 0, z);
-      r.userData._ringMesh.material.uniforms.uOpacity.value = 0;
+      r.userData._ringMesh.userData._opacity = 0;
       _lethalRingActive.push(r);
       return;
     }
@@ -15518,8 +15853,8 @@ function _spawnLateralEchoes(baseX, z, kind, opts) {
         wall.userData._mesh.position.y = 2;
         wall.userData._edges.position.y = 2;
         wall.rotation.y = angleSign * (25 + Math.random() * 20) * Math.PI / 180;
-        wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-        wall.userData._edges.material.opacity = 0;
+        wall.userData._mesh.userData._opacity = 0;
+        wall.userData._edges.userData._opacity = 0;
         wall.userData.isEcho = true;
         wall.userData.echoOpacity = echoOpacity; // wall fade handled separately
         _awActive.push(wall);
@@ -15713,8 +16048,8 @@ function spawnObstacles() {
           wall.userData._mesh.position.y = 2;
           wall.userData._edges.position.y = 2;
           wall.rotation.y = angleSign * (25 + Math.random() * 20) * Math.PI / 180;
-          wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-          wall.userData._edges.material.opacity = 0;
+          wall.userData._mesh.userData._opacity = 0;
+          wall.userData._edges.userData._opacity = 0;
           _awActive.push(wall);
           _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
         }
@@ -15778,8 +16113,8 @@ function spawnObstacles() {
         m.position.y = wallH / 2;
         e.position.y = wallH / 2;
         wall.rotation.y = angleSign * angleDeg * Math.PI / 180;
-        wall.userData._mesh.material.uniforms.uOpacity.value = 0;
-        wall.userData._edges.material.opacity = 0;
+        wall.userData._mesh.userData._opacity = 0;
+        wall.userData._edges.userData._opacity = 0;
         _awActive.push(wall);
         _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
         return;
@@ -19203,7 +19538,9 @@ function applyPowerup(typeIdx) {
   if (def.id === 'laser') state.sessionLasers++;
   if (def.id === 'invincible') state.sessionInvincibles++;
   playPickup(typeIdx); // pickup smash for ALL powerups; shield also layers shield-activate-sfx below
-  addCrashFlash(def.color);
+  // (was: addCrashFlash(def.color) — removed. The full-screen radial overlay
+  //  triggers a layout+paint+composite hitch on mobile every pickup, and it
+  //  also visually obscures the shatter animation we already spawn.)
 
   switch (def.id) {
     case 'shield': {
@@ -19648,6 +19985,28 @@ function returnToTitle() {
   dismissHeadStart();
   // Clear all in-flight objects and mechanic state
   _clearAllMechanics();
+  // Deep state wipe — nukes sequencer timers, one-shot fired flags, zipper
+  // substate, canyon flags, L3/L4/L5 entry markers, endless rotation state.
+  // Without this, exit-to-title → tap-to-play left state._seqRampT01 /
+  // _seqZipFired / corridor row counters in a stale state, which gated the
+  // normal cone spawner and produced "no initial cones" on the next run.
+  if (typeof _drFullStateWipe === 'function') _drFullStateWipe();
+  // Kill any in-flight powerup shatter effects (fragments + icon meshes) so
+  // they don't keep animating onto the title screen and don't leave their
+  // pool slots stuck _active=true on the next run.
+  try {
+    if (typeof _activeShatterEffects !== 'undefined' && _activeShatterEffects.length) {
+      for (const fx of _activeShatterEffects) {
+        if (fx && fx.fragments) {
+          for (const frag of fx.fragments) {
+            if (frag) { frag.visible = false; frag.userData._active = false; }
+          }
+        }
+        if (fx && fx.icon) { fx.icon.visible = false; fx.icon.userData._active = false; }
+      }
+      _activeShatterEffects.length = 0;
+    }
+  } catch(_) {}
   // Lightning + asteroids are pool-based and not in _clearAllMechanics; both
   // can leak past death/exit (lightning bolts freeze visible mid-strike, and
   // _updateAsteroids ticks every frame regardless of phase so rocks keep
@@ -21371,6 +21730,15 @@ function hapticHeavy() {
     navigator.vibrate([40, 30, 40]);
   }
 }
+// Stub for legacy dangling reference (god-mode lethal-ring shield flash)
+// Real impl was removed during split; keep as no-op to prevent update() throws.
+function _triggerCrashFlash() {}
+
+// Scratch Vector3 reused by angled-wall collision check — avoids per-frame
+// `new THREE.Vector3()` allocation in the active-walls loop (~1200 allocs/sec
+// during walls phase).
+const _awCollisionScratch = new THREE.Vector3();
+
 // ═══════════════════════════════════════════════════════
 //  ONBOARDING (first play only)
 // ═══════════════════════════════════════════════════════
@@ -24773,11 +25141,13 @@ function killPlayer() {
     // _triggerFlash(_sPos);
     // _triggerShockwave(_sPos);
     // _triggerSparks(_sPos);
-    // Face explosion: ship triangles fly apart from impact
-    const _faceExpModel = _altShipActive ? _altShipModel : window._shipModel;
-    if (_faceExpModel) {
-      const _impDir = new THREE.Vector3().subVectors(_sPos, _obstPos).normalize();
-      _triggerFaceExplosion(_faceExpModel, _impDir);
+    // Face explosion (ship triangles fly apart from impact) — disabled: was the main crash-frame hitch source.
+    if (window._FACE_EXP_ENABLED) {
+      const _faceExpModel = _altShipActive ? _altShipModel : window._shipModel;
+      if (_faceExpModel) {
+        const _impDir = new THREE.Vector3().subVectors(_sPos, _obstPos).normalize();
+        _triggerFaceExplosion(_faceExpModel, _impDir);
+      }
     }
     // Camera zoom-out + lateral orbit to profile view
     _expDeathZoomTarget = _baseFOV + 15; // less FOV zoom since camera rises instead
@@ -25676,6 +26046,13 @@ function update(dt) {
     // horizon (Star Fox / X-Wing barrel-roll look). The HORIZON COUPLING /
     // _camRollAmt slider still applies to normal steering bank in the else branch.
     cameraRoll = 0;
+    // CRITICAL: keep _shipBankNoWobble pinned to 0 while rolling. Otherwise it
+    // sits at whatever pre-roll bank value it had, and on the first frame
+    // after roll ends the lerp jumps from that stale value to the new target,
+    // producing a one-frame camera-roll snap that reads as a screen shake on
+    // recovery (X-Wing→flat). Pinning to 0 matches what the camera is showing
+    // during the roll, so exit is seamless.
+    state._shipBankNoWobble = 0;
   } else {
     // Lerp the BANK toward target. Wobble is intentionally excluded from the
     // lerp target — the lerp acts as a low-pass filter, and feeding a 2.5Hz
@@ -26923,15 +27300,17 @@ function update(dt) {
       const baseOp = child.material.userData.baseOpacity ?? 1.0;
       if (child.material.uniforms && child.material.uniforms.uOpacity) {
         child.material.uniforms.uOpacity.value = fadeT * baseOp;
-        // Once fully opaque, switch to solid for depth buffer (blocks corona)
+        // Once fully opaque, swap to pre-compiled opaque sibling (no recompile).
+        // Falls back to in-place mutation if no sibling was built.
+        const _ud = child.material.userData;
         if (fullyOpaque && child.material.transparent) {
-          child.material.transparent = false;
-          child.material.depthWrite = true;
-          child.material.needsUpdate = true;
+          const sib = _ud && _ud._opaqueSibling;
+          if (sib) { child.material = sib; }
+          else { child.material.transparent = false; child.material.depthWrite = true; child.material.needsUpdate = true; }
         } else if (!fullyOpaque && !child.material.transparent) {
-          child.material.transparent = true;
-          child.material.depthWrite = false;
-          child.material.needsUpdate = true;
+          const sib = _ud && _ud._transparentSibling;
+          if (sib) { child.material = sib; }
+          else { child.material.transparent = true; child.material.depthWrite = false; child.material.needsUpdate = true; }
         }
       } else {
         const wantTransparent = !fullyOpaque;
@@ -27050,8 +27429,10 @@ function update(dt) {
     if (!_awTunerPaused) {
       const awFadeT = Math.max(0, Math.min(1, (w.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
       const awEchoMul = w.userData.echoOpacity ?? 1.0;
-      w.userData._mesh.material.uniforms.uOpacity.value = awFadeT * _awTuner.opacity * awEchoMul;
-      w.userData._edges.material.opacity = awFadeT * _awTuner.opacity * 0.9 * awEchoMul;
+      // Write per-mesh opacity; onBeforeRender pushes it into the shared
+      // material uniform right before each draw call.
+      w.userData._mesh.userData._opacity = awFadeT * _awTuner.opacity * awEchoMul;
+      w.userData._edges.userData._opacity = awFadeT * _awTuner.opacity * 0.9 * awEchoMul;
     }
     // Laser destroys walls
     if (state.laserActive) {
@@ -27083,7 +27464,7 @@ function update(dt) {
       w.updateMatrixWorld(true);
       const wm = w.userData._mesh;
       wm.updateMatrixWorld(true);
-      const wc = new THREE.Vector3();
+      const wc = _awCollisionScratch;
       wm.getWorldPosition(wc);
       // Delta in world space
       const dx = sx - wc.x;
@@ -27119,7 +27500,8 @@ function update(dt) {
     const lr = _lethalRingActive[i];
     lr.position.z += effectiveSpeed * dt;
     const fadeT = Math.max(0, Math.min(1, (lr.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
-    lr.userData._ringMesh.material.uniforms.uOpacity.value = fadeT * 0.92;
+    // Per-ring opacity; onBeforeRender pushes it into the shared uniform.
+    lr.userData._ringMesh.userData._opacity = fadeT * 0.92;
     // Laser destroys lethal rings
     if (state.laserActive) {
       let _ringHit = false;
@@ -28364,7 +28746,7 @@ if (_origAdminToggle) {
   // Desktop defaults
   // titleY adjusted 2026-05-07 (final): user-tuned to -130 to sit higher under
   // the HUD; leaderboard offset -30px from auto-anchor (set via lbYOffset below).
-  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: -130, lbYOffset: -30 };
+  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: -130, lbYOffset: 6 };
 
   let shipX, shipY, shipSize, platX, platY, platSize, labelX, labelY, titleSize, titleY;
 
@@ -28653,8 +29035,8 @@ if (_origAdminToggle) {
                     rowZ - halfZs + iz * _awTuner.spacingZ
                   );
                   _applyWallTuner(w, angleSign);
-                  w.userData._mesh.material.uniforms.uOpacity.value = _awTuner.opacity;
-                  w.userData._edges.material.opacity = _awTuner.opacity * 0.9;
+                  w.userData._mesh.userData._opacity = _awTuner.opacity;
+                  w.userData._edges.userData._opacity = _awTuner.opacity * 0.9;
                 }
                 wi++;
               }
@@ -28704,8 +29086,8 @@ if (_origAdminToggle) {
           _awActive.forEach((w, idx) => {
             const sign = (idx % 2 === 0) ? 1 : -1;
             _applyWallTuner(w, sign);
-            w.userData._mesh.material.uniforms.uOpacity.value = _awTuner.opacity;
-            w.userData._edges.material.opacity = _awTuner.opacity * 0.9;
+            w.userData._mesh.userData._opacity = _awTuner.opacity;
+            w.userData._edges.userData._opacity = _awTuner.opacity * 0.9;
           });
         }
       });
@@ -29441,7 +29823,7 @@ void main(){
 }`;
 
 // ── Pool + state ─────────────────────────────────────────────────────────────
-const _AST_POOL_SIZE = 12;
+const _AST_POOL_SIZE = 0; // disabled — asteroids not currently used as an obstacle (was 12)
 const _asteroidPool  = [];      // { group, rockMesh, fireMesh, light, tailGeo, tailPts, warnMesh, warnMat, active, ... }
 let   _asteroidActive = [];     // refs into pool currently in flight
 let   _astTimer = 0;            // time until next spawn

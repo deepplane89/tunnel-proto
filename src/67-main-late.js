@@ -1,3 +1,12 @@
+// Stub for legacy dangling reference (god-mode lethal-ring shield flash)
+// Real impl was removed during split; keep as no-op to prevent update() throws.
+function _triggerCrashFlash() {}
+
+// Scratch Vector3 reused by angled-wall collision check — avoids per-frame
+// `new THREE.Vector3()` allocation in the active-walls loop (~1200 allocs/sec
+// during walls phase).
+const _awCollisionScratch = new THREE.Vector3();
+
 // ═══════════════════════════════════════════════════════
 //  ONBOARDING (first play only)
 // ═══════════════════════════════════════════════════════
@@ -3400,11 +3409,13 @@ function killPlayer() {
     // _triggerFlash(_sPos);
     // _triggerShockwave(_sPos);
     // _triggerSparks(_sPos);
-    // Face explosion: ship triangles fly apart from impact
-    const _faceExpModel = _altShipActive ? _altShipModel : window._shipModel;
-    if (_faceExpModel) {
-      const _impDir = new THREE.Vector3().subVectors(_sPos, _obstPos).normalize();
-      _triggerFaceExplosion(_faceExpModel, _impDir);
+    // Face explosion (ship triangles fly apart from impact) — disabled: was the main crash-frame hitch source.
+    if (window._FACE_EXP_ENABLED) {
+      const _faceExpModel = _altShipActive ? _altShipModel : window._shipModel;
+      if (_faceExpModel) {
+        const _impDir = new THREE.Vector3().subVectors(_sPos, _obstPos).normalize();
+        _triggerFaceExplosion(_faceExpModel, _impDir);
+      }
     }
     // Camera zoom-out + lateral orbit to profile view
     _expDeathZoomTarget = _baseFOV + 15; // less FOV zoom since camera rises instead
@@ -4303,6 +4314,13 @@ function update(dt) {
     // horizon (Star Fox / X-Wing barrel-roll look). The HORIZON COUPLING /
     // _camRollAmt slider still applies to normal steering bank in the else branch.
     cameraRoll = 0;
+    // CRITICAL: keep _shipBankNoWobble pinned to 0 while rolling. Otherwise it
+    // sits at whatever pre-roll bank value it had, and on the first frame
+    // after roll ends the lerp jumps from that stale value to the new target,
+    // producing a one-frame camera-roll snap that reads as a screen shake on
+    // recovery (X-Wing→flat). Pinning to 0 matches what the camera is showing
+    // during the roll, so exit is seamless.
+    state._shipBankNoWobble = 0;
   } else {
     // Lerp the BANK toward target. Wobble is intentionally excluded from the
     // lerp target — the lerp acts as a low-pass filter, and feeding a 2.5Hz
@@ -5550,15 +5568,17 @@ function update(dt) {
       const baseOp = child.material.userData.baseOpacity ?? 1.0;
       if (child.material.uniforms && child.material.uniforms.uOpacity) {
         child.material.uniforms.uOpacity.value = fadeT * baseOp;
-        // Once fully opaque, switch to solid for depth buffer (blocks corona)
+        // Once fully opaque, swap to pre-compiled opaque sibling (no recompile).
+        // Falls back to in-place mutation if no sibling was built.
+        const _ud = child.material.userData;
         if (fullyOpaque && child.material.transparent) {
-          child.material.transparent = false;
-          child.material.depthWrite = true;
-          child.material.needsUpdate = true;
+          const sib = _ud && _ud._opaqueSibling;
+          if (sib) { child.material = sib; }
+          else { child.material.transparent = false; child.material.depthWrite = true; child.material.needsUpdate = true; }
         } else if (!fullyOpaque && !child.material.transparent) {
-          child.material.transparent = true;
-          child.material.depthWrite = false;
-          child.material.needsUpdate = true;
+          const sib = _ud && _ud._transparentSibling;
+          if (sib) { child.material = sib; }
+          else { child.material.transparent = true; child.material.depthWrite = false; child.material.needsUpdate = true; }
         }
       } else {
         const wantTransparent = !fullyOpaque;
@@ -5677,8 +5697,10 @@ function update(dt) {
     if (!_awTunerPaused) {
       const awFadeT = Math.max(0, Math.min(1, (w.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
       const awEchoMul = w.userData.echoOpacity ?? 1.0;
-      w.userData._mesh.material.uniforms.uOpacity.value = awFadeT * _awTuner.opacity * awEchoMul;
-      w.userData._edges.material.opacity = awFadeT * _awTuner.opacity * 0.9 * awEchoMul;
+      // Write per-mesh opacity; onBeforeRender pushes it into the shared
+      // material uniform right before each draw call.
+      w.userData._mesh.userData._opacity = awFadeT * _awTuner.opacity * awEchoMul;
+      w.userData._edges.userData._opacity = awFadeT * _awTuner.opacity * 0.9 * awEchoMul;
     }
     // Laser destroys walls
     if (state.laserActive) {
@@ -5710,7 +5732,7 @@ function update(dt) {
       w.updateMatrixWorld(true);
       const wm = w.userData._mesh;
       wm.updateMatrixWorld(true);
-      const wc = new THREE.Vector3();
+      const wc = _awCollisionScratch;
       wm.getWorldPosition(wc);
       // Delta in world space
       const dx = sx - wc.x;
@@ -5746,7 +5768,8 @@ function update(dt) {
     const lr = _lethalRingActive[i];
     lr.position.z += effectiveSpeed * dt;
     const fadeT = Math.max(0, Math.min(1, (lr.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
-    lr.userData._ringMesh.material.uniforms.uOpacity.value = fadeT * 0.92;
+    // Per-ring opacity; onBeforeRender pushes it into the shared uniform.
+    lr.userData._ringMesh.userData._opacity = fadeT * 0.92;
     // Laser destroys lethal rings
     if (state.laserActive) {
       let _ringHit = false;

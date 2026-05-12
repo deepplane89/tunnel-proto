@@ -311,7 +311,7 @@ if (_origAdminToggle) {
   // Desktop defaults
   // titleY adjusted 2026-05-07 (final): user-tuned to -130 to sit higher under
   // the HUD; leaderboard offset -30px from auto-anchor (set via lbYOffset below).
-  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: -130, lbYOffset: -30 };
+  const DESKTOP    = { shipX: 2, shipY: -1, shipSize: 239, platX: 1, platY: -17, platSize: 166, labelX: 13, labelY: -26, titleSize: 160, titleY: -130, lbYOffset: 6 };
 
   let shipX, shipY, shipSize, platX, platY, platSize, labelX, labelY, titleSize, titleY;
 
@@ -600,8 +600,8 @@ if (_origAdminToggle) {
                     rowZ - halfZs + iz * _awTuner.spacingZ
                   );
                   _applyWallTuner(w, angleSign);
-                  w.userData._mesh.material.uniforms.uOpacity.value = _awTuner.opacity;
-                  w.userData._edges.material.opacity = _awTuner.opacity * 0.9;
+                  w.userData._mesh.userData._opacity = _awTuner.opacity;
+                  w.userData._edges.userData._opacity = _awTuner.opacity * 0.9;
                 }
                 wi++;
               }
@@ -651,8 +651,8 @@ if (_origAdminToggle) {
           _awActive.forEach((w, idx) => {
             const sign = (idx % 2 === 0) ? 1 : -1;
             _applyWallTuner(w, sign);
-            w.userData._mesh.material.uniforms.uOpacity.value = _awTuner.opacity;
-            w.userData._edges.material.opacity = _awTuner.opacity * 0.9;
+            w.userData._mesh.userData._opacity = _awTuner.opacity;
+            w.userData._edges.userData._opacity = _awTuner.opacity * 0.9;
           });
         }
       });
@@ -1388,7 +1388,7 @@ void main(){
 }`;
 
 // ── Pool + state ─────────────────────────────────────────────────────────────
-const _AST_POOL_SIZE = 12;
+const _AST_POOL_SIZE = 0; // disabled — asteroids not currently used as an obstacle (was 12)
 const _asteroidPool  = [];      // { group, rockMesh, fireMesh, light, tailGeo, tailPts, warnMesh, warnMat, active, ... }
 let   _asteroidActive = [];     // refs into pool currently in flight
 let   _astTimer = 0;            // time until next spawn
