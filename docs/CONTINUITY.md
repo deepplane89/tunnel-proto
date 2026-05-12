@@ -1,5 +1,5 @@
 # Tunnel Proto — Continuity Document
-**Last updated:** May 11, 2026 — Build split + Vercel build disabled
+**Last updated:** May 12, 2026 — Hitch-hunt v3, prewarm pipeline, SFX mute fix
 
 ## Repo & Deployment
 - **GitHub:** `deepplane89/tunnel-proto`
@@ -166,6 +166,101 @@ Prod ships **player-facing only**. All dev tools gated behind `window.__JH_DEV__
 - **Symptom:** Cones never spawned in next death run after exiting tutorial via settings/tuner overlay (instead of the EXIT TUTORIAL button).
 - **Root cause:** `state._tutorialActive` stuck true when overlay routed back to title without clearing the flag. The update loop's `_noSpawnMode` re-asserted, closing both spawn gates.
 - **Fix:** One-line `state._tutorialActive = false;` in `returnToTitle()`.
+
+## Session 2026-05-12 — Hitch Hunt, Prewarm Pipeline, Layout, SFX Mute
+
+### Layout issues (iOS PWA, mostly accepted as-is)
+- **Blank top strip in gameplay (iOS PWA only):** Confirmed via web search that this is iOS-default behavior — without `viewport-fit=cover`, `env(safe-area-inset-*)` returns 0 and iOS limits the PWA viewport to below the status bar. Only affects iOS home-screen PWA, not Android/desktop/Capacitor. **User accepted as-is.**
+- **Garage outer square + color box cut off at bottom in portrait (iOS PWA):** Diagnosed as iOS home-indicator overlay (~20-34px) without viewport-fit=cover. Fix would be hardcoded `padding-bottom` on `.sr-overlay`. **User said "ugh no lets just leave it as is."** Left unfixed intentionally.
+- **Thruster labels squares + color box minor portrait padding tightening:** Done earlier in session (commit `a30fb44`).
+
+### Hitch Meter v3 (dev-only, modular)
+All in `src/68-hitch-meter.js`:
+- Two paths: BRACKET (`_hitchStart`/`_hitchEnd`) and FRAME (`_hitchArm` arms label for next 3 frames).
+- Thresholds: 5ms bracket, 12ms frame. 30s rolling window. 500ms sanity cap. 5-frame skip after `visibilitychange`.
+- Pause-menu toggle button (`#pause-hitch-toggle`) — visible only when `window.__JH_DEV__`.
+- **Stripped from prod entirely** (added to `DEV_ONLY_FILES` in `scripts/build.sh`). All 23 call sites already use `typeof _hitchStart === 'function'` guards — zero-cost no-ops in prod.
+
+### Labels currently in `_shortLabel` map (dev only)
+- Canyon sub-phases: `cy-mat`, `cy-geo`, `cy-bake`, `cy-warm`, `cy-rndr`
+- Lightning: `lt-spn`, `lt-rndr`
+- Powerup pickup: `pk-app` (applyPowerup), `pk-shat` (shatter spawn), `pk-shld`, `pk-lsr`, `pk-mag`, `pk-inv`
+  - **Fix:** label map was `pickup-invinc` but arm fired `pickup-invincible` — mismatch caused fallthrough. Fixed to `pickup-invincible` in map.
+- Shield activation sub-phases (inside `applyPowerup` switch): `shld-set`, `shld-act`
+- Generic powerup activation sub-phases: `pu-hap`, `pu-ban`, `pu-sfx`
+- Crash sub-brackets (this session): `crsh` (full fatal path), `cr-tear` (state/timer teardown), `cr-exp` (explosion spawn + camera setup), `cr-aud` (SFX kill + engine stop + playCrash), `cr-rndr` (first frame after death)
+
+### Prewarm Pipeline (the big optimization story)
+Problem: shaders compile + vertex buffers upload lazily on first draw. Combined cost was ~270ms on iOS Safari for first lightning bolt, ~194ms for first shield pickup.
+
+**Three-pass prewarm in `src/82-main-late-tail.js`:**
+1. `_compileAllIncludingInvisible(scene, cam)` — traverses every Object3D, flips `.visible=true`, calls `renderer.compile()`, then restores. Compiles shaders.
+2. `_uploadAllBuffers(scene, cam)` — renders ONE frame to tiny offscreen RT so WebGL actually issues draw calls and uploads every vertex/index buffer to GPU.
+3. `_composerPrewarm()` — renders the full post-processing pipeline (bloom + thruster haze + vignette) once to an offscreen RT. Saves & restores every pass's `renderToScreen` flag so canvas backing store is never touched (prior implementation broke the bottom strip).
+
+All three run from `_compileAllIncludingInvisible`. Hooked at: boot (gameplay scene + titleScene), and inside `_createCanyonWalls` after canyon slab build (JIT path).
+
+### Pool coverage audit (final state)
+| Class | Eager in scene? | Shader compile | Buffer upload | Composer warm |
+|---|---|---|---|---|
+| Shield, magnet, laser unibeam, flash, shock disc, aurora, sprites | ✓ visible=false at boot | ✓ | ✓ | ✓ |
+| Lightning bolts (`_ltInitPool`) | ✓ | ✓ | ✓ | ✓ |
+| Lethal rings (`_initLethalRings`) | ✓ | ✓ | ✓ | ✓ |
+| Angled walls | ✓ eager | ✓ | ✓ | ✓ |
+| Cones / fat cones | ✓ eager | ✓ | ✓ | ✓ |
+| Asteroids | ✓ eager | ✓ | ✓ | ✓ |
+| **Canyon slabs** | ✗ JIT in `_createCanyonWalls` | ✓ (own) + ✓ (added this session) | ✓ (added) | ✓ (added) |
+| **Laser bolts** | ✗ JIT in `spawnLaserBolt` → ✓ (prepool 8 at boot, this session) | ✓ | ✓ | ✓ |
+| Sun, sky, stars, nebula | ✓ always visible | ✓ | ✓ | ✓ |
+
+### Powerup-by-powerup hitch / optimization status (post-session)
+- **Shield:** Mesh exists at boot (`visible=false`) → prewarm covers it. Sub-brackets `shld-set` / `shld-act` already in `applyPowerup`. 194ms pk-shld hitch killed by composer prewarm.
+- **Laser:** Unibeam meshes (`laserMesh`/`laserGlowMesh`) exist at boot → covered. Bolt pool now pre-allocated (8 bolts) at boot via `_prepoolLaserBolts` IIFE in `src/20-main-early.js` right after `spawnLaserBolt` definition.
+- **Invincible:** Reuses `shieldMesh` (set `.visible=true`) and plays `invincible-loop-sfx`. No JIT mesh, prewarm covers everything.
+- **Magnet:** `magnetRing`/`magnetRing2` exist at boot → covered. `_startMagnetWhir()` is 4 WebAudio nodes (microseconds, no JIT).
+- **Crash (`killPlayer` fatal path):** Wrapped in `crsh` outer bracket + 3 sub-brackets (`cr-tear`, `cr-exp`, `cr-aud`) + armed `cr-rndr` for next-frame work.
+  - `_spawnExplosion`: zero `new THREE.*` allocations, writes to pre-allocated particle buffers ✓
+  - `_getShipVertices`: allocates 2 arrays + 2 THREE objects, ~1ms once per death — not worth promoting to scratch
+  - `_triggerFaceExplosion`: dead code (`window._FACE_EXP_ENABLED` never set)
+  - `_spawnPowerupShatter`: uses pool (`_getShatterFragment`) ✓
+
+### SFX mute bug (was completely broken)
+**Root cause:** `state.muted` only becomes true when BOTH music AND sfx are muted (`state.muted = musicMult() === 0 && sfxMult() === 0`). Every "guarded" SFX `.play()` was checking `state.muted` — so muting only-SFX left engine-start, shield-activate, retry SFX, invincible loop, laser MG/unibeam, droplet, crash, argon, etc. all still audible.
+
+**Fix:** New helper `isSfxMuted()` in `src/65-settings.js`:
+```js
+function isSfxMuted() { return _settings.sfxMuted || _settings.sfxVol <= 0; }
+window.isSfxMuted = isSfxMuted;
+```
+
+Replaced every SFX play-gate across:
+- `src/30-audio.js`: `playSFX`, `playLevelUp`, `playCrash`, `playWhoosh`/`Release`, `playNearMissSFX`, `_playArgonLoop`/`Once`, `_startMagnetWhir`, `_playBuffer` (redundant but consistent)
+- `src/40-main-late.js`: `playThrusterImpact`, `playRetryWhoosh`, `_playThunderRotating`, `_playLightningStrike`, `_playAsteroidImpact`, `playPickup`, coin chime
+- `src/50-shop.js`: shield-activate-sfx (had NO mute check at all), laser-beam-sfx, unibeam-sfx (T4 + T5), invincible-loop-sfx
+- `src/60-main-late.js`: invincible/laser/unibeam resume after unpause
+- `src/67-main-late.js`: retry-tech-sfx + retry-warp-sfx (4 sites), engine-start (3 play sites + 1 resume), droplet-sfx, klaxon (2 sites), argon mid-flight replay kill
+- `src/20-main-early.js`: engine-start/engine-roar resume on missions/thruster panel close
+
+Music paths (titleMusic, lakeMusic, bgMusic, l3/l4Music, radio) intentionally KEEP `state.muted` — that's the correct gate for music context. Audio interruption recovery at `30-audio.js:199` also keeps `state.muted` (gates whole resume routine when fully muted).
+
+**Load-order note:** `isSfxMuted` defined in `65-settings.js`, called from earlier files (30/40/50/60). Safe because every call is inside a function invoked at runtime (after all files load), never at module top level. Verified via grep.
+
+### Commits this session (in order, most recent last)
+- `a30fb44` — garage portrait padding tightening (early session)
+- `4c2a9a5` — perf(prewarm): composer prewarm via offscreen RT (kills pk-shld 194ms)
+- `c19e9e7` — perf(canyon): extend prewarm with buffer upload + composer pass
+- `c1feb7d` — build: strip hitch-meter from prod (dev-only)
+- `71b3c3b` — perf(hitch): crash sub-brackets + fix pickup-invincible label
+- `d59e613` — perf(laser): prepool 8 bolts at boot so prewarm catches them
+- `f3fdfb3` — fix(audio): gate every SFX play on sfx-mute (not combined state.muted)
+
+**Current HEAD (dev):** `f3fdfb3`. Main still at `14ff568` (pre-May-9 revert, kept for Vercel until ready to merge).
+
+### Pending from this session
+- **Sun quality bump** — user wants to restore quality (sun mesh segments, sun glow sprite resolution, bloom strength multiplier, corona radius). Not started yet. User said: "i feel like with these changes i can start bumping up the quality of the sun again."
+- **Finish audit** — material churn, draw calls, intervals, textures (beyond what's covered)
+- **Compile ranked optimization report** — user-facing summary of wins
+- **Merge dev → main** when user confirms stability
 
 ## Critical User Instructions
 - DO NOT touch ice (T4) or gold (T5) sun warp effects
