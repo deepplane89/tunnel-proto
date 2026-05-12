@@ -31410,22 +31410,152 @@ window._jlDebug = {
   _LT_PANEL_PATTERNS.forEach(p => { _registerLtPattern(p.short, p.tick); _registerLtPattern(p.label, p.tick); });
 
   // ── Build jagged TubeGeometry bolt ────────────────────────────────────────
-  // Bolt geometry built at Z=0 local space — Group handles world Z position
-  function _ltBoltGeo(topY, landX, segs, jagg, radius) {
-    let pts = [{ x: landX, y: topY }, { x: landX, y: 0.5 }];
+  // Bolt geometry built at Z=0 local space — Group handles world Z position.
+  //
+  // Initial pool init uses _ltBoltGeo to construct each bolt's BufferGeometry
+  // exactly ONCE. After that, _ltRejag updates the existing position+normal
+  // Float32Arrays in place (no alloc, no GPU re-alloc, only bufferSubData) —
+  // see _ltUpdateTubeInPlace below.
+  //
+  // For in-place updates to work the vertex count must be constant across all
+  // rejags. With fixed _LT.segments, pts.length is deterministic:
+  //   pts.length = 2 * 2^iters + 1, iters = round(log2(segs))
+  // With segs=64, iters=6, pts=129. Constant. ✓
+  const _LT_TUBE_RADIAL = 5;   // matches original TubeGeometry param
+
+  // Pre-allocated scratch for jagged points (avoid alloc on every rejag).
+  // Sized to max plausible — we never exceed 256 pts even at high segs.
+  const _LT_PTS_X = new Float64Array(512);
+  const _LT_PTS_Y = new Float64Array(512);
+  let   _LT_PTS_N = 0;
+
+  // Fill _LT_PTS_X/_LT_PTS_Y with jagged-midpoint subdivision. Sets _LT_PTS_N.
+  // Same algorithm as the original _ltBoltGeo, just writes to typed arrays
+  // instead of allocating new arrays each call.
+  function _ltBuildPts(topY, landX, segs, jagg) {
+    _LT_PTS_X[0] = landX; _LT_PTS_Y[0] = topY;
+    _LT_PTS_X[1] = landX; _LT_PTS_Y[1] = 0.5;
+    let n = 2;
     const iters = Math.max(1, Math.round(Math.log2(Math.max(4, segs))));
     for (let d = 0; d < iters; d++) {
-      const next = [];
-      for (let i = 0; i < pts.length-1; i++) {
-        next.push(pts[i]);
-        next.push({ x:(pts[i].x+pts[i+1].x)*0.5+(Math.random()-0.5)*jagg*(1-d*0.2), y:(pts[i].y+pts[i+1].y)*0.5 });
+      // Subdivide in place — walk from end to start so we don't overwrite.
+      // After this loop, n becomes 2*n - 1.
+      const newN = 2 * n - 1;
+      for (let i = n - 1; i > 0; i--) {
+        // Original pt i goes to slot 2*i.
+        _LT_PTS_X[2*i] = _LT_PTS_X[i];
+        _LT_PTS_Y[2*i] = _LT_PTS_Y[i];
       }
-      next.push(pts[pts.length-1]);
-      pts = next;
+      // Pt 0 already at slot 0. Insert midpoints at odd slots.
+      const jaggScale = jagg * (1 - d * 0.2);
+      for (let i = 0; i < n - 1; i++) {
+        const x0 = _LT_PTS_X[2*i], x1 = _LT_PTS_X[2*(i+1)];
+        const y0 = _LT_PTS_Y[2*i], y1 = _LT_PTS_Y[2*(i+1)];
+        _LT_PTS_X[2*i+1] = (x0 + x1) * 0.5 + (Math.random() - 0.5) * jaggScale;
+        _LT_PTS_Y[2*i+1] = (y0 + y1) * 0.5;
+      }
+      n = newN;
     }
-    const v3pts = pts.map(p => new THREE.Vector3(p.x, p.y, 0)); // Z=0 local
-    const curve = new THREE.CatmullRomCurve3(v3pts);
-    return new THREE.TubeGeometry(curve, Math.max(4, pts.length), radius, 5, false);
+    _LT_PTS_N = n;
+  }
+
+  // Scratch curve + vec3 array reused across all rejags. We replace the
+  // curve.points array contents in place via the existing v3 pool below.
+  const _LT_V3_POOL = [];
+  function _ltEnsureV3Pool(n) {
+    while (_LT_V3_POOL.length < n) _LT_V3_POOL.push(new THREE.Vector3());
+  }
+
+  // Initial-build helper — used ONLY by _ltInitPool to create the BufferGeometry
+  // once. Returns a real TubeGeometry; subsequent updates go through
+  // _ltUpdateTubeInPlace which mutates the buffers without realloc.
+  function _ltBoltGeo(topY, landX, segs, jagg, radius) {
+    _ltBuildPts(topY, landX, segs, jagg);
+    _ltEnsureV3Pool(_LT_PTS_N);
+    for (let i = 0; i < _LT_PTS_N; i++) {
+      _LT_V3_POOL[i].set(_LT_PTS_X[i], _LT_PTS_Y[i], 0);
+    }
+    // CatmullRomCurve3 stores a reference to the points array — give it a
+    // fresh sliced array so the initial geo is independent of the scratch pool.
+    const curve = new THREE.CatmullRomCurve3(_LT_V3_POOL.slice(0, _LT_PTS_N).map(v => v.clone()));
+    return new THREE.TubeGeometry(curve, Math.max(4, _LT_PTS_N), radius, _LT_TUBE_RADIAL, false);
+  }
+
+  // ── IN-PLACE rejag update — the hot path ──────────────────────────────────
+  // Writes new vertex positions + normals into geo's existing Float32Arrays.
+  // No allocation, no GPU buffer reallocation — only bufferSubData on next draw.
+  // Vertex layout (matches TubeGeometry exactly):
+  //   for tubularSegment i in [0..tubularSegments]:
+  //     for radial j in [0..radialSegments]:
+  //       vertex at index i*(radialSegments+1) + j
+  //       position = P_i + radius * normal_ij
+  //       normal_ij = cos(v)*N_i + sin(v)*B_i (normalized), v = j/radial*2π
+  // where (N_i, B_i) are Frenet frame normal/binormal at tubular i.
+  function _ltUpdateTubeInPlace(geo, topY, landX, segs, jagg, radius) {
+    // 1) Build jagged 2D control points (cheap, in typed scratch arrays).
+    _ltBuildPts(topY, landX, segs, jagg);
+    const n = _LT_PTS_N;
+    _ltEnsureV3Pool(n);
+    for (let i = 0; i < n; i++) {
+      _LT_V3_POOL[i].set(_LT_PTS_X[i], _LT_PTS_Y[i], 0);
+    }
+
+    // 2) Build curve. CatmullRomCurve3 holds a reference to the points array;
+    // we hand it a fresh small array each time (n vec3 refs to the pool).
+    // This is the only per-rejag alloc — a single Array of n refs (~1KB).
+    const ptsRef = new Array(n);
+    for (let i = 0; i < n; i++) ptsRef[i] = _LT_V3_POOL[i];
+    const curve = new THREE.CatmullRomCurve3(ptsRef);
+
+    // 3) Frenet frames along the tube.
+    const tubularSegments = Math.max(4, n);
+    const frames = curve.computeFrenetFrames(tubularSegments, false);
+    const normals = frames.normals, binormals = frames.binormals;
+
+    // 4) Walk vertices, write into existing typed arrays.
+    const posAttr = geo.attributes.position;
+    const nrmAttr = geo.attributes.normal;
+    const posArr = posAttr.array;
+    const nrmArr = nrmAttr.array;
+    const radialSegments = _LT_TUBE_RADIAL;
+    const TWO_PI = Math.PI * 2;
+
+    let writeIdx = 0;
+    // Sample point at i/tubularSegments along the curve. Cache in P_x/y/z.
+    const _P = new THREE.Vector3();
+    for (let i = 0; i <= tubularSegments; i++) {
+      curve.getPointAt(i / tubularSegments, _P);
+      const Nx = normals[i].x,   Ny = normals[i].y,   Nz = normals[i].z;
+      const Bx = binormals[i].x, By = binormals[i].y, Bz = binormals[i].z;
+      for (let j = 0; j <= radialSegments; j++) {
+        const v   = j / radialSegments * TWO_PI;
+        const sin = Math.sin(v);
+        const cos = -Math.cos(v);
+        // Normal (then normalize) — same math as TubeGeometry.generateSegment.
+        let nx = cos * Nx + sin * Bx;
+        let ny = cos * Ny + sin * By;
+        let nz = cos * Nz + sin * Bz;
+        const invLen = 1 / Math.max(1e-9, Math.sqrt(nx*nx + ny*ny + nz*nz));
+        nx *= invLen; ny *= invLen; nz *= invLen;
+        const k = writeIdx * 3;
+        nrmArr[k]     = nx;
+        nrmArr[k + 1] = ny;
+        nrmArr[k + 2] = nz;
+        posArr[k]     = _P.x + radius * nx;
+        posArr[k + 1] = _P.y + radius * ny;
+        posArr[k + 2] = _P.z + radius * nz;
+        writeIdx++;
+      }
+    }
+
+    // 5) Mark for upload — next draw call bufferSubDatas these arrays.
+    // No realloc on the GPU side because byteLength is unchanged.
+    posAttr.needsUpdate = true;
+    nrmAttr.needsUpdate = true;
+    // UVs + indices never change — untouched.
+
+    // 6) Refresh bounding info so frustum culling stays sane (cheap).
+    geo.computeBoundingSphere();
   }
 
   // ── Lightning bolt object pool ────────────────────────────────────────────
@@ -31594,7 +31724,8 @@ window._jlDebug = {
   function _ltKill(inst) {
     // Pooled: hide meshes and release slot — no scene.remove, no dispose.
     // Tube geos (coreGeo/glowGeo) stay attached to their meshes; next spawn
-    // calls _ltRejag which disposes the old tube and assigns a fresh one.
+    // calls _ltRejag which mutates the existing position/normal arrays in
+    // place (no dispose, no realloc) — see _ltUpdateTubeInPlace.
     inst.warnMesh.visible = false;
     inst.flash.visible    = false;
     inst.ring.visible     = false;
@@ -31603,14 +31734,15 @@ window._jlDebug = {
   }
 
   function _ltRejag(inst) {
-    inst.coreGeo.dispose(); inst.glowGeo.dispose();
-    // Use per-instance radii (set at spawn) so lateral fat bolts stay fat through rejags
+    // In-place vertex update — no dispose, no new TubeGeometry, no GPU realloc.
+    // Same visual output as the old dispose+rebuild path; just rewrites the
+    // position+normal Float32Arrays already attached to inst.coreGeo/glowGeo.
+    // Cost: ~Npts × (radial+1) Math.sin/cos + writes — dominated by getPointAt.
+    // GPU side: bufferSubData on next draw (byteLength unchanged → no realloc).
     const cr = (inst._coreRadius != null) ? inst._coreRadius : _LT.coreRadius;
     const gr = (inst._glowRadius != null) ? inst._glowRadius : _LT.glowRadius;
-    const ng = _ltBoltGeo(_LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness,     cr);
-    const gg = _ltBoltGeo(_LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness*1.4, gr);
-    inst.coreMesh.geometry = ng; inst.coreGeo = ng;
-    inst.glowMesh.geometry = gg; inst.glowGeo = gg;
+    _ltUpdateTubeInPlace(inst.coreGeo, _LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness,     cr);
+    _ltUpdateTubeInPlace(inst.glowGeo, _LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness*1.4, gr);
   }
 
   let _ltShakeTime = 0;
