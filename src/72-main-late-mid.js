@@ -3127,6 +3127,24 @@ window._jlDebug = {
         glowMesh, glowGeo, glowMat,
       });
     }
+    // Build the shared jagged-variant cache too so the boot prewarm pass
+    // uploads ALL bolt buffers in one shot, not just whatever variant
+    // happens to be on coreMesh/glowMesh at the moment.
+    _ltEnsureVariants();
+    // Briefly assign each variant onto pool slots so the global compile-all
+    // pass renders (and thus uploads) every variant. After this loop the
+    // last variant remains assigned, which is fine — it gets cycled by the
+    // first real rejag.
+    if (_ltVariantCores) {
+      for (let i = 0; i < _ltPool.length; i++) {
+        const v = i % _LT_VARIANT_COUNT;
+        _ltPool[i].coreMesh.geometry = _ltVariantCores[v];
+        _ltPool[i].glowMesh.geometry = _ltVariantGlows[v];
+        _ltPool[i].coreGeo = _ltVariantCores[v];
+        _ltPool[i].glowGeo = _ltVariantGlows[v];
+        _ltPool[i]._geoShared = true;
+      }
+    }
     _ltPoolReady = true;
   }
   // Expose so global prewarm can call it once at startup
@@ -3236,13 +3254,72 @@ window._jlDebug = {
     inst._active = false;
   }
 
+  // ── Shared jagged tube-geo cache ───────────────────────────────────────
+  // _ltRejag used to dispose + rebuild + re-upload TubeGeometry on every
+  // call — multiple times per second per bolt during flicker. On iOS Safari
+  // the first bolt of a session paid a ~270ms GPU buffer-upload stall, and
+  // every subsequent rejag paid a smaller (~5-15ms) upload + GC tax.
+  //
+  // Now we pre-build M jagged variants ONCE at boot (default radius,
+  // landX=0). _ltRejag just cycles to the next variant — zero allocation,
+  // zero upload (buffers already on GPU after the boot warmup render). The
+  // visual flicker is preserved because the cycle order is randomized per
+  // bolt.
+  //
+  // landX used to be baked into vertex positions — now we set it on the
+  // bolt group's position.x instead, so a single variant pool covers every
+  // landX. Per-instance radii (lateral fat bolts) keep the slow path.
+  const _LT_VARIANT_COUNT = 8;
+  let _ltVariantCores = null; // BufferGeometry[]
+  let _ltVariantGlows = null;
+  function _ltEnsureVariants() {
+    if (_ltVariantCores) return;
+    _ltVariantCores = [];
+    _ltVariantGlows = [];
+    for (let i = 0; i < _LT_VARIANT_COUNT; i++) {
+      _ltVariantCores.push(_ltBoltGeo(_LT.skyHeight, 0, _LT.segments, _LT.jaggedness,       _LT.coreRadius));
+      _ltVariantGlows.push(_ltBoltGeo(_LT.skyHeight, 0, _LT.segments, _LT.jaggedness * 1.4, _LT.glowRadius));
+    }
+  }
+
   function _ltRejag(inst) {
-    inst.coreGeo.dispose(); inst.glowGeo.dispose();
-    // Use per-instance radii (set at spawn) so lateral fat bolts stay fat through rejags
     const cr = (inst._coreRadius != null) ? inst._coreRadius : _LT.coreRadius;
     const gr = (inst._glowRadius != null) ? inst._glowRadius : _LT.glowRadius;
+    // FAST PATH: default radii — reuse a shared pre-built variant. landX
+    // becomes a group transform, not a baked vertex offset. No allocation,
+    // no GPU upload.
+    if (cr === _LT.coreRadius && gr === _LT.glowRadius) {
+      _ltEnsureVariants();
+      const idx = (Math.random() * _LT_VARIANT_COUNT) | 0;
+      const ng = _ltVariantCores[idx];
+      const gg = _ltVariantGlows[idx];
+      // Apply landX as a group offset — cheap, no buffer touch.
+      inst.boltGroup.position.x = inst.landX;
+      // Only assign if it actually changed; reassigning the same geometry
+      // is a no-op but THREE still re-validates attributes.
+      if (inst.coreMesh.geometry !== ng) inst.coreMesh.geometry = ng;
+      if (inst.glowMesh.geometry !== gg) inst.glowMesh.geometry = gg;
+      // The original 'coreGeo' field used to point to a private geo we'd
+      // dispose next time. With shared variants we MUST NOT dispose, so
+      // mark these as non-owned. _ltKill checks this flag.
+      inst._geoShared = true;
+      inst.coreGeo = ng;
+      inst.glowGeo = gg;
+      return;
+    }
+    // SLOW PATH: lateral bolts with non-default radii — still allocate. Rare
+    // enough (handful per minute) that the cost is not user-visible.
+    if (!inst._geoShared) {
+      // Only dispose if we actually own the previous geo (i.e. it came from
+      // the slow path too). Shared variants must never be disposed.
+      inst.coreGeo.dispose(); inst.glowGeo.dispose();
+    }
+    inst._geoShared = false;
     const ng = _ltBoltGeo(_LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness,     cr);
     const gg = _ltBoltGeo(_LT.skyHeight, inst.landX, _LT.segments, _LT.jaggedness*1.4, gr);
+    // Fat-radius path: also reset group X to 0 so the baked-in landX is the
+    // final world position (was already the original behavior).
+    inst.boltGroup.position.x = 0;
     inst.coreMesh.geometry = ng; inst.coreGeo = ng;
     inst.glowMesh.geometry = gg; inst.glowGeo = gg;
   }
