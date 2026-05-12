@@ -12461,6 +12461,21 @@ function spawnLaserBolt(side) {
   return bolt;
 }
 
+// Pre-pool 8 laser bolts at boot so first laser pickup doesn't JIT-allocate
+// THREE.Group + 2 Meshes + 2 BasicMaterials per bolt. Pool size 8 covers the
+// worst case (T3 = 4 lanes × ~2 frames of overlap at fastest fire rate).
+// Each bolt is added to the scene with visible=false so the prewarm sweep
+// (_compileAllIncludingInvisible) compiles shaders + uploads vertex buffers.
+(function _prepoolLaserBolts() {
+  for (let _i = 0; _i < 8; _i++) {
+    const b = spawnLaserBolt(0);
+    b.visible = false;
+    // Clear transient state so the prepool doesn't act like an in-flight bolt.
+    b.userData.vel = 0;
+    b.userData.life = 0;
+  }
+})();
+
 // ═══════════════════════════════════════════════════
 //  FOG
 // ═══════════════════════════════════════════════════
