@@ -9154,7 +9154,7 @@ const activeObstacles = [];
     try { if (typeof activeCoins !== 'undefined') coins = activeCoins.length; } catch (_) {}
     try { if (typeof activePowerups !== 'undefined') powerups = activePowerups.length; } catch (_) {}
     try { if (typeof _asteroidPool !== 'undefined') asteroids = _countActive(_asteroidPool); } catch (_) {}
-    try { if (typeof _ffPool !== 'undefined') forcefields = _countActive(_ffPool); } catch (_) {}
+    // forcefields — always 0 (hazard removed); kept in shape for CSV compat
     try { if (typeof _lethalRingPool !== 'undefined') lethalRings = _countActive(_lethalRingPool); } catch (_) {}
     // Split fat cones from regular cones (both share activeObstacles)
     let fatCones = 0;

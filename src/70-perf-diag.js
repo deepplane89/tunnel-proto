@@ -495,8 +495,7 @@ function animate(now) {
   // Twinkling sky stars — update uTime uniform each frame
   if (skyStarPoints)      skyStarPoints.material.uniforms.uTime.value      += rawDt;
   if (skyConstellLines)   skyConstellLines.material.uniforms.uTime.value   += rawDt;
-  // Forcefield animation
-  _ffUniforms.uTime.value += rawDt;
+  // Forcefield animation — REMOVED (gate hazard never shipped)
   // Keep water X in sync with ship so reflection doesn't drift
   mirrorMesh.position.x = state.shipX;
 

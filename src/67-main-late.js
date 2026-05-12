@@ -5916,24 +5916,8 @@ function update(dt) {
     }
   }
 
-  // ── Move forcefields
-  for (let fi = _activeForcefields.length - 1; fi >= 0; fi--) {
-    const ff = _activeForcefields[fi];
-    ff.position.z += effectiveSpeed * dt;
-    if (ff.position.z > DESPAWN_Z) {
-      returnForcefieldToPool(ff);
-      _activeForcefields.splice(fi, 1);
-      continue;
-    }
-    // Collision: flat plane spanning the gap, height ~4 units
-    const halfW = (ff.userData.gapWidth || SLALOM_SPACING) * 0.5;
-    const dx = Math.abs(ff.position.x - state.shipX);
-    const dz = Math.abs(ff.position.z - shipGroup.position.z);
-    if (dx < halfW && dz < 1.5 && !state.invincibleSpeedActive && !state.shieldActive) {
-      killPlayer();
-      return;
-    }
-  }
+  // Forcefield move/collide loop — REMOVED (gate hazard never shipped;
+  // _activeForcefields stub-empty in 40-main-late.js).
 
   // ── Shield — flow shader drives everything via uReveal + uTime
   if (state.shieldActive && !state.invincibleSpeedActive) {
