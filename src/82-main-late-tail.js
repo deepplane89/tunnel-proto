@@ -76,6 +76,15 @@ function _compileAllIncludingInvisible(rootScene, cam) {
     // so without this the FIRST in-game draw of each pool mesh pays the
     // upload cost (~270ms on iOS for the lightning tube geos).
     _uploadAllBuffers(rootScene, cam);
+    // 2C) Render one frame at REAL canvas size with everything visible.
+    // iOS Safari (PowerVR/Apple GPU) defers final shader program LINK and
+    // viewport-specific specialization until first real-resolution draw.
+    // The 2x2 offscreen pass uploads buffers but doesn't trigger the
+    // viewport-spec'd link. Doing one full-res frame here pays that cost
+    // during loading (covered by #app-loader DOM overlay, z=99999) instead
+    // of mid-gameplay on first activation. This is what kills the 116ms
+    // first-shield-pickup hitch — same fix family for laser/magnet/etc.
+    _fullResRenderPass(rootScene, cam);
   } catch (e) {
     console.warn('[PREWARM] compile-all failed:', e && e.message);
   }
@@ -86,6 +95,42 @@ function _compileAllIncludingInvisible(rootScene, cam) {
   }
 }
 window._compileAllIncludingInvisible = _compileAllIncludingInvisible;
+
+// Full-res render pass at canvas size. Covers iOS Safari's defer-final-link.
+// Renders to the real canvas (visible to no one because #app-loader covers
+// it), then clears so the canvas is black when the loader fades.
+//
+// IMPORTANT: routes through composer.render() (not renderer.render()) so the
+// entire post-processing pipeline (bloom, FXAA, etc.) also gets first-use
+// shader specialization done during loading. Without this, bloom's first
+// encounter with a bright additive mesh (shield, laser, lightning, magnet)
+// still hitches mid-gameplay because the bloom shader specializes for input
+// brightness/format on first real use.
+function _fullResRenderPass(rootScene, cam) {
+  if (typeof renderer === 'undefined') return;
+  try {
+    const prevTarget = renderer.getRenderTarget();
+    renderer.setRenderTarget(null);
+    const prevClear = new THREE.Color();
+    renderer.getClearColor(prevClear);
+    const prevClearAlpha = renderer.getClearAlpha();
+    // Prefer composer (warms bloom + FXAA + tone-mapping passes too).
+    // Fall back to plain renderer.render if composer isn't ready.
+    if (typeof composer !== 'undefined' && composer && typeof composer.render === 'function') {
+      composer.render();
+    } else if (rootScene && cam) {
+      renderer.render(rootScene, cam);
+    }
+    // Clear back to opaque black so the loader-cover handoff is clean.
+    renderer.setClearColor(0x000000, 1);
+    renderer.clear();
+    renderer.setClearColor(prevClear, prevClearAlpha);
+    renderer.setRenderTarget(prevTarget);
+  } catch (e) {
+    console.warn('[PREWARM] full-res pass failed:', e && e.message);
+  }
+}
+window._fullResRenderPass = _fullResRenderPass;
 
 // Cached 1x1 render target. Reused across boot + ctx-restore prewarm calls.
 let _bufferWarmRT = null;
