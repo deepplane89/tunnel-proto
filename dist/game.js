@@ -27591,7 +27591,9 @@ const _perfDiag = (function() {
     });
     console.log('[PERF DIAG] needsUpdate trap installed');
   }
-  setTimeout(_installNeedsUpdateTrap, 100);
+  // Only install when perf diag is explicitly turned on. Otherwise the trap
+  // generates GL_INVALID_VALUE noise from inspecting GC'd program handles.
+  if (window._perfDiagOn) setTimeout(_installNeedsUpdateTrap, 100);
 
   return { frameStart, markRenderStart, markRenderEnd, frameEnd, tag };
 })();
