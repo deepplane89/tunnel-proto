@@ -25,12 +25,12 @@
 window._hitchMeterOn = false;
 
 const _HITCH_WINDOW_MS = 30000; // remember worst hitch for 30s
-const _HITCH_THRESHOLD_MS = 8;  // ignore anything under 8ms
+const _HITCH_THRESHOLD_MS = 5;  // ignore anything under 5ms (diagnosis mode)
 
 // Frame-path threshold is higher: 60fps budget = 16.7ms, 120fps = 8.3ms.
 // We only care when a frame demonstrably overran. Anything ≥25ms is a real
 // visible stutter on 60Hz; ≥18ms is a missed frame on 60Hz.
-const _HITCH_FRAME_THRESHOLD_MS = 18;
+const _HITCH_FRAME_THRESHOLD_MS = 12;  // diagnosis mode — was 18
 
 // How many frames after _hitchArm() the label remains "live". Shader compile
 // and texture upload typically lands the very next frame, sometimes the one
