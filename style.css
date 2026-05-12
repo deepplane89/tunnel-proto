@@ -4222,23 +4222,23 @@ html, body {
 }
 .fps-overlay.hidden { display: none; }
 
-/* Hitch readout — dev only, second line under FPS */
+/* Hitch readout — dev only. Positioned well below iOS Dynamic Island / status bar. */
 .hitch-overlay {
   position: fixed;
-  top: 28px;
+  top: calc(env(safe-area-inset-top, 0px) + 96px);
   right: 8px;
   z-index: 9999;
   font-family: 'JetBrains Mono', monospace, system-ui;
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 800;
   color: #ff8;
-  background: rgba(0,0,0,0.55);
-  padding: 2px 7px;
-  border-radius: 4px;
+  background: rgba(0,0,0,0.7);
+  padding: 4px 9px;
+  border-radius: 5px;
   pointer-events: none;
-  letter-spacing: 0.05em;
-  white-space: pre;
-  max-width: 220px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  text-align: right;
 }
 .hitch-overlay.hidden { display: none; }
 .hitch-overlay.warn { color: #ff5; }

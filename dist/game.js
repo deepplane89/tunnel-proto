@@ -27615,7 +27615,12 @@ function _renderHitchOverlay() {
   }
   const agoSec = Math.floor((now - _hitchWorst.t) / 1000);
   const ms = Math.round(_hitchWorst.ms);
-  el.textContent = 'worst: ' + ms + 'ms ' + _hitchWorst.name + ' (' + agoSec + 's ago)';
+  // ms first so it's always visible even if right edge is cropped.
+  // Short cat: 'cnyn' / 'pkup' so the whole line stays compact on iPhone.
+  const shortCat = _hitchWorst.name === 'canyon' ? 'cnyn'
+                 : _hitchWorst.name === 'pickup' ? 'pkup'
+                 : _hitchWorst.name;
+  el.textContent = ms + 'ms ' + shortCat + ' ' + agoSec + 's';
   el.classList.toggle('warn', ms >= 20 && ms < 50);
   el.classList.toggle('bad',  ms >= 50);
 }
