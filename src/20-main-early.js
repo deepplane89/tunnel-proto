@@ -10094,6 +10094,7 @@ function _buildCanyonSlabGeo(seed, thickOverride, snapOverride, wOverride) {
 function _createCanyonWalls() {
   if (_canyonWalls) return;
   const _hT0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
+  const _hTmat0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   _canyonDbgFrame = 0; _canyonDbgLastNearestRot = null; _canyonDbgStartTime = null;
   const T = _canyonTuner;
   // Defensive clamp: canyons must never have more than 1 entry slab. Some
@@ -10158,6 +10159,8 @@ function _createCanyonWalls() {
   });
   const canyonLight = { lights: _CANYON_PERSISTENT_LIGHTS };
 
+  if (typeof _hitchEnd === 'function') _hitchEnd('cnyn-mat', _hTmat0);
+  const _hTgeo0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   const SPACING  = T.slabW;
   // FOOT_OFF: the foot vertex sits at local X = footX.
   // To place foot at world X = center + halfX*side, group.x = center + halfX*side - footX*side.
@@ -10248,6 +10251,8 @@ function _createCanyonWalls() {
     }
   });
 
+  if (typeof _hitchEnd === 'function') _hitchEnd('cnyn-geo', _hTgeo0);
+  const _hTbake0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   // Bake X at init: entrance slabs stay flush with corridor (same halfX as regular)
   // Their thickness already pushes them outward visually
   ['left','right'].forEach(k => {
@@ -10311,6 +10316,8 @@ function _createCanyonWalls() {
     const zMin = _reg[_reg.length-1].position.z;
   }
 
+  if (typeof _hitchEnd === 'function') _hitchEnd('cnyn-bake', _hTbake0);
+  const _hTwarm0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   _canyonWalls = {
     strips:       [...chunks.left, ...chunks.right],
     left:         chunks.left,
@@ -10358,10 +10365,11 @@ function _createCanyonWalls() {
   } catch(e) {
     console.warn('[CANYON PREWARM] failed:', e.message);
   }
+  if (typeof _hitchEnd === 'function') _hitchEnd('cnyn-warm', _hTwarm0);
   if (typeof _hitchEnd === 'function') _hitchEnd('canyon', _hT0);
   // Also arm the frame-path detector — a canyon's hidden cost can be the
   // very next render frame (texture upload, atlas decode, lighting recompute).
-  if (typeof _hitchArm === 'function') _hitchArm('canyon-rndr');
+  if (typeof _hitchArm === 'function') _hitchArm('cnyn-rndr');
 }
 
 function _destroyCanyonWalls() {

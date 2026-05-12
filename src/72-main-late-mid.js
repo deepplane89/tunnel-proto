@@ -3145,6 +3145,7 @@ window._jlDebug = {
   // After the strike the bolt is a planted world-space column — ship flies past it.
   function _spawnLightning(targetX, landZOverride, skipWarn, radiiOverride, leadOverride) {
     if (window._perfDiag) window._perfDiag.tag('lightning_spawn');
+    const _hT0lt = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
     const shipZ  = _shipZ();
     // landZOverride lets callers (e.g. lateral) spawn at a custom Z without touching _LT.spawnZ
     const landZ  = (landZOverride !== undefined) ? landZOverride : (shipZ + _LT.spawnZ);
@@ -3217,6 +3218,11 @@ window._jlDebug = {
     }
 
     _ltActive.push(inst);
+    if (typeof _hitchEnd === 'function') _hitchEnd('lt-spawn', _hT0lt);
+    // Lightning's hidden cost is usually the NEXT frame: the rejagged tube
+    // geometry uploads to GPU and the bolt mesh flips visible. Arm a frame
+    // label so any post-spawn stutter is attributed to lightning, not 'frame'.
+    if (typeof _hitchArm === 'function') _hitchArm('lt-rndr');
   }
 
   function _ltKill(inst) {

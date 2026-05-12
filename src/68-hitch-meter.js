@@ -120,16 +120,26 @@ function _renderHitchOverlay() {
 
 function _shortLabel(name) {
   if (!name) return '?';
-  // Common labels → short forms.
+  // Common labels → short forms (kept short so a long line still fits on
+  // iPhone right edge with 13px font).
   if (name === 'canyon') return 'cnyn';
   if (name === 'pickup') return 'pkup';
-  if (name === 'pickup-app') return 'pk-app';
-  if (name === 'pickup-shat') return 'pk-shat';
-  if (name === 'pickup-shield') return 'pk-shld';
-  if (name === 'pickup-laser') return 'pk-lsr';
-  if (name === 'pickup-magnet') return 'pk-mag';
-  if (name === 'pickup-invinc') return 'pk-inv';
-  return name.length > 8 ? name.slice(0, 8) : name;
+  if (name === 'pickup-app')     return 'pk-app';
+  if (name === 'pickup-shat')    return 'pk-shat';
+  if (name === 'pickup-shield')  return 'pk-shld';
+  if (name === 'pickup-laser')   return 'pk-lsr';
+  if (name === 'pickup-magnet')  return 'pk-mag';
+  if (name === 'pickup-invinc')  return 'pk-inv';
+  // Canyon sub-phases (synchronous build steps inside _createCanyonWalls)
+  if (name === 'cnyn-mat')   return 'cy-mat';   // material allocation
+  if (name === 'cnyn-geo')   return 'cy-geo';   // slab geometry build (CPU)
+  if (name === 'cnyn-bake')  return 'cy-bake';  // X/rotation bake loop
+  if (name === 'cnyn-warm')  return 'cy-warm';  // GPU proxy-scene compile
+  if (name === 'cnyn-rndr')  return 'cy-rndr';  // next-frame render (upload/light)
+  // Lightning
+  if (name === 'lt-spawn')   return 'lt-spn';   // synchronous spawn setup
+  if (name === 'lt-rndr')    return 'lt-rndr';  // first render after spawn
+  return name.length > 9 ? name.slice(0, 9) : name;
 }
 
 window._hitchStart = _hitchStart;

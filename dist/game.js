@@ -10909,6 +10909,7 @@ function _buildCanyonSlabGeo(seed, thickOverride, snapOverride, wOverride) {
 function _createCanyonWalls() {
   if (_canyonWalls) return;
   const _hT0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
+  const _hTmat0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   _canyonDbgFrame = 0; _canyonDbgLastNearestRot = null; _canyonDbgStartTime = null;
   const T = _canyonTuner;
   // Defensive clamp: canyons must never have more than 1 entry slab. Some
@@ -10973,6 +10974,8 @@ function _createCanyonWalls() {
   });
   const canyonLight = { lights: _CANYON_PERSISTENT_LIGHTS };
 
+  if (typeof _hitchEnd === 'function') _hitchEnd('cnyn-mat', _hTmat0);
+  const _hTgeo0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   const SPACING  = T.slabW;
   // FOOT_OFF: the foot vertex sits at local X = footX.
   // To place foot at world X = center + halfX*side, group.x = center + halfX*side - footX*side.
@@ -11063,6 +11066,8 @@ function _createCanyonWalls() {
     }
   });
 
+  if (typeof _hitchEnd === 'function') _hitchEnd('cnyn-geo', _hTgeo0);
+  const _hTbake0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   // Bake X at init: entrance slabs stay flush with corridor (same halfX as regular)
   // Their thickness already pushes them outward visually
   ['left','right'].forEach(k => {
@@ -11126,6 +11131,8 @@ function _createCanyonWalls() {
     const zMin = _reg[_reg.length-1].position.z;
   }
 
+  if (typeof _hitchEnd === 'function') _hitchEnd('cnyn-bake', _hTbake0);
+  const _hTwarm0 = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   _canyonWalls = {
     strips:       [...chunks.left, ...chunks.right],
     left:         chunks.left,
@@ -11173,10 +11180,11 @@ function _createCanyonWalls() {
   } catch(e) {
     console.warn('[CANYON PREWARM] failed:', e.message);
   }
+  if (typeof _hitchEnd === 'function') _hitchEnd('cnyn-warm', _hTwarm0);
   if (typeof _hitchEnd === 'function') _hitchEnd('canyon', _hT0);
   // Also arm the frame-path detector — a canyon's hidden cost can be the
   // very next render frame (texture upload, atlas decode, lighting recompute).
-  if (typeof _hitchArm === 'function') _hitchArm('canyon-rndr');
+  if (typeof _hitchArm === 'function') _hitchArm('cnyn-rndr');
 }
 
 function _destroyCanyonWalls() {
@@ -27684,16 +27692,26 @@ function _renderHitchOverlay() {
 
 function _shortLabel(name) {
   if (!name) return '?';
-  // Common labels → short forms.
+  // Common labels → short forms (kept short so a long line still fits on
+  // iPhone right edge with 13px font).
   if (name === 'canyon') return 'cnyn';
   if (name === 'pickup') return 'pkup';
-  if (name === 'pickup-app') return 'pk-app';
-  if (name === 'pickup-shat') return 'pk-shat';
-  if (name === 'pickup-shield') return 'pk-shld';
-  if (name === 'pickup-laser') return 'pk-lsr';
-  if (name === 'pickup-magnet') return 'pk-mag';
-  if (name === 'pickup-invinc') return 'pk-inv';
-  return name.length > 8 ? name.slice(0, 8) : name;
+  if (name === 'pickup-app')     return 'pk-app';
+  if (name === 'pickup-shat')    return 'pk-shat';
+  if (name === 'pickup-shield')  return 'pk-shld';
+  if (name === 'pickup-laser')   return 'pk-lsr';
+  if (name === 'pickup-magnet')  return 'pk-mag';
+  if (name === 'pickup-invinc')  return 'pk-inv';
+  // Canyon sub-phases (synchronous build steps inside _createCanyonWalls)
+  if (name === 'cnyn-mat')   return 'cy-mat';   // material allocation
+  if (name === 'cnyn-geo')   return 'cy-geo';   // slab geometry build (CPU)
+  if (name === 'cnyn-bake')  return 'cy-bake';  // X/rotation bake loop
+  if (name === 'cnyn-warm')  return 'cy-warm';  // GPU proxy-scene compile
+  if (name === 'cnyn-rndr')  return 'cy-rndr';  // next-frame render (upload/light)
+  // Lightning
+  if (name === 'lt-spawn')   return 'lt-spn';   // synchronous spawn setup
+  if (name === 'lt-rndr')    return 'lt-rndr';  // first render after spawn
+  return name.length > 9 ? name.slice(0, 9) : name;
 }
 
 window._hitchStart = _hitchStart;
@@ -31478,6 +31496,7 @@ window._jlDebug = {
   // After the strike the bolt is a planted world-space column — ship flies past it.
   function _spawnLightning(targetX, landZOverride, skipWarn, radiiOverride, leadOverride) {
     if (window._perfDiag) window._perfDiag.tag('lightning_spawn');
+    const _hT0lt = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
     const shipZ  = _shipZ();
     // landZOverride lets callers (e.g. lateral) spawn at a custom Z without touching _LT.spawnZ
     const landZ  = (landZOverride !== undefined) ? landZOverride : (shipZ + _LT.spawnZ);
@@ -31550,6 +31569,11 @@ window._jlDebug = {
     }
 
     _ltActive.push(inst);
+    if (typeof _hitchEnd === 'function') _hitchEnd('lt-spawn', _hT0lt);
+    // Lightning's hidden cost is usually the NEXT frame: the rejagged tube
+    // geometry uploads to GPU and the bolt mesh flips visible. Arm a frame
+    // label so any post-spawn stutter is attributed to lightning, not 'frame'.
+    if (typeof _hitchArm === 'function') _hitchArm('lt-rndr');
   }
 
   function _ltKill(inst) {
