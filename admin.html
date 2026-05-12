@@ -452,7 +452,10 @@ function platClass(p) {
 function platLabel(p) { return p || 'unknown'; }
 function shortId(id) { return (id || '').slice(0, 8); }
 function relTime(ts) {
-  const s = Math.floor((Date.now() - ts) / 1000);
+  if (!ts || !isFinite(ts)) return '—';
+  let s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 0) s = 0; // guard against future ts / clock skew
+  if (s < 5) return 'just now';
   if (s < 60) return s + 's ago';
   if (s < 3600) return Math.floor(s/60) + 'm ago';
   if (s < 86400) return Math.floor(s/3600) + 'h ago';
@@ -671,9 +674,11 @@ function renderFunnel(d) {
   const sessions = d.summary.sessions || 0;
   const runs     = d.summary.runs || 0;
   const runs60   = d.summary.runs_60s || 0;
-  const conv1 = sessions > 0 ? (runs / sessions * 100).toFixed(0) + '%' : '—';
-  const conv2 = runs > 0 ? (runs60 / runs * 100).toFixed(0) + '%' : '—';
-  $('funnelHint').textContent = 'S→R ' + conv1 + ' · R→60s ' + conv2;
+  const c1 = sessions > 0 ? Math.min(100, Math.round(runs / sessions * 100)) : null;
+  const c2 = runs > 0 ? Math.min(100, Math.round(runs60 / runs * 100)) : null;
+  const conv1 = c1 == null ? '—' : c1 + '%';
+  const conv2 = c2 == null ? '—' : c2 + '%';
+  $('funnelHint').textContent = 'S→R ' + conv1 + ' · R≥60s ' + conv2;
 
   _charts.cFunnel = new Chart($('cFunnel'), {
     type: 'bar',
