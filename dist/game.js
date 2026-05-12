@@ -13011,19 +13011,19 @@ function playCrash() {
 // ═══════════════════════════════════════════════════
 
 const RADIO_TRACKS = [
-  { id: 'neon-underworld',   name: 'NEON UNDERWORLD',       src: './assets/audio/l4music.mp3' },
-  { id: 'brazilian-street',  name: 'BRAZILIAN STREET FIGHT',src: './assets/audio/l3music.mp3' },
-  { id: 'synesthetic-gears', name: 'SYNESTHETIC GEARS',     src: './assets/audio/radio-gears-1.mp3' },
-  { id: 'synthetic-gears-2', name: 'SYNTHETIC GEARS II',    src: './assets/audio/radio-gears-2.mp3' },
-  { id: 'funk-of-the-night', name: 'FUNK OF THE NIGHT',     src: './assets/audio/radio-funk.mp3' },
-  { id: 'orbital-ordinance', name: 'ORBITAL ORDINANCE',     src: './assets/audio/radio-orbital.mp3' },
-  { id: 'neon-mountain',     name: 'NEON MOUNTAIN',         src: './assets/audio/radio-neon-mtn.mp3' },
-  { id: 'house-of-fuel',     name: 'HOUSE OF FUEL',         src: './assets/audio/radio-house-of-fuel.mp3' },
-  { id: 'grannies-synth',    name: 'GRANNIES SYNTH',        src: './assets/audio/radio-grannies-synth.mp3' },
-  { id: 'andracid',          name: 'ANDRACID',              src: './assets/audio/radio-andracid.mp3' },
-  { id: 'cosmic-relay',      name: 'COSMIC RELAY',          src: './assets/audio/radio-cosmic-relay.mp3' },
-  { id: 'cosmic-relay-2',    name: 'COSMIC RELAY II',       src: './assets/audio/radio-cosmic-relay-2.mp3' },
-  { id: 'drum-n-space',      name: 'DRUM N SPACE',          src: './assets/audio/radio-drum-n-space.mp3' },
+  { id: 'neon-underworld',   name: 'NEON UNDERWORLD',       src: './assets/audio/l4music.m4a' },
+  { id: 'brazilian-street',  name: 'BRAZILIAN STREET FIGHT',src: './assets/audio/l3music.m4a' },
+  { id: 'synesthetic-gears', name: 'SYNESTHETIC GEARS',     src: './assets/audio/radio-gears-1.m4a' },
+  { id: 'synthetic-gears-2', name: 'SYNTHETIC GEARS II',    src: './assets/audio/radio-gears-2.m4a' },
+  { id: 'funk-of-the-night', name: 'FUNK OF THE NIGHT',     src: './assets/audio/radio-funk.m4a' },
+  { id: 'orbital-ordinance', name: 'ORBITAL ORDINANCE',     src: './assets/audio/radio-orbital.m4a' },
+  { id: 'neon-mountain',     name: 'NEON MOUNTAIN',         src: './assets/audio/radio-neon-mtn.m4a' },
+  { id: 'house-of-fuel',     name: 'HOUSE OF FUEL',         src: './assets/audio/radio-house-of-fuel.m4a' },
+  { id: 'grannies-synth',    name: 'GRANNIES SYNTH',        src: './assets/audio/radio-grannies-synth.m4a' },
+  { id: 'andracid',          name: 'ANDRACID',              src: './assets/audio/radio-andracid.m4a' },
+  { id: 'cosmic-relay',      name: 'COSMIC RELAY',          src: './assets/audio/radio-cosmic-relay.m4a' },
+  { id: 'cosmic-relay-2',    name: 'COSMIC RELAY II',       src: './assets/audio/radio-cosmic-relay-2.m4a' },
+  { id: 'drum-n-space',      name: 'DRUM N SPACE',          src: './assets/audio/radio-drum-n-space.m4a' },
 ];
 window.RADIO_TRACKS = RADIO_TRACKS;
 
