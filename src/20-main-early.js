@@ -1642,6 +1642,9 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 renderer.shadowMap.enabled = false;
+// Explicit output color space — r152+ default is sRGB but be explicit so future
+// three.js default changes don't silently shift our colors.
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene  = new THREE.Scene();
 
