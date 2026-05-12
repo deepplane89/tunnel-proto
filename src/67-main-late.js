@@ -793,7 +793,7 @@ function startDeathRun() {
   _pendingVibeIdx = -1;
   state._pendingSpeedTier = -1;
   // _drForcedBand / _drBand4Started / _drBand5StartTime: archived 2026-04-29
-  // (legacy wave director). See src/_archived/legacy-wave-director.js.
+  // (legacy wave director, removed).
   state._arcActive = false;
   state._arcQueue = null;
   state._arcStage = 0;
@@ -5172,7 +5172,7 @@ function update(dt) {
     if (state.deathRunRestBeat > 0) state.deathRunRestBeat -= dt;
     _drSequencerTick(dt);
   }
-  // Legacy wave director archived to src/_archived/legacy-wave-director.js (2026-04-29).
+  // Legacy wave director removed (2026-04-29).
   // Replaced by DR_SEQUENCE / _drSequencerTick above.
 
   // ── Spawn
@@ -5982,12 +5982,6 @@ function update(dt) {
 
   // ── DR Portal gate update ──
 
-
-  // ── Auto-spawn portal gate in DR mode after 10 seconds (POC trigger) ──
-  // QUARANTINED: wormhole sequence disabled for both DR and campaign while sequencer is in development
-  // if (state.isDeathRun && !_drPortalActive && !state.wormholeActive && state.elapsed > 10 && !state.introActive) {
-  //   drPortalSpawn();
-  // }
 
   updateTransition(dt);
   updateDeathRunTransition(dt);

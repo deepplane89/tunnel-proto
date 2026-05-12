@@ -2857,54 +2857,6 @@ const _thrusterHazePass = new ShaderPass(_thrusterHazeShader);
 _thrusterHazePass.enabled = false;  // enabled per-frame only when _coneThrustersEnabled
 composer.addPass(_thrusterHazePass);
 
-// ── RADIAL BLUR (speed streaks) — only active during wormhole
-const RadialBlurShader = {
-  uniforms: {
-    tDiffuse:    { value: null },
-    uIntensity:  { value: 0.0 },
-    uSamples:    { value: 12 },
-    uLength:     { value: 0.3 },
-    uFalloff:    { value: 0.5 },
-  },
-  vertexShader: /* glsl */`
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse;
-    uniform float uIntensity;
-    uniform int uSamples;
-    uniform float uLength;
-    uniform float uFalloff;
-    varying vec2 vUv;
-    void main() {
-      vec4 base = texture2D(tDiffuse, vUv);
-      if (uIntensity < 0.001) { gl_FragColor = base; return; }
-      vec2 dir = vUv - vec2(0.5);
-      float dist = length(dir);
-      // Center fade: less blur near center
-      float mask = smoothstep(0.0, uFalloff, dist);
-      vec4 sum = base;
-      float total = 1.0;
-      for (int i = 1; i < 24; i++) {
-        if (i >= uSamples) break;
-        float t = float(i) / float(uSamples);
-        vec2 offset = dir * t * uLength;
-        sum += texture2D(tDiffuse, vUv - offset);
-        total += 1.0;
-      }
-      vec4 blurred = sum / total;
-      gl_FragColor = mix(base, blurred, mask * uIntensity);
-    }
-  `,
-};
-const _radialBlurPass = new ShaderPass(RadialBlurShader);
-_radialBlurPass.enabled = false; // only during wormhole
-composer.addPass(_radialBlurPass);
-
 // ── PERFORMANCE MODE — defined here so bloom + renderer are in scope
 function applyPerfMode() {
   if (perfMode) {
@@ -22275,7 +22227,7 @@ function startDeathRun() {
   _pendingVibeIdx = -1;
   state._pendingSpeedTier = -1;
   // _drForcedBand / _drBand4Started / _drBand5StartTime: archived 2026-04-29
-  // (legacy wave director). See src/_archived/legacy-wave-director.js.
+  // (legacy wave director, removed).
   state._arcActive = false;
   state._arcQueue = null;
   state._arcStage = 0;
@@ -26654,7 +26606,7 @@ function update(dt) {
     if (state.deathRunRestBeat > 0) state.deathRunRestBeat -= dt;
     _drSequencerTick(dt);
   }
-  // Legacy wave director archived to src/_archived/legacy-wave-director.js (2026-04-29).
+  // Legacy wave director removed (2026-04-29).
   // Replaced by DR_SEQUENCE / _drSequencerTick above.
 
   // ── Spawn
@@ -27464,12 +27416,6 @@ function update(dt) {
 
   // ── DR Portal gate update ──
 
-
-  // ── Auto-spawn portal gate in DR mode after 10 seconds (POC trigger) ──
-  // QUARANTINED: wormhole sequence disabled for both DR and campaign while sequencer is in development
-  // if (state.isDeathRun && !_drPortalActive && !state.wormholeActive && state.elapsed > 10 && !state.introActive) {
-  //   drPortalSpawn();
-  // }
 
   updateTransition(dt);
   updateDeathRunTransition(dt);
