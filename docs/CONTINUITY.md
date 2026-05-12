@@ -1,12 +1,51 @@
 # Tunnel Proto — Continuity Document
-**Last updated:** April 13, 2026 — Session end
+**Last updated:** May 11, 2026 — Build split + Vercel build disabled
 
 ## Repo & Deployment
 - **GitHub:** `deepplane89/tunnel-proto`
 - **Live:** `https://tunnel-proto.vercel.app`
 - **Working dir:** `/home/user/workspace/tunnel-proto-fresh/`
 - **Auto-deploy from git push is ON — do NOT run `npx vercel --prod`**
-- **Current HEAD:** `dac8047` — fix: correct MK II landscape nozzle values from user tuner
+- **Vercel build step DISABLED (2026-05-11)** — Build Command / Install Command overridden to `echo skip`, Output Directory = `.`. Vercel now serves the committed `dist/game.js` directly. This cut build-minutes costs to ~$0; user stays on Pro $20/mo through current cycle, plans to downgrade to Hobby after.
+- **Current HEAD (dev):** `d434d6f` — build: flip default to prod, --dev opt-in
+
+## Build System (added 2026-05-11)
+
+**Unity build:** `src/*.js` files are concatenated alphabetically into `dist/game.js`. Numeric prefixes (00-, 10-, 20-, ...) control order. The browser only loads `dist/game.js` — never edit it directly; always edit `src/*.js` and rebuild.
+
+**Two modes, prod is default** (matches Webpack/Vite/Rollup convention):
+
+| Command | Mode | Size | Includes dev tools? | Use for |
+|---|---|---|---|---|
+| `bash scripts/build.sh` | **prod** | ~1.44 MB | No | Vercel + iOS App Store. **Commit this.** |
+| `bash scripts/build.sh --dev` | dev | ~1.64 MB | Yes (tuner panels, perf diag) | Local Mac mini / iPhone-over-network testing. **DO NOT commit.** |
+
+**Marker line:** First line of `dist/game.js` is `/* JH_BUILD: prod */` or `/* JH_BUILD: dev */`. A future `scripts/verify.sh` pre-commit hook can grep for the dev marker and refuse to commit.
+
+**Files only included in dev builds** (~3500 lines dropped from prod):
+- `src/49-tuner-hud.js` — showroom tuner HUD
+- `src/70-perf-diag.js` — perf recorder
+- `src/78-tuner-panels.js` — T/V/W/B/K hotkey tuner panels
+
+**Underscore-prefixed files** (e.g. `src/_dev-stubs.js`) are NOT auto-included. `_dev-stubs.js` is appended only in prod mode to provide no-op stubs for symbols the prod build would otherwise miss: `window.TunerHud`, `window._perfDiag`, `_ringShowTuner()`, `buildSkinTunerSliders()`, `window._awPanel`.
+
+**Local dev workflow:**
+```
+bash scripts/build.sh --dev    # rebuild dev locally
+# (test on Mac mini browser or iPhone via http://192.168.2.37:8080/)
+# DO NOT commit dist/game.js while in dev mode
+```
+
+**Ship-it workflow (push to dev branch, then merge to main):**
+```
+bash scripts/build.sh                                  # prod build, default
+TS=$(date +%s); sed -i.bak -E "s|game\.js\?v=[0-9]+|game.js?v=${TS}|" index.html && rm -f index.html.bak
+git add -A && git add -f dist/game.js
+git commit -m "..."
+git push origin dev    # then merge dev -> main when ready
+```
+
+Since Vercel's build is disabled, the committed `dist/game.js` IS what ships. Pushing to main refreshes the live game; no Vercel build runs.
 
 ## Key Code Locations (approximate — lines shift with edits)
 - `SHIP_SKINS` array: ~line 360 (MK II at index 5, line 370)
@@ -112,6 +151,8 @@
 - NEVER read more than 200 lines at a time
 - Syntax check after each edit: `node -c game.js`
 - Only deploy via git push (auto-deploy ON) — NEVER `npx vercel --prod`
+- Vercel build step is OFF — committed `dist/game.js` is what ships. Always rebuild prod (`bash scripts/build.sh`, no flag) before commit
+- NEVER commit a dev build — check first line of `dist/game.js`; it must say `/* JH_BUILD: prod */`
 - Bump cache buster in index.html with each deploy
 - Don't make cosmetic changes — only add tuner sliders, let user decide values
 - Call them "particles" not "stars"

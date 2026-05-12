@@ -3969,7 +3969,7 @@ function resetObsColor(obs) {
 
 function returnObstacleToPool(obs) {
   obs.userData.isCorridor = false;
-  obs.userData.isEcho = false;
+  // echo system removed
   obs.userData.active = false;
   obs.visible = false;
   if (obs.userData.slalomScaled) {
@@ -5623,7 +5623,7 @@ function update(dt) {
     }
 
     // ── Collision with ship
-    if (obs.userData.isEcho) continue; // echo cones are visual only — no collision
+    // echo system removed — no skip needed
     // Rotation-aware hitbox: wings (±2.1) point sideways when flat, up/down when rolled 90°
     // Roll angle from shipGroup.rotation.z — at 0 = flat (full wing width), at ±PI/2 = vertical (fuselage only)
     const roll = shipGroup.rotation.z || 0;
@@ -5916,24 +5916,8 @@ function update(dt) {
     }
   }
 
-  // ── Move forcefields
-  for (let fi = _activeForcefields.length - 1; fi >= 0; fi--) {
-    const ff = _activeForcefields[fi];
-    ff.position.z += effectiveSpeed * dt;
-    if (ff.position.z > DESPAWN_Z) {
-      returnForcefieldToPool(ff);
-      _activeForcefields.splice(fi, 1);
-      continue;
-    }
-    // Collision: flat plane spanning the gap, height ~4 units
-    const halfW = (ff.userData.gapWidth || SLALOM_SPACING) * 0.5;
-    const dx = Math.abs(ff.position.x - state.shipX);
-    const dz = Math.abs(ff.position.z - shipGroup.position.z);
-    if (dx < halfW && dz < 1.5 && !state.invincibleSpeedActive && !state.shieldActive) {
-      killPlayer();
-      return;
-    }
-  }
+  // Forcefield move/collide loop — REMOVED (gate hazard never shipped;
+  // _activeForcefields stub-empty in 40-main-late.js).
 
   // ── Shield — flow shader drives everything via uReveal + uTime
   if (state.shieldActive && !state.invincibleSpeedActive) {

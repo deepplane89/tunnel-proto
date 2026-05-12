@@ -257,7 +257,9 @@ const _perfDiag = (function() {
     });
     console.log('[PERF DIAG] needsUpdate trap installed');
   }
-  setTimeout(_installNeedsUpdateTrap, 100);
+  // Only install when perf diag is explicitly turned on. Otherwise the trap
+  // generates GL_INVALID_VALUE noise from inspecting GC'd program handles.
+  if (window._perfDiagOn) setTimeout(_installNeedsUpdateTrap, 100);
 
   return { frameStart, markRenderStart, markRenderEnd, frameEnd, tag };
 })();
@@ -495,8 +497,7 @@ function animate(now) {
   // Twinkling sky stars — update uTime uniform each frame
   if (skyStarPoints)      skyStarPoints.material.uniforms.uTime.value      += rawDt;
   if (skyConstellLines)   skyConstellLines.material.uniforms.uTime.value   += rawDt;
-  // Forcefield animation
-  _ffUniforms.uTime.value += rawDt;
+  // Forcefield animation — REMOVED (gate hazard never shipped)
   // Keep water X in sync with ship so reflection doesn't drift
   mirrorMesh.position.x = state.shipX;
 

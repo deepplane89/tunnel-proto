@@ -1251,92 +1251,16 @@ function _drNextGapCenter(diffOverride) {
   return cs.gapX;
 }
 
-// ─── FORCEFIELD GATE (Slalom) ────────────────────────────────────────
-// Animated energy barrier stretched between two slalom cones.
-// Custom ShaderMaterial: hex scanline + Fresnel edge glow + ripple.
-
-const FORCEFIELD_POOL_SIZE = 20;
+// ─── FORCEFIELD GATE — REMOVED ───────────────────────────────────────
+// Forcefield was a planned slalom-gate hazard that never shipped. Pool was
+// built (20 meshes in scene), per-frame uTime tick ran, but nothing ever
+// spawned one. Removed to drop 20 scene objects + 1 shaderMaterial + 1
+// per-frame uniform update.
+// Stubs below keep other-file references no-op'd without needing to edit
+// every call site. Remove the stubs once those references are cleaned up.
 const _ffPool = [];
 const _activeForcefields = [];
-
-const _ffUniforms = { uTime: { value: 0.0 } };
-
-const _ffVertShader = `
-  varying vec2 vUv;
-  varying vec3 vNormal;
-  varying vec3 vWorldPos;
-  void main() {
-    vUv = uv;
-    vNormal = normalize(normalMatrix * normal);
-    vec4 wp = modelMatrix * vec4(position, 1.0);
-    vWorldPos = wp.xyz;
-    gl_Position = projectionMatrix * viewMatrix * wp;
-  }
-`;
-
-const _ffFragShader = `
-  uniform float uTime;
-  varying vec2 vUv;
-  varying vec3 vNormal;
-  varying vec3 vWorldPos;
-
-  void main() {
-    // Fresnel — edges brighter
-    vec3 viewDir = normalize(cameraPosition - vWorldPos);
-    float fresnel = 1.0 - abs(dot(viewDir, vNormal));
-    fresnel = pow(fresnel, 1.8);
-
-    // Center-heavy opacity: strongest in the middle of the plane
-    float centerX = 1.0 - 2.0 * abs(vUv.x - 0.5); // 1 at center, 0 at edges
-    float centerY = 1.0 - 2.0 * abs(vUv.y - 0.5);
-    float center = centerX * centerY;
-    center = pow(center, 0.6); // soften falloff
-
-    // Subtle slow shimmer
-    float shimmer = 0.9 + 0.1 * sin(vUv.y * 6.0 - uTime * 3.0);
-
-    // Alpha: opaque center, fading to edges
-    float alpha = (0.3 + center * 0.55) * shimmer;
-    alpha += fresnel * 0.15;
-    alpha = clamp(alpha, 0.15, 0.8);
-
-    // Clean blue gradient: deep center, lighter edges
-    vec3 deepBlue  = vec3(0.05, 0.2, 0.8);
-    vec3 brightBlue = vec3(0.2, 0.55, 1.0);
-    vec3 col = mix(brightBlue, deepBlue, center);
-    col += vec3(0.15, 0.3, 0.5) * fresnel; // edge highlight
-    col *= shimmer;
-    col *= 1.5; // slight HDR for bloom
-
-    gl_FragColor = vec4(col, alpha);
-  }
-`;
-
-function createForcefieldMesh() {
-  const geo = new THREE.PlaneGeometry(1, 4, 1, 8); // width=1 (scaled per gap), height=4
-  const mat = new THREE.ShaderMaterial({
-    uniforms: _ffUniforms,
-    vertexShader: _ffVertShader,
-    fragmentShader: _ffFragShader,
-    transparent: true,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.userData.active = false;
-  mesh.visible = false;
-  scene.add(mesh);
-  return mesh;
-}
-
-for (let i = 0; i < FORCEFIELD_POOL_SIZE; i++) _ffPool.push(createForcefieldMesh());
-
-function returnForcefieldToPool(ff) {
-  ff.userData.active = false;
-  ff.visible = false;
-  ff.scale.set(1, 1, 1);
-}
+function returnForcefieldToPool(_ff) { /* no-op stub */ }
 
 // ─── SLALOM MINEFIELD (Death Run) ────────────────────────────────────
 // Slalom minefield: uniform staggered grid of cones — no carved gap.
@@ -1940,63 +1864,10 @@ function _spawnLethalRing(x, z) {
   }
 }
 
-// ── Lateral echo helper — spawns matching obstacle copies at lateral offsets ──
-// Tiles the same obstacle type outward to fill peripheral vision.
-const _ECHO_SHIFT = LANE_COUNT * LANE_WIDTH; // one full road width per copy (~67.2)
-const _ECHO_COPIES = 2; // copies per side (2 left + 2 right)
-const _ECHOES_ENABLED = false; // toggle — off until obstacle redesign
-function _spawnLateralEchoes(baseX, z, kind, opts) {
-  if (!_ECHOES_ENABLED) return;
-  // kind: 'cone' | 'wall' | 'ring' | 'fatcone'
-  for (let c = 1; c <= _ECHO_COPIES; c++) {
-    const echoOpacity = 1 / Math.pow(2, c); // 0.5 for copy 1, 0.25 for copy 2
-    for (const sign of [-1, 1]) {
-      const ex = baseX + sign * c * _ECHO_SHIFT;
-      if (kind === 'cone') {
-        const obs = getPooledObstacle(Math.floor(Math.random() * 3));
-        if (!obs) continue;
-        obs.position.set(ex + (Math.random() - 0.5) * 0.6, 0, z);
-        obs.userData.velX = 0;
-        obs.userData.isEcho = true;
-        // Cap max opacity so echoes fade with distance
-        const _mc = obs.userData._meshes;
-        for (let mi = 0; mi < _mc.length; mi++) _mc[mi].material.userData.baseOpacity = echoOpacity;
-        activeObstacles.push(obs);
-      } else if (kind === 'fatcone') {
-        const obs = getPooledObstacle(Math.floor(Math.random() * 3));
-        if (!obs) continue;
-        obs.position.set(ex + (Math.random() - 0.5) * 0.6, 0, z);
-        obs.scale.set(4, 1, 4);
-        obs.userData.velX = 0;
-        obs.userData.slalomScaled = true;
-        obs.userData.isFatCone = true;
-        obs.userData.isEcho = true;
-        const _mc = obs.userData._meshes;
-        for (let mi = 0; mi < _mc.length; mi++) _mc[mi].material.userData.baseOpacity = echoOpacity;
-        activeObstacles.push(obs);
-      } else if (kind === 'wall') {
-        const wall = _getPooledWall();
-        if (!wall) continue;
-        const angleSign = (opts && opts.angleSign) || (Math.random() < 0.5 ? 1 : -1);
-        wall.position.set(ex + (Math.random() - 0.5) * 0.6, 0, z);
-        wall.rotation.set(0, 0, 0);
-        wall.userData._mesh.scale.set(8, 4, 0.3);
-        wall.userData._edges.scale.set(8, 4, 0.3);
-        wall.userData._mesh.position.y = 2;
-        wall.userData._edges.position.y = 2;
-        wall.rotation.y = angleSign * (25 + Math.random() * 20) * Math.PI / 180;
-        wall.userData._mesh.userData._opacity = 0;
-        wall.userData._edges.userData._opacity = 0;
-        wall.userData.isEcho = true;
-        wall.userData.echoOpacity = echoOpacity; // wall fade handled separately
-        _awActive.push(wall);
-      } else if (kind === 'ring') {
-        _spawnLethalRing(ex + (Math.random() - 0.5) * 0.6, z);
-        // rings fade via their own system — no baseOpacity hook available
-      }
-    }
-  }
-}
+// ── Lateral echo helper — REMOVED ──
+// Was a planned visual-only obstacle tile system for peripheral vision.
+// Gated off via _ECHOES_ENABLED=false since obstacle redesign and never
+// reactivated. Function deleted; call sites no-op'd in spawnObstacles below.
 
 function spawnObstacles() {
   state._invObstaclesSpawned = (state._invObstaclesSpawned || 0) + 1;
@@ -2168,7 +2039,7 @@ function spawnObstacles() {
       const roll = Math.random();
       if (roll < 0.25) {
         _spawnLethalRing(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z);
-        _spawnLateralEchoes(laneX, SPAWN_Z, 'ring');
+        /* echoes removed */
       } else if (roll < 0.5) {
         const wall = _getPooledWall();
         if (wall) {
@@ -2183,7 +2054,7 @@ function spawnObstacles() {
           wall.userData._mesh.userData._opacity = 0;
           wall.userData._edges.userData._opacity = 0;
           _awActive.push(wall);
-          _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
+          /* echoes removed */
         }
       } else if (roll < 0.75) {
         const type = Math.floor(Math.random() * 3);
@@ -2194,7 +2065,7 @@ function spawnObstacles() {
           obs.userData.velX = 0;
           obs.userData.slalomScaled = true;
           activeObstacles.push(obs);
-          _spawnLateralEchoes(laneX, SPAWN_Z, 'fatcone');
+          /* echoes removed */
         }
       } else {
         const type = Math.floor(Math.random() * 3);
@@ -2203,14 +2074,14 @@ function spawnObstacles() {
           obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
           obs.userData.velX = 0;
           activeObstacles.push(obs);
-          _spawnLateralEchoes(laneX, SPAWN_Z, 'cone');
+          /* echoes removed */
         }
       }
       return;
     }
     if (_isRingBand) {
       _spawnLethalRing(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z);
-      _spawnLateralEchoes(laneX, SPAWN_Z, 'ring');
+      /* echoes removed */
       return;
     }
     if (_isFatConeBand) {
@@ -2223,7 +2094,7 @@ function spawnObstacles() {
       obs.userData.slalomScaled = true;
       obs.userData.isFatCone = true;
       activeObstacles.push(obs);
-      _spawnLateralEchoes(laneX, SPAWN_Z, 'fatcone');
+      /* echoes removed */
       return;
     }
     if (_isWallBand) {
@@ -2248,7 +2119,7 @@ function spawnObstacles() {
         wall.userData._mesh.userData._opacity = 0;
         wall.userData._edges.userData._opacity = 0;
         _awActive.push(wall);
-        _spawnLateralEchoes(laneX, SPAWN_Z, 'wall', { angleSign });
+        /* echoes removed */
         return;
       }
     }
@@ -2258,7 +2129,7 @@ function spawnObstacles() {
     obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
     obs.userData.velX = 0;
     activeObstacles.push(obs);
-    _spawnLateralEchoes(laneX, SPAWN_Z, 'cone');
+    /* echoes removed */
   });
 
   // ── Coin spawn — random singles + arc patterns (DR spawns more)
