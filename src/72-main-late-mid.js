@@ -252,13 +252,16 @@ function toggleSkinTuner() {
 window.toggleSkinTuner = toggleSkinTuner;
 
 // Show tuner button when admin mode activates
-const _origAdminToggle = document.getElementById('skin-viewer-label');
-if (_origAdminToggle) {
-  const origClick = _origAdminToggle.onclick;
-  // MutationObserver on the label color to detect admin mode
-  new MutationObserver(() => {
-    document.getElementById('skin-tuner-btn').style.display = _skinAdminMode ? 'block' : 'none';
-  }).observe(_origAdminToggle, { attributes: true, attributeFilter: ['style'] });
+// DEV-ONLY: tuner button reveal stripped from prod.
+if (window.__JH_DEV__) {
+  const _origAdminToggle = document.getElementById('skin-viewer-label');
+  if (_origAdminToggle) {
+    const origClick = _origAdminToggle.onclick;
+    // MutationObserver on the label color to detect admin mode
+    new MutationObserver(() => {
+      document.getElementById('skin-tuner-btn').style.display = _skinAdminMode ? 'block' : 'none';
+    }).observe(_origAdminToggle, { attributes: true, attributeFilter: ['style'] });
+  }
 }
 
 
@@ -741,15 +744,17 @@ if (_origAdminToggle) {
     panel.appendChild(resetBtn);
   }
 
-  // Toggle with backtick key (`)
-  document.addEventListener('keydown', e => {
-    if (e.key === '`') {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      const vis = panel.style.display === 'none';
-      if (vis) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  // Toggle with backtick key (`) — DEV-ONLY
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown', e => {
+      if (e.key === '`') {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        const vis = panel.style.display === 'none';
+        if (vis) { build(); panel.style.display = 'block'; }
+        else panel.style.display = 'none';
+      }
+    });
+  }
 })();
 
 // ═══════════════════════════════════════════════════
@@ -841,14 +846,16 @@ if (_origAdminToggle) {
     });
   };
 
-  document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.code === 'KeyR') {
-      const vis = panel.style.display === 'none';
-      if (vis) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.code === 'KeyR') {
+        const vis = panel.style.display === 'none';
+        if (vis) { build(); panel.style.display = 'block'; }
+        else panel.style.display = 'none';
+      }
+    });
+  }
 })();
 
 // ═══════════════════════════════════════════════════
@@ -1138,14 +1145,16 @@ if (_origAdminToggle) {
   }
 
   let visible = false;
-  document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.code === 'KeyG') {
-      visible = !visible;
-      if (visible) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.code === 'KeyG') {
+        visible = !visible;
+        if (visible) { build(); panel.style.display = 'block'; }
+        else panel.style.display = 'none';
+      }
+    });
+  }
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2583,14 +2592,16 @@ const _origUpdateShockwave = _updateShockwave;
   }
 
   let visible = false;
-  document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'y' || e.key === 'Y') {
-      visible = !visible;
-      if (visible) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'y' || e.key === 'Y') {
+        visible = !visible;
+        if (visible) { build(); panel.style.display = 'block'; }
+        else panel.style.display = 'none';
+      }
+    });
+  }
   // Expose for window._exportScene() — mirrors live tuner state after Y edits
   window._asteroidTuner = _asteroidTuner;
 })();
@@ -2611,7 +2622,9 @@ function startJetLightning() {
 let _godMode      = false; // no damage — plays shield-hit sound on hit instead of killing
 
 // Q hotkey — toggle god mode (no damage; shield-hit sound on impact instead of death)
+// DEV-ONLY: stripped from prod.
 (function _setupGodModeHotkey() {
+  if (!window.__JH_DEV__) return;
   document.addEventListener('keydown', e => {
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
     if (e.key !== 'q' && e.key !== 'Q') return;
@@ -3525,10 +3538,12 @@ window._jlDebug = {
   window._clearAllLightning = () => { _stopLtLoop(); _clearAllLightning(); };
 
   let visible=false;
-  document.addEventListener('keydown',e=>{
-    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
-    if(e.key==='l'||e.key==='L'){ visible=!visible; if(visible){build();panel.style.display='block';}else panel.style.display='none'; }
-  });
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown',e=>{
+      if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+      if(e.key==='l'||e.key==='L'){ visible=!visible; if(visible){build();panel.style.display='block';}else panel.style.display='none'; }
+    });
+  }
 
 })();
 
@@ -3792,14 +3807,16 @@ window._jlDebug = {
   window._FCT = FCT;
 
   let _fcVisible = false;
-  document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'f' || e.key === 'F') {
-      _fcVisible = !_fcVisible;
-      if (_fcVisible) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'f' || e.key === 'F') {
+        _fcVisible = !_fcVisible;
+        if (_fcVisible) { build(); panel.style.display = 'block'; }
+        else panel.style.display = 'none';
+      }
+    });
+  }
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════════

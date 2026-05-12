@@ -18512,19 +18512,22 @@ function updateStreakBadge() {
   // Only fires when the garage/showroom is open. The panel itself is owned by
   // window.TunerHud (src/49-tuner-hud.js) — we just flip its visibility. Tracks
   // local state since showTuner is a setter, not a toggle.
-  let _posPanelOpen = false;
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'p' && e.key !== 'P') return;
-    if (!_open) return;
-    // Don't hijack typing in input/textarea elements.
-    const t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    _ensureTunerHudInit();
-    _posPanelOpen = !_posPanelOpen;
-    if (window.TunerHud && typeof window.TunerHud.showTuner === 'function') {
-      window.TunerHud.showTuner(_posPanelOpen);
-    }
-  });
+  // DEV-ONLY: stripped from prod.
+  if (window.__JH_DEV__) {
+    let _posPanelOpen = false;
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'p' && e.key !== 'P') return;
+      if (!_open) return;
+      // Don't hijack typing in input/textarea elements.
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      _ensureTunerHudInit();
+      _posPanelOpen = !_posPanelOpen;
+      if (window.TunerHud && typeof window.TunerHud.showTuner === 'function') {
+        window.TunerHud.showTuner(_posPanelOpen);
+      }
+    });
+  }
 })();
 //  SHOP SYSTEM
 // ═══════════════════════════════════════════════════
@@ -19839,6 +19842,9 @@ window.addEventListener('keydown', e => {
     if (_hs) _hs.style.display = (_hs.style.display === 'none' || !_hs.style.display) ? 'block' : 'none';
   }
 
+  // ─── DEV-ONLY HOTKEYS (stripped from prod) ──────────────────────────
+  // Powerup spawns, level skips, tuners, debug-hitbox, force-arc keys.
+  if (window.__JH_DEV__) {
   // In-game powerup hotkeys (playing only, >1s in): L=laser S=shield I=invincible M=magnet
   if (state.phase === 'playing' && (state.elapsed || 0) > 1.0) {
     if (e.key === 'l' || e.key === 'L') applyPowerup(1); // laser
@@ -20005,6 +20011,7 @@ window.addEventListener('keydown', e => {
     state.l5RandomAfterZipper = 5.0;  // 5s of random cones, then corridor fires
 
   }
+  } // end DEV-ONLY hotkeys
 });
 window.addEventListener('keyup', e => {
   keys[e.key] = false;
@@ -20150,33 +20157,36 @@ window.addEventListener('keyup', e => {
   }
 
   // Triple-tap skin label = unlock entire shop (all skins + all powerups max tier)
-  const skinLabel = document.getElementById('skin-viewer-label');
-  let _skinTapCount = 0;
-  let _skinTapTimer = null;
-  function _adminUnlockAll() {
-    // Unlock all skins
-    const allSkinNames = SHIP_SKINS.map(s => s.name);
-    window._LS.setItem('jh_owned_skins', JSON.stringify(allSkinNames));
-    // Unlock all powerups
-    const allPuIds = POWERUP_TYPES.map(p => p.id);
-    window._LS.setItem('jetslide_pu_unlocked', JSON.stringify(allPuIds));
-    // Give plenty of fuel to buy upgrades
-    saveFuelCells(loadFuelCells() + 99999);
-    updateTitleFuelCells();
-  }
-  if (skinLabel) {
-    skinLabel.addEventListener('touchstart', e => {
-      _skinTapCount++;
-      if (_skinTapTimer) clearTimeout(_skinTapTimer);
-      if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
-      _skinTapTimer = setTimeout(() => { _skinTapCount = 0; }, 500);
-    }, { passive: true });
-    _tapBind(skinLabel, () => {
-      _skinTapCount++;
-      if (_skinTapTimer) clearTimeout(_skinTapTimer);
-      if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
-      _skinTapTimer = setTimeout(() => { _skinTapCount = 0; }, 500);
-    });
+  // DEV-ONLY: cheat handler stripped from prod.
+  if (window.__JH_DEV__) {
+    const skinLabel = document.getElementById('skin-viewer-label');
+    let _skinTapCount = 0;
+    let _skinTapTimer = null;
+    function _adminUnlockAll() {
+      // Unlock all skins
+      const allSkinNames = SHIP_SKINS.map(s => s.name);
+      window._LS.setItem('jh_owned_skins', JSON.stringify(allSkinNames));
+      // Unlock all powerups
+      const allPuIds = POWERUP_TYPES.map(p => p.id);
+      window._LS.setItem('jetslide_pu_unlocked', JSON.stringify(allPuIds));
+      // Give plenty of fuel to buy upgrades
+      saveFuelCells(loadFuelCells() + 99999);
+      updateTitleFuelCells();
+    }
+    if (skinLabel) {
+      skinLabel.addEventListener('touchstart', e => {
+        _skinTapCount++;
+        if (_skinTapTimer) clearTimeout(_skinTapTimer);
+        if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
+        _skinTapTimer = setTimeout(() => { _skinTapCount = 0; }, 500);
+      }, { passive: true });
+      _tapBind(skinLabel, () => {
+        _skinTapCount++;
+        if (_skinTapTimer) clearTimeout(_skinTapTimer);
+        if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
+        _skinTapTimer = setTimeout(() => { _skinTapCount = 0; }, 500);
+      });
+    }
   }
 })();
 
@@ -27237,19 +27247,21 @@ let dbgFrames = 0, dbgLast = performance.now(), dbgFps = 0;
 let dbgVisible = false;
 const dbgEl = document.getElementById('debug-overlay');
 
-// Toggle debug overlay with 'D' key (desktop only)
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'd' || e.key === 'D') {
-    dbgVisible = !dbgVisible;
-    dbgEl.classList.toggle('visible', dbgVisible);
-  }
-  // C — cone↔GLB diagnostic snapshot (logs + clipboard)
-  if (e.key === 'c' || e.key === 'C') {
-    if (typeof window._coneDiag === 'function') window._coneDiag();
-  }
-  // V — toggle canyon on/off
-  // V key is handled by the canyon tuner panel listener below
-});
+// Toggle debug overlay with 'D' key (desktop only) — DEV-ONLY
+if (window.__JH_DEV__) {
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'd' || e.key === 'D') {
+      dbgVisible = !dbgVisible;
+      dbgEl.classList.toggle('visible', dbgVisible);
+    }
+    // C — cone↔GLB diagnostic snapshot (logs + clipboard)
+    if (e.key === 'c' || e.key === 'C') {
+      if (typeof window._coneDiag === 'function') window._coneDiag();
+    }
+    // V — toggle canyon on/off
+    // V key is handled by the canyon tuner panel listener below
+  });
+}
 
 
 function updateDebug() {
@@ -28193,13 +28205,16 @@ function toggleSkinTuner() {
 window.toggleSkinTuner = toggleSkinTuner;
 
 // Show tuner button when admin mode activates
-const _origAdminToggle = document.getElementById('skin-viewer-label');
-if (_origAdminToggle) {
-  const origClick = _origAdminToggle.onclick;
-  // MutationObserver on the label color to detect admin mode
-  new MutationObserver(() => {
-    document.getElementById('skin-tuner-btn').style.display = _skinAdminMode ? 'block' : 'none';
-  }).observe(_origAdminToggle, { attributes: true, attributeFilter: ['style'] });
+// DEV-ONLY: tuner button reveal stripped from prod.
+if (window.__JH_DEV__) {
+  const _origAdminToggle = document.getElementById('skin-viewer-label');
+  if (_origAdminToggle) {
+    const origClick = _origAdminToggle.onclick;
+    // MutationObserver on the label color to detect admin mode
+    new MutationObserver(() => {
+      document.getElementById('skin-tuner-btn').style.display = _skinAdminMode ? 'block' : 'none';
+    }).observe(_origAdminToggle, { attributes: true, attributeFilter: ['style'] });
+  }
 }
 
 
@@ -28682,15 +28697,17 @@ if (_origAdminToggle) {
     panel.appendChild(resetBtn);
   }
 
-  // Toggle with backtick key (`)
-  document.addEventListener('keydown', e => {
-    if (e.key === '`') {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      const vis = panel.style.display === 'none';
-      if (vis) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  // Toggle with backtick key (`) — DEV-ONLY
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown', e => {
+      if (e.key === '`') {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        const vis = panel.style.display === 'none';
+        if (vis) { build(); panel.style.display = 'block'; }
+        else panel.style.display = 'none';
+      }
+    });
+  }
 })();
 
 // ═══════════════════════════════════════════════════
@@ -28782,14 +28799,16 @@ if (_origAdminToggle) {
     });
   };
 
-  document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.code === 'KeyR') {
-      const vis = panel.style.display === 'none';
-      if (vis) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.code === 'KeyR') {
+        const vis = panel.style.display === 'none';
+        if (vis) { build(); panel.style.display = 'block'; }
+        else panel.style.display = 'none';
+      }
+    });
+  }
 })();
 
 // ═══════════════════════════════════════════════════
@@ -29079,14 +29098,16 @@ if (_origAdminToggle) {
   }
 
   let visible = false;
-  document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.code === 'KeyG') {
-      visible = !visible;
-      if (visible) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.code === 'KeyG') {
+        visible = !visible;
+        if (visible) { build(); panel.style.display = 'block'; }
+        else panel.style.display = 'none';
+      }
+    });
+  }
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -30524,14 +30545,16 @@ const _origUpdateShockwave = _updateShockwave;
   }
 
   let visible = false;
-  document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'y' || e.key === 'Y') {
-      visible = !visible;
-      if (visible) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'y' || e.key === 'Y') {
+        visible = !visible;
+        if (visible) { build(); panel.style.display = 'block'; }
+        else panel.style.display = 'none';
+      }
+    });
+  }
   // Expose for window._exportScene() — mirrors live tuner state after Y edits
   window._asteroidTuner = _asteroidTuner;
 })();
@@ -30552,7 +30575,9 @@ function startJetLightning() {
 let _godMode      = false; // no damage — plays shield-hit sound on hit instead of killing
 
 // Q hotkey — toggle god mode (no damage; shield-hit sound on impact instead of death)
+// DEV-ONLY: stripped from prod.
 (function _setupGodModeHotkey() {
+  if (!window.__JH_DEV__) return;
   document.addEventListener('keydown', e => {
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
     if (e.key !== 'q' && e.key !== 'Q') return;
@@ -31466,10 +31491,12 @@ window._jlDebug = {
   window._clearAllLightning = () => { _stopLtLoop(); _clearAllLightning(); };
 
   let visible=false;
-  document.addEventListener('keydown',e=>{
-    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
-    if(e.key==='l'||e.key==='L'){ visible=!visible; if(visible){build();panel.style.display='block';}else panel.style.display='none'; }
-  });
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown',e=>{
+      if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+      if(e.key==='l'||e.key==='L'){ visible=!visible; if(visible){build();panel.style.display='block';}else panel.style.display='none'; }
+    });
+  }
 
 })();
 
@@ -31733,14 +31760,16 @@ window._jlDebug = {
   window._FCT = FCT;
 
   let _fcVisible = false;
-  document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'f' || e.key === 'F') {
-      _fcVisible = !_fcVisible;
-      if (_fcVisible) { build(); panel.style.display = 'block'; }
-      else panel.style.display = 'none';
-    }
-  });
+  if (window.__JH_DEV__) {
+    document.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'f' || e.key === 'F') {
+        _fcVisible = !_fcVisible;
+        if (_fcVisible) { build(); panel.style.display = 'block'; }
+        else panel.style.display = 'none';
+      }
+    });
+  }
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -579,6 +579,9 @@ window.addEventListener('keydown', e => {
     if (_hs) _hs.style.display = (_hs.style.display === 'none' || !_hs.style.display) ? 'block' : 'none';
   }
 
+  // ─── DEV-ONLY HOTKEYS (stripped from prod) ──────────────────────────
+  // Powerup spawns, level skips, tuners, debug-hitbox, force-arc keys.
+  if (window.__JH_DEV__) {
   // In-game powerup hotkeys (playing only, >1s in): L=laser S=shield I=invincible M=magnet
   if (state.phase === 'playing' && (state.elapsed || 0) > 1.0) {
     if (e.key === 'l' || e.key === 'L') applyPowerup(1); // laser
@@ -745,6 +748,7 @@ window.addEventListener('keydown', e => {
     state.l5RandomAfterZipper = 5.0;  // 5s of random cones, then corridor fires
 
   }
+  } // end DEV-ONLY hotkeys
 });
 window.addEventListener('keyup', e => {
   keys[e.key] = false;
@@ -890,33 +894,36 @@ window.addEventListener('keyup', e => {
   }
 
   // Triple-tap skin label = unlock entire shop (all skins + all powerups max tier)
-  const skinLabel = document.getElementById('skin-viewer-label');
-  let _skinTapCount = 0;
-  let _skinTapTimer = null;
-  function _adminUnlockAll() {
-    // Unlock all skins
-    const allSkinNames = SHIP_SKINS.map(s => s.name);
-    window._LS.setItem('jh_owned_skins', JSON.stringify(allSkinNames));
-    // Unlock all powerups
-    const allPuIds = POWERUP_TYPES.map(p => p.id);
-    window._LS.setItem('jetslide_pu_unlocked', JSON.stringify(allPuIds));
-    // Give plenty of fuel to buy upgrades
-    saveFuelCells(loadFuelCells() + 99999);
-    updateTitleFuelCells();
-  }
-  if (skinLabel) {
-    skinLabel.addEventListener('touchstart', e => {
-      _skinTapCount++;
-      if (_skinTapTimer) clearTimeout(_skinTapTimer);
-      if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
-      _skinTapTimer = setTimeout(() => { _skinTapCount = 0; }, 500);
-    }, { passive: true });
-    _tapBind(skinLabel, () => {
-      _skinTapCount++;
-      if (_skinTapTimer) clearTimeout(_skinTapTimer);
-      if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
-      _skinTapTimer = setTimeout(() => { _skinTapCount = 0; }, 500);
-    });
+  // DEV-ONLY: cheat handler stripped from prod.
+  if (window.__JH_DEV__) {
+    const skinLabel = document.getElementById('skin-viewer-label');
+    let _skinTapCount = 0;
+    let _skinTapTimer = null;
+    function _adminUnlockAll() {
+      // Unlock all skins
+      const allSkinNames = SHIP_SKINS.map(s => s.name);
+      window._LS.setItem('jh_owned_skins', JSON.stringify(allSkinNames));
+      // Unlock all powerups
+      const allPuIds = POWERUP_TYPES.map(p => p.id);
+      window._LS.setItem('jetslide_pu_unlocked', JSON.stringify(allPuIds));
+      // Give plenty of fuel to buy upgrades
+      saveFuelCells(loadFuelCells() + 99999);
+      updateTitleFuelCells();
+    }
+    if (skinLabel) {
+      skinLabel.addEventListener('touchstart', e => {
+        _skinTapCount++;
+        if (_skinTapTimer) clearTimeout(_skinTapTimer);
+        if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
+        _skinTapTimer = setTimeout(() => { _skinTapCount = 0; }, 500);
+      }, { passive: true });
+      _tapBind(skinLabel, () => {
+        _skinTapCount++;
+        if (_skinTapTimer) clearTimeout(_skinTapTimer);
+        if (_skinTapCount >= 3) { _skinTapCount = 0; _adminUnlockAll(); return; }
+        _skinTapTimer = setTimeout(() => { _skinTapCount = 0; }, 500);
+      });
+    }
   }
 })();
 
