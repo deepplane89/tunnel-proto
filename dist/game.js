@@ -24832,6 +24832,11 @@ function killPlayer() {
     return;
   }
 
+  // ── Hitch meter: bracket the full fatal-death path. Three sub-phases
+  // ── (crash-tear / crash-exp / crash-audio) attribute per-chunk cost,
+  // ── and crash-rndr arms the next ~3 frames to catch first post-death render.
+  const _hT0crash = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
+  const _hT0tear  = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   // Save corridor type so repair ship can restart it from scratch
   state._deathCorridorType = state.l3KnifeCanyon ? 'l3-knife'
                            : state.l5CorridorActive ? 'l5'
@@ -24896,6 +24901,8 @@ function killPlayer() {
   state._shipBankNoWobble = 0;
   shipGroup.rotation.z = 0;
 
+  if (typeof _hitchEnd === 'function') _hitchEnd('crash-tear', _hT0tear);
+  const _hT0exp = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   // ── Ship explosion: hide ship + thrusters, spawn particles ──
   shipGroup.visible = false;
   // Kill thruster particle systems (they're on scene, not shipGroup)
@@ -24949,6 +24956,9 @@ function killPlayer() {
     _expCrashWorldPos.set(shipGroup.position.x, shipGroup.position.y, shipGroup.position.z);
   }
 
+  if (typeof _hitchEnd === 'function') _hitchEnd('crash-exp', _hT0exp);
+  const _hT0aud = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
+
   if (state.score > state.bestScore) state.bestScore = state.score;
 
   hapticHeavy(); // death
@@ -24977,6 +24987,11 @@ function killPlayer() {
     _thunderActiveSrc = null;
   }
   playCrash();
+  if (typeof _hitchEnd === 'function') _hitchEnd('crash-audio', _hT0aud);
+  if (typeof _hitchEnd === 'function') _hitchEnd('crash', _hT0crash);
+  // Arm next frames — first render after death pays for any deferred uploads
+  // (face explosion geometry, particle texture state changes, etc).
+  if (typeof _hitchArm === 'function') _hitchArm('crash-rndr');
   // addCrashFlash(); // disabled to isolate face explosion
 
   if (titleMusic) titleMusic.currentTime = 0;  // always start title from top on game over
