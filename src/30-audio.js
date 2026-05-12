@@ -59,7 +59,7 @@ let _magnetWhirGain = null;
 let _magnetWhirLfo  = null;
 let _magnetWhirLfoG = null;
 function _startMagnetWhir() {
-  if (!audioCtx || state.muted || _magnetWhirOsc) return;
+  if (!audioCtx || isSfxMuted() || _magnetWhirOsc) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
@@ -95,7 +95,7 @@ function _stopMagnetWhir() {
 
 function playSFX(freq = 440, duration = 0.15, type = 'square', volume = 0.3) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   _ensureCtxRunning();
   const osc  = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
@@ -276,7 +276,7 @@ function _loadSFXBufferWithReverse(forwardName, reverseName, url) {
 // way to actually modulate volume on mobile. So argon runs as a looping
 // BufferSource feeding a GainNode that the per-frame steering code updates.
 function _playArgonLoop(initialVol) {
-  if (!audioCtx || state.muted) return null;
+  if (!audioCtx || isSfxMuted()) return null;
   _ensureCtxRunning();
   const buf = _sfxBuffers['argon-ambient'];
   if (!buf) return null; // not decoded yet — caller falls back to element
@@ -295,7 +295,7 @@ function _playArgonLoop(initialVol) {
 // targetVol: peak gain. fadeInSec: linear ramp 0 → targetVol from now.
 // Returns the source node (with _jhGain attached) or null if buffer not ready.
 function _playArgonOnce(targetVol, fadeInSec) {
-  if (!audioCtx || state.muted) return null;
+  if (!audioCtx || isSfxMuted()) return null;
   _ensureCtxRunning();
   const buf = _sfxBuffers['argon-ambient'];
   if (!buf) return null;
@@ -409,7 +409,7 @@ window.stopAllGameplaySFX = stopAllGameplaySFX;
 // opts.ui = true marks this as a UI sound (not tracked, survives death kill).
 function _playBuffer(name, volume, rate, panVal, opts) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (!audioCtx || state.muted || volume <= 0) return;
+  if (!audioCtx || isSfxMuted() || volume <= 0) return;
   _ensureCtxRunning();
   const isUI = !!(opts && opts.ui);
   // Preferred: AudioBufferSourceNode (zero-latency, no DOM)
@@ -457,7 +457,7 @@ function _playBufferUI(name, volume, rate, panVal) {
 window._playBufferUI = _playBufferUI;
 
 function playNearMissSFX() {
-  if (state.muted) return;
+  if (isSfxMuted()) return;
   _ensureCtxRunning();
   const rate = 0.92 + Math.random() * 0.16;
   _playBuffer('nearmiss', 0.24, rate, null);
@@ -480,7 +480,7 @@ function _lateralDuck() {
   try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _RADIO_LATERAL_DUCK : 1; } catch(_) { return 1; }
 }
 function playWhoosh(direction, intensity) {
-  if (!whooshReady || state.muted) return;
+  if (!whooshReady || isSfxMuted()) return;
   const now = performance.now();
   if (now - lastWhooshTime < 80) return;
   lastWhooshTime = now;
@@ -494,7 +494,7 @@ function playWhoosh(direction, intensity) {
 }
 
 function playWhooshRelease(direction, holdTime) {
-  if (state.muted) return;
+  if (isSfxMuted()) return;
   const intensity = Math.min(1, (holdTime - 1.5) / 1.5);
   const rate = 0.90 + Math.random() * 0.15 + intensity * 0.1;
   // Bumped 2026-05-02: matched scale-up with playWhoosh.
@@ -505,7 +505,7 @@ function playWhooshRelease(direction, holdTime) {
 }
 
 function playLevelUp() {
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   [440, 550, 660, 880].forEach((f, i) => {
     setTimeout(() => playSFX(f, 0.25, 'triangle', 0.25), i * 80);
   });
@@ -561,7 +561,7 @@ function playTapToPlay() { _playBufferUI('title-exit', 0.7, 1.0, null); }
 window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
-  if (state.muted) return;
+  if (isSfxMuted()) return;
   _ensureCtxRunning();
   const sfx = document.getElementById('crash-sound');
   if (sfx) { sfx.currentTime = 0; sfx.volume = 0.25; sfx.play().catch(() => {}); }

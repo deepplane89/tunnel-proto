@@ -1324,10 +1324,12 @@ function closeMissions() {
   if (_missionsOpenedFromGameplay && state.phase === 'paused') {
     state.phase = 'playing';
     _missionsOpenedFromGameplay = false;
-    const _engP = document.getElementById('engine-start');
-    const _roarP = document.getElementById('engine-roar');
-    if (_engP && _engP.paused) _engP.play().catch(()=>{});
-    if (_roarP && _roarP.paused) _roarP.play().catch(()=>{});
+    if (!isSfxMuted()) {
+      const _engP = document.getElementById('engine-start');
+      const _roarP = document.getElementById('engine-roar');
+      if (_engP && _engP.paused) _engP.play().catch(()=>{});
+      if (_roarP && _roarP.paused) _roarP.play().catch(()=>{});
+    }
   }
 }
 window.closeMissions = closeMissions;
@@ -1382,10 +1384,12 @@ function closeThrusterPanel() {
   if (_thrusterPanelOpenedFromGameplay && state.phase === 'paused') {
     state.phase = 'playing';
     _thrusterPanelOpenedFromGameplay = false;
-    const _engP = document.getElementById('engine-start');
-    const _roarP = document.getElementById('engine-roar');
-    if (_engP && _engP.paused) _engP.play().catch(()=>{});
-    if (_roarP && _roarP.paused) _roarP.play().catch(()=>{});
+    if (!isSfxMuted()) {
+      const _engP = document.getElementById('engine-start');
+      const _roarP = document.getElementById('engine-roar');
+      if (_engP && _engP.paused) _engP.play().catch(()=>{});
+      if (_roarP && _roarP.paused) _roarP.play().catch(()=>{});
+    }
   }
 }
 window.closeThrusterPanel = closeThrusterPanel;

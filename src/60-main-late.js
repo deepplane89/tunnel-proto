@@ -130,11 +130,11 @@ function togglePause() {
     // Resume invincible loop if active. The kill-switch on pause cleared the
     // loop flag, so re-set it before play().
     const _invU = document.getElementById('invincible-loop-sfx');
-    if (_invU && state.invincibleTimer > 0 && !state.muted) {
+    if (_invU && state.invincibleTimer > 0 && !isSfxMuted()) {
       _invU.loop = true; _invU.play().catch(()=>{});
     }
     // Resume looped weapon SFX if their power-up timer is still running.
-    if (state.laserActive && !state.muted) {
+    if (state.laserActive && !isSfxMuted()) {
       const _tier = state.laserTier || 1;
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');

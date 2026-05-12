@@ -1,6 +1,6 @@
 // Plasma-punch impact layered alongside engine-roar ignition.
 function playThrusterImpact(vol) {
-  if (state.muted) return;
+  if (isSfxMuted()) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   const _baseV = (vol == null ? 0.7 : vol) * _sM;
@@ -90,7 +90,7 @@ function stopEngineBaseline(_opts) { /* no-op */ }
 
 // ── Retry sweep whoosh: filtered noise with rising frequency sweep ──
 function playRetryWhoosh() {
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   _ensureCtxRunning();
   const vol = 0.18 * (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (vol <= 0) return;
@@ -129,7 +129,7 @@ function playRetryWhoosh() {
 let _thunderActiveSrc = null;   // active AudioBufferSourceNode (or null when free)
 let _thunderNextIdx   = 0;       // 0 -> thunder1 next, 1 -> thunder2 next
 function _playThunderRotating() {
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   // Skip if previous clip is still playing (no overlap allowed).
   if (_thunderActiveSrc) return;
   // Moderately quieter than synth boom so it sits as a longer-tail rumble layer.
@@ -157,7 +157,7 @@ function _playThunderRotating() {
 
 // ── Lightning strike: buzzy arc + deep boom two-layer SFX ──
 function _playLightningStrike() {
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   // Hard gate: only fire during active gameplay, never during intro/lift/menus/etc.
   if (state.phase !== 'playing' || state.introActive || state._introLiftActive) return;
   _ensureCtxRunning();
@@ -195,7 +195,7 @@ function _playLightningStrike() {
 
 function _playAsteroidImpact() {
   // Same boom as lightning but quieter (0.07 vs 0.22)
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   _ensureCtxRunning();
   const vol = 0.07 * (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (vol <= 0) return;
@@ -220,7 +220,7 @@ function _playAsteroidImpact() {
 }
 
 function playPickup(typeIdx) {
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   const freqs = [880, 1100, 660, 990, 770, 660];
   // Lowered 2026-05-10 (user request): pickup smash was too loud relative to
   // engine + radio mix. ~50% drop on all three layers — synth tone + harmonic
@@ -2366,7 +2366,7 @@ function collectCoin(coin, worldPos) {
   updateTitleCoins();
   // Collect sound — bright 3-note ascending chime (C5-E5-G5)
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (audioCtx && !state.muted && _sM > 0) {
+  if (audioCtx && !isSfxMuted() && _sM > 0) {
     const t = audioCtx.currentTime;
     if (state.magnetActive) {
       // Magnet whoosh — short rising pitch sweep per sucked coin

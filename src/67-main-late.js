@@ -79,10 +79,10 @@ function _triggerRetryWithSweep() {
     _retrySweepThrusterFired = false;
     // Retry SFX: tech-device one-shot (504ms) at sweep start, warp AFTER it finishes.
     const _retrySfx = document.getElementById('retry-tech-sfx');
-    if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
+    if (_retrySfx && !isSfxMuted()) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
     setTimeout(() => {
       const _retryWarp = document.getElementById('retry-warp-sfx');
-      if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
+      if (_retryWarp && !isSfxMuted()) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
     }, 300);
     // Fade from black
     fadeEl.style.opacity = '0';
@@ -964,7 +964,7 @@ function startDeathRun() {
     // Engine startup SFX at 8.5s
     _introScheduleTimeout(() => {
       const eng = document.getElementById('engine-start');
-      if (eng && !state.muted) {
+      if (eng && !isSfxMuted()) {
         _ensureCtxRunning();
         eng.currentTime = 0;
         eng.volume = 0.55;
@@ -1438,7 +1438,7 @@ function _drSequencerTick(dt) {
     if (_willPunch && !state._restBeepFired &&
         state.seqStageElapsed >= stage.duration - 1.5) {
       state._restBeepFired = true;
-      if (!state.muted) {
+      if (!isSfxMuted()) {
         // Klaxon countdown — 3 hits + roar locked to a 500ms grid (120 BPM).
         // Beeps trigger when stage has 1500ms left; roar lands at +1500ms
         // which is the exact moment _drSeqAdvance() bumps the speed tier.
@@ -1760,7 +1760,7 @@ function _drSequencerTick(dt) {
     if (_nextStage && _nextStage.speed > stage.speed &&
         state.seqStageElapsed >= stage.duration - 1.5) {
       state._restBeepFired = true;
-      if (!state.muted) {
+      if (!isSfxMuted()) {
         // Klaxon countdown — 500ms grid (120 BPM), roar lands on the
         // speed-change beat. Same cadence as the corridor handler above.
         _playBuffer('klaxon', 0.18, 1.0, null);
@@ -2933,7 +2933,7 @@ function resumeIntroAfterPause() {
   _introPausedSpecs.forEach(s => { _introScheduleTimeout(s.fn, s.remaining); });
   _introPausedSpecs = [];
   const eng = document.getElementById('engine-start');
-  if (eng && eng._jhPausedDuringIntro && !state.muted) {
+  if (eng && eng._jhPausedDuringIntro && !isSfxMuted()) {
     eng._jhPausedDuringIntro = false;
     try { eng.play().catch(()=>{}); } catch(_){}
   }
@@ -3218,7 +3218,7 @@ function showIntroText() {
   // Engine startup SFX — fade is baked into the audio file, just play from start
   _introTimers.push(setTimeout(() => {
     const eng = document.getElementById('engine-start');
-    if (eng && !state.muted) {
+    if (eng && !isSfxMuted()) {
       _ensureCtxRunning();
       eng.currentTime = 0;
       eng.volume = 0.55;
@@ -3838,10 +3838,10 @@ function killPlayer() {
         // Same two-shot SFX chain as the retry sweep:
         // tech-device one-shot at sweep start, warp one-shot 300ms later.
         const _saveMeSfx = document.getElementById('retry-tech-sfx');
-        if (_saveMeSfx && !state.muted) { _saveMeSfx.currentTime = 0; _saveMeSfx.volume = 0.55; _saveMeSfx.play().catch(()=>{}); }
+        if (_saveMeSfx && !isSfxMuted()) { _saveMeSfx.currentTime = 0; _saveMeSfx.volume = 0.55; _saveMeSfx.play().catch(()=>{}); }
         setTimeout(() => {
           const _saveMeWarp = document.getElementById('retry-warp-sfx');
-          if (_saveMeWarp && !state.muted) { _saveMeWarp.currentTime = 0; _saveMeWarp.volume = 0.85; _saveMeWarp.play().catch(()=>{}); }
+          if (_saveMeWarp && !isSfxMuted()) { _saveMeWarp.currentTime = 0; _saveMeWarp.volume = 0.85; _saveMeWarp.play().catch(()=>{}); }
         }, 300);
         // Re-engage the correct music track for wherever we are in the run
         musicFadeTo(currentGameTrack(), 1500);
@@ -4115,7 +4115,7 @@ function update(dt) {
     const _isSteering = !!(steerLeft || steerRight);
     const _wasSteering = !!state._argonSteering;
     const _argonEl = document.getElementById('argon-ambient-sfx');
-    if (!state.muted) {
+    if (!isSfxMuted()) {
       // Non-looping: play the clip up to 2 times max per steering hold,
       // fading in over the first play. No per-frame volume modulation.
       const _PEAK_VOL = 0.40;     // target gain at end of fade-in
@@ -4143,7 +4143,7 @@ function update(dt) {
           const _dur = (_src._jhDuration || 1.25);
           state._argonReplayTo = setTimeout(() => {
             state._argonReplayTo = null;
-            if (!state._argonSteering || state.muted) return;
+            if (!state._argonSteering || isSfxMuted()) return;
             if ((state._argonPlayCount || 0) >= _MAX_PLAYS) return;
             const _src2 = (typeof _playArgonOnce === 'function') ? _playArgonOnce(_PEAK_VOL, 0) : null;
             if (_src2) {
@@ -4168,7 +4168,7 @@ function update(dt) {
           // Schedule one possible replay
           state._argonReplayTo = setTimeout(() => {
             state._argonReplayTo = null;
-            if (!state._argonSteering || state.muted) return;
+            if (!state._argonSteering || isSfxMuted()) return;
             if ((state._argonPlayCount || 0) >= _MAX_PLAYS) return;
             try {
               _argonEl.currentTime = 0;
@@ -4905,7 +4905,7 @@ function update(dt) {
           _tutDestroyOverlay();
           // Play droplet sound on exit
           const _drp = document.getElementById('droplet-sfx');
-          if (_drp && !state.muted) { _drp.currentTime = 0; _drp.volume = 0.8; _drp.play().catch(()=>{}); }
+          if (_drp && !isSfxMuted()) { _drp.currentTime = 0; _drp.volume = 0.8; _drp.play().catch(()=>{}); }
           returnToTitle();
         }
       );

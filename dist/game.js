@@ -2139,10 +2139,12 @@ function closeMissions() {
   if (_missionsOpenedFromGameplay && state.phase === 'paused') {
     state.phase = 'playing';
     _missionsOpenedFromGameplay = false;
-    const _engP = document.getElementById('engine-start');
-    const _roarP = document.getElementById('engine-roar');
-    if (_engP && _engP.paused) _engP.play().catch(()=>{});
-    if (_roarP && _roarP.paused) _roarP.play().catch(()=>{});
+    if (!isSfxMuted()) {
+      const _engP = document.getElementById('engine-start');
+      const _roarP = document.getElementById('engine-roar');
+      if (_engP && _engP.paused) _engP.play().catch(()=>{});
+      if (_roarP && _roarP.paused) _roarP.play().catch(()=>{});
+    }
   }
 }
 window.closeMissions = closeMissions;
@@ -2197,10 +2199,12 @@ function closeThrusterPanel() {
   if (_thrusterPanelOpenedFromGameplay && state.phase === 'paused') {
     state.phase = 'playing';
     _thrusterPanelOpenedFromGameplay = false;
-    const _engP = document.getElementById('engine-start');
-    const _roarP = document.getElementById('engine-roar');
-    if (_engP && _engP.paused) _engP.play().catch(()=>{});
-    if (_roarP && _roarP.paused) _roarP.play().catch(()=>{});
+    if (!isSfxMuted()) {
+      const _engP = document.getElementById('engine-start');
+      const _roarP = document.getElementById('engine-roar');
+      if (_engP && _engP.paused) _engP.play().catch(()=>{});
+      if (_roarP && _roarP.paused) _roarP.play().catch(()=>{});
+    }
   }
 }
 window.closeThrusterPanel = closeThrusterPanel;
@@ -12542,7 +12546,7 @@ let _magnetWhirGain = null;
 let _magnetWhirLfo  = null;
 let _magnetWhirLfoG = null;
 function _startMagnetWhir() {
-  if (!audioCtx || state.muted || _magnetWhirOsc) return;
+  if (!audioCtx || isSfxMuted() || _magnetWhirOsc) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   _ensureCtxRunning();
@@ -12578,7 +12582,7 @@ function _stopMagnetWhir() {
 
 function playSFX(freq = 440, duration = 0.15, type = 'square', volume = 0.3) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   _ensureCtxRunning();
   const osc  = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
@@ -12759,7 +12763,7 @@ function _loadSFXBufferWithReverse(forwardName, reverseName, url) {
 // way to actually modulate volume on mobile. So argon runs as a looping
 // BufferSource feeding a GainNode that the per-frame steering code updates.
 function _playArgonLoop(initialVol) {
-  if (!audioCtx || state.muted) return null;
+  if (!audioCtx || isSfxMuted()) return null;
   _ensureCtxRunning();
   const buf = _sfxBuffers['argon-ambient'];
   if (!buf) return null; // not decoded yet — caller falls back to element
@@ -12778,7 +12782,7 @@ function _playArgonLoop(initialVol) {
 // targetVol: peak gain. fadeInSec: linear ramp 0 → targetVol from now.
 // Returns the source node (with _jhGain attached) or null if buffer not ready.
 function _playArgonOnce(targetVol, fadeInSec) {
-  if (!audioCtx || state.muted) return null;
+  if (!audioCtx || isSfxMuted()) return null;
   _ensureCtxRunning();
   const buf = _sfxBuffers['argon-ambient'];
   if (!buf) return null;
@@ -12892,7 +12896,7 @@ window.stopAllGameplaySFX = stopAllGameplaySFX;
 // opts.ui = true marks this as a UI sound (not tracked, survives death kill).
 function _playBuffer(name, volume, rate, panVal, opts) {
   volume *= (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (!audioCtx || state.muted || volume <= 0) return;
+  if (!audioCtx || isSfxMuted() || volume <= 0) return;
   _ensureCtxRunning();
   const isUI = !!(opts && opts.ui);
   // Preferred: AudioBufferSourceNode (zero-latency, no DOM)
@@ -12940,7 +12944,7 @@ function _playBufferUI(name, volume, rate, panVal) {
 window._playBufferUI = _playBufferUI;
 
 function playNearMissSFX() {
-  if (state.muted) return;
+  if (isSfxMuted()) return;
   _ensureCtxRunning();
   const rate = 0.92 + Math.random() * 0.16;
   _playBuffer('nearmiss', 0.24, rate, null);
@@ -12963,7 +12967,7 @@ function _lateralDuck() {
   try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _RADIO_LATERAL_DUCK : 1; } catch(_) { return 1; }
 }
 function playWhoosh(direction, intensity) {
-  if (!whooshReady || state.muted) return;
+  if (!whooshReady || isSfxMuted()) return;
   const now = performance.now();
   if (now - lastWhooshTime < 80) return;
   lastWhooshTime = now;
@@ -12977,7 +12981,7 @@ function playWhoosh(direction, intensity) {
 }
 
 function playWhooshRelease(direction, holdTime) {
-  if (state.muted) return;
+  if (isSfxMuted()) return;
   const intensity = Math.min(1, (holdTime - 1.5) / 1.5);
   const rate = 0.90 + Math.random() * 0.15 + intensity * 0.1;
   // Bumped 2026-05-02: matched scale-up with playWhoosh.
@@ -12988,7 +12992,7 @@ function playWhooshRelease(direction, holdTime) {
 }
 
 function playLevelUp() {
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   [440, 550, 660, 880].forEach((f, i) => {
     setTimeout(() => playSFX(f, 0.25, 'triangle', 0.25), i * 80);
   });
@@ -13044,7 +13048,7 @@ function playTapToPlay() { _playBufferUI('title-exit', 0.7, 1.0, null); }
 window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
-  if (state.muted) return;
+  if (isSfxMuted()) return;
   _ensureCtxRunning();
   const sfx = document.getElementById('crash-sound');
   if (sfx) { sfx.currentTime = 0; sfx.volume = 0.25; sfx.play().catch(() => {}); }
@@ -14098,7 +14102,7 @@ function _wirePauseShuffleSwitch() {
 })();
 // Plasma-punch impact layered alongside engine-roar ignition.
 function playThrusterImpact(vol) {
-  if (state.muted) return;
+  if (isSfxMuted()) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
   const _baseV = (vol == null ? 0.7 : vol) * _sM;
@@ -14188,7 +14192,7 @@ function stopEngineBaseline(_opts) { /* no-op */ }
 
 // ── Retry sweep whoosh: filtered noise with rising frequency sweep ──
 function playRetryWhoosh() {
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   _ensureCtxRunning();
   const vol = 0.18 * (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (vol <= 0) return;
@@ -14227,7 +14231,7 @@ function playRetryWhoosh() {
 let _thunderActiveSrc = null;   // active AudioBufferSourceNode (or null when free)
 let _thunderNextIdx   = 0;       // 0 -> thunder1 next, 1 -> thunder2 next
 function _playThunderRotating() {
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   // Skip if previous clip is still playing (no overlap allowed).
   if (_thunderActiveSrc) return;
   // Moderately quieter than synth boom so it sits as a longer-tail rumble layer.
@@ -14255,7 +14259,7 @@ function _playThunderRotating() {
 
 // ── Lightning strike: buzzy arc + deep boom two-layer SFX ──
 function _playLightningStrike() {
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   // Hard gate: only fire during active gameplay, never during intro/lift/menus/etc.
   if (state.phase !== 'playing' || state.introActive || state._introLiftActive) return;
   _ensureCtxRunning();
@@ -14293,7 +14297,7 @@ function _playLightningStrike() {
 
 function _playAsteroidImpact() {
   // Same boom as lightning but quieter (0.07 vs 0.22)
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   _ensureCtxRunning();
   const vol = 0.07 * (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (vol <= 0) return;
@@ -14318,7 +14322,7 @@ function _playAsteroidImpact() {
 }
 
 function playPickup(typeIdx) {
-  if (!audioCtx || state.muted) return;
+  if (!audioCtx || isSfxMuted()) return;
   const freqs = [880, 1100, 660, 990, 770, 660];
   // Lowered 2026-05-10 (user request): pickup smash was too loud relative to
   // engine + radio mix. ~50% drop on all three layers — synth tone + harmonic
@@ -16464,7 +16468,7 @@ function collectCoin(coin, worldPos) {
   updateTitleCoins();
   // Collect sound — bright 3-note ascending chime (C5-E5-G5)
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
-  if (audioCtx && !state.muted && _sM > 0) {
+  if (audioCtx && !isSfxMuted() && _sM > 0) {
     const t = audioCtx.currentTime;
     if (state.magnetActive) {
       // Magnet whoosh — short rising pitch sweep per sucked coin
@@ -19336,7 +19340,7 @@ function applyPowerup(typeIdx) {
       shieldWire.visible = false;
       shieldLight.intensity = 0;
       const _tShAct = _hS ? _hS() : 0;
-      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
+      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx && !isSfxMuted()) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
       if (_hE) _hE('shld-act', _tShAct);
       if (_hE) _hE('shld-set', _tShld);
       break;
@@ -19361,7 +19365,7 @@ function applyPowerup(typeIdx) {
         // on the first laser pickup of a session. Element clones work after
         // any user gesture, including touch.
         const _lsfx = document.getElementById('laser-beam-sfx');
-        if (_lsfx && !state.muted) {
+        if (_lsfx && !isSfxMuted()) {
           _lsfx.loop = false;
           _lsfx.volume = 0.2;
           try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
@@ -19407,7 +19411,7 @@ function applyPowerup(typeIdx) {
         state.laserBoltTimer = 0;
         state._laserScanActive = false;
         const _ubsfx = document.getElementById('unibeam-sfx');
-        if (_ubsfx && !state.muted) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6; _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
+        if (_ubsfx && !isSfxMuted()) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6; _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
         setTimeout(() => { const s = document.getElementById('unibeam-sfx'); if (s) { s.loop = false; s.pause(); s.currentTime = 0; } }, state.laserTimer * 1000);
       } else {
         // T5: scanning unibeam
@@ -19416,7 +19420,7 @@ function applyPowerup(typeIdx) {
         state._laserScanActive = true;
         state.laserBoltTimer   = 0;
         const _ubsfx = document.getElementById('unibeam-sfx');
-        if (_ubsfx && !state.muted) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6; _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
+        if (_ubsfx && !isSfxMuted()) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6; _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
         setTimeout(() => { const s = document.getElementById('unibeam-sfx'); if (s) { s.loop = false; s.pause(); s.currentTime = 0; } }, state.laserTimer * 1000);
       }
       break;
@@ -19433,7 +19437,7 @@ function applyPowerup(typeIdx) {
       shieldLight.intensity = 0;
       // Force-field loop: starts at 0 during speed phase
       const _invSfx = document.getElementById('invincible-loop-sfx');
-      if (_invSfx && !state.muted) {
+      if (_invSfx && !isSfxMuted()) {
         try { _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45; _invSfx.play().catch(()=>{}); } catch(_) {}
       }
       break;
@@ -19638,11 +19642,11 @@ function togglePause() {
     // Resume invincible loop if active. The kill-switch on pause cleared the
     // loop flag, so re-set it before play().
     const _invU = document.getElementById('invincible-loop-sfx');
-    if (_invU && state.invincibleTimer > 0 && !state.muted) {
+    if (_invU && state.invincibleTimer > 0 && !isSfxMuted()) {
       _invU.loop = true; _invU.play().catch(()=>{});
     }
     // Resume looped weapon SFX if their power-up timer is still running.
-    if (state.laserActive && !state.muted) {
+    if (state.laserActive && !isSfxMuted()) {
       const _tier = state.laserTier || 1;
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
@@ -21025,6 +21029,12 @@ function _sfxRadioDuck() {
   try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _SFX_RADIO_DUCK : 1; } catch(_) { return 1; }
 }
 function sfxMult()   { return (_settings.sfxMuted ? 0 : _settings.sfxVol / 100) * _sfxRadioDuck(); }
+// True when the SFX mute button is engaged (or sfx slider at 0). Use this
+// to gate SFX `.play()` calls — NOT `state.muted`, which only flips on when
+// BOTH music AND sfx are muted (so it silently lets SFX through when only
+// SFX is muted).
+function isSfxMuted() { return _settings.sfxMuted || _settings.sfxVol <= 0; }
+window.isSfxMuted = isSfxMuted;
 
 // Apply music volume to all active tracks. setTrackVol applies musicMult()
 // itself, so pass the raw TRACK_VOL base — don't double-multiply.
@@ -21587,10 +21597,10 @@ function _triggerRetryWithSweep() {
     _retrySweepThrusterFired = false;
     // Retry SFX: tech-device one-shot (504ms) at sweep start, warp AFTER it finishes.
     const _retrySfx = document.getElementById('retry-tech-sfx');
-    if (_retrySfx && !state.muted) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
+    if (_retrySfx && !isSfxMuted()) { _retrySfx.currentTime = 0; _retrySfx.volume = 0.55; _retrySfx.play().catch(()=>{}); }
     setTimeout(() => {
       const _retryWarp = document.getElementById('retry-warp-sfx');
-      if (_retryWarp && !state.muted) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
+      if (_retryWarp && !isSfxMuted()) { _retryWarp.currentTime = 0; _retryWarp.volume = 0.85; _retryWarp.play().catch(()=>{}); }
     }, 300);
     // Fade from black
     fadeEl.style.opacity = '0';
@@ -22472,7 +22482,7 @@ function startDeathRun() {
     // Engine startup SFX at 8.5s
     _introScheduleTimeout(() => {
       const eng = document.getElementById('engine-start');
-      if (eng && !state.muted) {
+      if (eng && !isSfxMuted()) {
         _ensureCtxRunning();
         eng.currentTime = 0;
         eng.volume = 0.55;
@@ -22946,7 +22956,7 @@ function _drSequencerTick(dt) {
     if (_willPunch && !state._restBeepFired &&
         state.seqStageElapsed >= stage.duration - 1.5) {
       state._restBeepFired = true;
-      if (!state.muted) {
+      if (!isSfxMuted()) {
         // Klaxon countdown — 3 hits + roar locked to a 500ms grid (120 BPM).
         // Beeps trigger when stage has 1500ms left; roar lands at +1500ms
         // which is the exact moment _drSeqAdvance() bumps the speed tier.
@@ -23268,7 +23278,7 @@ function _drSequencerTick(dt) {
     if (_nextStage && _nextStage.speed > stage.speed &&
         state.seqStageElapsed >= stage.duration - 1.5) {
       state._restBeepFired = true;
-      if (!state.muted) {
+      if (!isSfxMuted()) {
         // Klaxon countdown — 500ms grid (120 BPM), roar lands on the
         // speed-change beat. Same cadence as the corridor handler above.
         _playBuffer('klaxon', 0.18, 1.0, null);
@@ -24441,7 +24451,7 @@ function resumeIntroAfterPause() {
   _introPausedSpecs.forEach(s => { _introScheduleTimeout(s.fn, s.remaining); });
   _introPausedSpecs = [];
   const eng = document.getElementById('engine-start');
-  if (eng && eng._jhPausedDuringIntro && !state.muted) {
+  if (eng && eng._jhPausedDuringIntro && !isSfxMuted()) {
     eng._jhPausedDuringIntro = false;
     try { eng.play().catch(()=>{}); } catch(_){}
   }
@@ -24726,7 +24736,7 @@ function showIntroText() {
   // Engine startup SFX — fade is baked into the audio file, just play from start
   _introTimers.push(setTimeout(() => {
     const eng = document.getElementById('engine-start');
-    if (eng && !state.muted) {
+    if (eng && !isSfxMuted()) {
       _ensureCtxRunning();
       eng.currentTime = 0;
       eng.volume = 0.55;
@@ -25346,10 +25356,10 @@ function killPlayer() {
         // Same two-shot SFX chain as the retry sweep:
         // tech-device one-shot at sweep start, warp one-shot 300ms later.
         const _saveMeSfx = document.getElementById('retry-tech-sfx');
-        if (_saveMeSfx && !state.muted) { _saveMeSfx.currentTime = 0; _saveMeSfx.volume = 0.55; _saveMeSfx.play().catch(()=>{}); }
+        if (_saveMeSfx && !isSfxMuted()) { _saveMeSfx.currentTime = 0; _saveMeSfx.volume = 0.55; _saveMeSfx.play().catch(()=>{}); }
         setTimeout(() => {
           const _saveMeWarp = document.getElementById('retry-warp-sfx');
-          if (_saveMeWarp && !state.muted) { _saveMeWarp.currentTime = 0; _saveMeWarp.volume = 0.85; _saveMeWarp.play().catch(()=>{}); }
+          if (_saveMeWarp && !isSfxMuted()) { _saveMeWarp.currentTime = 0; _saveMeWarp.volume = 0.85; _saveMeWarp.play().catch(()=>{}); }
         }, 300);
         // Re-engage the correct music track for wherever we are in the run
         musicFadeTo(currentGameTrack(), 1500);
@@ -25623,7 +25633,7 @@ function update(dt) {
     const _isSteering = !!(steerLeft || steerRight);
     const _wasSteering = !!state._argonSteering;
     const _argonEl = document.getElementById('argon-ambient-sfx');
-    if (!state.muted) {
+    if (!isSfxMuted()) {
       // Non-looping: play the clip up to 2 times max per steering hold,
       // fading in over the first play. No per-frame volume modulation.
       const _PEAK_VOL = 0.40;     // target gain at end of fade-in
@@ -25651,7 +25661,7 @@ function update(dt) {
           const _dur = (_src._jhDuration || 1.25);
           state._argonReplayTo = setTimeout(() => {
             state._argonReplayTo = null;
-            if (!state._argonSteering || state.muted) return;
+            if (!state._argonSteering || isSfxMuted()) return;
             if ((state._argonPlayCount || 0) >= _MAX_PLAYS) return;
             const _src2 = (typeof _playArgonOnce === 'function') ? _playArgonOnce(_PEAK_VOL, 0) : null;
             if (_src2) {
@@ -25676,7 +25686,7 @@ function update(dt) {
           // Schedule one possible replay
           state._argonReplayTo = setTimeout(() => {
             state._argonReplayTo = null;
-            if (!state._argonSteering || state.muted) return;
+            if (!state._argonSteering || isSfxMuted()) return;
             if ((state._argonPlayCount || 0) >= _MAX_PLAYS) return;
             try {
               _argonEl.currentTime = 0;
@@ -26413,7 +26423,7 @@ function update(dt) {
           _tutDestroyOverlay();
           // Play droplet sound on exit
           const _drp = document.getElementById('droplet-sfx');
-          if (_drp && !state.muted) { _drp.currentTime = 0; _drp.volume = 0.8; _drp.play().catch(()=>{}); }
+          if (_drp && !isSfxMuted()) { _drp.currentTime = 0; _drp.volume = 0.8; _drp.play().catch(()=>{}); }
           returnToTitle();
         }
       );

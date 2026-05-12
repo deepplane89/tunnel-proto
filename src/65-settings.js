@@ -95,6 +95,12 @@ function _sfxRadioDuck() {
   try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _SFX_RADIO_DUCK : 1; } catch(_) { return 1; }
 }
 function sfxMult()   { return (_settings.sfxMuted ? 0 : _settings.sfxVol / 100) * _sfxRadioDuck(); }
+// True when the SFX mute button is engaged (or sfx slider at 0). Use this
+// to gate SFX `.play()` calls — NOT `state.muted`, which only flips on when
+// BOTH music AND sfx are muted (so it silently lets SFX through when only
+// SFX is muted).
+function isSfxMuted() { return _settings.sfxMuted || _settings.sfxVol <= 0; }
+window.isSfxMuted = isSfxMuted;
 
 // Apply music volume to all active tracks. setTrackVol applies musicMult()
 // itself, so pass the raw TRACK_VOL base — don't double-multiply.
