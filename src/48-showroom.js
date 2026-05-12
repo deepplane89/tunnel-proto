@@ -1673,17 +1673,20 @@
   // Only fires when the garage/showroom is open. The panel itself is owned by
   // window.TunerHud (src/49-tuner-hud.js) — we just flip its visibility. Tracks
   // local state since showTuner is a setter, not a toggle.
-  let _posPanelOpen = false;
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'p' && e.key !== 'P') return;
-    if (!_open) return;
-    // Don't hijack typing in input/textarea elements.
-    const t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    _ensureTunerHudInit();
-    _posPanelOpen = !_posPanelOpen;
-    if (window.TunerHud && typeof window.TunerHud.showTuner === 'function') {
-      window.TunerHud.showTuner(_posPanelOpen);
-    }
-  });
+  // DEV-ONLY: stripped from prod.
+  if (window.__JH_DEV__) {
+    let _posPanelOpen = false;
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'p' && e.key !== 'P') return;
+      if (!_open) return;
+      // Don't hijack typing in input/textarea elements.
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      _ensureTunerHudInit();
+      _posPanelOpen = !_posPanelOpen;
+      if (window.TunerHud && typeof window.TunerHud.showTuner === 'function') {
+        window.TunerHud.showTuner(_posPanelOpen);
+      }
+    });
+  }
 })();

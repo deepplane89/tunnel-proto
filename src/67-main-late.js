@@ -5984,19 +5984,21 @@ let dbgFrames = 0, dbgLast = performance.now(), dbgFps = 0;
 let dbgVisible = false;
 const dbgEl = document.getElementById('debug-overlay');
 
-// Toggle debug overlay with 'D' key (desktop only)
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'd' || e.key === 'D') {
-    dbgVisible = !dbgVisible;
-    dbgEl.classList.toggle('visible', dbgVisible);
-  }
-  // C — cone↔GLB diagnostic snapshot (logs + clipboard)
-  if (e.key === 'c' || e.key === 'C') {
-    if (typeof window._coneDiag === 'function') window._coneDiag();
-  }
-  // V — toggle canyon on/off
-  // V key is handled by the canyon tuner panel listener below
-});
+// Toggle debug overlay with 'D' key (desktop only) — DEV-ONLY
+if (window.__JH_DEV__) {
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'd' || e.key === 'D') {
+      dbgVisible = !dbgVisible;
+      dbgEl.classList.toggle('visible', dbgVisible);
+    }
+    // C — cone↔GLB diagnostic snapshot (logs + clipboard)
+    if (e.key === 'c' || e.key === 'C') {
+      if (typeof window._coneDiag === 'function') window._coneDiag();
+    }
+    // V — toggle canyon on/off
+    // V key is handled by the canyon tuner panel listener below
+  });
+}
 
 
 function updateDebug() {
