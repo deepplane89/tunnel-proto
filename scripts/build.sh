@@ -72,9 +72,12 @@ fi
 # Dev-only files swapped out in --prod builds. Stays the same in dev builds.
 # Stub file _dev-stubs.js provides no-op replacements for the few unguarded
 # globals these files export.
+# NOTE: 70-perf-diag.js is NOT dev-only. It contains the main animate() loop,
+# adaptive DPR, and frame budgeting — gameplay-critical. The _perfDiag tooling
+# inside it is gated by `window._perfDiagOn` (default false), so it adds ~28KB
+# of inert code in prod but nothing runs unless explicitly toggled on.
 DEV_ONLY_FILES=(
   "$SRC_DIR/49-tuner-hud.js"
-  "$SRC_DIR/70-perf-diag.js"
   "$SRC_DIR/78-tuner-panels.js"
 )
 DEV_STUB_FILE="$SRC_DIR/_dev-stubs.js"

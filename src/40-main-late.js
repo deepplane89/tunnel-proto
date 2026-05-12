@@ -2081,7 +2081,7 @@ function spawnObstacles() {
     }
     if (_isRingBand) {
       _spawnLethalRing(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z);
-      _spawnLateralEchoes(laneX, SPAWN_Z, 'ring');
+      /* echoes removed */
       return;
     }
     if (_isFatConeBand) {

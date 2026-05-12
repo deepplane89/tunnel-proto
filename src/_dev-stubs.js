@@ -16,10 +16,9 @@ window.TunerHud = {
   updateTuner: function () {},
 };
 
-// Perf-diag — all callers guard with `if (window._perfDiag)`. Stub kept null
-// so `if (window._perfDiag)` falses out cleanly.
-window._perfDiag = null;
-window._perfDiagOn = false;
+// Perf-diag is now included in prod builds (see scripts/build.sh comment).
+// No stub needed — window._perfDiag is the real factory; window._perfDiagOn
+// defaults false so the inner methods stay inert.
 
 // Tuner panel functions called unguarded from gameplay hotkey handlers.
 // Hotkeys are dev-only but the call sites are not gated, so we need no-ops.

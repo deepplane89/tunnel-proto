@@ -15949,7 +15949,7 @@ function spawnObstacles() {
     }
     if (_isRingBand) {
       _spawnLethalRing(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z);
-      _spawnLateralEchoes(laneX, SPAWN_Z, 'ring');
+      /* echoes removed */
       return;
     }
     if (_isFatConeBand) {
@@ -27332,6 +27332,611 @@ const _fpsEl = document.getElementById('fps-overlay');
   });
 })();
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  PERF DIAGNOSTIC — per-frame timing + event tags + first-render detection
+//  Purpose: pinpoint source of freeze (shader compile vs geo upload vs GC vs
+//  draw-call spike vs JS stall). Pure additive — no behavior changes.
+//  Toggle: window._perfDiagOn = false to silence.
+//  Threshold: frames >20ms log as [FREEZE]. Rolling p95/p99 every 2s as [PERF].
+// ═══════════════════════════════════════════════════════════════════════════
+window._perfDiagOn = false;
+const _perfDiag = (function() {
+  let _frameStartTs = 0;
+  let _renderStartTs = 0;
+  let _renderEndTs = 0;
+  let _lastFrameEndTs = 0;
+  let _prevDraws = 0;
+  let _prevTris = 0;
+  let _prevHeap = 0;
+  let _prevProgramCount = 0;         // for churn detection: same count + different programs = eviction
+  let _seenPrograms = new WeakSet(); // track compiled programs
+  let _seenProgramNames = new Map(); // program ref -> name, for eviction-diff
+  let _prevProgramRefs = [];         // refs seen last frame, for churn detection
+  let _frameEvents = [];              // events tagged this frame
+  let _rollingFrames = [];            // frame times for last 2s
+  let _rollingStart = 0;
+  let _needsUpdateHits = [];          // captured by needsUpdate setter trap
+
+  function _getHeap() {
+    if (performance.memory && performance.memory.usedJSHeapSize) {
+      return performance.memory.usedJSHeapSize;
+    }
+    return 0;
+  }
+
+  let _newProgramNames = []; // populated by _detectNewPrograms each frame
+  function _detectNewPrograms() {
+    // Walk renderer.info.programs; return count of programs not yet seen.
+    // First render of a new material = shader compile stall this frame.
+    // Also capture each new program's name/type so we know WHICH material compiled.
+    _newProgramNames.length = 0;
+    if (!renderer || !renderer.info || !renderer.info.programs) return 0;
+    let newCount = 0;
+    for (const p of renderer.info.programs) {
+      if (!_seenPrograms.has(p)) {
+        _seenPrograms.add(p);
+        newCount++;
+        // p.name = THREE material type (e.g. 'MeshStandardMaterial', 'ShaderMaterial')
+        // cacheKey encodes #define flags; truncate for readability.
+        const name = p.name || '?';
+        const ck = (p.cacheKey || '').slice(0, 40);
+        const label = name + (ck ? '[' + ck + ']' : '');
+        _newProgramNames.push(label);
+        _seenProgramNames.set(p, label);
+      }
+    }
+    return newCount;
+  }
+
+  // Diff current program refs against last-frame snapshot — returns labels of evicted programs
+  function _detectEvictedPrograms() {
+    if (!renderer || !renderer.info || !renderer.info.programs) return [];
+    const curr = renderer.info.programs;
+    const currSet = new Set(curr);
+    const evicted = [];
+    for (const p of _prevProgramRefs) {
+      if (!currSet.has(p)) {
+        const label = _seenProgramNames.get(p) || '?';
+        evicted.push(label);
+      }
+    }
+    // Snapshot current for next frame
+    _prevProgramRefs = curr.slice();
+    return evicted;
+  }
+
+  function frameStart() {
+    if (!window._perfDiagOn) return;
+    _frameStartTs = performance.now();
+    _frameEvents.length = 0;
+  }
+
+  function markRenderStart() {
+    if (!window._perfDiagOn) return;
+    _renderStartTs = performance.now();
+  }
+
+  function markRenderEnd() {
+    if (!window._perfDiagOn) return;
+    _renderEndTs = performance.now();
+  }
+
+  function tag(name, extra) {
+    if (!window._perfDiagOn) return;
+    _frameEvents.push(extra ? (name + '(' + extra + ')') : name);
+  }
+
+  // Walk entire scene graph (not just top-level children) counting ALL lights.
+  // Also captures toggle state. Only called on bad frames — too slow for every frame.
+  function _sampleLights() {
+    if (!scene) return { count: 0, summary: '' };
+    const lights = [];
+    scene.traverse(obj => {
+      if (obj.isLight) {
+        lights.push({
+          type: obj.type,
+          visible: obj.visible && (obj.parent ? obj.parent.visible !== false : true),
+          intensity: obj.intensity,
+          color: obj.color ? ('#' + obj.color.getHexString()) : null,
+          name: obj.name || '',
+        });
+      }
+    });
+    // THREE's uniform setup counts lights that are .visible AND .intensity > 0 AND in scene graph.
+    // That's what drives the lights hash in cacheKey.
+    const effective = lights.filter(l => l.visible && l.intensity > 0);
+    const byType = {};
+    for (const l of effective) byType[l.type] = (byType[l.type]||0) + 1;
+    const summary = Object.keys(byType).map(k => k+'×'+byType[k]).join(',');
+    return { total: lights.length, effective: effective.length, summary };
+  }
+
+  // Sample toggleable game state flags that might drive material variant churn.
+  function _sampleState() {
+    // Use module-local state via closure (window.state is not set)
+    const s = state || {};
+    const cw = (typeof _canyonWalls !== 'undefined') ? _canyonWalls : null;
+    const ap = (typeof _asteroidActive !== 'undefined') ? _asteroidActive : [];
+    const astActive = ap.length;
+    const canyonVis = cw ? (cw.left || []).filter(m => m.visible).length : 0;
+    const corridor = (typeof _jlCorridor !== 'undefined' && _jlCorridor.active) ? 1 : 0;
+    const canyonAct = (typeof _canyonActive !== 'undefined' && _canyonActive) ? 1 : 0;
+    return 'phase='+(s.phase||'?')
+      + ' corridor='+corridor
+      + ' canyonAct='+canyonAct
+      + ' chaos='+(window._chaosMode?1:0)
+      + ' revealed='+(cw && cw._corridorRevealed?1:0)
+      + ' astActive='+astActive
+      + ' canyonVis='+canyonVis;
+  }
+
+  function frameEnd() {
+    if (!window._perfDiagOn) return;
+    if (_frameStartTs === 0) return; // not initialized
+    const now = performance.now();
+    const frameMs = now - _frameStartTs;
+    const jsMs = (_renderStartTs > 0) ? (_renderStartTs - _frameStartTs) : 0;
+    const renderMs = (_renderEndTs > _renderStartTs) ? (_renderEndTs - _renderStartTs) : 0;
+
+    const draws = (renderer && renderer.info) ? renderer.info.render.calls : 0;
+    const tris  = (renderer && renderer.info) ? renderer.info.render.triangles : 0;
+    const heap  = _getHeap();
+
+    const drawsDelta = draws - _prevDraws;
+    const trisDelta  = tris - _prevTris;
+    const heapDelta  = heap - _prevHeap;
+
+    const newShaders = _detectNewPrograms();
+    const totalPrograms = (renderer && renderer.info && renderer.info.programs) ? renderer.info.programs.length : 0;
+    const programDelta = totalPrograms - _prevProgramCount;
+
+    // Rolling window for p95/p99
+    _rollingFrames.push(frameMs);
+    if (_rollingStart === 0) _rollingStart = now;
+    if (now - _rollingStart >= 2000) {
+      const sorted = _rollingFrames.slice().sort((a,b)=>a-b);
+      const p50 = sorted[Math.floor(sorted.length*0.5)];
+      const p95 = sorted[Math.floor(sorted.length*0.95)];
+      const p99 = sorted[Math.floor(sorted.length*0.99)];
+      const worst = sorted[sorted.length-1];
+      // Draw-call / tri budget readout (golden rule: draws <100, tris <500k)
+      const dpr = (renderer && renderer.getPixelRatio) ? renderer.getPixelRatio().toFixed(2) : '?';
+      const canyonTag = (typeof _canyonActive !== 'undefined' && _canyonActive) ? ' CANYON' : '';
+      console.log('[PERF] '+sorted.length+' frames / 2s — p50='+p50.toFixed(1)+'ms p95='+p95.toFixed(1)+'ms p99='+p99.toFixed(1)+'ms worst='+worst.toFixed(1)+'ms — draws='+draws+' tris='+(tris/1000).toFixed(0)+'k dpr='+dpr+canyonTag);
+      _rollingFrames.length = 0;
+      _rollingStart = now;
+    }
+
+    // Bad frame: emit detailed log
+    if (frameMs > 20) {
+      const evts = _frameEvents.length ? _frameEvents.join(', ') : '(none)';
+      const heapStr = heap > 0 ? (' heap='+(heap/1048576).toFixed(1)+'MB d=' + (heapDelta>=0?'+':'') + (heapDelta/1048576).toFixed(1)+'MB') : '';
+      const shaderStr = newShaders > 0 ? (' newShaders='+newShaders) : '';
+      // Tally duplicate material names so log stays compact.
+      let shaderDetail = '';
+      if (_newProgramNames.length) {
+        const counts = {};
+        for (const n of _newProgramNames) counts[n] = (counts[n]||0) + 1;
+        const parts = [];
+        for (const k of Object.keys(counts)) parts.push(counts[k] > 1 ? (k+'×'+counts[k]) : k);
+        shaderDetail = ' compiled: [' + parts.join(', ') + ']';
+      }
+      // KEY churn indicator: if programs count didn't grow but newShaders>0 → eviction/recompile.
+      // If it grew by newShaders → first-time compile (cache growing).
+      let churnMarker = '';
+      if (newShaders > 0 && programDelta < newShaders) {
+        const evictedLabels = _detectEvictedPrograms();
+        const evSummary = evictedLabels.length
+          ? ' [' + evictedLabels.slice(0, 8).join(', ') + (evictedLabels.length > 8 ? ',+' + (evictedLabels.length - 8) : '') + ']'
+          : '';
+        churnMarker = ' CHURN(evicted=' + (newShaders - programDelta) + evSummary + ')';
+      } else {
+        // Still snapshot refs even on non-churn frames so we have a baseline
+        _detectEvictedPrograms();
+      }
+      // Light sample — detects light count/visibility toggles that drive cacheKey churn.
+      const lights = _sampleLights();
+      const lightStr = ' lights='+lights.effective+'/'+lights.total+'['+lights.summary+']';
+      // State flags
+      const stateStr = ' state:['+_sampleState()+']';
+      // needsUpdate hits since last bad frame
+      const nuStr = _needsUpdateHits.length ? (' needsUpdate=['+_needsUpdateHits.join(',')+']') : '';
+      _needsUpdateHits.length = 0;
+      console.log('[FREEZE] '+frameMs.toFixed(1)+'ms | js='+jsMs.toFixed(1)+' render='+renderMs.toFixed(1)
+        +' | progs='+totalPrograms+'(d'+(programDelta>=0?'+':'')+programDelta+')'+churnMarker
+        +' draws='+draws+'(d'+(drawsDelta>=0?'+':'')+drawsDelta+')'
+        +' tris='+Math.round(tris/1000)+'k(d'+(trisDelta>=0?'+':'')+Math.round(trisDelta/1000)+'k)'
+        +heapStr+shaderStr+lightStr+stateStr
+        +' | events: '+evts+shaderDetail+nuStr);
+    }
+
+    _prevDraws = draws;
+    _prevTris = tris;
+    _prevHeap = heap;
+    _prevProgramCount = totalPrograms;
+  }
+
+  // needsUpdate trap — wraps THREE's existing needsUpdate setter so we can count
+  // how many times code sets it = true during gameplay. Classic cause of
+  // "everything recompiles" when code sets it on a shared material.
+  // We delegate to the original setter to preserve THREE's internal behavior.
+  function _installNeedsUpdateTrap() {
+    if (typeof THREE === 'undefined' || !THREE.Material) return;
+    const proto = THREE.Material.prototype;
+    if (proto._perfDiagTrapped) return;
+    // Find the existing descriptor (may be on prototype or up the chain)
+    let existing = null;
+    let target = proto;
+    while (target && !existing) {
+      existing = Object.getOwnPropertyDescriptor(target, 'needsUpdate');
+      if (!existing) target = Object.getPrototypeOf(target);
+    }
+    if (!existing || !existing.set) {
+      console.warn('[PERF DIAG] could not find needsUpdate setter, trap not installed');
+      return;
+    }
+    const origSet = existing.set;
+    const origGet = existing.get || function(){return false;};
+    proto._perfDiagTrapped = true;
+    Object.defineProperty(proto, 'needsUpdate', {
+      set: function(v) {
+        if (v && window._perfDiagOn) {
+          const name = this.type + (this.name ? ('/'+this.name) : '') + '#' + (this.id||'?');
+          _needsUpdateHits.push(name);
+        }
+        origSet.call(this, v);
+      },
+      get: function() { return origGet.call(this); },
+      configurable: true,
+    });
+    console.log('[PERF DIAG] needsUpdate trap installed');
+  }
+  setTimeout(_installNeedsUpdateTrap, 100);
+
+  return { frameStart, markRenderStart, markRenderEnd, frameEnd, tag };
+})();
+window._perfDiag = _perfDiag;
+
+// Hoisted scratch Vector3 reused every frame inside animate() for thruster
+// haze nozzle→screen-UV projection. Avoids per-frame allocation / GC churn.
+const _hazeProjScratch = new THREE.Vector3();
+
+// Soft 60fps cap. ProMotion iPhones (14/15/16/17 Pro) drive rAF at 120Hz,
+// which doubles GPU work for no visual gain (game logic is fixed dt = 1/60).
+// Skip rAF ticks that arrive faster than the budget. Subtract 1.5ms slack so
+// we don't accidentally land on every other tick (which would cap us at 30).
+const _FRAME_BUDGET_60 = 1000 / 60;
+const _FRAME_BUDGET_30 = 1000 / 30;
+function _frameBudgetMs() {
+  try {
+    if (typeof getSetting === 'function' && getSetting('fpsCap30')) return _FRAME_BUDGET_30;
+  } catch(_) {}
+  return _FRAME_BUDGET_60;
+}
+let _lastFrameMs = 0;
+
+// ── Adaptive DPR (thermal/perf throttle defense) ──────────────────────────
+// Watches the recent frame budget. When > 35% of the last ~120 frames blew
+// past 22ms (i.e. consistently below 45fps), drop renderer pixel ratio one
+// step (0.85x). When < 5% are slow over a longer window, recover one step.
+// Step floor = 0.5 of base DPR so we never go below half-quality.
+// Cooldown after each step prevents oscillation.
+const _ADAPT_WINDOW       = 120;     // frames considered
+const _ADAPT_SLOW_MS       = 22;     // frame considered slow above this
+const _ADAPT_DOWN_RATIO   = 0.35;    // > this fraction slow → drop quality
+const _ADAPT_UP_RATIO     = 0.05;    // < this fraction slow → recover
+const _ADAPT_STEP         = 0.85;    // multiplicative step
+const _ADAPT_MIN          = 0.5;
+const _ADAPT_MAX          = 1.0;
+const _ADAPT_DOWN_COOLDOWN = 180;    // frames after dropping before another check
+const _ADAPT_UP_COOLDOWN  = 600;     // longer cooldown before recovering (~10s)
+let _adaptSlowBuf = new Uint8Array(_ADAPT_WINDOW);
+let _adaptIdx = 0;
+let _adaptFilled = 0;
+let _adaptCooldown = 240;            // initial grace period after boot
+function _tickAdaptiveDPR(frameMs) {
+  // Don't run if disabled or if we're paused / not in gameplay.
+  if (typeof window._setAdaptiveDPRScale !== 'function') return;
+  if (state && (state.phase === 'paused' || state.phase === 'title' || state.phase === 'dead')) return;
+  // SHARP means "don't downgrade my image" — user opted into max DPR, leave it alone.
+  // Adaptive only runs on Balanced/Performance where the user accepted trade-offs.
+  try {
+    const _gq = (typeof getSetting === 'function') ? getSetting('graphicsQuality') :
+                (window._settings && window._settings.graphicsQuality);
+    if (_gq === 'sharp') {
+      // Pin to full while on Sharp so prior drops don't linger.
+      if (window._getAdaptiveDPRScale && window._getAdaptiveDPRScale() < 1.0) {
+        window._setAdaptiveDPRScale(1.0);
+      }
+      return;
+    }
+  } catch(_) {}
+  if (_adaptCooldown > 0) { _adaptCooldown--; return; }
+  // Append slow/fast bit.
+  const isSlow = frameMs > _ADAPT_SLOW_MS ? 1 : 0;
+  _adaptSlowBuf[_adaptIdx] = isSlow;
+  _adaptIdx = (_adaptIdx + 1) % _ADAPT_WINDOW;
+  if (_adaptFilled < _ADAPT_WINDOW) _adaptFilled++;
+  if (_adaptFilled < _ADAPT_WINDOW) return;
+  // Sum.
+  let slow = 0;
+  for (let i = 0; i < _ADAPT_WINDOW; i++) slow += _adaptSlowBuf[i];
+  const ratio = slow / _ADAPT_WINDOW;
+  const cur = window._getAdaptiveDPRScale ? window._getAdaptiveDPRScale() : 1.0;
+  if (ratio > _ADAPT_DOWN_RATIO && cur > _ADAPT_MIN + 0.001) {
+    const next = Math.max(_ADAPT_MIN, cur * _ADAPT_STEP);
+    window._setAdaptiveDPRScale(next);
+    _adaptCooldown = _ADAPT_DOWN_COOLDOWN;
+    _adaptFilled = 0; // reset window after a change
+    if (window._fpsOn) console.log('[adaptive-dpr] DROP', cur.toFixed(2), '→', next.toFixed(2), 'slow ratio', ratio.toFixed(2));
+  } else if (ratio < _ADAPT_UP_RATIO && cur < _ADAPT_MAX - 0.001) {
+    const next = Math.min(_ADAPT_MAX, cur / _ADAPT_STEP);
+    window._setAdaptiveDPRScale(next);
+    _adaptCooldown = _ADAPT_UP_COOLDOWN;
+    _adaptFilled = 0;
+    if (window._fpsOn) console.log('[adaptive-dpr] UP', cur.toFixed(2), '→', next.toFixed(2), 'slow ratio', ratio.toFixed(2));
+  }
+}
+
+// Lights whose intensity ramps to/from 0 frequently. When intensity is 0 the
+// light still costs fragment-shader cycles unless `visible` is also false
+// (Three.js skips invisible lights from the per-material lights uniform).
+// Keeping `visible` in sync with `intensity > 0` is a free mobile GPU win.
+const _OPTIONAL_LIGHTS = [];
+function _registerOptionalLight(L) { if (L && _OPTIONAL_LIGHTS.indexOf(L) === -1) _OPTIONAL_LIGHTS.push(L); }
+function _syncOptionalLightVisibility() {
+  for (let i = 0; i < _OPTIONAL_LIGHTS.length; i++) {
+    const L = _OPTIONAL_LIGHTS[i];
+    const want = L.intensity > 0.0001;
+    if (L.visible !== want) L.visible = want;
+  }
+}
+try {
+  if (typeof _flashLight       !== 'undefined') _registerOptionalLight(_flashLight);
+  if (typeof shieldLight       !== 'undefined') _registerOptionalLight(shieldLight);
+  if (typeof magnetLight       !== 'undefined') _registerOptionalLight(magnetLight);
+  if (typeof shipUnderlightWarm!== 'undefined') _registerOptionalLight(shipUnderlightWarm);
+} catch(_) {}
+
+function animate(now) {
+  requestAnimationFrame(animate);
+  let _frameDeltaMs = 0;
+  if (typeof now === 'number') {
+    if (now - _lastFrameMs < _frameBudgetMs() - 1.5) return;
+    _frameDeltaMs = _lastFrameMs > 0 ? (now - _lastFrameMs) : 0;
+    _lastFrameMs = now;
+  }
+  if (_frameDeltaMs > 0) _tickAdaptiveDPR(_frameDeltaMs);
+  _perfDiag.frameStart();
+  // FPS + draw call measurement
+  if (_fpsOn) {
+    _fpsFrames++;
+    const now = performance.now();
+    if (now - _fpsLastTime >= 500) {
+      const fps = Math.round(_fpsFrames / ((now - _fpsLastTime) / 1000));
+      if (_fpsEl) _fpsEl.textContent = fps + ' FPS  ' + _lastDC + ' DC';
+      _fpsFrames = 0; _fpsLastTime = now;
+    }
+  }
+  const rawDt = Math.min(clock.getDelta(), 0.05);
+
+  // ── PAUSE: render last frame, skip ALL ticks (sim, FOV lerp, shaders) ──
+  // Single guard at the top — obviates per-system pause gates throughout
+  // update() and the visual phase. Composer renders so the screen isn't black.
+  if (state.phase === 'paused') {
+    _syncOptionalLightVisibility();
+    _perfDiag.markRenderStart();
+    composer.render();
+    _perfDiag.markRenderEnd();
+    _perfDiag.frameEnd();
+    return;
+  }
+
+  // ── TITLE SCREEN: render title scene only, skip all gameplay ──────
+  if (state.phase === 'title') {
+    // Rotate title ship slowly
+    const pivot = titleScene.getObjectByName('titleShipPivot');
+    const _spinDefault = window.innerWidth >= 1024 ? 0.001 : 0.004;
+    const _spinRate = window._titleSpinSpeed !== undefined ? window._titleSpinSpeed : _spinDefault;
+    if (pivot) pivot.rotation.y += _spinRate;
+
+    // Handling upgrade pending → subtle cyan emissive glow pulse on title ship
+    if (_titleShipModel && getPendingHandlingUpgrade()) {
+      _titleGlowPhase += rawDt * 2.5;
+      const pulse = 0.08 + 0.08 * Math.sin(_titleGlowPhase);
+      for (const entry of _titleMeshMap) {
+        if (entry.origName === 'fire' || entry.origName === 'fire1') continue;
+        const mat = entry.mesh.material;
+        if (mat && mat !== _titleDarkMat && mat.emissive) {
+          // Store base intensity once, pulse relative to it
+          if (mat.userData._baseEI === undefined) mat.userData._baseEI = mat.emissiveIntensity;
+          mat.emissiveIntensity = mat.userData._baseEI + pulse;
+        }
+      }
+    }
+
+    // Showroom thruster preview tick — only runs while showroom is open
+    // (Showroom.tick early-returns when closed, so this is a free no-op otherwise).
+    if (window.Showroom && window.Showroom.isOpen && window.Showroom.isOpen()) {
+      try { window.Showroom.tick(rawDt); } catch(_){}
+    }
+
+    _titleRenderer.render(titleScene, titleCamera);
+    return;
+  }
+
+
+
+  // ── GAMEPLAY (playing / dead / paused) ────────────────────────
+  accumulator += rawDt;
+  while (accumulator >= FIXED_DT) {
+    try { update(FIXED_DT); } catch(e) { console.error('update() threw:', e); }
+    accumulator -= FIXED_DT;
+  }
+
+  // FOV scales with speed — most effective speed perception trick.
+  // Lerps toward base+boost during gameplay, back to base on death/title.
+  // Skip during retry sweep (sweep controls FOV directly)
+  if (!_retrySweepActive) {
+    const _fovSpd = state.speed;
+    // Map state.speed (range BASE..BASE*2.5 = 36..90) into [0,1] linearly,
+    // then pow-1.4 shape so low-tier stages start tame and high tiers punch.
+    // With boost=32, the curve gives:
+    //   1.5x (54) → frac 0.33 → ^1.4 0.22 → +7.0°
+    //   1.8x (65) → frac 0.54 → ^1.4 0.43 → +13.7°
+    //   2.0x (72) → frac 0.67 → ^1.4 0.58 → +18.4°
+    //   2.1x (76) → frac 0.74 → ^1.4 0.66 → +21.1°
+    //   2.5x (90) → frac 1.00 → ^1.4 1.00 → +32.0°
+    // Stage-to-stage steps move FOV ~3-7°; launch baseline stays calm.
+    const _fovRange = BASE_SPEED * 1.5; // 54 u/s of headroom above BASE
+    const _rawFrac = Math.max(0, Math.min(1, (_fovSpd - BASE_SPEED) / _fovRange));
+    const speedFrac = (state.phase === 'playing') ? Math.pow(_rawFrac, 1.4) : 0;
+    let targetFOV = _baseFOV + _fovSpeedBoost * speedFrac;
+    // FOV dip + punch removed 2026-05-06 (alongside bump-rest speed dip).
+    // _drFovDipBias / _drFovPunchPulse are kept on state but always 0 — left
+    // here as defensive reads so older death-screen code can still write them
+    // without breaking. FOV now tracks speed monotonically.
+    if (state._drFovDipBias) targetFOV += state._drFovDipBias; // always 0 now
+    // Death zoom-out: push FOV wider during explosion (only during dead phase)
+    if (_expDeathZoomActive && state.phase === 'dead') targetFOV = _expDeathZoomTarget;
+    // Launch snap in first 0.5s, then moderate accel / gentle decel
+    const fovDiff = targetFOV - camera.fov;
+    const isLaunch = state.phase === 'playing' && (state.elapsed || 0) < 0.5;
+    const fovLerpRate = isLaunch ? 12
+                      : (_expDeathZoomActive ? 0.8
+                      : (fovDiff > 0.5 ? 5 : 3));
+    camera.fov = THREE.MathUtils.lerp(camera.fov, targetFOV, fovLerpRate * rawDt);
+    camera.updateProjectionMatrix();
+  }
+
+  // ── Tuner speed override (slider in scene tuner) ──
+  if (_tunerSpeedOverride > 0) _setDRSpeed(_tunerSpeedOverride, 'TUNER_OVERRIDE');
+
+  // Water time tick — drives ripple animation
+  mirrorMesh.material.uniforms.time.value += rawDt * 0.5;
+  // Forward water flow — scroll normal map along Z proportional to speed
+  if (state.phase === 'playing' && state.thrusterPower > 0 && !state.introActive) {
+    const _rawWSpd = state.speed;
+    const _wSpd = state.invincibleSpeedActive ? _rawWSpd * 1.8 : _rawWSpd;
+    const _wSpdNorm = _wSpd / BASE_SPEED; // 1.0 at T1, 2.5 at T5c
+    _waterFlowZ -= _wSpd * _wSpdNorm * rawDt * _waterFlowScale; // squared scaling
+    _waterFlowZ %= 10000;
+    mirrorMesh.material.uniforms.uFlowZ.value = _waterFlowZ;
+  }
+
+  // Sun surface churn
+  if (sunMat && sunMat.uniforms) sunMat.uniforms.uTime.value += rawDt;
+  // Twinkling sky stars — update uTime uniform each frame
+  if (skyStarPoints)      skyStarPoints.material.uniforms.uTime.value      += rawDt;
+  if (skyConstellLines)   skyConstellLines.material.uniforms.uTime.value   += rawDt;
+  // Forcefield animation — REMOVED (gate hazard never shipped)
+  // Keep water X in sync with ship so reflection doesn't drift
+  mirrorMesh.position.x = state.shipX;
+
+  // (Old mid-loop pause guard moved to top of animate() — see line ~285.)
+
+  updateAurora(rawDt);
+  updateL5Flares(rawDt);
+  updateWake(rawDt);
+  renderer.info.reset();
+  updateDebugHitboxes();
+
+  // Keep all sun layers locked to ship X — sun is effectively at infinite distance
+  // so lateral movement should never shift it on screen
+  const _sunX = state.shipX || 0;
+  sunMesh.position.x      = _sunX;
+  sunCapMesh.position.x   = _sunX;
+  sunGlowSprite.position.x = _sunX;
+  sunRimGlow.position.x   = _sunX;
+  // Tendril groups are anchored at the sun base — they must track shipX too
+  // or they visibly disconnect from the sun when the ship is laterally offset.
+  l5fGroup.position.x     = _sunX;
+  auroraGroup.position.x  = _sunX;
+  const _camWP = camera.getWorldPosition(_sunBillboardV3);
+  sunGlowSprite.lookAt(_camWP);
+  sunCapMesh.lookAt(_camWP);
+
+  // Fire meshes track thrusterPower every frame (no timing gaps).
+  // Also modulate emissiveIntensity + opacity per-frame from window dials so the
+  // GLB-baked exhaust meshes (the dominant white-hot source at the nozzle) are tunable.
+  {
+    const _fEi = (window._shipFire_emissive != null) ? window._shipFire_emissive : 1.0;
+    const _fOp = (window._shipFire_opacity  != null) ? window._shipFire_opacity  : 1.0;
+    const _vis = state.thrusterPower > 0 && window._thrusterVisible !== false && _fOp > 0.001;
+    for (const fm of shipFireMeshes) {
+      fm.visible = _vis;
+      const m = fm.material;
+      if (m) {
+        if ('emissiveIntensity' in m) {
+          if (fm.userData._origEi == null) fm.userData._origEi = (m.emissiveIntensity != null ? m.emissiveIntensity : 1.0);
+          m.emissiveIntensity = fm.userData._origEi * _fEi;
+        }
+        if (_fOp < 0.999) {
+          if (!m.transparent) { m.transparent = true; m.needsUpdate = true; }
+          m.opacity = _fOp;
+        } else if (m.transparent && fm.userData._wasTransparent !== true) {
+          // Don't flip transparent off if material was originally transparent
+          m.opacity = 1.0;
+        }
+      }
+    }
+  }
+  // Tick alt ship animation mixer
+  if (_altShipActive && _altShipMixer) _altShipMixer.update(rawDt);
+  // ── Death sky pivot camera (runs in animate so it works during dead phase) ──
+  if (_expCamOrbitActive && state.phase === 'dead') {
+    _expCamOrbitT = Math.min(1, _expCamOrbitT + _EXP_CAM_ORBIT_SPEED * rawDt);
+    const easeT = 1 - Math.pow(1 - _expCamOrbitT, 3);
+    cameraPivot.position.y = THREE.MathUtils.lerp(_expCamAnchorY, _expCamAnchorY + _EXP_CAM_RISE, easeT);
+    cameraPivot.position.z = THREE.MathUtils.lerp(_expCamAnchorZ, _expCamAnchorZ + _EXP_CAM_PULLBACK, easeT);
+    const lateralDir = (_expCrashWorldPos.x >= 0) ? 1 : -1;
+    cameraPivot.position.x = THREE.MathUtils.lerp(_expCamAnchorX, _expCamAnchorX + lateralDir * _EXP_CAM_LATERAL, easeT);
+    camera.lookAt(_expCrashWorldPos.x, _expCrashWorldPos.y, _expCrashWorldPos.z - 2);
+  }
+  // Tick explosion particles + all VFX layers (runs during dead phase too)
+  _updateExplosion(rawDt);
+  _updateFlash(rawDt);
+  _updateShockwave(rawDt);
+  _updateSparks(rawDt);
+  _updateFaceExplosion(rawDt);
+  // ── Update localized heat haze pass (only when _coneThrustersEnabled) ──
+  {
+    // Disable thruster haze entirely on mobile — fullscreen post-processing pass
+    // that runs every frame thrusters fire (= most of the game). Subtle visual,
+    // measurable cost. Saves ~0.5-1ms/frame on mid-range Android.
+    _thrusterHazePass.enabled = !window._isMobile && window._coneThrustersEnabled && state.phase === 'playing' && state.thrusterPower > 0.01;
+    if (_thrusterHazePass.enabled) {
+      // Reuse hoisted scratch Vector3 instead of allocating one every frame.
+      // (Was new THREE.Vector3() per-frame — GC churn during desktop cone-thruster play.)
+      const _hzProj = _hazeProjScratch;
+      let _hazeValid = true;
+      // Project left nozzle to screen UV
+      const nwL = nozzleWorld(_localNozzles[0]);
+      _hzProj.set(nwL.x, nwL.y, nwL.z).project(camera);
+      if (_hzProj.z > 1 || _hzProj.z < -1) _hazeValid = false;
+      _thrusterHazePass.uniforms.uNozzleL.value.set(_hzProj.x * 0.5 + 0.5, _hzProj.y * 0.5 + 0.5);
+      // Project right nozzle to screen UV
+      const nwR = nozzleWorld(_localNozzles[1]);
+      _hzProj.set(nwR.x, nwR.y, nwR.z).project(camera);
+      if (_hzProj.z > 1 || _hzProj.z < -1) _hazeValid = false;
+      _thrusterHazePass.uniforms.uNozzleR.value.set(_hzProj.x * 0.5 + 0.5, _hzProj.y * 0.5 + 0.5);
+      _thrusterHazePass.uniforms.uTime.value = performance.now() * 0.001;
+      // Kill haze if nozzles aren't on screen
+      _thrusterHazePass.uniforms.uIntensity.value = _hazeValid
+        ? (window._hazeBaseIntensity != null ? window._hazeBaseIntensity : 0.10) * state.thrusterPower
+        : 0.0;
+      _thrusterHazePass.uniforms.uAspect.value = window.innerWidth / window.innerHeight;
+    }
+  }
+  _syncOptionalLightVisibility();
+  _perfDiag.markRenderStart();
+  composer.render();
+  _perfDiag.markRenderEnd();
+  if (_fpsOn) _lastDC = renderer.info.render.calls;
+  updateDebug();
+  _perfDiag.frameEnd();
+}
+
 // Set DEBUG_LAT=true to re-enable lateral-spawn diagnostic logs (LAT_DIAG,
 // LAT_FIRE, LT_LAT_DIAG, LT_LAT_FIRE). Off in production.
 const DEBUG_LAT = false;
@@ -31479,10 +32084,9 @@ window.TunerHud = {
   updateTuner: function () {},
 };
 
-// Perf-diag — all callers guard with `if (window._perfDiag)`. Stub kept null
-// so `if (window._perfDiag)` falses out cleanly.
-window._perfDiag = null;
-window._perfDiagOn = false;
+// Perf-diag is now included in prod builds (see scripts/build.sh comment).
+// No stub needed — window._perfDiag is the real factory; window._perfDiagOn
+// defaults false so the inner methods stay inert.
 
 // Tuner panel functions called unguarded from gameplay hotkey handlers.
 // Hotkeys are dev-only but the call sites are not gated, so we need no-ops.
