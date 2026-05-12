@@ -786,6 +786,9 @@ function startDeathRun() {
 
   state.isDeathRun      = true;
   state.startedFromL1   = false;
+  // Analytics: run_start (anonymous, batched)
+  state._runStartTs = Date.now();
+  try { window.jhTrack && window.jhTrack('run_start', { mode: 'deathrun' }); } catch(_){}
   state.deathRunVibeIdx = 0;
   _pendingVibeIdx = -1;
   state._pendingSpeedTier = -1;
@@ -3364,6 +3367,19 @@ function killPlayer() {
   _retryIsFromDead = false;
   _drLogEvent('death', `score=${state.score} tier=${state.deathRunSpeedTier}`);
   _drSaveSession('death');
+  // Analytics: run_end (anonymous, batched)
+  try {
+    const _dur = state._runStartTs ? (Date.now() - state._runStartTs) / 1000 : (state.elapsed || 0);
+    window.jhTrack && window.jhTrack('run_end', {
+      reason: 'death',
+      score: state.score || 0,
+      tier: state.deathRunSpeedTier || 0,
+      duration: +_dur.toFixed(2),
+      elapsed: +(state.elapsed || 0).toFixed(2),
+      waveCount: state.drWaveCount || 0,
+      seqStage: (DR_SEQUENCE[state.seqStageIdx] || {}).name || 'UNKNOWN',
+    });
+  } catch(_){}
   // [WHEEL DISABLED] if (!state.wheelEarned) state.wheelEarned = true;
   dismissHeadStart(); // clean up if still showing
   // Kill roll state immediately on death

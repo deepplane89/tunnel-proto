@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Jet Horizon — Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #03070f;
+    color: #ccd6e0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.5;
+    padding: 24px 20px 80px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 { color: #fff; font-size: 22px; margin-bottom: 4px; letter-spacing: 1px; }
+  h1 span { color: #00eeff; }
+  .sub { color: #667; font-size: 12px; margin-bottom: 24px; }
+  .gate {
+    max-width: 320px;
+    margin: 80px auto;
+    padding: 28px 24px;
+    background: rgba(0, 238, 255, 0.04);
+    border: 1px solid rgba(0, 238, 255, 0.15);
+    border-radius: 8px;
+    text-align: center;
+  }
+  .gate h2 { color: #fff; font-size: 16px; margin-bottom: 16px; letter-spacing: 0.5px; }
+  .gate input {
+    width: 100%;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    margin-bottom: 12px;
+    -webkit-appearance: none;
+  }
+  .gate button {
+    width: 100%;
+    background: #00eeff;
+    border: none;
+    color: #002028;
+    padding: 10px;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+  }
+  .gate .err { color: #ff5577; font-size: 12px; margin-top: 8px; min-height: 16px; }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: rgba(0, 238, 255, 0.03);
+    border: 1px solid rgba(0, 238, 255, 0.12);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .card .label { font-size: 11px; color: #889; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .card .val { font-size: 26px; color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .card .sub2 { font-size: 11px; color: #667; margin-top: 2px; }
+  .panel {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 6px;
+    padding: 16px 18px;
+    margin-bottom: 20px;
+  }
+  .panel h2 { color: #00eeff; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px; font-weight: 500; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .row2 { grid-template-columns: 1fr; } }
+  canvas { max-width: 100%; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  th { color: #889; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
+  tr:hover td { background: rgba(0,238,255,0.03); }
+  .empty { color: #557; font-size: 12px; text-align: center; padding: 24px; }
+  .refresh {
+    position: fixed; top: 14px; right: 14px;
+    background: rgba(0,238,255,0.12); border: 1px solid rgba(0,238,255,0.3);
+    color: #00eeff; padding: 6px 12px; border-radius: 4px; font-size: 11px;
+    cursor: pointer; letter-spacing: 0.5px;
+  }
+  .refresh:active { background: rgba(0,238,255,0.25); }
+</style>
+</head>
+<body>
+
+<!-- Password gate -->
+<div id="gate" class="gate">
+  <h2>JET HORIZON · ADMIN</h2>
+  <input id="pw" type="password" placeholder="password" autocomplete="off" />
+  <button id="go">UNLOCK</button>
+  <div class="err" id="err"></div>
+</div>
+
+<!-- Dashboard -->
+<div id="dash" style="display:none;">
+  <button class="refresh" id="refresh">↻ REFRESH</button>
+  <h1>JET HORIZON · <span>ADMIN</span></h1>
+  <div class="sub" id="ts"></div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="panel">
+    <h2>Daily Activity (last 30 days)</h2>
+    <canvas id="cDaily" height="120"></canvas>
+  </div>
+
+  <div class="row2">
+    <div class="panel">
+      <h2>Crashes per day</h2>
+      <canvas id="cCrash" height="160"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Funnel (last 30d)</h2>
+      <canvas id="cFunnel" height="160"></canvas>
+    </div>
+  </div>
+
+  <div class="row2">
+    <div class="panel">
+      <h2>Recent Runs</h2>
+      <div id="tRuns"></div>
+    </div>
+    <div class="panel">
+      <h2>Recent Crashes</h2>
+      <div id="tCrash"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Top Scores (this 30d window)</h2>
+    <div id="tScores"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+let _pw = sessionStorage.getItem('jh_admin_pw') || '';
+let _charts = {};
+
+function $(id) { return document.getElementById(id); }
+function fmt(n) { return (n||0).toLocaleString(); }
+function fmtDur(s) {
+  if (!s) return '—';
+  const m = Math.floor(s/60), sec = Math.floor(s%60);
+  return m > 0 ? m+'m '+sec+'s' : sec+'s';
+}
+function shortDate(d) { return d.slice(5); } // MM-DD
+
+async function fetchData() {
+  const r = await fetch('/api/analytics?password=' + encodeURIComponent(_pw) + '&limit=2000');
+  if (r.status === 401) { _pw = ''; sessionStorage.removeItem('jh_admin_pw'); showGate('Wrong password'); return null; }
+  if (!r.ok) { showGate('Server error: ' + r.status); return null; }
+  return r.json();
+}
+
+function showGate(err) {
+  $('gate').style.display = '';
+  $('dash').style.display = 'none';
+  $('err').textContent = err || '';
+}
+function showDash() {
+  $('gate').style.display = 'none';
+  $('dash').style.display = '';
+}
+
+function renderCards(d) {
+  const summary = d.summary || {};
+  const evRuns = (d.events.run_end || []);
+  // average run duration last 30d
+  let avgDur = 0;
+  if (evRuns.length > 0) {
+    let total = 0, n = 0;
+    for (const e of evRuns) { const x = e.props && e.props.duration; if (x) { total += x; n++; } }
+    if (n > 0) avgDur = total / n;
+  }
+  const cards = [
+    { label: 'Today DAU',     val: fmt(summary.todayDau),  sub: 'unique devices today' },
+    { label: 'Sessions 30d',  val: fmt(summary.sessions),  sub: 'app opens' },
+    { label: 'Runs 30d',      val: fmt(summary.runs),      sub: fmt(summary.runs_60s) + ' ≥ 60s' },
+    { label: 'Crashes 30d',   val: fmt(summary.crashes),   sub: summary.runs > 0 ? ((summary.crashes/summary.runs*100).toFixed(1)+'% rate') : '—' },
+    { label: 'Avg Run',       val: fmtDur(avgDur),         sub: 'mean duration' },
+  ];
+  $('cards').innerHTML = cards.map(c =>
+    '<div class="card"><div class="label">'+c.label+'</div><div class="val">'+c.val+'</div><div class="sub2">'+c.sub+'</div></div>'
+  ).join('');
+}
+
+function destroy(name) { if (_charts[name]) { _charts[name].destroy(); delete _charts[name]; } }
+
+function chartOpts(extra) {
+  return Object.assign({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: '#ccd6e0', font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: '#667', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+      y: { beginAtZero: true, ticks: { color: '#667', font: { size: 10 }, precision: 0 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+    },
+  }, extra || {});
+}
+
+function renderDaily(d) {
+  destroy('cDaily');
+  const labels = d.daily.map(x => shortDate(x.date));
+  _charts.cDaily = new Chart($('cDaily'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'DAU',      data: d.daily.map(x => x.dau),      borderColor: '#00eeff', backgroundColor: 'rgba(0,238,255,0.1)', tension: 0.3 },
+        { label: 'Runs',     data: d.daily.map(x => x.runs),     borderColor: '#ffaa00', backgroundColor: 'rgba(255,170,0,0.08)', tension: 0.3 },
+        { label: 'Sessions', data: d.daily.map(x => x.sessions), borderColor: '#aa88ff', backgroundColor: 'rgba(170,136,255,0.08)', tension: 0.3 },
+      ],
+    },
+    options: chartOpts(),
+  });
+}
+
+function renderCrash(d) {
+  destroy('cCrash');
+  const labels = d.daily.map(x => shortDate(x.date));
+  _charts.cCrash = new Chart($('cCrash'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label: 'Crashes', data: d.daily.map(x => x.crashes), backgroundColor: '#ff5577' }],
+    },
+    options: chartOpts({ plugins: { legend: { display: false } } }),
+  });
+}
+
+function renderFunnel(d) {
+  destroy('cFunnel');
+  const sessions = d.summary.sessions || 0;
+  const runs     = d.summary.runs || 0;
+  const runs60   = d.summary.runs_60s || 0;
+  _charts.cFunnel = new Chart($('cFunnel'), {
+    type: 'bar',
+    data: {
+      labels: ['Sessions', 'Started Run', 'Run ≥ 60s'],
+      datasets: [{
+        label: 'Count',
+        data: [sessions, runs, runs60],
+        backgroundColor: ['#aa88ff', '#ffaa00', '#00eeff'],
+      }],
+    },
+    options: chartOpts({ indexAxis: 'y', plugins: { legend: { display: false } } }),
+  });
+}
+
+function renderTables(d) {
+  // Recent runs
+  const runs = (d.events.run_end || []).slice(0, 20);
+  if (runs.length === 0) {
+    $('tRuns').innerHTML = '<div class="empty">No run_end events yet</div>';
+  } else {
+    $('tRuns').innerHTML = '<table><thead><tr><th>When</th><th>Plat</th><th>Score</th><th>Dur</th><th>Wave</th><th>Stage</th></tr></thead><tbody>' +
+      runs.map(e => {
+        const p = e.props || {};
+        const when = new Date(e.ts).toLocaleString();
+        return '<tr><td>'+when+'</td><td>'+(e.platform||'?')+'</td><td>'+fmt(p.score)+'</td><td>'+fmtDur(p.duration)+'</td><td>'+fmt(p.waveCount)+'</td><td>'+(p.seqStage||'?')+'</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  // Recent crashes
+  const crashes = (d.events.crash || []).slice(0, 20);
+  if (crashes.length === 0) {
+    $('tCrash').innerHTML = '<div class="empty">No crashes — nice</div>';
+  } else {
+    $('tCrash').innerHTML = '<table><thead><tr><th>When</th><th>Plat</th><th>Kind</th><th>Message</th></tr></thead><tbody>' +
+      crashes.map(e => {
+        const p = e.props || {};
+        const when = new Date(e.ts).toLocaleString();
+        const msg = (p.message||'').slice(0, 100);
+        return '<tr><td>'+when+'</td><td>'+(e.platform||'?')+'</td><td>'+(p.kind||'?')+'</td><td style="color:#ff8aa0">'+msg+'</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  // Top scores
+  const top = (d.events.run_end || []).slice().sort((a,b) => (b.props?.score||0) - (a.props?.score||0)).slice(0, 10);
+  if (top.length === 0) {
+    $('tScores').innerHTML = '<div class="empty">No scores yet</div>';
+  } else {
+    $('tScores').innerHTML = '<table><thead><tr><th>#</th><th>Score</th><th>Dur</th><th>Plat</th><th>When</th><th>Device ID</th></tr></thead><tbody>' +
+      top.map((e, i) => {
+        const p = e.props || {};
+        return '<tr><td>'+(i+1)+'</td><td>'+fmt(p.score)+'</td><td>'+fmtDur(p.duration)+'</td><td>'+(e.platform||'?')+'</td><td>'+new Date(e.ts).toLocaleString()+'</td><td style="color:#667">'+(e.did||'').slice(0,8)+'…</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+}
+
+async function refresh() {
+  const d = await fetchData();
+  if (!d) return;
+  showDash();
+  $('ts').textContent = 'Server time: ' + new Date(d.serverTime).toLocaleString();
+  renderCards(d);
+  renderDaily(d);
+  renderCrash(d);
+  renderFunnel(d);
+  renderTables(d);
+}
+
+$('go').addEventListener('click', () => {
+  _pw = $('pw').value;
+  sessionStorage.setItem('jh_admin_pw', _pw);
+  refresh();
+});
+$('pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go').click(); });
+$('refresh').addEventListener('click', refresh);
+
+// Auto-attempt if we have a saved password
+if (_pw) refresh();
+</script>
+</body>
+</html>
