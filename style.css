@@ -54,7 +54,14 @@ input, textarea, [contenteditable="true"] {
 }
 
 html, body {
-  width: 100%; height: 100%; overflow: hidden;
+  /* iOS Safari + viewport-fit=cover: with height:100% the body only fills
+   * the SAFE area in standalone PWA mode, leaving a strip at the home-bar.
+   * 100vh = full layout viewport (includes safe-area strips). 100dvh adapts
+   * if mobile browsers later add chrome (Safari URL bar coming/going). */
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--color-bg);
   font-family: var(--font-body);
   color: var(--color-text);
