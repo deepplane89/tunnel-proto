@@ -523,20 +523,32 @@ window.selectSkin = selectSkin;
 window.buySkin = buySkin;
 
 function applyPowerup(typeIdx) {
+  // Fine-grain hitch sub-brackets so we can see WHICH part of applyPowerup
+  // is slow on first activation (banner DOM, audio decode, mesh state mutation).
+  const _hS = (typeof _hitchStart === 'function') ? _hitchStart : null;
+  const _hE = (typeof _hitchEnd === 'function') ? _hitchEnd : null;
+  let _tHap=0,_tBan=0,_tSfx=0;
+  if (_hS) _tHap = _hS();
   hapticTap(); // powerup pickup
+  if (_hE) _hE('pu-hap', _tHap);
   state.sessionPowerups++;
   const def = POWERUP_TYPES[typeIdx];
+  if (_hS) _tBan = _hS();
   showBanner(def.label, 'mission', 1500);
+  if (_hE) _hE('pu-ban', _tBan);
   if (def.id === 'shield') state.sessionShields++;
   if (def.id === 'laser') state.sessionLasers++;
   if (def.id === 'invincible') state.sessionInvincibles++;
+  if (_hS) _tSfx = _hS();
   playPickup(typeIdx); // pickup smash for ALL powerups; shield also layers shield-activate-sfx below
+  if (_hE) _hE('pu-sfx', _tSfx);
   // (was: addCrashFlash(def.color) — removed. The full-screen radial overlay
   //  triggers a layout+paint+composite hitch on mobile every pickup, and it
   //  also visually obscures the shatter animation we already spawn.)
 
   switch (def.id) {
     case 'shield': {
+      const _tShld = _hS ? _hS() : 0;
       const tier = loadUpgradeTier('shield');
       state.shieldActive = true;
       // T1=10s, T2=15s, T3+=permanent (0 = no timer)
@@ -562,7 +574,10 @@ function applyPowerup(typeIdx) {
       shieldMesh.visible = false;
       shieldWire.visible = false;
       shieldLight.intensity = 0;
+      const _tShAct = _hS ? _hS() : 0;
       const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
+      if (_hE) _hE('shld-act', _tShAct);
+      if (_hE) _hE('shld-set', _tShld);
       break;
     }
     case 'laser': {
