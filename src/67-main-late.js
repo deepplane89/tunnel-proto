@@ -5048,7 +5048,7 @@ function update(dt) {
       shieldMat.uniforms.uReveal.value = 1.0;
       shieldWireMat.opacity = 0;
       shieldLight.intensity = 0;
-      const _shExpSfx = document.getElementById('shield-expire-sfx'); if (_shExpSfx) { _shExpSfx.currentTime = 0; _shExpSfx.volume = 0.18; _shExpSfx.play().catch(()=>{}); }
+      // Shield dissolve SFX removed 2026-05-12 (user: reverse of activation, redundant).
     }
   }
   if (state.invincibleTimer > 0) {

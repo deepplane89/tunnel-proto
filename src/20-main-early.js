@@ -463,12 +463,12 @@ function saveSkinData(data) {
 // unlockable BLINK preset, gated by the same mission slot LIGHT used to be).
 const THRUSTER_STORAGE_KEY = 'jh_thrusters';
 function loadThrusterData() {
-  // 'coneThrust' is currently auto-unlocked for testing (no MISSION_LADDER gate).
-  // Remove from defaults + the force-push below to re-gate it behind a mission.
+  // PYLON (coneThrust) is now gated behind a late MISSION_LADDER rung (2026-05-12).
+  // Only LIGHT is unlocked by default.
   const defaults = {
     selectedPreset: 'light',
     selectedColor:  'default',
-    unlockedPresets: ['light', 'coneThrust'],
+    unlockedPresets: ['light'],
     unlockedColors:  ['default'],
   };
   const raw = window._LS.getItem(THRUSTER_STORAGE_KEY);
@@ -479,7 +479,6 @@ function loadThrusterData() {
     if (!Array.isArray(d.unlockedColors))  d.unlockedColors  = ['default'];
     // LIGHT is now the always-available starter — force it into unlocks.
     if (!d.unlockedPresets.includes('light')) d.unlockedPresets.push('light');
-    if (!d.unlockedPresets.includes('coneThrust')) d.unlockedPresets.push('coneThrust');
     if (!d.unlockedColors.includes('default'))   d.unlockedColors.push('default');
     // Migration: drop unlocked entries that no longer exist in data tables
     try {
@@ -1093,6 +1092,7 @@ const MISSION_LADDER = [
   { type:'mission', id:'ltscore500k', desc:'Score 500,000 total points', check:(r,lt)=>lt.score>=500000 },
   { type:'reward', reward:{ kind:'stat', stat:'scoremult', value:5, label:'Score Mult +5x', coins:3000 } },
   { type:'mission', id:'level20', desc:'Reach Level 20 (Endgame) in one run', check:(r)=>r.level>=20 },
+  { type:'reward', reward:{ kind:'thruster', presetKey:'coneThrust', label:'Unlock PYLON Thruster' } },
   { type:'reward', reward:{ kind:'fuelcells', amount:1000, label:'1,000 Fuel Cells', coins:5000, xp:1000 } },
 ];
 
