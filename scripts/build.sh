@@ -36,8 +36,10 @@ PROD_BUILD=1   # DEFAULT: prod. Use --dev to opt out.
 mkdir -p "$(dirname "$OUT_PATH")"
 
 # Marker string the verify hook greps for to detect dev builds.
-DEV_BUILD_MARKER="/* JH_BUILD: dev */"
-PROD_BUILD_MARKER="/* JH_BUILD: prod */"
+# Marker is a comment + a global flag JS can read at runtime to gate dev-only
+# UI (layout tuner, admin panels, etc.) that ships in shared source files.
+DEV_BUILD_MARKER='/* JH_BUILD: dev */ window.__JH_DEV__=true;'
+PROD_BUILD_MARKER='/* JH_BUILD: prod */ window.__JH_DEV__=false;'
 
 # --output / -o flag override
 while [[ $# -gt 0 ]]; do

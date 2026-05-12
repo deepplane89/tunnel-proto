@@ -1,4 +1,4 @@
-/* JH_BUILD: prod */
+/* JH_BUILD: prod */ window.__JH_DEV__=false;
 import * as THREE from 'three';
 import { Water } from 'three/addons/objects/Water.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -28208,22 +28208,30 @@ if (_origAdminToggle) {
   // Triple-tap title (.game-title) to toggle the layout tuner. Lives on the
   // same element as the admin-panel triple-tap (78-tuner-panels.js) — both
   // listeners run independently so 3 taps reveals BOTH admin panel + tuner.
+  //
+  // DEV-ONLY: the triple-tap reveal + tuner panel are stripped in prod, but
+  // the rest of this IIFE (layout apply, resize handler) MUST run in both
+  // builds — it's what positions the title-screen ship/platform/title/LB.
   let tapCount = 0, tapTimer = null;
   const titleTapEl = document.querySelector('.game-title');
   const tunerPanel = document.getElementById('layout-tuner');
-  if (!titleTapEl || !tunerPanel) return;
-
-  titleTapEl.addEventListener('click', () => {
-    tapCount++;
-    if (tapCount === 3) {
-      tapCount = 0;
-      clearTimeout(tapTimer);
-      tunerPanel.classList.toggle('hidden');
-    } else {
-      clearTimeout(tapTimer);
-      tapTimer = setTimeout(() => { tapCount = 0; }, 600);
-    }
-  });
+  if (!window.__JH_DEV__) {
+    // Remove the panel element entirely so it can't be revealed via DOM
+    // inspection in prod. Skip the click handler binding.
+    if (tunerPanel) tunerPanel.remove();
+  } else if (titleTapEl && tunerPanel) {
+    titleTapEl.addEventListener('click', () => {
+      tapCount++;
+      if (tapCount === 3) {
+        tapCount = 0;
+        clearTimeout(tapTimer);
+        tunerPanel.classList.toggle('hidden');
+      } else {
+        clearTimeout(tapTimer);
+        tapTimer = setTimeout(() => { tapCount = 0; }, 600);
+      }
+    });
+  }
 
   const canvas = document.getElementById('title-ship-canvas');
   const platform = document.querySelector('.platform-pad');
