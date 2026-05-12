@@ -1781,13 +1781,29 @@ const _lethalRingActive = [];
 const LETHAL_RING_POOL_SIZE = 20;
 const _LR_SIDES = 8, _LR_R = 5.25, _LR_Y = 2, _LR_TUBE = 2.2;
 let _lrGeo = null;
-let _LR_SHARED_MAT = null;
-// onBeforeRender: push per-ring opacity into the shared uniform right before
-// each draw. Same pattern as the angled walls fix — one shader program for
-// the whole pool, but per-ring fade-in preserved.
-function _lrMeshBeforeRender() {
-  _LR_SHARED_MAT.uniforms.uOpacity.value = this.userData._opacity || 0;
-}
+// Shared shader source strings — three.js dedupes program compilation by
+// source string identity. 20 ShaderMaterial instances using these same
+// strings compile to ONE GPU program. Each material instance owns its own
+// `uOpacity` uniform, so per-ring fade is correct.
+const _LR_VS = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const _LR_FS = `
+  uniform vec3 uNeon;
+  uniform vec3 uObsidian;
+  uniform float uOpacity;
+  varying vec2 vUv;
+  void main() {
+    float band = smoothstep(0.3, 0.5, vUv.y) * (1.0 - smoothstep(0.5, 0.7, vUv.y));
+    vec3 glow = uNeon * (1.0 + band * 4.0);
+    vec3 col = mix(uObsidian, glow, band);
+    gl_FragColor = vec4(col, uOpacity);
+  }
+`;
 // Exposed on window so the global prewarm pass can force-init the pool at
 // startup instead of letting the first ring spawn pay the shader-compile cost.
 function _initLethalRings() {
@@ -1804,40 +1820,24 @@ function _initLethalRings() {
   // template — 20 distinct shader programs that the driver had to validate on
   // every render. With one shared program, ring spawns no longer add to the
   // per-frame validation cost on iOS.
-  _LR_SHARED_MAT = new THREE.ShaderMaterial({
-    uniforms: {
-      uNeon:    { value: new THREE.Color(0xff1a1a) },
-      uObsidian:{ value: new THREE.Color(0x0a0a0f) },
-      uOpacity: { value: 0.0 },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 uNeon;
-      uniform vec3 uObsidian;
-      uniform float uOpacity;
-      varying vec2 vUv;
-      void main() {
-        float band = smoothstep(0.3, 0.5, vUv.y) * (1.0 - smoothstep(0.5, 0.7, vUv.y));
-        vec3 glow = uNeon * (1.0 + band * 4.0);
-        vec3 col = mix(uObsidian, glow, band);
-        gl_FragColor = vec4(col, uOpacity);
-      }
-    `,
-    transparent: true,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
   for (let i = 0; i < LETHAL_RING_POOL_SIZE; i++) {
-    const mesh = new THREE.Mesh(_lrGeo, _LR_SHARED_MAT);
+    // Per-slot material: own uOpacity uniform (per-ring fade is correct),
+    // but shares VS/FS source strings — three.js compiles ONE program total.
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uNeon:    { value: new THREE.Color(0xff1a1a) },
+        uObsidian:{ value: new THREE.Color(0x0a0a0f) },
+        uOpacity: { value: 0.0 },
+      },
+      vertexShader: _LR_VS,
+      fragmentShader: _LR_FS,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(_lrGeo, mat);
     mesh.position.y = _LR_Y;
-    mesh.userData._opacity = 0;
-    mesh.onBeforeRender = _lrMeshBeforeRender;
+    mesh.userData._mat = mat;
     const group = new THREE.Group();
     group.add(mesh);
     group.visible = false;
@@ -1857,7 +1857,7 @@ function _spawnLethalRing(x, z) {
       r.userData.active = true;
       r.visible = true;
       r.position.set(x, 0, z);
-      r.userData._ringMesh.userData._opacity = 0;
+      r.userData._ringMesh.userData._mat.uniforms.uOpacity.value = 0;
       _lethalRingActive.push(r);
       return;
     }

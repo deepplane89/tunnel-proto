@@ -19,7 +19,7 @@
   "ios": {
     "contentInset": "never",
     "scrollEnabled": false,
-    "limitsNavigationsToAppBoundDomains": false,
+    "limitsNavigationsToAppBoundDomains": true,
     "allowsLinkPreview": false,
     "preferredContentMode": "mobile",
     "backgroundColor": "#000000"

@@ -2457,6 +2457,9 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 renderer.shadowMap.enabled = false;
+// Explicit output color space — r152+ default is sRGB but be explicit so future
+// three.js default changes don't silently shift our colors.
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene  = new THREE.Scene();
 
@@ -13008,19 +13011,19 @@ function playCrash() {
 // ═══════════════════════════════════════════════════
 
 const RADIO_TRACKS = [
-  { id: 'neon-underworld',   name: 'NEON UNDERWORLD',       src: './assets/audio/l4music.mp3' },
-  { id: 'brazilian-street',  name: 'BRAZILIAN STREET FIGHT',src: './assets/audio/l3music.mp3' },
-  { id: 'synesthetic-gears', name: 'SYNESTHETIC GEARS',     src: './assets/audio/radio-gears-1.mp3' },
-  { id: 'synthetic-gears-2', name: 'SYNTHETIC GEARS II',    src: './assets/audio/radio-gears-2.mp3' },
-  { id: 'funk-of-the-night', name: 'FUNK OF THE NIGHT',     src: './assets/audio/radio-funk.mp3' },
-  { id: 'orbital-ordinance', name: 'ORBITAL ORDINANCE',     src: './assets/audio/radio-orbital.mp3' },
-  { id: 'neon-mountain',     name: 'NEON MOUNTAIN',         src: './assets/audio/radio-neon-mtn.mp3' },
-  { id: 'house-of-fuel',     name: 'HOUSE OF FUEL',         src: './assets/audio/radio-house-of-fuel.mp3' },
-  { id: 'grannies-synth',    name: 'GRANNIES SYNTH',        src: './assets/audio/radio-grannies-synth.mp3' },
-  { id: 'andracid',          name: 'ANDRACID',              src: './assets/audio/radio-andracid.mp3' },
-  { id: 'cosmic-relay',      name: 'COSMIC RELAY',          src: './assets/audio/radio-cosmic-relay.mp3' },
-  { id: 'cosmic-relay-2',    name: 'COSMIC RELAY II',       src: './assets/audio/radio-cosmic-relay-2.mp3' },
-  { id: 'drum-n-space',      name: 'DRUM N SPACE',          src: './assets/audio/radio-drum-n-space.mp3' },
+  { id: 'neon-underworld',   name: 'NEON UNDERWORLD',       src: './assets/audio/l4music.m4a' },
+  { id: 'brazilian-street',  name: 'BRAZILIAN STREET FIGHT',src: './assets/audio/l3music.m4a' },
+  { id: 'synesthetic-gears', name: 'SYNESTHETIC GEARS',     src: './assets/audio/radio-gears-1.m4a' },
+  { id: 'synthetic-gears-2', name: 'SYNTHETIC GEARS II',    src: './assets/audio/radio-gears-2.m4a' },
+  { id: 'funk-of-the-night', name: 'FUNK OF THE NIGHT',     src: './assets/audio/radio-funk.m4a' },
+  { id: 'orbital-ordinance', name: 'ORBITAL ORDINANCE',     src: './assets/audio/radio-orbital.m4a' },
+  { id: 'neon-mountain',     name: 'NEON MOUNTAIN',         src: './assets/audio/radio-neon-mtn.m4a' },
+  { id: 'house-of-fuel',     name: 'HOUSE OF FUEL',         src: './assets/audio/radio-house-of-fuel.m4a' },
+  { id: 'grannies-synth',    name: 'GRANNIES SYNTH',        src: './assets/audio/radio-grannies-synth.m4a' },
+  { id: 'andracid',          name: 'ANDRACID',              src: './assets/audio/radio-andracid.m4a' },
+  { id: 'cosmic-relay',      name: 'COSMIC RELAY',          src: './assets/audio/radio-cosmic-relay.m4a' },
+  { id: 'cosmic-relay-2',    name: 'COSMIC RELAY II',       src: './assets/audio/radio-cosmic-relay-2.m4a' },
+  { id: 'drum-n-space',      name: 'DRUM N SPACE',          src: './assets/audio/radio-drum-n-space.m4a' },
 ];
 window.RADIO_TRACKS = RADIO_TRACKS;
 
@@ -13865,6 +13868,181 @@ function _wirePauseShuffleSwitch() {
   // Also retry on next rAF (after layout) and on window load (after assets).
   try { requestAnimationFrame(_go); } catch(_) {}
   try { window.addEventListener('load', _go, { once: true }); } catch(_) {}
+})();
+// Jet Horizon — Client Analytics Emitter
+//
+// Exposes window.jhTrack(type, props) — adds device/session metadata, queues
+// events, flushes in batches every 5 seconds or when the queue hits 20, and
+// uses navigator.sendBeacon on page unload so no events are dropped.
+//
+// Anonymous: device id is a random UUID stored in localStorage (`jh_did`).
+// Not linked to any user identity. Not used for advertising or tracking.
+//
+// Auto-captures: window.onerror and unhandledrejection → 'crash' events.
+
+(function () {
+  'use strict';
+
+  // ── one-time init guard ────────────────────────────────────────────────
+  if (typeof window === 'undefined' || window.__jhTrackInit) return;
+  window.__jhTrackInit = true;
+
+  const ENDPOINT = '/api/analytics';
+  const FLUSH_MS = 5000;
+  const FLUSH_AT = 20;
+  const MAX_QUEUE = 200;
+  const VERSION = '1.0.0';
+
+  // ── device id ──────────────────────────────────────────────────────────
+  function uuid() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      try { return crypto.randomUUID(); } catch (_) {}
+    }
+    // RFC4122 v4 fallback
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  let did;
+  try {
+    did = localStorage.getItem('jh_did');
+    if (!did) {
+      did = uuid();
+      localStorage.setItem('jh_did', did);
+    }
+  } catch (_) {
+    did = uuid(); // private mode etc — session-only id
+  }
+
+  const sid = uuid();
+
+  // ── platform detection ────────────────────────────────────────────────
+  function detectPlatform() {
+    try {
+      if (window.Capacitor && window.Capacitor.getPlatform) {
+        const p = window.Capacitor.getPlatform(); // 'ios' | 'android' | 'web'
+        if (p === 'ios') return 'ios';
+        if (p === 'android') return 'android';
+      }
+      const ua = navigator.userAgent || '';
+      if (/iPhone|iPad|iPod/i.test(ua)) return 'ios-web';
+      if (/Android/i.test(ua)) return 'android-web';
+    } catch (_) {}
+    return 'web';
+  }
+  const platform = detectPlatform();
+
+  // ── queue + flush ─────────────────────────────────────────────────────
+  let queue = [];
+  let flushTimer = null;
+  let flushing = false;
+
+  function scheduleFlush() {
+    if (flushTimer) return;
+    flushTimer = setTimeout(flush, FLUSH_MS);
+  }
+
+  async function flush(useBeacon) {
+    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+    if (flushing && !useBeacon) return;
+    if (queue.length === 0) return;
+    flushing = true;
+    const batch = queue.splice(0, FLUSH_AT);
+    const body = JSON.stringify({ events: batch });
+
+    try {
+      if (useBeacon && navigator.sendBeacon) {
+        const blob = new Blob([body], { type: 'application/json' });
+        const ok = navigator.sendBeacon(ENDPOINT, blob);
+        if (!ok) {
+          // put events back; will retry on next flush tick
+          queue.unshift(...batch);
+        }
+      } else {
+        const r = await fetch(ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+          keepalive: true,
+        });
+        if (!r.ok && r.status >= 500) {
+          // server hiccup — requeue (front of line) up to MAX_QUEUE
+          queue.unshift(...batch.slice(0, Math.max(0, MAX_QUEUE - queue.length)));
+        }
+      }
+    } catch (_) {
+      // network down — requeue
+      queue.unshift(...batch.slice(0, Math.max(0, MAX_QUEUE - queue.length)));
+    } finally {
+      flushing = false;
+      if (queue.length > 0) scheduleFlush();
+    }
+  }
+
+  // ── public API ─────────────────────────────────────────────────────────
+  function jhTrack(type, props) {
+    try {
+      if (!type) return;
+      // Cap queue so a runaway loop can't OOM
+      if (queue.length >= MAX_QUEUE) queue.shift();
+      queue.push({
+        type: String(type),
+        ts: Date.now(),
+        did,
+        sid,
+        platform,
+        version: VERSION,
+        props: (props && typeof props === 'object') ? props : {},
+      });
+      if (queue.length >= FLUSH_AT) {
+        flush(false);
+      } else {
+        scheduleFlush();
+      }
+    } catch (_) {}
+  }
+  window.jhTrack = jhTrack;
+
+  // ── auto-capture: errors ──────────────────────────────────────────────
+  let crashCount = 0;
+  const CRASH_CAP = 10; // don't spam server if game is on fire
+  window.addEventListener('error', function (e) {
+    if (crashCount++ >= CRASH_CAP) return;
+    jhTrack('crash', {
+      kind: 'error',
+      message: String(e.message || '').slice(0, 240),
+      file: String(e.filename || '').slice(0, 120),
+      line: e.lineno || 0,
+      col: e.colno || 0,
+    });
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    if (crashCount++ >= CRASH_CAP) return;
+    const r = e.reason;
+    const msg = (r && (r.message || r.toString())) || 'unknown';
+    jhTrack('crash', {
+      kind: 'rejection',
+      message: String(msg).slice(0, 240),
+    });
+  });
+
+  // ── auto-flush on page hide / unload ──────────────────────────────────
+  window.addEventListener('pagehide', function () { flush(true); });
+  window.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') flush(true);
+  });
+
+  // ── session_start fires once on load ──────────────────────────────────
+  jhTrack('session_start', {
+    ref: (document.referrer || '').slice(0, 120),
+    lang: (navigator.language || '').slice(0, 16),
+    w: window.innerWidth,
+    h: window.innerHeight,
+    dpr: window.devicePixelRatio || 1,
+  });
 })();
 // Plasma-punch impact layered alongside engine-roar ignition.
 function playThrusterImpact(vol) {
@@ -15649,13 +15827,29 @@ const _lethalRingActive = [];
 const LETHAL_RING_POOL_SIZE = 20;
 const _LR_SIDES = 8, _LR_R = 5.25, _LR_Y = 2, _LR_TUBE = 2.2;
 let _lrGeo = null;
-let _LR_SHARED_MAT = null;
-// onBeforeRender: push per-ring opacity into the shared uniform right before
-// each draw. Same pattern as the angled walls fix — one shader program for
-// the whole pool, but per-ring fade-in preserved.
-function _lrMeshBeforeRender() {
-  _LR_SHARED_MAT.uniforms.uOpacity.value = this.userData._opacity || 0;
-}
+// Shared shader source strings — three.js dedupes program compilation by
+// source string identity. 20 ShaderMaterial instances using these same
+// strings compile to ONE GPU program. Each material instance owns its own
+// `uOpacity` uniform, so per-ring fade is correct.
+const _LR_VS = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const _LR_FS = `
+  uniform vec3 uNeon;
+  uniform vec3 uObsidian;
+  uniform float uOpacity;
+  varying vec2 vUv;
+  void main() {
+    float band = smoothstep(0.3, 0.5, vUv.y) * (1.0 - smoothstep(0.5, 0.7, vUv.y));
+    vec3 glow = uNeon * (1.0 + band * 4.0);
+    vec3 col = mix(uObsidian, glow, band);
+    gl_FragColor = vec4(col, uOpacity);
+  }
+`;
 // Exposed on window so the global prewarm pass can force-init the pool at
 // startup instead of letting the first ring spawn pay the shader-compile cost.
 function _initLethalRings() {
@@ -15672,40 +15866,24 @@ function _initLethalRings() {
   // template — 20 distinct shader programs that the driver had to validate on
   // every render. With one shared program, ring spawns no longer add to the
   // per-frame validation cost on iOS.
-  _LR_SHARED_MAT = new THREE.ShaderMaterial({
-    uniforms: {
-      uNeon:    { value: new THREE.Color(0xff1a1a) },
-      uObsidian:{ value: new THREE.Color(0x0a0a0f) },
-      uOpacity: { value: 0.0 },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 uNeon;
-      uniform vec3 uObsidian;
-      uniform float uOpacity;
-      varying vec2 vUv;
-      void main() {
-        float band = smoothstep(0.3, 0.5, vUv.y) * (1.0 - smoothstep(0.5, 0.7, vUv.y));
-        vec3 glow = uNeon * (1.0 + band * 4.0);
-        vec3 col = mix(uObsidian, glow, band);
-        gl_FragColor = vec4(col, uOpacity);
-      }
-    `,
-    transparent: true,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
   for (let i = 0; i < LETHAL_RING_POOL_SIZE; i++) {
-    const mesh = new THREE.Mesh(_lrGeo, _LR_SHARED_MAT);
+    // Per-slot material: own uOpacity uniform (per-ring fade is correct),
+    // but shares VS/FS source strings — three.js compiles ONE program total.
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uNeon:    { value: new THREE.Color(0xff1a1a) },
+        uObsidian:{ value: new THREE.Color(0x0a0a0f) },
+        uOpacity: { value: 0.0 },
+      },
+      vertexShader: _LR_VS,
+      fragmentShader: _LR_FS,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(_lrGeo, mat);
     mesh.position.y = _LR_Y;
-    mesh.userData._opacity = 0;
-    mesh.onBeforeRender = _lrMeshBeforeRender;
+    mesh.userData._mat = mat;
     const group = new THREE.Group();
     group.add(mesh);
     group.visible = false;
@@ -15725,7 +15903,7 @@ function _spawnLethalRing(x, z) {
       r.userData.active = true;
       r.visible = true;
       r.position.set(x, 0, z);
-      r.userData._ringMesh.userData._opacity = 0;
+      r.userData._ringMesh.userData._mat.uniforms.uOpacity.value = 0;
       _lethalRingActive.push(r);
       return;
     }
@@ -22049,6 +22227,9 @@ function startDeathRun() {
 
   state.isDeathRun      = true;
   state.startedFromL1   = false;
+  // Analytics: run_start (anonymous, batched)
+  state._runStartTs = Date.now();
+  try { window.jhTrack && window.jhTrack('run_start', { mode: 'deathrun' }); } catch(_){}
   state.deathRunVibeIdx = 0;
   _pendingVibeIdx = -1;
   state._pendingSpeedTier = -1;
@@ -24627,6 +24808,19 @@ function killPlayer() {
   _retryIsFromDead = false;
   _drLogEvent('death', `score=${state.score} tier=${state.deathRunSpeedTier}`);
   _drSaveSession('death');
+  // Analytics: run_end (anonymous, batched)
+  try {
+    const _dur = state._runStartTs ? (Date.now() - state._runStartTs) / 1000 : (state.elapsed || 0);
+    window.jhTrack && window.jhTrack('run_end', {
+      reason: 'death',
+      score: state.score || 0,
+      tier: state.deathRunSpeedTier || 0,
+      duration: +_dur.toFixed(2),
+      elapsed: +(state.elapsed || 0).toFixed(2),
+      waveCount: state.drWaveCount || 0,
+      seqStage: (DR_SEQUENCE[state.seqStageIdx] || {}).name || 'UNKNOWN',
+    });
+  } catch(_){}
   // [WHEEL DISABLED] if (!state.wheelEarned) state.wheelEarned = true;
   dismissHeadStart(); // clean up if still showing
   // Kill roll state immediately on death
@@ -27031,8 +27225,8 @@ function update(dt) {
     const lr = _lethalRingActive[i];
     lr.position.z += effectiveSpeed * dt;
     const fadeT = Math.max(0, Math.min(1, (lr.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
-    // Per-ring opacity; onBeforeRender pushes it into the shared uniform.
-    lr.userData._ringMesh.userData._opacity = fadeT * 0.92;
+    // Per-ring opacity — each pool slot owns its own material uOpacity uniform.
+    lr.userData._ringMesh.userData._mat.uniforms.uOpacity.value = fadeT * 0.92;
     // Laser destroys lethal rings
     if (state.laserActive) {
       let _ringHit = false;

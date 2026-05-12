@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#03070f">
+<title>Jet Horizon — Admin</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #03070f;
+    --bg-2: #07101c;
+    --line: rgba(255, 255, 255, 0.06);
+    --line-2: rgba(255, 255, 255, 0.12);
+    --text: #d6dde6;
+    --text-dim: #6b7785;
+    --text-faint: #4a5260;
+    --accent: #00eeff;
+    --accent-dim: rgba(0, 238, 255, 0.12);
+    --warn: #ffaa00;
+    --danger: #ff5577;
+    --violet: #aa88ff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); }
+  body {
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ── Top bar ───────────────────────────────────────────────── */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(3, 7, 15, 0.85);
+    backdrop-filter: saturate(150%) blur(14px);
+    -webkit-backdrop-filter: saturate(150%) blur(14px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+  }
+  .brand .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .brand .name { color: #fff; }
+  .brand .sub  { color: var(--accent); font-weight: 500; }
+  .topbar-right { display: flex; align-items: center; gap: 14px; }
+  .updated { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .btn {
+    background: transparent;
+    border: 1px solid var(--line-2);
+    color: var(--text);
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 120ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:active { transform: scale(0.97); }
+  .btn.primary {
+    background: var(--accent);
+    color: #002028;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .btn.primary:hover { background: #5af3ff; border-color: #5af3ff; color: #002028; }
+
+  /* ── Container ─────────────────────────────────────────────── */
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 28px 24px 80px; }
+
+  /* ── Gate ──────────────────────────────────────────────────── */
+  .gate-wrap {
+    min-height: calc(100vh - 60px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .gate {
+    width: 100%;
+    max-width: 340px;
+    padding: 32px 28px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-2);
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  }
+  .gate h2 {
+    color: #fff;
+    font-size: 13px;
+    margin-bottom: 6px;
+    letter-spacing: 2px;
+    font-weight: 600;
+  }
+  .gate p { color: var(--text-dim); font-size: 12px; margin-bottom: 22px; }
+  .gate input {
+    width: 100%;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--line-2);
+    color: #fff;
+    padding: 11px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 12px;
+    -webkit-appearance: none;
+    outline: none;
+    transition: border-color 120ms ease;
+  }
+  .gate input:focus { border-color: var(--accent); }
+  .gate button {
+    width: 100%;
+    padding: 11px;
+    border-radius: 8px;
+    font-size: 12px;
+  }
+  .gate .err { color: var(--danger); font-size: 12px; margin-top: 10px; min-height: 16px; }
+
+  /* ── Cards ─────────────────────────────────────────────────── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 920px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 480px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 2px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  .card.is-warn::before { background: var(--warn); opacity: 1; }
+  .card.is-danger::before { background: var(--danger); opacity: 1; }
+  .card.is-ok::before { background: var(--accent); opacity: 1; }
+  .card .label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .card .val {
+    font-size: 28px;
+    color: #fff;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    letter-spacing: -0.5px;
+  }
+  .card .sub2 {
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .card .delta { color: var(--accent); }
+  .card .delta.dn { color: var(--danger); }
+
+  /* ── Panels ────────────────────────────────────────────────── */
+  .panel {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .panel h2 {
+    color: var(--text);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .panel-hint { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  .row2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 820px) { .row2 { grid-template-columns: 1fr; } }
+
+  /* ── Chart wrappers (fixed height fixes Chart.js sizing) ───── */
+  .chart-wrap { position: relative; width: 100%; }
+  .chart-wrap.h-lg { height: 260px; }
+  .chart-wrap.h-md { height: 220px; }
+  .chart-wrap.h-sm { height: 180px; }
+
+  /* ── Tables ────────────────────────────────────────────────── */
+  .table-wrap { overflow-x: auto; margin: -4px -4px 0; padding: 0 4px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  th, td { padding: 8px 12px; text-align: left; white-space: nowrap; }
+  th {
+    color: var(--text-faint);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 10px;
+    border-bottom: 1px solid var(--line-2);
+  }
+  td { border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(0, 238, 255, 0.03); }
+  td.num { font-variant-numeric: tabular-nums; }
+  td.dim { color: var(--text-dim); }
+  td.code { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace; font-size: 11px; }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .pill.ios     { background: rgba(0, 238, 255, 0.12);  color: var(--accent); }
+  .pill.web     { background: rgba(170, 136, 255, 0.12); color: var(--violet); }
+  .pill.android { background: rgba(255, 170, 0, 0.12);   color: var(--warn); }
+  .pill.unknown { background: rgba(255, 255, 255, 0.04); color: var(--text-faint); }
+
+  .empty {
+    color: var(--text-faint);
+    font-size: 12px;
+    text-align: center;
+    padding: 28px 12px;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    margin: 4px 0;
+  }
+  .empty.ok { color: var(--accent); border-color: rgba(0, 238, 255, 0.2); }
+
+  /* ── Loading ───────────────────────────────────────────────── */
+  .skel {
+    background: linear-gradient(90deg, var(--line) 0%, var(--line-2) 50%, var(--line) 100%);
+    background-size: 200% 100%;
+    animation: skel 1.6s ease-in-out infinite;
+    border-radius: 6px;
+  }
+  @keyframes skel {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  .loader-card .label-skel { height: 10px; width: 60%; margin-bottom: 10px; }
+  .loader-card .val-skel { height: 26px; width: 50%; margin-bottom: 8px; }
+  .loader-card .sub-skel { height: 10px; width: 70%; }
+
+  /* ── Section header ────────────────────────────────────────── */
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 24px 4px 12px;
+  }
+  .section-head h3 {
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  /* ── Status bar (errors) ───────────────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-2);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    padding: 10px 16px;
+    border-radius: 999px;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 200ms ease;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ── Password gate ────────────────────────────────────────── -->
+<div id="gate" class="gate-wrap">
+  <div class="gate">
+    <h2>JET HORIZON</h2>
+    <p>Analytics admin</p>
+    <input id="pw" type="password" placeholder="Password" autocomplete="off" autofocus />
+    <button id="go" class="btn primary">UNLOCK</button>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<!-- ── Dashboard ────────────────────────────────────────────── -->
+<div id="dash" style="display:none;">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="dot"></div>
+        <span class="name">JET HORIZON</span>
+        <span class="sub">/ ADMIN</span>
+      </div>
+      <div class="topbar-right">
+        <span class="updated" id="updated"></span>
+        <button class="btn" id="refresh">↻ REFRESH</button>
+        <button class="btn" id="signout">SIGN OUT</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- KPI cards -->
+    <div class="cards" id="cards"></div>
+
+    <!-- Daily activity -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Daily Activity</h2>
+        <span class="panel-hint">Last 30 days · DAU · Sessions · Runs</span>
+      </div>
+      <div class="chart-wrap h-lg"><canvas id="cDaily"></canvas></div>
+    </div>
+
+    <div class="row2">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Crashes Per Day</h2>
+          <span class="panel-hint" id="crashHint"></span>
+        </div>
+        <div class="chart-wrap h-md"><canvas id="cCrash"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Engagement Funnel</h2>
+          <span class="panel-hint" id="funnelHint"></span>
+        </div>
+        <div class="chart-wrap h-md"><canvas id="cFunnel"></canvas></div>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="panel">
+        <div class="panel-head"><h2>Recent Runs</h2><span class="panel-hint">Last 20</span></div>
+        <div id="tRuns"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Recent Crashes</h2><span class="panel-hint">Last 20</span></div>
+        <div id="tCrash"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Top Scores</h2><span class="panel-hint">30-day window</span></div>
+      <div id="tScores"></div>
+    </div>
+
+    <div class="section-head"><h3>Devices & Platforms</h3></div>
+    <div class="row2">
+      <div class="panel">
+        <div class="panel-head"><h2>Platform Mix</h2><span class="panel-hint">Sessions 30d</span></div>
+        <div class="chart-wrap h-md"><canvas id="cPlat"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Most Active Devices</h2><span class="panel-hint">Top 10 by run count</span></div>
+        <div id="tDevices"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+let _pw = sessionStorage.getItem('jh_admin_pw') || '';
+const _charts = {};
+let _lastFetch = 0;
+
+function $(id) { return document.getElementById(id); }
+function fmt(n) { return (Number(n) || 0).toLocaleString(); }
+function pct(n, d) { return d > 0 ? ((n/d)*100).toFixed(1) + '%' : '—'; }
+function fmtDur(s) {
+  if (!s && s !== 0) return '—';
+  if (s < 60) return Math.round(s) + 's';
+  const m = Math.floor(s/60), sec = Math.round(s%60);
+  return m + 'm ' + (sec < 10 ? '0' : '') + sec + 's';
+}
+function shortDate(d) { return d.slice(5).replace('-', '/'); }
+function platClass(p) {
+  p = (p || '').toLowerCase();
+  if (p.startsWith('ios')) return 'ios';
+  if (p.startsWith('android')) return 'android';
+  if (p === 'web' || p === 'desktop') return 'web';
+  return 'unknown';
+}
+function platLabel(p) { return p || 'unknown'; }
+function shortId(id) { return (id || '').slice(0, 8); }
+function relTime(ts) {
+  if (!ts || !isFinite(ts)) return '—';
+  let s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 0) s = 0; // guard against future ts / clock skew
+  if (s < 5) return 'just now';
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+
+function toast(msg, ms) {
+  $('toast').textContent = msg;
+  $('toast').classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => $('toast').classList.remove('show'), ms || 3000);
+}
+
+// ── Fetch ────────────────────────────────────────────────────
+async function fetchData() {
+  try {
+    const r = await fetch('/api/analytics?password=' + encodeURIComponent(_pw) + '&limit=2000');
+    if (r.status === 401) {
+      _pw = '';
+      sessionStorage.removeItem('jh_admin_pw');
+      showGate('Wrong password');
+      return null;
+    }
+    if (!r.ok) {
+      toast('Server error: ' + r.status);
+      return null;
+    }
+    _lastFetch = Date.now();
+    return r.json();
+  } catch (e) {
+    toast('Network error');
+    return null;
+  }
+}
+
+function showGate(err) {
+  $('gate').style.display = '';
+  $('dash').style.display = 'none';
+  $('err').textContent = err || '';
+  setTimeout(() => $('pw').focus(), 0);
+}
+function showDash() {
+  $('gate').style.display = 'none';
+  $('dash').style.display = '';
+}
+
+// ── Cards ────────────────────────────────────────────────────
+function renderCards(d) {
+  const s = d.summary || {};
+  const evRuns = (d.events.run_end || []);
+  let totalDur = 0, durN = 0;
+  for (const e of evRuns) { const x = e.props && e.props.duration; if (x) { totalDur += x; durN++; } }
+  const avgDur = durN > 0 ? totalDur / durN : 0;
+
+  // Today vs yesterday delta
+  const today = d.daily[d.daily.length - 1] || {};
+  const yest  = d.daily[d.daily.length - 2] || {};
+  const dauDelta = (today.dau || 0) - (yest.dau || 0);
+  const dauDeltaStr = dauDelta === 0 ? '' : (dauDelta > 0 ? '▲ ' + dauDelta : '▼ ' + Math.abs(dauDelta));
+  const dauDeltaCls = dauDelta < 0 ? 'delta dn' : 'delta';
+
+  const crashRate = s.runs > 0 ? (s.crashes / s.runs * 100) : 0;
+  const crashCls = crashRate > 5 ? 'is-danger' : crashRate > 1 ? 'is-warn' : 'is-ok';
+
+  const cards = [
+    {
+      cls: 'is-ok',
+      label: 'Today · DAU',
+      val: fmt(s.todayDau),
+      sub: dauDeltaStr ? '<span class="' + dauDeltaCls + '">' + dauDeltaStr + '</span> vs yesterday' : 'unique devices today',
+    },
+    {
+      label: 'Sessions · 30d',
+      val: fmt(s.sessions),
+      sub: 'app opens',
+    },
+    {
+      label: 'Runs · 30d',
+      val: fmt(s.runs),
+      sub: fmt(s.runs_60s) + ' ≥ 60s (' + pct(s.runs_60s, s.runs) + ')',
+    },
+    {
+      cls: crashCls,
+      label: 'Crashes · 30d',
+      val: fmt(s.crashes),
+      sub: pct(s.crashes, s.runs) + ' of runs',
+    },
+    {
+      label: 'Avg Run',
+      val: fmtDur(avgDur),
+      sub: durN + ' run' + (durN === 1 ? '' : 's') + ' measured',
+    },
+  ];
+
+  $('cards').innerHTML = cards.map(c =>
+    '<div class="card ' + (c.cls || '') + '">' +
+      '<div class="label">' + c.label + '</div>' +
+      '<div class="val">' + c.val + '</div>' +
+      '<div class="sub2">' + c.sub + '</div>' +
+    '</div>'
+  ).join('');
+}
+
+// ── Charts ───────────────────────────────────────────────────
+function destroy(name) { if (_charts[name]) { _charts[name].destroy(); delete _charts[name]; } }
+
+const COMMON_OPTS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: { duration: 400, easing: 'easeOutQuart' },
+  plugins: {
+    legend: {
+      labels: { color: '#d6dde6', font: { size: 11, family: 'inherit' }, boxWidth: 10, boxHeight: 10, padding: 14 },
+    },
+    tooltip: {
+      backgroundColor: 'rgba(7,16,28,0.95)',
+      borderColor: 'rgba(0,238,255,0.3)',
+      borderWidth: 1,
+      titleColor: '#fff',
+      bodyColor: '#d6dde6',
+      titleFont: { size: 11, family: 'inherit' },
+      bodyFont: { size: 12, family: 'inherit' },
+      padding: 10,
+      cornerRadius: 6,
+      displayColors: true,
+      boxPadding: 4,
+    },
+  },
+  scales: {
+    x: {
+      ticks: { color: '#6b7785', font: { size: 10, family: 'inherit' }, maxRotation: 0, autoSkip: true, autoSkipPadding: 12 },
+      grid: { display: false, drawBorder: false },
+      border: { color: 'rgba(255,255,255,0.08)' },
+    },
+    y: {
+      beginAtZero: true,
+      ticks: { color: '#6b7785', font: { size: 10, family: 'inherit' }, precision: 0 },
+      grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+      border: { display: false },
+    },
+  },
+};
+
+function gradientFill(ctx, color) {
+  const g = ctx.createLinearGradient(0, 0, 0, 260);
+  g.addColorStop(0, color.replace(')', ', 0.25)').replace('rgb', 'rgba'));
+  g.addColorStop(1, color.replace(')', ', 0)').replace('rgb', 'rgba'));
+  return g;
+}
+
+function renderDaily(d) {
+  destroy('cDaily');
+  const labels = d.daily.map(x => shortDate(x.date));
+  const ctx = $('cDaily').getContext('2d');
+  _charts.cDaily = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'DAU',
+          data: d.daily.map(x => x.dau),
+          borderColor: 'rgb(0, 238, 255)',
+          backgroundColor: gradientFill(ctx, 'rgb(0, 238, 255)'),
+          tension: 0.35, pointRadius: 0, pointHoverRadius: 4, borderWidth: 2, fill: true,
+        },
+        {
+          label: 'Sessions',
+          data: d.daily.map(x => x.sessions),
+          borderColor: 'rgb(170, 136, 255)',
+          backgroundColor: 'transparent',
+          tension: 0.35, pointRadius: 0, pointHoverRadius: 4, borderWidth: 2,
+        },
+        {
+          label: 'Runs',
+          data: d.daily.map(x => x.runs),
+          borderColor: 'rgb(255, 170, 0)',
+          backgroundColor: 'transparent',
+          tension: 0.35, pointRadius: 0, pointHoverRadius: 4, borderWidth: 2,
+        },
+      ],
+    },
+    options: Object.assign({}, COMMON_OPTS, {
+      interaction: { mode: 'index', intersect: false },
+    }),
+  });
+}
+
+function renderCrash(d) {
+  destroy('cCrash');
+  const labels = d.daily.map(x => shortDate(x.date));
+  const series = d.daily.map(x => x.crashes);
+  const total = series.reduce((a,b) => a+b, 0);
+  $('crashHint').textContent = total + ' total';
+
+  _charts.cCrash = new Chart($('cCrash'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Crashes',
+        data: series,
+        backgroundColor: 'rgba(255, 85, 119, 0.85)',
+        borderRadius: 3,
+        maxBarThickness: 14,
+      }],
+    },
+    options: Object.assign({}, COMMON_OPTS, {
+      plugins: Object.assign({}, COMMON_OPTS.plugins, { legend: { display: false } }),
+    }),
+  });
+}
+
+function renderFunnel(d) {
+  destroy('cFunnel');
+  const sessions = d.summary.sessions || 0;
+  const runs     = d.summary.runs || 0;
+  const runs60   = d.summary.runs_60s || 0;
+  const c1 = sessions > 0 ? Math.min(100, Math.round(runs / sessions * 100)) : null;
+  const c2 = runs > 0 ? Math.min(100, Math.round(runs60 / runs * 100)) : null;
+  const conv1 = c1 == null ? '—' : c1 + '%';
+  const conv2 = c2 == null ? '—' : c2 + '%';
+  $('funnelHint').textContent = 'S→R ' + conv1 + ' · R≥60s ' + conv2;
+
+  _charts.cFunnel = new Chart($('cFunnel'), {
+    type: 'bar',
+    data: {
+      labels: ['Sessions', 'Started Run', 'Run ≥ 60s'],
+      datasets: [{
+        label: 'Count',
+        data: [sessions, runs, runs60],
+        backgroundColor: ['rgba(170,136,255,0.85)', 'rgba(255,170,0,0.85)', 'rgba(0,238,255,0.85)'],
+        borderRadius: 4,
+        maxBarThickness: 36,
+      }],
+    },
+    options: Object.assign({}, COMMON_OPTS, {
+      indexAxis: 'y',
+      plugins: Object.assign({}, COMMON_OPTS.plugins, { legend: { display: false } }),
+      scales: {
+        x: { beginAtZero: true, ticks: { color: '#6b7785', font: { size: 10 }, precision: 0 }, grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false } },
+        y: { ticks: { color: '#d6dde6', font: { size: 11 } }, grid: { display: false, drawBorder: false } },
+      },
+    }),
+  });
+}
+
+function renderPlatformMix(d) {
+  destroy('cPlat');
+  const tally = {};
+  for (const e of (d.events.session_start || [])) {
+    const k = e.platform || 'unknown';
+    tally[k] = (tally[k] || 0) + 1;
+  }
+  const labels = Object.keys(tally);
+  const data = labels.map(k => tally[k]);
+  const colors = labels.map(l => {
+    const c = platClass(l);
+    if (c === 'ios') return 'rgba(0,238,255,0.85)';
+    if (c === 'android') return 'rgba(255,170,0,0.85)';
+    if (c === 'web') return 'rgba(170,136,255,0.85)';
+    return 'rgba(120,128,140,0.7)';
+  });
+
+  if (data.length === 0 || data.every(v => v === 0)) {
+    $('cPlat').style.display = 'none';
+    if (!document.getElementById('platEmpty')) {
+      const el = document.createElement('div');
+      el.id = 'platEmpty';
+      el.className = 'empty';
+      el.textContent = 'No platform data yet';
+      $('cPlat').parentElement.appendChild(el);
+    }
+    return;
+  }
+  $('cPlat').style.display = '';
+  const old = document.getElementById('platEmpty'); if (old) old.remove();
+
+  _charts.cPlat = new Chart($('cPlat'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderColor: '#07101c', borderWidth: 3, hoverOffset: 6 }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '62%',
+      animation: { duration: 400 },
+      plugins: {
+        legend: { position: 'right', labels: { color: '#d6dde6', font: { size: 11 }, boxWidth: 10, boxHeight: 10, padding: 10 } },
+        tooltip: COMMON_OPTS.plugins.tooltip,
+      },
+    },
+  });
+}
+
+// ── Tables ───────────────────────────────────────────────────
+function pillFor(plat) {
+  const c = platClass(plat);
+  return '<span class="pill ' + c + '">' + platLabel(plat) + '</span>';
+}
+
+function renderRunsTable(d) {
+  const runs = (d.events.run_end || []).slice(0, 20);
+  if (runs.length === 0) {
+    $('tRuns').innerHTML = '<div class="empty">No run_end events yet</div>';
+    return;
+  }
+  $('tRuns').innerHTML = '<div class="table-wrap"><table>' +
+    '<thead><tr><th>When</th><th>Plat</th><th class="num">Score</th><th class="num">Duration</th><th class="num">Wave</th><th>Stage</th></tr></thead>' +
+    '<tbody>' + runs.map(e => {
+      const p = e.props || {};
+      return '<tr>' +
+        '<td class="dim">' + relTime(e.ts) + '</td>' +
+        '<td>' + pillFor(e.platform) + '</td>' +
+        '<td class="num">' + fmt(p.score) + '</td>' +
+        '<td class="num">' + fmtDur(p.duration) + '</td>' +
+        '<td class="num">' + fmt(p.waveCount) + '</td>' +
+        '<td class="dim">' + (p.seqStage || '—') + '</td>' +
+      '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+function renderCrashTable(d) {
+  const crashes = (d.events.crash || []).slice(0, 20);
+  if (crashes.length === 0) {
+    $('tCrash').innerHTML = '<div class="empty ok">No crashes — nice</div>';
+    return;
+  }
+  $('tCrash').innerHTML = '<div class="table-wrap"><table>' +
+    '<thead><tr><th>When</th><th>Plat</th><th>Kind</th><th>Message</th></tr></thead>' +
+    '<tbody>' + crashes.map(e => {
+      const p = e.props || {};
+      const msg = (p.message || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])).slice(0, 100);
+      return '<tr>' +
+        '<td class="dim">' + relTime(e.ts) + '</td>' +
+        '<td>' + pillFor(e.platform) + '</td>' +
+        '<td class="dim">' + (p.kind || '—') + '</td>' +
+        '<td class="code" style="color:#ff8aa0">' + msg + '</td>' +
+      '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+function renderScoresTable(d) {
+  const top = (d.events.run_end || [])
+    .slice()
+    .sort((a,b) => (b.props?.score || 0) - (a.props?.score || 0))
+    .slice(0, 10);
+  if (top.length === 0) {
+    $('tScores').innerHTML = '<div class="empty">No scores yet</div>';
+    return;
+  }
+  $('tScores').innerHTML = '<div class="table-wrap"><table>' +
+    '<thead><tr><th>#</th><th class="num">Score</th><th class="num">Duration</th><th>Plat</th><th>When</th><th>Device</th></tr></thead>' +
+    '<tbody>' + top.map((e, i) => {
+      const p = e.props || {};
+      return '<tr>' +
+        '<td class="dim">' + (i+1) + '</td>' +
+        '<td class="num" style="color:#fff;font-weight:600">' + fmt(p.score) + '</td>' +
+        '<td class="num">' + fmtDur(p.duration) + '</td>' +
+        '<td>' + pillFor(e.platform) + '</td>' +
+        '<td class="dim">' + relTime(e.ts) + '</td>' +
+        '<td class="code dim">' + shortId(e.did) + '</td>' +
+      '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+function renderDevicesTable(d) {
+  const tally = {};
+  for (const e of (d.events.run_end || [])) {
+    if (!e.did) continue;
+    if (!tally[e.did]) tally[e.did] = { did: e.did, runs: 0, bestScore: 0, plat: e.platform, last: 0 };
+    tally[e.did].runs++;
+    tally[e.did].bestScore = Math.max(tally[e.did].bestScore, (e.props?.score || 0));
+    tally[e.did].last = Math.max(tally[e.did].last, e.ts);
+  }
+  const list = Object.values(tally).sort((a,b) => b.runs - a.runs).slice(0, 10);
+  if (list.length === 0) {
+    $('tDevices').innerHTML = '<div class="empty">No device data yet</div>';
+    return;
+  }
+  $('tDevices').innerHTML = '<div class="table-wrap"><table>' +
+    '<thead><tr><th>Device</th><th>Plat</th><th class="num">Runs</th><th class="num">Best</th><th>Last seen</th></tr></thead>' +
+    '<tbody>' + list.map(r =>
+      '<tr>' +
+        '<td class="code dim">' + shortId(r.did) + '</td>' +
+        '<td>' + pillFor(r.plat) + '</td>' +
+        '<td class="num">' + fmt(r.runs) + '</td>' +
+        '<td class="num">' + fmt(r.bestScore) + '</td>' +
+        '<td class="dim">' + relTime(r.last) + '</td>' +
+      '</tr>'
+    ).join('') + '</tbody></table></div>';
+}
+
+// ── Loading state ───────────────────────────────────────────
+function renderLoaders() {
+  const loaders = [];
+  for (let i = 0; i < 5; i++) {
+    loaders.push('<div class="card loader-card"><div class="skel label-skel"></div><div class="skel val-skel"></div><div class="skel sub-skel"></div></div>');
+  }
+  $('cards').innerHTML = loaders.join('');
+}
+
+// ── Master render ───────────────────────────────────────────
+async function refresh() {
+  if (!_pw) { showGate(); return; }
+  showDash();
+  renderLoaders();
+  const d = await fetchData();
+  if (!d) return;
+  $('updated').textContent = 'Updated ' + new Date(_lastFetch).toLocaleTimeString();
+  renderCards(d);
+  renderDaily(d);
+  renderCrash(d);
+  renderFunnel(d);
+  renderPlatformMix(d);
+  renderRunsTable(d);
+  renderCrashTable(d);
+  renderScoresTable(d);
+  renderDevicesTable(d);
+}
+
+// ── Auto-refresh every 60s while tab is visible ────────────
+setInterval(() => {
+  if (document.visibilityState === 'visible' && _pw) refresh();
+}, 60000);
+
+// ── Wire up ─────────────────────────────────────────────────
+$('go').addEventListener('click', () => {
+  const v = $('pw').value;
+  if (!v) { $('err').textContent = 'Enter password'; return; }
+  _pw = v;
+  sessionStorage.setItem('jh_admin_pw', _pw);
+  refresh();
+});
+$('pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go').click(); });
+$('refresh').addEventListener('click', refresh);
+$('signout').addEventListener('click', () => {
+  _pw = '';
+  sessionStorage.removeItem('jh_admin_pw');
+  $('pw').value = '';
+  showGate();
+});
+
+// Auto-attempt if password saved
+if (_pw) refresh(); else $('pw').focus();
+</script>
+</body>
+</html>
