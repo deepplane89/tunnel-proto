@@ -115,6 +115,25 @@ Since Vercel's build is disabled, the committed `dist/game.js` IS what ships. Pu
 - Desktop does NOT have separate baked values yet — it uses landscape values since innerWidth > innerHeight on desktop
 - May need desktop-specific tuning in a future session
 
+## Dev/Prod Gating (2026-05-11)
+
+Prod ships **player-facing only**. All dev tools gated behind `window.__JH_DEV__` (set by build.sh — true for `--dev`, false for prod).
+
+**Gates added this session:**
+- `src/60-main-late.js` triple-tap skin-label `_adminUnlockAll()` cheat (unlocks all skins/powerups + 99k fuel)
+- `src/60-main-late.js` keydown dev block: L/S/I/M powerups, Z/X/C/V spawn cubes, T skin tuner, R rings tuner, P pattern force, C/X/Z/V/K/J/N/B force-arc keys, 1-5/7/9/6 level skips, 0 hitbox wireframes
+- `src/72-main-late-mid.js` six tuner panel hotkeys: ` canyon, R terrain, G ship-GLB, Y asteroid, L lightning, F fat-cone
+- `src/72-main-late-mid.js` Q god mode toggle
+- `src/72-main-late-mid.js` skin-tuner-btn MutationObserver
+- `src/67-main-late.js` D debug overlay + C cone diagnostic
+- `src/48-showroom.js` P thruster positioner (in garage)
+
+**Pattern:** wrap the listener bind in `if (window.__JH_DEV__) { ... }`. State objects (`_canyonTuner`, `_terrainTuner`, etc.) stay — gameplay reads them. Console-only `window._*` utilities stay (only fire if typed). The `#admin-panel` DIV in index.html is harmless — its triple-tap reveal lives in `src/78-tuner-panels.js` which is stripped from prod entirely.
+
+**Layout tuner** (`src/72-main-late-mid.js:268-293`) is the prototype gate: panel element gets `.remove()`'d in prod AND click handler skipped, but the layout-apply/resize logic still runs (it positions title screen).
+
+**To add a new dev tool:** wrap UI reveal/listener in `if (window.__JH_DEV__) { ... }`. Don't gate gameplay state objects.
+
 ## Commits This Session
 - `100b5e8` — cone thruster toggle (pushed from prev session)
 - `f107253` → `0690952` → `995b667` → `ed6763a` → `d29beaa` → `86828d1` — various failed nozzle attempts
@@ -131,6 +150,9 @@ Since Vercel's build is disabled, the committed `dist/game.js` IS what ships. Pu
 - Stress testing / dev tools diagnostics
 - EnvMap for Phoenix, terrain walls brightness, motion blur, speed vignette, MK II mesh toggling
 - 3D artist contact: "tkkjee" (Serbian, tkkjee@gmail.com, +381 62 961 9583)
+- iOS / TestFlight build with new prod (Capacitor wrap)
+- Vercel Pro → Hobby downgrade next cycle
+- Optional: strip `console.log` from prod (51 in 20-main-early.js, ~17 across other prod files)
 
 ## Glitch Fixes (root causes + resolutions)
 
@@ -150,7 +172,7 @@ Since Vercel's build is disabled, the committed `dist/game.js` IS what ships. Pu
 - NEVER read lines 16-17 of game.js
 - NEVER read more than 200 lines at a time
 - Syntax check after each edit: `node -c game.js`
-- Only deploy via git push (auto-deploy ON) — NEVER `npx vercel --prod`
+- Vercel auto-deploy on main push is sometimes sluggish/silent. If a main push doesn't refresh prod within ~1 min, force-deploy via `npx --yes vercel --token "$VERCEL_TOKEN" --prod --yes` from `/tmp/tunnel-proto` (with `api_credentials=["vercel"]`)
 - Vercel build step is OFF — committed `dist/game.js` is what ships. Always rebuild prod (`bash scripts/build.sh`, no flag) before commit
 - NEVER commit a dev build — check first line of `dist/game.js`; it must say `/* JH_BUILD: prod */`
 - Bump cache buster in index.html with each deploy
