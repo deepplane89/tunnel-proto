@@ -10,13 +10,18 @@
 # rather than 00, 01, 02) so new files can slot in without renumbering.
 #
 # Usage:
-#   ./scripts/build.sh                 # dev build with all dev tools
-#   ./scripts/build.sh -o out.js       # writes ./out.js
-#   ./scripts/build.sh --prod          # PROD build: omits dev tooling files
-#                                      # (49-tuner-hud, 70-perf-diag,
-#                                      # 78-tuner-panels) and concatenates
-#                                      # src/_dev-stubs.js in their place.
-#                                      # Output: ./dist/game.js (same path).
+#   ./scripts/build.sh                 # PROD build (default — dev tools omitted)
+#                                      # This is what ships to Vercel + App Store.
+#                                      # Always commit prod builds.
+#   ./scripts/build.sh --dev           # DEV build (tuner panels, perf recorder)
+#                                      # Use for local tuning. DO NOT commit.
+#   ./scripts/build.sh -o out.js       # writes to a custom path
+#
+# Convention follows Webpack/Vite/Rollup: production is the default, dev is
+# opt-in via flag. CI/CD and `git push` are safe with no flag.
+#
+# A marker is embedded near the top of dist/game.js so scripts/verify.sh can
+# refuse to commit dev builds (see DEV_BUILD_MARKER below).
 #
 # Exit 0 on success, nonzero on failure.
 
@@ -27,16 +32,22 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 SRC_DIR="$REPO_ROOT/src"
 OUT_PATH="$REPO_ROOT/dist/game.js"
-PROD_BUILD=0
+PROD_BUILD=1   # DEFAULT: prod. Use --dev to opt out.
 mkdir -p "$(dirname "$OUT_PATH")"
+
+# Marker string the verify hook greps for to detect dev builds.
+DEV_BUILD_MARKER="/* JH_BUILD: dev */"
+PROD_BUILD_MARKER="/* JH_BUILD: prod */"
 
 # --output / -o flag override
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -o|--output) OUT_PATH="$2"; shift 2 ;;
     --prod)      PROD_BUILD=1; shift ;;
+    --dev)       PROD_BUILD=0; shift ;;
     -h|--help)
-      echo "Usage: $0 [-o OUT_PATH] [--prod]"; exit 0 ;;
+      echo "Usage: $0 [-o OUT_PATH] [--prod|--dev]"
+      echo "  default mode is --prod"; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -95,7 +106,7 @@ done < <(
 # all on user input (hotkeys), so by the time they fire the stubs are in place.
 if [[ "$PROD_BUILD" -eq 1 ]]; then
   if [[ ! -f "$DEV_STUB_FILE" ]]; then
-    echo "--prod requested but $DEV_STUB_FILE not found" >&2
+    echo "prod build requested but $DEV_STUB_FILE not found" >&2
     exit 1
   fi
   FILES+=("$DEV_STUB_FILE")
@@ -150,12 +161,21 @@ fi
 # that straddle boundaries. If a file doesn't end with \n, cat preserves that
 # and the next file's first line joins onto the last line of the previous.
 # Source files MUST end with a newline. `scripts/verify.sh` catches this.
-cat "${FILES[@]}" > "$OUT_PATH"
+# Prepend a build-mode marker on the first line so verify.sh can detect dev
+# bundles before they get committed. Use a JS line-comment so it doesn't
+# perturb parsing.
+if [[ "$PROD_BUILD" -eq 1 ]]; then
+  echo "$PROD_BUILD_MARKER" > "$OUT_PATH"
+else
+  echo "$DEV_BUILD_MARKER" > "$OUT_PATH"
+fi
+cat "${FILES[@]}" >> "$OUT_PATH"
 
 if [[ "$PROD_BUILD" -eq 1 ]]; then
   echo "Built $OUT_PATH (PROD) from ${#FILES[@]} source file(s):"
 else
-  echo "Built $OUT_PATH from ${#FILES[@]} source file(s):"
+  echo "Built $OUT_PATH (DEV)  from ${#FILES[@]} source file(s):"
+  echo "  ⚠️  DEV build — do NOT commit. Run \`bash scripts/build.sh\` (no flag) before committing." >&2
 fi
 for f in "${FILES[@]}"; do
   echo "  - ${f#$REPO_ROOT/}"
