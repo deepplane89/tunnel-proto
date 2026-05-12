@@ -72,8 +72,12 @@ html, body {
 #game-canvas {
   position: fixed;
   inset: 0;
-  width: 100%;
-  height: 100%;
+  /* iOS Safari standalone PWA + viewport-fit=cover: width/height:100% on a
+   * fixed-inset:0 canvas leaves a strip at the home-bar. Use vh/dvh which
+   * include the safe-area strip. */
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   display: block;
   touch-action: manipulation;
 }
