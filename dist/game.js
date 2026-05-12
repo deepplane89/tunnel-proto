@@ -2461,6 +2461,47 @@ renderer.shadowMap.enabled = false;
 // three.js default changes don't silently shift our colors.
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
+// ── Global anisotropy cap (mobile only) ──────────────────────────
+// Apple GPUs report 16x max aniso; 4x is imperceptible at game viewing
+// distance + speed and saves 5-10% fragment cost on texture-heavy fills.
+// Desktop keeps full GPU max.
+window._maxAniso = renderer.capabilities.getMaxAnisotropy();
+window._texAnisoCap = _mobAA ? Math.min(4, window._maxAniso) : window._maxAniso;
+
+// Monkey-patch TextureLoader so every load() return automatically picks up
+// the cap — set-and-forget; any new TextureLoader call in src/ inherits this.
+(function _patchTextureLoader() {
+  const origLoad = THREE.TextureLoader.prototype.load;
+  THREE.TextureLoader.prototype.load = function(...args) {
+    const tex = origLoad.apply(this, args);
+    try { if (tex) tex.anisotropy = window._texAnisoCap; } catch(e) {}
+    return tex;
+  };
+})();
+
+// Same idea for GLTFLoader — wrap onLoad so every GLB's material maps get
+// the cap applied automatically. Covers all current + future ship loads.
+(function _patchGLTFLoader() {
+  const origLoad = GLTFLoader.prototype.load;
+  GLTFLoader.prototype.load = function(url, onLoad, onProgress, onError) {
+    const wrappedOnLoad = onLoad ? function(gltf) {
+      try {
+        gltf.scene.traverse(o => {
+          if (!o.material) return;
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const m of mats) {
+            for (const k of ['map','normalMap','roughnessMap','metalnessMap','emissiveMap','aoMap']) {
+              if (m[k]) { m[k].anisotropy = window._texAnisoCap; m[k].needsUpdate = true; }
+            }
+          }
+        });
+      } catch(e) {}
+      onLoad(gltf);
+    } : onLoad;
+    return origLoad.call(this, url, wrappedOnLoad, onProgress, onError);
+  };
+})();
+
 const scene  = new THREE.Scene();
 
 // ── Milky Way panorama sky — full-screen NDC quad above stars, below sun ──
