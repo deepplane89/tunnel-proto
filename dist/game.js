@@ -32280,13 +32280,20 @@ window._reprewarmShaders = function _reprewarmShaders(reason) {
 
 // Three.js renderer.compile() uses scene.traverseVisible() internally — it
 // silently SKIPS any mesh with visible=false. That means shield, magnetRing,
-// laser, flash sprite, shock disc, aurora, etc. (all hidden at boot) never
-// got their shaders compiled. First time the game flips them visible, the
-// GPU driver compiles+links the program synchronously on the render thread,
-// producing a 100-150ms freeze right at the worst moment (powerup pickup).
+// laser, lightning bolts, flash sprite, shock disc, aurora, etc. (all hidden
+// at boot) never got their shaders compiled OR their vertex buffers uploaded.
 //
-// Fix: flip every mesh visible for one compile() call, then restore. Also
-// force their materials' needsUpdate so any deferred uniform setup runs.
+// First time the game flips them visible, TWO costs land on the render
+// thread synchronously:
+//   1. Shader program compile + link (covered by renderer.compile()).
+//   2. Vertex/index buffer GPU upload (NOT covered — only happens on first
+//      actual draw call for that buffer).
+//
+// Combined cost on iOS Safari for first lightning bolt: ~270ms (16+ frames).
+//
+// Fix in two parts: (A) flip every mesh visible and compile (handles 1),
+// (B) render one frame to a tiny offscreen target with everything visible
+// so the GPU actually issues draw calls and uploads every buffer (handles 2).
 function _compileAllIncludingInvisible(rootScene, cam) {
   if (!rootScene || !cam || typeof renderer === 'undefined') return;
   // 1) Snapshot every mesh's visibility, force visible.
@@ -32298,8 +32305,13 @@ function _compileAllIncludingInvisible(rootScene, cam) {
     }
   });
   try {
-    // 2) Compile — now traverseVisible() sees everything.
+    // 2A) Compile shaders — traverseVisible() now sees everything.
     renderer.compile(rootScene, cam);
+    // 2B) Render one tiny offscreen frame so every vertex/index buffer gets
+    // uploaded to GPU. WebGLRenderer uploads buffers lazily on first draw,
+    // so without this the FIRST in-game draw of each pool mesh pays the
+    // upload cost (~270ms on iOS for the lightning tube geos).
+    _uploadAllBuffers(rootScene, cam);
   } catch (e) {
     console.warn('[PREWARM] compile-all failed:', e && e.message);
   }
@@ -32309,6 +32321,30 @@ function _compileAllIncludingInvisible(rootScene, cam) {
   }
 }
 window._compileAllIncludingInvisible = _compileAllIncludingInvisible;
+
+// Cached 1x1 render target. Reused across boot + ctx-restore prewarm calls.
+let _bufferWarmRT = null;
+function _uploadAllBuffers(rootScene, cam) {
+  if (!rootScene || !cam || typeof renderer === 'undefined') return;
+  try {
+    if (!_bufferWarmRT) {
+      _bufferWarmRT = new THREE.WebGLRenderTarget(2, 2, {
+        depthBuffer: true, stencilBuffer: false,
+        minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+      });
+    }
+    const prevTarget = renderer.getRenderTarget();
+    renderer.setRenderTarget(_bufferWarmRT);
+    // Single render pass — every visible mesh in the scene gets a draw call
+    // which triggers WebGL bufferData() upload for any not-yet-uploaded
+    // vertex/index buffer.
+    renderer.render(rootScene, cam);
+    renderer.setRenderTarget(prevTarget);
+  } catch (e) {
+    console.warn('[PREWARM] buffer-upload pass failed:', e && e.message);
+  }
+}
+window._uploadAllBuffers = _uploadAllBuffers;
 
 (function _globalShaderPrewarm() {
   if (typeof window === 'undefined' || typeof renderer === 'undefined') return;
