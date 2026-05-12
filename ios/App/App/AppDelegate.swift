@@ -42,6 +42,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
+    // ── WEB INSPECTOR GATING ──────────────────────────────────────────────────
+    // iOS 16.4+: WKWebView is only inspectable from Safari Web Inspector when
+    // isInspectable=true. Default in CapacitorBridge is true in DEBUG builds,
+    // but we want to be explicit: never inspectable in RELEASE so end users
+    // cannot peek at the bundle from a tethered Mac. Hooks into Capacitor's
+    // bridge after didFinishLaunching via applicationDidBecomeActive (the
+    // earliest point where the bridge VC + webView are guaranteed to exist).
+    private var _inspectorGated = false
+    private func gateWebInspector() {
+        if _inspectorGated { return }
+        guard let bridgeVC = window?.rootViewController as? CAPBridgeViewController,
+              let webView = bridgeVC.webView else { return }
+        if #available(iOS 16.4, *) {
+            #if DEBUG
+            webView.isInspectable = true
+            #else
+            webView.isInspectable = false
+            #endif
+            _inspectorGated = true
+        }
+    }
+
     @objc private func displayTick() {
         // No-op: just by existing this CADisplayLink tells the system the app
         // wants 120Hz, which lifts the WebView/CAMetalLayer cap.
@@ -80,6 +102,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func applicationDidBecomeActive(_ application: UIApplication) {
         // Re-disable idle timer when returning to play
         application.isIdleTimerDisabled = true
+        // Apply inspector policy once webView exists
+        gateWebInspector()
     }
 
     func applicationWillTerminate(_ application: UIApplication) {}
