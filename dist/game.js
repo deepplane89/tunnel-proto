@@ -11174,6 +11174,26 @@ function _createCanyonWalls() {
       }
     }
     renderer.compile(_warmScene, _warmCam);
+    // Upload every proxy's vertex/index buffer to GPU — renderer.compile()
+    // only compiles shaders, buffers upload lazily on first draw. Without
+    // this the first canyon reveal frame pays the bufferData() cost for
+    // every slab geo (~30+ unique seeds). Render to our existing buffer
+    // warm RT (defined in 82-main-late-tail.js).
+    try {
+      if (typeof window._uploadAllBuffers === 'function') {
+        window._uploadAllBuffers(_warmScene, _warmCam);
+      }
+    } catch(_) {}
+    // Warm the composer/bloom pipeline for canyon's holo material — first
+    // bloom encounter with the slab's emissive cyan output specializes the
+    // bloom shader on iOS Safari, costing ~50-100ms on the reveal frame.
+    // Routes to offscreen RTs only (never touches canvas) per the same
+    // pattern as boot prewarm.
+    try {
+      if (typeof window._composerPrewarm === 'function') {
+        window._composerPrewarm();
+      }
+    } catch(_) {}
     if (window._perfDiag) window._perfDiag.tag('canyon_prewarm', _seenGeos.size+'geos');
     // Don't dispose proxy geometries — they reference real slab geometries still in use
     // _warmScene goes out of scope, proxy meshes GC naturally
