@@ -32296,11 +32296,21 @@ window._reprewarmShaders = function _reprewarmShaders(reason) {
 // so the GPU actually issues draw calls and uploads every buffer (handles 2).
 function _compileAllIncludingInvisible(rootScene, cam) {
   if (!rootScene || !cam || typeof renderer === 'undefined') return;
-  // 1) Snapshot every mesh's visibility, force visible.
+  // 1) Snapshot EVERY Object3D's visibility, force visible.
+  // Why every Object3D, not just isMesh:
+  //   - Points (thruster particles, warp particles) and LineSegments (warp
+  //     streaks, angled-wall edges) and Sprites (flash, bloom) all have their
+  //     own materials + shaders + vertex buffers. They need compile + upload.
+  //   - Groups (e.g. angled-wall pool: group.visible=false wraps inner Mesh +
+  //     LineSegments). renderer.compile/render use traverseVisible() which
+  //     stops at the parent group — so flipping just the inner mesh visible
+  //     does NOTHING if its parent group is still hidden.
+  // Flip every node so the traversal reaches everything. Restore exactly
+  // afterward so gameplay state is untouched.
   const snap = [];
   rootScene.traverse((obj) => {
-    if (obj && obj.isMesh) {
-      snap.push([obj, obj.visible]);
+    if (obj && obj.visible === false) {
+      snap.push(obj);
       obj.visible = true;
     }
   });
@@ -32315,9 +32325,10 @@ function _compileAllIncludingInvisible(rootScene, cam) {
   } catch (e) {
     console.warn('[PREWARM] compile-all failed:', e && e.message);
   }
-  // 3) Restore visibility exactly as it was.
+  // 3) Restore visibility exactly as it was. Everything in snap was originally
+  // hidden, so just flip back to false.
   for (let i = 0; i < snap.length; i++) {
-    snap[i][0].visible = snap[i][1];
+    snap[i].visible = false;
   }
 }
 window._compileAllIncludingInvisible = _compileAllIncludingInvisible;
