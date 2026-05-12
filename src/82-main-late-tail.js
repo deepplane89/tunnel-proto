@@ -20,10 +20,10 @@ window._reprewarmShaders = function _reprewarmShaders(reason) {
   const t0 = (typeof performance !== 'undefined') ? performance.now() : 0;
   try {
     if (typeof scene !== 'undefined' && typeof camera !== 'undefined') {
-      renderer.compile(scene, camera);
+      _compileAllIncludingInvisible(scene, camera);
     }
     if (typeof titleScene !== 'undefined' && titleScene && typeof camera !== 'undefined') {
-      renderer.compile(titleScene, camera);
+      _compileAllIncludingInvisible(titleScene, camera);
     }
     const dt = ((typeof performance !== 'undefined') ? performance.now() : 0) - t0;
     if (window._perfDiag) try { window._perfDiag.tag('reprewarm', (reason||'?') + ' ' + dt.toFixed(0) + 'ms'); } catch(_) {}
@@ -31,6 +31,38 @@ window._reprewarmShaders = function _reprewarmShaders(reason) {
     console.warn('[PREWARM] reprewarm failed (non-fatal):', err && err.message);
   }
 };
+
+// Three.js renderer.compile() uses scene.traverseVisible() internally — it
+// silently SKIPS any mesh with visible=false. That means shield, magnetRing,
+// laser, flash sprite, shock disc, aurora, etc. (all hidden at boot) never
+// got their shaders compiled. First time the game flips them visible, the
+// GPU driver compiles+links the program synchronously on the render thread,
+// producing a 100-150ms freeze right at the worst moment (powerup pickup).
+//
+// Fix: flip every mesh visible for one compile() call, then restore. Also
+// force their materials' needsUpdate so any deferred uniform setup runs.
+function _compileAllIncludingInvisible(rootScene, cam) {
+  if (!rootScene || !cam || typeof renderer === 'undefined') return;
+  // 1) Snapshot every mesh's visibility, force visible.
+  const snap = [];
+  rootScene.traverse((obj) => {
+    if (obj && obj.isMesh) {
+      snap.push([obj, obj.visible]);
+      obj.visible = true;
+    }
+  });
+  try {
+    // 2) Compile — now traverseVisible() sees everything.
+    renderer.compile(rootScene, cam);
+  } catch (e) {
+    console.warn('[PREWARM] compile-all failed:', e && e.message);
+  }
+  // 3) Restore visibility exactly as it was.
+  for (let i = 0; i < snap.length; i++) {
+    snap[i][0].visible = snap[i][1];
+  }
+}
+window._compileAllIncludingInvisible = _compileAllIncludingInvisible;
 
 (function _globalShaderPrewarm() {
   if (typeof window === 'undefined' || typeof renderer === 'undefined') return;
