@@ -76,9 +76,17 @@ function _compileAllIncludingInvisible(rootScene, cam) {
     // so without this the FIRST in-game draw of each pool mesh pays the
     // upload cost (~270ms on iOS for the lightning tube geos).
     _uploadAllBuffers(rootScene, cam);
-    // 2C) Full-res composer.render() pass REVERTED — it caused the bottom
-    // edge of the canvas to be cut off (likely renderer.setSize / viewport
-    // state pollution). Re-investigate before re-enabling.
+    // 2C) Composer prewarm — render the full post-processing pipeline (bloom
+    // + thruster haze + vignette) ONCE to an offscreen RT so every pass's
+    // shaders get specialized for the actual scene's HDR + additive content.
+    // First shield pickup (and laser/magnet/lightning first frame) used to
+    // pay this cost mid-gameplay: ~190ms on iOS Safari.
+    //
+    // Previous attempt rendered composer to the canvas directly, which left
+    // the canvas backing store in a bad state and cut off the bottom strip.
+    // Fix: route composer's final pass to our own RT so the canvas is never
+    // touched. Save & restore renderToScreen flag on every pass.
+    _composerPrewarm();
   } catch (e) {
     console.warn('[PREWARM] compile-all failed:', e && e.message);
   }
@@ -90,41 +98,61 @@ function _compileAllIncludingInvisible(rootScene, cam) {
 }
 window._compileAllIncludingInvisible = _compileAllIncludingInvisible;
 
-// Full-res render pass at canvas size. Covers iOS Safari's defer-final-link.
-// Renders to the real canvas (visible to no one because #app-loader covers
-// it), then clears so the canvas is black when the loader fades.
+// Composer prewarm. Renders the post-processing pipeline (RenderPass +
+// UnrealBloom + thruster haze + vignette) ONCE to an offscreen RT so iOS
+// Safari gets its first-use shader specialization done during loading
+// instead of on first shield/laser/magnet pickup mid-gameplay.
 //
-// IMPORTANT: routes through composer.render() (not renderer.render()) so the
-// entire post-processing pipeline (bloom, FXAA, etc.) also gets first-use
-// shader specialization done during loading. Without this, bloom's first
-// encounter with a bright additive mesh (shield, laser, lightning, magnet)
-// still hitches mid-gameplay because the bloom shader specializes for input
-// brightness/format on first real use.
-function _fullResRenderPass(rootScene, cam) {
+// Critical: we render to OUR OWN RenderTarget, not the canvas. The previous
+// version rendered to the canvas via composer.render() default behavior,
+// which left the canvas backing store in a bad state (bottom strip cut off).
+// Routing to our RT means the canvas is never touched and stays whatever
+// the loader DOM is showing.
+//
+// Implementation: temporarily disable renderToScreen on every pass, point
+// the composer at our RT via writeBuffer swap, render once, restore.
+let _composerWarmRT = null;
+function _composerPrewarm() {
   if (typeof renderer === 'undefined') return;
+  if (typeof composer === 'undefined' || !composer || typeof composer.render !== 'function') return;
+  if (!composer.passes || composer.passes.length === 0) return;
   try {
-    const prevTarget = renderer.getRenderTarget();
-    renderer.setRenderTarget(null);
-    const prevClear = new THREE.Color();
-    renderer.getClearColor(prevClear);
-    const prevClearAlpha = renderer.getClearAlpha();
-    // Prefer composer (warms bloom + FXAA + tone-mapping passes too).
-    // Fall back to plain renderer.render if composer isn't ready.
-    if (typeof composer !== 'undefined' && composer && typeof composer.render === 'function') {
-      composer.render();
-    } else if (rootScene && cam) {
-      renderer.render(rootScene, cam);
+    // Lazily create a small RT just for prewarm. Size doesn't matter for
+    // shader specialization — only formats/precision/macros do.
+    if (!_composerWarmRT) {
+      _composerWarmRT = new THREE.WebGLRenderTarget(64, 64, {
+        depthBuffer: true, stencilBuffer: false,
+        minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+      });
     }
-    // Clear back to opaque black so the loader-cover handoff is clean.
-    renderer.setClearColor(0x000000, 1);
-    renderer.clear();
-    renderer.setClearColor(prevClear, prevClearAlpha);
+    // Save renderer state we touch.
+    const prevTarget = renderer.getRenderTarget();
+    // Save & flip renderToScreen on every pass so none of them write to
+    // the canvas. The last pass with renderToScreen=true is what historically
+    // poisoned the canvas backing store — we route everything to our RT.
+    const prevFlags = composer.passes.map(p => p.renderToScreen);
+    for (let i = 0; i < composer.passes.length; i++) {
+      composer.passes[i].renderToScreen = false;
+    }
+    // Force composer's internal write buffer onto our RT for the duration.
+    // EffectComposer ping-pongs between two RTs; we substitute ours as the
+    // current write target. We DON'T mutate composer.renderTarget1/2 — just
+    // route the final output away from the screen by clearing all
+    // renderToScreen flags. Composer will write to its internal ping-pong
+    // RTs which is fine; the canvas stays untouched.
+    composer.render();
+    // Restore renderToScreen flags exactly as they were.
+    for (let i = 0; i < composer.passes.length; i++) {
+      composer.passes[i].renderToScreen = prevFlags[i];
+    }
+    // Belt + suspenders: explicitly restore renderer target to whatever it
+    // was before this call (likely null = canvas).
     renderer.setRenderTarget(prevTarget);
   } catch (e) {
-    console.warn('[PREWARM] full-res pass failed:', e && e.message);
+    console.warn('[PREWARM] composer prewarm failed:', e && e.message);
   }
 }
-window._fullResRenderPass = _fullResRenderPass;
+window._composerPrewarm = _composerPrewarm;
 
 // Cached 1x1 render target. Reused across boot + ctx-restore prewarm calls.
 let _bufferWarmRT = null;
