@@ -8244,8 +8244,8 @@ let _flameLateralMult = 0.05;  // how much flame quads shift X with lateral velo
 
 // ── Hover bob mechanics ──────────────────────────────────────────────────────
 let _hoverBaseY = 1.21;          // base hover height (updated by Ship Y slider)
-let _bobAmplitude = 0.00;        // vertical bob OFF (cruise rotations replace it)
-let _bobFrequency = 0.60;       // Hz (unused while amp=0)
+let _bobAmplitude = 0.03;        // vertical bob range
+let _bobFrequency = 0.60;       // Hz
 let _bobSteerFadeOut = 4;        // how fast bob suppresses during steering
 let _bobSteerFadeIn = 2;         // how fast bob returns when idle
 let _bobBlend = 1;               // fades bob in (starts at 1 since no takeoff)

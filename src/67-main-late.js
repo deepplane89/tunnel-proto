@@ -4403,9 +4403,18 @@ function update(dt) {
   const _cruiseTarget = (typeof _altShipActive !== 'undefined' && _altShipActive && typeof _altShipModel !== 'undefined' && _altShipModel)
     ? _altShipModel
     : (typeof window._shipModel !== 'undefined' ? window._shipModel : null);
+  // Capture base rotation/position ONCE per model so we add cruise offsets
+  // on top of the GLB's authored orientation (not replace it).
+  if (_cruiseTarget && !_cruiseTarget.userData._cruiseBase) {
+    _cruiseTarget.userData._cruiseBase = {
+      px: _cruiseTarget.position.x, py: _cruiseTarget.position.y,
+      rx: _cruiseTarget.rotation.x, ry: _cruiseTarget.rotation.y, rz: _cruiseTarget.rotation.z,
+    };
+  }
   if (_cruiseTarget && _cruiseMacro > 0.001 && state.rollAngle === 0 && !state.rollHeld) {
     const _cm = _cruiseMacro;
     const _ct = performance.now() * 0.001 + _cruisePhase;
+    const _cb = _cruiseTarget.userData._cruiseBase;
     // Cheap 1D value-noise (deterministic, no library): smoothstep between
     // hashed integer samples. Reads as 'organic drift' on yaw + X.
     const _hash = (n) => {
@@ -4428,20 +4437,20 @@ function update(dt) {
     const _bank    = _noise1(_ct * 0.9 + 200)                                   * _cruiseBankAmp  * _cm;
     // X drift: slowest noise channel
     const _xDrift  = _noise1(_ct * 0.6 + 50)                                    * _cruiseXAmp     * _cm;
-    _cruiseTarget.position.y = _bobY;
-    _cruiseTarget.position.x = _xDrift;
-    _cruiseTarget.rotation.x = _pitch;
-    _cruiseTarget.rotation.y = _yaw;
-    // rot.z is additive over the parent's steering bank (which lives on
-    // shipGroup). The model's local Z thus adds a tiny shimmer on top.
-    _cruiseTarget.rotation.z = _bank;
-  } else if (_cruiseTarget) {
-    // Lerp cruise offsets to zero when disabled / rolling so we don't pop.
-    _cruiseTarget.position.y *= 0.85;
-    _cruiseTarget.position.x *= 0.85;
-    _cruiseTarget.rotation.x *= 0.85;
-    _cruiseTarget.rotation.y *= 0.85;
-    _cruiseTarget.rotation.z *= 0.85;
+    // Add cruise offsets on top of base GLB-authored rotation/position.
+    _cruiseTarget.position.y = _cb.py + _bobY;
+    _cruiseTarget.position.x = _cb.px + _xDrift;
+    _cruiseTarget.rotation.x = _cb.rx + _pitch;
+    _cruiseTarget.rotation.y = _cb.ry + _yaw;
+    _cruiseTarget.rotation.z = _cb.rz + _bank;
+  } else if (_cruiseTarget && _cruiseTarget.userData._cruiseBase) {
+    // Lerp back to base when disabled / rolling (no pop).
+    const _cb = _cruiseTarget.userData._cruiseBase;
+    _cruiseTarget.position.y += (_cb.py - _cruiseTarget.position.y) * 0.15;
+    _cruiseTarget.position.x += (_cb.px - _cruiseTarget.position.x) * 0.15;
+    _cruiseTarget.rotation.x += (_cb.rx - _cruiseTarget.rotation.x) * 0.15;
+    _cruiseTarget.rotation.y += (_cb.ry - _cruiseTarget.rotation.y) * 0.15;
+    _cruiseTarget.rotation.z += (_cb.rz - _cruiseTarget.rotation.z) * 0.15;
   }
 
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──
