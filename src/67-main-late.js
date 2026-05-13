@@ -4474,12 +4474,16 @@ function update(dt) {
     // water. Nozzles live ~±0.49 X local and ~+5.1 Z local (behind ship);
     // with _thrusterScale 0.8 that's ~+4.1 in world along +Z. Strip is 5u long
     // so its center goes another 2.5u beyond the nozzle exit.
-    const _scl = (typeof window._thrusterScale === 'number') ? window._thrusterScale : 0.8;
-    const _nozzleZWorld = shipGroup.position.z + 5.1 * _scl;
-    const _zBehind = _nozzleZWorld + 2.5;
-    const _xOut    = 0.49;
-    _bankWakeR.position.set(state.shipX + _xOut, 0.02, _zBehind);
-    _bankWakeL.position.set(state.shipX - _xOut, 0.02, _zBehind);
+    // Wing-tip rear centroid in ship-local space: ±0.394 X, +4.543 Z (from
+    // _wingtipNozzleOffsets). shipGroup.scale = 0.30, so multiply through.
+    const _shipScl = shipGroup.scale.x || 0.30;
+    const _xOut    = 0.394 * _shipScl;                          // ~0.118 outboard
+    const _zTip    = shipGroup.position.z + 4.543 * _shipScl;   // posterior wingtip Z
+    // Strip is 5u long, anchored at center — bias center slightly behind tip
+    // so the visible streak trails BEHIND the wing.
+    const _zCenter = _zTip + 2.0;
+    _bankWakeR.position.set(state.shipX + _xOut, 0.02, _zCenter);
+    _bankWakeL.position.set(state.shipX - _xOut, 0.02, _zCenter);
     // Apply opacity / visibility.
     const _peak = 0.55;
     _bankWakeR.material.opacity = _bankWakeOpaR * _peak;
