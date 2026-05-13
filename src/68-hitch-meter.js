@@ -174,7 +174,7 @@ window._renderHitchOverlay = _renderHitchOverlay;
 (function _setupHitchToggle() {
   const btn = document.getElementById('pause-hitch-toggle');
   if (!btn) return;
-  if (window.__JH_DEV__) btn.style.display = '';
+  if (window.__JH_DEV__) btn.style.display = 'inline-flex';
   btn.addEventListener('click', () => {
     window._hitchMeterOn = !window._hitchMeterOn;
     btn.textContent = 'HITCH METER: ' + (window._hitchMeterOn ? 'ON' : 'OFF');

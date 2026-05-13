@@ -1307,6 +1307,13 @@ html, body {
      in lockstep with the rendered text. Prevents text drift on resize. */
   width: 12em;
 }
+
+/* Hitch meter toggle: hidden by default (also has inline display:none, but
+   stale cached HTML may not have that). Dev JS in 68-hitch-meter.js sets
+   inline display:inline-flex to override this in dev builds. */
+#pause-hitch-toggle {
+  display: none;
+}
 .pause-gear {
   position: fixed;
   top: max(env(safe-area-inset-top, 16px), 16px);
