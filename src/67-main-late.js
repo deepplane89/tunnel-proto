@@ -4416,21 +4416,27 @@ function update(dt) {
     const _bobY    = Math.sin(_ct * _cruiseBobFreq * 2 * Math.PI)               * _cruiseBobAmp   * _cm;
     // Pitch: sine offset by π/3 so it never crosses zero with the Y bob
     const _pitch   = Math.sin(_ct * _cruisePitchFreq * 2 * Math.PI + Math.PI/3) * _cruisePitchAmp * _cm;
-    // Yaw: noise, slow time scale
-    const _yaw     = _noise1(_ct * 0.6 + 100)                                   * _cruiseYawAmp   * _cm;
-    // X drift: noise, even slower
-    const _xDrift  = _noise1(_ct * 0.4 + 50)                                    * _cruiseXAmp     * _cm;
+    // Yaw: noise, faster time scale so the drift reads as 'alive corrections'
+    const _yaw     = _noise1(_ct * 1.3 + 100)                                   * _cruiseYawAmp   * _cm;
+    // Micro-bank: noise on rot.z (additive over steering bank). Different
+    // noise seed + slightly different freq so it doesn't co-vary with yaw.
+    const _bank    = _noise1(_ct * 0.9 + 200)                                   * _cruiseBankAmp  * _cm;
+    // X drift: slowest noise channel
+    const _xDrift  = _noise1(_ct * 0.6 + 50)                                    * _cruiseXAmp     * _cm;
     window._shipModel.position.y = _bobY;
     window._shipModel.position.x = _xDrift;
-    // Add to existing model rot (in case skin/anim system pre-set anything).
     window._shipModel.rotation.x = _pitch;
     window._shipModel.rotation.y = _yaw;
+    // rot.z is additive over the parent's steering bank (which lives on
+    // shipGroup). The model's local Z thus adds a tiny shimmer on top.
+    window._shipModel.rotation.z = _bank;
   } else if (typeof window._shipModel !== 'undefined' && window._shipModel) {
     // Lerp cruise offsets to zero when disabled / rolling so we don't pop.
     window._shipModel.position.y *= 0.85;
     window._shipModel.position.x *= 0.85;
     window._shipModel.rotation.x *= 0.85;
     window._shipModel.rotation.y *= 0.85;
+    window._shipModel.rotation.z *= 0.85;
   }
 
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──

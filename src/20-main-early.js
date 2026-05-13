@@ -8337,16 +8337,18 @@ let _overshootDamp = 6;          // how fast overshoot damps out
 let _turbulence    = 0.0;        // micro-drift turbulence (off by default)
 let _wobbleSpeedMult = 0.0;      // speed wobble amplification (baked)
 // ── CRUISE: idle body motion (decoupled from JUICE) ──────────────────────
-// Layered sine+noise on the ship MODEL (child of shipGroup) so gameplay X
-// stays responsive while the visible body breathes. Macro 0..1: 0 = rigid,
-// 0.5 = baked default, 1 = pronounced. Default 0.4 for a subtle baseline.
-let _cruiseMacro   = 0.4;         // master CRUISE 0..1 (default subtle)
+// Multi-axis sine+noise on the ship MODEL (child of shipGroup). Gameplay X is
+// untouched; this is pure body-cosmetics. Macro 0..1: 0 = rigid, 0.7 = baked
+// default (alive but subtle), 1 = pronounced. Time-scales picked non-harmonic
+// so it never reads as a loop.
+let _cruiseMacro   = 0.7;         // master CRUISE 0..1 (default alive-subtle)
 let _cruiseBobAmp  = 0.012;       // pos.y sine amplitude (units)
 let _cruiseBobFreq = 1.4;         // pos.y sine frequency (Hz)
-let _cruisePitchAmp  = 0.008;     // rot.x sine amplitude (rad ~0.5°)
+let _cruisePitchAmp  = 0.012;     // rot.x sine amplitude (rad ~0.7°)
 let _cruisePitchFreq = 1.1;       // rot.x sine frequency (Hz)
-let _cruiseYawAmp  = 0.012;       // rot.y noise amplitude (rad ~0.7°)
-let _cruiseXAmp    = 0.008;       // pos.x noise amplitude (units)
+let _cruiseYawAmp  = 0.022;       // rot.y noise amplitude (rad ~1.3°)
+let _cruiseBankAmp = 0.018;       // rot.z noise amplitude (rad ~1.0°) — micro-bank
+let _cruiseXAmp    = 0.010;       // pos.x noise amplitude (units)
 let _cruisePhase   = Math.random() * 10; // randomized so identical sessions desync
 let _shipRotXOffset = 0.02;      // tuner offset for ship pitch angle
 let _shipRotZOffset = 0;         // tuner offset for ship roll angle
