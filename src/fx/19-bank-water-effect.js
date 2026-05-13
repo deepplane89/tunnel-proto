@@ -71,6 +71,9 @@
     // wingtip we shift center forward by (0.5 - 0.20) * length along head dir.
     headBias:            0.30,
     waterClearance:      0.02,
+    // Push each strip outward along ship-right by this much beyond the auto-
+    // resolved wingtip X. Small nudge so it reads as "just outside" the wing.
+    lateralPush:         0.10,
     peakOpacity:         0.65,
     attackRate:          10,
     releaseRate:         4,
@@ -167,15 +170,17 @@
     }
 
     // Place band center so the texture's bright peak (at 20% of V) lands AT
-    // the wingtip. Shift backward along ship -forward by (0.5 - 0.20)*length.
+    // the wingtip. Shift backward along ship -forward by (0.5 - 0.20)*length,
+    // and push outward along ship-right so the strip clears the wing visually.
     const centerOffset = -length * TUNING.headBias;
+    const lat = TUNING.lateralPush;
     _bandPosR.copy(_wingtipR);
-    _bandPosR.x += _fwd.x * centerOffset;
-    _bandPosR.z += _fwd.z * centerOffset;
+    _bandPosR.x += _fwd.x * centerOffset + _right.x * lat;
+    _bandPosR.z += _fwd.z * centerOffset + _right.z * lat;
     _bandPosR.y  = waterY + TUNING.waterClearance;
     _bandPosL.copy(_wingtipL);
-    _bandPosL.x += _fwd.x * centerOffset;
-    _bandPosL.z += _fwd.z * centerOffset;
+    _bandPosL.x += _fwd.x * centerOffset - _right.x * lat;
+    _bandPosL.z += _fwd.z * centerOffset - _right.z * lat;
     _bandPosL.y  = waterY + TUNING.waterClearance;
 
     return {
