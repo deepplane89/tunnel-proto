@@ -2714,48 +2714,57 @@ mirrorMesh.rotation.x = -Math.PI / 2;
 mirrorMesh.position.set(0, 0.01, -100);
 scene.add(mirrorMesh);
 
-// ── BANK WAKE: subtle white foam streak on the bank side ───────────────
-// Triggered on bank ENTRY (|d/dt bank| spike), not steady bank — a held turn
-// shouldn't drown the water in foam. Pool of 16 additive planes laid flat on
-// the water surface, stretched along ship Z, fading in/out with attack-decay.
-const _BANK_WAKE_POOL = 16;
+// ── BANK WAKE: two thin persistent strips, one per side ────────────────
+// No pool, no spawning. Each strip is parented to shipGroup so it follows
+// X/Z automatically. Opacity ramps in with |bank|, side selected by sign.
+// Reads as a waterline scar, not foam.
 const _bankWakeGeo = new THREE.PlaneGeometry(1, 1);
-const _bankWakeColor = new THREE.Color(0xcfe9ff);
-// Procedural soft radial alpha so we don't ship a new texture asset.
+// Soft-edged strip alpha: long, very thin, feathered on all sides.
 const _bankWakeTex = (() => {
-  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const c = document.createElement('canvas'); c.width = 32; c.height = 256;
   const g = c.getContext('2d');
-  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0,    'rgba(255,255,255,1)');
-  grad.addColorStop(0.45, 'rgba(255,255,255,0.55)');
-  grad.addColorStop(1,    'rgba(255,255,255,0)');
-  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  g.clearRect(0, 0, 32, 256);
+  // Vertical: faint head, peak ~30%, long fade to tail.
+  const vg = g.createLinearGradient(0, 0, 0, 256);
+  vg.addColorStop(0.00, 'rgba(255,255,255,0)');
+  vg.addColorStop(0.20, 'rgba(255,255,255,0.85)');
+  vg.addColorStop(0.50, 'rgba(255,255,255,0.55)');
+  vg.addColorStop(1.00, 'rgba(255,255,255,0)');
+  g.fillStyle = vg; g.fillRect(0, 0, 32, 256);
+  // Horizontal feather — hard edges off, so strip reads as a soft line.
+  g.globalCompositeOperation = 'destination-in';
+  const hg = g.createLinearGradient(0, 0, 32, 0);
+  hg.addColorStop(0.00, 'rgba(0,0,0,0)');
+  hg.addColorStop(0.50, 'rgba(0,0,0,1)');
+  hg.addColorStop(1.00, 'rgba(0,0,0,0)');
+  g.fillStyle = hg; g.fillRect(0, 0, 32, 256);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
   return t;
 })();
-const _bankWakePool = [];
-for (let i = 0; i < _BANK_WAKE_POOL; i++) {
+function _makeBankWakeStrip() {
   const m = new THREE.Mesh(_bankWakeGeo, new THREE.MeshBasicMaterial({
     map: _bankWakeTex,
-    color: _bankWakeColor,
+    color: 0xffffff,
     transparent: true,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
     depthWrite: false,
     opacity: 0,
   }));
-  m.rotation.x = -Math.PI / 2; // lay flat on water surface
+  m.rotation.x = -Math.PI / 2;       // flat on water; local +Y → world -Z
+  // Thin and long: 0.12 wide, 5 long. Trails BEHIND the ship.
+  m.scale.set(0.12, 5.0, 1);
   m.visible = false;
-  m.renderOrder = 8;  // above water, below thrusters/particles
+  m.renderOrder = 8;
   m.frustumCulled = false;
-  scene.add(m);
-  _bankWakePool.push({
-    mesh: m, life: 0, maxLife: 0.75,
-    velX: 0, velZ: 0,
-  });
+  return m;
 }
-let _bankWakePrevBank = 0;
-let _bankWakeSpawnAccum = 0;        // sub-frame spawn accumulator
+const _bankWakeL = _makeBankWakeStrip();
+const _bankWakeR = _makeBankWakeStrip();
+scene.add(_bankWakeL); scene.add(_bankWakeR);
+let _bankWakeOpaL = 0;              // smoothed visible opacity
+let _bankWakeOpaR = 0;
 window._bankWakeEnabled = true;     // global kill switch
 
 // Patch Water's onBeforeRender so the internal mirrorCamera skips thruster /
