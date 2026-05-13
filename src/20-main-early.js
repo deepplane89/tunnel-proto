@@ -4232,12 +4232,12 @@ const SUN_Y   = -2;    // low — just peeking above the floor plane
 const SUN_R   = 112;   // big radius (doubled)
 
 // Core sphere — emissive solid disc look
-// Sun: silhouette-only (always far). 32x32 is visually identical to 64x64
-// and saves ~6k tris. _mobAA is set on mobile UAs (line 1106).
-// Sun is a hero visual element — use full 48 segments on mobile too.
-// 16 extra triangles on a single sphere is negligible perf, but eliminates
-// visible silhouette/corona faceting that was happening at 32 segments.
-const _SUN_SEG = 48;
+// Sun is a hero visual element. Sphere segments are the cheapest possible
+// quality bump (one mesh, drawn once per frame, far from camera) — 64x64
+// = ~8k tris, indistinguishable cost vs 48x48 even on iOS A12, but gives
+// a perfectly smooth silhouette + corona where 48 still showed slight
+// faceting at the limb. Same value on mobile + desktop.
+const _SUN_SEG = 64;
 const sunGeo = new THREE.SphereGeometry(SUN_R * 0.95, _SUN_SEG, _SUN_SEG);
 const sunMat = new THREE.ShaderMaterial({
   uniforms: {
@@ -4616,10 +4616,10 @@ scene.add(sunMesh);
 // Sun cap disc — opaque circle sitting just in front of the sun sphere (Z+4),
 // renderOrder=1 so it draws AFTER the tendrils (renderOrder=0) and paints over
 // any tendril roots that bleed onto the sun face. Color tracks sunColor.
-// Sun cap circle: 32 segs is indistinguishable from 64 at this size/distance
-// Match sun sphere segments (48) on mobile too — sun cap traces the same
-// silhouette as the sphere, faceting at 32 was visible against the corona.
-const sunCapGeo = new THREE.CircleGeometry(SUN_R * 0.95, 48);
+// Sun cap silhouette must match the sphere exactly (otherwise the rim
+// gradient between cap and sphere edge mismatches and you see a polyline).
+// Sphere is now 64 segs (above) — cap matches.
+const sunCapGeo = new THREE.CircleGeometry(SUN_R * 0.95, 64);
 const sunCapMat = new THREE.ShaderMaterial({
   uniforms: {
     uSunColor: { value: new THREE.Color(LEVELS[0].sunColor) },
@@ -4681,12 +4681,14 @@ sunCapMesh.position.set(0, SUN_Y, SUN_Z + 4);
 sunCapMesh.renderOrder = 1;
 scene.add(sunCapMesh);
 
-// Glow + corona baked into one canvas/mesh — avoids alignment issues
-// Canvas size 1024 for sharp ring strokes
+// Glow + corona baked into one canvas/mesh — avoids alignment issues.
+// Canvas size 2048 for sharp ring strokes + crown gradient. One-time CPU
+// draw at boot (~2ms); GPU cost is negligible (drawn once per frame, far,
+// additive). iOS hard cap on texture size is 4096 — 2048 fits with margin.
 const glowCanvas = document.createElement('canvas');
-glowCanvas.width = glowCanvas.height = 1024;
+glowCanvas.width = glowCanvas.height = 2048;
 const gc = glowCanvas.getContext('2d');
-const GS = 1024, GC = GS / 2;
+const GS = 2048, GC = GS / 2;
 
 // Corona — drawn as bright arc segments directly on black canvas, additive blended in-game
 // Black bg adds nothing; bright pixels add light on top of the sphere.
@@ -4698,7 +4700,8 @@ const ringR_gc = GC * 0.625;
   //   PI→2PI arc = canvas top semicircle = world top arc ✓
   //   angle PI/2 in canvas = downward = into sun body in world ✓
 
-  const STEPS = 200;
+  // STEPS scales with canvas resolution so arc segments stay sub-pixel.
+  const STEPS = Math.round(200 * (GS / 1024));
   const crownY = GC - ringR_gc; // top edge of sun disc
 
   // ── 1. Crown bloom — clipped strictly to corona arc circle ──
@@ -4725,13 +4728,16 @@ const ringR_gc = GC * 0.625;
     const mid = Math.abs(t - 0.5) * 2;
     return 0.28 + 0.72 * Math.pow(1 - mid, 1.6);
   }
+  // rOff/w scale with canvas resolution so corona thickness is constant
+  // in world space regardless of canvas size. Base values tuned for 1024.
+  const _coronaScale = GS / 1024;
   const layers = [
-    { rOff: -8,  w: 16, color: [255, 130, 25],  a: 0.35 },
-    { rOff: -3,  w: 12, color: [255, 170, 55],  a: 0.70 },
-    { rOff:  0,  w: 10, color: [255, 215, 95],  a: 1.00 },
-    { rOff:  0,  w:  4, color: [255, 250, 200], a: 1.00 },
-    { rOff:  3,  w: 10, color: [255, 185, 60],  a: 0.70 },
-    { rOff:  8,  w: 16, color: [255, 148, 30],  a: 0.30 },
+    { rOff: -8 * _coronaScale, w: 16 * _coronaScale, color: [255, 130, 25],  a: 0.35 },
+    { rOff: -3 * _coronaScale, w: 12 * _coronaScale, color: [255, 170, 55],  a: 0.70 },
+    { rOff:  0,                w: 10 * _coronaScale, color: [255, 215, 95],  a: 1.00 },
+    { rOff:  0,                w:  4 * _coronaScale, color: [255, 250, 200], a: 1.00 },
+    { rOff:  3 * _coronaScale, w: 10 * _coronaScale, color: [255, 185, 60],  a: 0.70 },
+    { rOff:  8 * _coronaScale, w: 16 * _coronaScale, color: [255, 148, 30],  a: 0.30 },
   ];
   for (const L of layers) {
     for (let i = 0; i < STEPS; i++) {
@@ -4749,6 +4755,14 @@ const ringR_gc = GC * 0.625;
 }());
 
 const glowTex = new THREE.CanvasTexture(glowCanvas);
+// Trilinear + anisotropic filtering for crisp corona at all view angles.
+// 2048² canvas + mipmaps gives sharp ring even when the sun is partially
+// off-screen or under heavy bloom. Anisotropy uses _texAnisoCap (4 on iOS,
+// hardware max on desktop) — set via the user's standard texture path.
+glowTex.minFilter = THREE.LinearMipmapLinearFilter;
+glowTex.magFilter = THREE.LinearFilter;
+glowTex.generateMipmaps = true;
+glowTex.anisotropy = (typeof window._texAnisoCap === 'number') ? window._texAnisoCap : 4;
 const glowSpriteGeo = new THREE.PlaneGeometry(SUN_R * 3.2, SUN_R * 3.2);
 const glowSpriteMat = new THREE.MeshBasicMaterial({
   map: glowTex, transparent: true, blending: THREE.AdditiveBlending,
