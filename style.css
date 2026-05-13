@@ -5883,7 +5883,9 @@ body.sr-open #title-leaderboard {
     gap: 8px;
   }
   .sr-overlay:not(.hidden) .sr-stage         { grid-area: stage; min-width: 0; min-height: 0; }
-  .sr-overlay:not(.hidden) .sr-handling-slot { grid-area: handle; min-width: 0; overflow: hidden; }
+  /* overflow:visible so the upward-opening handling menu (position:absolute;
+     bottom:100%) can escape this fixed-height grid row in landscape. */
+  .sr-overlay:not(.hidden) .sr-handling-slot { grid-area: handle; min-width: 0; overflow: visible; }
   .sr-overlay:not(.hidden) .sr-panel {
     grid-area: panel;
     max-width: none;
