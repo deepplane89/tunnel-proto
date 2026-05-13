@@ -221,10 +221,17 @@ window._uploadAllBuffers = _uploadAllBuffers;
         }
       }
       // b) Audio prewarm: load() + set currentTime on every SFX touched by the
-      //    shield pickup/impact path. load() forces a decode pass; we never
-      //    call play() so the user hears nothing.
+      //    full powerup pickup shell (shield/laser/invincible/magnet) plus
+      //    impact. load() forces a decode pass; we never call play() so the
+      //    user hears nothing.
       if (typeof document !== 'undefined') {
-        const _sfxIds = ['shield-activate-sfx', 'shield-hit-sfx', 'shield-expire-sfx', 'powerup-burst-sfx', 'droplet-sfx'];
+        const _sfxIds = [
+          'shield-activate-sfx', 'shield-hit-sfx', 'shield-expire-sfx',
+          'laser-beam-sfx', 'unibeam-sfx',
+          'invincible-loop-sfx', 'speed-dip-sfx',
+          'powerup-burst-sfx', 'droplet-sfx',
+          'thruster-impact-sfx',
+        ];
         for (const id of _sfxIds) {
           const el = document.getElementById(id);
           if (!el) continue;
@@ -255,6 +262,80 @@ window._uploadAllBuffers = _uploadAllBuffers;
       if (typeof shieldLight !== 'undefined' && shieldLight.color) {
         try { shieldLight.color.setHex(0x26aeff); } catch(_) {}
       }
+      // c2) Powerup pool material exercise: every cube/icon HoloMaterial
+      //     uniform write so first pickup's color tint doesn't re-pipe.
+      try {
+        if (typeof powerupPool !== 'undefined' && powerupPool.length) {
+          const _puColors = [0x00f0ff, 0xff2200, 0xffcc00, 0x44ff88];
+          for (let i = 0; i < powerupPool.length; i++) {
+            const pu = powerupPool[i];
+            if (!pu || !pu.userData) continue;
+            const cm = pu.userData._cubeMesh; const im = pu.userData._iconMesh;
+            const c = _puColors[i % _puColors.length];
+            if (cm && cm.material && cm.material.uniforms && cm.material.uniforms.hologramColor) {
+              try { cm.material.uniforms.hologramColor.value.setHex(c); } catch(_) {}
+            }
+            if (im && im.material && im.material.uniforms && im.material.uniforms.hologramColor) {
+              try { im.material.uniforms.hologramColor.value.setHex(c); } catch(_) {}
+            }
+          }
+        }
+      } catch(_) {}
+      // c3) Laser pivot + bolt pool: touch visibility flags + color so the
+      //     first laser pickup's mesh-state mutation path is hot.
+      try {
+        if (typeof laserPivot !== 'undefined') {
+          const _wasV = laserPivot.visible;
+          laserPivot.visible = true; laserPivot.visible = _wasV;
+        }
+      } catch(_) {}
+      // c4) Magnet rings: visibility flip exercise (mesh-state mutation).
+      try {
+        if (typeof magnetRing !== 'undefined') {
+          const _wm = magnetRing.visible;
+          magnetRing.visible = true; magnetRing.visible = _wm;
+        }
+        if (typeof magnetRing2 !== 'undefined') {
+          const _wm2 = magnetRing2.visible;
+          magnetRing2.visible = true; magnetRing2.visible = _wm2;
+        }
+      } catch(_) {}
+      // c5) Shatter fragments + icons: touch each pooled mesh's material
+      //     uniform so the first shatter doesn't pipe through fresh JS paths.
+      try {
+        if (typeof _powerupShatterFragmentPool !== 'undefined') {
+          for (const f of _powerupShatterFragmentPool) {
+            if (f && f.userData && f.userData._mat && f.userData._mat.uniforms && f.userData._mat.uniforms.hologramColor) {
+              try { f.userData._mat.uniforms.hologramColor.value.setHex(0x00f0ff); } catch(_) {}
+              try { f.userData._mat.uniforms.hologramOpacity.value = 0.9; } catch(_) {}
+            }
+          }
+        }
+        if (typeof _powerupShatterIconPool !== 'undefined') {
+          for (const f of _powerupShatterIconPool) {
+            if (f && f.userData && f.userData._mat && f.userData._mat.uniforms && f.userData._mat.uniforms.hologramColor) {
+              try { f.userData._mat.uniforms.hologramColor.value.setHex(0x00f0ff); } catch(_) {}
+            }
+          }
+        }
+      } catch(_) {}
+      // c6) Banner DOM prewarm: showBanner() builds + animates a styled DOM
+      //     node on every pickup. Pre-create + remove one in the real
+      //     banner-container so the layer is allocated and any first-use
+      //     style recalc is paid.
+      try {
+        const _bc = (typeof document !== 'undefined') ? document.getElementById('banner-container') : null;
+        if (_bc) {
+          const _b = document.createElement('div');
+          _b.className = 'game-banner banner-mission';
+          _b.style.opacity = '0';
+          _b.style.pointerEvents = 'none';
+          _b.textContent = 'PREWARM';
+          _bc.appendChild(_b);
+          void _b.offsetHeight;
+          _b.remove();
+        }
+      } catch(_) {}
       // d) Haptic dry-run: many browsers JIT the first navigator.vibrate call.
       //    A zero-duration vibrate is silent + free of side effects.
       try {
