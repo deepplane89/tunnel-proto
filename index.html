@@ -18,6 +18,10 @@
         document.documentElement.classList.add('is-capacitor');
         var vp = document.querySelector('meta[name="viewport"]');
         if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
+        var l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.href = './style.capacitor.css';
+        document.head.appendChild(l);
       }
     })();
   </script>

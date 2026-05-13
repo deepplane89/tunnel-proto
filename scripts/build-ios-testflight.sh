@@ -63,7 +63,7 @@ bash scripts/build.sh
 echo "=== Copying web files to www/ for Capacitor ==="
 rm -rf www
 mkdir -p www
-cp index.html style.css manifest.json privacy.html www/
+cp index.html style.css style.capacitor.css manifest.json privacy.html www/
 cp -r src dist assets vendor www/ 2>/dev/null || true
 
 echo "=== cap sync ios ==="

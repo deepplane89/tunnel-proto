@@ -1,0 +1,21 @@
+/* ════════════════════════════════════════════════════════
+   Jet Horizon — Capacitor (iOS) safe-area overrides
+
+   Loaded ONLY inside the Capacitor app via inline script
+   in index.html (gated behind window.Capacitor.isNativePlatform()).
+   PWA / web / desktop never see this file.
+
+   Owned by iOS chat. Web chat does not edit this file.
+
+   Apple HIG: essential content must respect safe-area insets
+   (Dynamic Island top ~59pt, home indicator bottom ~34pt).
+
+   Use CSS variables from @capacitor-community/safe-area:
+     var(--safe-area-inset-top)
+     var(--safe-area-inset-right)
+     var(--safe-area-inset-bottom)
+     var(--safe-area-inset-left)
+
+   All selectors must be prefixed with html.platform-ios-native
+   as belt-and-suspenders defense.
+   ════════════════════════════════════════════════════════ */
