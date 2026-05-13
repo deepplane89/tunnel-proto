@@ -1336,7 +1336,7 @@ function _broadcastHoloUniform(name, value) {
 
 (function () {
   const TUNING = {
-    peakGain:        0.045,   // max volume — very subtle
+    peakGain:        0.028,   // max volume — very subtle (lowered per user feedback)
     attackRate:      8,       // how fast gain ramps up   (per second)
     releaseRate:     3,       // how fast gain ramps down
     bandpassFreq:    3200,    // hiss center (Hz) — water skim is high-mid
@@ -20973,8 +20973,10 @@ window.addEventListener('keyup', e => {
           if (dy < -SWIPE_THRESH) {
             info.swiped = true;
             touch.rollToggle = true;
-            touch.rollUp = true;
-            touch.rollDown = false;
+            // Direction depends on which zone owns the swipe (left zone → rollUp
+            // → dir -1; right zone → rollDown → dir +1). The other key clears.
+            touch[rollKey] = true;
+            touch[rollKey === 'rollUp' ? 'rollDown' : 'rollUp'] = false;
           } else if (dy > SWIPE_THRESH) {
             info.swiped = true;
             touch.rollToggle = false;
@@ -20995,8 +20997,8 @@ window.addEventListener('keyup', e => {
           const dy = t.clientY - info.startY;
           if (dy < -SWIPE_THRESH) {
             touch.rollToggle = true;
-            touch.rollUp = true;
-            touch.rollDown = false;
+            touch[rollKey] = true;
+            touch[rollKey === 'rollUp' ? 'rollDown' : 'rollUp'] = false;
           } else if (dy > SWIPE_THRESH) {
             touch.rollToggle = false;
             touch.rollUp = false;
@@ -26660,6 +26662,12 @@ function update(dt) {
   // are decoupled inside the module so v2 (low-res distortion render-target)
   // can swap the visual without touching gameplay code.
   if (window.BankWaterEffect) {
+    // Suppress the wake during a barrel roll — the ship's rotation.z is being
+    // driven by state.rollAngle (knife-edge / barrel-roll axis), not by steering
+    // bank, so using rotation.z as the bank input would mis-trigger the wake on
+    // every roll. Gate by feeding overWater=false, which the module already
+    // handles by hiding visual + silencing the hiss.
+    const _rolling = (state.rollAngle !== 0 || state.rollHeld);
     window.BankWaterEffect.update({
       shipGroup:      shipGroup,                  // auto-resolves wingtips from geometry
       rollAngle:      shipGroup.rotation.z,
@@ -26667,7 +26675,7 @@ function update(dt) {
       // speedFactor saturates around ~1.5x BASE_SPEED (matches audio module).
       maxSpeed:       (typeof BASE_SPEED !== 'undefined') ? BASE_SPEED * 1.5 : 60,
       waterY:         mirrorMesh.position.y,
-      overWater:      mirrorMesh.visible,
+      overWater:      mirrorMesh.visible && !_rolling,
     }, dt);
   }
 

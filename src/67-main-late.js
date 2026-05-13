@@ -4504,6 +4504,12 @@ function update(dt) {
   // are decoupled inside the module so v2 (low-res distortion render-target)
   // can swap the visual without touching gameplay code.
   if (window.BankWaterEffect) {
+    // Suppress the wake during a barrel roll — the ship's rotation.z is being
+    // driven by state.rollAngle (knife-edge / barrel-roll axis), not by steering
+    // bank, so using rotation.z as the bank input would mis-trigger the wake on
+    // every roll. Gate by feeding overWater=false, which the module already
+    // handles by hiding visual + silencing the hiss.
+    const _rolling = (state.rollAngle !== 0 || state.rollHeld);
     window.BankWaterEffect.update({
       shipGroup:      shipGroup,                  // auto-resolves wingtips from geometry
       rollAngle:      shipGroup.rotation.z,
@@ -4511,7 +4517,7 @@ function update(dt) {
       // speedFactor saturates around ~1.5x BASE_SPEED (matches audio module).
       maxSpeed:       (typeof BASE_SPEED !== 'undefined') ? BASE_SPEED * 1.5 : 60,
       waterY:         mirrorMesh.position.y,
-      overWater:      mirrorMesh.visible,
+      overWater:      mirrorMesh.visible && !_rolling,
     }, dt);
   }
 

@@ -832,8 +832,10 @@ window.addEventListener('keyup', e => {
           if (dy < -SWIPE_THRESH) {
             info.swiped = true;
             touch.rollToggle = true;
-            touch.rollUp = true;
-            touch.rollDown = false;
+            // Direction depends on which zone owns the swipe (left zone → rollUp
+            // → dir -1; right zone → rollDown → dir +1). The other key clears.
+            touch[rollKey] = true;
+            touch[rollKey === 'rollUp' ? 'rollDown' : 'rollUp'] = false;
           } else if (dy > SWIPE_THRESH) {
             info.swiped = true;
             touch.rollToggle = false;
@@ -854,8 +856,8 @@ window.addEventListener('keyup', e => {
           const dy = t.clientY - info.startY;
           if (dy < -SWIPE_THRESH) {
             touch.rollToggle = true;
-            touch.rollUp = true;
-            touch.rollDown = false;
+            touch[rollKey] = true;
+            touch[rollKey === 'rollUp' ? 'rollDown' : 'rollUp'] = false;
           } else if (dy > SWIPE_THRESH) {
             touch.rollToggle = false;
             touch.rollUp = false;

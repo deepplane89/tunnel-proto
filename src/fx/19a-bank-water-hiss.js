@@ -21,7 +21,7 @@
 
 (function () {
   const TUNING = {
-    peakGain:        0.045,   // max volume — very subtle
+    peakGain:        0.028,   // max volume — very subtle (lowered per user feedback)
     attackRate:      8,       // how fast gain ramps up   (per second)
     releaseRate:     3,       // how fast gain ramps down
     bandpassFreq:    3200,    // hiss center (Hz) — water skim is high-mid
