@@ -244,16 +244,11 @@ html, body {
 
 .btn-space {
   font-family: 'Zain', sans-serif;
-  /* LOCKED font-size (no vw scaling) so fixed-pixel-width buttons (e.g.
-     .pause-actions .btn-space {width:200px}) don't have their centered
-     text drift as the viewport resizes. letter-spacing is em-based, so
-     scaling the font with vw would change the rendered text width while
-     the button stays 200px wide — caused the CONTINUE-shifting bug. */
-  font-size: 18px;
+  font-size: clamp(16px, 1.8vw, 22px);
   font-weight: 300;
   letter-spacing: 0.35em;
   /* Compensate for letter-spacing trail on last char so centered text
-     actually looks centered inside fixed-width buttons (e.g. CONTINUE). */
+     actually looks centered inside em-sized buttons. */
   text-indent: 0.35em;
   color: rgba(255,255,255,0.92);
   background: rgba(255,255,255,0.08);
@@ -1307,7 +1302,9 @@ html, body {
   width: 100%;
 }
 .pause-actions .btn-space {
-  width: 220px;
+  /* em-based width: scales with btn-space font-size so the box grows/shrinks
+     in lockstep with the rendered text. Prevents text drift on resize. */
+  width: 12em;
 }
 .pause-gear {
   position: fixed;
@@ -1635,7 +1632,7 @@ html, body {
   }
   .btn-space {
     padding: 10px 36px;
-    font-size: 15px;
+    font-size: clamp(13px, 1.5vw, 18px);
   }
   .btn-death-run {
     padding: 4px 14px;
@@ -1711,7 +1708,7 @@ html, body {
   .pause-title       { grid-area: title; font-size: clamp(24px, 6vw, 40px); margin: 0; }
   .pause-actions     { grid-area: acts; gap: 8px; }
   .pause-radio-player { grid-area: radio; }
-  .pause-actions .btn-space { padding: 8px 24px; width: 200px; }
+  .pause-actions .btn-space { padding: 8px 24px; width: 12em; }
   /* Radio: compact vertical card on the right, sized so it doesn't dwarf buttons */
   .pause-radio-player {
     width: 220px;
