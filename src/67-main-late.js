@@ -4415,29 +4415,67 @@ function update(dt) {
     const _cm = _cruiseMacro;
     const _ct = performance.now() * 0.001 + _cruisePhase;
     const _cb = _cruiseTarget.userData._cruiseBase;
-    // Cheap 1D value-noise (deterministic, no library): smoothstep between
-    // hashed integer samples. Reads as 'organic drift' on yaw + X.
-    const _hash = (n) => {
-      n = (n << 13) ^ n;
-      return (1.0 - ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741823.5);
-    };
-    const _noise1 = (t) => {
-      const i = Math.floor(t); const f = t - i;
-      const s = f * f * (3 - 2 * f);
-      return _hash(i) * (1 - s) + _hash(i + 1) * s;
-    };
-    // Y bob: clean sine, phase 0
-    const _bobY    = Math.sin(_ct * _cruiseBobFreq * 2 * Math.PI)               * _cruiseBobAmp   * _cm;
-    // Pitch: sine offset by π/3 so it never crosses zero with the Y bob
-    const _pitch   = Math.sin(_ct * _cruisePitchFreq * 2 * Math.PI + Math.PI/3) * _cruisePitchAmp * _cm;
-    // Yaw: noise, faster time scale so the drift reads as 'alive corrections'
-    const _yaw     = _noise1(_ct * 1.3 + 100)                                   * _cruiseYawAmp   * _cm;
-    // Micro-bank: noise on rot.z (additive over steering bank). Different
-    // noise seed + slightly different freq so it doesn't co-vary with yaw.
-    const _bank    = _noise1(_ct * 0.9 + 200)                                   * _cruiseBankAmp  * _cm;
-    // X drift: slowest noise channel
-    const _xDrift  = _noise1(_ct * 0.6 + 50)                                    * _cruiseXAmp     * _cm;
-    // Add cruise offsets on top of base GLB-authored rotation/position.
+    // ── Multi-band layered idle (LF/MF/HF, per-axis offset phases) ────────
+    // Each axis sums three sines with non-harmonic freqs and unique phase
+    // seeds so no two axes line up — reads as a pilot + flight-computer
+    // micro-correcting, not a rocking-horse. Cheap (4 axes × 3 sines = 12).
+    //
+    // LF: lazy drift (~0.5 Hz)  MF: pose adjust (~1.5 Hz)  HF: thrust jitter (~5 Hz, tiny)
+    // Mix per axis: LF*1.0 + MF*0.5 + HF*0.2 (HF clipped further below).
+    const _PI2 = Math.PI * 2;
+    const _band = (f1, p1, f2, p2, f3, p3) =>
+      Math.sin(_ct * f1 * _PI2 + p1)
+      + 0.5 * Math.sin(_ct * f2 * _PI2 + p2)
+      + 0.2 * Math.sin(_ct * f3 * _PI2 + p3);
+    // Yaw: lazy heading drift, mid-correction, twitchy nose jitter
+    const _yawRaw   = _band(0.50, 1.7, 1.70, 0.3, 5.30, 4.1);
+    // Bank: independent freqs/phases so it doesn't co-vary with yaw
+    const _bankRaw  = _band(0.40, 2.9, 2.10, 5.5, 6.10, 1.8);
+    // Pitch: slowest LF (long inhale/exhale feel), mid pose
+    const _pitchRaw = _band(0.70, 0.7, 1.30, 4.2, 4.70, 2.6);
+    // Y bob: gentle, slowest of all
+    const _bobYRaw  = Math.sin(_ct * 0.6 * _PI2 + 3.7);
+    // X drift: very slow, low amp (sells “hovering in space” not pivot-on-mount)
+    const _xRaw     = Math.sin(_ct * 0.35 * _PI2 + 1.2)
+                    + 0.4 * Math.sin(_ct * 0.95 * _PI2 + 4.4);
+    // Pre-coupling per-axis values (max abs ~1.7 for bands, ~1.0 for bob, ~1.4 for x)
+    let _yaw   = _yawRaw   / 1.7 * _cruiseYawAmp   * _cm;
+    let _bank  = _bankRaw  / 1.7 * _cruiseBankAmp  * _cm;
+    let _pitch = _pitchRaw / 1.7 * _cruisePitchAmp * _cm;
+    let _bobY  = _bobYRaw          * _cruiseBobAmp * _cm;
+    let _xDrift= _xRaw     / 1.4 * _cruiseXAmp     * _cm;
+    // ── Coupling: real aerodynamics expectations ─────────────────────
+    // Yaw drags a bit of bank in the same direction (a body leaning into a
+    // micro-turn). Pitch nose-down drops Y a hair. Both subtle.
+    _bank += _yaw * 0.30;
+    _bobY += _pitch * 0.15;
+    // ── Drift-and-snap impulses (flight computer correcting) ──────────
+    // Every ~3-5s, kick a small impulse on a random axis with quick decay.
+    // Reads as: “something bumped me, I corrected back.”
+    if (typeof _cruiseImpulse === 'undefined') {
+      // Lazy-init module-scope state on window so HMR-safe
+      window._cruiseImpulseNext  = _ct + 2 + Math.random() * 3;
+      window._cruiseImpulseAmpY  = 0;
+      window._cruiseImpulseAmpZ  = 0;
+      window._cruiseImpulseAmpX  = 0;
+    }
+    if (_ct >= window._cruiseImpulseNext) {
+      window._cruiseImpulseNext = _ct + 3 + Math.random() * 2;
+      const _pickAxis = Math.random();
+      const _sgn = Math.random() < 0.5 ? -1 : 1;
+      if      (_pickAxis < 0.45) window._cruiseImpulseAmpZ = _sgn * 0.020; // bank kick
+      else if (_pickAxis < 0.80) window._cruiseImpulseAmpY = _sgn * 0.015; // yaw kick
+      else                       window._cruiseImpulseAmpX = _sgn * 0.012; // pitch kick
+    }
+    // Decay impulses every frame (fast snap-back; asymmetric — sharp settle).
+    const _decay = Math.exp(-dt * 3.2);
+    window._cruiseImpulseAmpY *= _decay;
+    window._cruiseImpulseAmpZ *= _decay;
+    window._cruiseImpulseAmpX *= _decay;
+    _yaw   += window._cruiseImpulseAmpY * _cm;
+    _bank  += window._cruiseImpulseAmpZ * _cm;
+    _pitch += window._cruiseImpulseAmpX * _cm;
+    // Apply: add on top of base GLB-authored rotation/position.
     _cruiseTarget.position.y = _cb.py + _bobY;
     _cruiseTarget.position.x = _cb.px + _xDrift;
     _cruiseTarget.rotation.x = _cb.rx + _pitch;
