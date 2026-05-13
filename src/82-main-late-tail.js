@@ -192,6 +192,84 @@ window._uploadAllBuffers = _uploadAllBuffers;
     }
     // 2) Compile every material currently in the scene graph (idempotent).
     window._reprewarmShaders('boot');
+
+    // 3) FIRST-IMPACT SIMULATION ── walk every non-shader cost that runs on
+    //    the first shield pickup + first shell impact so nothing JITs mid-run.
+    //    Without this, on iOS Safari the first impact can hitch ~50-150ms
+    //    even with shaders prewarmed, due to:
+    //      a) addCrashFlash() creating its first radial-gradient compositor layer
+    //      b) <audio>.play() decoding shield-activate-sfx + shield-hit-sfx
+    //      c) shield uniform updates touching arrays/Color objects first time
+    //      d) haptic API first call
+    try {
+      // a) Compositor-layer prewarm: build + remove one crash-flash div per
+      //    color we use, with animation disabled so it never shows. The
+      //    compositor will still allocate the gradient texture cache.
+      if (typeof document !== 'undefined' && document.body) {
+        const _shieldColors = [0x26aeff, 0x00f0cc, 0x00f0ff, 0xffcc00];
+        for (const c of _shieldColors) {
+          const el = document.createElement('div');
+          el.className = 'crash-flash';
+          el.style.background = 'radial-gradient(ellipse at center, rgba(' + ((c>>16)&255) + ',' + ((c>>8)&255) + ',' + (c&255) + ',0.6), transparent)';
+          el.style.animation = 'none';
+          el.style.opacity = '0';
+          el.style.pointerEvents = 'none';
+          document.body.appendChild(el);
+          // Force a layout/paint so the layer actually allocates.
+          void el.offsetHeight;
+          el.remove();
+        }
+      }
+      // b) Audio prewarm: load() + set currentTime on every SFX touched by the
+      //    shield pickup/impact path. load() forces a decode pass; we never
+      //    call play() so the user hears nothing.
+      if (typeof document !== 'undefined') {
+        const _sfxIds = ['shield-activate-sfx', 'shield-hit-sfx', 'shield-expire-sfx', 'powerup-burst-sfx', 'droplet-sfx'];
+        for (const id of _sfxIds) {
+          const el = document.getElementById(id);
+          if (!el) continue;
+          try { el.load(); } catch(_) {}
+          try { el.currentTime = 0; } catch(_) {}
+        }
+      }
+      // c) Shield uniform exercise: touch every uniform the impact handler
+      //    writes, so the JS-side Color/Vector3 mutations + uniform-upload
+      //    code paths are hot.
+      if (typeof shieldMat !== 'undefined' && shieldMat.uniforms) {
+        const u = shieldMat.uniforms;
+        try {
+          for (let i = 0; i < 6; i++) {
+            if (u.uHitPos && u.uHitPos.value && u.uHitPos.value[i]) {
+              u.uHitPos.value[i].set(0, 1.8, 0);
+            }
+            if (u.uHitTime && u.uHitTime.value) u.uHitTime.value[i] = -999;
+          }
+          if (u.uColor)          u.uColor.value.setHex(0x26aeff);
+          if (u.uNoiseEdgeColor) u.uNoiseEdgeColor.value.setHex(0x26aeff);
+          if (u.uLife)           u.uLife.value = 1.0;
+        } catch(_) {}
+      }
+      if (typeof shieldWireMat !== 'undefined' && shieldWireMat.color) {
+        try { shieldWireMat.color.setHex(0x26aeff); } catch(_) {}
+      }
+      if (typeof shieldLight !== 'undefined' && shieldLight.color) {
+        try { shieldLight.color.setHex(0x26aeff); } catch(_) {}
+      }
+      // d) Haptic dry-run: many browsers JIT the first navigator.vibrate call.
+      //    A zero-duration vibrate is silent + free of side effects.
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(0);
+        }
+      } catch(_) {}
+      if (window._perfDiag && typeof window._perfDiag.tag === 'function') {
+        try { window._perfDiag.tag('impact_prewarm', 'ok'); } catch(_) {}
+      }
+      console.log('[IMPACT-PREWARM] simulated first shield activation + impact');
+    } catch (e) {
+      console.warn('[IMPACT-PREWARM] failed (non-fatal):', e && e.message);
+    }
+
     status('PREWARM', 95);
   } catch (err) {
     console.warn('[PREWARM] global prewarm failed (non-fatal):', err && err.message);
