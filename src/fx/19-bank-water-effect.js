@@ -57,20 +57,24 @@
   // ── TUNING ──────────────────────────────────────────────────────────────
   // All knobs in one place so v2 inherits them unchanged.
   const TUNING = {
-    bankThresholdLow:    0.05,   // rad — intensity starts ramping above this
-    bankThresholdHigh:   0.22,   // rad — intensity saturates at this
-    bankOffsetDistance:  0.18,   // world units sideways at full bank
-    trailDistance:       2.0,    // world units behind ship (along its forward)
-    bandLength:          5.0,    // world units (long axis of strip)
-    bandWidth:           0.12,   // world units (short axis of strip)
-    bandLengthBoost:     2.0,    // extra length at full speed (added to base)
-    waterClearance:      0.02,   // height above water plane
-    peakOpacity:         0.55,
-    attackRate:          10,     // dt-multiplier when ramping UP
-    releaseRate:         4,      // dt-multiplier when ramping DOWN
-    rotateWithShip:      false,  // false = always world-axis aligned to +Z
-                                 // (matches old behaviour; cheaper). true =
-                                 // align long axis with ship forward.
+    // Activation thresholds — only fires near MAX steering bank (~0.52 rad
+    // / 30°, the steerBankRadMax cap). Both knobs in radians.
+    bankThresholdLow:    0.42,   // ~24° — intensity starts ramping
+    bankThresholdHigh:   0.52,   // ~30° — intensity saturates here
+    // Anchor: band's bright HEAD sits AT the rear-wingtip world point,
+    // resolved from the ship geometry bbox (auto, no magic numbers).
+    // Tail trails back along ship -forward.
+    bandLength:          4.5,    // world units (long axis)
+    bandWidth:           0.14,   // world units (short axis)
+    bandLengthBoost:     2.0,    // extra length added at full speed
+    // Texture bright peak sits ~20% down its V axis. To land peak AT the
+    // wingtip we shift center forward by (0.5 - 0.20) * length along head dir.
+    headBias:            0.30,
+    waterClearance:      0.02,
+    peakOpacity:         0.65,
+    attackRate:          10,
+    releaseRate:         4,
+    rotateWithShip:      true,   // align long axis with ship forward
   };
 
   // ── helpers ────────────────────────────────────────────────────────────
@@ -81,28 +85,64 @@
   };
 
   // ═════════════════════════════════════════════════════════════════════════
-  //  STATE LAYER — pure logic. No Three.js side-effects.
-  //  Returns the contract every visual backend consumes.
+  //  STATE LAYER — pure logic, no rendering.
+  //  Auto-resolves rear-wingtip points from ship geometry bbox (cached).
   // ═════════════════════════════════════════════════════════════════════════
-  // Scratch vectors hoisted so update() allocates zero per frame.
   const _fwd = new THREE.Vector3();
   const _right = new THREE.Vector3();
-  const _pos = new THREE.Vector3();
-  const _FORWARD_LOCAL = new THREE.Vector3(0, 0, -1); // ship's nose is -Z local
+  const _wingtipL = new THREE.Vector3();
+  const _wingtipR = new THREE.Vector3();
+  const _bandPosL = new THREE.Vector3();
+  const _bandPosR = new THREE.Vector3();
+  const _FORWARD_LOCAL = new THREE.Vector3(0, 0, -1);
   const _RIGHT_LOCAL   = new THREE.Vector3(1, 0,  0);
 
+  // ── Wingtip resolution from ship geometry bbox ──────────────────────────
+  // Unions every visible-mesh local bbox into a single bbox in shipGroup-local
+  // coords. Rear wingtip corners are (±bbox.max.x, midY, bbox.max.z). Ship
+  // faces -Z so +Z IS the rear; widest |X| at the rear = wingtip. No magic
+  // constants, survives model edits. Cached after first successful resolve.
+  let _wingtipLocalL = null;
+  let _wingtipLocalR = null;
+  const _tmpBox     = new THREE.Box3();
+  const _tmpMeshBox = new THREE.Box3();
+  const _tmpInv     = new THREE.Matrix4();
+  function _resolveWingtips(shipGroup) {
+    if (_wingtipLocalL && _wingtipLocalR) return true;
+    if (!shipGroup) return false;
+    _tmpBox.makeEmpty();
+    let any = false;
+    shipGroup.updateMatrixWorld(true);
+    _tmpInv.copy(shipGroup.matrixWorld).invert();
+    shipGroup.traverse(obj => {
+      if (!obj.isMesh || !obj.geometry) return;
+      if (!obj.visible) return;
+      if (obj.userData && obj.userData._excludeFromBounds) return;
+      // Skip non-ship meshes parented to shipGroup: shields, magnet rings,
+      // exhaust fire/underlight halos, lights, etc.
+      if (/shield|magnet|fire|underlight|aura|halo|light/i.test(obj.name || '')) return;
+      if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+      _tmpMeshBox.copy(obj.geometry.boundingBox);
+      obj.updateMatrixWorld(true);
+      _tmpMeshBox.applyMatrix4(obj.matrixWorld); // → world
+      _tmpMeshBox.applyMatrix4(_tmpInv);         // → shipGroup-local
+      _tmpBox.union(_tmpMeshBox);
+      any = true;
+    });
+    if (!any || _tmpBox.isEmpty()) return false;
+    const midY = (_tmpBox.min.y + _tmpBox.max.y) * 0.5;
+    _wingtipLocalR = new THREE.Vector3( _tmpBox.max.x, midY, _tmpBox.max.z);
+    _wingtipLocalL = new THREE.Vector3(-_tmpBox.max.x, midY, _tmpBox.max.z);
+    return true;
+  }
+
   function getBankWaterEffectState(inputs) {
-    // Inputs we expect (caller responsible — see file header).
-    const {
-      shipPosition, shipQuaternion, rollAngle,
-      speed, maxSpeed, waterY, overWater,
-    } = inputs;
+    const { shipGroup, rollAngle, speed, maxSpeed, waterY, overWater } = inputs;
+    const ready = _resolveWingtips(shipGroup);
 
-    // Derived basis vectors from ship orientation.
-    _fwd.copy(_FORWARD_LOCAL).applyQuaternion(shipQuaternion);
-    _right.copy(_RIGHT_LOCAL).applyQuaternion(shipQuaternion);
+    _fwd  .copy(_FORWARD_LOCAL).applyQuaternion(shipGroup.quaternion);
+    _right.copy(_RIGHT_LOCAL  ).applyQuaternion(shipGroup.quaternion);
 
-    // bankStrength = signed normalized; we keep sign separate for side logic.
     const absBank = Math.abs(rollAngle);
     const bankStrength = _smoothstep(
       TUNING.bankThresholdLow,
@@ -110,30 +150,39 @@
       absBank
     );
     const speedFactor = _clamp01((speed || 0) / Math.max(0.001, maxSpeed || 1));
-    const intensity = (overWater ? 1 : 0) * bankStrength * speedFactor;
-    const sideSign = Math.sign(rollAngle) || 0; // +1 right-bank, -1 left-bank, 0 level
+    const intensity   = (overWater && ready ? 1 : 0) * bankStrength * speedFactor;
+    const sideSign    = Math.sign(rollAngle) || 0;
+    const length      = TUNING.bandLength + TUNING.bandLengthBoost * speedFactor;
 
-    // Position: under ship, offset toward low side, trailed behind.
-    // Using ship's RIGHT basis means the effect tracks even when ship yaws.
-    const sideOffset  = sideSign * bankStrength * TUNING.bankOffsetDistance;
-    const trailOffset = -TUNING.trailDistance;
-    _pos.copy(shipPosition);
-    _pos.x += _right.x * sideOffset + _fwd.x * trailOffset;
-    _pos.z += _right.z * sideOffset + _fwd.z * trailOffset;
-    _pos.y = waterY + TUNING.waterClearance;
+    // Resolve both wingtip world positions (cheap: 1 matrix4×vec3 each).
+    if (ready) {
+      _wingtipR.copy(_wingtipLocalR); shipGroup.localToWorld(_wingtipR);
+      _wingtipL.copy(_wingtipLocalL); shipGroup.localToWorld(_wingtipL);
+    } else {
+      _wingtipR.copy(shipGroup.position);
+      _wingtipL.copy(shipGroup.position);
+    }
+
+    // Place band center so the texture's bright peak (at 20% of V) lands AT
+    // the wingtip. Shift backward along ship -forward by (0.5 - 0.20)*length.
+    const centerOffset = -length * TUNING.headBias;
+    _bandPosR.copy(_wingtipR);
+    _bandPosR.x += _fwd.x * centerOffset;
+    _bandPosR.z += _fwd.z * centerOffset;
+    _bandPosR.y  = waterY + TUNING.waterClearance;
+    _bandPosL.copy(_wingtipL);
+    _bandPosL.x += _fwd.x * centerOffset;
+    _bandPosL.z += _fwd.z * centerOffset;
+    _bandPosL.y  = waterY + TUNING.waterClearance;
 
     return {
-      // World-space placement on water plane.
-      position: _pos,            // Vector3 (scratch — copy if storing)
-      forward:  _fwd,            // Vector3 (scratch)
-      right:    _right,          // Vector3 (scratch)
-      // Drive values.
-      intensity,                 // 0..1
-      sideSign,                  // -1/0/+1
-      // Geometry hints for visual layer.
-      width:   TUNING.bandWidth,
-      length:  TUNING.bandLength + TUNING.bandLengthBoost * speedFactor,
-      // Smoothing — visual layer uses these to lerp.
+      positionL: _bandPosL,
+      positionR: _bandPosR,
+      forward:   _fwd,
+      right:     _right,
+      intensity, sideSign,
+      width:  TUNING.bandWidth,
+      length,
       opacity: intensity * TUNING.peakOpacity,
     };
   }
@@ -148,6 +197,7 @@
   // Shared geometry + texture across both strips (one allocation, one upload).
   let _sharedGeo = null;
   let _sharedTex = null;
+  const _tmpEuler = new THREE.Euler();
 
   function _buildStripTexture() {
     // Soft-edged elongated band: bright leading edge, long fade aft, feathered
@@ -220,10 +270,10 @@
       this._opaR += (targetR - this._opaR) * (targetR > this._opaR ? attack : release);
       this._opaL += (targetL - this._opaL) * (targetL > this._opaL ? attack : release);
 
-      // Both strips share the same position (under the ship) — only one is
-      // visible at a time. Cheaper than computing two positions.
-      this.meshR.position.copy(state.position);
-      this.meshL.position.copy(state.position);
+      // Each strip sits under its own rear-wingtip (auto-resolved from ship
+      // geometry bbox in the state layer). Only one is visible at a time.
+      this.meshR.position.copy(state.positionR);
+      this.meshL.position.copy(state.positionL);
 
       // Scale: width × length. The quad was authored long-axis = Y in canvas;
       // after the -PI/2 X rotation, local Y maps to world -Z, so scale.y is
@@ -256,7 +306,6 @@
       this._opaL = 0;
     }
   }
-  const _tmpEuler = new THREE.Euler();
 
   // ═════════════════════════════════════════════════════════════════════════
   //  FACADE — single entry point exposed to game code.

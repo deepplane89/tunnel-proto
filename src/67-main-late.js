@@ -4505,8 +4505,7 @@ function update(dt) {
   // can swap the visual without touching gameplay code.
   if (window.BankWaterEffect) {
     window.BankWaterEffect.update({
-      shipPosition:   shipGroup.position,
-      shipQuaternion: shipGroup.quaternion,
+      shipGroup:      shipGroup,                  // auto-resolves wingtips from geometry
       rollAngle:      shipGroup.rotation.z,
       speed:          state.speed || 0,
       // speedFactor saturates around ~1.5x BASE_SPEED (matches audio module).
