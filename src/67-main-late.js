@@ -994,8 +994,16 @@ function startDeathRun() {
     _preSpurt(13675, 0.3, 110);
     // JET HORIZON title at 14s
     _introScheduleTimeout(() => { lineC.classList.add('playing'); }, 14000);
-    // Auto-launch at 18.5s
+    // Auto-launch at 18.5s. Goes through _introScheduleTimeout for pause/freeze
+    // support, AND a parallel un-tracked safety net at 19s in case something
+    // upstream clears _introTimers mid-flight (orphan clearIntroTimers from a
+    // stale handler). Safety guard early-returns if introActive already false.
     _introScheduleTimeout(() => { _launchDeathRun(); }, 18500);
+    setTimeout(() => {
+      if (state.introActive) {
+        try { _launchDeathRun(); } catch(_){}
+      }
+    }, 19000);
 
     function _launchDeathRun(e) {
       if (!state.introActive) return; // already launched
