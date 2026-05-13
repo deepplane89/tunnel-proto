@@ -510,6 +510,11 @@ window.addEventListener('keydown', e => {
     if (e.key === 'ArrowDown') { state.rollHeld = true; state.rollDir =  1; }
   }
   if (e.key === 'm' || e.key === 'M') toggleMute();
+
+  // ─── DEV-ONLY DR digit hotkeys + no-spawn + Shift+H speed HUD ───
+  // These previously leaked into prod (no __JH_DEV__ gate). Real players
+  // were able to skip DR stages with 1-9, toggle obstacle spawns off, etc.
+  if (window.__JH_DEV__) {
   // Level skipper for testing: press 1-5
   // ── Debug hotkeys: Sequencer stage jumping (numbers 1-9) + debug toggles ──
   const _digit = e.code.startsWith('Digit') ? e.code.replace('Digit','') : null;
@@ -578,6 +583,7 @@ window.addEventListener('keydown', e => {
     const _hs = document.getElementById('hud-speed');
     if (_hs) _hs.style.display = (_hs.style.display === 'none' || !_hs.style.display) ? 'block' : 'none';
   }
+  } // end dev-only DR-digit / no-spawn / shift+H block
 
   // ─── DEV-ONLY HOTKEYS (stripped from prod) ──────────────────────────
   // Powerup spawns, level skips, tuners, debug-hitbox, force-arc keys.
