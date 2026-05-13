@@ -247,10 +247,11 @@ html, body {
   font-size: clamp(16px, 1.8vw, 22px);
   font-weight: 300;
   letter-spacing: 0.35em;
-  /* Flexbox center handles the trailing letter-spacing gap correctly. */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  /* Plain <button> with text-align:center — per CSS Text spec, trailing
+     letter-spacing is stripped at end-of-line, so the visible glyphs
+     center correctly inside the box. (inline-flex breaks this — it counts
+     trailing letter-spacing in the content width, shifting text left.) */
+  text-align: center;
   color: rgba(255,255,255,0.92);
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.25);
