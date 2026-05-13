@@ -880,8 +880,10 @@ function _ringShowTuner() {
     }
 
     // JUICE — organic feedback layer. Surgical (0) ↔ alive (1).
-    // Scales wobble, overshoot, and micro-turbulence together. Absolute mapping
-    // (not multiplicative) because some baselines are zero.
+    // Scales wobble + overshoot. Turbulence is intentionally NOT touched here:
+    // high JUICE used to drive _turbulence which produced a violent random
+    // shimmy on the ship X-axis. Turbulence stays at 0 unless the dev tuner
+    // explicitly sets it.
     function _applyJuice(m) {
       _wobbleMaxAmp  = _macroLerp3(m, 0.0,  0.05, 0.15);
       // Damping inverts with JUICE — high JUICE = low damping = wobble rings
@@ -889,13 +891,11 @@ function _ringShowTuner() {
       // for ~750ms (alive). 10 = baked legacy feel.
       _wobbleDamping = _macroLerp3(m, 20,   10,   4);
       _overshootAmt  = _macroLerp3(m, 0.0,  0.0,  0.5);
-      _turbulence    = _macroLerp3(m, 0.0,  0.0,  0.15);
       // Hard-clamp to fine-slider ranges.
       if (_wobbleMaxAmp  > 0.5) _wobbleMaxAmp  = 0.5;
       if (_wobbleDamping < 1)   _wobbleDamping = 1;
       if (_wobbleDamping > 30)  _wobbleDamping = 30;
       if (_overshootAmt  > 1.0) _overshootAmt  = 1.0;
-      if (_turbulence    > 0.5) _turbulence    = 0.5;
     }
 
     // Apply on initial build so live values reflect current macro state.
