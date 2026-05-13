@@ -183,7 +183,9 @@ function _setupHandlingDropdown(bar) {
     bar.classList.remove('open', 'open-up');
     if (menu) {
       menu.style.position = '';
-      menu.style.left = ''; menu.style.top = ''; menu.style.bottom = '';
+      menu.style.left = ''; menu.style.right = '';
+      menu.style.top = ''; menu.style.bottom = '';
+      menu.style.marginBottom = '';
       menu.style.width = ''; menu.style.maxHeight = ''; menu.style.zIndex = '';
       menu.style.display = '';
       _portalUnmount();
@@ -215,16 +217,20 @@ function _setupHandlingDropdown(bar) {
     bar.classList.add('open');
     if (head) head.setAttribute('aria-expanded', 'true');
     if (!menu) return;
-    // Render menu inline beneath the head as a normal sibling — no portal,
-    // no position:fixed. Guarantees the menu is visually attached to the
-    // bar that opened it, regardless of ancestor transforms / overflow.
-    // The previous portal approach was detaching the menu and dropping it
-    // at the wrong viewport coordinate on portrait. (2026-05-12)
-    menu.style.position = '';
-    menu.style.left = ''; menu.style.right = '';
-    menu.style.top = ''; menu.style.bottom = '';
-    menu.style.width = ''; menu.style.zIndex = '';
+    // position:absolute relative to .fm-bar so menu stays glued to the bar
+    // (no portal drift) AND overlays surrounding content (no layout shift).
+    // Opens UPWARD by default so it doesn't get clipped by the panel below,
+    // and so it covers the ship-preview area which is empty space.
+    bar.classList.add('open-up');
+    menu.style.position = 'absolute';
+    menu.style.left = '0';
+    menu.style.right = '0';
+    menu.style.top = 'auto';
+    menu.style.bottom = '100%';        // sit directly above the bar
+    menu.style.marginBottom = '4px';
+    menu.style.width = 'auto';
     menu.style.maxHeight = '280px';
+    menu.style.zIndex = '50';
     menu.style.display = 'block';
     requestAnimationFrame(() => {
       document.addEventListener('click', _outside, true);

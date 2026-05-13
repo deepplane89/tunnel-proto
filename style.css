@@ -2927,7 +2927,10 @@ html, body {
 }
 
 /* ── FLIGHT MODEL dropdown (lives inside .shop-handling-bar) ───────────── */
-.shop-handling-bar { padding: 0; background: transparent; }
+/* position:relative so .fm-menu (position:absolute) anchors to this bar.
+   Menu opens upward via bottom:100% so it overlays the ship preview area
+   instead of pushing the panel content. (2026-05-12) */
+.shop-handling-bar { padding: 0; background: transparent; position: relative; }
 .shop-handling-bar .fm-head {
   display: flex;
   align-items: center;
