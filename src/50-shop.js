@@ -215,32 +215,17 @@ function _setupHandlingDropdown(bar) {
     bar.classList.add('open');
     if (head) head.setAttribute('aria-expanded', 'true');
     if (!menu) return;
-    let r, openUp = false, below = 0, above = 0;
-    try {
-      r = bar.getBoundingClientRect();
-      const measured = menu.scrollHeight || 240;
-      const need = Math.min(measured, 280) + 8;
-      below = window.innerHeight - r.bottom;
-      above = r.top;
-      openUp = below < need && above > below;
-    } catch(_) { r = { left: 0, right: 0, top: 0, bottom: 0, width: 240 }; }
-    _portalMount();
+    // Render menu inline beneath the head as a normal sibling — no portal,
+    // no position:fixed. Guarantees the menu is visually attached to the
+    // bar that opened it, regardless of ancestor transforms / overflow.
+    // The previous portal approach was detaching the menu and dropping it
+    // at the wrong viewport coordinate on portrait. (2026-05-12)
+    menu.style.position = '';
+    menu.style.left = ''; menu.style.right = '';
+    menu.style.top = ''; menu.style.bottom = '';
+    menu.style.width = ''; menu.style.zIndex = '';
+    menu.style.maxHeight = '280px';
     menu.style.display = 'block';
-    menu.style.position = 'fixed';
-    menu.style.left  = r.left + 'px';
-    menu.style.width = r.width + 'px';
-    menu.style.zIndex = '10000';
-    if (openUp) {
-      bar.classList.add('open-up');
-      menu.style.bottom = (window.innerHeight - r.top + 4) + 'px';
-      menu.style.top = 'auto';
-      menu.style.maxHeight = Math.min(280, above - 8) + 'px';
-    } else {
-      bar.classList.remove('open-up');
-      menu.style.top = (r.bottom + 4) + 'px';
-      menu.style.bottom = 'auto';
-      menu.style.maxHeight = Math.min(280, below - 8) + 'px';
-    }
     requestAnimationFrame(() => {
       document.addEventListener('click', _outside, true);
       window.addEventListener('resize', _resize);
