@@ -8342,7 +8342,7 @@ let _wobbleSpeedMult = 0.0;      // speed wobble amplification (baked)
 // default (alive but subtle), 1 = pronounced. Time-scales picked non-harmonic
 // so it never reads as a loop.
 let _cruiseMacro   = 0.7;         // master CRUISE 0..1 (default alive-subtle)
-let _cruiseBobAmp  = 0.005;       // pos.y sine amplitude (units) — deliberately small
+let _cruiseBobAmp  = 0.000;       // pos.y sine amplitude — OFF; pitch sine alone reads as breathing
 let _cruiseBobFreq = 1.4;         // pos.y sine frequency (Hz)
 let _cruisePitchAmp  = 0.022;     // rot.x sine amplitude (rad ~1.3°)
 let _cruisePitchFreq = 1.1;       // rot.x sine frequency (Hz)
