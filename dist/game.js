@@ -3529,6 +3529,50 @@ mirrorMesh.rotation.x = -Math.PI / 2;
 mirrorMesh.position.set(0, 0.01, -100);
 scene.add(mirrorMesh);
 
+// ── BANK WAKE: subtle white foam streak on the bank side ───────────────
+// Triggered on bank ENTRY (|d/dt bank| spike), not steady bank — a held turn
+// shouldn't drown the water in foam. Pool of 16 additive planes laid flat on
+// the water surface, stretched along ship Z, fading in/out with attack-decay.
+const _BANK_WAKE_POOL = 16;
+const _bankWakeGeo = new THREE.PlaneGeometry(1, 1);
+const _bankWakeColor = new THREE.Color(0xcfe9ff);
+// Procedural soft radial alpha so we don't ship a new texture asset.
+const _bankWakeTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0,    'rgba(255,255,255,1)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1,    'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const _bankWakePool = [];
+for (let i = 0; i < _BANK_WAKE_POOL; i++) {
+  const m = new THREE.Mesh(_bankWakeGeo, new THREE.MeshBasicMaterial({
+    map: _bankWakeTex,
+    color: _bankWakeColor,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    opacity: 0,
+  }));
+  m.rotation.x = -Math.PI / 2; // lay flat on water surface
+  m.visible = false;
+  m.renderOrder = 8;  // above water, below thrusters/particles
+  m.frustumCulled = false;
+  scene.add(m);
+  _bankWakePool.push({
+    mesh: m, life: 0, maxLife: 0.75,
+    velX: 0, velZ: 0,
+  });
+}
+let _bankWakePrevBank = 0;
+let _bankWakeSpawnAccum = 0;        // sub-frame spawn accumulator
+window._bankWakeEnabled = true;     // global kill switch
+
 // Patch Water's onBeforeRender so the internal mirrorCamera skips thruster /
 // flame / cone / warp objects (those default to layer 0 like the rest of
 // the scene, so mirrorCamera DOES see them; we hide explicitly).
@@ -25994,6 +26038,61 @@ function update(dt) {
     _cruiseTarget.rotation.x += (_cb.rx - _cruiseTarget.rotation.x) * 0.15;
     _cruiseTarget.rotation.y += (_cb.ry - _cruiseTarget.rotation.y) * 0.15;
     _cruiseTarget.rotation.z += (_cb.rz - _cruiseTarget.rotation.z) * 0.15;
+  }
+
+  // ── BANK WAKE foam (water levels only) ─────────────────────────────────
+  // Spawn small additive sprite on bank ENTRY (rate-of-change), trailing
+  // back along Z on the bank-down side of the ship. Updates active pool
+  // entries every frame regardless of trigger.
+  if (window._bankWakeEnabled && typeof _bankWakePool !== 'undefined' && mirrorMesh.visible) {
+    const _bwBank = shipGroup.rotation.z;
+    const _bwRate = (_bwBank - _bankWakePrevBank) / Math.max(dt, 1/240);
+    _bankWakePrevBank = _bwBank;
+    // Spawn gate: meaningful bank AND meaningful rate of change in same direction.
+    const _bwAbsBank = Math.abs(_bwBank);
+    const _bwAbsRate = Math.abs(_bwRate);
+    if (_bwAbsBank > 0.08 && _bwAbsRate > 0.5 && Math.sign(_bwBank) === Math.sign(_bwRate)) {
+      _bankWakeSpawnAccum += dt * (12 + _bwAbsRate * 4); // ~12-20 spawns/sec while banking in
+      while (_bankWakeSpawnAccum >= 1) {
+        _bankWakeSpawnAccum -= 1;
+        // Find a free slot.
+        let _slot = null;
+        for (let i = 0; i < _bankWakePool.length; i++) {
+          if (_bankWakePool[i].life <= 0) { _slot = _bankWakePool[i]; break; }
+        }
+        if (_slot) {
+          const _side = Math.sign(_bwBank);
+          const _jitter = (Math.random() - 0.5) * 0.3;
+          _slot.mesh.position.set(
+            state.shipX + _side * 0.6 + _jitter,
+            0.02,
+            shipGroup.position.z - 0.4 - Math.random() * 0.3
+          );
+          _slot.mesh.scale.set(0.4, 1, 1.6);
+          _slot.mesh.material.opacity = 0.6;
+          _slot.mesh.visible = true;
+          _slot.life = _slot.maxLife;
+          _slot.velX = _side * 0.6;
+          _slot.velZ = -state.speed * 0.4;
+        }
+      }
+    } else {
+      _bankWakeSpawnAccum = 0;
+    }
+    // Update active entries.
+    for (let i = 0; i < _bankWakePool.length; i++) {
+      const _p = _bankWakePool[i];
+      if (_p.life <= 0) continue;
+      _p.life -= dt;
+      if (_p.life <= 0) { _p.mesh.visible = false; _p.mesh.material.opacity = 0; continue; }
+      const _t = 1 - (_p.life / _p.maxLife);                 // 0→1
+      _p.mesh.material.opacity = 0.6 * Math.pow(1 - _t, 1.8);
+      _p.mesh.scale.z = 1.6 + _t * 2.4;                       // stretch back over time
+      _p.mesh.scale.x = 0.4 + _t * 0.5;                       // widen slightly
+      _p.mesh.position.x += _p.velX * dt;
+      _p.mesh.position.z += _p.velZ * dt;
+      _p.velX *= 0.92;                                        // settle laterally
+    }
   }
 
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──

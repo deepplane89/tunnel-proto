@@ -4453,6 +4453,61 @@ function update(dt) {
     _cruiseTarget.rotation.z += (_cb.rz - _cruiseTarget.rotation.z) * 0.15;
   }
 
+  // ── BANK WAKE foam (water levels only) ─────────────────────────────────
+  // Spawn small additive sprite on bank ENTRY (rate-of-change), trailing
+  // back along Z on the bank-down side of the ship. Updates active pool
+  // entries every frame regardless of trigger.
+  if (window._bankWakeEnabled && typeof _bankWakePool !== 'undefined' && mirrorMesh.visible) {
+    const _bwBank = shipGroup.rotation.z;
+    const _bwRate = (_bwBank - _bankWakePrevBank) / Math.max(dt, 1/240);
+    _bankWakePrevBank = _bwBank;
+    // Spawn gate: meaningful bank AND meaningful rate of change in same direction.
+    const _bwAbsBank = Math.abs(_bwBank);
+    const _bwAbsRate = Math.abs(_bwRate);
+    if (_bwAbsBank > 0.08 && _bwAbsRate > 0.5 && Math.sign(_bwBank) === Math.sign(_bwRate)) {
+      _bankWakeSpawnAccum += dt * (12 + _bwAbsRate * 4); // ~12-20 spawns/sec while banking in
+      while (_bankWakeSpawnAccum >= 1) {
+        _bankWakeSpawnAccum -= 1;
+        // Find a free slot.
+        let _slot = null;
+        for (let i = 0; i < _bankWakePool.length; i++) {
+          if (_bankWakePool[i].life <= 0) { _slot = _bankWakePool[i]; break; }
+        }
+        if (_slot) {
+          const _side = Math.sign(_bwBank);
+          const _jitter = (Math.random() - 0.5) * 0.3;
+          _slot.mesh.position.set(
+            state.shipX + _side * 0.6 + _jitter,
+            0.02,
+            shipGroup.position.z - 0.4 - Math.random() * 0.3
+          );
+          _slot.mesh.scale.set(0.4, 1, 1.6);
+          _slot.mesh.material.opacity = 0.6;
+          _slot.mesh.visible = true;
+          _slot.life = _slot.maxLife;
+          _slot.velX = _side * 0.6;
+          _slot.velZ = -state.speed * 0.4;
+        }
+      }
+    } else {
+      _bankWakeSpawnAccum = 0;
+    }
+    // Update active entries.
+    for (let i = 0; i < _bankWakePool.length; i++) {
+      const _p = _bankWakePool[i];
+      if (_p.life <= 0) continue;
+      _p.life -= dt;
+      if (_p.life <= 0) { _p.mesh.visible = false; _p.mesh.material.opacity = 0; continue; }
+      const _t = 1 - (_p.life / _p.maxLife);                 // 0→1
+      _p.mesh.material.opacity = 0.6 * Math.pow(1 - _t, 1.8);
+      _p.mesh.scale.z = 1.6 + _t * 2.4;                       // stretch back over time
+      _p.mesh.scale.x = 0.4 + _t * 0.5;                       // widen slightly
+      _p.mesh.position.x += _p.velX * dt;
+      _p.mesh.position.z += _p.velZ * dt;
+      _p.velX *= 0.92;                                        // settle laterally
+    }
+  }
+
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──
   const speedDelta = (state.speed - _prevSpeed) / dt;
   _prevSpeed = state.speed;

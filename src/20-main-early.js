@@ -2714,6 +2714,50 @@ mirrorMesh.rotation.x = -Math.PI / 2;
 mirrorMesh.position.set(0, 0.01, -100);
 scene.add(mirrorMesh);
 
+// ── BANK WAKE: subtle white foam streak on the bank side ───────────────
+// Triggered on bank ENTRY (|d/dt bank| spike), not steady bank — a held turn
+// shouldn't drown the water in foam. Pool of 16 additive planes laid flat on
+// the water surface, stretched along ship Z, fading in/out with attack-decay.
+const _BANK_WAKE_POOL = 16;
+const _bankWakeGeo = new THREE.PlaneGeometry(1, 1);
+const _bankWakeColor = new THREE.Color(0xcfe9ff);
+// Procedural soft radial alpha so we don't ship a new texture asset.
+const _bankWakeTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0,    'rgba(255,255,255,1)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1,    'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const _bankWakePool = [];
+for (let i = 0; i < _BANK_WAKE_POOL; i++) {
+  const m = new THREE.Mesh(_bankWakeGeo, new THREE.MeshBasicMaterial({
+    map: _bankWakeTex,
+    color: _bankWakeColor,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    opacity: 0,
+  }));
+  m.rotation.x = -Math.PI / 2; // lay flat on water surface
+  m.visible = false;
+  m.renderOrder = 8;  // above water, below thrusters/particles
+  m.frustumCulled = false;
+  scene.add(m);
+  _bankWakePool.push({
+    mesh: m, life: 0, maxLife: 0.75,
+    velX: 0, velZ: 0,
+  });
+}
+let _bankWakePrevBank = 0;
+let _bankWakeSpawnAccum = 0;        // sub-frame spawn accumulator
+window._bankWakeEnabled = true;     // global kill switch
+
 // Patch Water's onBeforeRender so the internal mirrorCamera skips thruster /
 // flame / cone / warp objects (those default to layer 0 like the rest of
 // the scene, so mirrorCamera DOES see them; we hide explicitly).
