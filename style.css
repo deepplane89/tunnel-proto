@@ -248,13 +248,14 @@ html, body {
   font-weight: 300;
   letter-spacing: 0.35em;
   /* Compensate for letter-spacing trail on last char so centered text
-     actually looks centered inside em-sized buttons. */
-  text-indent: 0.35em;
+     actually looks centered inside em-sized buttons. text-indent doesn't
+     apply reliably to <button>, so push the LEFT padding more than the RIGHT
+     by ~half the letter-spacing (button text reads centered visually). */
   color: rgba(255,255,255,0.92);
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.25);
   border-bottom-color: rgba(255,255,255,0.1);
-  padding: 16px 52px;
+  padding: 16px 48px 16px 56px;
   border-radius: 14px;
   cursor: pointer;
   outline: none;
