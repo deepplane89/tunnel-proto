@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.deepplane.tunnel-proto.devsync</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd $HOME/Developer/tunnel-proto &amp;&amp; bash scripts/dev-sync.sh</string>
+  </array>
+
+  <!-- Run every 30 seconds. -->
+  <key>StartInterval</key>
+  <integer>30</integer>
+
+  <!-- Run once at load (so you don't wait up to 30s for the first sync). -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Don't relaunch on crash spam; just wait until next interval. -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/tunnel-proto-devsync.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/tunnel-proto-devsync.err</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>
