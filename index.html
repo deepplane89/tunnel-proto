@@ -6,21 +6,6 @@
   <meta http-equiv=1777944632"Pragma" content="no-cache" />
   <meta http-equiv=1777944632"Expires" content="0" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <script>
-    /* Capacitor-only fixes: tag <html> with .is-capacitor and switch viewport
-       meta to viewport-fit=cover so env(safe-area-inset-*) returns real
-       insets inside WKWebView. PWA/web stays unchanged (revert 14ff568). */
-    (function () {
-      var isCap = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ||
-                  /capacitor:\/\//.test(location.href) ||
-                  location.protocol === 'capacitor:';
-      if (isCap) {
-        document.documentElement.classList.add('is-capacitor');
-        var vp = document.querySelector('meta[name="viewport"]');
-        if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
-      }
-    })();
-  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- PWA / iOS fullscreen -->
