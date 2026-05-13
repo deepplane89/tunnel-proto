@@ -1006,6 +1006,11 @@ function _ringShowTuner() {
     panel.appendChild(makeSlider('JUICE', _fm.juice, 0, 1, 0.02, v => {
       _fm.juice = v; _exitPresetMode(); _applyJuice(v);
     }, '#0fa'));
+    // CRUISE — idle body motion macro (independent of JUICE for organization).
+    // Default 0.4 baked at boot; slider only exists in dev.
+    panel.appendChild(makeSlider('CRUISE', (typeof _cruiseMacro === 'number' ? _cruiseMacro : 0.4), 0, 1, 0.02, v => {
+      if (typeof _cruiseMacro !== 'undefined') _cruiseMacro = v;
+    }, '#0fa'));
 
     // RESET MACROS button — snap all five back to 0.5 (neutral baseline).
     const _macroResetBtn = document.createElement('button');

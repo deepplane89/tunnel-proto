@@ -4392,6 +4392,47 @@ function update(dt) {
     if (shipGroup.rotation.z < -_rollClamp) shipGroup.rotation.z = -_rollClamp;
   }
   camera.rotation.z = cameraRoll;
+
+  // ── CRUISE idle body motion (decoupled from JUICE) ──────────────────
+  // Multi-axis sine+noise applied to the ship MODEL (child of shipGroup) so
+  // gameplay X stays untouched. Uses non-harmonic freqs and phase offsets so
+  // it reads as a living pilot, not a bouncing balloon. Skipped while rolling
+  // (knife-edge / barrel-roll) so the cosmetic pose doesn't fight the spin.
+  if (typeof window._shipModel !== 'undefined' && window._shipModel && _cruiseMacro > 0.001 && state.rollAngle === 0 && !state.rollHeld) {
+    const _cm = _cruiseMacro;
+    const _ct = performance.now() * 0.001 + _cruisePhase;
+    // Cheap 1D value-noise (deterministic, no library): smoothstep between
+    // hashed integer samples. Reads as 'organic drift' on yaw + X.
+    const _hash = (n) => {
+      n = (n << 13) ^ n;
+      return (1.0 - ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741823.5);
+    };
+    const _noise1 = (t) => {
+      const i = Math.floor(t); const f = t - i;
+      const s = f * f * (3 - 2 * f);
+      return _hash(i) * (1 - s) + _hash(i + 1) * s;
+    };
+    // Y bob: clean sine, phase 0
+    const _bobY    = Math.sin(_ct * _cruiseBobFreq * 2 * Math.PI)               * _cruiseBobAmp   * _cm;
+    // Pitch: sine offset by π/3 so it never crosses zero with the Y bob
+    const _pitch   = Math.sin(_ct * _cruisePitchFreq * 2 * Math.PI + Math.PI/3) * _cruisePitchAmp * _cm;
+    // Yaw: noise, slow time scale
+    const _yaw     = _noise1(_ct * 0.6 + 100)                                   * _cruiseYawAmp   * _cm;
+    // X drift: noise, even slower
+    const _xDrift  = _noise1(_ct * 0.4 + 50)                                    * _cruiseXAmp     * _cm;
+    window._shipModel.position.y = _bobY;
+    window._shipModel.position.x = _xDrift;
+    // Add to existing model rot (in case skin/anim system pre-set anything).
+    window._shipModel.rotation.x = _pitch;
+    window._shipModel.rotation.y = _yaw;
+  } else if (typeof window._shipModel !== 'undefined' && window._shipModel) {
+    // Lerp cruise offsets to zero when disabled / rolling so we don't pop.
+    window._shipModel.position.y *= 0.85;
+    window._shipModel.position.x *= 0.85;
+    window._shipModel.rotation.x *= 0.85;
+    window._shipModel.rotation.y *= 0.85;
+  }
+
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──
   const speedDelta = (state.speed - _prevSpeed) / dt;
   _prevSpeed = state.speed;
