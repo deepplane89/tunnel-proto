@@ -6432,33 +6432,6 @@ normal = _dbn;`;
     console.warn('[CONE-PREWARM] failed:', err && err.message);
   }
 
-  // ── PREWARM shield bubble shader ─────────────────────────
-  // Shield mesh starts .visible=false (see line ~9074) so renderer never
-  // compiles its ShaderMaterial until first powerup activation, which
-  // produces a hitch on the FIRST shell impact (shader program upload +
-  // Metal translation on iOS). Force-compile via a proxy mesh now so the
-  // cost lands on the loading screen instead of mid-game.
-  try {
-    if (typeof renderer !== 'undefined' && typeof shieldMat !== 'undefined' && typeof shieldGeo !== 'undefined') {
-      const _shWarmScene = new THREE.Scene();
-      const _shWarmCam   = new THREE.PerspectiveCamera();
-      _shWarmScene.add(new THREE.Mesh(shieldGeo, shieldMat));
-      if (typeof shieldWireGeo !== 'undefined' && typeof shieldWireMat !== 'undefined') {
-        _shWarmScene.add(new THREE.Mesh(shieldWireGeo, shieldWireMat));
-      }
-      renderer.compile(_shWarmScene, _shWarmCam);
-      if (typeof window._uploadAllBuffers === 'function') {
-        try { window._uploadAllBuffers(_shWarmScene, _shWarmCam); } catch(_) {}
-      }
-      if (window._perfDiag && typeof window._perfDiag.tag === 'function') {
-        window._perfDiag.tag('shield_prewarm', '1mat');
-      }
-      console.log('[SHIELD-PREWARM] compiled shield bubble + wire');
-    }
-  } catch (err) {
-    console.warn('[SHIELD-PREWARM] failed:', err && err.message);
-  }
-
   // Boot gate: ship is the gating asset — resolve last
   if (typeof _shipLoadResolve === 'function') _shipLoadResolve();
 });
