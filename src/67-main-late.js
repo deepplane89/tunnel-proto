@@ -4470,10 +4470,16 @@ function update(dt) {
     const _release = Math.min(1, dt * 4);
     _bankWakeOpaR += (_targetR - _bankWakeOpaR) * (_targetR > _bankWakeOpaR ? _attack : _release);
     _bankWakeOpaL += (_targetL - _bankWakeOpaL) * (_targetL > _bankWakeOpaL ? _attack : _release);
-    // Position strips: 0.55u outboard, 2.5u behind ship (strip is 5u long).
-    const _zBehind = shipGroup.position.z - 2.5;
-    _bankWakeR.position.set(state.shipX + 0.55, 0.02, _zBehind);
-    _bankWakeL.position.set(state.shipX - 0.55, 0.02, _zBehind);
+    // Position strips just outboard of the thruster nozzles, sitting on the
+    // water. Nozzles live ~±0.49 X local and ~+5.1 Z local (behind ship);
+    // with _thrusterScale 0.8 that's ~+4.1 in world along +Z. Strip is 5u long
+    // so its center goes another 2.5u beyond the nozzle exit.
+    const _scl = (typeof window._thrusterScale === 'number') ? window._thrusterScale : 0.8;
+    const _nozzleZWorld = shipGroup.position.z + 5.1 * _scl;
+    const _zBehind = _nozzleZWorld + 2.5;
+    const _xOut    = 0.49;
+    _bankWakeR.position.set(state.shipX + _xOut, 0.02, _zBehind);
+    _bankWakeL.position.set(state.shipX - _xOut, 0.02, _zBehind);
     // Apply opacity / visibility.
     const _peak = 0.55;
     _bankWakeR.material.opacity = _bankWakeOpaR * _peak;
