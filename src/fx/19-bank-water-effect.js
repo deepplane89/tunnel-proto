@@ -70,7 +70,7 @@
     // Texture bright peak sits ~20% down its V axis. To land peak AT the
     // wingtip we shift center forward by (0.5 - 0.20) * length along head dir.
     headBias:            0.30,
-    waterClearance:      0.02,
+    waterClearance:      0.005,  // flush w/ water (5mm above; just enough to avoid z-fight)
     // Push each strip outward along ship-right by this much beyond the auto-
     // resolved wingtip X. Small nudge so it reads as "just outside" the wing.
     lateralPush:         0.10,
@@ -78,6 +78,18 @@
     attackRate:          10,
     releaseRate:         4,
     rotateWithShip:      true,   // align long axis with ship forward
+    // ── Artistry knobs ──────────────────────────────────────────────────
+    // Slight cyan tint reads as moisture / refraction off pure white.
+    tintColor:           0xeaf8ff,
+    // Lower-layer parallax: wider, dimmer, scrolls slower → reads as foam +
+    // underbody disturbance separate from the bright pressure head.
+    underWidthMul:       2.2,
+    underLengthMul:      1.10,
+    underOpacityMul:     0.45,
+    underScrollMul:      0.55,   // slower drift
+    // UV scroll rate: world-units of strip-length per second at FULL speed.
+    // Drift is along the tail (positive V → from head toward tail).
+    scrollSpeed:         6.0,
   };
 
   // ── helpers ────────────────────────────────────────────────────────────
@@ -202,63 +214,167 @@
   //  by default (matches game's mostly-forward camera path; cheap).
   // ═════════════════════════════════════════════════════════════════════════
 
-  // Shared geometry + texture across both strips (one allocation, one upload).
+  // Shared geometry + noise texture across both strips (one allocation each).
   let _sharedGeo = null;
-  let _sharedTex = null;
+  let _sharedNoise = null;
   const _tmpEuler = new THREE.Euler();
 
-  function _buildStripTexture() {
-    // Soft-edged elongated band: bright leading edge, long fade aft, feathered
-    // on the long edges. 32×256 = 32 KB; sRGB; anisotropic 4 for crisp grazing.
+  // ── Procedural noise texture ───────────────────────────────────────────────
+  // 64×64 grayscale noise tiled ×2 → used by the fragment shader for UV warp
+  // and dissolve. ~4 KB VRAM. One upload, sampled twice per fragment at
+  // different scroll rates for parallax (no obvious repeat).
+  function _buildNoiseTexture() {
+    const SZ = 64;
     const c = document.createElement('canvas');
-    c.width = 32; c.height = 256;
+    c.width = SZ; c.height = SZ;
     const g = c.getContext('2d');
-    g.clearRect(0, 0, 32, 256);
-    // Lengthwise gradient: head bright at ~20% down (front of strip), long tail.
-    const vg = g.createLinearGradient(0, 0, 0, 256);
-    vg.addColorStop(0.00, 'rgba(255,255,255,0)');
-    vg.addColorStop(0.20, 'rgba(255,255,255,0.95)');
-    vg.addColorStop(0.50, 'rgba(255,255,255,0.55)');
-    vg.addColorStop(1.00, 'rgba(255,255,255,0)');
-    g.fillStyle = vg; g.fillRect(0, 0, 32, 256);
-    // Crosswise feather — multiply alpha out on the long edges.
-    g.globalCompositeOperation = 'destination-in';
-    const hg = g.createLinearGradient(0, 0, 32, 0);
-    hg.addColorStop(0.00, 'rgba(0,0,0,0)');
-    hg.addColorStop(0.50, 'rgba(0,0,0,1)');
-    hg.addColorStop(1.00, 'rgba(0,0,0,0)');
-    g.fillStyle = hg; g.fillRect(0, 0, 32, 256);
+    const img = g.createImageData(SZ, SZ);
+    // Two-octave value-noise sampled by averaging 4 random fields with bilinear-
+    // ish smoothing. Cheap and good enough — we're not doing photorealism.
+    const fine   = new Float32Array(SZ * SZ);
+    const coarse = new Float32Array(SZ * SZ);
+    for (let i = 0; i < SZ * SZ; i++) fine[i]   = Math.random();
+    // Coarse: 16×16 stretched up to 64×64 for low-freq variation.
+    const CSZ = 16;
+    const coarseSrc = new Float32Array(CSZ * CSZ);
+    for (let i = 0; i < CSZ * CSZ; i++) coarseSrc[i] = Math.random();
+    for (let y = 0; y < SZ; y++) {
+      for (let x = 0; x < SZ; x++) {
+        const cx = (x / SZ) * CSZ, cy = (y / SZ) * CSZ;
+        const ix = Math.floor(cx), iy = Math.floor(cy);
+        const fx = cx - ix,        fy = cy - iy;
+        const i00 = coarseSrc[(iy            ) * CSZ + (ix            ) % CSZ];
+        const i10 = coarseSrc[(iy            ) * CSZ + (ix + 1        ) % CSZ];
+        const i01 = coarseSrc[((iy + 1) % CSZ) * CSZ + (ix            ) % CSZ];
+        const i11 = coarseSrc[((iy + 1) % CSZ) * CSZ + (ix + 1        ) % CSZ];
+        const a = i00 * (1 - fx) + i10 * fx;
+        const b = i01 * (1 - fx) + i11 * fx;
+        coarse[y * SZ + x] = a * (1 - fy) + b * fy;
+      }
+    }
+    for (let i = 0; i < SZ * SZ; i++) {
+      const v = (fine[i] * 0.4 + coarse[i] * 0.6) * 255 | 0;
+      img.data[i * 4    ] = v;
+      img.data[i * 4 + 1] = v;
+      img.data[i * 4 + 2] = v;
+      img.data[i * 4 + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
     const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 4;
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.NoColorSpace;
+    t.minFilter = THREE.LinearFilter;
+    t.magFilter = THREE.LinearFilter;
     t.needsUpdate = true;
     return t;
   }
 
+  // ── Stylized wake ShaderMaterial ──────────────────────────────────────
+  // Everything procedural: head→tail gradient (V), cross-strip feather (U),
+  // dual-octave panned noise distortion, step-cutoff foam edge, dissolve at
+  // the tail. No main texture sample — only the noise.
+  // V=0 is HEAD (forward of ship). V=1 is TAIL.
+  const _WAKE_VS = `
+    varying vec2 vUv;
+    uniform float uConeShape;   // 0 = rectangle, 1 = strong cone
+    void main() {
+      vUv = uv;
+      // Narrow the HEAD, widen the TAIL: lerp local X around 0 toward 0 as V→0.
+      // PlaneGeometry has uv in [0,1]; position.x in [-0.5,0.5].
+      float taper = mix(0.45, 1.0, uv.y);   // head 45% width, tail full width
+      taper = mix(1.0, taper, uConeShape);
+      vec3 p = position;
+      p.x *= taper;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }
+  `;
+  const _WAKE_FS = `
+    precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uNoise;
+    uniform float uTime;
+    uniform float uOpacity;
+    uniform float uScroll;     // V-units of pan per second (mapped from speed)
+    uniform float uIntensity;  // 0…1 bank strength (drives dissolve threshold)
+    uniform vec3  uTint;
+    void main() {
+      // Cross-strip feather (U): bright down the centerline, soft on long edges.
+      float feather = smoothstep(0.0, 0.35, vUv.x) * smoothstep(0.0, 0.35, 1.0 - vUv.x);
+
+      // Head→tail base profile: bright peak near V=0.15, long fade to V=1.
+      float head    = smoothstep(0.00, 0.18, vUv.y);
+      float tail    = smoothstep(1.00, 0.18, vUv.y);
+      float profile = head * tail;
+
+      // Two-octave panned noise. Octave A: fast scroll, fine UV. Octave B:
+      // slower scroll, coarser UV. Their sum gives a non-repeating shimmer.
+      float panA = uTime * uScroll;
+      float panB = uTime * uScroll * 0.55;
+      float nA = texture2D(uNoise, vec2(vUv.x * 1.4, vUv.y * 1.5 + panA      )).r;
+      float nB = texture2D(uNoise, vec2(vUv.x * 0.7 - 0.13, vUv.y * 0.8 - panB)).r;
+      float n  = (nA * 0.55 + nB * 0.45);
+
+      // Sine-wave foam fingers: classic stylized water trick. Bright lines
+      // that scroll along V and get distorted by the noise above.
+      float fingers = sin((vUv.y - uTime * uScroll * 0.6) * 22.0 + n * 6.2832);
+      fingers = smoothstep(0.55, 0.95, fingers);   // crisp bright bands
+
+      // Edge dissolve: step the noise against the profile so the strip's
+      // boundary frays instead of being a clean rectangle.
+      float dissolveThresh = mix(0.65, 0.15, uIntensity);  // strong bank = less erosion
+      float dissolve = smoothstep(dissolveThresh - 0.10, dissolveThresh + 0.05, n + profile * 0.6);
+
+      // Compose: base = profile * feather, plus fingers, masked by dissolve.
+      float alpha = (profile * feather) * dissolve;
+      // Fingers add brightness on top, modulated by feather so they fade at edges.
+      float bright = alpha + fingers * feather * profile * 0.85;
+
+      gl_FragColor = vec4(uTint * (0.65 + bright * 0.6), bright * uOpacity);
+    }
+  `;
+
+  function _makeMaterial(noiseTex, tintHex) {
+    const tint = new THREE.Color(tintHex);
+    return new THREE.ShaderMaterial({
+      vertexShader:   _WAKE_VS,
+      fragmentShader: _WAKE_FS,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+      uniforms: {
+        uNoise:     { value: noiseTex },
+        uTime:      { value: 0 },
+        uOpacity:   { value: 0 },
+        uScroll:    { value: 0.2 },
+        uIntensity: { value: 0 },
+        uConeShape: { value: 0.65 },
+        uTint:      { value: new THREE.Vector3(tint.r, tint.g, tint.b) },
+      },
+    });
+  }
+
   class BankWaterEffectVisual {
     constructor() {
-      if (!_sharedGeo) _sharedGeo = new THREE.PlaneGeometry(1, 1);
-      if (!_sharedTex) _sharedTex = _buildStripTexture();
+      if (!_sharedGeo)   _sharedGeo   = new THREE.PlaneGeometry(1, 1);
+      if (!_sharedNoise) _sharedNoise = _buildNoiseTexture();
 
-      const make = () => {
-        const m = new THREE.Mesh(_sharedGeo, new THREE.MeshBasicMaterial({
-          map: _sharedTex,
-          color: 0xffffff,
-          transparent: true,
-          blending: THREE.NormalBlending,
-          depthWrite: false,
-          opacity: 0,
-        }));
-        m.rotation.x = -Math.PI / 2;     // flat on water; quad's local +Y → world -Z
+      this._matL = _makeMaterial(_sharedNoise, TUNING.tintColor);
+      this._matR = _makeMaterial(_sharedNoise, TUNING.tintColor);
+
+      const make = (mat) => {
+        const m = new THREE.Mesh(_sharedGeo, mat);
+        m.rotation.x = -Math.PI / 2;     // flat on water
         m.visible = false;
         m.renderOrder = 8;
         m.frustumCulled = false;
         return m;
       };
-      this.meshL = make();   // shown when ship banks left  (rollAngle < 0)
-      this.meshR = make();   // shown when ship banks right (rollAngle > 0)
-      this._opaL = 0;        // smoothed opacities, separate per side
+      this.meshL = make(this._matL);
+      this.meshR = make(this._matR);
+      this._opaL = 0;
       this._opaR = 0;
+      this._time = 0;
     }
 
     addTo(scene) {
@@ -277,32 +393,33 @@
       const release = Math.min(1, dt * TUNING.releaseRate);
       this._opaR += (targetR - this._opaR) * (targetR > this._opaR ? attack : release);
       this._opaL += (targetL - this._opaL) * (targetL > this._opaL ? attack : release);
+      this._time += dt;
 
       // Each strip sits under its own rear-wingtip (auto-resolved from ship
       // geometry bbox in the state layer). Only one is visible at a time.
       this.meshR.position.copy(state.positionR);
       this.meshL.position.copy(state.positionL);
-
-      // Scale: width × length. The quad was authored long-axis = Y in canvas;
-      // after the -PI/2 X rotation, local Y maps to world -Z, so scale.y is
-      // the world-Z length. scale.x is the world-X width.
       this.meshR.scale.set(state.width, state.length, 1);
       this.meshL.scale.set(state.width, state.length, 1);
 
-      // Optional ship-forward alignment (off by default — game runs mostly
-      // along world Z so axis-aligned reads correctly and skips a rotation).
       if (TUNING.rotateWithShip) {
         const yaw = Math.atan2(state.forward.x, state.forward.z);
-        // After -PI/2 X-rotation, the world rotation we want is around world Y.
-        // Setting .rotation.y on a mesh already X-rotated rotates in its local
-        // frame; we want a Y-axis world rotation. Quaternion solves it:
         _tmpEuler.set(-Math.PI / 2, yaw, 0, 'YXZ');
         this.meshR.quaternion.setFromEuler(_tmpEuler);
         this.meshL.quaternion.copy(this.meshR.quaternion);
       }
 
-      this.meshR.material.opacity = this._opaR;
-      this.meshL.material.opacity = this._opaL;
+      // Shader uniforms: time, per-side opacity, intensity, speed-driven scroll.
+      const uR = this._matR.uniforms;
+      const uL = this._matL.uniforms;
+      uR.uTime.value = uL.uTime.value = this._time;
+      uR.uOpacity.value   = this._opaR;
+      uL.uOpacity.value   = this._opaL;
+      uR.uIntensity.value = uL.uIntensity.value = state.intensity;
+      // uScroll scales with bank intensity — stronger turn, faster shimmer.
+      const scroll = TUNING.scrollSpeed * (0.4 + 0.6 * state.intensity);
+      uR.uScroll.value = uL.uScroll.value = scroll;
+
       this.meshR.visible = this._opaR > 0.01;
       this.meshL.visible = this._opaL > 0.01;
     }
@@ -312,6 +429,8 @@
       this.meshL.visible = false;
       this._opaR = 0;
       this._opaL = 0;
+      this._matR.uniforms.uOpacity.value = 0;
+      this._matL.uniforms.uOpacity.value = 0;
     }
   }
 
@@ -322,11 +441,22 @@
     _visual: null,
     _ready: false,
 
-    init(scene) {
+    // init(scene) — or init(scene, renderer, camera) to prewarm the shader
+    // compile and avoid a first-bank hitch.
+    init(scene, renderer, camera) {
       if (this._ready) return;
       this._visual = new BankWaterEffectVisual();
       this._visual.addTo(scene);
       this._ready = true;
+      try {
+        if (renderer && camera && renderer.compile) {
+          this._visual.meshL.visible = true;
+          this._visual.meshR.visible = true;
+          renderer.compile(scene, camera);
+          this._visual.meshL.visible = false;
+          this._visual.meshR.visible = false;
+        }
+      } catch (e) { /* prewarm is best-effort */ }
     },
 
     // Single per-frame call. Caller passes the inputs bag described in the

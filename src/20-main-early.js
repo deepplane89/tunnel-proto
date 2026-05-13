@@ -2718,7 +2718,7 @@ scene.add(mirrorMesh);
 // All logic + visuals live in src/fx/19-bank-water-effect.js (loads earlier
 // by basename sort and defines window.BankWaterEffect). We init here because
 // the module needs the scene reference. Update is wired in 67-main-late.js.
-if (window.BankWaterEffect) window.BankWaterEffect.init(scene);
+if (window.BankWaterEffect) window.BankWaterEffect.init(scene, renderer, camera);
 
 // Patch Water's onBeforeRender so the internal mirrorCamera skips thruster /
 // flame / cone / warp objects (those default to layer 0 like the rest of
