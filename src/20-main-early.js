@@ -8341,15 +8341,14 @@ let _wobbleSpeedMult = 0.0;      // speed wobble amplification (baked)
 // untouched; this is pure body-cosmetics. Macro 0..1: 0 = rigid, 0.7 = baked
 // default (alive but subtle), 1 = pronounced. Time-scales picked non-harmonic
 // so it never reads as a loop.
-let _cruiseMacro   = 0.7;         // master CRUISE 0..1 (default alive-subtle)
-let _cruiseBobAmp  = 0.000;       // pos.y — OFF (vertical motion = 'bouncing' read)
-let _cruiseBobFreq = 1.4;         // (unused while bob=0)
-let _cruisePitchAmp  = 0.000;     // rot.x — OFF (pitch pivots the ship around its center,
-                                 // which reads as a vertical bounce at low camera angles)
-let _cruisePitchFreq = 1.1;       // (unused while pitch=0)
-let _cruiseYawAmp  = 0.070;       // rot.y noise amplitude (rad ~4°) — dominant
-let _cruiseBankAmp = 0.060;       // rot.z noise amplitude (rad ~3.4°)
-let _cruiseXAmp    = 0.020;       // pos.x noise amplitude (units)
+let _cruiseMacro   = 0.4;         // master CRUISE 0..1 (default subtle baseline)
+let _cruiseBobAmp  = 0.000;       // pos.y — OFF (hover bob owns vertical)
+let _cruiseBobFreq = 1.4;         // (unused)
+let _cruisePitchAmp  = 0.000;     // rot.x — OFF (reads as bounce at low cam angles)
+let _cruisePitchFreq = 1.1;       // (unused)
+let _cruiseYawAmp  = 0.022;       // rot.y noise amplitude (rad ~1.3°)
+let _cruiseBankAmp = 0.018;       // rot.z noise amplitude (rad ~1.0°)
+let _cruiseXAmp    = 0.008;       // pos.x noise amplitude (units)
 let _cruisePhase   = Math.random() * 10; // randomized so identical sessions desync
 let _shipRotXOffset = 0.02;      // tuner offset for ship pitch angle
 let _shipRotZOffset = 0;         // tuner offset for ship roll angle
