@@ -4698,11 +4698,13 @@ function update(dt) {
   shipGroup.position.x = state.shipX + _turbNudge;
   // laserPivot X is set per-frame in the laser update block (T4/T5 only)
 
-  // Sync touch roll into rollHeld state each frame
-  // Toggle mode: rollToggle stays true until swipe-down
-  if (touch.rollToggle) { state.rollHeld = true; state.rollDir = -1; }
-  else if (touch.rollUp)   { state.rollHeld = true; state.rollDir = -1; }
+  // Sync touch roll into rollHeld state each frame.
+  // touch.rollUp → dir -1 (set by LEFT-zone swipe-up).
+  // touch.rollDown → dir +1 (set by RIGHT-zone swipe-up).
+  // touch.rollToggle is just "some swipe is held" — direction comes from rollUp/rollDown.
+  if      (touch.rollUp)   { state.rollHeld = true; state.rollDir = -1; }
   else if (touch.rollDown) { state.rollHeld = true; state.rollDir =  1; }
+  else if (touch.rollToggle) { state.rollHeld = true; /* keep last dir */ }
   else if (!keys['ArrowUp'] && !keys['ArrowDown']) { state.rollHeld = false; }
 
   // Hold-to-spin — pure Z-axis rotation, no lateral boost
