@@ -247,13 +247,10 @@ html, body {
   font-size: clamp(16px, 1.8vw, 22px);
   font-weight: 300;
   letter-spacing: 0.35em;
-  /* Empirically (verified in Chromium): no centering method (text-align,
-     inline-flex, flex) strips the trailing 0.35em letter-spacing — they
-     all leave glyphs ~half-a-trail left of geometric center. text-indent
-     pushes the inline content right by exactly that half-trail amount,
-     producing true visual centering. Works on <button> in all engines. */
-  text-align: center;
-  text-indent: 0.35em;
+  /* inline-flex center — visually correct on user's device (verified). */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: rgba(255,255,255,0.92);
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.25);
