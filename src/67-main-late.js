@@ -4394,11 +4394,16 @@ function update(dt) {
   camera.rotation.z = cameraRoll;
 
   // ── CRUISE idle body motion (decoupled from JUICE) ──────────────────
-  // Multi-axis sine+noise applied to the ship MODEL (child of shipGroup) so
-  // gameplay X stays untouched. Uses non-harmonic freqs and phase offsets so
-  // it reads as a living pilot, not a bouncing balloon. Skipped while rolling
-  // (knife-edge / barrel-roll) so the cosmetic pose doesn't fight the spin.
-  if (typeof window._shipModel !== 'undefined' && window._shipModel && _cruiseMacro > 0.001 && state.rollAngle === 0 && !state.rollHeld) {
+  // Multi-axis sine+noise applied to the VISIBLE ship model (default OR alt)
+  // so gameplay X stays untouched. Uses non-harmonic freqs and phase offsets
+  // so it reads as a living pilot, not a bouncing balloon. Skipped while
+  // rolling so the cosmetic pose doesn't fight the spin.
+  // Pick the currently-visible model: alt if active, otherwise default. If we
+  // animate the hidden one, nothing reads on screen.
+  const _cruiseTarget = (typeof _altShipActive !== 'undefined' && _altShipActive && typeof _altShipModel !== 'undefined' && _altShipModel)
+    ? _altShipModel
+    : (typeof window._shipModel !== 'undefined' ? window._shipModel : null);
+  if (_cruiseTarget && _cruiseMacro > 0.001 && state.rollAngle === 0 && !state.rollHeld) {
     const _cm = _cruiseMacro;
     const _ct = performance.now() * 0.001 + _cruisePhase;
     // Cheap 1D value-noise (deterministic, no library): smoothstep between
@@ -4423,20 +4428,20 @@ function update(dt) {
     const _bank    = _noise1(_ct * 0.9 + 200)                                   * _cruiseBankAmp  * _cm;
     // X drift: slowest noise channel
     const _xDrift  = _noise1(_ct * 0.6 + 50)                                    * _cruiseXAmp     * _cm;
-    window._shipModel.position.y = _bobY;
-    window._shipModel.position.x = _xDrift;
-    window._shipModel.rotation.x = _pitch;
-    window._shipModel.rotation.y = _yaw;
+    _cruiseTarget.position.y = _bobY;
+    _cruiseTarget.position.x = _xDrift;
+    _cruiseTarget.rotation.x = _pitch;
+    _cruiseTarget.rotation.y = _yaw;
     // rot.z is additive over the parent's steering bank (which lives on
     // shipGroup). The model's local Z thus adds a tiny shimmer on top.
-    window._shipModel.rotation.z = _bank;
-  } else if (typeof window._shipModel !== 'undefined' && window._shipModel) {
+    _cruiseTarget.rotation.z = _bank;
+  } else if (_cruiseTarget) {
     // Lerp cruise offsets to zero when disabled / rolling so we don't pop.
-    window._shipModel.position.y *= 0.85;
-    window._shipModel.position.x *= 0.85;
-    window._shipModel.rotation.x *= 0.85;
-    window._shipModel.rotation.y *= 0.85;
-    window._shipModel.rotation.z *= 0.85;
+    _cruiseTarget.position.y *= 0.85;
+    _cruiseTarget.position.x *= 0.85;
+    _cruiseTarget.rotation.x *= 0.85;
+    _cruiseTarget.rotation.y *= 0.85;
+    _cruiseTarget.rotation.z *= 0.85;
   }
 
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──
