@@ -8,12 +8,11 @@
   "plugins": {
     "SafeArea": {
       "enabled": true,
-      "customColorsForSystemBars": {
-        "statusBarColor": "#00000000",
-        "statusBarContent": "light",
-        "navigationBarColor": "#00000000",
-        "navigationBarContent": "light"
-      }
+      "customColorsForSystemBars": true,
+      "statusBarColor": "#00000000",
+      "statusBarContent": "light",
+      "navigationBarColor": "#00000000",
+      "navigationBarContent": "light"
     }
   },
   "ios": {
