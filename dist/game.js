@@ -966,7 +966,10 @@ function _broadcastHoloUniform(name, value) {
     );
     const speedFactor = _clamp01((speed || 0) / Math.max(0.001, maxSpeed || 1));
     const intensity   = (overWater && ready ? 1 : 0) * bankStrength * speedFactor;
-    const sideSign    = Math.sign(rollAngle) || 0;
+    // rollAngle sign convention: banking RIGHT (hold right) rolls the ship
+    // so its right wing dips DOWN → rollAngle is NEGATIVE. The inside of the
+    // turn = the dipping side. So sideSign = -sign(rollAngle).
+    const sideSign    = -Math.sign(rollAngle) || 0;
     const length      = TUNING.bandLength + TUNING.bandLengthBoost * speedFactor;
 
     // Resolve both wingtip world positions (cheap: 1 matrix4×vec3 each).
