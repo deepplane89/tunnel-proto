@@ -2714,58 +2714,11 @@ mirrorMesh.rotation.x = -Math.PI / 2;
 mirrorMesh.position.set(0, 0.01, -100);
 scene.add(mirrorMesh);
 
-// ── BANK WAKE: two thin persistent strips, one per side ────────────────
-// No pool, no spawning. Each strip is parented to shipGroup so it follows
-// X/Z automatically. Opacity ramps in with |bank|, side selected by sign.
-// Reads as a waterline scar, not foam.
-const _bankWakeGeo = new THREE.PlaneGeometry(1, 1);
-// Soft-edged strip alpha: long, very thin, feathered on all sides.
-const _bankWakeTex = (() => {
-  const c = document.createElement('canvas'); c.width = 32; c.height = 256;
-  const g = c.getContext('2d');
-  g.clearRect(0, 0, 32, 256);
-  // Vertical: faint head, peak ~30%, long fade to tail.
-  const vg = g.createLinearGradient(0, 0, 0, 256);
-  vg.addColorStop(0.00, 'rgba(255,255,255,0)');
-  vg.addColorStop(0.20, 'rgba(255,255,255,0.85)');
-  vg.addColorStop(0.50, 'rgba(255,255,255,0.55)');
-  vg.addColorStop(1.00, 'rgba(255,255,255,0)');
-  g.fillStyle = vg; g.fillRect(0, 0, 32, 256);
-  // Horizontal feather — hard edges off, so strip reads as a soft line.
-  g.globalCompositeOperation = 'destination-in';
-  const hg = g.createLinearGradient(0, 0, 32, 0);
-  hg.addColorStop(0.00, 'rgba(0,0,0,0)');
-  hg.addColorStop(0.50, 'rgba(0,0,0,1)');
-  hg.addColorStop(1.00, 'rgba(0,0,0,0)');
-  g.fillStyle = hg; g.fillRect(0, 0, 32, 256);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
-  return t;
-})();
-function _makeBankWakeStrip() {
-  const m = new THREE.Mesh(_bankWakeGeo, new THREE.MeshBasicMaterial({
-    map: _bankWakeTex,
-    color: 0xffffff,
-    transparent: true,
-    blending: THREE.NormalBlending,
-    depthWrite: false,
-    opacity: 0,
-  }));
-  m.rotation.x = -Math.PI / 2;       // flat on water; local +Y → world -Z
-  // Thin and long: 0.12 wide, 5 long. Trails BEHIND the ship.
-  m.scale.set(0.12, 5.0, 1);
-  m.visible = false;
-  m.renderOrder = 8;
-  m.frustumCulled = false;
-  return m;
-}
-const _bankWakeL = _makeBankWakeStrip();
-const _bankWakeR = _makeBankWakeStrip();
-scene.add(_bankWakeL); scene.add(_bankWakeR);
-let _bankWakeOpaL = 0;              // smoothed visible opacity
-let _bankWakeOpaR = 0;
-window._bankWakeEnabled = true;     // global kill switch
+// ── BANK WATER EFFECT ──────────────────────────────────────────
+// All logic + visuals live in src/fx/19-bank-water-effect.js (loads earlier
+// by basename sort and defines window.BankWaterEffect). We init here because
+// the module needs the scene reference. Update is wired in 67-main-late.js.
+if (window.BankWaterEffect) window.BankWaterEffect.init(scene);
 
 // Patch Water's onBeforeRender so the internal mirrorCamera skips thruster /
 // flame / cone / warp objects (those default to layer 0 like the rest of

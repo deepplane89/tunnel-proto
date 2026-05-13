@@ -4499,46 +4499,21 @@ function update(dt) {
     _cruiseTarget.rotation.z += (_cb.rz - _cruiseTarget.rotation.z) * 0.15;
   }
 
-  // ── BANK WAKE strips (water levels only) ──────────────────────────
-  // Two thin held strips that follow the ship; opacity ramps with |bank|.
-  // Strip is positioned BEHIND the wingtip on its side; faded fully when
-  // banking away. Texture's bright head is at top (−Y local → −Z world after
-  // rotation), so we sit the strip with center 2.5u behind the ship.
-  if (window._bankWakeEnabled && typeof _bankWakeL !== 'undefined' && mirrorMesh.visible) {
-    const _bwBank = shipGroup.rotation.z;
-    // Per-side intensity: only the bank-DOWN side shows.
-    // Bank z > 0 → right wing down; z < 0 → left wing down. Confirm at runtime.
-    const _bwBankN  = Math.max(0, Math.min(1, (Math.abs(_bwBank) - 0.04) / 0.18));
-    const _targetR  = (_bwBank > 0) ? _bwBankN : 0;
-    const _targetL  = (_bwBank < 0) ? _bwBankN : 0;
-    // Smooth (fast attack, slow release feels natural).
-    const _attack  = Math.min(1, dt * 10);
-    const _release = Math.min(1, dt * 4);
-    _bankWakeOpaR += (_targetR - _bankWakeOpaR) * (_targetR > _bankWakeOpaR ? _attack : _release);
-    _bankWakeOpaL += (_targetL - _bankWakeOpaL) * (_targetL > _bankWakeOpaL ? _attack : _release);
-    // Position strips just outboard of the thruster nozzles, sitting on the
-    // water. Nozzles live ~±0.49 X local and ~+5.1 Z local (behind ship);
-    // with _thrusterScale 0.8 that's ~+4.1 in world along +Z. Strip is 5u long
-    // so its center goes another 2.5u beyond the nozzle exit.
-    // Wing-tip rear centroid in ship-local space: ±0.394 X, +4.543 Z (from
-    // _wingtipNozzleOffsets). shipGroup.scale = 0.30, so multiply through.
-    const _shipScl = shipGroup.scale.x || 0.30;
-    const _xOut    = 0.394 * _shipScl;                          // ~0.118 outboard
-    const _zTip    = shipGroup.position.z + 4.543 * _shipScl;   // posterior wingtip Z
-    // Strip is 5u long, anchored at center — bias center slightly behind tip
-    // so the visible streak trails BEHIND the wing.
-    const _zCenter = _zTip + 2.0;
-    _bankWakeR.position.set(state.shipX + _xOut, 0.02, _zCenter);
-    _bankWakeL.position.set(state.shipX - _xOut, 0.02, _zCenter);
-    // Apply opacity / visibility.
-    const _peak = 0.55;
-    _bankWakeR.material.opacity = _bankWakeOpaR * _peak;
-    _bankWakeL.material.opacity = _bankWakeOpaL * _peak;
-    _bankWakeR.visible = _bankWakeOpaR > 0.01;
-    _bankWakeL.visible = _bankWakeOpaL > 0.01;
-  } else if (typeof _bankWakeL !== 'undefined') {
-    _bankWakeR.visible = false; _bankWakeL.visible = false;
-    _bankWakeOpaR = 0; _bankWakeOpaL = 0;
+  // ── BANK WATER EFFECT update ──────────────────────────────────
+  // Logic + visuals in src/fx/19-bank-water-effect.js. State ↔ visual layers
+  // are decoupled inside the module so v2 (low-res distortion render-target)
+  // can swap the visual without touching gameplay code.
+  if (window.BankWaterEffect) {
+    window.BankWaterEffect.update({
+      shipPosition:   shipGroup.position,
+      shipQuaternion: shipGroup.quaternion,
+      rollAngle:      shipGroup.rotation.z,
+      speed:          state.speed || 0,
+      // speedFactor saturates around ~1.5x BASE_SPEED (matches audio module).
+      maxSpeed:       (typeof BASE_SPEED !== 'undefined') ? BASE_SPEED * 1.5 : 60,
+      waterY:         mirrorMesh.position.y,
+      overWater:      mirrorMesh.visible,
+    }, dt);
   }
 
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──
