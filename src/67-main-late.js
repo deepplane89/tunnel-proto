@@ -4452,6 +4452,35 @@ function update(dt) {
   }
   _pitchSmooth += (targetPitch - _pitchSmooth) * Math.min(1, dt * _pitchSmoothing);
 
+  // ── Pitch impulse: discrete nose dip/lift on every speed change ────────
+  // Spring-driven, layered on top of the steady-state pitch tilt above so
+  // small speed changes (gear-shift, pickup boost, brake pulse) get a visible
+  // 'kick' even when speedDelta is too small to move the steady-state tilt.
+  // Skipped while jumping or rolling so the cosmetic pose can't fight other
+  // forced ship rotations.
+  if (!_jumpActive && state.rollAngle === 0 && !state.rollHeld) {
+    const _absDelta = Math.abs(speedDelta);
+    if (_absDelta > _pitchImpulseThresh) {
+      // Sign: positive speedDelta (accel) -> nose DOWN -> negative impulse.
+      // sqrt curve so small deltas still register; clamped saturation.
+      const _impSign = speedDelta > 0 ? -1 : 1;
+      const _mag = Math.min(1.0, Math.sqrt(_absDelta) / 6.0);
+      _pitchImpulseVel += _impSign * _mag * _pitchImpulseGain * 60; // *60 ≈ frame-rate normalize
+    }
+    // Critically-damped spring integration toward 0.
+    const _stiffForce = -_pitchImpulsePos * _pitchImpulseStiff;
+    const _dampForce  = -_pitchImpulseVel * _pitchImpulseDamp;
+    _pitchImpulseVel += (_stiffForce + _dampForce) * dt;
+    _pitchImpulsePos += _pitchImpulseVel * dt;
+    if (_pitchImpulsePos >  _pitchImpulseMax) { _pitchImpulsePos =  _pitchImpulseMax; _pitchImpulseVel = 0; }
+    if (_pitchImpulsePos < -_pitchImpulseMax) { _pitchImpulsePos = -_pitchImpulseMax; _pitchImpulseVel = 0; }
+    _pitchSmooth += _pitchImpulsePos;
+  } else {
+    // Decay quickly when blocked so we don't pop on return.
+    _pitchImpulsePos *= 0.85;
+    _pitchImpulseVel *= 0.85;
+  }
+
   // ── Alt ship animation drive (wing bank + engine boost) ──
   if (_altShipActive && _altShipMixer) {
     const _roll = shipGroup.rotation.z || 0; // negative = banking right, positive = banking left

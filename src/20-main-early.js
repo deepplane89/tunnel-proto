@@ -8350,6 +8350,17 @@ let _cruiseYawAmp  = 0.022;       // rot.y noise amplitude (rad ~1.3°)
 let _cruiseBankAmp = 0.018;       // rot.z noise amplitude (rad ~1.0°) — micro-bank
 let _cruiseXAmp    = 0.010;       // pos.x noise amplitude (units)
 let _cruisePhase   = Math.random() * 10; // randomized so identical sessions desync
+// ── PITCH IMPULSE: discrete nose dip/lift on speed changes ──────────────
+// Critically-damped spring fed by Math.sign(speedDelta) * |speedDelta|^0.5 so
+// the impulse magnitude grows quickly with small deltas and saturates near
+// the max. Decoupled from the existing steady-state pitch tilt block.
+let _pitchImpulsePos = 0;          // current displacement (rad)
+let _pitchImpulseVel = 0;          // velocity (rad/s)
+let _pitchImpulseGain = 0.012;     // rad per sqrt(speedDelta) at impulse trigger
+let _pitchImpulseStiff = 90;       // spring stiffness (higher = snappier)
+let _pitchImpulseDamp  = 18;       // damping (critical ~ 2*sqrt(stiff))
+let _pitchImpulseThresh = 0.15;    // |speedDelta| threshold to trigger
+let _pitchImpulseMax   = 0.10;     // hard clamp on |pos| (rad ~5.7°)
 let _shipRotXOffset = 0.02;      // tuner offset for ship pitch angle
 let _shipRotZOffset = 0;         // tuner offset for ship roll angle
 let _shipZOffset = 0;            // tuner offset for ship Z position
