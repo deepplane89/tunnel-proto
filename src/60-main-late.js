@@ -1006,6 +1006,9 @@ function initTitleAudio() {
   engineGain.gain.value = 0.0;
   engineGain.connect(audioCtx.destination);
   _initSFXBuffers();  // pre-decode SFX for instant mobile playback
+  // Bank water hiss: synthesized noise loop, lives forever, gain driven by
+  // the visual effect's intensity (see src/fx/19a-bank-water-hiss.js).
+  if (window.BankWaterHiss) window.BankWaterHiss.init(audioCtx);
   bgMusic    = bgMusic    || document.getElementById('bgm');
   titleMusic = titleMusic || document.getElementById('title-music');
   if (!l3Music) { l3Music = document.getElementById('l3-music'); setTrackVol('l3', 0); }

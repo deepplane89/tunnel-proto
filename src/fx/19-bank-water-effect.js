@@ -463,11 +463,20 @@
     // header. dt is seconds since last frame.
     update(inputs, dt) {
       if (!this._ready) return;
-      if (window._bankWaterEffectEnabled === false) { this._visual.hide(); return; }
+      if (window._bankWaterEffectEnabled === false) {
+        this._visual.hide();
+        if (window.BankWaterHiss) window.BankWaterHiss.update(0, dt);
+        return;
+      }
       // Gate: must be over water AND mirror visible AND not paused.
-      if (!inputs.overWater) { this._visual.hide(); return; }
+      if (!inputs.overWater) {
+        this._visual.hide();
+        if (window.BankWaterHiss) window.BankWaterHiss.update(0, dt);
+        return;
+      }
       const state = getBankWaterEffectState(inputs);
       this._visual.update(state, dt);
+      if (window.BankWaterHiss) window.BankWaterHiss.update(state.intensity, dt);
     },
 
     // Power-users: swap the visual backend (v2 distortion render-target etc).
