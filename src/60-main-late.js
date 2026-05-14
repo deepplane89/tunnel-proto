@@ -1011,6 +1011,10 @@ function initTitleAudio() {
   // Bank water hiss: synthesized noise loop, lives forever, gain driven by
   // the visual effect's intensity (see src/fx/19a-bank-water-hiss.js).
   if (window.BankWaterHiss) window.BankWaterHiss.init(audioCtx);
+  // Strafe loop: continuous argon-ambient buffer, gain tracks steering
+  // intensity (see src/fx/19b-strafe-loop.js). Init is lazy — it will retry
+  // each frame in .update() until the buffer is decoded.
+  if (window.StrafeLoop) window.StrafeLoop.init();
   bgMusic    = bgMusic    || document.getElementById('bgm');
   titleMusic = titleMusic || document.getElementById('title-music');
   if (!l3Music) { l3Music = document.getElementById('l3-music'); setTrackVol('l3', 0); }

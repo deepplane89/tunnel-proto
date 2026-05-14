@@ -4116,114 +4116,16 @@ function update(dt) {
   state.shipVelX = Math.max(-tiltMaxVel, Math.min(tiltMaxVel, state.shipVelX));
   state.shipX   += state.shipVelX * dt;
 
-  // ── Argon edge-trigger + intensity modulation ──
-  // Re-enabled 2026-05-03 with new vr-flutter-rumble sample (file swapped at
-  // assets/audio/argon-ambient.mp3, same id/buffer name).
-  if (state.phase === 'playing' && !_introBlock) {
-    const _isSteering = !!(steerLeft || steerRight);
-    const _wasSteering = !!state._argonSteering;
-    const _argonEl = document.getElementById('argon-ambient-sfx');
-    if (!isSfxMuted()) {
-      // Non-looping: play the clip up to 2 times max per steering hold,
-      // fading in over the first play. No per-frame volume modulation.
-      const _PEAK_VOL = 0.40;     // target gain at end of fade-in
-      const _FADE_IN_SEC = 0.6;   // fade-in duration (clip is ~1.25s)
-      const _MAX_PLAYS = 2;
-      if (_isSteering && !_wasSteering) {
-        // Rising edge: cancel any pending fade-out, stop prior source, start play #1
-        if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
-        if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
-        if (state._argonSrc) {
-          try { state._argonSrc.stop(); } catch (_) {}
-          state._argonSrc = null;
-        }
-        state._argonPlayCount = 0;
-        // Web Audio path: one-shot with fade-in
-        const _src = (typeof _playArgonOnce === 'function') ? _playArgonOnce(_PEAK_VOL, _FADE_IN_SEC) : null;
-        if (_src) {
-          state._argonSrc = _src;
-          state._argonPath = 'wa';
-          state._argonPlayCount = 1;
-          if (_argonEl) { try { _argonEl.pause(); _argonEl.currentTime = 0; } catch (_) {} }
-          // Schedule a possible second play right at the end of the first.
-          // Picks up the gain at _PEAK_VOL (no second fade-in) so it sounds
-          // continuous, only if user is still steering when it fires.
-          const _dur = (_src._jhDuration || 1.25);
-          state._argonReplayTo = setTimeout(() => {
-            state._argonReplayTo = null;
-            if (!state._argonSteering || isSfxMuted()) return;
-            if ((state._argonPlayCount || 0) >= _MAX_PLAYS) return;
-            const _src2 = (typeof _playArgonOnce === 'function') ? _playArgonOnce(_PEAK_VOL, 0) : null;
-            if (_src2) {
-              // Old source has finished naturally; just swap reference
-              state._argonSrc = _src2;
-              state._argonPath = 'wa';
-              state._argonPlayCount = (state._argonPlayCount || 1) + 1;
-            }
-          }, Math.max(50, _dur * 1000 - 30));
-        } else if (_argonEl) {
-          // Element fallback (buffer not decoded). iOS ignores .volume so play
-          // straight at peak; no fade-in possible on this path.
-          try {
-            _argonEl.loop = false;
-            _argonEl.currentTime = 0;
-            _argonEl.volume = _PEAK_VOL;
-            _argonEl.playbackRate = 1.0;
-            _argonEl.play().catch(()=>{});
-          } catch (_) {}
-          state._argonPath = 'el';
-          state._argonPlayCount = 1;
-          // Schedule one possible replay
-          state._argonReplayTo = setTimeout(() => {
-            state._argonReplayTo = null;
-            if (!state._argonSteering || isSfxMuted()) return;
-            if ((state._argonPlayCount || 0) >= _MAX_PLAYS) return;
-            try {
-              _argonEl.currentTime = 0;
-              _argonEl.volume = _PEAK_VOL;
-              _argonEl.play().catch(()=>{});
-              state._argonPlayCount = (state._argonPlayCount || 1) + 1;
-            } catch (_) {}
-          }, 1220);
-        }
-      } else if (!_isSteering && _wasSteering) {
-        // Falling edge: cancel any pending replay, ~80ms fade then stop
-        if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
-        if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
-        if (state._argonPath === 'wa' && state._argonSrc && state._argonSrc._jhGain && audioCtx) {
-          const _src = state._argonSrc;
-          const _g = _src._jhGain;
-          const _now = audioCtx.currentTime;
-          try {
-            _g.gain.cancelScheduledValues(_now);
-            _g.gain.setValueAtTime(_g.gain.value, _now);
-            _g.gain.linearRampToValueAtTime(0, _now + 0.08);
-          } catch (_) {}
-          state._argonSrc = null;
-          state._argonPath = null;
-          setTimeout(() => { try { _src.stop(); } catch (_) {} }, 100);
-        } else if (_argonEl) {
-          // Element fallback fade (desktop only — iOS ignores .volume)
-          const _start = _argonEl.volume || 0;
-          let _step = 0;
-          const _steps = 5;
-          state._argonCutIv = setInterval(() => {
-            _step++;
-            const _t = _step / _steps;
-            try { _argonEl.volume = Math.max(0, _start * (1 - _t)); } catch (_) {}
-            if (_step >= _steps) {
-              clearInterval(state._argonCutIv);
-              state._argonCutIv = null;
-              try { _argonEl.pause(); _argonEl.currentTime = 0; _argonEl.volume = 0; } catch (_) {}
-            }
-          }, 16);
-          state._argonPath = null;
-        }
-        state._argonPlayCount = 0;
-      }
-      // Held (steering both this frame and last): no-op. Sound plays out naturally.
-    }
-    if (_isSteering !== _wasSteering) state._argonSteering = _isSteering;
+  // ── Strafe loop (continuous gain modulation) ───────────────────────────────
+  // Driven by window._steerNorm magnitude. Same modulation pattern as the
+  // bank-water hiss: smoothed gain on a permanently-looping buffer source.
+  // Logic in src/fx/19b-strafe-loop.js.
+  if (window.StrafeLoop) {
+    const _strafeIntensity =
+      (state.phase === 'playing' && !_introBlock && !isSfxMuted())
+        ? Math.abs(window._steerNorm || 0)
+        : 0;
+    window.StrafeLoop.update(_strafeIntensity, dt);
   }
 
 
