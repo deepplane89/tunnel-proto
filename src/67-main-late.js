@@ -2406,9 +2406,13 @@ function _flyRelease(slot) {
   slot.el.style.display = 'none';
 }
 
+// Scratch Vector3 reused by both fly-to-HUD paths — .project() mutates in place
+// so we no longer need worldPos.clone() per pickup. Saves an alloc per coin.
+const _flyProjScratch = new THREE.Vector3();
+
 // ── Coin fly-to-HUD animation (gold) ──
 function _spawnCoinFly(worldPos, hudEl) {
-  const v = worldPos.clone();
+  const v = _flyProjScratch.copy(worldPos);
   v.project(camera);
   const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
   const sy = (-v.y * 0.5 + 0.5) * window.innerHeight;
@@ -2454,7 +2458,7 @@ function _spawnCoinFly(worldPos, hudEl) {
 // ── Fuel cell fly-to-HUD animation ──
 function _spawnFuelFly(worldPos) {
   // Project 3D position to screen
-  const v = worldPos.clone();
+  const v = _flyProjScratch.copy(worldPos);
   v.project(camera);
   const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
   const sy = (-v.y * 0.5 + 0.5) * window.innerHeight;
@@ -4095,6 +4099,7 @@ function returnObstacleToPool(obs) {
   obs.userData.isCorridor = false;
   // echo system removed
   obs.userData.active = false;
+  obs.userData._fadeDone = false; // clear fade-fast-path flag so next spawn fades in again
   obs.visible = false;
   if (obs.userData.slalomScaled) {
     obs.scale.set(1, 1, 1);  // reset fat slalom scale
@@ -5815,34 +5820,39 @@ function update(dt) {
     // Smooth fade-in from horizon: invisible at spawn, fully opaque by z=-80
     const FADE_START_Z = SPAWN_Z;       // -160: totally transparent at birth
     const FADE_END_Z   = -110;          // fully opaque from here onward
-    const fadeT = Math.max(0, Math.min(1, (obs.position.z - FADE_START_Z) / (FADE_END_Z - FADE_START_Z)));
-    const fullyOpaque = fadeT >= 1.0;
-    const _mc = obs.userData._meshes;
-    for (let mi = 0; mi < _mc.length; mi++) {
-      const child = _mc[mi];
-      const baseOp = child.material.userData.baseOpacity ?? 1.0;
-      if (child.material.uniforms && child.material.uniforms.uOpacity) {
-        child.material.uniforms.uOpacity.value = fadeT * baseOp;
-        // Once fully opaque, swap to pre-compiled opaque sibling (no recompile).
-        // Falls back to in-place mutation if no sibling was built.
-        const _ud = child.material.userData;
-        if (fullyOpaque && child.material.transparent) {
-          const sib = _ud && _ud._opaqueSibling;
-          if (sib) { child.material = sib; }
-          else { child.material.transparent = false; child.material.depthWrite = true; child.material.needsUpdate = true; }
-        } else if (!fullyOpaque && !child.material.transparent) {
-          const sib = _ud && _ud._transparentSibling;
-          if (sib) { child.material = sib; }
-          else { child.material.transparent = true; child.material.depthWrite = false; child.material.needsUpdate = true; }
+    // Fast path: once an obstacle has been latched to fully opaque, skip the
+    // fade math + per-child material writes entirely. Saves O(obstacles×meshes)
+    // uniform writes every frame for the dominant case (most active obstacles
+    // are past the fade-in zone). Flag is cleared in returnObstacleToPool.
+    if (!obs.userData._fadeDone) {
+      const fadeT = Math.max(0, Math.min(1, (obs.position.z - FADE_START_Z) / (FADE_END_Z - FADE_START_Z)));
+      const fullyOpaque = fadeT >= 1.0;
+      const _mc = obs.userData._meshes;
+      for (let mi = 0; mi < _mc.length; mi++) {
+        const child = _mc[mi];
+        const baseOp = child.material.userData.baseOpacity ?? 1.0;
+        if (child.material.uniforms && child.material.uniforms.uOpacity) {
+          child.material.uniforms.uOpacity.value = fadeT * baseOp;
+          const _ud = child.material.userData;
+          if (fullyOpaque && child.material.transparent) {
+            const sib = _ud && _ud._opaqueSibling;
+            if (sib) { child.material = sib; }
+            else { child.material.transparent = false; child.material.depthWrite = true; child.material.needsUpdate = true; }
+          } else if (!fullyOpaque && !child.material.transparent) {
+            const sib = _ud && _ud._transparentSibling;
+            if (sib) { child.material = sib; }
+            else { child.material.transparent = true; child.material.depthWrite = false; child.material.needsUpdate = true; }
+          }
+        } else {
+          const wantTransparent = !fullyOpaque;
+          if (child.material.transparent !== wantTransparent) {
+            child.material.transparent = wantTransparent;
+            child.material.needsUpdate = true;
+          }
+          child.material.opacity = fullyOpaque ? 1.0 : fadeT * baseOp;
         }
-      } else {
-        const wantTransparent = !fullyOpaque;
-        if (child.material.transparent !== wantTransparent) {
-          child.material.transparent = wantTransparent;
-          child.material.needsUpdate = true;
-        }
-        child.material.opacity = fullyOpaque ? 1.0 : fadeT * baseOp;
       }
+      if (fullyOpaque) obs.userData._fadeDone = true;
     }
 
     if (obs.position.z > DESPAWN_Z) {
@@ -6101,9 +6111,13 @@ function update(dt) {
     if (state.magnetActive && state.magnetPullsPowerups) {
       const dx = state.shipX - pu.position.x;
       const dz = shipGroup.position.z - pu.position.z;
-      const dist = Math.sqrt(dx*dx + dz*dz);
-      if (dist < state.magnetRadius) {
-        const pull = 40 * dt; // pull speed — strong enough to reel in distant powerups
+      const distSq = dx*dx + dz*dz;
+      const rMag = state.magnetRadius;
+      if (distSq < rMag * rMag) {
+        // sqrt only when inside the radius (rare branch). Avoids per-frame
+        // sqrt across every active powerup whether magnet would reach it or not.
+        const dist = Math.sqrt(distSq) || 1;
+        const pull = 40 * dt;
         pu.position.x += (dx / dist) * pull;
         pu.position.z += (dz / dist) * pull;
       }
@@ -6157,8 +6171,11 @@ function update(dt) {
     if (state.magnetActive) {
       const dx = coin.position.x - state.shipX;
       const dz = coin.position.z - shipGroup.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < (state.magnetRadius || 18)) {
+      // Squared compare — no sqrt. Pull math is linear (dx*5*dt) so it never
+      // needed normalized direction anyway. With 60+ active coins during a
+      // magnet chain, this drops ~60 sqrt/frame.
+      const rMag = state.magnetRadius || 18;
+      if (dx * dx + dz * dz < rMag * rMag) {
         coin.position.x -= dx * 5 * dt;
         coin.position.z -= dz * 3 * dt;
       }
@@ -6175,7 +6192,9 @@ function update(dt) {
     const dcx = Math.abs(coin.position.x - state.shipX);
     const dcz = Math.abs(coin.position.z - shipGroup.position.z);
     if (dcx < 1.6 && dcz < 1.6) {
-      collectCoin(coin, coin.position.clone());
+      // Pass position directly — _spawnCoinFly now uses a scratch Vector3 internally
+      // (won't mutate coin.position before returnCoinToPool resets it).
+      collectCoin(coin, coin.position);
       returnCoinToPool(coin);
       activeCoins.splice(ci, 1);
     }

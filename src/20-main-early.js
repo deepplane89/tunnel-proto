@@ -5269,7 +5269,9 @@ function updateRibbonGeo(geo, pts, halfWidth, segs, rootFade) {
     pos.setXYZ(j*2 + 1, pts[j].x - nx*hw2, pts[j].y - ny*hw2, 0);
   }
   pos.needsUpdate = true;
-  geo.computeBoundingSphere();
+  // All tendril meshes use frustumCulled=false, so computeBoundingSphere() is
+  // pure waste — it walked every vertex of 340 geometries per frame in L4+L5
+  // tendril stages. Three.js only consults bounding spheres for culling.
 }
 
 for (let i = 0; i < AURORA_COUNT; i++) {

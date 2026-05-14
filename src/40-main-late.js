@@ -1875,6 +1875,11 @@ function _spawnLethalRing(x, z) {
 // Gated off via _ECHOES_ENABLED=false since obstacle redesign and never
 // reactivated. Function deleted; call sites no-op'd in spawnObstacles below.
 
+// Module-scope scratches for spawnObstacles — avoid per-wave allocations.
+// Fisher-Yates shuffle into _shuffleScratch; reusable _blockedScratch.
+const _shuffleScratch = [];
+const _blockedScratch = [];
+
 function spawnObstacles() {
   state._invObstaclesSpawned = (state._invObstaclesSpawned || 0) + 1;
   let lvl;
@@ -1995,12 +2000,19 @@ function spawnObstacles() {
 
   // Always guarantee at least 2 adjacent free lanes so there's a clear path
   const _spawnLaneCount = LANE_COUNT;
-  const lanes   = Array.from({ length: _spawnLaneCount }, (_, i) => i);
-  const shuffled = [...lanes].sort(() => Math.random() - 0.5);
+  // Fisher-Yates shuffle into reused scratch (no Array.from / spread / sort).
+  const shuffled = _shuffleScratch;
+  shuffled.length = _spawnLaneCount;
+  for (let i = 0; i < _spawnLaneCount; i++) shuffled[i] = i;
+  for (let i = _spawnLaneCount - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp;
+  }
 
-  // Pick a guaranteed gap: a random 2-wide corridor that is always free
+  // Pick a guaranteed gap: a random 2-wide corridor that is always free.
+  // Two-int range check beats Set.has for a 2-element set.
   const gapStart  = Math.floor(Math.random() * (_spawnLaneCount - 1));
-  const gapLanes  = new Set([gapStart, gapStart + 1]);
+  const gapEnd    = gapStart + 1;
 
   // S1 ramp anti-bunch rule: enforce a minimum lane gap so cones in the
   // same row never sit shoulder-to-shoulder. Multi-cone rows are fine —
@@ -2010,10 +2022,12 @@ function spawnObstacles() {
   // enough that the row still feels dense as the stage intensifies.
   const _rampMinGap = 3;
 
-  const blocked = [];
-  for (const lane of shuffled) {
+  const blocked = _blockedScratch;
+  blocked.length = 0;
+  for (let si = 0; si < shuffled.length; si++) {
+    const lane = shuffled[si];
     if (blocked.length >= clampedCount) break;
-    if (gapLanes.has(lane)) continue;
+    if (lane === gapStart || lane === gapEnd) continue;
     // For rings/walls/mix: enforce minimum lane gap so they don't overlap
     if ((_isRingBand || _isMixBand) && blocked.some(b => Math.abs(b - lane) < 4)) continue;
     if (_isWallBand && blocked.some(b => Math.abs(b - lane) < (window._awRand ? window._awRand.laneGap : 3))) continue;
@@ -2386,31 +2400,41 @@ function collectCoin(coin, worldPos) {
       wo.connect(wg).connect(audioCtx.destination);
       wo.start(); wo.stop(t + 0.12);
     }
-    const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
-    notes.forEach((freq, i) => {
-      const osc  = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      // Add a little shimmer with a detuned second oscillator
-      const osc2  = audioCtx.createOscillator();
-      const gain2 = audioCtx.createGain();
-      const onset = t + i * 0.06;
-      const dur   = 0.22 - i * 0.02;
-      osc.type  = 'sine';
-      osc2.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, onset);
-      osc2.frequency.setValueAtTime(freq * 1.004, onset); // slight detune shimmer
-      // Attack
-      gain.gain.setValueAtTime(0.0, onset);
-      gain.gain.linearRampToValueAtTime((0.10 - i * 0.01) * _sM, onset + 0.012);
-      gain.gain.exponentialRampToValueAtTime(0.001, onset + dur);
-      gain2.gain.setValueAtTime(0.0, onset);
-      gain2.gain.linearRampToValueAtTime(0.04 * _sM, onset + 0.012);
-      gain2.gain.exponentialRampToValueAtTime(0.001, onset + dur);
-      osc.connect(gain).connect(audioCtx.destination);
-      osc2.connect(gain2).connect(audioCtx.destination);
-      osc.start(onset);  osc.stop(onset + dur);
-      osc2.start(onset); osc2.stop(onset + dur);
-    });
+    // Chime throttle: each chime spawns 6 oscillators + 6 gains. During a
+    // magnet sweep multiple coins land in the same frame, stacking 30+ voices
+    // for an effect that's audibly indistinguishable from one chime. Cap to
+    // one full chime every 80ms; the per-coin magnet whoosh above stays
+    // (cheap, gives unique per-coin feedback). Note: doesn't compound across
+    // runs — state._lastChimeT is reset on play start.
+    const _nowSec = audioCtx.currentTime;
+    if (!state._lastChimeT || (_nowSec - state._lastChimeT) > 0.08) {
+      state._lastChimeT = _nowSec;
+      const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+      notes.forEach((freq, i) => {
+        const osc  = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        // Add a little shimmer with a detuned second oscillator
+        const osc2  = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        const onset = t + i * 0.06;
+        const dur   = 0.22 - i * 0.02;
+        osc.type  = 'sine';
+        osc2.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, onset);
+        osc2.frequency.setValueAtTime(freq * 1.004, onset); // slight detune shimmer
+        // Attack
+        gain.gain.setValueAtTime(0.0, onset);
+        gain.gain.linearRampToValueAtTime((0.10 - i * 0.01) * _sM, onset + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.001, onset + dur);
+        gain2.gain.setValueAtTime(0.0, onset);
+        gain2.gain.linearRampToValueAtTime(0.04 * _sM, onset + 0.012);
+        gain2.gain.exponentialRampToValueAtTime(0.001, onset + dur);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc2.connect(gain2).connect(audioCtx.destination);
+        osc.start(onset);  osc.stop(onset + dur);
+        osc2.start(onset); osc2.stop(onset + dur);
+      });
+    }
   }
 }
 

@@ -6693,7 +6693,9 @@ function updateRibbonGeo(geo, pts, halfWidth, segs, rootFade) {
     pos.setXYZ(j*2 + 1, pts[j].x - nx*hw2, pts[j].y - ny*hw2, 0);
   }
   pos.needsUpdate = true;
-  geo.computeBoundingSphere();
+  // All tendril meshes use frustumCulled=false, so computeBoundingSphere() is
+  // pure waste — it walked every vertex of 340 geometries per frame in L4+L5
+  // tendril stages. Three.js only consults bounding spheres for culling.
 }
 
 for (let i = 0; i < AURORA_COUNT; i++) {
@@ -16646,6 +16648,11 @@ function _spawnLethalRing(x, z) {
 // Gated off via _ECHOES_ENABLED=false since obstacle redesign and never
 // reactivated. Function deleted; call sites no-op'd in spawnObstacles below.
 
+// Module-scope scratches for spawnObstacles — avoid per-wave allocations.
+// Fisher-Yates shuffle into _shuffleScratch; reusable _blockedScratch.
+const _shuffleScratch = [];
+const _blockedScratch = [];
+
 function spawnObstacles() {
   state._invObstaclesSpawned = (state._invObstaclesSpawned || 0) + 1;
   let lvl;
@@ -16766,12 +16773,19 @@ function spawnObstacles() {
 
   // Always guarantee at least 2 adjacent free lanes so there's a clear path
   const _spawnLaneCount = LANE_COUNT;
-  const lanes   = Array.from({ length: _spawnLaneCount }, (_, i) => i);
-  const shuffled = [...lanes].sort(() => Math.random() - 0.5);
+  // Fisher-Yates shuffle into reused scratch (no Array.from / spread / sort).
+  const shuffled = _shuffleScratch;
+  shuffled.length = _spawnLaneCount;
+  for (let i = 0; i < _spawnLaneCount; i++) shuffled[i] = i;
+  for (let i = _spawnLaneCount - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp;
+  }
 
-  // Pick a guaranteed gap: a random 2-wide corridor that is always free
+  // Pick a guaranteed gap: a random 2-wide corridor that is always free.
+  // Two-int range check beats Set.has for a 2-element set.
   const gapStart  = Math.floor(Math.random() * (_spawnLaneCount - 1));
-  const gapLanes  = new Set([gapStart, gapStart + 1]);
+  const gapEnd    = gapStart + 1;
 
   // S1 ramp anti-bunch rule: enforce a minimum lane gap so cones in the
   // same row never sit shoulder-to-shoulder. Multi-cone rows are fine —
@@ -16781,10 +16795,12 @@ function spawnObstacles() {
   // enough that the row still feels dense as the stage intensifies.
   const _rampMinGap = 3;
 
-  const blocked = [];
-  for (const lane of shuffled) {
+  const blocked = _blockedScratch;
+  blocked.length = 0;
+  for (let si = 0; si < shuffled.length; si++) {
+    const lane = shuffled[si];
     if (blocked.length >= clampedCount) break;
-    if (gapLanes.has(lane)) continue;
+    if (lane === gapStart || lane === gapEnd) continue;
     // For rings/walls/mix: enforce minimum lane gap so they don't overlap
     if ((_isRingBand || _isMixBand) && blocked.some(b => Math.abs(b - lane) < 4)) continue;
     if (_isWallBand && blocked.some(b => Math.abs(b - lane) < (window._awRand ? window._awRand.laneGap : 3))) continue;
@@ -17157,31 +17173,41 @@ function collectCoin(coin, worldPos) {
       wo.connect(wg).connect(audioCtx.destination);
       wo.start(); wo.stop(t + 0.12);
     }
-    const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
-    notes.forEach((freq, i) => {
-      const osc  = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      // Add a little shimmer with a detuned second oscillator
-      const osc2  = audioCtx.createOscillator();
-      const gain2 = audioCtx.createGain();
-      const onset = t + i * 0.06;
-      const dur   = 0.22 - i * 0.02;
-      osc.type  = 'sine';
-      osc2.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, onset);
-      osc2.frequency.setValueAtTime(freq * 1.004, onset); // slight detune shimmer
-      // Attack
-      gain.gain.setValueAtTime(0.0, onset);
-      gain.gain.linearRampToValueAtTime((0.10 - i * 0.01) * _sM, onset + 0.012);
-      gain.gain.exponentialRampToValueAtTime(0.001, onset + dur);
-      gain2.gain.setValueAtTime(0.0, onset);
-      gain2.gain.linearRampToValueAtTime(0.04 * _sM, onset + 0.012);
-      gain2.gain.exponentialRampToValueAtTime(0.001, onset + dur);
-      osc.connect(gain).connect(audioCtx.destination);
-      osc2.connect(gain2).connect(audioCtx.destination);
-      osc.start(onset);  osc.stop(onset + dur);
-      osc2.start(onset); osc2.stop(onset + dur);
-    });
+    // Chime throttle: each chime spawns 6 oscillators + 6 gains. During a
+    // magnet sweep multiple coins land in the same frame, stacking 30+ voices
+    // for an effect that's audibly indistinguishable from one chime. Cap to
+    // one full chime every 80ms; the per-coin magnet whoosh above stays
+    // (cheap, gives unique per-coin feedback). Note: doesn't compound across
+    // runs — state._lastChimeT is reset on play start.
+    const _nowSec = audioCtx.currentTime;
+    if (!state._lastChimeT || (_nowSec - state._lastChimeT) > 0.08) {
+      state._lastChimeT = _nowSec;
+      const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+      notes.forEach((freq, i) => {
+        const osc  = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        // Add a little shimmer with a detuned second oscillator
+        const osc2  = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        const onset = t + i * 0.06;
+        const dur   = 0.22 - i * 0.02;
+        osc.type  = 'sine';
+        osc2.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, onset);
+        osc2.frequency.setValueAtTime(freq * 1.004, onset); // slight detune shimmer
+        // Attack
+        gain.gain.setValueAtTime(0.0, onset);
+        gain.gain.linearRampToValueAtTime((0.10 - i * 0.01) * _sM, onset + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.001, onset + dur);
+        gain2.gain.setValueAtTime(0.0, onset);
+        gain2.gain.linearRampToValueAtTime(0.04 * _sM, onset + 0.012);
+        gain2.gain.exponentialRampToValueAtTime(0.001, onset + dur);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc2.connect(gain2).connect(audioCtx.destination);
+        osc.start(onset);  osc.stop(onset + dur);
+        osc2.start(onset); osc2.stop(onset + dur);
+      });
+    }
   }
 }
 
@@ -24601,9 +24627,13 @@ function _flyRelease(slot) {
   slot.el.style.display = 'none';
 }
 
+// Scratch Vector3 reused by both fly-to-HUD paths — .project() mutates in place
+// so we no longer need worldPos.clone() per pickup. Saves an alloc per coin.
+const _flyProjScratch = new THREE.Vector3();
+
 // ── Coin fly-to-HUD animation (gold) ──
 function _spawnCoinFly(worldPos, hudEl) {
-  const v = worldPos.clone();
+  const v = _flyProjScratch.copy(worldPos);
   v.project(camera);
   const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
   const sy = (-v.y * 0.5 + 0.5) * window.innerHeight;
@@ -24649,7 +24679,7 @@ function _spawnCoinFly(worldPos, hudEl) {
 // ── Fuel cell fly-to-HUD animation ──
 function _spawnFuelFly(worldPos) {
   // Project 3D position to screen
-  const v = worldPos.clone();
+  const v = _flyProjScratch.copy(worldPos);
   v.project(camera);
   const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
   const sy = (-v.y * 0.5 + 0.5) * window.innerHeight;
@@ -26290,6 +26320,7 @@ function returnObstacleToPool(obs) {
   obs.userData.isCorridor = false;
   // echo system removed
   obs.userData.active = false;
+  obs.userData._fadeDone = false; // clear fade-fast-path flag so next spawn fades in again
   obs.visible = false;
   if (obs.userData.slalomScaled) {
     obs.scale.set(1, 1, 1);  // reset fat slalom scale
@@ -28010,34 +28041,39 @@ function update(dt) {
     // Smooth fade-in from horizon: invisible at spawn, fully opaque by z=-80
     const FADE_START_Z = SPAWN_Z;       // -160: totally transparent at birth
     const FADE_END_Z   = -110;          // fully opaque from here onward
-    const fadeT = Math.max(0, Math.min(1, (obs.position.z - FADE_START_Z) / (FADE_END_Z - FADE_START_Z)));
-    const fullyOpaque = fadeT >= 1.0;
-    const _mc = obs.userData._meshes;
-    for (let mi = 0; mi < _mc.length; mi++) {
-      const child = _mc[mi];
-      const baseOp = child.material.userData.baseOpacity ?? 1.0;
-      if (child.material.uniforms && child.material.uniforms.uOpacity) {
-        child.material.uniforms.uOpacity.value = fadeT * baseOp;
-        // Once fully opaque, swap to pre-compiled opaque sibling (no recompile).
-        // Falls back to in-place mutation if no sibling was built.
-        const _ud = child.material.userData;
-        if (fullyOpaque && child.material.transparent) {
-          const sib = _ud && _ud._opaqueSibling;
-          if (sib) { child.material = sib; }
-          else { child.material.transparent = false; child.material.depthWrite = true; child.material.needsUpdate = true; }
-        } else if (!fullyOpaque && !child.material.transparent) {
-          const sib = _ud && _ud._transparentSibling;
-          if (sib) { child.material = sib; }
-          else { child.material.transparent = true; child.material.depthWrite = false; child.material.needsUpdate = true; }
+    // Fast path: once an obstacle has been latched to fully opaque, skip the
+    // fade math + per-child material writes entirely. Saves O(obstacles×meshes)
+    // uniform writes every frame for the dominant case (most active obstacles
+    // are past the fade-in zone). Flag is cleared in returnObstacleToPool.
+    if (!obs.userData._fadeDone) {
+      const fadeT = Math.max(0, Math.min(1, (obs.position.z - FADE_START_Z) / (FADE_END_Z - FADE_START_Z)));
+      const fullyOpaque = fadeT >= 1.0;
+      const _mc = obs.userData._meshes;
+      for (let mi = 0; mi < _mc.length; mi++) {
+        const child = _mc[mi];
+        const baseOp = child.material.userData.baseOpacity ?? 1.0;
+        if (child.material.uniforms && child.material.uniforms.uOpacity) {
+          child.material.uniforms.uOpacity.value = fadeT * baseOp;
+          const _ud = child.material.userData;
+          if (fullyOpaque && child.material.transparent) {
+            const sib = _ud && _ud._opaqueSibling;
+            if (sib) { child.material = sib; }
+            else { child.material.transparent = false; child.material.depthWrite = true; child.material.needsUpdate = true; }
+          } else if (!fullyOpaque && !child.material.transparent) {
+            const sib = _ud && _ud._transparentSibling;
+            if (sib) { child.material = sib; }
+            else { child.material.transparent = true; child.material.depthWrite = false; child.material.needsUpdate = true; }
+          }
+        } else {
+          const wantTransparent = !fullyOpaque;
+          if (child.material.transparent !== wantTransparent) {
+            child.material.transparent = wantTransparent;
+            child.material.needsUpdate = true;
+          }
+          child.material.opacity = fullyOpaque ? 1.0 : fadeT * baseOp;
         }
-      } else {
-        const wantTransparent = !fullyOpaque;
-        if (child.material.transparent !== wantTransparent) {
-          child.material.transparent = wantTransparent;
-          child.material.needsUpdate = true;
-        }
-        child.material.opacity = fullyOpaque ? 1.0 : fadeT * baseOp;
       }
+      if (fullyOpaque) obs.userData._fadeDone = true;
     }
 
     if (obs.position.z > DESPAWN_Z) {
@@ -28296,9 +28332,13 @@ function update(dt) {
     if (state.magnetActive && state.magnetPullsPowerups) {
       const dx = state.shipX - pu.position.x;
       const dz = shipGroup.position.z - pu.position.z;
-      const dist = Math.sqrt(dx*dx + dz*dz);
-      if (dist < state.magnetRadius) {
-        const pull = 40 * dt; // pull speed — strong enough to reel in distant powerups
+      const distSq = dx*dx + dz*dz;
+      const rMag = state.magnetRadius;
+      if (distSq < rMag * rMag) {
+        // sqrt only when inside the radius (rare branch). Avoids per-frame
+        // sqrt across every active powerup whether magnet would reach it or not.
+        const dist = Math.sqrt(distSq) || 1;
+        const pull = 40 * dt;
         pu.position.x += (dx / dist) * pull;
         pu.position.z += (dz / dist) * pull;
       }
@@ -28352,8 +28392,11 @@ function update(dt) {
     if (state.magnetActive) {
       const dx = coin.position.x - state.shipX;
       const dz = coin.position.z - shipGroup.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < (state.magnetRadius || 18)) {
+      // Squared compare — no sqrt. Pull math is linear (dx*5*dt) so it never
+      // needed normalized direction anyway. With 60+ active coins during a
+      // magnet chain, this drops ~60 sqrt/frame.
+      const rMag = state.magnetRadius || 18;
+      if (dx * dx + dz * dz < rMag * rMag) {
         coin.position.x -= dx * 5 * dt;
         coin.position.z -= dz * 3 * dt;
       }
@@ -28370,7 +28413,9 @@ function update(dt) {
     const dcx = Math.abs(coin.position.x - state.shipX);
     const dcz = Math.abs(coin.position.z - shipGroup.position.z);
     if (dcx < 1.6 && dcz < 1.6) {
-      collectCoin(coin, coin.position.clone());
+      // Pass position directly — _spawnCoinFly now uses a scratch Vector3 internally
+      // (won't mutate coin.position before returnCoinToPool resets it).
+      collectCoin(coin, coin.position);
       returnCoinToPool(coin);
       activeCoins.splice(ci, 1);
     }
