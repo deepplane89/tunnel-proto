@@ -69,12 +69,10 @@ function applyGraphicsQuality() {
     if (window._starMat && window._starMat.uniforms && window._starMat.uniforms.uPixelRatio) {
       window._starMat.uniforms.uPixelRatio.value = dpr;
     }
-    // Live MSAA tier swap. The graphics picker is title-screen-gated
-    // (see openSettings below), so this only runs when no active game
-    // render is happening — safe to dispose composer FBOs.
-    if (typeof window._rebuildComposerSamples === 'function') {
-      window._rebuildComposerSamples();
-    }
+    // NOTE: do NOT call _rebuildComposerSamples here. This function is
+    // called by adaptive DPR every time framerate changes — rebuilding
+    // the composer mid-game causes hitches. MSAA rebuild only runs from
+    // explicit mode picker (see button handler).
   } catch(e) {}
 }
 window.applyGraphicsQuality = applyGraphicsQuality;
@@ -453,6 +451,12 @@ function _initSettingsAccordion() {
         if (bb) bb.classList.toggle('active', qq === q);
       });
       applyGraphicsQuality();
+      // Explicit mode pick — rebuild MSAA composer RT (safe: picker is
+      // title-gated, no active game render). DPR adaptive doesn't call
+      // this so it can't hitch mid-game.
+      if (typeof window._rebuildComposerSamples === 'function') {
+        window._rebuildComposerSamples();
+      }
       saveSettings();
     });
   });
