@@ -154,7 +154,9 @@ function openSettings() {
   // for one-rule simplicity; user explicitly asked to remove DISPLAY in pause.
   const _dispSec = document.getElementById('display-section');
   if (_dispSec) {
-    const _onTitle = !window.state || window.state.phase === 'title';
+    // `state` is module-const, NOT on window — earlier gate used window.state
+    // which is always undefined, so the row stayed visible. Use bare ref.
+    const _onTitle = (typeof state === 'undefined') || state.phase === 'title';
     _dispSec.style.display = _onTitle ? '' : 'none';
   }
 
