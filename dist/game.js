@@ -21791,9 +21791,9 @@ function openSettings() {
   document.getElementById('vol-music').value = _settings.musicVol;
   document.getElementById('vol-sfx').value = _settings.sfxVol;
   document.getElementById('mute-music').classList.toggle('muted', _settings.musicMuted);
-  document.getElementById('mute-music').textContent = _settings.musicMuted ? '🔇' : '♪';
+  document.getElementById('mute-music').textContent = _settings.musicMuted ? '🔇' : '🔊';
   document.getElementById('mute-sfx').classList.toggle('muted', _settings.sfxMuted);
-  document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '♪';
+  document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '🔊';
   const hBtn = document.getElementById('haptic-toggle');
   hBtn.textContent = _settings.hapticsOn ? 'ON' : 'OFF';
   hBtn.classList.toggle('off', !_settings.hapticsOn);
@@ -22059,7 +22059,7 @@ function _initSettingsAccordion() {
     _settings.musicVol = parseInt(e.target.value);
     _settings.musicMuted = false;
     document.getElementById('mute-music').classList.remove('muted');
-    document.getElementById('mute-music').textContent = '♪';
+    document.getElementById('mute-music').textContent = '🔊';
     applyMusicVolume();
     saveSettings();
   });
@@ -22069,7 +22069,7 @@ function _initSettingsAccordion() {
     _settings.sfxVol = parseInt(e.target.value);
     _settings.sfxMuted = false;
     document.getElementById('mute-sfx').classList.remove('muted');
-    document.getElementById('mute-sfx').textContent = '♪';
+    document.getElementById('mute-sfx').textContent = '🔊';
     applySfxMute(); // refresh state.muted (and no-op live stop since not muted)
     saveSettings();
   });
@@ -22079,7 +22079,7 @@ function _initSettingsAccordion() {
   _tapBind(document.getElementById('mute-music'), () => {
     _settings.musicMuted = !_settings.musicMuted;
     document.getElementById('mute-music').classList.toggle('muted', _settings.musicMuted);
-    document.getElementById('mute-music').textContent = _settings.musicMuted ? '🔇' : '♪';
+    document.getElementById('mute-music').textContent = _settings.musicMuted ? '🔇' : '🔊';
     applyMusicVolume();
     saveSettings();
   }, { moveCancel: true });
@@ -22088,7 +22088,7 @@ function _initSettingsAccordion() {
   _tapBind(document.getElementById('mute-sfx'), () => {
     _settings.sfxMuted = !_settings.sfxMuted;
     document.getElementById('mute-sfx').classList.toggle('muted', _settings.sfxMuted);
-    document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '♪';
+    document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '🔊';
     applySfxMute(); // immediately silence looping <audio> SFX when muting
     saveSettings();
   }, { moveCancel: true });
