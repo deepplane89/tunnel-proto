@@ -6480,12 +6480,6 @@ normal = _dbn;`;
           if (!m.material || _seenMats.has(m.material)) continue;
           _seenMats.add(m.material);
           _coneWarmScene.add(new THREE.Mesh(m.geometry, m.material));
-          // Also compile the opaque sibling so the fadeT=1 swap is hitch-free.
-          const sib = m.material.userData && m.material.userData._opaqueSibling;
-          if (sib && !_seenMats.has(sib)) {
-            _seenMats.add(sib);
-            _coneWarmScene.add(new THREE.Mesh(m.geometry, sib));
-          }
         }
       }
       renderer.compile(_coneWarmScene, _coneWarmCam);
@@ -9391,16 +9385,11 @@ function createObstacleMesh(type) {
   });
   bodyMat.userData.baseOpacity = 1.0;
   bodyMat.userData.baseColor   = CONE_COLORS[type];
-  // Pre-built opaque sibling: same shader/uniforms (shared by reference) but
-  // transparent:false / depthWrite:true. Swapped in at fadeT=1 to avoid the
-  // shader-recompile that material.needsUpdate=true triggers.
-  const bodyMatOpaque = bodyMat.clone();
-  bodyMatOpaque.transparent = false;
-  bodyMatOpaque.depthWrite  = true;
-  bodyMatOpaque.uniforms    = bodyMat.uniforms; // share uniforms so uOpacity stays in sync
-  bodyMatOpaque.userData    = bodyMat.userData; // share userData (baseOpacity, baseColor)
-  bodyMat.userData._opaqueSibling = bodyMatOpaque;
-  bodyMatOpaque.userData._transparentSibling = bodyMat;
+  // Sibling-material swap removed: shared uniforms/userData between two
+  // materials caused obstacle flicker. Material stays transparent:true,
+  // depthWrite:false for its entire lifetime; the shader's uOpacity uniform
+  // is animated by the fade code, and obstacles past fadeT=1 simply render
+  // fully opaque via the alpha-1 path. Single material = no swap glitches.
   const bodyMesh = new THREE.Mesh(new THREE.ConeGeometry(1.6, totalH, SEGS), bodyMat);
   bodyMesh.position.y = totalH / 2 - SINK;
   group.add(bodyMesh);

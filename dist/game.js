@@ -7904,12 +7904,6 @@ normal = _dbn;`;
           if (!m.material || _seenMats.has(m.material)) continue;
           _seenMats.add(m.material);
           _coneWarmScene.add(new THREE.Mesh(m.geometry, m.material));
-          // Also compile the opaque sibling so the fadeT=1 swap is hitch-free.
-          const sib = m.material.userData && m.material.userData._opaqueSibling;
-          if (sib && !_seenMats.has(sib)) {
-            _seenMats.add(sib);
-            _coneWarmScene.add(new THREE.Mesh(m.geometry, sib));
-          }
         }
       }
       renderer.compile(_coneWarmScene, _coneWarmCam);
@@ -10815,16 +10809,11 @@ function createObstacleMesh(type) {
   });
   bodyMat.userData.baseOpacity = 1.0;
   bodyMat.userData.baseColor   = CONE_COLORS[type];
-  // Pre-built opaque sibling: same shader/uniforms (shared by reference) but
-  // transparent:false / depthWrite:true. Swapped in at fadeT=1 to avoid the
-  // shader-recompile that material.needsUpdate=true triggers.
-  const bodyMatOpaque = bodyMat.clone();
-  bodyMatOpaque.transparent = false;
-  bodyMatOpaque.depthWrite  = true;
-  bodyMatOpaque.uniforms    = bodyMat.uniforms; // share uniforms so uOpacity stays in sync
-  bodyMatOpaque.userData    = bodyMat.userData; // share userData (baseOpacity, baseColor)
-  bodyMat.userData._opaqueSibling = bodyMatOpaque;
-  bodyMatOpaque.userData._transparentSibling = bodyMat;
+  // Sibling-material swap removed: shared uniforms/userData between two
+  // materials caused obstacle flicker. Material stays transparent:true,
+  // depthWrite:false for its entire lifetime; the shader's uOpacity uniform
+  // is animated by the fade code, and obstacles past fadeT=1 simply render
+  // fully opaque via the alpha-1 path. Single material = no swap glitches.
   const bodyMesh = new THREE.Mesh(new THREE.ConeGeometry(1.6, totalH, SEGS), bodyMat);
   bodyMesh.position.y = totalH / 2 - SINK;
   group.add(bodyMesh);
@@ -26318,7 +26307,6 @@ function returnObstacleToPool(obs) {
   obs.userData.isCorridor = false;
   // echo system removed
   obs.userData.active = false;
-  obs.userData._fadeDone = false; // clear fade-fast-path flag so next spawn fades in again
   obs.visible = false;
   if (obs.userData.slalomScaled) {
     obs.scale.set(1, 1, 1);  // reset fat slalom scale
@@ -28039,39 +28027,20 @@ function update(dt) {
     // Smooth fade-in from horizon: invisible at spawn, fully opaque by z=-80
     const FADE_START_Z = SPAWN_Z;       // -160: totally transparent at birth
     const FADE_END_Z   = -110;          // fully opaque from here onward
-    // Fast path: once an obstacle has been latched to fully opaque, skip the
-    // fade math + per-child material writes entirely. Saves O(obstacles×meshes)
-    // uniform writes every frame for the dominant case (most active obstacles
-    // are past the fade-in zone). Flag is cleared in returnObstacleToPool.
-    if (!obs.userData._fadeDone) {
-      const fadeT = Math.max(0, Math.min(1, (obs.position.z - FADE_START_Z) / (FADE_END_Z - FADE_START_Z)));
-      const fullyOpaque = fadeT >= 1.0;
-      const _mc = obs.userData._meshes;
-      for (let mi = 0; mi < _mc.length; mi++) {
-        const child = _mc[mi];
-        const baseOp = child.material.userData.baseOpacity ?? 1.0;
-        if (child.material.uniforms && child.material.uniforms.uOpacity) {
-          child.material.uniforms.uOpacity.value = fadeT * baseOp;
-          const _ud = child.material.userData;
-          if (fullyOpaque && child.material.transparent) {
-            const sib = _ud && _ud._opaqueSibling;
-            if (sib) { child.material = sib; }
-            else { child.material.transparent = false; child.material.depthWrite = true; child.material.needsUpdate = true; }
-          } else if (!fullyOpaque && !child.material.transparent) {
-            const sib = _ud && _ud._transparentSibling;
-            if (sib) { child.material = sib; }
-            else { child.material.transparent = true; child.material.depthWrite = false; child.material.needsUpdate = true; }
-          }
-        } else {
-          const wantTransparent = !fullyOpaque;
-          if (child.material.transparent !== wantTransparent) {
-            child.material.transparent = wantTransparent;
-            child.material.needsUpdate = true;
-          }
-          child.material.opacity = fullyOpaque ? 1.0 : fadeT * baseOp;
-        }
+    // Fade math runs every frame. Materials stay transparent:true,
+    // depthWrite:false for their entire lifetime — fadeT=1.0 past the fade
+    // window just makes the shader render fully opaque via the alpha=1 path.
+    // No material swap, no needsUpdate churn, no flicker.
+    const fadeT = Math.max(0, Math.min(1, (obs.position.z - FADE_START_Z) / (FADE_END_Z - FADE_START_Z)));
+    const _mc = obs.userData._meshes;
+    for (let mi = 0; mi < _mc.length; mi++) {
+      const child = _mc[mi];
+      const baseOp = child.material.userData.baseOpacity ?? 1.0;
+      if (child.material.uniforms && child.material.uniforms.uOpacity) {
+        child.material.uniforms.uOpacity.value = fadeT * baseOp;
+      } else {
+        child.material.opacity = fadeT * baseOp;
       }
-      if (fullyOpaque) obs.userData._fadeDone = true;
     }
 
     if (obs.position.z > DESPAWN_Z) {
