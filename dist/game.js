@@ -21776,13 +21776,13 @@ function openSettings() {
     const b = document.getElementById('gfx-' + q);
     if (b) b.classList.toggle('active', _settings.graphicsQuality === q);
   });
-  // Gate graphics picker to title screen only — most engines apply gfx
-  // changes on next scene load. Hiding from pause/game avoids mid-render
-  // FBO swaps. Live MSAA rebuild is only safe with no active render.
-  const _gfxRow = document.getElementById('graphics-row');
-  if (_gfxRow) {
+  // Gate entire DISPLAY section to title screen only — graphics + lite bloom
+  // both require scene reload to apply safely. Haptics/FPS cap go here too
+  // for one-rule simplicity; user explicitly asked to remove DISPLAY in pause.
+  const _dispSec = document.getElementById('display-section');
+  if (_dispSec) {
     const _onTitle = !window.state || window.state.phase === 'title';
-    _gfxRow.style.display = _onTitle ? '' : 'none';
+    _dispSec.style.display = _onTitle ? '' : 'none';
   }
 
   ov.classList.remove('hidden');
@@ -26264,6 +26264,9 @@ function killPlayer() {
 
   // Hide the HUD immediately on death — cheap, must happen on the impact frame.
   document.getElementById('hud').classList.add('hidden');
+  // Hide pause button on death — no game to pause once you're dead.
+  // Restored by startGame() when player taps RETRY.
+  { const _tp = document.getElementById('touch-pause'); if (_tp) _tp.classList.add('hidden'); }
 
   // Delay game over screen so explosion plays first.
   // Run the prep work just-in-time, inside the timer, so the impact frame stays
@@ -26715,7 +26718,7 @@ function update(dt) {
   }
   if (_cruiseTarget && _cruiseMacro > 0.001 && state.rollAngle === 0 && !state.rollHeld) {
     const _cm = _cruiseMacro;
-    const _ct = performance.now() * 0.001 + _cruisePhase;
+    const _ct = performance.now() * 0.0006 + _cruisePhase;
     const _cb = _cruiseTarget.userData._cruiseBase;
     // ── Multi-band layered idle (LF/MF/HF, per-axis offset phases) ────────
     // Each axis sums three sines with non-harmonic freqs and unique phase
@@ -26728,7 +26731,7 @@ function update(dt) {
     const _band = (f1, p1, f2, p2, f3, p3) =>
       Math.sin(_ct * f1 * _PI2 + p1)
       + 0.5 * Math.sin(_ct * f2 * _PI2 + p2)
-      + 0.2 * Math.sin(_ct * f3 * _PI2 + p3);
+      + 0.10 * Math.sin(_ct * f3 * _PI2 + p3);
     // Yaw: lazy heading drift, mid-correction, twitchy nose jitter
     const _yawRaw   = _band(0.50, 1.7, 1.70, 0.3, 5.30, 4.1);
     // Bank: independent freqs/phases so it doesn't co-vary with yaw

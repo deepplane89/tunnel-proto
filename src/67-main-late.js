@@ -4044,6 +4044,9 @@ function killPlayer() {
 
   // Hide the HUD immediately on death — cheap, must happen on the impact frame.
   document.getElementById('hud').classList.add('hidden');
+  // Hide pause button on death — no game to pause once you're dead.
+  // Restored by startGame() when player taps RETRY.
+  { const _tp = document.getElementById('touch-pause'); if (_tp) _tp.classList.add('hidden'); }
 
   // Delay game over screen so explosion plays first.
   // Run the prep work just-in-time, inside the timer, so the impact frame stays
@@ -4495,7 +4498,7 @@ function update(dt) {
   }
   if (_cruiseTarget && _cruiseMacro > 0.001 && state.rollAngle === 0 && !state.rollHeld) {
     const _cm = _cruiseMacro;
-    const _ct = performance.now() * 0.001 + _cruisePhase;
+    const _ct = performance.now() * 0.0006 + _cruisePhase;
     const _cb = _cruiseTarget.userData._cruiseBase;
     // ── Multi-band layered idle (LF/MF/HF, per-axis offset phases) ────────
     // Each axis sums three sines with non-harmonic freqs and unique phase
@@ -4508,7 +4511,7 @@ function update(dt) {
     const _band = (f1, p1, f2, p2, f3, p3) =>
       Math.sin(_ct * f1 * _PI2 + p1)
       + 0.5 * Math.sin(_ct * f2 * _PI2 + p2)
-      + 0.2 * Math.sin(_ct * f3 * _PI2 + p3);
+      + 0.10 * Math.sin(_ct * f3 * _PI2 + p3);
     // Yaw: lazy heading drift, mid-correction, twitchy nose jitter
     const _yawRaw   = _band(0.50, 1.7, 1.70, 0.3, 5.30, 4.1);
     // Bank: independent freqs/phases so it doesn't co-vary with yaw
