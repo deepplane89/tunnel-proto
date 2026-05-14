@@ -323,7 +323,8 @@ function closeRadio() {
   // preview never bleeds into gameplay or game-over.
 }
 window.closeRadio = closeRadio;
-window._stopRadioPreview = _stopRadioPreview;
+// NOTE: window._stopRadioPreview export moved below the function decl —
+// works today (function hoisting) but fragile if ever refactored to const.
 
 // Called from startGame() when radio is OFF — forces any title-screen
 // preview to stop so it doesn't bleed into gameplay. Bypasses the
@@ -355,6 +356,7 @@ function _stopRadioPreview() {
   }
   try { _updatePlayIcon(); } catch(_) {}
 }
+window._stopRadioPreview = _stopRadioPreview;
 
 function _previewRadioTrack(idx) {
   if (typeof initAudio === 'function') initAudio();
