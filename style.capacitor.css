@@ -16,7 +16,7 @@
      var(--safe-area-inset-bottom)
      var(--safe-area-inset-left)
 
-   All selectors must be prefixed with html.is-capacitor
+   All selectors must be prefixed with html.platform-ios-native
    as belt-and-suspenders defense.
    ════════════════════════════════════════════════════════ */
 
@@ -30,12 +30,12 @@
    The actual game UI still pads its interactive surfaces with
    env(safe-area-inset-bottom) via style.css; this rule just kills
    the visible gap.                                           */
-html.is-capacitor,
-html.is-capacitor body {
+html.platform-ios-native,
+html.platform-ios-native body {
   background-color: #000 !important;
   min-height: 100dvh;
 }
-html.is-capacitor body {
+html.platform-ios-native body {
   /* Stretch body to the full visual viewport so the home-indicator
      area paints with the page background instead of WKWebView's
      bare backdrop. The game's own UI elements still honor
@@ -47,10 +47,10 @@ html.is-capacitor body {
 /* Three.js / game canvas should stretch through the safe area so
    no transparent strip is left under the home-indicator. The HUD
    layers above the canvas already pad themselves. */
-html.is-capacitor canvas#bg,
-html.is-capacitor canvas.three-canvas,
-html.is-capacitor #three-root,
-html.is-capacitor #app {
+html.platform-ios-native canvas#bg,
+html.platform-ios-native canvas.three-canvas,
+html.platform-ios-native #three-root,
+html.platform-ios-native #app {
   background-color: #000;
 }
 
@@ -69,21 +69,21 @@ html.is-capacitor #app {
    the panel by lifting overflow on the immediate scroll
    containers and temporarily disabling .sr-panel's clip-path.
    Uses :has() (Safari 15.4+; iOS 17 on user device).         */
-html.is-capacitor .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) {
+html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) {
   /* Clip-path clips ALL descendants regardless of overflow.
      Drop it while the dropdown is open; corners look slightly
      less sci-fi for the few seconds the menu is open, but
      the menu is now visible. */
   clip-path: none;
 }
-html.is-capacitor .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-body,
-html.is-capacitor .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane,
-html.is-capacitor .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane[data-pane="thrusters"]:not(.sr-hidden) {
+html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-body,
+html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane,
+html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane[data-pane="thrusters"]:not(.sr-hidden) {
   overflow: visible !important;
 }
 /* Belt-and-suspenders: ensure the menu itself paints above
    everything and isn't clipped by any sibling. */
-html.is-capacitor .shop-handling-bar.open .fm-menu {
+html.platform-ios-native .shop-handling-bar.open .fm-menu {
   z-index: 9999 !important;
 }
 
@@ -103,7 +103,7 @@ html.is-capacitor .shop-handling-bar.open .fm-menu {
    back to env(safe-area-inset-*) when the plugin hasn't run
    yet (e.g. very first frame). Then shrink the UI layer's
    effective box so its layout edges = visual edges.            */
-html.is-capacitor {
+html.platform-ios-native {
   --jh-sat: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   --jh-sar: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
   --jh-sab: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
@@ -118,9 +118,9 @@ html.is-capacitor {
    so the page-level #000 background still shows through.
    .overlay uses radial-gradient, so it must NOT be padded here
    — use inner-margin pattern below instead. */
-html.is-capacitor #hud,
-html.is-capacitor #ui,
-html.is-capacitor .ui-layer {
+html.platform-ios-native #hud,
+html.platform-ios-native #ui,
+html.platform-ios-native .ui-layer {
   padding-top:    var(--jh-sat);
   padding-right:  var(--jh-sar);
   padding-bottom: var(--jh-sab);
@@ -130,19 +130,19 @@ html.is-capacitor .ui-layer {
 
 /* Floating top-bar / top-row UI elements (score, settings, etc.):
    shift them down so they clear the Dynamic Island. */
-html.is-capacitor .topbar,
-html.is-capacitor .top-bar,
-html.is-capacitor #score-row,
-html.is-capacitor #top-hud,
-html.is-capacitor [data-hud-edge="top"] {
+html.platform-ios-native .topbar,
+html.platform-ios-native .top-bar,
+html.platform-ios-native #score-row,
+html.platform-ios-native #top-hud,
+html.platform-ios-native [data-hud-edge="top"] {
   top: var(--jh-sat) !important;
 }
 
 /* Floating bottom-row UI elements (controls, buttons):
    shift them up so they clear the home indicator. */
-html.is-capacitor .bottom-bar,
-html.is-capacitor #bottom-hud,
-html.is-capacitor [data-hud-edge="bottom"] {
+html.platform-ios-native .bottom-bar,
+html.platform-ios-native #bottom-hud,
+html.platform-ios-native [data-hud-edge="bottom"] {
   bottom: var(--jh-sab) !important;
 }
 
@@ -154,9 +154,9 @@ html.is-capacitor [data-hud-edge="bottom"] {
    which creates a black strip in the home-indicator area.
    Instead, give the panel margin so it sits within the safe
    area while the gradient fills edge-to-edge. */
-html.is-capacitor .sr-overlay:not(.hidden) > .sr-panel,
-html.is-capacitor .sr-overlay:not(.hidden) > .sr-stage,
-html.is-capacitor .sr-overlay:not(.hidden) .sr-close-floating {
+html.platform-ios-native .sr-overlay:not(.hidden) > .sr-panel,
+html.platform-ios-native .sr-overlay:not(.hidden) > .sr-stage,
+html.platform-ios-native .sr-overlay:not(.hidden) .sr-close-floating {
   margin-top:    max(var(--jh-sat), 0px);
   margin-bottom: max(var(--jh-sab), 0px);
 }
