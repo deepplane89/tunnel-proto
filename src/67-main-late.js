@@ -5953,11 +5953,11 @@ function update(dt) {
     // Fade-in (skip when paused — walls are placed manually with full opacity)
     if (!_awTunerPaused) {
       const awFadeT = Math.max(0, Math.min(1, (w.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
-      const awEchoMul = w.userData.echoOpacity ?? 1.0;
+
       // Write per-mesh opacity; onBeforeRender pushes it into the shared
       // material uniform right before each draw call.
-      w.userData._mesh.userData._opacity = awFadeT * _awTuner.opacity * awEchoMul;
-      w.userData._edges.userData._opacity = awFadeT * _awTuner.opacity * 0.9 * awEchoMul;
+      w.userData._mesh.userData._opacity = awFadeT * _awTuner.opacity;
+      w.userData._edges.userData._opacity = awFadeT * _awTuner.opacity * 0.9;
     }
     // Laser destroys walls
     if (state.laserActive) {

@@ -1856,11 +1856,6 @@ function _spawnLethalRing(x, z) {
   }
 }
 
-// ── Lateral echo helper — REMOVED ──
-// Was a planned visual-only obstacle tile system for peripheral vision.
-// Gated off via _ECHOES_ENABLED=false since obstacle redesign and never
-// reactivated. Function deleted; call sites no-op'd in spawnObstacles below.
-
 // Module-scope scratches for spawnObstacles — avoid per-wave allocations.
 // Fisher-Yates shuffle into _shuffleScratch; reusable _blockedScratch.
 const _shuffleScratch = [];
@@ -2045,7 +2040,6 @@ function spawnObstacles() {
       const roll = Math.random();
       if (roll < 0.25) {
         _spawnLethalRing(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z);
-        /* echoes removed */
       } else if (roll < 0.5) {
         const wall = _getPooledWall();
         if (wall) {
@@ -2060,7 +2054,6 @@ function spawnObstacles() {
           wall.userData._mesh.userData._opacity = 0;
           wall.userData._edges.userData._opacity = 0;
           _awActive.push(wall);
-          /* echoes removed */
         }
       } else if (roll < 0.75) {
         const type = Math.floor(Math.random() * 3);
@@ -2071,7 +2064,6 @@ function spawnObstacles() {
           obs.userData.velX = 0;
           obs.userData.slalomScaled = true;
           activeObstacles.push(obs);
-          /* echoes removed */
         }
       } else {
         const type = Math.floor(Math.random() * 3);
@@ -2080,14 +2072,12 @@ function spawnObstacles() {
           obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
           obs.userData.velX = 0;
           activeObstacles.push(obs);
-          /* echoes removed */
         }
       }
       return;
     }
     if (_isRingBand) {
       _spawnLethalRing(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z);
-      /* echoes removed */
       return;
     }
     if (_isFatConeBand) {
@@ -2100,7 +2090,6 @@ function spawnObstacles() {
       obs.userData.slalomScaled = true;
       obs.userData.isFatCone = true;
       activeObstacles.push(obs);
-      /* echoes removed */
       return;
     }
     if (_isWallBand) {
@@ -2125,7 +2114,6 @@ function spawnObstacles() {
         wall.userData._mesh.userData._opacity = 0;
         wall.userData._edges.userData._opacity = 0;
         _awActive.push(wall);
-        /* echoes removed */
         return;
       }
     }
@@ -2135,7 +2123,6 @@ function spawnObstacles() {
     obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
     obs.userData.velX = 0;
     activeObstacles.push(obs);
-    /* echoes removed */
   });
 
   // ── Coin spawn — random singles + arc patterns (DR spawns more)

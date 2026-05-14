@@ -1078,12 +1078,8 @@ initSkinViewer();
 // Fetch leaderboard on initial load
 fetchLeaderboard();
 
-// ── Snap-sound family REMOVED per user ("remove the snap sound entirely").
-// All UI navigation now uses dedicated cues: playMenuCycle (pinball) for
-// menu/panel transitions, playGarageOpen/Close for garage, playReject for
-// locked taps, playStartInterference for ACCESS GRANTED. These wrappers are
-// kept as no-ops so any stray callers don't throw — and so the inline
-// onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
+// Legacy snap-sound wrappers — snap was removed per user; these forward to
+// the current per-context cues so existing inline onclick handlers still work.
 function playStartSound() {
   // TAP TO PLAY on title — unified with ACCESS GRANTED so the gate-tap and
   // the start-game tap feel identical (both go through playTitleTap →

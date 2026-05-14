@@ -10209,9 +10209,6 @@ function _createCanyonWalls() {
     side:               THREE.DoubleSide,
   });
 
-  // Holographic grid overlay REMOVED for perf (was doubling draw calls on cyan slabs).
-  // Post-processing _holoPass (screen-space) is separate and still active.
-
   // Canyon-scoped lights — original cyan rig at full intensity.
   // Smoothed in/out via _canyonLightT in _updateCanyonWalls (600ms ease)
   // so transitions are imperceptible. Light-count hash unchanged — no

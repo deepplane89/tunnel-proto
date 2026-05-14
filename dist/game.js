@@ -11633,9 +11633,6 @@ function _createCanyonWalls() {
     side:               THREE.DoubleSide,
   });
 
-  // Holographic grid overlay REMOVED for perf (was doubling draw calls on cyan slabs).
-  // Post-processing _holoPass (screen-space) is separate and still active.
-
   // Canyon-scoped lights — original cyan rig at full intensity.
   // Smoothed in/out via _canyonLightT in _updateCanyonWalls (600ms ease)
   // so transitions are imperceptible. Light-count hash unchanged — no
@@ -16628,11 +16625,6 @@ function _spawnLethalRing(x, z) {
   }
 }
 
-// ── Lateral echo helper — REMOVED ──
-// Was a planned visual-only obstacle tile system for peripheral vision.
-// Gated off via _ECHOES_ENABLED=false since obstacle redesign and never
-// reactivated. Function deleted; call sites no-op'd in spawnObstacles below.
-
 // Module-scope scratches for spawnObstacles — avoid per-wave allocations.
 // Fisher-Yates shuffle into _shuffleScratch; reusable _blockedScratch.
 const _shuffleScratch = [];
@@ -16817,7 +16809,6 @@ function spawnObstacles() {
       const roll = Math.random();
       if (roll < 0.25) {
         _spawnLethalRing(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z);
-        /* echoes removed */
       } else if (roll < 0.5) {
         const wall = _getPooledWall();
         if (wall) {
@@ -16832,7 +16823,6 @@ function spawnObstacles() {
           wall.userData._mesh.userData._opacity = 0;
           wall.userData._edges.userData._opacity = 0;
           _awActive.push(wall);
-          /* echoes removed */
         }
       } else if (roll < 0.75) {
         const type = Math.floor(Math.random() * 3);
@@ -16843,7 +16833,6 @@ function spawnObstacles() {
           obs.userData.velX = 0;
           obs.userData.slalomScaled = true;
           activeObstacles.push(obs);
-          /* echoes removed */
         }
       } else {
         const type = Math.floor(Math.random() * 3);
@@ -16852,14 +16841,12 @@ function spawnObstacles() {
           obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
           obs.userData.velX = 0;
           activeObstacles.push(obs);
-          /* echoes removed */
         }
       }
       return;
     }
     if (_isRingBand) {
       _spawnLethalRing(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z);
-      /* echoes removed */
       return;
     }
     if (_isFatConeBand) {
@@ -16872,7 +16859,6 @@ function spawnObstacles() {
       obs.userData.slalomScaled = true;
       obs.userData.isFatCone = true;
       activeObstacles.push(obs);
-      /* echoes removed */
       return;
     }
     if (_isWallBand) {
@@ -16897,7 +16883,6 @@ function spawnObstacles() {
         wall.userData._mesh.userData._opacity = 0;
         wall.userData._edges.userData._opacity = 0;
         _awActive.push(wall);
-        /* echoes removed */
         return;
       }
     }
@@ -16907,7 +16892,6 @@ function spawnObstacles() {
     obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
     obs.userData.velX = 0;
     activeObstacles.push(obs);
-    /* echoes removed */
   });
 
   // ── Coin spawn — random singles + arc patterns (DR spawns more)
@@ -21267,12 +21251,8 @@ initSkinViewer();
 // Fetch leaderboard on initial load
 fetchLeaderboard();
 
-// ── Snap-sound family REMOVED per user ("remove the snap sound entirely").
-// All UI navigation now uses dedicated cues: playMenuCycle (pinball) for
-// menu/panel transitions, playGarageOpen/Close for garage, playReject for
-// locked taps, playStartInterference for ACCESS GRANTED. These wrappers are
-// kept as no-ops so any stray callers don't throw — and so the inline
-// onclick handlers on the pause CONTINUE/EXIT buttons still resolve.
+// Legacy snap-sound wrappers — snap was removed per user; these forward to
+// the current per-context cues so existing inline onclick handlers still work.
 function playStartSound() {
   // TAP TO PLAY on title — unified with ACCESS GRANTED so the gate-tap and
   // the start-game tap feel identical (both go through playTitleTap →
@@ -28157,11 +28137,11 @@ function update(dt) {
     // Fade-in (skip when paused — walls are placed manually with full opacity)
     if (!_awTunerPaused) {
       const awFadeT = Math.max(0, Math.min(1, (w.position.z - SPAWN_Z) / (SPAWN_Z * -0.4)));
-      const awEchoMul = w.userData.echoOpacity ?? 1.0;
+
       // Write per-mesh opacity; onBeforeRender pushes it into the shared
       // material uniform right before each draw call.
-      w.userData._mesh.userData._opacity = awFadeT * _awTuner.opacity * awEchoMul;
-      w.userData._edges.userData._opacity = awFadeT * _awTuner.opacity * 0.9 * awEchoMul;
+      w.userData._mesh.userData._opacity = awFadeT * _awTuner.opacity;
+      w.userData._edges.userData._opacity = awFadeT * _awTuner.opacity * 0.9;
     }
     // Laser destroys walls
     if (state.laserActive) {
