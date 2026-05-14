@@ -19,3 +19,82 @@
    All selectors must be prefixed with html.platform-ios-native
    as belt-and-suspenders defense.
    ════════════════════════════════════════════════════════ */
+
+/* ──────────────────────────────────────────────────────────
+   1) BLACK STRIP AT BOTTOM
+   ──────────────────────────────────────────────────────────
+   contentInset:"always" + body background not extending into the
+   safe area produces a black gap under the home indicator. Make
+   sure html/body fill the full viewport (dvh) AND paint the same
+   background that the game uses, so any inset area blends in.
+   The actual game UI still pads its interactive surfaces with
+   env(safe-area-inset-bottom) via style.css; this rule just kills
+   the visible gap.                                           */
+html.platform-ios-native,
+html.platform-ios-native body {
+  background-color: #000 !important;
+  min-height: 100dvh;
+}
+html.platform-ios-native body {
+  /* Stretch body to the full visual viewport so the home-indicator
+     area paints with the page background instead of WKWebView's
+     bare backdrop. The game's own UI elements still honor
+     env(safe-area-inset-bottom) for their own padding. */
+  height: 100dvh;
+  min-height: 100dvh;
+  margin: 0;
+}
+/* Three.js / game canvas should stretch through the safe area so
+   no transparent strip is left under the home-indicator. The HUD
+   layers above the canvas already pad themselves. */
+html.platform-ios-native canvas#bg,
+html.platform-ios-native canvas.three-canvas,
+html.platform-ios-native #three-root,
+html.platform-ios-native #app {
+  background-color: #000;
+}
+
+/* ──────────────────────────────────────────────────────────
+   2) SHIP HANDLING DROPDOWN — PORTRAIT FIX
+   ──────────────────────────────────────────────────────────
+   .sr-panel has a clip-path (sci-fi notched corners) and its
+   descendants (.sr-body, .sr-pane) use overflow:hidden. The
+   SHIP HANDLING menu uses position:absolute; bottom:100% to
+   open upward, which works in landscape (bar sits near bottom
+   of panel) but in portrait the bar is higher and the menu
+   gets clipped by the chain of overflow:hidden + clip-path
+   ancestors, so nothing visible appears when tapping.
+
+   Fix: when the handling-bar is OPEN, let its dropdown escape
+   the panel by lifting overflow on the immediate scroll
+   containers and temporarily disabling .sr-panel's clip-path.
+   Uses :has() (Safari 15.4+; iOS 17 on user device).         */
+html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) {
+  /* Clip-path clips ALL descendants regardless of overflow.
+     Drop it while the dropdown is open; corners look slightly
+     less sci-fi for the few seconds the menu is open, but
+     the menu is now visible. */
+  clip-path: none;
+}
+html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-body,
+html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane,
+html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane[data-pane="thrusters"]:not(.sr-hidden) {
+  overflow: visible !important;
+}
+/* Belt-and-suspenders: ensure the menu itself paints above
+   everything and isn't clipped by any sibling. */
+html.platform-ios-native .shop-handling-bar.open .fm-menu {
+  z-index: 9999 !important;
+}
+
+/* ──────────────────────────────────────────────────────────
+   3) GENERAL SAFE-AREA PADDING
+   ──────────────────────────────────────────────────────────
+   Make absolutely-positioned UI elements respect the home
+   indicator + Dynamic Island. Only applied on iOS native. */
+html.platform-ios-native #app,
+html.platform-ios-native #ui {
+  padding-left:   var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+  padding-right:  var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+}
+
