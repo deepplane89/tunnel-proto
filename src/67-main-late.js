@@ -2013,9 +2013,11 @@ function _drEndlessTick(dt) {
   state._endlessRotationIdx    = (state._endlessRotationIdx    || 0);
   state._endlessCorridorCount  = (state._endlessCorridorCount  || 0);
 
-  // (Removed unused _drBandIdx / _drBand declarations — dead code post-Pass 2C.
-  // Endless tick doesn't depend on band lookup; mechanics consume current
-  // sequencer stage state directly.)
+  // Endless tick doesn't depend on band lookup — mechanics consume current
+  // sequencer stage state directly. We pass a stub band shape just in case a
+  // future activate() body reads band.label (current ANGLED_WALL / L3_CORRIDOR /
+  // L4_SINE_CORRIDOR families ignore it).
+  const _endlessBandStub = { label: 'ENDLESS' };
 
   const _drMechActive = state.slalomActive || state.zipperActive ||
     state.angledWallsActive || state.drCustomPatternActive || state.corridorMode ||
@@ -2057,7 +2059,7 @@ function _drEndlessTick(dt) {
         state.drPhase = 'BUILD'; state.drPhaseTimer = 0;
       } else if (nextType === 'angled_struct') {
         // Structural angled walls via mechanic family
-        DR_MECHANIC_FAMILIES['ANGLED_WALL'].activate(_drBand, 'build');
+        DR_MECHANIC_FAMILIES['ANGLED_WALL'].activate(_endlessBandStub, 'build');
         state._endlessActiveType = 'angled_struct';
         state.drPhase = 'BUILD'; state.drPhaseTimer = 0;
       } else if (nextType === 'zipper') {
@@ -2084,7 +2086,7 @@ function _drEndlessTick(dt) {
         state.drPhase = 'BUILD'; state.drPhaseTimer = 0;
       } else if (nextType === 'L3_CORRIDOR' || nextType === 'L4_SINE_CORRIDOR') {
         clearAllCorridorFlags();
-        DR_MECHANIC_FAMILIES[nextType].activate(_drBand, 'peak');
+        DR_MECHANIC_FAMILIES[nextType].activate(_endlessBandStub, 'peak');
         state._endlessCorridorCount++;
         state._endlessLastCorrWave = state.drWaveCount || 0;
         state._endlessActiveType = nextType;
