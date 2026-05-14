@@ -193,6 +193,41 @@ window._uploadAllBuffers = _uploadAllBuffers;
     // 2) Compile every material currently in the scene graph (idempotent).
     window._reprewarmShaders('boot');
 
+    // 2b) LIGHTNING FIRST-STRIKE simulation. _reprewarmShaders compiles the
+    // pool's PLACEHOLDER tube geometries (built at landX=0 in _ltInitPool),
+    // but the first real strike calls _ltRejag which mutates the position+
+    // normal Float32Arrays. That mutation flips needsUpdate=true and the
+    // next draw issues bufferSubData to re-upload — cost ~270-320ms on iOS
+    // Safari for the first bolt (tagged 'lt-rndr' in the hitch meter).
+    //
+    // Fix: force one spawn at a far-offscreen Z, render composer once so
+    // the mutated tube actually uploads + draws, then kill it.
+    try {
+      if (typeof window._spawnLightning === 'function' && typeof window._clearAllLightning === 'function') {
+        // Spawn at landZ way behind ship-zero so even if a frame paints it
+        // can't be seen. skipWarn=true so it goes straight to strike phase
+        // (rejag fires, all materials get touched).
+        window._spawnLightning(0, -9999, true, null, 0);
+        // Render one frame so the rejagged tubes upload + draw.
+        if (typeof composer !== 'undefined' && composer && composer.render) {
+          const _prevTarget = renderer.getRenderTarget();
+          const _prevFlags = composer.passes ? composer.passes.map(p => p.renderToScreen) : [];
+          if (composer.passes) {
+            for (let i = 0; i < composer.passes.length; i++) composer.passes[i].renderToScreen = false;
+          }
+          try { composer.render(); } catch(_) {}
+          if (composer.passes) {
+            for (let i = 0; i < composer.passes.length; i++) composer.passes[i].renderToScreen = _prevFlags[i];
+          }
+          renderer.setRenderTarget(_prevTarget);
+        }
+        // Kill and release the pool slot.
+        window._clearAllLightning();
+      }
+    } catch (e) {
+      console.warn('[PREWARM] lightning first-strike sim failed:', e && e.message);
+    }
+
     // 3) FIRST-IMPACT SIMULATION ── walk every non-shader cost that runs on
     //    the first shield pickup + first shell impact so nothing JITs mid-run.
     //    Without this, on iOS Safari the first impact can hitch ~50-150ms
