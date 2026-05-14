@@ -1417,80 +1417,6 @@ function _broadcastHoloUniform(name, value) {
 
   window.BankWaterHiss = BankWaterHiss;
 })();
-// ═══════════════════════════════════════════════════════════════════════════
-//  STRAFE LOOP — continuous gain-modulated steering sound
-//
-//  Replaces the old edge-trigger / 2-play / fixed-fade-in strafe play path
-//  with a permanently-looping argon-ambient buffer whose gain tracks
-//  |window._steerNorm| (0..1). Same modulation pattern as the bank-water
-//  hiss — fast attack, slow release, no hard edges.
-//
-//  Why: the prior path felt unreliable (fade quirks, drop-outs after the
-//  second clip, race conditions with replay timers). A single eternal
-//  loop + smoothed gain has zero of those failure modes.
-//
-//  ── INTEGRATION ───────────────────────────────────────────────────────────
-//    StrafeLoop.init()                  — once when audioCtx + buffer ready
-//    StrafeLoop.update(intensity, dt)   — every frame; 0..1 magnitude
-//    StrafeLoop.silence()               — kill gain (death / pause / mute)
-// ═══════════════════════════════════════════════════════════════════════════
-
-(function () {
-  const TUNING = {
-    peakGain:        0.55,    // peak volume when steering hard
-    attackRate:      9,       // per second (slightly faster than hiss)
-    releaseRate:     2.5,     // gentle tail off
-    intensityFloor:  0.05,    // below this, target = 0 (silence at center)
-    // Curve: square the input so light steering is quiet, hard steering bright.
-    // Reads as "harder turn = more wind" instead of linear ramp.
-    curveExp:        1.6,
-  };
-
-  const StrafeLoop = {
-    _src: null,
-    _gain: null,
-    _ready: false,
-    _smoothed: 0,
-
-    // Tries to start the loop. Returns true on success.
-    // Depends on _playArgonLoop (in src/30-audio.js) which returns a source
-    // with _jhGain attached, or null if the buffer hasn't decoded yet.
-    init() {
-      if (this._ready) return true;
-      if (typeof _playArgonLoop !== 'function') return false;
-      const src = _playArgonLoop(0);   // start at silence
-      if (!src || !src._jhGain) return false;
-      this._src = src;
-      this._gain = src._jhGain;
-      this._ready = true;
-      return true;
-    },
-
-    // intensity in [0,1]; dt in seconds.
-    update(intensity, dt) {
-      // Lazy init — buffer might not have been decoded when game first calls.
-      if (!this._ready) { if (!this.init()) return; }
-      const i = Math.min(1, Math.max(0, intensity || 0));
-      const shaped = Math.pow(i, TUNING.curveExp);
-      const target = i < TUNING.intensityFloor ? 0 : (shaped * TUNING.peakGain);
-      const rate = target > this._smoothed ? TUNING.attackRate : TUNING.releaseRate;
-      const k = Math.min(1, dt * rate);
-      this._smoothed += (target - this._smoothed) * k;
-      this._gain.gain.value = this._smoothed;
-    },
-
-    silence() {
-      if (this._ready) {
-        this._smoothed = 0;
-        this._gain.gain.value = 0;
-      }
-    },
-
-    getTuning() { return TUNING; },
-  };
-
-  window.StrafeLoop = StrafeLoop;
-})();
 
 // ── Reset hook ──
 // Visit ?reset=1 to wipe all localStorage (coins, level, owned skins, owned
@@ -21226,10 +21152,6 @@ function initTitleAudio() {
   // Bank water hiss: synthesized noise loop, lives forever, gain driven by
   // the visual effect's intensity (see src/fx/19a-bank-water-hiss.js).
   if (window.BankWaterHiss) window.BankWaterHiss.init(audioCtx);
-  // Strafe loop: continuous argon-ambient buffer, gain tracks steering
-  // intensity (see src/fx/19b-strafe-loop.js). Init is lazy — it will retry
-  // each frame in .update() until the buffer is decoded.
-  if (window.StrafeLoop) window.StrafeLoop.init();
   bgMusic    = bgMusic    || document.getElementById('bgm');
   titleMusic = titleMusic || document.getElementById('title-music');
   if (!l3Music) { l3Music = document.getElementById('l3-music'); setTrackVol('l3', 0); }
@@ -26352,16 +26274,114 @@ function update(dt) {
   state.shipVelX = Math.max(-tiltMaxVel, Math.min(tiltMaxVel, state.shipVelX));
   state.shipX   += state.shipVelX * dt;
 
-  // ── Strafe loop (continuous gain modulation) ───────────────────────────────
-  // Driven by window._steerNorm magnitude. Same modulation pattern as the
-  // bank-water hiss: smoothed gain on a permanently-looping buffer source.
-  // Logic in src/fx/19b-strafe-loop.js.
-  if (window.StrafeLoop) {
-    const _strafeIntensity =
-      (state.phase === 'playing' && !_introBlock && !isSfxMuted())
-        ? Math.abs(window._steerNorm || 0)
-        : 0;
-    window.StrafeLoop.update(_strafeIntensity, dt);
+  // ── Argon edge-trigger + intensity modulation ──
+  // Re-enabled 2026-05-03 with new vr-flutter-rumble sample (file swapped at
+  // assets/audio/argon-ambient.mp3, same id/buffer name).
+  if (state.phase === 'playing' && !_introBlock) {
+    const _isSteering = !!(steerLeft || steerRight);
+    const _wasSteering = !!state._argonSteering;
+    const _argonEl = document.getElementById('argon-ambient-sfx');
+    if (!isSfxMuted()) {
+      // Non-looping: play the clip up to 2 times max per steering hold,
+      // fading in over the first play. No per-frame volume modulation.
+      const _PEAK_VOL = 0.40;     // target gain at end of fade-in
+      const _FADE_IN_SEC = 0.6;   // fade-in duration (clip is ~1.25s)
+      const _MAX_PLAYS = 2;
+      if (_isSteering && !_wasSteering) {
+        // Rising edge: cancel any pending fade-out, stop prior source, start play #1
+        if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+        if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
+        if (state._argonSrc) {
+          try { state._argonSrc.stop(); } catch (_) {}
+          state._argonSrc = null;
+        }
+        state._argonPlayCount = 0;
+        // Web Audio path: one-shot with fade-in
+        const _src = (typeof _playArgonOnce === 'function') ? _playArgonOnce(_PEAK_VOL, _FADE_IN_SEC) : null;
+        if (_src) {
+          state._argonSrc = _src;
+          state._argonPath = 'wa';
+          state._argonPlayCount = 1;
+          if (_argonEl) { try { _argonEl.pause(); _argonEl.currentTime = 0; } catch (_) {} }
+          // Schedule a possible second play right at the end of the first.
+          // Picks up the gain at _PEAK_VOL (no second fade-in) so it sounds
+          // continuous, only if user is still steering when it fires.
+          const _dur = (_src._jhDuration || 1.25);
+          state._argonReplayTo = setTimeout(() => {
+            state._argonReplayTo = null;
+            if (!state._argonSteering || isSfxMuted()) return;
+            if ((state._argonPlayCount || 0) >= _MAX_PLAYS) return;
+            const _src2 = (typeof _playArgonOnce === 'function') ? _playArgonOnce(_PEAK_VOL, 0) : null;
+            if (_src2) {
+              // Old source has finished naturally; just swap reference
+              state._argonSrc = _src2;
+              state._argonPath = 'wa';
+              state._argonPlayCount = (state._argonPlayCount || 1) + 1;
+            }
+          }, Math.max(50, _dur * 1000 - 30));
+        } else if (_argonEl) {
+          // Element fallback (buffer not decoded). iOS ignores .volume so play
+          // straight at peak; no fade-in possible on this path.
+          try {
+            _argonEl.loop = false;
+            _argonEl.currentTime = 0;
+            _argonEl.volume = _PEAK_VOL;
+            _argonEl.playbackRate = 1.0;
+            _argonEl.play().catch(()=>{});
+          } catch (_) {}
+          state._argonPath = 'el';
+          state._argonPlayCount = 1;
+          // Schedule one possible replay
+          state._argonReplayTo = setTimeout(() => {
+            state._argonReplayTo = null;
+            if (!state._argonSteering || isSfxMuted()) return;
+            if ((state._argonPlayCount || 0) >= _MAX_PLAYS) return;
+            try {
+              _argonEl.currentTime = 0;
+              _argonEl.volume = _PEAK_VOL;
+              _argonEl.play().catch(()=>{});
+              state._argonPlayCount = (state._argonPlayCount || 1) + 1;
+            } catch (_) {}
+          }, 1220);
+        }
+      } else if (!_isSteering && _wasSteering) {
+        // Falling edge: cancel any pending replay, ~80ms fade then stop
+        if (state._argonReplayTo) { clearTimeout(state._argonReplayTo); state._argonReplayTo = null; }
+        if (state._argonCutIv) { clearInterval(state._argonCutIv); state._argonCutIv = null; }
+        if (state._argonPath === 'wa' && state._argonSrc && state._argonSrc._jhGain && audioCtx) {
+          const _src = state._argonSrc;
+          const _g = _src._jhGain;
+          const _now = audioCtx.currentTime;
+          try {
+            _g.gain.cancelScheduledValues(_now);
+            _g.gain.setValueAtTime(_g.gain.value, _now);
+            _g.gain.linearRampToValueAtTime(0, _now + 0.08);
+          } catch (_) {}
+          state._argonSrc = null;
+          state._argonPath = null;
+          setTimeout(() => { try { _src.stop(); } catch (_) {} }, 100);
+        } else if (_argonEl) {
+          // Element fallback fade (desktop only — iOS ignores .volume)
+          const _start = _argonEl.volume || 0;
+          let _step = 0;
+          const _steps = 5;
+          state._argonCutIv = setInterval(() => {
+            _step++;
+            const _t = _step / _steps;
+            try { _argonEl.volume = Math.max(0, _start * (1 - _t)); } catch (_) {}
+            if (_step >= _steps) {
+              clearInterval(state._argonCutIv);
+              state._argonCutIv = null;
+              try { _argonEl.pause(); _argonEl.currentTime = 0; _argonEl.volume = 0; } catch (_) {}
+            }
+          }, 16);
+          state._argonPath = null;
+        }
+        state._argonPlayCount = 0;
+      }
+      // Held (steering both this frame and last): no-op. Sound plays out naturally.
+    }
+    if (_isSteering !== _wasSteering) state._argonSteering = _isSteering;
   }
 
 
