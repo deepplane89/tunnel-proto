@@ -1291,7 +1291,12 @@ function _broadcastHoloUniform(name, value) {
       }
       const state = getBankWaterEffectState(inputs);
       this._visual.update(state, dt);
-      if (window.BankWaterHiss) window.BankWaterHiss.update(state.intensity, dt);
+      // Hiss gain follows visual intensity unless caller asks for sfx-mute,
+      // in which case force the hiss gain to 0 (visual keeps animating).
+      if (window.BankWaterHiss) {
+        const _hissIntensity = inputs.sfxMuted ? 0 : state.intensity;
+        window.BankWaterHiss.update(_hissIntensity, dt);
+      }
     },
 
     // Power-users: swap the visual backend (v2 distortion render-target etc).
@@ -26693,7 +26698,14 @@ function update(dt) {
     // bank, so using rotation.z as the bank input would mis-trigger the wake on
     // every roll. Gate by feeding overWater=false, which the module already
     // handles by hiding visual + silencing the hiss.
-    const _rolling = (state.rollAngle !== 0 || state.rollHeld);
+    //
+    // Phase + SFX gates added 2026-05-13: the hiss was leaking onto gameover/
+    // title because the wake update runs every frame from update() regardless
+    // of phase, and the visual stays "over water" so intensity > 0 kept the
+    // gain ramped up. Now gate to playing-phase AND respect sfx-mute setting.
+    const _rolling   = (state.rollAngle !== 0 || state.rollHeld);
+    const _phaseOk   = (state.phase === 'playing');
+    const _sfxOk     = (typeof isSfxMuted === 'function') ? !isSfxMuted() : true;
     window.BankWaterEffect.update({
       shipGroup:      shipGroup,                  // auto-resolves wingtips from geometry
       rollAngle:      shipGroup.rotation.z,
@@ -26701,7 +26713,8 @@ function update(dt) {
       // speedFactor saturates around ~1.5x BASE_SPEED (matches audio module).
       maxSpeed:       (typeof BASE_SPEED !== 'undefined') ? BASE_SPEED * 1.5 : 60,
       waterY:         mirrorMesh.position.y,
-      overWater:      mirrorMesh.visible && !_rolling,
+      overWater:      mirrorMesh.visible && !_rolling && _phaseOk,
+      sfxMuted:       !_sfxOk,
     }, dt);
   }
 

@@ -4519,7 +4519,14 @@ function update(dt) {
     // bank, so using rotation.z as the bank input would mis-trigger the wake on
     // every roll. Gate by feeding overWater=false, which the module already
     // handles by hiding visual + silencing the hiss.
-    const _rolling = (state.rollAngle !== 0 || state.rollHeld);
+    //
+    // Phase + SFX gates added 2026-05-13: the hiss was leaking onto gameover/
+    // title because the wake update runs every frame from update() regardless
+    // of phase, and the visual stays "over water" so intensity > 0 kept the
+    // gain ramped up. Now gate to playing-phase AND respect sfx-mute setting.
+    const _rolling   = (state.rollAngle !== 0 || state.rollHeld);
+    const _phaseOk   = (state.phase === 'playing');
+    const _sfxOk     = (typeof isSfxMuted === 'function') ? !isSfxMuted() : true;
     window.BankWaterEffect.update({
       shipGroup:      shipGroup,                  // auto-resolves wingtips from geometry
       rollAngle:      shipGroup.rotation.z,
@@ -4527,7 +4534,8 @@ function update(dt) {
       // speedFactor saturates around ~1.5x BASE_SPEED (matches audio module).
       maxSpeed:       (typeof BASE_SPEED !== 'undefined') ? BASE_SPEED * 1.5 : 60,
       waterY:         mirrorMesh.position.y,
-      overWater:      mirrorMesh.visible && !_rolling,
+      overWater:      mirrorMesh.visible && !_rolling && _phaseOk,
+      sfxMuted:       !_sfxOk,
     }, dt);
   }
 

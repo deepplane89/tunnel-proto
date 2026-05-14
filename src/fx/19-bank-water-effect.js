@@ -476,7 +476,12 @@
       }
       const state = getBankWaterEffectState(inputs);
       this._visual.update(state, dt);
-      if (window.BankWaterHiss) window.BankWaterHiss.update(state.intensity, dt);
+      // Hiss gain follows visual intensity unless caller asks for sfx-mute,
+      // in which case force the hiss gain to 0 (visual keeps animating).
+      if (window.BankWaterHiss) {
+        const _hissIntensity = inputs.sfxMuted ? 0 : state.intensity;
+        window.BankWaterHiss.update(_hissIntensity, dt);
+      }
     },
 
     // Power-users: swap the visual backend (v2 distortion render-target etc).
