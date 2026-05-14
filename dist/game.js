@@ -3389,17 +3389,15 @@ let camTargetX = 0;
 // ═══════════════════════════════════════════════════
 // MSAA in the composer render target. EffectComposer renders to an offscreen
 // FBO, so the renderer's `antialias` flag does nothing — we need to ask the
-// FBO for multisamples directly. Sharp 4x, Balanced + Performance both 2x.
-// Apple's TBDR makes 2x MSAA nearly free on iOS; smooth edges are table-
-// stakes for not looking cheap. Performance differentiates via lower DPR.
-function _samplesForQuality(q) { return q === 'sharp' ? 4 : 2; }
-let _composerSamples = 2;
+// FBO for multisamples directly. On Sharp we use 4x (great edges, ~10–15% GPU
+// hit on iPhone); on Balanced 2x; Performance stays 0 to save fill rate.
+let _composerSamples = 0;
 try {
   const _gq = (window._settings && window._settings.graphicsQuality) ||
               ((window._LS && JSON.parse(window._LS.getItem('jh_settings')||'{}').graphicsQuality)) ||
               'balanced';
-  _composerSamples = _samplesForQuality(_gq);
-} catch(_) {}
+  _composerSamples = _gq === 'sharp' ? 4 : _gq === 'balanced' ? 2 : 0;
+} catch(_) { _composerSamples = 2; }
 // NOTE: We do NOT set `type: HalfFloatType` here. Half-float FBOs caused a
 // visible horizon banding/artifact on iOS (Apple GPU + tonemapping). MSAA
 // (`samples`) is what makes Sharp actually look sharp — keep that, default
@@ -3411,28 +3409,6 @@ const _composerRT = new THREE.WebGLRenderTarget(
 );
 const composer = new EffectComposer(renderer, _composerRT);
 composer.addPass(new RenderPass(scene, camera));
-// Live MSAA rebuild — only safe to call when no game render is active
-// (we gate the graphics picker to title screen). Mutates the existing
-// composer render targets in place rather than constructing fresh ones,
-// to preserve the exact texture/depth/stencil format EffectComposer
-// originally chose. Just changes `samples` and forces a re-allocation
-// via setSize, which triggers internal _renderTargetNeedsUpdate.
-window._rebuildComposerSamples = function() {
-  try {
-    const gq = (window._settings && window._settings.graphicsQuality) || 'balanced';
-    const want = _samplesForQuality(gq);
-    if (want === _composerSamples) return;
-    _composerSamples = want;
-    if (composer.writeBuffer) composer.writeBuffer.samples = want;
-    if (composer.readBuffer)  composer.readBuffer.samples  = want;
-    if (composer.renderTarget1) composer.renderTarget1.samples = want;
-    if (composer.renderTarget2) composer.renderTarget2.samples = want;
-    // setSize forces three.js to dispose+reallocate the GPU FBO with the
-    // new sample count on next render. Keeps the same JS RT object so
-    // all texture format/filter/depth settings stay identical.
-    composer.setSize(window.innerWidth, window.innerHeight);
-  } catch(_) {}
-};
 
 // Bloom resolution: /2 on both desktop and mobile. Previously /3 on mobile,
 // but that left the sun corona/atmosphere glow visibly blurry — bloom IS the
@@ -21720,10 +21696,6 @@ function applyGraphicsQuality() {
     if (window._starMat && window._starMat.uniforms && window._starMat.uniforms.uPixelRatio) {
       window._starMat.uniforms.uPixelRatio.value = dpr;
     }
-    // NOTE: do NOT call _rebuildComposerSamples here. This function is
-    // called by adaptive DPR every time framerate changes — rebuilding
-    // the composer mid-game causes hitches. MSAA rebuild only runs from
-    // explicit mode picker (see button handler).
   } catch(e) {}
 }
 window.applyGraphicsQuality = applyGraphicsQuality;
@@ -22102,12 +22074,6 @@ function _initSettingsAccordion() {
         if (bb) bb.classList.toggle('active', qq === q);
       });
       applyGraphicsQuality();
-      // Explicit mode pick — rebuild MSAA composer RT (safe: picker is
-      // title-gated, no active game render). DPR adaptive doesn't call
-      // this so it can't hitch mid-game.
-      if (typeof window._rebuildComposerSamples === 'function') {
-        window._rebuildComposerSamples();
-      }
       saveSettings();
     });
   });
