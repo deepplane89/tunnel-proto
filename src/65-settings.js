@@ -69,6 +69,12 @@ function applyGraphicsQuality() {
     if (window._starMat && window._starMat.uniforms && window._starMat.uniforms.uPixelRatio) {
       window._starMat.uniforms.uPixelRatio.value = dpr;
     }
+    // Live MSAA tier swap. The graphics picker is title-screen-gated
+    // (see openSettings below), so this only runs when no active game
+    // render is happening — safe to dispose composer FBOs.
+    if (typeof window._rebuildComposerSamples === 'function') {
+      window._rebuildComposerSamples();
+    }
   } catch(e) {}
 }
 window.applyGraphicsQuality = applyGraphicsQuality;
@@ -149,6 +155,14 @@ function openSettings() {
     const b = document.getElementById('gfx-' + q);
     if (b) b.classList.toggle('active', _settings.graphicsQuality === q);
   });
+  // Gate graphics picker to title screen only — most engines apply gfx
+  // changes on next scene load. Hiding from pause/game avoids mid-render
+  // FBO swaps. Live MSAA rebuild is only safe with no active render.
+  const _gfxRow = document.getElementById('graphics-row');
+  if (_gfxRow) {
+    const _onTitle = !window.state || window.state.phase === 'title';
+    _gfxRow.style.display = _onTitle ? '' : 'none';
+  }
 
   ov.classList.remove('hidden');
 }

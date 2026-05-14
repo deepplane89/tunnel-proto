@@ -3389,15 +3389,17 @@ let camTargetX = 0;
 // ═══════════════════════════════════════════════════
 // MSAA in the composer render target. EffectComposer renders to an offscreen
 // FBO, so the renderer's `antialias` flag does nothing — we need to ask the
-// FBO for multisamples directly. On Sharp we use 4x (great edges, ~10–15% GPU
-// hit on iPhone); on Balanced 2x; Performance stays 0 to save fill rate.
-let _composerSamples = 0;
+// FBO for multisamples directly. Sharp 4x, Balanced + Performance both 2x.
+// Apple's TBDR makes 2x MSAA nearly free on iOS; smooth edges are table-
+// stakes for not looking cheap. Performance differentiates via lower DPR.
+function _samplesForQuality(q) { return q === 'sharp' ? 4 : 2; }
+let _composerSamples = 2;
 try {
   const _gq = (window._settings && window._settings.graphicsQuality) ||
               ((window._LS && JSON.parse(window._LS.getItem('jh_settings')||'{}').graphicsQuality)) ||
               'balanced';
-  _composerSamples = _gq === 'sharp' ? 4 : _gq === 'balanced' ? 2 : 0;
-} catch(_) { _composerSamples = 2; }
+  _composerSamples = _samplesForQuality(_gq);
+} catch(_) {}
 // NOTE: We do NOT set `type: HalfFloatType` here. Half-float FBOs caused a
 // visible horizon banding/artifact on iOS (Apple GPU + tonemapping). MSAA
 // (`samples`) is what makes Sharp actually look sharp — keep that, default
@@ -3409,6 +3411,30 @@ const _composerRT = new THREE.WebGLRenderTarget(
 );
 const composer = new EffectComposer(renderer, _composerRT);
 composer.addPass(new RenderPass(scene, camera));
+// Live MSAA rebuild — only safe to call when no game render is active
+// (we gate the graphics picker to title screen). Disposes the current
+// render target and rebuilds with new sample count; updates composer's
+// writeBuffer + readBuffer to point at the new target.
+window._rebuildComposerSamples = function() {
+  try {
+    const gq = (window._settings && window._settings.graphicsQuality) || 'balanced';
+    const want = _samplesForQuality(gq);
+    if (want === _composerSamples) return;
+    _composerSamples = want;
+    const w = Math.max(1, window.innerWidth);
+    const h = Math.max(1, window.innerHeight);
+    const newRT = new THREE.WebGLRenderTarget(w, h, { samples: want });
+    const oldWrite = composer.writeBuffer;
+    const oldRead  = composer.readBuffer;
+    composer.writeBuffer = newRT;
+    composer.readBuffer  = newRT.clone();
+    composer.renderTarget1 = composer.writeBuffer;
+    composer.renderTarget2 = composer.readBuffer;
+    composer.setSize(w, h);
+    try { oldWrite.dispose(); } catch(_) {}
+    try { oldRead.dispose(); } catch(_) {}
+  } catch(_) {}
+};
 
 // Bloom resolution: /2 on both desktop and mobile. Previously /3 on mobile,
 // but that left the sun corona/atmosphere glow visibly blurry — bloom IS the
@@ -21696,6 +21722,12 @@ function applyGraphicsQuality() {
     if (window._starMat && window._starMat.uniforms && window._starMat.uniforms.uPixelRatio) {
       window._starMat.uniforms.uPixelRatio.value = dpr;
     }
+    // Live MSAA tier swap. The graphics picker is title-screen-gated
+    // (see openSettings below), so this only runs when no active game
+    // render is happening — safe to dispose composer FBOs.
+    if (typeof window._rebuildComposerSamples === 'function') {
+      window._rebuildComposerSamples();
+    }
   } catch(e) {}
 }
 window.applyGraphicsQuality = applyGraphicsQuality;
@@ -21776,6 +21808,14 @@ function openSettings() {
     const b = document.getElementById('gfx-' + q);
     if (b) b.classList.toggle('active', _settings.graphicsQuality === q);
   });
+  // Gate graphics picker to title screen only — most engines apply gfx
+  // changes on next scene load. Hiding from pause/game avoids mid-render
+  // FBO swaps. Live MSAA rebuild is only safe with no active render.
+  const _gfxRow = document.getElementById('graphics-row');
+  if (_gfxRow) {
+    const _onTitle = !window.state || window.state.phase === 'title';
+    _gfxRow.style.display = _onTitle ? '' : 'none';
+  }
 
   ov.classList.remove('hidden');
 }
