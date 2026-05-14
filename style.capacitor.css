@@ -16,7 +16,7 @@
      var(--safe-area-inset-bottom)
      var(--safe-area-inset-left)
 
-   All selectors must be prefixed with html.platform-ios-native
+   All selectors must be prefixed with html.is-capacitor
    as belt-and-suspenders defense.
    ════════════════════════════════════════════════════════ */
 
@@ -30,12 +30,12 @@
    The actual game UI still pads its interactive surfaces with
    env(safe-area-inset-bottom) via style.css; this rule just kills
    the visible gap.                                           */
-html.platform-ios-native,
-html.platform-ios-native body {
+html.is-capacitor,
+html.is-capacitor body {
   background-color: #000 !important;
   min-height: 100dvh;
 }
-html.platform-ios-native body {
+html.is-capacitor body {
   /* Stretch body to the full visual viewport so the home-indicator
      area paints with the page background instead of WKWebView's
      bare backdrop. The game's own UI elements still honor
@@ -47,10 +47,10 @@ html.platform-ios-native body {
 /* Three.js / game canvas should stretch through the safe area so
    no transparent strip is left under the home-indicator. The HUD
    layers above the canvas already pad themselves. */
-html.platform-ios-native canvas#bg,
-html.platform-ios-native canvas.three-canvas,
-html.platform-ios-native #three-root,
-html.platform-ios-native #app {
+html.is-capacitor canvas#bg,
+html.is-capacitor canvas.three-canvas,
+html.is-capacitor #three-root,
+html.is-capacitor #app {
   background-color: #000;
 }
 
@@ -69,32 +69,88 @@ html.platform-ios-native #app {
    the panel by lifting overflow on the immediate scroll
    containers and temporarily disabling .sr-panel's clip-path.
    Uses :has() (Safari 15.4+; iOS 17 on user device).         */
-html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) {
+html.is-capacitor .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) {
   /* Clip-path clips ALL descendants regardless of overflow.
      Drop it while the dropdown is open; corners look slightly
      less sci-fi for the few seconds the menu is open, but
      the menu is now visible. */
   clip-path: none;
 }
-html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-body,
-html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane,
-html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane[data-pane="thrusters"]:not(.sr-hidden) {
+html.is-capacitor .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-body,
+html.is-capacitor .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane,
+html.is-capacitor .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane[data-pane="thrusters"]:not(.sr-hidden) {
   overflow: visible !important;
 }
 /* Belt-and-suspenders: ensure the menu itself paints above
    everything and isn't clipped by any sibling. */
-html.platform-ios-native .shop-handling-bar.open .fm-menu {
+html.is-capacitor .shop-handling-bar.open .fm-menu {
   z-index: 9999 !important;
 }
 
 /* ──────────────────────────────────────────────────────────
-   3) GENERAL SAFE-AREA PADDING
+   3) TAP-ALIGNMENT FIX — safe-area-aware viewport variables
    ──────────────────────────────────────────────────────────
-   Make absolutely-positioned UI elements respect the home
-   indicator + Dynamic Island. Only applied on iOS native. */
-html.platform-ios-native #app,
-html.platform-ios-native #ui {
-  padding-left:   var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
-  padding-right:  var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+   viewport-fit=cover extends the layout viewport under the
+   Dynamic Island and home indicator. The game's UI elements
+   are positioned via the existing CSS using 100vw/100vh/100% —
+   that still works, BUT visually portions of UI can sit under
+   the notch / indicator, making the displayed button look like
+   it's elsewhere relative to where touches actually hit.
+
+   Strategy: expose CSS custom properties for safe insets that
+   default to the SafeArea plugin's --safe-area-inset-* (which
+   it sets on document.documentElement at startup) and fall
+   back to env(safe-area-inset-*) when the plugin hasn't run
+   yet (e.g. very first frame). Then shrink the UI layer's
+   effective box so its layout edges = visual edges.            */
+html.is-capacitor {
+  --jh-sat: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --jh-sar: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --jh-sab: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --jh-sal: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+}
+
+/* HUD / UI overlay: pad on all four sides so buttons can't be
+   placed under the notch or home indicator. The canvas behind
+   #app continues to fill the full screen for the immersive
+   game look. */
+html.is-capacitor #app,
+html.is-capacitor #ui,
+html.is-capacitor #hud,
+html.is-capacitor .ui-layer {
+  padding-top:    var(--jh-sat);
+  padding-right:  var(--jh-sar);
+  padding-bottom: var(--jh-sab);
+  padding-left:   var(--jh-sal);
+  box-sizing: border-box;
+}
+
+/* Floating top-bar / top-row UI elements (score, settings, etc.):
+   shift them down so they clear the Dynamic Island. */
+html.is-capacitor .topbar,
+html.is-capacitor .top-bar,
+html.is-capacitor #score-row,
+html.is-capacitor #top-hud,
+html.is-capacitor [data-hud-edge="top"] {
+  top: var(--jh-sat) !important;
+}
+
+/* Floating bottom-row UI elements (controls, buttons):
+   shift them up so they clear the home indicator. */
+html.is-capacitor .bottom-bar,
+html.is-capacitor #bottom-hud,
+html.is-capacitor [data-hud-edge="bottom"] {
+  bottom: var(--jh-sab) !important;
+}
+
+/* Full-screen overlays (sr-overlay = garage/shop, pause menu,
+   etc.) need the safe-area inset on their inner content so
+   close buttons and tap targets don't end up under the notch. */
+html.is-capacitor .sr-overlay:not(.hidden) {
+  padding-top:    var(--jh-sat);
+  padding-right:  var(--jh-sar);
+  padding-bottom: var(--jh-sab);
+  padding-left:   var(--jh-sal);
+  box-sizing: border-box;
 }
 
