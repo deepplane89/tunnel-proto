@@ -1988,27 +1988,25 @@ const _composerRT = new THREE.WebGLRenderTarget(
 const composer = new EffectComposer(renderer, _composerRT);
 composer.addPass(new RenderPass(scene, camera));
 // Live MSAA rebuild — only safe to call when no game render is active
-// (we gate the graphics picker to title screen). Disposes the current
-// render target and rebuilds with new sample count; updates composer's
-// writeBuffer + readBuffer to point at the new target.
+// (we gate the graphics picker to title screen). Mutates the existing
+// composer render targets in place rather than constructing fresh ones,
+// to preserve the exact texture/depth/stencil format EffectComposer
+// originally chose. Just changes `samples` and forces a re-allocation
+// via setSize, which triggers internal _renderTargetNeedsUpdate.
 window._rebuildComposerSamples = function() {
   try {
     const gq = (window._settings && window._settings.graphicsQuality) || 'balanced';
     const want = _samplesForQuality(gq);
     if (want === _composerSamples) return;
     _composerSamples = want;
-    const w = Math.max(1, window.innerWidth);
-    const h = Math.max(1, window.innerHeight);
-    const newRT = new THREE.WebGLRenderTarget(w, h, { samples: want });
-    const oldWrite = composer.writeBuffer;
-    const oldRead  = composer.readBuffer;
-    composer.writeBuffer = newRT;
-    composer.readBuffer  = newRT.clone();
-    composer.renderTarget1 = composer.writeBuffer;
-    composer.renderTarget2 = composer.readBuffer;
-    composer.setSize(w, h);
-    try { oldWrite.dispose(); } catch(_) {}
-    try { oldRead.dispose(); } catch(_) {}
+    if (composer.writeBuffer) composer.writeBuffer.samples = want;
+    if (composer.readBuffer)  composer.readBuffer.samples  = want;
+    if (composer.renderTarget1) composer.renderTarget1.samples = want;
+    if (composer.renderTarget2) composer.renderTarget2.samples = want;
+    // setSize forces three.js to dispose+reallocate the GPU FBO with the
+    // new sample count on next render. Keeps the same JS RT object so
+    // all texture format/filter/depth settings stay identical.
+    composer.setSize(window.innerWidth, window.innerHeight);
   } catch(_) {}
 };
 
