@@ -18,23 +18,57 @@ try {
 // Binds to pointerdown for instant response (no 300ms click delay on mobile).
 // Suppresses the synthetic click that follows so handlers don't double-fire,
 // and falls back to click on the rare browser without pointer events.
+//
+// opts.moveCancel: when true, fire on pointerup instead, and skip the fire if
+// the pointer moved more than ~10px between down and up. Use for buttons
+// embedded in scrollable areas (settings mute toggles) so a scroll-flick
+// that starts on the button doesn't accidentally trigger it.
 function _tapBind(el, fn, opts) {
   if (!el) return;
   const passive = !(opts && opts.preventDefault);
+  const moveCancel = !!(opts && opts.moveCancel);
+  const MOVE_THRESH_SQ = 10 * 10; // px^2
   let _firedAt = 0;
-  const handler = (e) => {
-    _firedAt = performance.now();
-    if (opts && opts.preventDefault) { try { e.preventDefault(); } catch (_) {} }
-    fn(e);
-  };
   if ('onpointerdown' in window) {
-    el.addEventListener('pointerdown', handler, { passive });
-    // Suppress the synthetic click (within 500ms of pointerdown)
-    el.addEventListener('click', (e) => {
-      if (performance.now() - _firedAt < 500) { try { e.preventDefault(); e.stopPropagation(); } catch (_) {} }
-    });
+    if (moveCancel) {
+      // pointerdown records start position; pointerup fires fn only if the
+      // pointer didn't move far. pointercancel / move-past-threshold aborts.
+      let _startX = 0, _startY = 0, _armed = false;
+      el.addEventListener('pointerdown', (e) => {
+        _startX = e.clientX; _startY = e.clientY; _armed = true;
+      }, { passive });
+      el.addEventListener('pointermove', (e) => {
+        if (!_armed) return;
+        const dx = e.clientX - _startX, dy = e.clientY - _startY;
+        if (dx * dx + dy * dy > MOVE_THRESH_SQ) _armed = false;
+      }, { passive: true });
+      el.addEventListener('pointercancel', () => { _armed = false; });
+      el.addEventListener('pointerup', (e) => {
+        if (!_armed) return;
+        _armed = false;
+        _firedAt = performance.now();
+        if (opts && opts.preventDefault) { try { e.preventDefault(); } catch (_) {} }
+        fn(e);
+      }, { passive });
+      el.addEventListener('click', (e) => {
+        if (performance.now() - _firedAt < 500) { try { e.preventDefault(); e.stopPropagation(); } catch (_) {} }
+      });
+    } else {
+      const handler = (e) => {
+        _firedAt = performance.now();
+        if (opts && opts.preventDefault) { try { e.preventDefault(); } catch (_) {} }
+        fn(e);
+      };
+      el.addEventListener('pointerdown', handler, { passive });
+      el.addEventListener('click', (e) => {
+        if (performance.now() - _firedAt < 500) { try { e.preventDefault(); e.stopPropagation(); } catch (_) {} }
+      });
+    }
   } else {
-    el.addEventListener('click', handler);
+    el.addEventListener('click', (e) => {
+      if (opts && opts.preventDefault) { try { e.preventDefault(); } catch (_) {} }
+      fn(e);
+    });
   }
 }
 

@@ -409,23 +409,24 @@ function _initSettingsAccordion() {
     saveSettings();
   });
 
-  // Music mute toggle
+  // Music mute toggle — moveCancel: scroll-flicks that start on the button
+  // (settings panel is scrollable) must not flip the mute state.
   _tapBind(document.getElementById('mute-music'), () => {
     _settings.musicMuted = !_settings.musicMuted;
     document.getElementById('mute-music').classList.toggle('muted', _settings.musicMuted);
     document.getElementById('mute-music').textContent = _settings.musicMuted ? '🔇' : '♪';
     applyMusicVolume();
     saveSettings();
-  });
+  }, { moveCancel: true });
 
-  // SFX mute toggle
+  // SFX mute toggle — same scroll-cancel guard as music mute.
   _tapBind(document.getElementById('mute-sfx'), () => {
     _settings.sfxMuted = !_settings.sfxMuted;
     document.getElementById('mute-sfx').classList.toggle('muted', _settings.sfxMuted);
     document.getElementById('mute-sfx').textContent = _settings.sfxMuted ? '🔇' : '♪';
     applySfxMute(); // immediately silence looping <audio> SFX when muting
     saveSettings();
-  });
+  }, { moveCancel: true });
 
   // Graphics quality 3-way toggle (Performance / Balanced / Sharp)
   ['performance','balanced','sharp'].forEach(q => {
