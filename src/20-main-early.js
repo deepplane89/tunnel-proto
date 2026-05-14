@@ -5762,6 +5762,16 @@ function updateSunColor(color, levelIdx) {
     sunCapMat.uniforms.uIsIce.value  = sunMat.uniforms.uIsIce.value;
     sunCapMat.uniforms.uIsGold.value = sunMat.uniforms.uIsGold.value;
   }
+  // PERF: skip the canvas-redraw + texture re-upload during transition lerps
+  // (called every frame via updateDeathRunTransition / updateTransition with
+  // levelIdx === -1). The shader-driven sun disc + sunLight lerp smoothly
+  // every frame above; the canvas-baked corona/rim halo is supplementary
+  // additive glow and snaps at transition end via updateDeathRunTransition
+  // (one final updateSunColor call with the target levelIdx). This avoids
+  // ~50 full 2D-canvas redraws + 2 GPU texture re-uploads per transition
+  // (~0.83s of lerp at 60Hz) that were causing visible hitches in prod.
+  if (levelIdx === -1) return;
+
   // Recolor the glow gradient using the level's sun color
   const r = color.r, g2 = color.g, b = color.b;
   const rSun = Math.round(r*255), gSun = Math.round(g2*255), bSun = Math.round(b*255);

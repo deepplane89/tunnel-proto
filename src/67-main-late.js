@@ -1400,14 +1400,18 @@ function _drSequencerTick(dt) {
   // mid-air — visual collision between mechanics.
   //
   // Cones spawn at z=-160 and travel ~144 units to reach the ship. Time to
-  // clear depends on stage speed. We use 3s which covers everything from
-  // S1's 1.5x up to the late-stage 2.5x speeds with comfortable headroom.
+  // clear depends on stage speed. Bumped from 3s → 4s on 2026-05-13: at S1's
+  // 1.5x speed (BASE_SPEED 36 * 1.5 = 54 u/s) travel time is 144/54 = 2.67s
+  // with only 0.33s headroom, letting cones spawned in the last ~1s before
+  // the gate flipped leak into CA_CANYON's opening. 4s gives 1.33s headroom
+  // at 1.5x and is still well under any stage's 30s+ duration. Later stages
+  // (1.8x+) already had plenty of margin and are unaffected.
   const _nextStageIsCanyon = (() => {
     const _ns = DR_SEQUENCE[state.seqStageIdx + 1];
     return _ns && _ns.type === 'corridor';
   })();
   const _stageDur = stage.duration || 0;
-  const _PRE_CANYON_QUIET_S = 3;
+  const _PRE_CANYON_QUIET_S = 4;
   const _inPreCanyonQuiet = _nextStageIsCanyon && _stageDur > 0 &&
     state.seqStageElapsed >= _stageDur - _PRE_CANYON_QUIET_S;
 
@@ -2835,6 +2839,12 @@ function updateDeathRunTransition(dt) {
 
   if (_drTransT >= 1) {
     _drTransActive = false;
+    // PERF: corona/rim canvas halo was skipped every frame during the lerp
+    // (see updateSunColor levelIdx===-1 early return). Snap-redraw it ONCE
+    // here at transition end with the target sun's shader so the additive
+    // glow finally re-tints. Disc/sunLight already match because their
+    // shader uniforms lerped every frame.
+    updateSunColor(to.sunColor, to.sunShader);
   }
 }
 

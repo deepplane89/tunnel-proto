@@ -351,7 +351,13 @@ function updateTransition(dt) {
 
   bloom.strength = currentLevelDef.bloomStrength + (targetLevelDef.bloomStrength - currentLevelDef.bloomStrength) * t;
 
-  if (transitionT >= 1) currentLevelDef = targetLevelDef;
+  if (transitionT >= 1) {
+    currentLevelDef = targetLevelDef;
+    // PERF: snap corona/rim canvas halo to the target sun once at end
+    // (skipped every frame during the lerp — see updateSunColor levelIdx===-1).
+    const _toIdx = LEVELS.indexOf(targetLevelDef);
+    if (_toIdx >= 0) updateSunColor(targetLevelDef.sunColor, _toIdx);
+  }
 }
 
 // ═══════════════════════════════════════════════════
