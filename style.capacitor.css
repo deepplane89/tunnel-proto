@@ -21,37 +21,31 @@
    ════════════════════════════════════════════════════════ */
 
 /* ──────────────────────────────────────────────────────────
-   1) BLACK STRIP AT BOTTOM
+   1) BLACK STRIP AT BOTTOM — root cause
    ──────────────────────────────────────────────────────────
-   contentInset:"always" + body background not extending into the
-   safe area produces a black gap under the home indicator. Make
-   sure html/body fill the full viewport (dvh) AND paint the same
-   background that the game uses, so any inset area blends in.
-   The actual game UI still pads its interactive surfaces with
-   env(safe-area-inset-bottom) via style.css; this rule just kills
-   the visible gap.                                           */
+   style.css line 56-62 sets `html, body { height: 100% }`.
+   With viewport-fit=cover + contentInset:always, `100%`
+   resolves to LAYOUT viewport height (excludes safe-area
+   insets). So body stops ~34pt short of the bottom of the
+   screen. The #game-canvas (inset:0) stretches only to body's
+   bottom edge, so it also stops short. The 34pt below the
+   body is painted by Capacitor's backgroundColor (#000000
+   from capacitor.config.json) — that's the visible strip.
+
+   Fix: force html, body, and #game-canvas to 100dvh which
+   on iOS WKWebView in cover mode = full visual viewport,
+   including the home-indicator area. Use !important to win
+   against the base `height: 100%` rule. */
 html.platform-ios-native,
 html.platform-ios-native body {
+  height: 100dvh !important;
+  min-height: 100dvh !important;
   background-color: #000 !important;
-  min-height: 100dvh;
-}
-html.platform-ios-native body {
-  /* Stretch body to the full visual viewport so the home-indicator
-     area paints with the page background instead of WKWebView's
-     bare backdrop. The game's own UI elements still honor
-     env(safe-area-inset-bottom) for their own padding. */
-  height: 100dvh;
-  min-height: 100dvh;
   margin: 0;
 }
-/* Three.js / game canvas should stretch through the safe area so
-   no transparent strip is left under the home-indicator. The HUD
-   layers above the canvas already pad themselves. */
-html.platform-ios-native canvas#bg,
-html.platform-ios-native canvas.three-canvas,
-html.platform-ios-native #three-root,
-html.platform-ios-native #app {
-  background-color: #000;
+html.platform-ios-native #game-canvas {
+  height: 100dvh !important;
+  min-height: 100dvh !important;
 }
 
 /* ──────────────────────────────────────────────────────────
