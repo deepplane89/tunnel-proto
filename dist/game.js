@@ -20357,6 +20357,10 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
+  // Belt-and-suspenders: bank-water hiss should already be zeroed in onDeath,
+  // but any path that reaches title without going through death (e.g. pause
+  // → exit) skips that. Hard-zero again here.
+  try { if (window.BankWaterHiss) window.BankWaterHiss.silence(); } catch(_) {}
   // Radio: when the shuffle station is on the player explicitly opted into it
   // and never asked for it to stop. Keep it rolling seamlessly across
   // exit → title. The title-music restart below is also gated on radio-off
@@ -25649,6 +25653,10 @@ function killPlayer() {
                            : null;
 
   state.phase = 'dead';
+  // Bank-water hiss has a soft release (~300ms). The wake update only runs
+  // during phase==='playing', so once we flip to 'dead' the hiss gain freezes
+  // at its last value and bleeds onto the gameover/title screen. Hard-zero it.
+  try { if (window.BankWaterHiss) window.BankWaterHiss.silence(); } catch(_) {}
   // Radio: keep the shuffle station rolling across death → game-over → title.
   // The player explicitly turned it on; only the user should stop it.
   // (Previously stopRadio() was called here. Lock-in unlock still fires.)

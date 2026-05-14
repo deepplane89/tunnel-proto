@@ -150,6 +150,10 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
+  // Belt-and-suspenders: bank-water hiss should already be zeroed in onDeath,
+  // but any path that reaches title without going through death (e.g. pause
+  // → exit) skips that. Hard-zero again here.
+  try { if (window.BankWaterHiss) window.BankWaterHiss.silence(); } catch(_) {}
   // Radio: when the shuffle station is on the player explicitly opted into it
   // and never asked for it to stop. Keep it rolling seamlessly across
   // exit → title. The title-music restart below is also gated on radio-off
