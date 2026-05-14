@@ -33391,8 +33391,39 @@ window._uploadAllBuffers = _uploadAllBuffers;
     if (typeof window._initLethalRings === 'function') {
       try { window._initLethalRings(); } catch (e) { console.warn('[PREWARM] lethal rings init failed:', e && e.message); }
     }
+    // 1b) SHATTER ICON GEOMETRIES: the 4 baked geos (_SHATTER_ICON_GEOS.oct,
+    // torus, ring, sphere) are NOT attached to any mesh at boot — only sphere
+    // is, because _createShatterIcon defaults to it. First pickup of a shield
+    // (oct) or laser (torus) calls icon.geometry = baked, which triggers a
+    // brand-new bufferData upload on the impact frame (same bug-class as the
+    // lightning _ltRejag re-upload).
+    //
+    // Fix: temporarily attach each of the 4 shapes to a distinct pool icon
+    // mesh BEFORE the compile pass, so when _compileAllIncludingInvisible
+    // flips them visible + _uploadAllBuffers renders, every shape's vertex
+    // buffer uploads. Restore the original assignments right after.
+    let _shatterIconRestore = null;
+    try {
+      if (typeof _SHATTER_ICON_GEOS !== 'undefined' && typeof _powerupShatterIconPool !== 'undefined' && _powerupShatterIconPool.length >= 4) {
+        const _shapes = ['oct', 'torus', 'ring', 'sphere'];
+        _shatterIconRestore = [];
+        for (let i = 0; i < _shapes.length; i++) {
+          const m = _powerupShatterIconPool[i];
+          if (m && _SHATTER_ICON_GEOS[_shapes[i]]) {
+            _shatterIconRestore.push({ mesh: m, geo: m.geometry });
+            m.geometry = _SHATTER_ICON_GEOS[_shapes[i]];
+          }
+        }
+      }
+    } catch (e) { console.warn('[PREWARM] shatter icon geo-swap failed:', e && e.message); }
+
     // 2) Compile every material currently in the scene graph (idempotent).
     window._reprewarmShaders('boot');
+
+    // Restore shatter icon geometries now that buffers have uploaded.
+    if (_shatterIconRestore) {
+      try { for (const r of _shatterIconRestore) { r.mesh.geometry = r.geo; } } catch(_) {}
+    }
 
     // 2b) LIGHTNING FIRST-STRIKE simulation. _reprewarmShaders compiles the
     // pool's PLACEHOLDER tube geometries (built at landX=0 in _ltInitPool),
