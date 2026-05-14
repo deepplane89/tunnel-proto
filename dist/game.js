@@ -5300,6 +5300,22 @@ const _FACE_EXP_MAT = new THREE.ShaderMaterial({
   toneMapped: false,
 });
 
+// Prewarm: 1-triangle dummy mesh added to scene with all required attributes so
+// applySkin()'s renderer.compile(scene, camera) compiles the face-explosion
+// shader at boot. Without this, the first crash compiles the shader mid-death
+// = visible hitch right when the player needs smooth FX.
+(function _prewarmFaceExp() {
+  const dummyGeo = new THREE.BufferGeometry();
+  const _zeros3 = new Float32Array(9); // 3 verts × 3 floats
+  dummyGeo.setAttribute('position',     new THREE.BufferAttribute(_zeros3, 3));
+  dummyGeo.setAttribute('faceCentroid', new THREE.BufferAttribute(_zeros3, 3));
+  dummyGeo.setAttribute('faceNormal',   new THREE.BufferAttribute(_zeros3, 3));
+  const dummy = new THREE.Mesh(dummyGeo, _FACE_EXP_MAT);
+  dummy.visible = false;
+  dummy.frustumCulled = false;
+  scene.add(dummy);
+})();
+
 // ── Pre-bake cache for face-explosion ship topology ──
 // Keyed by ship model UUID. Holds ship-local positions/centroids/normals, a single merged
 // BufferGeometry, and a reusable mesh. The only per-crash work is transforming local positions
@@ -24559,6 +24575,32 @@ function _drAdvanceArc() {
   }
 }
 
+// ── Coin/Fuel fly-to-HUD DOM pool ──
+// Avoids per-pickup createElement + appendChild churn. 40 dots covers worst-case
+// magnet chain (fuel = up to 12/pickup, coin = up to 6/pickup, multiple
+// simultaneous pickups). Pre-created, parked, reused.
+const _FLY_POOL_SIZE = 40;
+const _flyPool = [];
+(function _initFlyPool() {
+  if (typeof document === 'undefined' || !document.body) return;
+  for (let i = 0; i < _FLY_POOL_SIZE; i++) {
+    const dot = document.createElement('div');
+    dot.style.cssText = 'position:fixed;left:0;top:0;border-radius:50%;z-index:9999;pointer-events:none;will-change:transform,opacity;display:none;';
+    document.body.appendChild(dot);
+    _flyPool.push({ el: dot, inUse: false });
+  }
+})();
+function _flyAcquire() {
+  for (let i = 0; i < _flyPool.length; i++) {
+    if (!_flyPool[i].inUse) { _flyPool[i].inUse = true; _flyPool[i].el.style.display = 'block'; return _flyPool[i]; }
+  }
+  return null; // pool exhausted — drop the particle (visual only)
+}
+function _flyRelease(slot) {
+  slot.inUse = false;
+  slot.el.style.display = 'none';
+}
+
 // ── Coin fly-to-HUD animation (gold) ──
 function _spawnCoinFly(worldPos, hudEl) {
   const v = worldPos.clone();
@@ -24570,7 +24612,9 @@ function _spawnCoinFly(worldPos, hudEl) {
   const ty = rect.top + rect.height / 2;
   const count = 4 + Math.floor(Math.random() * 3); // 4-6 (less than fuel)
   for (let i = 0; i < count; i++) {
-    const dot = document.createElement('div');
+    const slot = _flyAcquire();
+    if (!slot) break; // pool full — skip remaining
+    const dot = slot.el;
     const size = 5 + Math.random() * 5;
     const startX = sx + (Math.random() - 0.5) * 20;
     const startY = sy + (Math.random() - 0.5) * 20;
@@ -24578,8 +24622,11 @@ function _spawnCoinFly(worldPos, hudEl) {
     const dur = 500 + Math.random() * 200;
     const midX = (startX + tx) / 2 + (Math.random() - 0.5) * 60;
     const midY = Math.min(startY, ty) - 20 - Math.random() * 40;
-    dot.style.cssText = `position:fixed;left:0;top:0;width:${size}px;height:${size}px;background:#ffd700;border-radius:50%;box-shadow:0 0 ${size+3}px #fa0;z-index:9999;pointer-events:none;will-change:transform,opacity;`;
-    document.body.appendChild(dot);
+    dot.style.width = size + 'px';
+    dot.style.height = size + 'px';
+    dot.style.background = '#ffd700';
+    dot.style.boxShadow = `0 0 ${size+3}px #fa0`;
+    dot.style.opacity = '1';
     const start = performance.now() + delay;
     function tick(now) {
       const elapsed = now - start;
@@ -24593,7 +24640,7 @@ function _spawnCoinFly(worldPos, hudEl) {
       dot.style.transform = `translate(${bx}px,${by}px) scale(${s})`;
       dot.style.opacity = op;
       if (t < 1) requestAnimationFrame(tick);
-      else dot.remove();
+      else _flyRelease(slot);
     }
     requestAnimationFrame(tick);
   }
@@ -24616,25 +24663,27 @@ function _spawnFuelFly(worldPos) {
   }
   const count = 8 + Math.floor(Math.random() * 5); // 8-12 particles
   for (let i = 0; i < count; i++) {
-    const dot = document.createElement('div');
+    const slot = _flyAcquire();
+    if (!slot) break; // pool full — skip remaining
+    const dot = slot.el;
     const size = 6 + Math.random() * 6;
     const startX = sx + (Math.random() - 0.5) * 30;
     const startY = sy + (Math.random() - 0.5) * 30;
     const delay = i * 50;
     const dur = 600 + Math.random() * 200;
-    // Unique arc midpoint for each particle
     const midX = (startX + tx) / 2 + (Math.random() - 0.5) * 80;
     const midY = Math.min(startY, ty) - 30 - Math.random() * 60;
-    dot.style.cssText = `position:fixed;left:0;top:0;width:${size}px;height:${size}px;background:#4cf;border-radius:50%;box-shadow:0 0 ${size+4}px #0af;z-index:9999;pointer-events:none;will-change:transform,opacity;`;
-    document.body.appendChild(dot);
-    // Animate with requestAnimationFrame for smooth bezier arc
+    dot.style.width = size + 'px';
+    dot.style.height = size + 'px';
+    dot.style.background = '#4cf';
+    dot.style.boxShadow = `0 0 ${size+4}px #0af`;
+    dot.style.opacity = '1';
     const start = performance.now() + delay;
     function tick(now) {
       const elapsed = now - start;
       if (elapsed < 0) { requestAnimationFrame(tick); return; }
       const t = Math.min(1, elapsed / dur);
-      const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t; // ease in-out quad
-      // Quadratic bezier: start → mid → target
+      const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
       const bx = (1-ease)*(1-ease)*startX + 2*(1-ease)*ease*midX + ease*ease*tx;
       const by = (1-ease)*(1-ease)*startY + 2*(1-ease)*ease*midY + ease*ease*ty;
       const s = 1 - ease * 0.7;
@@ -24642,7 +24691,7 @@ function _spawnFuelFly(worldPos) {
       dot.style.transform = `translate(${bx}px,${by}px) scale(${s})`;
       dot.style.opacity = op;
       if (t < 1) requestAnimationFrame(tick);
-      else dot.remove();
+      else _flyRelease(slot);
     }
     requestAnimationFrame(tick);
   }
@@ -24762,10 +24811,18 @@ const _ringTuner = { x: 0, y: 2, radius: 5.25, lineWidth: 20, sides: 8, length: 
 // length = number of rings per lane, freq = Z spacing
 // copies = how many lanes side by side, copySpacing = X gap between lanes
 const _ringPalette = [0xff6600, 0x00ddff, 0xcc00ff]; // orange, cyan, purple (matches wormhole)
-let _bonusRings = [];      // array of { mesh: Line2, z: number }
+let _bonusRings = [];      // array of { mesh: Line2, collected, _slot, _isRipple }
 let _ringTunerPanel = null;
 
-function _ringBuildOne(colorIdx) {
+// Pool: avoids per-spawn LineGeometry+LineMaterial alloc and first-render shader
+// compile hitch. 12 spawn rings + 12 ripple rings = 24 slots. Each slot has its
+// own material (per-instance opacity/color animations), but all shaders compile
+// once at boot via _ringPrewarm() — matches the lethal-ring pattern.
+const _RING_POOL_SIZE = 24;
+const _ringPool = [];   // array of { mesh, mat, geo, inUse }
+let _ringPoolInited = false;
+
+function _ringBuildGeo() {
   const SIDES = _ringTuner.sides;
   const R = _ringTuner.radius;
   const positions = [];
@@ -24775,17 +24832,58 @@ function _ringBuildOne(colorIdx) {
   }
   const geo = new LineGeometry();
   geo.setPositions(positions);
-  const mat = new LineMaterial({
-    color: _ringPalette[colorIdx % 3],
-    linewidth: _ringTuner.lineWidth,
-    transparent: false,
-    worldUnits: false,
-  });
-  mat.depthWrite = true;
-  mat.resolution.set(window.innerWidth, window.innerHeight);
-  const ring = new Line2(geo, mat);
-  ring.computeLineDistances();
-  return ring;
+  return geo;
+}
+
+function _ringInitPool() {
+  if (_ringPoolInited) return;
+  for (let i = 0; i < _RING_POOL_SIZE; i++) {
+    const geo = _ringBuildGeo();
+    const mat = new LineMaterial({
+      color: _ringPalette[i % 3],
+      linewidth: _ringTuner.lineWidth,
+      transparent: true,
+      opacity: 1.0,
+      worldUnits: false,
+    });
+    mat.depthWrite = true;
+    mat.resolution.set(window.innerWidth, window.innerHeight);
+    const ring = new Line2(geo, mat);
+    ring.computeLineDistances();
+    ring.visible = false;
+    ring.frustumCulled = false;
+    scene.add(ring);
+    _ringPool.push({ mesh: ring, mat, geo, inUse: false });
+  }
+  _ringPoolInited = true;
+  // Prewarm: compile all 24 shader programs now so first ring spawn doesn't hitch.
+  try { renderer.compile(scene, camera); } catch (_) {}
+}
+// Init at boot — runs once.
+_ringInitPool();
+// Expose for any global prewarm sweep.
+window._ringInitPool = _ringInitPool;
+
+function _ringAcquire(colorIdx, opaque) {
+  for (let i = 0; i < _ringPool.length; i++) {
+    const slot = _ringPool[i];
+    if (slot.inUse) continue;
+    slot.inUse = true;
+    slot.mesh.visible = true;
+    slot.mesh.scale.set(1, 1, 1);
+    slot.mat.color.setHex(_ringPalette[colorIdx % 3]);
+    slot.mat.opacity = opaque ? 1.0 : 0.8;
+    slot.mat.depthWrite = !!opaque;
+    slot.mat.blending = opaque ? THREE.NormalBlending : THREE.AdditiveBlending;
+    slot.mat.linewidth = opaque ? _ringTuner.lineWidth : _ringTuner.lineWidth * 1.5;
+    return slot;
+  }
+  return null; // pool exhausted (shouldn't happen with 24)
+}
+
+function _ringRelease(slot) {
+  slot.inUse = false;
+  slot.mesh.visible = false;
 }
 
 function _ringSpawnRow(xPos, nearSpawn) {
@@ -24805,41 +24903,28 @@ function _ringSpawnRow(xPos, nearSpawn) {
       const sineX = _ringTuner.sineAmp > 0
         ? Math.sin((i / Math.max(1, _ringTuner.sinePeriod)) * Math.PI * 2) * _ringTuner.sineAmp
         : 0;
-      const ring = _ringBuildOne(c * count + i);
-      ring.position.set(laneX + sineX, 0, z);
-      scene.add(ring);
-      _bonusRings.push({ mesh: ring, collected: false });
+      const slot = _ringAcquire(c * count + i, true);
+      if (!slot) continue; // pool exhausted
+      slot.mesh.position.set(laneX + sineX, 0, z);
+      _bonusRings.push({ mesh: slot.mesh, collected: false, _slot: slot, _isRipple: false });
     }
   }
   state._ringsActive = true;
 }
 
 // ── Ring ripple effect on collection ──
-let _ringRipples = []; // { mesh, age, maxAge }
+let _ringRipples = []; // { slot, age, maxAge }
 function _ringSpawnRipple(pos, color) {
-  const SIDES = _ringTuner.sides;
-  const R = _ringTuner.radius;
-  const positions = [];
-  for (let s = 0; s <= SIDES; s++) {
-    const angle = (s % SIDES) * (Math.PI * 2 / SIDES);
-    positions.push(Math.cos(angle) * R, Math.sin(angle) * R + _ringTuner.y, 0);
+  // Find slot by hex color (palette index) — fall back to 0
+  let colorIdx = 0;
+  for (let i = 0; i < _ringPalette.length; i++) {
+    if (_ringPalette[i] === color) { colorIdx = i; break; }
   }
-  const geo = new LineGeometry();
-  geo.setPositions(positions);
-  const mat = new LineMaterial({
-    color: color || 0xffffff,
-    linewidth: _ringTuner.lineWidth * 1.5,
-    transparent: true, opacity: 0.8,
-    worldUnits: false,
-  });
-  mat.blending = THREE.AdditiveBlending;
-  mat.depthWrite = false;
-  mat.resolution.set(window.innerWidth, window.innerHeight);
-  const ripple = new Line2(geo, mat);
-  ripple.computeLineDistances();
-  ripple.position.copy(pos);
-  scene.add(ripple);
-  _ringRipples.push({ mesh: ripple, age: 0, maxAge: 0.4, startScale: 1, color: color });
+  const slot = _ringAcquire(colorIdx, false);
+  if (!slot) return;
+  if (color) slot.mat.color.setHex(color);
+  slot.mesh.position.copy(pos);
+  _ringRipples.push({ slot, age: 0, maxAge: 0.4 });
 }
 
 function _ringTickRipples(dt) {
@@ -24847,15 +24932,12 @@ function _ringTickRipples(dt) {
     const rp = _ringRipples[i];
     rp.age += dt;
     const t = rp.age / rp.maxAge; // 0→1
-    // Expand outward
     const scale = 1 + t * 1.2;
-    rp.mesh.scale.set(scale, scale, 1);
-    // Fade out
-    rp.mesh.material.opacity = 0.8 * (1 - t);
-    // Move with world
-    rp.mesh.position.z += (state.speed || 0) * dt;
+    rp.slot.mesh.scale.set(scale, scale, 1);
+    rp.slot.mat.opacity = 0.8 * (1 - t);
+    rp.slot.mesh.position.z += (state.speed || 0) * dt;
     if (t >= 1) {
-      scene.remove(rp.mesh); rp.mesh.geometry.dispose(); rp.mesh.material.dispose();
+      _ringRelease(rp.slot);
       _ringRipples.splice(i, 1);
     }
   }
@@ -24863,9 +24945,7 @@ function _ringTickRipples(dt) {
 
 function _ringRemoveAll() {
   for (const r of _bonusRings) {
-    scene.remove(r.mesh);
-    r.mesh.geometry.dispose();
-    r.mesh.material.dispose();
+    if (r._slot) _ringRelease(r._slot);
   }
   _bonusRings = [];
   state._ringsActive = false;
@@ -27915,7 +27995,7 @@ function update(dt) {
     }
     // Despawn when past camera
     if (br.mesh.position.z > 20) {
-      scene.remove(br.mesh); br.mesh.geometry.dispose(); br.mesh.material.dispose();
+      if (br._slot) _ringRelease(br._slot);
       _bonusRings.splice(i, 1);
     }
   }

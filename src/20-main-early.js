@@ -3876,6 +3876,22 @@ const _FACE_EXP_MAT = new THREE.ShaderMaterial({
   toneMapped: false,
 });
 
+// Prewarm: 1-triangle dummy mesh added to scene with all required attributes so
+// applySkin()'s renderer.compile(scene, camera) compiles the face-explosion
+// shader at boot. Without this, the first crash compiles the shader mid-death
+// = visible hitch right when the player needs smooth FX.
+(function _prewarmFaceExp() {
+  const dummyGeo = new THREE.BufferGeometry();
+  const _zeros3 = new Float32Array(9); // 3 verts × 3 floats
+  dummyGeo.setAttribute('position',     new THREE.BufferAttribute(_zeros3, 3));
+  dummyGeo.setAttribute('faceCentroid', new THREE.BufferAttribute(_zeros3, 3));
+  dummyGeo.setAttribute('faceNormal',   new THREE.BufferAttribute(_zeros3, 3));
+  const dummy = new THREE.Mesh(dummyGeo, _FACE_EXP_MAT);
+  dummy.visible = false;
+  dummy.frustumCulled = false;
+  scene.add(dummy);
+})();
+
 // ── Pre-bake cache for face-explosion ship topology ──
 // Keyed by ship model UUID. Holds ship-local positions/centroids/normals, a single merged
 // BufferGeometry, and a reusable mesh. The only per-crash work is transforming local positions
