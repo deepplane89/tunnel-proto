@@ -10577,7 +10577,7 @@ const obstaclePool = [];
 const activeObstacles = [];
 // DevTools session recorder — see window._perfReport() docstring below.
 (function () {
-  const _frames = []; // each entry: { t, dt, cones, walls, coins, asteroids, forcefields, lethalRings, powerups, drawCalls, triangles }
+  const _frames = []; // each entry: { t, dt, cones, walls, coins, asteroids, lethalRings, powerups, drawCalls, triangles }
   const _MAX_FRAMES = 60 * 60 * 5; // ~5 min @ 60fps
   let _recording = false;
   let _lastT = 0;
@@ -10609,7 +10609,7 @@ const activeObstacles = [];
   }
   // Pool conventions vary across the codebase:
   //   activeObstacles, activeCoins, activePowerups, _lethalRingActive → separate active list (length = count)
-  //   _awPool, _ffPool, _lethalRingPool → each obj has userData.active
+  //   _awPool, _lethalRingPool → each obj has userData.active
   //   _asteroidPool → each obj has .active directly
   // _countActive handles all three.
   function _countActive(arr) {
@@ -10633,14 +10633,13 @@ const activeObstacles = [];
     const drawCalls = _lastDrawCalls;
     const triangles = _lastTriangles;
     // Active counts — pools use various conventions, so we count multiple ways
-    let walls = 0, coins = 0, asteroids = 0, forcefields = 0, lethalRings = 0, powerups = 0;
+    let walls = 0, coins = 0, asteroids = 0, lethalRings = 0, powerups = 0;
     // Walls use a separate _awActive array (length = count), not userData.active on pool
     try { if (typeof _awActive !== 'undefined') walls = _awActive.length; } catch (_) {}
     // Coins and powerups have dedicated 'active*' arrays — use those directly
     try { if (typeof activeCoins !== 'undefined') coins = activeCoins.length; } catch (_) {}
     try { if (typeof activePowerups !== 'undefined') powerups = activePowerups.length; } catch (_) {}
     try { if (typeof _asteroidPool !== 'undefined') asteroids = _countActive(_asteroidPool); } catch (_) {}
-    // forcefields — always 0 (hazard removed); kept in shape for CSV compat
     try { if (typeof _lethalRingPool !== 'undefined') lethalRings = _countActive(_lethalRingPool); } catch (_) {}
     // Split fat cones from regular cones (both share activeObstacles)
     let fatCones = 0;
@@ -10653,7 +10652,7 @@ const activeObstacles = [];
       t: now, dt,
       cones: activeObstacles.length - fatCones,
       fatCones,
-      walls, coins, asteroids, forcefields, lethalRings, powerups,
+      walls, coins, asteroids, lethalRings, powerups,
       drawCalls, triangles,
     });
   }
@@ -10701,7 +10700,7 @@ const activeObstacles = [];
     _recording = false;
     const n = _frames.length;
     if (!n) { console.warn('[PERF] no frames recorded — call _perfStart() first'); return null; }
-    const fields = ['dt', 'cones', 'fatCones', 'walls', 'coins', 'asteroids', 'forcefields', 'lethalRings', 'powerups', 'drawCalls', 'triangles'];
+    const fields = ['dt', 'cones', 'fatCones', 'walls', 'coins', 'asteroids', 'lethalRings', 'powerups', 'drawCalls', 'triangles'];
     // (lightning omitted — pool is created inside a closure and not introspectable from here)
     const summary = {};
     for (const f of fields) {
@@ -15264,8 +15263,6 @@ function maybeStartGauntlet() {
       // Clear all existing obstacles so entry isn't blocked
       ;[...activeObstacles].forEach(returnObstacleToPool);
       activeObstacles.length = 0;
-  [..._activeForcefields].forEach(returnForcefieldToPool);
-  _activeForcefields.length = 0;
     }
     return;
   }
@@ -15287,7 +15284,7 @@ function maybeStartGauntlet() {
 // to false to restore it.
 // ============================================================================
 function _startL3KnifeCanyon() {
-  // NOTE: do NOT wipe activeObstacles/forcefields here. The DR sequencer
+  // NOTE: do NOT wipe activeObstacles here. The DR sequencer
   // stops spawning cones before L3 trigger, so the last batch will z-scroll
   // past the player naturally during the ~1s before canyon slabs reach play
   // distance. Wiping caused cones to pop out of existence instead of
@@ -16030,17 +16027,6 @@ function _drNextGapCenter(diffOverride) {
   return cs.gapX;
 }
 
-// ─── FORCEFIELD GATE — REMOVED ───────────────────────────────────────
-// Forcefield was a planned slalom-gate hazard that never shipped. Pool was
-// built (20 meshes in scene), per-frame uTime tick ran, but nothing ever
-// spawned one. Removed to drop 20 scene objects + 1 shaderMaterial + 1
-// per-frame uniform update.
-// Stubs below keep other-file references no-op'd without needing to edit
-// every call site. Remove the stubs once those references are cleaned up.
-const _ffPool = [];
-const _activeForcefields = [];
-function returnForcefieldToPool(_ff) { /* no-op stub */ }
-
 // ─── SLALOM MINEFIELD (Death Run) ────────────────────────────────────
 // Slalom minefield: uniform staggered grid of cones — no carved gap.
 // Even rows: cones at 0, ±S, ±2S, …  Odd rows offset by S/2 (brick pattern).
@@ -16053,7 +16039,6 @@ const SLALOM_TINT       = 0xff44aa;     // hot pink — distinct from corridor c
 
 // Closing doors pattern: two fat walls with a gap that shifts position each row.
 // Gap is ~8 units wide (ship is 3), position moves left/right/center randomly.
-// Forcefield spans one side, coins sit in the gap to reward threading the needle.
 
 const SLALOM_GAP_WIDTH = 8;       // gap the player must fly through
 const SLALOM_WALL_HALF = 500;     // total wall span ±500
@@ -20503,8 +20488,6 @@ function returnToTitle() {
     pu.scale.setScalar(1);
   });
   activePowerups.length = 0;
-  [..._activeForcefields].forEach(returnForcefieldToPool);
-  _activeForcefields.length = 0;
   // Show title, hide everything else
   const _tEl = document.getElementById('title-screen');
   _tEl.classList.remove('hidden');
@@ -22568,8 +22551,6 @@ function startGame() {
 
   // Clear all in-flight objects and mechanic state
   _clearAllMechanics();
-  [..._activeForcefields].forEach(returnForcefieldToPool);
-  _activeForcefields.length = 0;
   _awTunerPaused = false;
   // Reset ALL pool meshes (not just active ones) so nothing lingers from last session
   powerupPool.forEach(pu => {
@@ -24059,9 +24040,9 @@ function _drSeqAdvance() {
     if (targetSpeed > state.speed + 0.5) {
       state._pendingSpeed = targetSpeed;
       // Snapshot uuids of EVERY in-flight hazard, not just activeObstacles.
-      // Walls live in _awPool (active marked via userData.active), forcefields
-      // in _activeForcefields. We were missing those before, which caused the
-      // gate to no-op for wall stages (S4/S5) and bump speed instantly.
+      // Walls live in _awPool (active marked via userData.active). We were
+      // missing walls before, which caused the gate to no-op for wall stages
+      // (S4/S5) and bump speed instantly.
       state._pendingSpeedObstacles = new Set();
       for (let i = 0; i < activeObstacles.length; i++) {
         state._pendingSpeedObstacles.add(activeObstacles[i].uuid);
@@ -24071,11 +24052,6 @@ function _drSeqAdvance() {
           if (_awPool[i].userData && _awPool[i].userData.active) {
             state._pendingSpeedObstacles.add(_awPool[i].uuid);
           }
-        }
-      }
-      if (typeof _activeForcefields !== 'undefined' && _activeForcefields) {
-        for (let i = 0; i < _activeForcefields.length; i++) {
-          state._pendingSpeedObstacles.add(_activeForcefields[i].uuid);
         }
       }
       // Safety: if for any reason the set never empties (e.g. obstacle removed
@@ -24117,9 +24093,6 @@ function _drApplyPendingSpeed() {
       for (let i = 0; i < _awPool.length; i++) {
         if (_awPool[i].userData && _awPool[i].userData.active) aliveIds.add(_awPool[i].uuid);
       }
-    }
-    if (typeof _activeForcefields !== 'undefined' && _activeForcefields) {
-      for (let i = 0; i < _activeForcefields.length; i++) aliveIds.add(_activeForcefields[i].uuid);
     }
     for (const uid of snap) {
       if (aliveIds.has(uid)) { anyAlive = true; break; }
@@ -28421,9 +28394,6 @@ function update(dt) {
     }
   }
 
-  // Forcefield move/collide loop — REMOVED (gate hazard never shipped;
-  // _activeForcefields stub-empty in 40-main-late.js).
-
   // ── Shield — flow shader drives everything via uReveal + uTime
   if (state.shieldActive && !state.invincibleSpeedActive) {
     shieldMat.uniforms.uTime.value += dt;
@@ -29086,7 +29056,6 @@ function animate(now) {
   // Twinkling sky stars — update uTime uniform each frame
   if (skyStarPoints)      skyStarPoints.material.uniforms.uTime.value      += rawDt;
   if (skyConstellLines)   skyConstellLines.material.uniforms.uTime.value   += rawDt;
-  // Forcefield animation — REMOVED (gate hazard never shipped)
   // Keep water X in sync with ship so reflection doesn't drift
   mirrorMesh.position.x = state.shipX;
 

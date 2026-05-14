@@ -299,8 +299,6 @@ function returnToTitle() {
     pu.scale.setScalar(1);
   });
   activePowerups.length = 0;
-  [..._activeForcefields].forEach(returnForcefieldToPool);
-  _activeForcefields.length = 0;
   // Show title, hide everything else
   const _tEl = document.getElementById('title-screen');
   _tEl.classList.remove('hidden');

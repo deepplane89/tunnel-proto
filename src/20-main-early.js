@@ -9153,7 +9153,7 @@ const obstaclePool = [];
 const activeObstacles = [];
 // DevTools session recorder — see window._perfReport() docstring below.
 (function () {
-  const _frames = []; // each entry: { t, dt, cones, walls, coins, asteroids, forcefields, lethalRings, powerups, drawCalls, triangles }
+  const _frames = []; // each entry: { t, dt, cones, walls, coins, asteroids, lethalRings, powerups, drawCalls, triangles }
   const _MAX_FRAMES = 60 * 60 * 5; // ~5 min @ 60fps
   let _recording = false;
   let _lastT = 0;
@@ -9185,7 +9185,7 @@ const activeObstacles = [];
   }
   // Pool conventions vary across the codebase:
   //   activeObstacles, activeCoins, activePowerups, _lethalRingActive → separate active list (length = count)
-  //   _awPool, _ffPool, _lethalRingPool → each obj has userData.active
+  //   _awPool, _lethalRingPool → each obj has userData.active
   //   _asteroidPool → each obj has .active directly
   // _countActive handles all three.
   function _countActive(arr) {
@@ -9209,14 +9209,13 @@ const activeObstacles = [];
     const drawCalls = _lastDrawCalls;
     const triangles = _lastTriangles;
     // Active counts — pools use various conventions, so we count multiple ways
-    let walls = 0, coins = 0, asteroids = 0, forcefields = 0, lethalRings = 0, powerups = 0;
+    let walls = 0, coins = 0, asteroids = 0, lethalRings = 0, powerups = 0;
     // Walls use a separate _awActive array (length = count), not userData.active on pool
     try { if (typeof _awActive !== 'undefined') walls = _awActive.length; } catch (_) {}
     // Coins and powerups have dedicated 'active*' arrays — use those directly
     try { if (typeof activeCoins !== 'undefined') coins = activeCoins.length; } catch (_) {}
     try { if (typeof activePowerups !== 'undefined') powerups = activePowerups.length; } catch (_) {}
     try { if (typeof _asteroidPool !== 'undefined') asteroids = _countActive(_asteroidPool); } catch (_) {}
-    // forcefields — always 0 (hazard removed); kept in shape for CSV compat
     try { if (typeof _lethalRingPool !== 'undefined') lethalRings = _countActive(_lethalRingPool); } catch (_) {}
     // Split fat cones from regular cones (both share activeObstacles)
     let fatCones = 0;
@@ -9229,7 +9228,7 @@ const activeObstacles = [];
       t: now, dt,
       cones: activeObstacles.length - fatCones,
       fatCones,
-      walls, coins, asteroids, forcefields, lethalRings, powerups,
+      walls, coins, asteroids, lethalRings, powerups,
       drawCalls, triangles,
     });
   }
@@ -9277,7 +9276,7 @@ const activeObstacles = [];
     _recording = false;
     const n = _frames.length;
     if (!n) { console.warn('[PERF] no frames recorded — call _perfStart() first'); return null; }
-    const fields = ['dt', 'cones', 'fatCones', 'walls', 'coins', 'asteroids', 'forcefields', 'lethalRings', 'powerups', 'drawCalls', 'triangles'];
+    const fields = ['dt', 'cones', 'fatCones', 'walls', 'coins', 'asteroids', 'lethalRings', 'powerups', 'drawCalls', 'triangles'];
     // (lightning omitted — pool is created inside a closure and not introspectable from here)
     const summary = {};
     for (const f of fields) {

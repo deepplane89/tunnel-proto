@@ -347,8 +347,6 @@ function startGame() {
 
   // Clear all in-flight objects and mechanic state
   _clearAllMechanics();
-  [..._activeForcefields].forEach(returnForcefieldToPool);
-  _activeForcefields.length = 0;
   _awTunerPaused = false;
   // Reset ALL pool meshes (not just active ones) so nothing lingers from last session
   powerupPool.forEach(pu => {
@@ -1838,9 +1836,9 @@ function _drSeqAdvance() {
     if (targetSpeed > state.speed + 0.5) {
       state._pendingSpeed = targetSpeed;
       // Snapshot uuids of EVERY in-flight hazard, not just activeObstacles.
-      // Walls live in _awPool (active marked via userData.active), forcefields
-      // in _activeForcefields. We were missing those before, which caused the
-      // gate to no-op for wall stages (S4/S5) and bump speed instantly.
+      // Walls live in _awPool (active marked via userData.active). We were
+      // missing walls before, which caused the gate to no-op for wall stages
+      // (S4/S5) and bump speed instantly.
       state._pendingSpeedObstacles = new Set();
       for (let i = 0; i < activeObstacles.length; i++) {
         state._pendingSpeedObstacles.add(activeObstacles[i].uuid);
@@ -1850,11 +1848,6 @@ function _drSeqAdvance() {
           if (_awPool[i].userData && _awPool[i].userData.active) {
             state._pendingSpeedObstacles.add(_awPool[i].uuid);
           }
-        }
-      }
-      if (typeof _activeForcefields !== 'undefined' && _activeForcefields) {
-        for (let i = 0; i < _activeForcefields.length; i++) {
-          state._pendingSpeedObstacles.add(_activeForcefields[i].uuid);
         }
       }
       // Safety: if for any reason the set never empties (e.g. obstacle removed
@@ -1896,9 +1889,6 @@ function _drApplyPendingSpeed() {
       for (let i = 0; i < _awPool.length; i++) {
         if (_awPool[i].userData && _awPool[i].userData.active) aliveIds.add(_awPool[i].uuid);
       }
-    }
-    if (typeof _activeForcefields !== 'undefined' && _activeForcefields) {
-      for (let i = 0; i < _activeForcefields.length; i++) aliveIds.add(_activeForcefields[i].uuid);
     }
     for (const uid of snap) {
       if (aliveIds.has(uid)) { anyAlive = true; break; }
@@ -6199,9 +6189,6 @@ function update(dt) {
       activeCoins.splice(ci, 1);
     }
   }
-
-  // Forcefield move/collide loop — REMOVED (gate hazard never shipped;
-  // _activeForcefields stub-empty in 40-main-late.js).
 
   // ── Shield — flow shader drives everything via uReveal + uTime
   if (state.shieldActive && !state.invincibleSpeedActive) {

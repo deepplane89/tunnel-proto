@@ -491,8 +491,6 @@ function maybeStartGauntlet() {
       // Clear all existing obstacles so entry isn't blocked
       ;[...activeObstacles].forEach(returnObstacleToPool);
       activeObstacles.length = 0;
-  [..._activeForcefields].forEach(returnForcefieldToPool);
-  _activeForcefields.length = 0;
     }
     return;
   }
@@ -514,7 +512,7 @@ function maybeStartGauntlet() {
 // to false to restore it.
 // ============================================================================
 function _startL3KnifeCanyon() {
-  // NOTE: do NOT wipe activeObstacles/forcefields here. The DR sequencer
+  // NOTE: do NOT wipe activeObstacles here. The DR sequencer
   // stops spawning cones before L3 trigger, so the last batch will z-scroll
   // past the player naturally during the ~1s before canyon slabs reach play
   // distance. Wiping caused cones to pop out of existence instead of
@@ -1257,17 +1255,6 @@ function _drNextGapCenter(diffOverride) {
   return cs.gapX;
 }
 
-// ─── FORCEFIELD GATE — REMOVED ───────────────────────────────────────
-// Forcefield was a planned slalom-gate hazard that never shipped. Pool was
-// built (20 meshes in scene), per-frame uTime tick ran, but nothing ever
-// spawned one. Removed to drop 20 scene objects + 1 shaderMaterial + 1
-// per-frame uniform update.
-// Stubs below keep other-file references no-op'd without needing to edit
-// every call site. Remove the stubs once those references are cleaned up.
-const _ffPool = [];
-const _activeForcefields = [];
-function returnForcefieldToPool(_ff) { /* no-op stub */ }
-
 // ─── SLALOM MINEFIELD (Death Run) ────────────────────────────────────
 // Slalom minefield: uniform staggered grid of cones — no carved gap.
 // Even rows: cones at 0, ±S, ±2S, …  Odd rows offset by S/2 (brick pattern).
@@ -1280,7 +1267,6 @@ const SLALOM_TINT       = 0xff44aa;     // hot pink — distinct from corridor c
 
 // Closing doors pattern: two fat walls with a gap that shifts position each row.
 // Gap is ~8 units wide (ship is 3), position moves left/right/center randomly.
-// Forcefield spans one side, coins sit in the gap to reward threading the needle.
 
 const SLALOM_GAP_WIDTH = 8;       // gap the player must fly through
 const SLALOM_WALL_HALF = 500;     // total wall span ±500
