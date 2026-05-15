@@ -1,3 +1,8 @@
+// ⚠️  NEW CHAT? READ /IOS_CONTINUITY.md AT REPO ROOT FIRST. Non-negotiable.
+//     Working baseline tag on GitHub: ios-baseline-working (commit d7e7824)
+//     styleWebViewForSafeArea() below is part of the strip fix — do not remove
+//     without reading section 4 of IOS_CONTINUITY.md.
+
 import UIKit
 import Capacitor
 import AVFoundation
