@@ -69,25 +69,23 @@ html.platform-ios-native #game-canvas {
   background: #050614 !important;
 }
 
-/* ──────────────────────────────────────────────────────────
-   1b) GARAGE — KEEP PANEL ABOVE HOME INDICATOR
-   ──────────────────────────────────────────────────────────
-   With contentInset:"never", the .sr-overlay (position:fixed inset:0
-   align-items:flex-end) docks its panel to the absolute bottom of
-   the screen, which falls behind the home indicator. Pad the
-   overlay's bottom by safe-area-inset-bottom so the panel sits
-   just above the home indicator — exactly how the web build looks
-   in mobile Safari. */
-html.is-capacitor .sr-overlay,
-html.platform-ios-native .sr-overlay {
-  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
-}
-/* .sr-stage's bottom anchor (=280px from screen bottom) must also lift
-   by the safe-area amount so the ship stays centered above the panel. */
-html.is-capacitor .sr-overlay .sr-stage,
-html.platform-ios-native .sr-overlay .sr-stage {
-  bottom: calc(280px + env(safe-area-inset-bottom, 0px)) !important;
-}
+/* ══════════════════════════════════════════════════════════
+   GARAGE ISOLATION CONTRACT — DO NOT VIOLATE
+   ══════════════════════════════════════════════════════════
+   User-mandated rule (May 15, 2026):
+     1. Garage-only fixes MUST be scoped to garage selectors
+        ONLY (.sr-*, .shop-*, #shop-*). They MUST NOT modify
+        html, body, #game-canvas, #app, #ui, #hud, or any
+        global element.
+     2. Strip/title/gameplay fixes MUST NOT touch any
+        .sr-*, .shop-*, or #shop-* selector.
+     3. If a garage fix appears to require a global change,
+        STOP — the architecture is wrong, ask the user.
+
+   This contract exists because we've burned multiple cycles
+   on garage-vs-strip whack-a-mole. Keep the two domains
+   completely orthogonal.
+   ══════════════════════════════════════════════════════════ */
 
 /* ──────────────────────────────────────────────────────────
    2) SHIP HANDLING DROPDOWN — PORTRAIT FIX
