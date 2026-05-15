@@ -36682,11 +36682,20 @@ window._uploadAllBuffers = _uploadAllBuffers;
     // the mutated tube actually uploads + draws, then kill it.
     try {
       if (typeof window._spawnLightning === 'function' && typeof window._clearAllLightning === 'function') {
-        // Spawn at landZ way behind ship-zero so even if a frame paints it
-        // can't be seen. skipWarn=true so it goes straight to strike phase
-        // (rejag fires, all materials get touched).
-        window._spawnLightning(0, -9999, true, null, 0);
-        // Render one frame so the rejagged tubes upload + draw.
+        // Spawn one bolt PER POOL SLOT at landZ way behind ship-zero. skipWarn=true
+        // routes straight to strike phase so rejag fires + materials get touched.
+        // Why all 32: the first real strike on each slot pays a per-mesh-pointer
+        // first-draw cost in WebKit's pipeline cache (validates framebuffer +
+        // MSAA combo for that specific mesh). Covering only slot 0 left slots
+        // 1-31 hitching as they got cycled in during real gameplay.
+        // Spread X slightly so they don't perfectly z-fight (cosmetic only).
+        const _LT_PREWARM_COUNT = 32; // matches _LT_POOL_SIZE in 72-main-late-mid.js
+        for (let i = 0; i < _LT_PREWARM_COUNT; i++) {
+          window._spawnLightning(i * 0.001, -9999, true, null, 0);
+        }
+        // Single composer render — all 32 visible bolts upload + draw in one
+        // pass. Driver validates every mesh's pipeline state in this frame so
+        // none of them pay it during gameplay.
         if (typeof composer !== 'undefined' && composer && composer.render) {
           const _prevTarget = renderer.getRenderTarget();
           const _prevFlags = composer.passes ? composer.passes.map(p => p.renderToScreen) : [];
@@ -36699,7 +36708,7 @@ window._uploadAllBuffers = _uploadAllBuffers;
           }
           renderer.setRenderTarget(_prevTarget);
         }
-        // Kill and release the pool slot.
+        // Kill and release all pool slots.
         window._clearAllLightning();
       }
     } catch (e) {
