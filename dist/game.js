@@ -27369,7 +27369,12 @@ function update(dt) {
         if (_free >= _needed) {
           state._tutorialZipPassed = false;
           state._tutorialZipRowSpawned = true;
-          for (let zi = -LANE_COUNT; zi <= LANE_COUNT; zi++) {
+          // Spawn from center outward so any pool shortfall leaves the row
+          // visually centered on the ship instead of left-anchored.
+          const _zipOrder = [0];
+          for (let zk = 1; zk <= LANE_COUNT; zk++) { _zipOrder.push(zk); _zipOrder.push(-zk); }
+          for (let zoi = 0; zoi < _zipOrder.length; zoi++) {
+            const zi = _zipOrder[zoi];
             const obs = getPooledObstacle(Math.floor(Math.random() * 3));
             if (!obs) continue;
             obs.position.set(zi * LANE_WIDTH, 0, SPAWN_Z);
