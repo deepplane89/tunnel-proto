@@ -30,28 +30,33 @@
    The actual game UI still pads its interactive surfaces with
    env(safe-area-inset-bottom) via style.css; this rule just kills
    the visible gap.                                           */
+/* Stretch html/body to 100dvh (visual viewport, includes safe area
+   on iOS) and paint with page bg #050614 so any inset area blends in.
+   The game UI still honors env(safe-area-inset-bottom) for its own
+   internal padding. */
 html.platform-ios-native,
 html.platform-ios-native body {
-  background-color: #000 !important;
-  min-height: 100dvh;
+  height:       100dvh !important;
+  min-height:   100dvh !important;
+  width:        100vw  !important;
+  background:   #050614 !important;
+  margin:       0       !important;
+  padding:      0       !important;
+  overflow:     hidden  !important;
 }
-html.platform-ios-native body {
-  /* Stretch body to the full visual viewport so the home-indicator
-     area paints with the page background instead of WKWebView's
-     bare backdrop. The game's own UI elements still honor
-     env(safe-area-inset-bottom) for their own padding. */
-  height: 100dvh;
-  min-height: 100dvh;
-  margin: 0;
-}
-/* Three.js / game canvas should stretch through the safe area so
-   no transparent strip is left under the home-indicator. The HUD
-   layers above the canvas already pad themselves. */
-html.platform-ios-native canvas#bg,
-html.platform-ios-native canvas.three-canvas,
-html.platform-ios-native #three-root,
-html.platform-ios-native #app {
-  background-color: #000;
+
+/* #game-canvas — force it to fill the full visual viewport. Without
+   this, the three.js renderer sizes the canvas to window.innerHeight
+   (layout viewport, excludes safe area) and the canvas stops ~34pt
+   above the home indicator, exposing the page bg as a strip.
+   position:fixed + inset:0 pins it to viewport edges regardless of
+   body's layout box. */
+html.platform-ios-native #game-canvas {
+  position:   fixed !important;
+  inset:      0     !important;
+  width:      100vw !important;
+  height:     100dvh !important;
+  min-height: 100dvh !important;
 }
 
 /* ──────────────────────────────────────────────────────────
