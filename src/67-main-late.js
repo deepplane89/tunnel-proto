@@ -1907,7 +1907,66 @@ function _drApplyPendingSpeed() {
 }
 
 // Endless mix fallback — uses existing random wave director logic
-// ── Tutorial overlay helpers ──
+
+// Shared tutorial entrypoint. Used by Settings → TUTORIAL button and by the
+// first-launch auto-trigger. Applies the JL_v1 baseline physics, sets the
+// tutorial flag, and calls startGame() which starts the real DODGE flow.
+function startTutorial() {
+  try {
+    window._LS.removeItem('jh_tutorial_done');
+    const _tp = (typeof _PHYSICS_PRESETS !== 'undefined') ? _PHYSICS_PRESETS['JL_v1'] : null;
+    if (_tp) {
+      _accelBase     = _tp.accelBase;
+      _accelSnap     = _tp.accelSnap;
+      _maxVelBase    = _tp.maxVelBase;
+      _maxVelSnap    = _tp.maxVelSnap;
+      _bankMax       = _tp.bankMax;
+      _bankSmoothing = _tp.bankSmoothing;
+      _decelBasePct  = _tp.decelBasePct;
+      _decelFullPct  = _tp.decelFullPct;
+    }
+    state._tutorialActive  = true;  // suppress prologue inside startGame()
+    state._tutRocksSpawned = false;
+    state._tutRocksPassed  = 0;
+    startGame();
+  } catch (_) {}
+}
+window.startTutorial = startTutorial;
+
+// First-launch auto-trigger: brand-new player (or post-?reset=1) → launch
+// tutorial BEFORE the title screen is interactive. Gated by jh_tutorial_done
+// so it never re-triggers, and by jh_tutorial_autostarted_v1 so existing
+// players who somehow lost the flag don't get re-onboarded.
+function _maybeAutoStartTutorial() {
+  try {
+    if (window._LS.getItem('jh_tutorial_done') === '1') return;
+    if (window._LS.getItem('jh_tutorial_autostarted_v1') === '1') return;
+    // Skip if any meaningful progress already exists.
+    const hasProgress = (
+      !!window._LS.getItem('jh_owned_skins') ||
+      !!window._LS.getItem('jetslide_mission_flags') ||
+      !!window._LS.getItem('jet-horizon-scores') ||
+      parseInt(window._LS.getItem('jetslide_fuelcells') || '0', 10) > 50
+    );
+    if (hasProgress) {
+      window._LS.setItem('jh_tutorial_autostarted_v1', '1');
+      return;
+    }
+    window._LS.setItem('jh_tutorial_autostarted_v1', '1');
+    // Defer one tick so the title renders a frame first (clean crossfade,
+    // audio context primed). Tutorial fires before the title is interactive.
+    setTimeout(() => { try { startTutorial(); } catch(_){} }, 800);
+  } catch(_) {}
+}
+window._maybeAutoStartTutorial = _maybeAutoStartTutorial;
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => { setTimeout(_maybeAutoStartTutorial, 0); });
+  } else {
+    setTimeout(_maybeAutoStartTutorial, 0);
+  }
+}
+
 // ── Tutorial overlay helpers ──
 function _tutShowInstructionBox(title, sub, color, onDismiss) {
   // Never show if tutorial already completed
