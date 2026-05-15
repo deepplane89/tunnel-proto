@@ -20414,6 +20414,24 @@ function returnToTitle() {
   // without going through the EXIT TUTORIAL button, leaving _tutorialActive
   // stuck true and gating the next run's spawner. (No-spawn-cones bug.)
   state._tutorialActive = false;
+  // Full tutorial state reset on exit — prevents stale step (e.g. =2 end-card)
+  // from previous run leaking into replay. startGame() resets these too, but
+  // doing it here means a Play (non-tutorial) run after tutorial also starts
+  // clean, and replay tutorial doesn't have a 1-frame window where step=2 is
+  // still live before startGame() runs.
+  state._tutorialStep        = 0;
+  state._tutorialTimer       = 0;
+  state._tutorialSubStep     = 0;
+  state._tutorialConeSpawned = false;
+  state._tutorialConeZ       = -80;
+  state._tutRocksSpawned     = false;
+  state._tutRocksPassed      = 0;
+  state._tutorialZipZ        = -99;
+  state._tutorialZipRows     = 0;
+  state._tutorialZipPassed   = false;
+  state._tutorialZipSuccesses = 0;
+  state._tutorialZipHit      = false;
+  state._tutorialZipRowSpawned = false;
   // Clear any active banners
   const bc = document.getElementById('banner-container');
   if (bc) bc.innerHTML = '';
