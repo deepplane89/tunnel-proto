@@ -64,6 +64,36 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
     }
 
+    // ── WEBVIEW BACKGROUND / SAFE-AREA STRIP FIX ──────────────────────────────
+    // Capacitor's `ios.backgroundColor` config is ignored because the WKWebView
+    // is opaque by default (https://github.com/ionic-team/capacitor/issues/5335).
+    // The opaque WebView paints its own system background (black) into the
+    // safe-area gap below the home indicator, producing the visible black strip.
+    //
+    // Fix: make the WebView transparent so the underlying view's
+    // backgroundColor (set from capacitor.config.json `backgroundColor`) shows
+    // through, AND set the WebView's own backgroundColor to the page bg
+    // (#050614) as belt-and-suspenders for the moments before WebKit paints
+    // anything. This is the native equivalent of what mobile Safari does
+    // automatically for PWAs — that's why the web build never shows the strip.
+    //
+    // Page bg = --color-bg in style.css = #050614 (deep dark blue).
+    private var _webViewStyled = false
+    private func styleWebViewForSafeArea() {
+        if _webViewStyled { return }
+        guard let bridgeVC = window?.rootViewController as? CAPBridgeViewController,
+              let webView = bridgeVC.webView else { return }
+        let pageBg = UIColor(red: 0x05/255.0, green: 0x06/255.0, blue: 0x14/255.0, alpha: 1.0)
+        webView.isOpaque = false
+        webView.backgroundColor = pageBg
+        webView.scrollView.backgroundColor = pageBg
+        bridgeVC.view.backgroundColor = pageBg
+        if let win = window {
+            win.backgroundColor = pageBg
+        }
+        _webViewStyled = true
+    }
+
     @objc private func displayTick() {
         // No-op: just by existing this CADisplayLink tells the system the app
         // wants 120Hz, which lifts the WebView/CAMetalLayer cap.
@@ -104,6 +134,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         application.isIdleTimerDisabled = true
         // Apply inspector policy once webView exists
         gateWebInspector()
+        // Paint the WebView container in the page bg so the home-indicator
+        // safe-area gap doesn't show through as a black strip.
+        styleWebViewForSafeArea()
     }
 
     func applicationWillTerminate(_ application: UIApplication) {}
