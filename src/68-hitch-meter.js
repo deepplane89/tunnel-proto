@@ -155,6 +155,8 @@ function _shortLabel(name) {
   // Lightning
   if (name === 'lt-spawn')   return 'lt-spn';   // synchronous spawn setup
   if (name === 'lt-rndr')    return 'lt-rndr';  // first render after spawn
+  // Angled walls (Band 1 / Band 5 family) — pre-pooled but first-draw GPU upload
+  if (name === 'aw-rndr')    return 'aw-rndr';  // first render after activate()
   // Crash sub-phases (killPlayer fatal path)
   if (name === 'crash')       return 'crsh';    // full fatal path bracket
   if (name === 'crash-tear')  return 'cr-tear'; // state/timer/transition teardown
@@ -183,5 +185,20 @@ window._renderHitchOverlay = _renderHitchOverlay;
       _armedLabel = null; _armedFramesLeft = 0;
     }
     _renderHitchOverlay();
+  });
+})();
+
+// God mode toggle — dev-only. killPlayer() short-circuits on window._godMode.
+// In prod this whole file is excluded by the build, so the button stays
+// display:none (set in index.html) and _godMode stays undefined.
+(function _setupGodToggle() {
+  const btn = document.getElementById('pause-god-toggle');
+  if (!btn) return;
+  if (window.__JH_DEV__) btn.style.display = 'inline-flex';
+  btn.addEventListener('click', () => {
+    window._godMode = !window._godMode;
+    btn.textContent = 'GOD MODE: ' + (window._godMode ? 'ON' : 'OFF');
+    btn.style.color = window._godMode ? '#00ff66' : '';
+    btn.style.borderColor = window._godMode ? '#00ff66' : '';
   });
 })();

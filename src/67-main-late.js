@@ -2222,6 +2222,10 @@ const DR_MECHANIC_FAMILIES = {
       state.angledWallsActive = true;
       state.angledWallSpawnZ = -_awTuner.zSpacing; // start far out so walls fade in from horizon
       state.angledWallRowsDone = 0;
+      // Arm a hitch label so the first-frame GPU upload (when angled walls
+      // first become visible) gets attributed. Pre-pooled walls still hit a
+      // first-draw cost on iOS Metal driver.
+      if (typeof _hitchArm === 'function') _hitchArm('aw-rndr');
     },
     isActive() { return state.angledWallsActive; }
   },
@@ -3406,6 +3410,14 @@ function killPlayer() {
   // — spawning explosions twice, double-stopping canyons, double-logging the death,
   // and potentially leaking transient state.
   if (state.phase !== 'playing') return;
+  // Dev god mode: bypass all death paths. Toggle from pause menu (dev builds only).
+  // window._godMode is undefined in prod (nothing ever sets it), so this short-
+  // circuit is dead code in prod. In dev, the pause-god-toggle button flips it.
+  if (window._godMode) {
+    hapticMedium();
+    addCrashFlash(0x00ff66); // green flash = god-mode hit absorbed
+    return;
+  }
   // Tutorial: flash and respawn, reset current zip row if in zip phase
   if (state._tutorialActive) {
     hapticMedium();

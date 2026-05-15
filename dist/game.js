@@ -24800,6 +24800,10 @@ const DR_MECHANIC_FAMILIES = {
       state.angledWallsActive = true;
       state.angledWallSpawnZ = -_awTuner.zSpacing; // start far out so walls fade in from horizon
       state.angledWallRowsDone = 0;
+      // Arm a hitch label so the first-frame GPU upload (when angled walls
+      // first become visible) gets attributed. Pre-pooled walls still hit a
+      // first-draw cost on iOS Metal driver.
+      if (typeof _hitchArm === 'function') _hitchArm('aw-rndr');
     },
     isActive() { return state.angledWallsActive; }
   },
@@ -25984,6 +25988,14 @@ function killPlayer() {
   // — spawning explosions twice, double-stopping canyons, double-logging the death,
   // and potentially leaking transient state.
   if (state.phase !== 'playing') return;
+  // Dev god mode: bypass all death paths. Toggle from pause menu (dev builds only).
+  // window._godMode is undefined in prod (nothing ever sets it), so this short-
+  // circuit is dead code in prod. In dev, the pause-god-toggle button flips it.
+  if (window._godMode) {
+    hapticMedium();
+    addCrashFlash(0x00ff66); // green flash = god-mode hit absorbed
+    return;
+  }
   // Tutorial: flash and respawn, reset current zip row if in zip phase
   if (state._tutorialActive) {
     hapticMedium();
@@ -29145,6 +29157,8 @@ function _shortLabel(name) {
   // Lightning
   if (name === 'lt-spawn')   return 'lt-spn';   // synchronous spawn setup
   if (name === 'lt-rndr')    return 'lt-rndr';  // first render after spawn
+  // Angled walls (Band 1 / Band 5 family) — pre-pooled but first-draw GPU upload
+  if (name === 'aw-rndr')    return 'aw-rndr';  // first render after activate()
   // Crash sub-phases (killPlayer fatal path)
   if (name === 'crash')       return 'crsh';    // full fatal path bracket
   if (name === 'crash-tear')  return 'cr-tear'; // state/timer/transition teardown
@@ -29173,6 +29187,21 @@ window._renderHitchOverlay = _renderHitchOverlay;
       _armedLabel = null; _armedFramesLeft = 0;
     }
     _renderHitchOverlay();
+  });
+})();
+
+// God mode toggle — dev-only. killPlayer() short-circuits on window._godMode.
+// In prod this whole file is excluded by the build, so the button stays
+// display:none (set in index.html) and _godMode stays undefined.
+(function _setupGodToggle() {
+  const btn = document.getElementById('pause-god-toggle');
+  if (!btn) return;
+  if (window.__JH_DEV__) btn.style.display = 'inline-flex';
+  btn.addEventListener('click', () => {
+    window._godMode = !window._godMode;
+    btn.textContent = 'GOD MODE: ' + (window._godMode ? 'ON' : 'OFF');
+    btn.style.color = window._godMode ? '#00ff66' : '';
+    btn.style.borderColor = window._godMode ? '#00ff66' : '';
   });
 })();
 // ═══════════════════════════════════════════════════════════════════════════
