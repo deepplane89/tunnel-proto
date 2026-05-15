@@ -1,4 +1,42 @@
 /* ════════════════════════════════════════════════════════
+   ★★★  WORKING BASELINE — May 15, 2026 (commit d7e7824)  ★★★
+   ════════════════════════════════════════════════════════
+   Tag on GitHub: `ios-baseline-working`
+   User confirmed: "this is WORKING. right now the layout
+   is the best we've had it so far."
+
+   THIS COMBINATION WORKS — DO NOT REGRESS:
+
+     capacitor.config.json:
+       ios.contentInset       = "never"
+       ios.scrollEnabled      = false
+       ios.backgroundColor    = "#050614"
+       top-level backgroundColor = "#050614"
+
+     style.capacitor.css (this file):
+       html/body    → 100dvh, bg #050614, overflow:hidden
+       #game-canvas → position:fixed inset:0, 100vw × 100dvh
+       NO .sr-*/.shop-*/#shop-* layout rules
+       (only the :has() dropdown un-clip fix in section 2)
+
+     Storyboards (Main.storyboard + LaunchScreen.storyboard):
+       view backgroundColor RGB = (5, 6, 20) → #050614
+
+     ios/App/App/AppDelegate.swift:
+       styleWebViewForSafeArea() runs in applicationDidBecomeActive
+       → webView.isOpaque = false + paint container #050614
+
+   WHAT BREAKS THIS BASELINE (history of failed attempts):
+     ✗ contentInset: "always"                  → strip returns
+     ✗ Pad .sr-overlay with safe-area-inset    → garage breaks
+     ✗ Pad #hud/#app/#ui with safe-area-inset  → garage breaks
+     ✗ Override .sr-stage bottom               → ship misaligns
+     ✗ Use .platform-ios-native alone          → first-paint race
+
+   IF YOU NEED TO CHANGE LAYOUT, READ THE GARAGE ISOLATION
+   CONTRACT BELOW BEFORE TOUCHING ANYTHING.
+   ════════════════════════════════════════════════════════
+
    Jet Horizon — Capacitor (iOS) safe-area overrides
 
    Loaded ONLY inside the Capacitor app via inline script
