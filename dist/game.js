@@ -4157,12 +4157,9 @@ if (window.__loadGate) {
 }
 
 const waterGeo  = new THREE.PlaneGeometry(1400, 700, 4, 4);
-// Mirror RT: dropped 512→320. Forward-flow distortion + tight normal map
-// (size=8, distortionScale=0.6) already blur the reflection enough that 320
-// is visually indistinguishable. ~60% fill-rate cut on the mirror pass.
 const mirrorMesh = new Water(waterGeo, {
-  textureWidth:  320,
-  textureHeight: 320,
+  textureWidth:  512,
+  textureHeight: 512,
   waterNormals,
   sunDirection:  new THREE.Vector3(0, 1, 0),
   sunColor:      0x000000,   // overridden below
@@ -10781,12 +10778,6 @@ function createObstacleMesh(type) {
 
   // ── Obsidian cone with neon base gradient — ShaderMaterial, UV-based ──
   const neonCol = new THREE.Color(CONE_COLORS[type]);
-  // uWaterUv = the vUv.y value that corresponds to the water surface (y=0
-  // in world space). Cone base is at y=-SINK, tip at y=h, so the waterline
-  // sits at vUv.y = SINK / totalH. Fragments below this fade alpha to 0 so
-  // the submerged stub doesn't render as a black sliver hovering on the
-  // water surface. Composes cleanly with uOpacity (horizon fade-in).
-  const _waterUv = SINK / totalH;
   const bodyMat = new THREE.ShaderMaterial({
     uniforms: {
       uNeon:    { value: neonCol },
@@ -10794,7 +10785,6 @@ function createObstacleMesh(type) {
       uOpacity: { value: 0.0 },
       uGlowBot: { value: 0.255 },  // neon starts ~0.8 above waterline
       uGlowTop: { value: 0.345 },  // neon ends at ~20% up visible cone
-      uWaterUv: { value: _waterUv },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -10809,7 +10799,6 @@ function createObstacleMesh(type) {
       uniform float uOpacity;
       uniform float uGlowBot;
       uniform float uGlowTop;
-      uniform float uWaterUv;
       varying vec2 vUv;
       void main() {
         // floating neon band above waterline — obsidian below and above it
@@ -10817,10 +10806,7 @@ function createObstacleMesh(type) {
         float band = smoothstep(uGlowBot, mid, vUv.y) * (1.0 - smoothstep(mid, uGlowTop, vUv.y));
         vec3 neonGlow = uNeon * (1.0 + band * 5.0);
         vec3 col = mix(uObsidian, neonGlow, band);
-        // Waterline fade: below uWaterUv → alpha=0, smooth ramp to 1 just
-        // above. Kills the black submerged stub that read as a gap.
-        float waterFade = smoothstep(uWaterUv - 0.015, uWaterUv + 0.015, vUv.y);
-        gl_FragColor = vec4(col, uOpacity * waterFade);
+        gl_FragColor = vec4(col, uOpacity);
       }
     `,
     transparent: true,
