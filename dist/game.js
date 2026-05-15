@@ -10821,7 +10821,11 @@ function createObstacleMesh(type) {
   // is animated by the fade code, and obstacles past fadeT=1 simply render
   // fully opaque via the alpha-1 path. Single material = no swap glitches.
   const bodyMesh = new THREE.Mesh(new THREE.ConeGeometry(1.6, totalH, SEGS), bodyMat);
-  bodyMesh.position.y = totalH / 2 - SINK;
+  // Dunk the whole cone 2 units deeper so the visible base pierces well
+  // below the water surface (y=0.01). Compensates for the thin-sliver
+  // artifact caused by transparent+depthWrite:false rendering at the
+  // waterline. Tip and neon band shift down by 2 units.
+  bodyMesh.position.y = totalH / 2 - SINK - 2.0;
   group.add(bodyMesh);
 
   group.userData.type   = type;
