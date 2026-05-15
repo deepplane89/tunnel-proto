@@ -21,23 +21,25 @@
    ════════════════════════════════════════════════════════ */
 
 /* ──────────────────────────────────────────────────────────
-   1) BLACK STRIP AT BOTTOM
+   1) BLACK STRIP AT BOTTOM — LAYOUT FIX (not color)
    ──────────────────────────────────────────────────────────
-   contentInset:"always" + body background not extending into the
-   safe area produces a black gap under the home indicator. Make
-   sure html/body fill the full viewport (dvh) AND paint the same
-   background that the game uses, so any inset area blends in.
-   The actual game UI still pads its interactive surfaces with
-   env(safe-area-inset-bottom) via style.css; this rule just kills
-   the visible gap.                                           */
-/* Stretch html/body to 100dvh (visual viewport, includes safe area
-   on iOS) and paint with page bg #050614 so any inset area blends in.
-   The game UI still honors env(safe-area-inset-bottom) for its own
-   internal padding. */
-/* Dual-gated on .is-capacitor (set synchronously in <head> inline script,
-   so it applies on first paint) AND .platform-ios-native (set later by
-   src/01-platform.js). Without .is-capacitor, first-paint canvas sizing
-   races ahead of our rules and the bottom strip appears. */
+   Pairs with capacitor.config.json:
+     ios.contentInset = "never"
+
+   With contentInset:"always" (previous setting), the WKWebView's
+   visible area excluded the home-indicator safe area. The game
+   canvas physically stopped ~34pt above the home indicator and
+   the system painted black underneath. CSS could not extend the
+   canvas into that region because the WebView itself wasn't there.
+
+   With contentInset:"never", the WebView extends edge-to-edge and
+   the canvas + game render into the full screen including the
+   home-indicator area. No strip.
+
+   The catch: bottom-docked UI (garage panel) would fall behind the
+   home indicator. We compensate selectively per-element below via
+   safe-area-inset-bottom padding — same pattern mobile Safari
+   (the web build) uses to keep elements reachable.            */
 html.is-capacitor,
 html.is-capacitor body,
 html.platform-ios-native,
@@ -65,6 +67,26 @@ html.platform-ios-native #game-canvas {
   height:     100dvh !important;
   min-height: 100dvh !important;
   background: #050614 !important;
+}
+
+/* ──────────────────────────────────────────────────────────
+   1b) GARAGE — KEEP PANEL ABOVE HOME INDICATOR
+   ──────────────────────────────────────────────────────────
+   With contentInset:"never", the .sr-overlay (position:fixed inset:0
+   align-items:flex-end) docks its panel to the absolute bottom of
+   the screen, which falls behind the home indicator. Pad the
+   overlay's bottom by safe-area-inset-bottom so the panel sits
+   just above the home indicator — exactly how the web build looks
+   in mobile Safari. */
+html.is-capacitor .sr-overlay,
+html.platform-ios-native .sr-overlay {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+}
+/* .sr-stage's bottom anchor (=280px from screen bottom) must also lift
+   by the safe-area amount so the ship stays centered above the panel. */
+html.is-capacitor .sr-overlay .sr-stage,
+html.platform-ios-native .sr-overlay .sr-stage {
+  bottom: calc(280px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
 /* ──────────────────────────────────────────────────────────
