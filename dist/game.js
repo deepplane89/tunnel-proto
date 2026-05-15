@@ -24135,9 +24135,29 @@ function startTutorial() {
       _decelBasePct  = _tp.decelBasePct;
       _decelFullPct  = _tp.decelFullPct;
     }
+    // Hard reset all tutorial progress flags so replay always starts from step 0.
+    // Without this, a previous completion (step=2) leaked across into the next
+    // run and the player landed at the end card instead of the dodge intro.
+    state._tutorialStep        = -1;
+    state._tutorialTimer       = 0;
+    state._tutorialSubStep     = 0;
+    state._tutorialConesFired  = 0;
+    state._tutorialConeSpawned = false;
+    state._tutorialConeZ       = -80;
+    state._tutorialZipZ        = -99;
+    state._tutorialZipRows     = 0;
+    state._tutorialZipPassed       = false;
+    state._tutorialZipSuccesses    = 0;
+    state._tutorialZipHit          = false;
+    state._tutorialZipRowSpawned   = false;
+    state._tutWasRolled        = false;
+    state._tutRocksSpawned     = false;
+    state._tutRocksPassed      = 0;
+    // Remove any lingering tutorial DOM so step 0's instruction box can render.
+    if (typeof _tutDestroyOverlay === 'function') _tutDestroyOverlay();
+    const _sigEl = document.getElementById('tut-signal-flash');
+    if (_sigEl) _sigEl.style.opacity = '0';
     state._tutorialActive  = true;  // suppress prologue inside startGame()
-    state._tutRocksSpawned = false;
-    state._tutRocksPassed  = 0;
     startGame();
   } catch (_) {}
 }
