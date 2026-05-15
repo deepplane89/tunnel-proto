@@ -21,54 +21,37 @@
    ════════════════════════════════════════════════════════ */
 
 /* ──────────────────────────────────────────────────────────
-   1) BLACK STRIP AT BOTTOM — root cause
+   1) BLACK STRIP AT BOTTOM
    ──────────────────────────────────────────────────────────
-   style.css line 56-62 sets `html, body { height: 100% }`.
-   With viewport-fit=cover + contentInset:always, `100%`
-   resolves to LAYOUT viewport height (excludes safe-area
-   insets). So body stops ~34pt short of the bottom of the
-   screen. The #game-canvas (inset:0) stretches only to body's
-   bottom edge, so it also stops short. The 34pt below the
-   body is painted by Capacitor's backgroundColor (#000000
-   from capacitor.config.json) — that's the visible strip.
-
-   Fix: force html, body, and #game-canvas to 100dvh which
-   on iOS WKWebView in cover mode = full visual viewport,
-   including the home-indicator area. Use !important to win
-   against the base `height: 100%` rule. */
-/* (a) html, body, root-level containers — stretch through the
-       safe area. 100dvh on iOS WKWebView in cover mode = full
-       visual viewport including the home-indicator zone. */
+   contentInset:"always" + body background not extending into the
+   safe area produces a black gap under the home indicator. Make
+   sure html/body fill the full viewport (dvh) AND paint the same
+   background that the game uses, so any inset area blends in.
+   The actual game UI still pads its interactive surfaces with
+   env(safe-area-inset-bottom) via style.css; this rule just kills
+   the visible gap.                                           */
 html.platform-ios-native,
 html.platform-ios-native body {
-  height:        100dvh !important;
-  min-height:    100dvh !important;
-  width:         100vw   !important;
-  background:    #000    !important;
-  margin:        0       !important;
-  padding:       0       !important;
-  overflow:      hidden  !important;
+  background-color: #000 !important;
+  min-height: 100dvh;
 }
-
-/* (b) #game-canvas — the main three.js canvas. Force it to fill
-       the full visual viewport. position:fixed wins over body's
-       layout box, so even if body is somehow inset the canvas
-       still hits the screen edges. */
-html.platform-ios-native #game-canvas {
-  position: fixed !important;
-  inset:    0     !important;
-  width:    100vw !important;
-  height:   100dvh !important;
-  min-height: 100dvh !important;
+html.platform-ios-native body {
+  /* Stretch body to the full visual viewport so the home-indicator
+     area paints with the page background instead of WKWebView's
+     bare backdrop. The game's own UI elements still honor
+     env(safe-area-inset-bottom) for their own padding. */
+  height: 100dvh;
+  min-height: 100dvh;
+  margin: 0;
 }
-
-/* (c) Any element that has been positioned at 'bottom: 0' —
-       extend to true bottom edge. Catches HUD bottom bars,
-       overlays, etc. */
-html.platform-ios-native #app,
-html.platform-ios-native #ui,
-html.platform-ios-native main {
-  background: transparent !important;
+/* Three.js / game canvas should stretch through the safe area so
+   no transparent strip is left under the home-indicator. The HUD
+   layers above the canvas already pad themselves. */
+html.platform-ios-native canvas#bg,
+html.platform-ios-native canvas.three-canvas,
+html.platform-ios-native #three-root,
+html.platform-ios-native #app {
+  background-color: #000;
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -105,76 +88,13 @@ html.platform-ios-native .shop-handling-bar.open .fm-menu {
 }
 
 /* ──────────────────────────────────────────────────────────
-   3) TAP-ALIGNMENT FIX — safe-area-aware viewport variables
+   3) GENERAL SAFE-AREA PADDING
    ──────────────────────────────────────────────────────────
-   viewport-fit=cover extends the layout viewport under the
-   Dynamic Island and home indicator. The game's UI elements
-   are positioned via the existing CSS using 100vw/100vh/100% —
-   that still works, BUT visually portions of UI can sit under
-   the notch / indicator, making the displayed button look like
-   it's elsewhere relative to where touches actually hit.
-
-   Strategy: expose CSS custom properties for safe insets that
-   default to the SafeArea plugin's --safe-area-inset-* (which
-   it sets on document.documentElement at startup) and fall
-   back to env(safe-area-inset-*) when the plugin hasn't run
-   yet (e.g. very first frame). Then shrink the UI layer's
-   effective box so its layout edges = visual edges.            */
-html.platform-ios-native {
-  --jh-sat: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
-  --jh-sar: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
-  --jh-sab: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
-  --jh-sal: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
-}
-
-/* HUD / UI overlay: pad on all four sides so buttons can't be
-   placed under the notch or home indicator. The canvas behind
-   continues to fill the full screen for the immersive game
-   look. NOTE: only target containers that don't paint a
-   background (#hud has none, #app/#ui are also transparent),
-   so the page-level #000 background still shows through.
-   .overlay uses radial-gradient, so it must NOT be padded here
-   — use inner-margin pattern below instead. */
-html.platform-ios-native #hud,
-html.platform-ios-native #ui,
-html.platform-ios-native .ui-layer {
-  padding-top:    var(--jh-sat);
-  padding-right:  var(--jh-sar);
-  padding-bottom: var(--jh-sab);
-  padding-left:   var(--jh-sal);
-  box-sizing: border-box;
-}
-
-/* Floating top-bar / top-row UI elements (score, settings, etc.):
-   shift them down so they clear the Dynamic Island. */
-html.platform-ios-native .topbar,
-html.platform-ios-native .top-bar,
-html.platform-ios-native #score-row,
-html.platform-ios-native #top-hud,
-html.platform-ios-native [data-hud-edge="top"] {
-  top: var(--jh-sat) !important;
-}
-
-/* Floating bottom-row UI elements (controls, buttons):
-   shift them up so they clear the home indicator. */
-html.platform-ios-native .bottom-bar,
-html.platform-ios-native #bottom-hud,
-html.platform-ios-native [data-hud-edge="bottom"] {
-  bottom: var(--jh-sab) !important;
-}
-
-/* Full-screen overlays (sr-overlay = garage/shop, pause menu,
-   etc.) need the safe-area inset on the INNER panel so close
-   buttons and tap targets don't end up under the notch.
-   IMPORTANT: do NOT pad the .sr-overlay itself — it has a
-   radial-gradient background that paints to the padding-box,
-   which creates a black strip in the home-indicator area.
-   Instead, give the panel margin so it sits within the safe
-   area while the gradient fills edge-to-edge. */
-html.platform-ios-native .sr-overlay:not(.hidden) > .sr-panel,
-html.platform-ios-native .sr-overlay:not(.hidden) > .sr-stage,
-html.platform-ios-native .sr-overlay:not(.hidden) .sr-close-floating {
-  margin-top:    max(var(--jh-sat), 0px);
-  margin-bottom: max(var(--jh-sab), 0px);
+   Make absolutely-positioned UI elements respect the home
+   indicator + Dynamic Island. Only applied on iOS native. */
+html.platform-ios-native #app,
+html.platform-ios-native #ui {
+  padding-left:   var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+  padding-right:  var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
 }
 
