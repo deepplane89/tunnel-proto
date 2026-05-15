@@ -213,7 +213,7 @@ function _initSettingsAccordion() {
     _decelBasePct  = _tp.decelBasePct;
     _decelFullPct  = _tp.decelFullPct;
     state._tutorialActive = true;  // must be set BEFORE startGame() so prologue is suppressed
-    state._tutorialStep = -0.5;
+    // step is set inside startGame() — leave alone here (was -0.5, dev-only terrain step that stuck the tutorial).
     startGame();
     state._tutRocksSpawned = false;
     state._tutRocksPassed = 0;

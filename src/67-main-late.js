@@ -877,7 +877,9 @@ function startDeathRun() {
     // Higher player handling tier = faster opening + faster score climb (score
     // tick at line ~4432 multiplies by live speed/BASE_SPEED).
     _setDRSpeed(BASE_SPEED * _funFloorSpeed * getHandlingStartBoost(), 'RUN_START');
-    setTimeout(() => { state._tutorialStep = -0.5; }, 100); // start with rock mounds
+    // Begin proper tutorial flow at DODGE (step 0). Step -0.5 is a dev-only
+    // terrain-walls testing entry, not real tutorial content.
+    setTimeout(() => { state._tutorialStep = 0; }, 100);
   }
   state._tutorialTimer       = 0;
   state._tutorialSubStep     = 0;
