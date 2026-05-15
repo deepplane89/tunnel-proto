@@ -1928,11 +1928,6 @@ function startTutorial() {
     state._tutorialActive  = true;  // suppress prologue inside startGame()
     state._tutRocksSpawned = false;
     state._tutRocksPassed  = 0;
-    // Remove any lingering tutorial DOM from a previous run. Without this, the
-    // end-card instruction box ("CHASE THE HORIZON") survives returnToTitle
-    // and _tutShowInstructionBox's `if (el) return` short-circuit makes step 0
-    // a no-op — player sees the old end card instead of the DODGE intro.
-    if (typeof _tutDestroyOverlay === 'function') _tutDestroyOverlay();
     startGame();
   } catch (_) {}
 }
