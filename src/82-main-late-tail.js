@@ -1,5 +1,53 @@
 // cache bust 1777249800
 
+// ── DEV-ONLY BUILD VERSION HUD ──
+// Tiny version chip in the bottom-left corner so we always know which build
+// is loaded on device. Reads the ?v=<ts> param from the game.js script tag
+// (set by build pipeline). DEV ONLY — hidden in prod via __JH_DEV__ gate.
+if (window.__JH_DEV__) {
+  try {
+    let ver = 'dev';
+    const scripts = document.getElementsByTagName('script');
+    for (let i = 0; i < scripts.length; i++) {
+      const src = scripts[i].src || '';
+      const m = src.match(/game\.js\?v=(\d+)/);
+      if (m) { ver = m[1]; break; }
+    }
+    // Format as HH:MM from the epoch timestamp so it's human-readable at a
+    // glance — full ts as title for hover detail.
+    let label = ver;
+    if (/^\d{10}$/.test(ver)) {
+      const d = new Date(parseInt(ver, 10) * 1000);
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const da = String(d.getDate()).padStart(2, '0');
+      label = `dev ${mo}/${da} ${hh}:${mm}`;
+    }
+    const chip = document.createElement('div');
+    chip.id = '_devBuildChip';
+    chip.textContent = label;
+    chip.title = 'build ' + ver;
+    chip.style.cssText = [
+      'position:fixed',
+      'left:6px',
+      'bottom:6px',
+      'z-index:99999',
+      'font:10px/1 -apple-system,monospace',
+      'color:#7fd',
+      'background:rgba(0,0,0,0.45)',
+      'padding:3px 6px',
+      'border:1px solid rgba(127,221,221,0.35)',
+      'border-radius:3px',
+      'pointer-events:none',
+      'letter-spacing:0.5px',
+      '-webkit-user-select:none',
+      'user-select:none',
+    ].join(';');
+    document.body.appendChild(chip);
+  } catch (_) {}
+}
+
 // ── GLOBAL SHADER PREWARM ──
 // Force-init every lazy pool, then call renderer.compile(scene, camera) so
 // EVERY material in the scene graph (eager + just-initialized lazy pools)
