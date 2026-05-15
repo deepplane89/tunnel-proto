@@ -34,6 +34,12 @@
    on iOS) and paint with page bg #050614 so any inset area blends in.
    The game UI still honors env(safe-area-inset-bottom) for its own
    internal padding. */
+/* Dual-gated on .is-capacitor (set synchronously in <head> inline script,
+   so it applies on first paint) AND .platform-ios-native (set later by
+   src/01-platform.js). Without .is-capacitor, first-paint canvas sizing
+   races ahead of our rules and the bottom strip appears. */
+html.is-capacitor,
+html.is-capacitor body,
 html.platform-ios-native,
 html.platform-ios-native body {
   height:       100dvh !important;
@@ -51,12 +57,14 @@ html.platform-ios-native body {
    above the home indicator, exposing the page bg as a strip.
    position:fixed + inset:0 pins it to viewport edges regardless of
    body's layout box. */
+html.is-capacitor #game-canvas,
 html.platform-ios-native #game-canvas {
   position:   fixed !important;
   inset:      0     !important;
   width:      100vw !important;
   height:     100dvh !important;
   min-height: 100dvh !important;
+  background: #050614 !important;
 }
 
 /* ──────────────────────────────────────────────────────────
