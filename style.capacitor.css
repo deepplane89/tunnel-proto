@@ -36,16 +36,39 @@
    on iOS WKWebView in cover mode = full visual viewport,
    including the home-indicator area. Use !important to win
    against the base `height: 100%` rule. */
+/* (a) html, body, root-level containers — stretch through the
+       safe area. 100dvh on iOS WKWebView in cover mode = full
+       visual viewport including the home-indicator zone. */
 html.platform-ios-native,
 html.platform-ios-native body {
-  height: 100dvh !important;
-  min-height: 100dvh !important;
-  background-color: #000 !important;
-  margin: 0;
+  height:        100dvh !important;
+  min-height:    100dvh !important;
+  width:         100vw   !important;
+  background:    #000    !important;
+  margin:        0       !important;
+  padding:       0       !important;
+  overflow:      hidden  !important;
 }
+
+/* (b) #game-canvas — the main three.js canvas. Force it to fill
+       the full visual viewport. position:fixed wins over body's
+       layout box, so even if body is somehow inset the canvas
+       still hits the screen edges. */
 html.platform-ios-native #game-canvas {
-  height: 100dvh !important;
+  position: fixed !important;
+  inset:    0     !important;
+  width:    100vw !important;
+  height:   100dvh !important;
   min-height: 100dvh !important;
+}
+
+/* (c) Any element that has been positioned at 'bottom: 0' —
+       extend to true bottom edge. Catches HUD bottom bars,
+       overlays, etc. */
+html.platform-ios-native #app,
+html.platform-ios-native #ui,
+html.platform-ios-native main {
+  background: transparent !important;
 }
 
 /* ──────────────────────────────────────────────────────────
