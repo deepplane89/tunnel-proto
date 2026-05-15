@@ -5151,7 +5151,7 @@ function update(dt) {
         // Spawn next row only if not yet succeeded.
         // Atomic spawn: need 2*LANE_COUNT+1 free slots for a full centered row.
         // If pool isn't ready, wait a frame — prevents left-clustered partial rows.
-        const _needed = 2 * LANE_COUNT + 1;
+        const _needed = 4 * LANE_COUNT + 1; // doubled row length
         let _free = 0;
         for (let pi = 0; pi < obstaclePool.length; pi++) {
           if (!obstaclePool[pi].userData.active) { _free++; if (_free >= _needed) break; }
@@ -5159,15 +5159,15 @@ function update(dt) {
         if (_free >= _needed) {
           state._tutorialZipPassed = false;
           state._tutorialZipRowSpawned = true;
-          // Spawn from center outward so any pool shortfall leaves the row
-          // visually centered on the ship instead of left-anchored.
-          const _zipOrder = [0];
-          for (let zk = 1; zk <= LANE_COUNT; zk++) { _zipOrder.push(zk); _zipOrder.push(-zk); }
-          for (let zoi = 0; zoi < _zipOrder.length; zoi++) {
-            const zi = _zipOrder[zoi];
+          // Anchor row to current ship X (player may have drifted during prior
+          // tutorial steps). 2x length for good measure so edges always reach
+          // wide enough to require a roll regardless of drift.
+          const _zipReach = LANE_COUNT * 2;
+          const _zipAnchorX = state.shipX || 0;
+          for (let zi = -_zipReach; zi <= _zipReach; zi++) {
             const obs = getPooledObstacle(Math.floor(Math.random() * 3));
             if (!obs) continue;
-            obs.position.set(zi * LANE_WIDTH, 0, SPAWN_Z);
+            obs.position.set(_zipAnchorX + zi * LANE_WIDTH, 0, SPAWN_Z);
             obs.userData.velX = 0;
             obs.userData.isCorridor = false;
             obs.userData._tutZip = true;
