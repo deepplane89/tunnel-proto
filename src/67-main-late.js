@@ -5519,7 +5519,7 @@ function update(dt) {
         }
       }
     }
-  } else if (state.currentLevelIdx === 3 && !state.l4CorridorDone && !state.isDeathRun) {
+  } else if (state.currentLevelIdx === 3 && !state.l4CorridorDone && !state.isDeathRun && !state._tutorialActive) {
     if (!state.l4CorridorActive) {
       if (state.levelElapsed >= L4_CORRIDOR_TRIGGER_S) {
         state.l4CorridorActive = true;
@@ -5799,7 +5799,7 @@ function update(dt) {
       }
       state.nextSpawnZ = _spawnZBase + (Math.random() - 0.5) * 10;
       state.frameCount++;
-      const l4PreClear = (!state.isDeathRun && state.currentLevelIdx === 3 && !state.l4CorridorDone &&
+      const l4PreClear = (!state.isDeathRun && !state._tutorialActive && state.currentLevelIdx === 3 && !state.l4CorridorDone &&
                           state.levelElapsed >= L4_CORRIDOR_TRIGGER_S - 4);
 
       if (!state.corridorMode && !state.l4CorridorActive && !l4PreClear && state.corridorDelay <= 0 && !state.slalomActive && !state.drCustomPatternActive && !_noSpawnMode) spawnObstacles();
