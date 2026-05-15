@@ -33205,6 +33205,52 @@ window._jlDebug = {
   }
   // Expose so global prewarm can call it once at startup
   window._ltInitPool = _ltInitPool;
+  // Force every pooled bolt to draw EVERY material variant during boot prewarm.
+  // Without this, the warn/flash/ring materials never get opacity > 0 during
+  // skipWarn=true prewarm spawns, so their GL programs aren't compiled until
+  // a real strike (sh=5 + js=399 cascade observed in gameplay). After this
+  // helper runs, all five materials per slot are opaque + visible + freshly
+  // positioned, ready for a single composer.render to compile + upload.
+  window._ltPrewarmForceVisible = function() {
+    if (!_ltPoolReady) _ltInitPool();
+    for (let i = 0; i < _ltPool.length; i++) {
+      const inst = _ltPool[i];
+      // Position pool slot at a unique in-view location (X spread, in-view Z).
+      const x = (i - 16) * 0.5;
+      const z = -40;
+      inst.warnMesh.position.set(x, 0.08, z);
+      inst.flash.position.set(x, 1.5, z);
+      inst.ring.position.set(x, 0.1, z);
+      inst.boltGroup.position.set(0, 0, z);
+      inst.warnMesh.visible = true;
+      inst.flash.visible    = true;
+      inst.ring.visible     = true;
+      inst.boltGroup.visible = true;
+      // Tiny positive opacity — enough to skip THREE's transparent-skip
+      // fast-path, so the program compiles + draws, but visually invisible
+      // (we render to a hidden target during prewarm anyway).
+      inst.warnMat.opacity  = 0.01;
+      inst.flashMat.opacity = 0.01;
+      inst.ringMat.opacity  = 0.01;
+      inst.coreMat.opacity  = 1.0;
+      inst.glowMat.opacity  = 0.5;
+    }
+  };
+  window._ltPrewarmHideAll = function() {
+    if (!_ltPoolReady) return;
+    for (let i = 0; i < _ltPool.length; i++) {
+      const inst = _ltPool[i];
+      inst.warnMesh.visible = false;
+      inst.flash.visible    = false;
+      inst.ring.visible     = false;
+      inst.boltGroup.visible = false;
+      inst.warnMat.opacity  = 0;
+      inst.flashMat.opacity = 0;
+      inst.ringMat.opacity  = 0;
+      inst.coreMat.opacity  = 0;
+      inst.glowMat.opacity  = 0;
+    }
+  };
   function _ltAcquire() {
     if (!_ltPoolReady) _ltInitPool();
     for (let i = 0; i < _ltPool.length; i++) {
@@ -36806,29 +36852,14 @@ window._uploadAllBuffers = _uploadAllBuffers;
     // Fix: force one spawn at a far-offscreen Z, render composer once so
     // the mutated tube actually uploads + draws, then kill it.
     try {
-      if (typeof window._spawnLightning === 'function' && typeof window._clearAllLightning === 'function') {
-        // Spawn one bolt PER POOL SLOT at landZ way behind ship-zero. skipWarn=true
-        // routes straight to strike phase so rejag fires + materials get touched.
-        // Why all 32: the first real strike on each slot pays a per-mesh-pointer
-        // first-draw cost in WebKit's pipeline cache (validates framebuffer +
-        // MSAA combo for that specific mesh). Covering only slot 0 left slots
-        // 1-31 hitching as they got cycled in during real gameplay.
-        // Spread X slightly so they don't perfectly z-fight (cosmetic only).
-        // Spawn at in-view Z so the bolts actually draw. landZ=-9999 was
-        // either clipped by frustum culling or beyond projection, so the
-        // prewarm draw never happened and slots 1–31 still hitched in
-        // gameplay (lt-rndr 100–300ms first-strike). Use a Z roughly where
-        // a normal strike would land (a few units ahead of camera origin).
-        const _LT_PREWARM_COUNT = 32; // matches _LT_POOL_SIZE in 72-main-late-mid.js
-        const _LT_PREWARM_Z     = -40; // in-view, well ahead of camera
-        for (let i = 0; i < _LT_PREWARM_COUNT; i++) {
-          // Spread X so individual bolts don't perfectly z-fight (cosmetic only,
-          // off-screen anyway since we render to a non-displayed target below).
-          window._spawnLightning((i - 16) * 0.5, _LT_PREWARM_Z, true, null, 0);
-        }
-        // Single composer render — all 32 visible bolts upload + draw in one
-        // pass. Driver validates every mesh's pipeline state in this frame so
-        // none of them pay it during gameplay.
+      if (typeof window._ltPrewarmForceVisible === 'function' && typeof window._ltPrewarmHideAll === 'function') {
+        // Force every slot's 5 materials (warn / flash / ring / core / glow) to
+        // draw during the boot composer render. Previously the prewarm spawned
+        // via _spawnLightning(skipWarn=true) which leaves 3 of 5 materials at
+        // opacity=0 — THREE's transparent-fast-path skips them, so warn/flash/
+        // ring programs never compiled until the first real strike (sh=5 +
+        // js=399 cascade observed in gameplay screenshots).
+        window._ltPrewarmForceVisible();
         if (typeof composer !== 'undefined' && composer && composer.render) {
           const _prevTarget = renderer.getRenderTarget();
           const _prevFlags = composer.passes ? composer.passes.map(p => p.renderToScreen) : [];
@@ -36841,7 +36872,18 @@ window._uploadAllBuffers = _uploadAllBuffers;
           }
           renderer.setRenderTarget(_prevTarget);
         }
-        // Kill and release all pool slots.
+        // Hide all and clear opacities back to zero (pool back to fresh state).
+        window._ltPrewarmHideAll();
+      } else if (typeof window._spawnLightning === 'function' && typeof window._clearAllLightning === 'function') {
+        // Fallback (shouldn't fire): old spawn-based prewarm.
+        const _LT_PREWARM_COUNT = 32;
+        const _LT_PREWARM_Z     = -40;
+        for (let i = 0; i < _LT_PREWARM_COUNT; i++) {
+          window._spawnLightning((i - 16) * 0.5, _LT_PREWARM_Z, true, null, 0);
+        }
+        if (typeof composer !== 'undefined' && composer && composer.render) {
+          try { composer.render(); } catch(_) {}
+        }
         window._clearAllLightning();
       }
     } catch (e) {

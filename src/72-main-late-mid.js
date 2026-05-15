@@ -3274,6 +3274,52 @@ window._jlDebug = {
   }
   // Expose so global prewarm can call it once at startup
   window._ltInitPool = _ltInitPool;
+  // Force every pooled bolt to draw EVERY material variant during boot prewarm.
+  // Without this, the warn/flash/ring materials never get opacity > 0 during
+  // skipWarn=true prewarm spawns, so their GL programs aren't compiled until
+  // a real strike (sh=5 + js=399 cascade observed in gameplay). After this
+  // helper runs, all five materials per slot are opaque + visible + freshly
+  // positioned, ready for a single composer.render to compile + upload.
+  window._ltPrewarmForceVisible = function() {
+    if (!_ltPoolReady) _ltInitPool();
+    for (let i = 0; i < _ltPool.length; i++) {
+      const inst = _ltPool[i];
+      // Position pool slot at a unique in-view location (X spread, in-view Z).
+      const x = (i - 16) * 0.5;
+      const z = -40;
+      inst.warnMesh.position.set(x, 0.08, z);
+      inst.flash.position.set(x, 1.5, z);
+      inst.ring.position.set(x, 0.1, z);
+      inst.boltGroup.position.set(0, 0, z);
+      inst.warnMesh.visible = true;
+      inst.flash.visible    = true;
+      inst.ring.visible     = true;
+      inst.boltGroup.visible = true;
+      // Tiny positive opacity — enough to skip THREE's transparent-skip
+      // fast-path, so the program compiles + draws, but visually invisible
+      // (we render to a hidden target during prewarm anyway).
+      inst.warnMat.opacity  = 0.01;
+      inst.flashMat.opacity = 0.01;
+      inst.ringMat.opacity  = 0.01;
+      inst.coreMat.opacity  = 1.0;
+      inst.glowMat.opacity  = 0.5;
+    }
+  };
+  window._ltPrewarmHideAll = function() {
+    if (!_ltPoolReady) return;
+    for (let i = 0; i < _ltPool.length; i++) {
+      const inst = _ltPool[i];
+      inst.warnMesh.visible = false;
+      inst.flash.visible    = false;
+      inst.ring.visible     = false;
+      inst.boltGroup.visible = false;
+      inst.warnMat.opacity  = 0;
+      inst.flashMat.opacity = 0;
+      inst.ringMat.opacity  = 0;
+      inst.coreMat.opacity  = 0;
+      inst.glowMat.opacity  = 0;
+    }
+  };
   function _ltAcquire() {
     if (!_ltPoolReady) _ltInitPool();
     for (let i = 0; i < _ltPool.length; i++) {
