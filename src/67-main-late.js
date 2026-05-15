@@ -5148,18 +5148,27 @@ function update(dt) {
         _tutHideText();
         state._tutorialStep = 1.55; state._tutorialTimer = 0;
       } else if (!_zipRowPresent && (state._tutorialZipSuccesses || 0) < 1) {
-        // Spawn next row only if not yet succeeded
-        state._tutorialZipPassed = false;
-        state._tutorialZipRowSpawned = true;
-        for (let zi = -LANE_COUNT; zi <= LANE_COUNT; zi++) {
-          const obs = getPooledObstacle(Math.floor(Math.random() * 3));
-          if (!obs) continue;
-          obs.position.set(zi * LANE_WIDTH, 0, SPAWN_Z);
-          obs.userData.velX = 0;
-          obs.userData.isCorridor = false;
-          obs.userData._tutZip = true;
-          tintObsColor(obs, 0xffcc00);
-          activeObstacles.push(obs);
+        // Spawn next row only if not yet succeeded.
+        // Atomic spawn: need 2*LANE_COUNT+1 free slots for a full centered row.
+        // If pool isn't ready, wait a frame — prevents left-clustered partial rows.
+        const _needed = 2 * LANE_COUNT + 1;
+        let _free = 0;
+        for (let pi = 0; pi < obstaclePool.length; pi++) {
+          if (!obstaclePool[pi].userData.active) { _free++; if (_free >= _needed) break; }
+        }
+        if (_free >= _needed) {
+          state._tutorialZipPassed = false;
+          state._tutorialZipRowSpawned = true;
+          for (let zi = -LANE_COUNT; zi <= LANE_COUNT; zi++) {
+            const obs = getPooledObstacle(Math.floor(Math.random() * 3));
+            if (!obs) continue;
+            obs.position.set(zi * LANE_WIDTH, 0, SPAWN_Z);
+            obs.userData.velX = 0;
+            obs.userData.isCorridor = false;
+            obs.userData._tutZip = true;
+            tintObsColor(obs, 0xffcc00);
+            activeObstacles.push(obs);
+          }
         }
       }
 
