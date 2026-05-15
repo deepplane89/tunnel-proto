@@ -4157,9 +4157,12 @@ if (window.__loadGate) {
 }
 
 const waterGeo  = new THREE.PlaneGeometry(1400, 700, 4, 4);
+// Mirror RT: dropped 512→320. Forward-flow distortion + tight normal map
+// (size=8, distortionScale=0.6) already blur the reflection enough that 320
+// is visually indistinguishable. ~60% fill-rate cut on the mirror pass.
 const mirrorMesh = new Water(waterGeo, {
-  textureWidth:  512,
-  textureHeight: 512,
+  textureWidth:  320,
+  textureHeight: 320,
   waterNormals,
   sunDirection:  new THREE.Vector3(0, 1, 0),
   sunColor:      0x000000,   // overridden below
