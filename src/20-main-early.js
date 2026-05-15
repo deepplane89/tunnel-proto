@@ -2770,6 +2770,7 @@ function _waterMaybeHide(obj) {
   }
 }
 mirrorMesh.onBeforeRender = function(renderer, scene, camera) {
+  const _t0_wtr = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   _waterHideLen = 0;
   for (let i = 0, n = thrusterSystems.length;     i < n; i++) _waterMaybeHide(thrusterSystems[i].points);
   for (let i = 0, n = miniThrusterSystems.length; i < n; i++) _waterMaybeHide(miniThrusterSystems[i].points);
@@ -2782,6 +2783,7 @@ mirrorMesh.onBeforeRender = function(renderer, scene, camera) {
   _waterMaybeHide(_warpMesh);
   _origWaterOBR.call(this, renderer, scene, camera);
   for (let i = 0; i < _waterHideLen; i++) _waterHideBuf[i].visible = true;
+  if (typeof _hitchEnd === 'function') _hitchEnd('water', _t0_wtr);
 };
 
 // Almost totally black water — only sun streak illuminates it
@@ -3377,7 +3379,9 @@ function _spawnExplosion(shipPos, obstaclePos, shipSpeed, palette) {
   _expSlomoAge = 0;
 
   // ── Harvest vertex positions from ship mesh (Robot Bobby style) ──
+  const _t0_ev = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   const { verts: meshVerts, colors: meshColors } = _getShipVertices();
+  if (typeof _hitchEnd === 'function') _hitchEnd('exp-verts', _t0_ev);
   const hasVerts = meshVerts.length >= 3;
   const vertCount = hasVerts ? (meshVerts.length / 3) : 0;
 
@@ -3391,6 +3395,7 @@ function _spawnExplosion(shipPos, obstaclePos, shipSpeed, palette) {
   const deflectX = nx / nLen;
   const deflectZ = nz / nLen;
 
+  const _t0_es = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   for (let i = 0; i < _EXP_COUNT; i++) {
     // ── Position: sample from actual ship mesh vertex (TSL instanceBufferAttribute) ──
     if (hasVerts) {
@@ -3502,6 +3507,7 @@ function _spawnExplosion(shipPos, obstaclePos, shipSpeed, palette) {
     _expSizes[i] = sizeBase;
     _expStartSizes[i] = sizeBase;
   }
+  if (typeof _hitchEnd === 'function') _hitchEnd('exp-spawn', _t0_es);
   _expGeo.attributes.position.needsUpdate = true;
   _expGeo.attributes.color.needsUpdate    = true;
   _expGeo.attributes.alpha.needsUpdate    = true;

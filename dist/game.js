@@ -4194,6 +4194,7 @@ function _waterMaybeHide(obj) {
   }
 }
 mirrorMesh.onBeforeRender = function(renderer, scene, camera) {
+  const _t0_wtr = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   _waterHideLen = 0;
   for (let i = 0, n = thrusterSystems.length;     i < n; i++) _waterMaybeHide(thrusterSystems[i].points);
   for (let i = 0, n = miniThrusterSystems.length; i < n; i++) _waterMaybeHide(miniThrusterSystems[i].points);
@@ -4206,6 +4207,7 @@ mirrorMesh.onBeforeRender = function(renderer, scene, camera) {
   _waterMaybeHide(_warpMesh);
   _origWaterOBR.call(this, renderer, scene, camera);
   for (let i = 0; i < _waterHideLen; i++) _waterHideBuf[i].visible = true;
+  if (typeof _hitchEnd === 'function') _hitchEnd('water', _t0_wtr);
 };
 
 // Almost totally black water — only sun streak illuminates it
@@ -4801,7 +4803,9 @@ function _spawnExplosion(shipPos, obstaclePos, shipSpeed, palette) {
   _expSlomoAge = 0;
 
   // ── Harvest vertex positions from ship mesh (Robot Bobby style) ──
+  const _t0_ev = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   const { verts: meshVerts, colors: meshColors } = _getShipVertices();
+  if (typeof _hitchEnd === 'function') _hitchEnd('exp-verts', _t0_ev);
   const hasVerts = meshVerts.length >= 3;
   const vertCount = hasVerts ? (meshVerts.length / 3) : 0;
 
@@ -4815,6 +4819,7 @@ function _spawnExplosion(shipPos, obstaclePos, shipSpeed, palette) {
   const deflectX = nx / nLen;
   const deflectZ = nz / nLen;
 
+  const _t0_es = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
   for (let i = 0; i < _EXP_COUNT; i++) {
     // ── Position: sample from actual ship mesh vertex (TSL instanceBufferAttribute) ──
     if (hasVerts) {
@@ -4926,6 +4931,7 @@ function _spawnExplosion(shipPos, obstaclePos, shipSpeed, palette) {
     _expSizes[i] = sizeBase;
     _expStartSizes[i] = sizeBase;
   }
+  if (typeof _hitchEnd === 'function') _hitchEnd('exp-spawn', _t0_es);
   _expGeo.attributes.position.needsUpdate = true;
   _expGeo.attributes.color.needsUpdate    = true;
   _expGeo.attributes.alpha.needsUpdate    = true;
@@ -27245,6 +27251,7 @@ function update(dt) {
     const _rolling   = (state.rollAngle !== 0 || state.rollHeld);
     const _phaseOk   = (state.phase === 'playing');
     const _sfxOk     = (typeof isSfxMuted === 'function') ? !isSfxMuted() : true;
+    const _t0_wup = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
     window.BankWaterEffect.update({
       shipGroup:      shipGroup,                  // auto-resolves wingtips from geometry
       rollAngle:      shipGroup.rotation.z,
@@ -27255,6 +27262,7 @@ function update(dt) {
       overWater:      mirrorMesh.visible && !_rolling && _phaseOk,
       sfxMuted:       !_sfxOk,
     }, dt);
+    if (typeof _hitchEnd === 'function') _hitchEnd('water-upd', _t0_wup);
   }
 
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──
@@ -29009,17 +29017,29 @@ const _fpsEl = document.getElementById('fps-overlay');
 //       const t0 = _hitchStart(); ...work... _hitchEnd('pickup-app', t0);
 //
 //  2) FRAME path  (catches ANYTHING that makes a frame long, including
-//       shader compiles, texture uploads, layout, paint, GC. The previous
-//       bracket path missed those because the cost happens AFTER the bracketed
-//       block, during the actual render.)
+//       shader compiles, texture uploads, layout, paint, GC.)
 //
-//       _hitchArm('pickup-shield');   // arms a label for the NEXT 2 frames
+//       _hitchArm('pickup-shield');   // arms a label for the NEXT N frames
 //       _hitchFrameTick(frameDeltaMs); // called once per frame in animate()
 //
 //       If a frame within the armed window exceeds the hitch threshold,
-//       the armed label gets credited. Otherwise a generic 'frame' label is
-//       used, so we still see WHEN big frames happened even if nothing armed
-//       them.
+//       the armed label gets credit. Otherwise a generic 'frame' label is
+//       used. Stale arms (frame after the immediate next) record with a '?'
+//       suffix so we know the attribution may be off.
+//
+//  ── ARM AGE & ATTRIBUTION CONFIDENCE ─────────────────────────────────────
+//  Old behavior: arm-window=3 frames, no age tracking. A hitch 2-3 frames
+//  after an unrelated arm got credited to that arm with full confidence,
+//  e.g. an angled-walls glitch landing within 3 frames of killPlayer's
+//  _hitchArm('crash-rndr') showed as `cr-rndr`.
+//  New behavior: window=2, but only frame N+1 gets full attribution.
+//  Frame N+2 records with '?' suffix (e.g. `crash-rndr?`). Stale = low confidence.
+//
+//  ── PERF-DIAG BREAKDOWN ──────────────────────────────────────────────────
+//  Each frame-path hitch now also snapshots the perf-diag breakdown
+//  (js/render/shaders/draws/heap-delta) so the overlay shows WHY the frame
+//  was slow, not just its duration. Perf diag is auto-enabled when hitch
+//  meter is on so we always have data.
 //
 //  Both paths feed the same "worst in last 30s" overlay.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -29034,12 +29054,14 @@ const _HITCH_THRESHOLD_MS = 5;  // ignore anything under 5ms (diagnosis mode)
 // visible stutter on 60Hz; ≥18ms is a missed frame on 60Hz.
 const _HITCH_FRAME_THRESHOLD_MS = 12;  // diagnosis mode — was 18
 
-// How many frames after _hitchArm() the label remains "live". Shader compile
-// and texture upload typically lands the very next frame, sometimes the one
-// after that on iOS. 3 is generous but safe.
-const _HITCH_ARM_FRAMES = 3;
+// How many frames after _hitchArm() the label remains "live".
+// Frame 1 (immediate next) = full confidence.
+// Frame 2 = stale, label gets '?' suffix.
+// Was 3 — caused mis-attribution (death-armed labels claiming angled-wall
+// hitches that happened seconds earlier in the same arm window).
+const _HITCH_ARM_FRAMES = 2;
 
-// worst hitch over rolling window: { ms, t, name }
+// worst hitch over rolling window: { ms, t, name, breakdown }
 let _hitchWorst = null;
 // most recent over-threshold hitch (kept for potential future history view)
 let _hitchLast  = null;
@@ -29048,13 +29070,29 @@ let _hitchLast  = null;
 let _armedLabel = null;
 let _armedFramesLeft = 0;
 
-function _recordHitch(ms, name) {
+// Snapshot perf-diag breakdown for the just-finished frame. Read at frame-path
+// hitch record time. Null when perf-diag is off or hasn't run a frame yet.
+function _snapPerfBreakdown() {
+  const pd = window._perfDiag;
+  if (!pd || !pd.lastFrame) return null;
+  // Shallow copy so it doesn't mutate when perf-diag updates next frame.
+  const lf = pd.lastFrame;
+  return {
+    js:      lf.js|0,
+    rndr:    lf.rndr|0,
+    shdrs:   lf.shdrs|0,
+    draws:   lf.draws|0,
+    heap:    lf.heap|0, // bytes delta, can be negative
+  };
+}
+
+function _recordHitch(ms, name, breakdown) {
   if (ms < _HITCH_THRESHOLD_MS) return;
   const now = performance.now();
-  _hitchLast = { ms, t: now, name };
+  _hitchLast = { ms, t: now, name, breakdown: breakdown || null };
   // Replace worst if (a) bigger, or (b) old one expired.
   if (!_hitchWorst || ms > _hitchWorst.ms || (now - _hitchWorst.t) > _HITCH_WINDOW_MS) {
-    _hitchWorst = { ms, t: now, name };
+    _hitchWorst = { ms, t: now, name, breakdown: breakdown || null };
   }
 }
 
@@ -29066,11 +29104,13 @@ function _hitchStart() {
 function _hitchEnd(category, t0) {
   if (!window._hitchMeterOn || !t0) return;
   const dt = performance.now() - t0;
-  _recordHitch(dt, category);
+  // Bracket hitches do not get a frame breakdown — they're a CPU subset of
+  // one frame, breakdown would conflate with whatever else ran.
+  _recordHitch(dt, category, null);
 }
 
 // ── FRAME PATH ────────────────────────────────────────────────────────────
-// Arm a label for the NEXT few frames. If any of those frames overruns,
+// Arm a label for the NEXT N frames. If any of those frames overruns,
 // the label gets credit. Cheap when meter is off.
 function _hitchArm(label) {
   if (!window._hitchMeterOn) return;
@@ -29099,8 +29139,15 @@ function _hitchFrameTick(frameDeltaMs) {
   if (frameDeltaMs > _HITCH_SANITY_MAX_MS) return;
   if (frameDeltaMs >= _HITCH_FRAME_THRESHOLD_MS) {
     // Attribute to armed label if present, else generic 'frame'.
-    const name = _armedLabel || 'frame';
-    _recordHitch(frameDeltaMs, name);
+    // First frame after arm = full confidence. Subsequent = stale ('?').
+    let name;
+    if (_armedLabel) {
+      const stale = (_armedFramesLeft < _HITCH_ARM_FRAMES);
+      name = stale ? (_armedLabel + '?') : _armedLabel;
+    } else {
+      name = 'frame';
+    }
+    _recordHitch(frameDeltaMs, name, _snapPerfBreakdown());
   }
   // Decrement arm window
   if (_armedFramesLeft > 0) {
@@ -29131,41 +29178,70 @@ function _renderHitchOverlay() {
   // Short label so a long line still fits on iPhone right edge.
   // Drops anything past first hyphen segment for known long labels.
   const shortCat = _shortLabel(_hitchWorst.name);
-  el.textContent = ms + 'ms ' + shortCat + ' ' + agoSec + 's';
+  // Two-line readout: ms + label + age on line 1, breakdown on line 2.
+  // Breakdown only shown if perf-diag snapshot was available (frame-path hitches).
+  let txt = ms + 'ms ' + shortCat + ' ' + agoSec + 's';
+  const bd = _hitchWorst.breakdown;
+  if (bd) {
+    // js=Nms r=Nms sh=N dr=N h=±NKB — kept tight so it fits on iPhone
+    // (right-edge of HUD). Heap delta in KB (not MB) — most frames are
+    // sub-MB allocations, MB display loses sub-MB GC pressure signal.
+    const heapKb = Math.round(bd.heap / 1024);
+    const heapStr = (heapKb >= 0 ? '+' : '') + heapKb + 'k';
+    txt += '\njs=' + bd.js + ' r=' + bd.rndr + ' sh=' + bd.shdrs
+         + ' dr=' + bd.draws + ' h=' + heapStr;
+    // Multi-line needs CSS white-space:pre to render \n.
+    el.style.whiteSpace = 'pre';
+  } else {
+    el.style.whiteSpace = '';
+  }
+  el.textContent = txt;
   el.classList.toggle('warn', ms >= 20 && ms < 50);
   el.classList.toggle('bad',  ms >= 50);
 }
 
 function _shortLabel(name) {
   if (!name) return '?';
+  // Stale-arm '?' suffix preserves through shortening: strip, shorten, re-add.
+  const stale = name.endsWith('?');
+  const base  = stale ? name.slice(0, -1) : name;
+  const tail  = stale ? '?' : '';
   // Common labels → short forms (kept short so a long line still fits on
   // iPhone right edge with 13px font).
-  if (name === 'canyon') return 'cnyn';
-  if (name === 'pickup') return 'pkup';
-  if (name === 'pickup-app')        return 'pk-app';
-  if (name === 'pickup-shat')       return 'pk-shat';
-  if (name === 'pickup-shield')     return 'pk-shld';
-  if (name === 'pickup-laser')      return 'pk-lsr';
-  if (name === 'pickup-magnet')     return 'pk-mag';
-  if (name === 'pickup-invincible') return 'pk-inv';
+  if (base === 'canyon') return 'cnyn'+tail;
+  if (base === 'pickup') return 'pkup'+tail;
+  if (base === 'pickup-app')        return 'pk-app'+tail;
+  if (base === 'pickup-shat')       return 'pk-shat'+tail;
+  if (base === 'pickup-shield')     return 'pk-shld'+tail;
+  if (base === 'pickup-laser')      return 'pk-lsr'+tail;
+  if (base === 'pickup-magnet')     return 'pk-mag'+tail;
+  if (base === 'pickup-invincible') return 'pk-inv'+tail;
   // Canyon sub-phases (synchronous build steps inside _createCanyonWalls)
-  if (name === 'cnyn-mat')   return 'cy-mat';   // material allocation
-  if (name === 'cnyn-geo')   return 'cy-geo';   // slab geometry build (CPU)
-  if (name === 'cnyn-bake')  return 'cy-bake';  // X/rotation bake loop
-  if (name === 'cnyn-warm')  return 'cy-warm';  // GPU proxy-scene compile
-  if (name === 'cnyn-rndr')  return 'cy-rndr';  // next-frame render (upload/light)
+  if (base === 'cnyn-mat')   return 'cy-mat'+tail;   // material allocation
+  if (base === 'cnyn-geo')   return 'cy-geo'+tail;   // slab geometry build (CPU)
+  if (base === 'cnyn-bake')  return 'cy-bake'+tail;  // X/rotation bake loop
+  if (base === 'cnyn-warm')  return 'cy-warm'+tail;  // GPU proxy-scene compile
+  if (base === 'cnyn-rndr')  return 'cy-rndr'+tail;  // next-frame render (upload/light)
+  if (base === 'cnyn-act')   return 'cy-act'+tail;   // per-frame: any canyon active
+  if (base === 'knife-act')  return 'knife'+tail;    // per-frame: L3 knife active
   // Lightning
-  if (name === 'lt-spawn')   return 'lt-spn';   // synchronous spawn setup
-  if (name === 'lt-rndr')    return 'lt-rndr';  // first render after spawn
+  if (base === 'lt-spawn')   return 'lt-spn'+tail;   // synchronous spawn setup
+  if (base === 'lt-rndr')    return 'lt-rndr'+tail;  // first render after spawn
   // Angled walls (Band 1 / Band 5 family) — pre-pooled but first-draw GPU upload
-  if (name === 'aw-rndr')    return 'aw-rndr';  // first render after activate()
+  if (base === 'aw-rndr')    return 'aw-rndr'+tail;  // first render after activate()
+  if (base === 'aw-act')     return 'aw-act'+tail;   // per-frame: angled walls active
   // Crash sub-phases (killPlayer fatal path)
-  if (name === 'crash')       return 'crsh';    // full fatal path bracket
-  if (name === 'crash-tear')  return 'cr-tear'; // state/timer/transition teardown
-  if (name === 'crash-exp')   return 'cr-exp';  // explosion spawn + camera setup
-  if (name === 'crash-audio') return 'cr-aud';  // SFX kill + engine stop + playCrash
-  if (name === 'crash-rndr')  return 'cr-rndr'; // first frame after death (post-FX render)
-  return name.length > 9 ? name.slice(0, 9) : name;
+  if (base === 'crash')       return 'crsh'+tail;    // full fatal path bracket
+  if (base === 'crash-tear')  return 'cr-tear'+tail; // state/timer/transition teardown
+  if (base === 'crash-exp')   return 'cr-exp'+tail;  // explosion spawn + camera setup
+  if (base === 'crash-audio') return 'cr-aud'+tail;  // SFX kill + engine stop + playCrash
+  if (base === 'crash-rndr')  return 'cr-rndr'+tail; // first frame after death (post-FX render)
+  if (base === 'exp-verts')   return 'ex-vrt'+tail;  // _getShipVertices CPU iteration
+  if (base === 'exp-spawn')   return 'ex-spn'+tail;  // _spawnExplosion 6000-iter loop
+  // Per-frame scene-system labels (water, reflection, bloom)
+  if (base === 'water')       return 'water'+tail;   // mirrorMesh.onBeforeRender mirror render
+  if (base === 'water-upd')   return 'wtr-up'+tail;  // BankWaterEffect.update call
+  return (base.length > 7 ? base.slice(0, 7) : base) + tail;
 }
 
 window._hitchStart = _hitchStart;
@@ -29175,12 +29251,18 @@ window._hitchFrameTick = _hitchFrameTick;
 window._renderHitchOverlay = _renderHitchOverlay;
 
 // Wire up the pause-menu toggle button. Visible only in dev mode.
+// Auto-enables perf-diag too so the on-screen breakdown has data to read.
 (function _setupHitchToggle() {
   const btn = document.getElementById('pause-hitch-toggle');
   if (!btn) return;
   if (window.__JH_DEV__) btn.style.display = 'inline-flex';
   btn.addEventListener('click', () => {
     window._hitchMeterOn = !window._hitchMeterOn;
+    // Couple perf-diag to hitch meter so the per-frame js/rndr/shdrs/heap
+    // breakdown is always available when the hitch meter records a frame.
+    // We don't auto-disable on hitch-off in case the user wanted perf-diag
+    // on for console logging independently.
+    if (window._hitchMeterOn) window._perfDiagOn = true;
     btn.textContent = 'HITCH METER: ' + (window._hitchMeterOn ? 'ON' : 'OFF');
     if (window._hitchMeterOn) {
       _hitchWorst = null; _hitchLast = null;
@@ -29422,6 +29504,10 @@ const _perfDiag = (function() {
         +' | events: '+evts+shaderDetail+nuStr);
     }
 
+    // Snapshot last-frame metrics for hitch overlay attribution (on-screen, no console).
+    // Always written, even on good frames, so when a hitch fires the meter has the prior frame.
+    _perfDiag.lastFrame = { js: jsMs, rndr: renderMs, shdrs: newShaders, draws: draws, heap: heapDelta };
+
     _prevDraws = draws;
     _prevTris = tris;
     _prevHeap = heap;
@@ -29467,7 +29553,7 @@ const _perfDiag = (function() {
   // generates GL_INVALID_VALUE noise from inspecting GC'd program handles.
   if (window._perfDiagOn) setTimeout(_installNeedsUpdateTrap, 100);
 
-  return { frameStart, markRenderStart, markRenderEnd, frameEnd, tag };
+  return { frameStart, markRenderStart, markRenderEnd, frameEnd, tag, lastFrame: null };
 })();
 window._perfDiag = _perfDiag;
 
@@ -29586,6 +29672,16 @@ function animate(now) {
   // code we explicitly bracketed.
   if (_frameDeltaMs > 0 && typeof _hitchFrameTick === 'function') _hitchFrameTick(_frameDeltaMs);
   _perfDiag.frameStart();
+  // Per-frame mechanic arms — sets the armed label every frame a mechanic is
+  // active so any hitch picked up next tick attributes to the right system.
+  // Priority: knife > angled walls > generic canyon (most specific first).
+  if (typeof _hitchArm === 'function' && window._hitchMeterOn) {
+    try {
+      if (typeof state !== 'undefined' && state.l3KnifeCanyon) _hitchArm('knife-act');
+      else if (typeof state !== 'undefined' && state.angledWallsActive) _hitchArm('aw-act');
+      else if (typeof _canyonActive !== 'undefined' && _canyonActive) _hitchArm('cnyn-act');
+    } catch(_) {}
+  }
   // FPS + draw call measurement
   if (_fpsOn) {
     _fpsFrames++;

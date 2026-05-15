@@ -4667,6 +4667,7 @@ function update(dt) {
     const _rolling   = (state.rollAngle !== 0 || state.rollHeld);
     const _phaseOk   = (state.phase === 'playing');
     const _sfxOk     = (typeof isSfxMuted === 'function') ? !isSfxMuted() : true;
+    const _t0_wup = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
     window.BankWaterEffect.update({
       shipGroup:      shipGroup,                  // auto-resolves wingtips from geometry
       rollAngle:      shipGroup.rotation.z,
@@ -4677,6 +4678,7 @@ function update(dt) {
       overWater:      mirrorMesh.visible && !_rolling && _phaseOk,
       sfxMuted:       !_sfxOk,
     }, dt);
+    if (typeof _hitchEnd === 'function') _hitchEnd('water-upd', _t0_wup);
   }
 
   // ── Pitch tilt: nose dips on accel, lifts on decel (when grounded) ──

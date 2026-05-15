@@ -216,6 +216,10 @@ const _perfDiag = (function() {
         +' | events: '+evts+shaderDetail+nuStr);
     }
 
+    // Snapshot last-frame metrics for hitch overlay attribution (on-screen, no console).
+    // Always written, even on good frames, so when a hitch fires the meter has the prior frame.
+    _perfDiag.lastFrame = { js: jsMs, rndr: renderMs, shdrs: newShaders, draws: draws, heap: heapDelta };
+
     _prevDraws = draws;
     _prevTris = tris;
     _prevHeap = heap;
@@ -261,7 +265,7 @@ const _perfDiag = (function() {
   // generates GL_INVALID_VALUE noise from inspecting GC'd program handles.
   if (window._perfDiagOn) setTimeout(_installNeedsUpdateTrap, 100);
 
-  return { frameStart, markRenderStart, markRenderEnd, frameEnd, tag };
+  return { frameStart, markRenderStart, markRenderEnd, frameEnd, tag, lastFrame: null };
 })();
 window._perfDiag = _perfDiag;
 
@@ -380,6 +384,16 @@ function animate(now) {
   // code we explicitly bracketed.
   if (_frameDeltaMs > 0 && typeof _hitchFrameTick === 'function') _hitchFrameTick(_frameDeltaMs);
   _perfDiag.frameStart();
+  // Per-frame mechanic arms — sets the armed label every frame a mechanic is
+  // active so any hitch picked up next tick attributes to the right system.
+  // Priority: knife > angled walls > generic canyon (most specific first).
+  if (typeof _hitchArm === 'function' && window._hitchMeterOn) {
+    try {
+      if (typeof state !== 'undefined' && state.l3KnifeCanyon) _hitchArm('knife-act');
+      else if (typeof state !== 'undefined' && state.angledWallsActive) _hitchArm('aw-act');
+      else if (typeof _canyonActive !== 'undefined' && _canyonActive) _hitchArm('cnyn-act');
+    } catch(_) {}
+  }
   // FPS + draw call measurement
   if (_fpsOn) {
     _fpsFrames++;
