@@ -69,16 +69,21 @@ html.platform-ios-native #app {
    the panel by lifting overflow on the immediate scroll
    containers and temporarily disabling .sr-panel's clip-path.
    Uses :has() (Safari 15.4+; iOS 17 on user device).         */
-html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) {
+/* Note: #shop-handling-bar mounts into .sr-handling-slot which is a
+   SIBLING of .sr-panel, not a descendant. So target .sr-overlay
+   (the common ancestor) with :has() to detect the open state, then
+   strip clip-path on .sr-panel and lift overflow on its scrollers. */
+html.platform-ios-native .sr-overlay:not(.hidden):has(.shop-handling-bar.open) .sr-panel {
   /* Clip-path clips ALL descendants regardless of overflow.
      Drop it while the dropdown is open; corners look slightly
      less sci-fi for the few seconds the menu is open, but
      the menu is now visible. */
-  clip-path: none;
+  clip-path: none !important;
 }
-html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-body,
-html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane,
-html.platform-ios-native .sr-overlay:not(.hidden) .sr-panel:has(.shop-handling-bar.open) .sr-pane[data-pane="thrusters"]:not(.sr-hidden) {
+html.platform-ios-native .sr-overlay:not(.hidden):has(.shop-handling-bar.open) .sr-body,
+html.platform-ios-native .sr-overlay:not(.hidden):has(.shop-handling-bar.open) .sr-pane,
+html.platform-ios-native .sr-overlay:not(.hidden):has(.shop-handling-bar.open) .sr-pane[data-pane="thrusters"]:not(.sr-hidden),
+html.platform-ios-native .sr-overlay:not(.hidden):has(.shop-handling-bar.open) .sr-handling-slot {
   overflow: visible !important;
 }
 /* Belt-and-suspenders: ensure the menu itself paints above
