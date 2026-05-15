@@ -108,6 +108,17 @@ function _hitchArm(label) {
   _armedFramesLeft = _HITCH_ARM_FRAMES;
 }
 
+// Soft arm — only takes effect if NO specific event arm is already pending.
+// Used by per-frame mechanic arms (cy-act, knife-act, aw-act) so they don't
+// clobber a higher-priority event arm like lt-rndr or cy-rndr fired the
+// frame before. Cheap when meter off.
+function _hitchArmSoft(label) {
+  if (!window._hitchMeterOn) return;
+  if (_armedLabel) return; // event arm already pending; don't override
+  _armedLabel = label;
+  _armedFramesLeft = _HITCH_ARM_FRAMES;
+}
+
 // Frames over this are NOT hitches — they're tab-resume / debugger-pause /
 // system-stall events. We don't want them poisoning the worst-in-30s display.
 const _HITCH_SANITY_MAX_MS = 500;  // anything bigger = system event, ignore
@@ -237,6 +248,7 @@ function _shortLabel(name) {
 window._hitchStart = _hitchStart;
 window._hitchEnd = _hitchEnd;
 window._hitchArm = _hitchArm;
+window._hitchArmSoft = _hitchArmSoft;
 window._hitchFrameTick = _hitchFrameTick;
 window._renderHitchOverlay = _renderHitchOverlay;
 

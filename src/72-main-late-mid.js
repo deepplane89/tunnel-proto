@@ -3240,6 +3240,19 @@ window._jlDebug = {
       const glowMesh  = new THREE.Mesh(glowGeo, glowMat);
       boltGroup.add(coreMesh); boltGroup.add(glowMesh);
       boltGroup.visible = false;
+      // Disable frustum culling on every bolt-related mesh. Two reasons:
+      // (1) The boot prewarm spawns bolts at synthetic Z to force their
+      //     first-draw pipeline-cache cost. If frustum culling skips the
+      //     draw, the prewarm is silently a no-op and the first real
+      //     gameplay strike pays the cost (lt-rndr 100–300ms on iOS).
+      // (2) During gameplay, lightning is always spawned in-view so culling
+      //     never helps anyway. Cost of disabling = zero per-frame.
+      warnMesh.frustumCulled = false;
+      flash.frustumCulled    = false;
+      ring.frustumCulled     = false;
+      coreMesh.frustumCulled = false;
+      glowMesh.frustumCulled = false;
+      boltGroup.frustumCulled = false;
       scene.add(boltGroup);
 
       _ltPool.push({

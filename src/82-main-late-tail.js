@@ -242,9 +242,17 @@ window._uploadAllBuffers = _uploadAllBuffers;
         // MSAA combo for that specific mesh). Covering only slot 0 left slots
         // 1-31 hitching as they got cycled in during real gameplay.
         // Spread X slightly so they don't perfectly z-fight (cosmetic only).
+        // Spawn at in-view Z so the bolts actually draw. landZ=-9999 was
+        // either clipped by frustum culling or beyond projection, so the
+        // prewarm draw never happened and slots 1–31 still hitched in
+        // gameplay (lt-rndr 100–300ms first-strike). Use a Z roughly where
+        // a normal strike would land (a few units ahead of camera origin).
         const _LT_PREWARM_COUNT = 32; // matches _LT_POOL_SIZE in 72-main-late-mid.js
+        const _LT_PREWARM_Z     = -40; // in-view, well ahead of camera
         for (let i = 0; i < _LT_PREWARM_COUNT; i++) {
-          window._spawnLightning(i * 0.001, -9999, true, null, 0);
+          // Spread X so individual bolts don't perfectly z-fight (cosmetic only,
+          // off-screen anyway since we render to a non-displayed target below).
+          window._spawnLightning((i - 16) * 0.5, _LT_PREWARM_Z, true, null, 0);
         }
         // Single composer render — all 32 visible bolts upload + draw in one
         // pass. Driver validates every mesh's pipeline state in this frame so

@@ -29118,6 +29118,17 @@ function _hitchArm(label) {
   _armedFramesLeft = _HITCH_ARM_FRAMES;
 }
 
+// Soft arm — only takes effect if NO specific event arm is already pending.
+// Used by per-frame mechanic arms (cy-act, knife-act, aw-act) so they don't
+// clobber a higher-priority event arm like lt-rndr or cy-rndr fired the
+// frame before. Cheap when meter off.
+function _hitchArmSoft(label) {
+  if (!window._hitchMeterOn) return;
+  if (_armedLabel) return; // event arm already pending; don't override
+  _armedLabel = label;
+  _armedFramesLeft = _HITCH_ARM_FRAMES;
+}
+
 // Frames over this are NOT hitches — they're tab-resume / debugger-pause /
 // system-stall events. We don't want them poisoning the worst-in-30s display.
 const _HITCH_SANITY_MAX_MS = 500;  // anything bigger = system event, ignore
@@ -29247,6 +29258,7 @@ function _shortLabel(name) {
 window._hitchStart = _hitchStart;
 window._hitchEnd = _hitchEnd;
 window._hitchArm = _hitchArm;
+window._hitchArmSoft = _hitchArmSoft;
 window._hitchFrameTick = _hitchFrameTick;
 window._renderHitchOverlay = _renderHitchOverlay;
 
@@ -29671,15 +29683,19 @@ function animate(now) {
   // long frame (shader compile, texture upload, GC pause) — not just
   // code we explicitly bracketed.
   if (_frameDeltaMs > 0 && typeof _hitchFrameTick === 'function') _hitchFrameTick(_frameDeltaMs);
+  // Hitch meter implies perf-diag (so the on-screen breakdown has data).
+  // Cheap fall-through when hitch meter is off.
+  if (window._hitchMeterOn && !window._perfDiagOn) window._perfDiagOn = true;
   _perfDiag.frameStart();
   // Per-frame mechanic arms — sets the armed label every frame a mechanic is
   // active so any hitch picked up next tick attributes to the right system.
   // Priority: knife > angled walls > generic canyon (most specific first).
-  if (typeof _hitchArm === 'function' && window._hitchMeterOn) {
+  // Soft arms — only set if no event arm (lt-rndr/cy-rndr/etc) is pending.
+  if (typeof _hitchArmSoft === 'function' && window._hitchMeterOn) {
     try {
-      if (typeof state !== 'undefined' && state.l3KnifeCanyon) _hitchArm('knife-act');
-      else if (typeof state !== 'undefined' && state.angledWallsActive) _hitchArm('aw-act');
-      else if (typeof _canyonActive !== 'undefined' && _canyonActive) _hitchArm('cnyn-act');
+      if (typeof state !== 'undefined' && state.l3KnifeCanyon) _hitchArmSoft('knife-act');
+      else if (typeof state !== 'undefined' && state.angledWallsActive) _hitchArmSoft('aw-act');
+      else if (typeof _canyonActive !== 'undefined' && _canyonActive) _hitchArmSoft('cnyn-act');
     } catch(_) {}
   }
   // FPS + draw call measurement
@@ -33155,6 +33171,19 @@ window._jlDebug = {
       const glowMesh  = new THREE.Mesh(glowGeo, glowMat);
       boltGroup.add(coreMesh); boltGroup.add(glowMesh);
       boltGroup.visible = false;
+      // Disable frustum culling on every bolt-related mesh. Two reasons:
+      // (1) The boot prewarm spawns bolts at synthetic Z to force their
+      //     first-draw pipeline-cache cost. If frustum culling skips the
+      //     draw, the prewarm is silently a no-op and the first real
+      //     gameplay strike pays the cost (lt-rndr 100–300ms on iOS).
+      // (2) During gameplay, lightning is always spawned in-view so culling
+      //     never helps anyway. Cost of disabling = zero per-frame.
+      warnMesh.frustumCulled = false;
+      flash.frustumCulled    = false;
+      ring.frustumCulled     = false;
+      coreMesh.frustumCulled = false;
+      glowMesh.frustumCulled = false;
+      boltGroup.frustumCulled = false;
       scene.add(boltGroup);
 
       _ltPool.push({
@@ -36785,9 +36814,17 @@ window._uploadAllBuffers = _uploadAllBuffers;
         // MSAA combo for that specific mesh). Covering only slot 0 left slots
         // 1-31 hitching as they got cycled in during real gameplay.
         // Spread X slightly so they don't perfectly z-fight (cosmetic only).
+        // Spawn at in-view Z so the bolts actually draw. landZ=-9999 was
+        // either clipped by frustum culling or beyond projection, so the
+        // prewarm draw never happened and slots 1–31 still hitched in
+        // gameplay (lt-rndr 100–300ms first-strike). Use a Z roughly where
+        // a normal strike would land (a few units ahead of camera origin).
         const _LT_PREWARM_COUNT = 32; // matches _LT_POOL_SIZE in 72-main-late-mid.js
+        const _LT_PREWARM_Z     = -40; // in-view, well ahead of camera
         for (let i = 0; i < _LT_PREWARM_COUNT; i++) {
-          window._spawnLightning(i * 0.001, -9999, true, null, 0);
+          // Spread X so individual bolts don't perfectly z-fight (cosmetic only,
+          // off-screen anyway since we render to a non-displayed target below).
+          window._spawnLightning((i - 16) * 0.5, _LT_PREWARM_Z, true, null, 0);
         }
         // Single composer render — all 32 visible bolts upload + draw in one
         // pass. Driver validates every mesh's pipeline state in this frame so

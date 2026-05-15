@@ -383,15 +383,19 @@ function animate(now) {
   // long frame (shader compile, texture upload, GC pause) — not just
   // code we explicitly bracketed.
   if (_frameDeltaMs > 0 && typeof _hitchFrameTick === 'function') _hitchFrameTick(_frameDeltaMs);
+  // Hitch meter implies perf-diag (so the on-screen breakdown has data).
+  // Cheap fall-through when hitch meter is off.
+  if (window._hitchMeterOn && !window._perfDiagOn) window._perfDiagOn = true;
   _perfDiag.frameStart();
   // Per-frame mechanic arms — sets the armed label every frame a mechanic is
   // active so any hitch picked up next tick attributes to the right system.
   // Priority: knife > angled walls > generic canyon (most specific first).
-  if (typeof _hitchArm === 'function' && window._hitchMeterOn) {
+  // Soft arms — only set if no event arm (lt-rndr/cy-rndr/etc) is pending.
+  if (typeof _hitchArmSoft === 'function' && window._hitchMeterOn) {
     try {
-      if (typeof state !== 'undefined' && state.l3KnifeCanyon) _hitchArm('knife-act');
-      else if (typeof state !== 'undefined' && state.angledWallsActive) _hitchArm('aw-act');
-      else if (typeof _canyonActive !== 'undefined' && _canyonActive) _hitchArm('cnyn-act');
+      if (typeof state !== 'undefined' && state.l3KnifeCanyon) _hitchArmSoft('knife-act');
+      else if (typeof state !== 'undefined' && state.angledWallsActive) _hitchArmSoft('aw-act');
+      else if (typeof _canyonActive !== 'undefined' && _canyonActive) _hitchArmSoft('cnyn-act');
     } catch(_) {}
   }
   // FPS + draw call measurement
