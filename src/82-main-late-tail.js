@@ -2,32 +2,16 @@
 
 // ── DEV-ONLY BUILD VERSION HUD ──
 // Tiny version chip in the bottom-left corner so we always know which build
-// is loaded on device. Reads the ?v=<ts> param from the game.js script tag
-// (set by build pipeline). DEV ONLY — hidden in prod via __JH_DEV__ gate.
+// is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
+// BUILD_VERSION is bumped manually on every push so you have a real
+// monotonically-incrementing number to confirm latest-build.
+const BUILD_VERSION = 1;
 if (window.__JH_DEV__) {
   try {
-    let ver = 'dev';
-    const scripts = document.getElementsByTagName('script');
-    for (let i = 0; i < scripts.length; i++) {
-      const src = scripts[i].src || '';
-      const m = src.match(/game\.js\?v=(\d+)/);
-      if (m) { ver = m[1]; break; }
-    }
-    // Format as HH:MM from the epoch timestamp so it's human-readable at a
-    // glance — full ts as title for hover detail.
-    let label = ver;
-    if (/^\d{10}$/.test(ver)) {
-      const d = new Date(parseInt(ver, 10) * 1000);
-      const hh = String(d.getHours()).padStart(2, '0');
-      const mm = String(d.getMinutes()).padStart(2, '0');
-      const mo = String(d.getMonth() + 1).padStart(2, '0');
-      const da = String(d.getDate()).padStart(2, '0');
-      label = `dev ${mo}/${da} ${hh}:${mm}`;
-    }
     const chip = document.createElement('div');
     chip.id = '_devBuildChip';
-    chip.textContent = label;
-    chip.title = 'build ' + ver;
+    chip.textContent = 'dev v' + BUILD_VERSION;
+    chip.title = 'build v' + BUILD_VERSION;
     chip.style.cssText = [
       'position:fixed',
       'left:6px',
