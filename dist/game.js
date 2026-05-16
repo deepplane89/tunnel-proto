@@ -28412,14 +28412,17 @@ function update(dt) {
     }
   }
   // Normal nextSpawnZ-based spawner — suppressed during active zipper, L5 ending, intro, or death run rest beat
-  // ── DIAG (spawn-delay): log gate state every 0.5s during S1_CONES until first cone spawns. ──
-  // Captures EVERY block reason + sequencer/speed/timing state so a recurrence is fully diagnosable.
-  if (state.isDeathRun && state.phase === 'playing' && !window._spawnDiagDone) {
+  // ── DIAG (spawn-delay): log spawn-gate + coin/PU pool state every 0.5s. ──
+  // Captures EVERY block reason + sequencer/speed/timing + coin/PU counters so
+  // any recurrence (no cones / no coins / no powerups) is fully diagnosable.
+  // Runs in ALL modes (DR + non-DR). Continues forever — doesn't stop after
+  // first cone fires — so we catch issues that appear AFTER spawning starts.
+  if (state.phase === 'playing') {
     window._spawnDiagT = (window._spawnDiagT || 0) + dt;
     if (window._spawnDiagT >= 0.5 || window._spawnDiagFirst === undefined) {
       window._spawnDiagT = 0;
       window._spawnDiagFirst = false;
-      const _stg = (typeof DR_SEQUENCE !== 'undefined' && DR_SEQUENCE[state.seqStageIdx]) || {};
+      const _stg = (typeof DR_SEQUENCE !== 'undefined' && state.isDeathRun && DR_SEQUENCE[state.seqStageIdx]) || {};
       const _gate = {
         preBumpRestDrain: !!_preBumpRestDrain,
         tutorialActive: !!state._tutorialActive,
@@ -28439,30 +28442,56 @@ function update(dt) {
         l4CorridorActive: !!state.l4CorridorActive,
         slalomActive: !!state.slalomActive,
         corridorDelay: state.corridorDelay,
+        postL3Gap: state.postL3Gap,
+        l4PreClear: (!state.isDeathRun && !state._tutorialActive && state.currentLevelIdx === 3 && !state.l4CorridorDone && state.levelElapsed >= L4_CORRIDOR_TRIGGER_S - 4),
         noSpawnMode: (typeof _noSpawnMode !== 'undefined') ? _noSpawnMode : 'undef',
       };
-      const _open = !_gate.preBumpRestDrain && !_gate.tutorialActive && !_gate.zipperActive && !_gate.l5EndingActive && !_gate.l5CorridorActive && !_gate.drCustomPatternActive && !_gate.angledWallsActive && !_gate.introActive && !(_gate.isDeathRun && _gate.deathRunRestBeat > 0) && !_gate.awTunerPaused && !_gate.ringsActive;
+      // Outer gate (line 5815): blocks spawnObstacles() from being called at all.
+      const _outerOpen = !_gate.preBumpRestDrain && !_gate.tutorialActive && !_gate.zipperActive && !_gate.l5EndingActive && !_gate.l5CorridorActive && !_gate.drCustomPatternActive && !_gate.angledWallsActive && !_gate.introActive && !(_gate.isDeathRun && _gate.deathRunRestBeat > 0) && !_gate.awTunerPaused && !_gate.ringsActive;
+      // Inner gate (line 5850): blocks the actual coin/PU/cone spawn branches.
+      const _innerOpen = !_gate.corridorMode && !_gate.l4CorridorActive && !_gate.l4PreClear && _gate.corridorDelay <= 0 && !_gate.slalomActive && !_gate.drCustomPatternActive && _gate.noSpawnMode !== true;
+      const _open = _outerOpen && _innerOpen;
       console.log('[SPAWN-DIAG]', {
+        // Mode + level context
+        mode: state.isDeathRun ? 'DR' : (state._tutorialActive ? 'TUT' : 'NORMAL'),
+        levelIdx: state.currentLevelIdx,
+        phase: state.phase,
         elapsed: state.elapsed?.toFixed(2),
+        levelElapsed: state.levelElapsed?.toFixed(2),
+        // DR sequencer (empty in non-DR)
         seqStageIdx: state.seqStageIdx,
-        seqStageName: _stg.name || _stg.id || 'unk',
+        seqStageName: _stg.name || _stg.id || (state.isDeathRun ? 'unk' : 'n/a'),
         seqStageType: _stg.type,
         seqStageElapsed: state.seqStageElapsed?.toFixed(2),
         seqStageDur: _stg.duration,
         seqRampT01: state._seqRampT01,
         seqSpawnMode: state._seqSpawnMode,
         seqConeDensity: state._seqConeDensity,
+        // Speed + spawn cursor
         speed: state.speed?.toFixed(1),
         speedMult: (state.speed / BASE_SPEED).toFixed(2),
         effectiveSpeed: effectiveSpeed?.toFixed(1),
         nextSpawnZ: state.nextSpawnZ?.toFixed(2),
         drSpeedFloor: state._drSpeedFloor,
+        // Pool counters — critical for coin/PU diagnosis
         activeObstacles: (typeof activeObstacles !== 'undefined') ? activeObstacles.length : -1,
+        activeCoins: (typeof activeCoins !== 'undefined') ? activeCoins.length : -1,
+        activePowerups: (typeof activePowerups !== 'undefined') ? activePowerups.length : -1,
+        framesSinceLastCoin: (typeof framesSinceLastCoin !== 'undefined') ? framesSinceLastCoin : -1,
+        framesSinceLastPowerup: (typeof framesSinceLastPowerup !== 'undefined') ? framesSinceLastPowerup : -1,
+        // Gate verdict
+        outerGateOpen: _outerOpen,
+        innerGateOpen: _innerOpen,
         gateOpen: _open,
         blockedBy: _open ? null : Object.keys(_gate).filter(k => {
-          if (k === 'deathRunRestBeat' || k === 'bonusRingCount' || k === 'corridorDelay' || k === 'noSpawnMode') return false;
+          if (k === 'deathRunRestBeat' || k === 'bonusRingCount' || k === 'corridorDelay' || k === 'postL3Gap' || k === 'noSpawnMode') return false;
           return _gate[k] === true;
-        }).concat(_gate.deathRunRestBeat > 0 ? ['restBeat>0'] : []),
+        }).concat(
+          (_gate.deathRunRestBeat > 0 ? ['restBeat>0'] : []),
+          (_gate.corridorDelay > 0 ? ['corridorDelay>0'] : []),
+          (_gate.postL3Gap > 0 ? ['postL3Gap>0'] : []),
+          (_gate.noSpawnMode === true ? ['noSpawn'] : [])
+        ),
       });
     }
   }
@@ -36825,7 +36854,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 10;
+const BUILD_VERSION = 11;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
