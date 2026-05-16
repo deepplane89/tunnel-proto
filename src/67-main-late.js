@@ -135,6 +135,23 @@ function startGame() {
       window._applyFeelPresetByName(_useFM);
     }
   } catch(_){}
+  // POST-SETTINGS RE-PREWARM — the boot prewarm (_globalShaderPrewarm) ran
+  // BEFORE skin/thruster/flight-model/perf-mode were applied to the live
+  // renderer state. Any of those can mutate tone mapping, emissive defines,
+  // light setup or material flags in ways that invalidate THREE's program
+  // cacheKeys. Result: first lightning strike / canyon build / etc. still
+  // pays a 3-program compile cost mid-run (seen on device: lt-rndr sh=3 +
+  // js=51 even after a290ee2's 5-variant prewarm). Re-running the full
+  // scene compile + buffer upload + composer prewarm here, AFTER all
+  // gameplay-affecting state is locked in but BEFORE state.phase flips to
+  // 'playing', lands the hitch on the loading→gameplay transition (ship
+  // still hidden, no countdown started) instead of mid-flight. Same code
+  // path as the tab-resume reprewarm, just a different trigger.
+  try {
+    if (typeof window._reprewarmShaders === 'function') {
+      window._reprewarmShaders('post-start');
+    }
+  } catch(_){}
   state.phase          = 'playing';
   shipGroup.visible    = true;
   _killExplosion();
