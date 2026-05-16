@@ -4157,9 +4157,11 @@ if (window.__loadGate) {
 }
 
 const waterGeo  = new THREE.PlaneGeometry(1400, 700, 4, 4);
+// Mirror RT 320: forward-flow + tight normal map blur the reflection
+// enough that 320 is visually indistinguishable from 512 in motion.
 const mirrorMesh = new Water(waterGeo, {
-  textureWidth:  512,
-  textureHeight: 512,
+  textureWidth:  320,
+  textureHeight: 320,
   waterNormals,
   sunDirection:  new THREE.Vector3(0, 1, 0),
   sunColor:      0x000000,   // overridden below
@@ -36624,7 +36626,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 1;
+const BUILD_VERSION = 2;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
