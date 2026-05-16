@@ -29434,8 +29434,14 @@ window._renderHitchOverlay = _renderHitchOverlay;
   const godT   = document.getElementById('dev-god-toggle');
   const hitchT = document.getElementById('dev-hitch-toggle');
   const neonT  = document.getElementById('dev-neon-toggle');
-  // Neon band defaults to ON (matches initial shader uniform values).
-  if (window._coneNeonOn == null) window._coneNeonOn = true;
+  // Neon band defaults to OFF — visual A/B exploration of obsidian-only look.
+  // On first load, apply the OFF state to the cone pool.
+  if (window._coneNeonOn == null) {
+    window._coneNeonOn = false;
+    if (typeof window._setConeNeonBand === 'function') {
+      window._setConeNeonBand(false);
+    }
+  }
   function _applyToggleVisual(el, on) {
     if (!el) return;
     el.textContent = on ? 'ON' : 'OFF';
@@ -36819,7 +36825,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 9;
+const BUILD_VERSION = 10;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

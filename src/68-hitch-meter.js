@@ -337,8 +337,14 @@ window._renderHitchOverlay = _renderHitchOverlay;
   const godT   = document.getElementById('dev-god-toggle');
   const hitchT = document.getElementById('dev-hitch-toggle');
   const neonT  = document.getElementById('dev-neon-toggle');
-  // Neon band defaults to ON (matches initial shader uniform values).
-  if (window._coneNeonOn == null) window._coneNeonOn = true;
+  // Neon band defaults to OFF — visual A/B exploration of obsidian-only look.
+  // On first load, apply the OFF state to the cone pool.
+  if (window._coneNeonOn == null) {
+    window._coneNeonOn = false;
+    if (typeof window._setConeNeonBand === 'function') {
+      window._setConeNeonBand(false);
+    }
+  }
   function _applyToggleVisual(el, on) {
     if (!el) return;
     el.textContent = on ? 'ON' : 'OFF';
