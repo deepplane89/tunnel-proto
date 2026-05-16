@@ -1945,6 +1945,13 @@ if (document.readyState === 'loading') {
 
 camera.layers.enable(1);  // render ship edge lines (layer 1) without bloom
 camera.layers.enable(3);  // render sky stars (layer 3) — excluded from Water reflection camera
+// Layer 4 = "do not draw in water reflection". Main camera renders it; Water's
+// internal mirrorCamera defaults to layer 0 only and so silently skips it.
+// Used for thruster particles, flame meshes, bloom sprites, warp lines, and
+// thruster cones — all objects we were previously hiding per-frame inside
+// mirrorMesh.onBeforeRender. Layer-based exclusion = zero per-frame mutation.
+const LAYER_NO_WATER_REFLECT = 4;
+camera.layers.enable(LAYER_NO_WATER_REFLECT);
 
 // Camera rig: pivot moves through world, camera child handles roll.
 // camera.position stays (0,0,0) — pivot carries world position.
@@ -2468,6 +2475,7 @@ const _warpMat = new THREE.LineBasicMaterial({
 });
 const _warpMesh = new THREE.LineSegments(_warpGeo, _warpMat);
 _warpMesh.frustumCulled = false;
+_warpMesh.layers.set(LAYER_NO_WATER_REFLECT);  // skip in water reflection
 scene.add(_warpMesh);
 
 // ── Called every frame — scroll all three layers forward ──
@@ -2754,35 +2762,21 @@ scene.add(mirrorMesh);
 // the module needs the scene reference. Update is wired in 67-main-late.js.
 if (window.BankWaterEffect) window.BankWaterEffect.init(scene, renderer, camera);
 
-// Patch Water's onBeforeRender so the internal mirrorCamera skips thruster /
-// flame / cone / warp objects (those default to layer 0 like the rest of
-// the scene, so mirrorCamera DOES see them; we hide explicitly).
-// PERF: was forEach with new closure per call + new _hidden array per frame.
-// Now uses a hoisted scratch buffer and plain for-loops — zero allocations
-// and zero closures per frame.
-const _origWaterOBR  = mirrorMesh.onBeforeRender;
-const _waterHideBuf  = new Array(64);   // scratch — grows once, never re-allocs
-let   _waterHideLen  = 0;
-function _waterMaybeHide(obj) {
-  if (obj && obj.visible) {
-    obj.visible = false;
-    _waterHideBuf[_waterHideLen++] = obj;
-  }
-}
+// Exclude thruster / flame / cone / warp from the water reflection via
+// LAYER_NO_WATER_REFLECT. Water's internal mirrorCamera defaults to layer 0
+// only, so objects on layer 4 never get traversed by it. _warpMesh is set
+// at creation; the thruster collections are set by _setupWaterReflectLayers()
+// which runs after they're populated (called near end of this file).
+//
+// Was: per-frame mutation — every frame we toggled .visible=false on ~20
+// objects, called the original onBeforeRender, then restored visibility.
+// Zero allocations but still a synchronous read/write of every object's
+// .visible flag, twice per frame. Layer mask = literally one bit test
+// inside three.js, set once at boot.
+const _origWaterOBR = mirrorMesh.onBeforeRender;
 mirrorMesh.onBeforeRender = function(renderer, scene, camera) {
   const _t0_wtr = (typeof _hitchStart === 'function') ? _hitchStart() : 0;
-  _waterHideLen = 0;
-  for (let i = 0, n = thrusterSystems.length;     i < n; i++) _waterMaybeHide(thrusterSystems[i].points);
-  for (let i = 0, n = miniThrusterSystems.length; i < n; i++) _waterMaybeHide(miniThrusterSystems[i].points);
-  for (let i = 0, n = nozzleBloomSprites.length;  i < n; i++) _waterMaybeHide(nozzleBloomSprites[i]);
-  for (let i = 0, n = miniBloomSprites.length;    i < n; i++) _waterMaybeHide(miniBloomSprites[i]);
-  for (let i = 0, n = flameMeshes.length;         i < n; i++) _waterMaybeHide(flameMeshes[i]);
-  if (typeof _thrusterCones !== 'undefined') {
-    for (let i = 0, n = _thrusterCones.length;    i < n; i++) _waterMaybeHide(_thrusterCones[i]);
-  }
-  _waterMaybeHide(_warpMesh);
   _origWaterOBR.call(this, renderer, scene, camera);
-  for (let i = 0; i < _waterHideLen; i++) _waterHideBuf[i].visible = true;
   if (typeof _hitchEnd === 'function') _hitchEnd('water', _t0_wtr);
 };
 
@@ -8258,6 +8252,24 @@ const _thrusterCones = NOZZLE_OFFSETS.map(() => {
   shipGroup.add(mesh);
   return mesh;
 });
+
+// ── WATER REFLECTION LAYER MASK ──
+// All thruster/flame/cone/bloom-sprite collections are now populated. Move
+// every object that should be invisible to the water reflection onto
+// LAYER_NO_WATER_REFLECT (=4). Water's internal mirrorCamera defaults to
+// layer 0 only, so layer-4 objects are silently skipped during the mirror
+// render — replacing the old per-frame .visible toggle inside
+// mirrorMesh.onBeforeRender. _warpMesh gets its layer set at creation; this
+// covers the ship-thruster collections that don't exist until now.
+(function _setupWaterReflectLayers() {
+  const L = LAYER_NO_WATER_REFLECT;
+  for (let i = 0; i < thrusterSystems.length;     i++) thrusterSystems[i].points.layers.set(L);
+  for (let i = 0; i < miniThrusterSystems.length; i++) miniThrusterSystems[i].points.layers.set(L);
+  for (let i = 0; i < nozzleBloomSprites.length;  i++) nozzleBloomSprites[i].layers.set(L);
+  for (let i = 0; i < miniBloomSprites.length;    i++) miniBloomSprites[i].layers.set(L);
+  for (let i = 0; i < flameMeshes.length;         i++) flameMeshes[i].layers.set(L);
+  for (let i = 0; i < _thrusterCones.length;      i++) _thrusterCones[i].layers.set(L);
+})();
 
 // ── Cone↔GLB diagnostic snapshot (bound to 'C' key in 67-main-late.js) ──
 // Hold a roll, press C. Output includes cone hull-local position (where it lives
