@@ -28534,7 +28534,11 @@ function update(dt) {
       // to -16 (cones rolling in fast) as t01 goes 0→1.
       if (state._seqConeDensity === 'ramp') {
         const _t01 = state._seqRampT01 || 0;
-        _spawnZBase = -36 + 20 * _t01; // -36 → -16
+        // Mild ramp — was -36 → -16 (2.25× faster row cadence by stage end,
+        // felt like a cone wall). Now -32 → -26 (~1.23× faster) so stage 1
+        // stays close to the same cone density start-to-finish but still has
+        // a small progression for variety. User-requested 2026-05-16.
+        _spawnZBase = -32 + 6 * _t01; // -32 → -26
       }
       state.nextSpawnZ = _spawnZBase + (Math.random() - 0.5) * 10;
       state.frameCount++;
@@ -36865,7 +36869,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 12;
+const BUILD_VERSION = 13;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
