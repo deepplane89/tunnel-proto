@@ -218,7 +218,12 @@ const _perfDiag = (function() {
 
     // Snapshot last-frame metrics for hitch overlay attribution (on-screen, no console).
     // Always written, even on good frames, so when a hitch fires the meter has the prior frame.
-    _perfDiag.lastFrame = { js: jsMs, rndr: renderMs, shdrs: newShaders, draws: draws, heap: heapDelta };
+    // shdrNames: copy of _newProgramNames so the on-screen overlay can show WHICH programs
+    // compiled. Truncated server-side to keep snapshot small (max 8 entries).
+    const _shdrNamesSnap = _newProgramNames.length
+      ? _newProgramNames.slice(0, 8)
+      : null;
+    _perfDiag.lastFrame = { js: jsMs, rndr: renderMs, shdrs: newShaders, draws: draws, heap: heapDelta, shdrNames: _shdrNamesSnap };
 
     _prevDraws = draws;
     _prevTris = tris;

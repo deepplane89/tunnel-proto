@@ -73,6 +73,10 @@ function _snapPerfBreakdown() {
     shdrs:   lf.shdrs|0,
     draws:   lf.draws|0,
     heap:    lf.heap|0, // bytes delta, can be negative
+    // Names of programs that compiled THIS frame (sh>0). Stored as array of
+    // 'MaterialType[cacheKey...]' strings, max 8. Used for on-screen overlay
+    // line 3 so we can tell WHICH 5 lightning programs are still compiling.
+    shdrNames: lf.shdrNames ? lf.shdrNames.slice() : null,
   };
 }
 
@@ -191,6 +195,25 @@ function _renderHitchOverlay() {
     const heapStr = (heapKb >= 0 ? '+' : '') + heapKb + 'k';
     txt += '\njs=' + bd.js + ' r=' + bd.rndr + ' sh=' + bd.shdrs
          + ' dr=' + bd.draws + ' h=' + heapStr;
+    // Line 3: WHICH programs compiled this frame (only when sh>0). Each name
+    // is 'MaterialType[cacheKey...]'. We strip the cacheKey '[...]' to keep
+    // the line short and show just the type counts (e.g. 'MeshBasic\xd73').
+    if (bd.shdrs > 0 && bd.shdrNames && bd.shdrNames.length) {
+      const typeCounts = {};
+      for (const full of bd.shdrNames) {
+        // Pull material type from 'MaterialType[cacheKey...]' format.
+        const tIdx = full.indexOf('[');
+        const t = tIdx > 0 ? full.slice(0, tIdx) : full;
+        // Compact 'MeshBasicMaterial' \u2192 'MshBsc' style: drop 'Material' suffix.
+        const tShort = t.replace(/Material$/, '');
+        typeCounts[tShort] = (typeCounts[tShort] || 0) + 1;
+      }
+      const parts = [];
+      for (const k of Object.keys(typeCounts)) {
+        parts.push(typeCounts[k] > 1 ? (k + '\u00d7' + typeCounts[k]) : k);
+      }
+      txt += '\n' + parts.join(' ');
+    }
     // Multi-line needs CSS white-space:pre to render \n.
     el.style.whiteSpace = 'pre';
   } else {
