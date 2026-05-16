@@ -2733,11 +2733,9 @@ if (window.__loadGate) {
 }
 
 const waterGeo  = new THREE.PlaneGeometry(1400, 700, 4, 4);
-// Mirror RT 320: forward-flow + tight normal map blur the reflection
-// enough that 320 is visually indistinguishable from 512 in motion.
 const mirrorMesh = new Water(waterGeo, {
-  textureWidth:  320,
-  textureHeight: 320,
+  textureWidth:  512,
+  textureHeight: 512,
   waterNormals,
   sunDirection:  new THREE.Vector3(0, 1, 0),
   sunColor:      0x000000,   // overridden below
@@ -2787,6 +2785,38 @@ mirrorMesh.onBeforeRender = function(renderer, scene, camera) {
   for (let i = 0; i < _waterHideLen; i++) _waterHideBuf[i].visible = true;
   if (typeof _hitchEnd === 'function') _hitchEnd('water', _t0_wtr);
 };
+
+// ── DEV: capture the Water internal renderTarget so dev tab can A/B test
+// ── RT resolution at runtime. The RT is a closure-private var inside Water,
+// ── but we can grab it by intercepting renderer.setRenderTarget on the first
+// ── onBeforeRender call. Stored on mirrorMesh.userData._rt for setSize calls.
+if (window.__JH_DEV__) {
+  const _capWrap = mirrorMesh.onBeforeRender;
+  mirrorMesh.onBeforeRender = function(renderer, scene, camera) {
+    if (!mirrorMesh.userData._rt) {
+      const _origSetRT = renderer.setRenderTarget.bind(renderer);
+      let _captured = false;
+      renderer.setRenderTarget = function(rt, ...rest) {
+        if (!_captured && rt && rt.isWebGLRenderTarget) {
+          mirrorMesh.userData._rt = rt;
+          _captured = true;
+        }
+        return _origSetRT(rt, ...rest);
+      };
+      _capWrap.call(this, renderer, scene, camera);
+      renderer.setRenderTarget = _origSetRT;
+      mirrorMesh.onBeforeRender = _capWrap;  // restore plain wrapper after capture
+    } else {
+      _capWrap.call(this, renderer, scene, camera);
+    }
+  };
+  window._setMirrorRT = function(n) {
+    const rt = mirrorMesh.userData._rt;
+    if (!rt) { console.warn('[mirror-rt] not captured yet — render one frame first'); return; }
+    rt.setSize(n, n);
+    console.log('[mirror-rt] set to', n + 'x' + n);
+  };
+}
 
 // Almost totally black water — only sun streak illuminates it
 // Sun direction: toward horizon ahead (-Z), slightly above floor

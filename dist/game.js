@@ -4157,11 +4157,9 @@ if (window.__loadGate) {
 }
 
 const waterGeo  = new THREE.PlaneGeometry(1400, 700, 4, 4);
-// Mirror RT 320: forward-flow + tight normal map blur the reflection
-// enough that 320 is visually indistinguishable from 512 in motion.
 const mirrorMesh = new Water(waterGeo, {
-  textureWidth:  320,
-  textureHeight: 320,
+  textureWidth:  512,
+  textureHeight: 512,
   waterNormals,
   sunDirection:  new THREE.Vector3(0, 1, 0),
   sunColor:      0x000000,   // overridden below
@@ -4211,6 +4209,38 @@ mirrorMesh.onBeforeRender = function(renderer, scene, camera) {
   for (let i = 0; i < _waterHideLen; i++) _waterHideBuf[i].visible = true;
   if (typeof _hitchEnd === 'function') _hitchEnd('water', _t0_wtr);
 };
+
+// ── DEV: capture the Water internal renderTarget so dev tab can A/B test
+// ── RT resolution at runtime. The RT is a closure-private var inside Water,
+// ── but we can grab it by intercepting renderer.setRenderTarget on the first
+// ── onBeforeRender call. Stored on mirrorMesh.userData._rt for setSize calls.
+if (window.__JH_DEV__) {
+  const _capWrap = mirrorMesh.onBeforeRender;
+  mirrorMesh.onBeforeRender = function(renderer, scene, camera) {
+    if (!mirrorMesh.userData._rt) {
+      const _origSetRT = renderer.setRenderTarget.bind(renderer);
+      let _captured = false;
+      renderer.setRenderTarget = function(rt, ...rest) {
+        if (!_captured && rt && rt.isWebGLRenderTarget) {
+          mirrorMesh.userData._rt = rt;
+          _captured = true;
+        }
+        return _origSetRT(rt, ...rest);
+      };
+      _capWrap.call(this, renderer, scene, camera);
+      renderer.setRenderTarget = _origSetRT;
+      mirrorMesh.onBeforeRender = _capWrap;  // restore plain wrapper after capture
+    } else {
+      _capWrap.call(this, renderer, scene, camera);
+    }
+  };
+  window._setMirrorRT = function(n) {
+    const rt = mirrorMesh.userData._rt;
+    if (!rt) { console.warn('[mirror-rt] not captured yet — render one frame first'); return; }
+    rt.setSize(n, n);
+    console.log('[mirror-rt] set to', n + 'x' + n);
+  };
+}
 
 // Almost totally black water — only sun streak illuminates it
 // Sun direction: toward horizon ahead (-Z), slightly above floor
@@ -29270,7 +29300,8 @@ window._renderHitchOverlay = _renderHitchOverlay;
 (function _setupHitchToggle() {
   const btn = document.getElementById('pause-hitch-toggle');
   if (!btn) return;
-  if (window.__JH_DEV__) btn.style.display = 'inline-flex';
+  // Legacy direct button stays hidden — the DEV modal owns the UI now.
+  btn.style.display = 'none';
   btn.addEventListener('click', () => {
     window._hitchMeterOn = !window._hitchMeterOn;
     // Couple perf-diag to hitch meter so the per-frame js/rndr/shdrs/heap
@@ -29293,12 +29324,81 @@ window._renderHitchOverlay = _renderHitchOverlay;
 (function _setupGodToggle() {
   const btn = document.getElementById('pause-god-toggle');
   if (!btn) return;
-  if (window.__JH_DEV__) btn.style.display = 'inline-flex';
+  // Legacy direct button stays hidden — the DEV modal owns the UI now.
+  btn.style.display = 'none';
   btn.addEventListener('click', () => {
     window._godMode = !window._godMode;
     btn.textContent = 'GOD MODE: ' + (window._godMode ? 'ON' : 'OFF');
     btn.style.color = window._godMode ? '#00ff66' : '';
     btn.style.borderColor = window._godMode ? '#00ff66' : '';
+  });
+})();
+
+// ── DEV PANEL WIRING (dev-only) ──
+// Opens dev-overlay from the pause menu. Hosts god mode + hitch meter +
+// mirror-RT A/B test. All three controls just proxy the existing globals
+// (window._godMode, window._hitchMeterOn, window._setMirrorRT).
+(function _setupDevPanel() {
+  if (!window.__JH_DEV__) return;
+  const btn = document.getElementById('pause-dev-btn');
+  const overlay = document.getElementById('dev-overlay');
+  const closeBtn = document.getElementById('dev-close');
+  if (!btn || !overlay) return;
+  btn.style.display = 'inline-flex';
+  overlay.style.display = '';  // remove the inline display:none guard
+  function open() { overlay.classList.remove('hidden'); _syncDev(); }
+  function close() { overlay.classList.add('hidden'); }
+  btn.addEventListener('click', open);
+  if (closeBtn) closeBtn.addEventListener('click', close);
+  // Click outside the panel closes it.
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  // ─ God / hitch toggles ─
+  const godT   = document.getElementById('dev-god-toggle');
+  const hitchT = document.getElementById('dev-hitch-toggle');
+  function _applyToggleVisual(el, on) {
+    if (!el) return;
+    el.textContent = on ? 'ON' : 'OFF';
+    el.classList.toggle('on',  on);
+    el.classList.toggle('off', !on);
+  }
+  function _syncDev() {
+    _applyToggleVisual(godT,   !!window._godMode);
+    _applyToggleVisual(hitchT, !!window._hitchMeterOn);
+    // Sync RT button highlight to whatever was last set (if any).
+    const cur = window._curMirrorRT || 512;
+    [256, 320, 512].forEach(n => {
+      const b = document.getElementById('dev-rt-' + n);
+      if (b) b.classList.toggle('active', n === cur);
+    });
+  }
+  if (godT) godT.addEventListener('click', () => {
+    window._godMode = !window._godMode;
+    _applyToggleVisual(godT, window._godMode);
+    // Mirror to legacy button so its label stays in sync.
+    const legacy = document.getElementById('pause-god-toggle');
+    if (legacy) legacy.textContent = 'GOD MODE: ' + (window._godMode ? 'ON' : 'OFF');
+  });
+  if (hitchT) hitchT.addEventListener('click', () => {
+    window._hitchMeterOn = !window._hitchMeterOn;
+    if (window._hitchMeterOn) window._perfDiagOn = true;
+    _applyToggleVisual(hitchT, window._hitchMeterOn);
+    const legacy = document.getElementById('pause-hitch-toggle');
+    if (legacy) legacy.textContent = 'HITCH METER: ' + (window._hitchMeterOn ? 'ON' : 'OFF');
+  });
+
+  // ─ Mirror RT A/B test ─
+  [256, 320, 512].forEach(n => {
+    const b = document.getElementById('dev-rt-' + n);
+    if (!b) return;
+    b.addEventListener('click', () => {
+      if (typeof window._setMirrorRT === 'function') window._setMirrorRT(n);
+      window._curMirrorRT = n;
+      [256, 320, 512].forEach(m => {
+        const mb = document.getElementById('dev-rt-' + m);
+        if (mb) mb.classList.toggle('active', m === n);
+      });
+    });
   });
 })();
 // ═══════════════════════════════════════════════════════════════════════════
@@ -36626,7 +36726,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 2;
+const BUILD_VERSION = 3;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

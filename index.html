@@ -600,8 +600,48 @@
       <button class="btn-space" onclick="playResumeSound(); togglePause()">CONTINUE</button>
       <button id="pause-settings-btn" class="btn-space">SETTINGS</button>
       <button class="btn-space" onclick="playExitSound(); returnToTitle()">EXIT</button>
+      <button id="pause-dev-btn" class="btn-space" style="display:none;font-size:11px;letter-spacing:0.06em">DEV</button>
+      <!-- Legacy direct-toggles, still wired in JS but hidden behind the DEV modal. -->
       <button id="pause-hitch-toggle" class="btn-space" style="display:none;font-size:11px;letter-spacing:0.06em">HITCH METER: OFF</button>
       <button id="pause-god-toggle" class="btn-space" style="display:none;font-size:11px;letter-spacing:0.06em">GOD MODE: OFF</button>
+    </div>
+  </div>
+</div>
+
+<!-- DEV panel (dev builds only). Opened by pause-dev-btn. -->
+<div id="dev-overlay" class="settings-overlay hidden" style="display:none">
+  <div class="settings-panel">
+    <div class="settings-header">
+      <span>DEV</span>
+      <button id="dev-close" class="settings-close">✕</button>
+    </div>
+    <div class="settings-body">
+      <details class="settings-section" open>
+        <summary class="settings-section-head"><span>DEBUG</span><span class="settings-chevron">›</span></summary>
+        <div class="settings-section-content">
+          <div class="settings-row">
+            <label>God Mode</label>
+            <button id="dev-god-toggle" class="toggle-btn off">OFF</button>
+          </div>
+          <div class="settings-row">
+            <label>Hitch Meter</label>
+            <button id="dev-hitch-toggle" class="toggle-btn off">OFF</button>
+          </div>
+        </div>
+      </details>
+      <details class="settings-section" open>
+        <summary class="settings-section-head"><span>WATER MIRROR RT</span><span class="settings-chevron">›</span></summary>
+        <div class="settings-section-content">
+          <div class="settings-row">
+            <label>Resolution</label>
+            <div class="gfx-row">
+              <button id="dev-rt-256" class="toggle-btn gfx-btn">256</button>
+              <button id="dev-rt-320" class="toggle-btn gfx-btn">320</button>
+              <button id="dev-rt-512" class="toggle-btn gfx-btn active">512</button>
+            </div>
+          </div>
+        </div>
+      </details>
     </div>
   </div>
 </div>
@@ -736,6 +776,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1778890857"></script>
+<script type="module" src="./dist/game.js?v=1778891272"></script>
 </body>
 </html>

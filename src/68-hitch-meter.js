@@ -257,7 +257,8 @@ window._renderHitchOverlay = _renderHitchOverlay;
 (function _setupHitchToggle() {
   const btn = document.getElementById('pause-hitch-toggle');
   if (!btn) return;
-  if (window.__JH_DEV__) btn.style.display = 'inline-flex';
+  // Legacy direct button stays hidden — the DEV modal owns the UI now.
+  btn.style.display = 'none';
   btn.addEventListener('click', () => {
     window._hitchMeterOn = !window._hitchMeterOn;
     // Couple perf-diag to hitch meter so the per-frame js/rndr/shdrs/heap
@@ -280,11 +281,80 @@ window._renderHitchOverlay = _renderHitchOverlay;
 (function _setupGodToggle() {
   const btn = document.getElementById('pause-god-toggle');
   if (!btn) return;
-  if (window.__JH_DEV__) btn.style.display = 'inline-flex';
+  // Legacy direct button stays hidden — the DEV modal owns the UI now.
+  btn.style.display = 'none';
   btn.addEventListener('click', () => {
     window._godMode = !window._godMode;
     btn.textContent = 'GOD MODE: ' + (window._godMode ? 'ON' : 'OFF');
     btn.style.color = window._godMode ? '#00ff66' : '';
     btn.style.borderColor = window._godMode ? '#00ff66' : '';
+  });
+})();
+
+// ── DEV PANEL WIRING (dev-only) ──
+// Opens dev-overlay from the pause menu. Hosts god mode + hitch meter +
+// mirror-RT A/B test. All three controls just proxy the existing globals
+// (window._godMode, window._hitchMeterOn, window._setMirrorRT).
+(function _setupDevPanel() {
+  if (!window.__JH_DEV__) return;
+  const btn = document.getElementById('pause-dev-btn');
+  const overlay = document.getElementById('dev-overlay');
+  const closeBtn = document.getElementById('dev-close');
+  if (!btn || !overlay) return;
+  btn.style.display = 'inline-flex';
+  overlay.style.display = '';  // remove the inline display:none guard
+  function open() { overlay.classList.remove('hidden'); _syncDev(); }
+  function close() { overlay.classList.add('hidden'); }
+  btn.addEventListener('click', open);
+  if (closeBtn) closeBtn.addEventListener('click', close);
+  // Click outside the panel closes it.
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  // ─ God / hitch toggles ─
+  const godT   = document.getElementById('dev-god-toggle');
+  const hitchT = document.getElementById('dev-hitch-toggle');
+  function _applyToggleVisual(el, on) {
+    if (!el) return;
+    el.textContent = on ? 'ON' : 'OFF';
+    el.classList.toggle('on',  on);
+    el.classList.toggle('off', !on);
+  }
+  function _syncDev() {
+    _applyToggleVisual(godT,   !!window._godMode);
+    _applyToggleVisual(hitchT, !!window._hitchMeterOn);
+    // Sync RT button highlight to whatever was last set (if any).
+    const cur = window._curMirrorRT || 512;
+    [256, 320, 512].forEach(n => {
+      const b = document.getElementById('dev-rt-' + n);
+      if (b) b.classList.toggle('active', n === cur);
+    });
+  }
+  if (godT) godT.addEventListener('click', () => {
+    window._godMode = !window._godMode;
+    _applyToggleVisual(godT, window._godMode);
+    // Mirror to legacy button so its label stays in sync.
+    const legacy = document.getElementById('pause-god-toggle');
+    if (legacy) legacy.textContent = 'GOD MODE: ' + (window._godMode ? 'ON' : 'OFF');
+  });
+  if (hitchT) hitchT.addEventListener('click', () => {
+    window._hitchMeterOn = !window._hitchMeterOn;
+    if (window._hitchMeterOn) window._perfDiagOn = true;
+    _applyToggleVisual(hitchT, window._hitchMeterOn);
+    const legacy = document.getElementById('pause-hitch-toggle');
+    if (legacy) legacy.textContent = 'HITCH METER: ' + (window._hitchMeterOn ? 'ON' : 'OFF');
+  });
+
+  // ─ Mirror RT A/B test ─
+  [256, 320, 512].forEach(n => {
+    const b = document.getElementById('dev-rt-' + n);
+    if (!b) return;
+    b.addEventListener('click', () => {
+      if (typeof window._setMirrorRT === 'function') window._setMirrorRT(n);
+      window._curMirrorRT = n;
+      [256, 320, 512].forEach(m => {
+        const mb = document.getElementById('dev-rt-' + m);
+        if (mb) mb.classList.toggle('active', m === n);
+      });
+    });
   });
 })();
