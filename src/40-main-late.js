@@ -1860,6 +1860,7 @@ function _spawnLethalRing(x, z) {
 // Fisher-Yates shuffle into _shuffleScratch; reusable _blockedScratch.
 const _shuffleScratch = [];
 const _blockedScratch = [];
+const _laneListScratch = [];
 
 function spawnObstacles() {
   state._invObstaclesSpawned = (state._invObstaclesSpawned || 0) + 1;
@@ -2126,6 +2127,16 @@ function spawnObstacles() {
   });
 
   // ── Coin spawn — random singles + arc patterns (DR spawns more)
+  // `lanes` was removed from the top of spawnObstacles in fcb381e (perf-round2
+  // dropped the allocation when the Fisher-Yates shuffle replaced [...lanes].sort).
+  // The coin + powerup blocks below still need a full lane list to compute
+  // freeLanes2 = lanes - blocked. Build it lazily here from _spawnLaneCount.
+  // Without this, lanes.filter throws ReferenceError and coins/powerups never
+  // spawn (cones still spawn because they use `blocked` directly). Pre-existing
+  // bug — fcb381e shipped Apr 2026.
+  const lanes = _laneListScratch;
+  lanes.length = _spawnLaneCount;
+  for (let _li = 0; _li < _spawnLaneCount; _li++) lanes[_li] = _li;
   framesSinceLastCoin++;
   const _coinThresh = (state.isDeathRun) ? 1 : (2 + Math.floor(Math.random() * 2));
   if (framesSinceLastCoin > _coinThresh) {
