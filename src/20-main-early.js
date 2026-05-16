@@ -2275,6 +2275,7 @@ starPosAttr.setUsage(THREE.DynamicDrawUsage);
 starGeo.setAttribute('position', starPosAttr);
 const starField = new THREE.Points(starGeo, galaxyMat);
 starField.frustumCulled = false;
+starField.layers.set(3);  // sky — excluded from water reflection
 scene.add(starField);
 
 // ── Layer 1b: BRIGHT STARS — ~60 larger stars for depth/variation ──
@@ -2358,6 +2359,7 @@ const brightStarMat = new THREE.ShaderMaterial({
 });
 const brightStarField = new THREE.Points(brightStarGeo, brightStarMat);
 brightStarField.frustumCulled = false;
+brightStarField.layers.set(3);  // sky — excluded from water reflection
 scene.add(brightStarField);
 
 // ── Layer 2: NEBULA CLOUDS — 600 soft blobs ──
@@ -2383,6 +2385,7 @@ nebulaPosAttr.setUsage(THREE.DynamicDrawUsage);
 nebulaGeo.setAttribute('position', nebulaPosAttr);
 const nebulaCloud = new THREE.Points(nebulaGeo, nebulaMat);
 nebulaCloud.frustumCulled = false;
+nebulaCloud.layers.set(3);  // sky — excluded from water reflection
 scene.add(nebulaCloud);
 
 // ── Layer 3: WARP STREAKS — Z-aligned, perspective does the radial work ──
@@ -5279,6 +5282,7 @@ const auroraGroup    = new THREE.Group();
 auroraGroup.position.set(0, SUN_Y, SUN_Z + 3);
 auroraGroup.visible = false;
 auroraGroup.frustumCulled = false;
+auroraGroup.layers.set(3);  // sky — excluded from water reflection
 scene.add(auroraGroup);
 
 const auroraData = [];
