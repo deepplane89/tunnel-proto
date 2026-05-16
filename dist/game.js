@@ -10891,6 +10891,26 @@ for (let i = 0; i < OBSTACLE_POOL_SIZE; i++) {
   obstaclePool.push(_o);
 }
 
+// ── DEV: toggle neon band on cones (collapses uGlowBot/uGlowTop to kill band) ──
+// Pure obsidian cones when off. Sweeps every obstacle material in the pool.
+window._setConeNeonBand = function(on) {
+  for (let i = 0; i < obstaclePool.length; i++) {
+    const meshes = obstaclePool[i].userData._meshes;
+    if (!meshes) continue;
+    for (let j = 0; j < meshes.length; j++) {
+      const u = meshes[j].material && meshes[j].material.uniforms;
+      if (!u || !u.uGlowBot || !u.uGlowTop) continue;
+      if (on) {
+        u.uGlowBot.value = 0.255;
+        u.uGlowTop.value = 0.345;
+      } else {
+        u.uGlowBot.value = 0.0;
+        u.uGlowTop.value = 0.0;
+      }
+    }
+  }
+};
+
 // ═══════════════════════════════════════════════════
 //  TERRAIN WALLS — vaporwave mountain ridges on both sides
 // ═══════════════════════════════════════════════════
@@ -29413,6 +29433,9 @@ window._renderHitchOverlay = _renderHitchOverlay;
   // ─ God / hitch toggles ─
   const godT   = document.getElementById('dev-god-toggle');
   const hitchT = document.getElementById('dev-hitch-toggle');
+  const neonT  = document.getElementById('dev-neon-toggle');
+  // Neon band defaults to ON (matches initial shader uniform values).
+  if (window._coneNeonOn == null) window._coneNeonOn = true;
   function _applyToggleVisual(el, on) {
     if (!el) return;
     el.textContent = on ? 'ON' : 'OFF';
@@ -29422,6 +29445,7 @@ window._renderHitchOverlay = _renderHitchOverlay;
   function _syncDev() {
     _applyToggleVisual(godT,   !!window._godMode);
     _applyToggleVisual(hitchT, !!window._hitchMeterOn);
+    _applyToggleVisual(neonT,  !!window._coneNeonOn);
     // Sync RT button highlight to whatever was last set (if any).
     const cur = window._curMirrorRT || 512;
     [256, 320, 512].forEach(n => {
@@ -29442,6 +29466,13 @@ window._renderHitchOverlay = _renderHitchOverlay;
     _applyToggleVisual(hitchT, window._hitchMeterOn);
     const legacy = document.getElementById('pause-hitch-toggle');
     if (legacy) legacy.textContent = 'HITCH METER: ' + (window._hitchMeterOn ? 'ON' : 'OFF');
+  });
+  if (neonT) neonT.addEventListener('click', () => {
+    window._coneNeonOn = !window._coneNeonOn;
+    _applyToggleVisual(neonT, window._coneNeonOn);
+    if (typeof window._setConeNeonBand === 'function') {
+      window._setConeNeonBand(window._coneNeonOn);
+    }
   });
 
   // ─ Mirror RT A/B test ─
@@ -36788,7 +36819,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 8;
+const BUILD_VERSION = 9;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

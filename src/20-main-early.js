@@ -9467,6 +9467,26 @@ for (let i = 0; i < OBSTACLE_POOL_SIZE; i++) {
   obstaclePool.push(_o);
 }
 
+// ── DEV: toggle neon band on cones (collapses uGlowBot/uGlowTop to kill band) ──
+// Pure obsidian cones when off. Sweeps every obstacle material in the pool.
+window._setConeNeonBand = function(on) {
+  for (let i = 0; i < obstaclePool.length; i++) {
+    const meshes = obstaclePool[i].userData._meshes;
+    if (!meshes) continue;
+    for (let j = 0; j < meshes.length; j++) {
+      const u = meshes[j].material && meshes[j].material.uniforms;
+      if (!u || !u.uGlowBot || !u.uGlowTop) continue;
+      if (on) {
+        u.uGlowBot.value = 0.255;
+        u.uGlowTop.value = 0.345;
+      } else {
+        u.uGlowBot.value = 0.0;
+        u.uGlowTop.value = 0.0;
+      }
+    }
+  }
+};
+
 // ═══════════════════════════════════════════════════
 //  TERRAIN WALLS — vaporwave mountain ridges on both sides
 // ═══════════════════════════════════════════════════

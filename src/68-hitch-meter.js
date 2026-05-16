@@ -336,6 +336,9 @@ window._renderHitchOverlay = _renderHitchOverlay;
   // ─ God / hitch toggles ─
   const godT   = document.getElementById('dev-god-toggle');
   const hitchT = document.getElementById('dev-hitch-toggle');
+  const neonT  = document.getElementById('dev-neon-toggle');
+  // Neon band defaults to ON (matches initial shader uniform values).
+  if (window._coneNeonOn == null) window._coneNeonOn = true;
   function _applyToggleVisual(el, on) {
     if (!el) return;
     el.textContent = on ? 'ON' : 'OFF';
@@ -345,6 +348,7 @@ window._renderHitchOverlay = _renderHitchOverlay;
   function _syncDev() {
     _applyToggleVisual(godT,   !!window._godMode);
     _applyToggleVisual(hitchT, !!window._hitchMeterOn);
+    _applyToggleVisual(neonT,  !!window._coneNeonOn);
     // Sync RT button highlight to whatever was last set (if any).
     const cur = window._curMirrorRT || 512;
     [256, 320, 512].forEach(n => {
@@ -365,6 +369,13 @@ window._renderHitchOverlay = _renderHitchOverlay;
     _applyToggleVisual(hitchT, window._hitchMeterOn);
     const legacy = document.getElementById('pause-hitch-toggle');
     if (legacy) legacy.textContent = 'HITCH METER: ' + (window._hitchMeterOn ? 'ON' : 'OFF');
+  });
+  if (neonT) neonT.addEventListener('click', () => {
+    window._coneNeonOn = !window._coneNeonOn;
+    _applyToggleVisual(neonT, window._coneNeonOn);
+    if (typeof window._setConeNeonBand === 'function') {
+      window._setConeNeonBand(window._coneNeonOn);
+    }
   });
 
   // ─ Mirror RT A/B test ─
