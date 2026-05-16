@@ -3221,7 +3221,7 @@ const _skyQuadMat = new THREE.ShaderMaterial({
 const _skyQuad = new THREE.Mesh(_skyQuadGeo, _skyQuadMat);
 _skyQuad.frustumCulled = false;
 _skyQuad.renderOrder = -5;  // above stars (-9), below sun (0)
-_skyQuad.layers.set(0);     // visible to main camera only
+_skyQuad.layers.set(3);     // sky — excluded from water reflection (main cam has layer 3)
 scene.add(_skyQuad);
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 600);
 
@@ -3625,6 +3625,7 @@ const skyMat = new THREE.ShaderMaterial({
 });
 const skyMesh = new THREE.Mesh(skyGeo, skyMat);
 skyMesh.renderOrder = -10;
+skyMesh.layers.set(3);  // sky — excluded from water reflection
 scene.add(skyMesh);
 
 // ═══════════════════════════════════════════════════
@@ -36787,7 +36788,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 7;
+const BUILD_VERSION = 8;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

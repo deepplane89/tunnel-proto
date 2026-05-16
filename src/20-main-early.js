@@ -1797,7 +1797,7 @@ const _skyQuadMat = new THREE.ShaderMaterial({
 const _skyQuad = new THREE.Mesh(_skyQuadGeo, _skyQuadMat);
 _skyQuad.frustumCulled = false;
 _skyQuad.renderOrder = -5;  // above stars (-9), below sun (0)
-_skyQuad.layers.set(0);     // visible to main camera only
+_skyQuad.layers.set(3);     // sky — excluded from water reflection (main cam has layer 3)
 scene.add(_skyQuad);
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 600);
 
@@ -2201,6 +2201,7 @@ const skyMat = new THREE.ShaderMaterial({
 });
 const skyMesh = new THREE.Mesh(skyGeo, skyMat);
 skyMesh.renderOrder = -10;
+skyMesh.layers.set(3);  // sky — excluded from water reflection
 scene.add(skyMesh);
 
 // ═══════════════════════════════════════════════════
