@@ -9391,11 +9391,12 @@ function createObstacleMesh(type) {
   });
   bodyMat.userData.baseOpacity = 1.0;
   bodyMat.userData.baseColor   = CONE_COLORS[type];
-  // Sibling-material swap removed: shared uniforms/userData between two
-  // materials caused obstacle flicker. Material stays transparent:true,
-  // depthWrite:false for its entire lifetime; the shader's uOpacity uniform
-  // is animated by the fade code, and obstacles past fadeT=1 simply render
-  // fully opaque via the alpha-1 path. Single material = no swap glitches.
+  // EXPERIMENT 2026-05-15: enable depthWrite so the water plane properly
+  // z-occludes the submerged portion of the cone (kills the visible
+  // waterline-sliver artifact). Old comment warned that *material-swap*
+  // caused flicker; depthWrite itself was never tested in isolation.
+  // If this re-introduces obstacle flicker during fade-in, revert.
+  bodyMat.depthWrite = true;
   const bodyMesh = new THREE.Mesh(new THREE.ConeGeometry(1.6, totalH, SEGS), bodyMat);
   bodyMesh.position.y = totalH / 2 - SINK;
   group.add(bodyMesh);
