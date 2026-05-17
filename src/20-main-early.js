@@ -9480,6 +9480,40 @@ window._setConeNeonBand = function(on) {
   }
 };
 
+// ── DEV: toggle obstacle water-reflection (cones, fat cones, angled walls, lethal rings) ──
+// on=true  → leaf meshes on layer 0 → reflected in water (default Three.js behavior).
+// on=false → leaf meshes on layer LAYER_NO_WATER_REFLECT (=4) → skipped by mirrorCamera.
+// Three.js mirror traversal walks each leaf mesh, so parent Group layer doesn't help —
+// we have to set layers on the actual draw calls. Pools sweep their cached child meshes.
+// _lethalRingPool is lazy-built; _initLethalRings reads window._obstacleReflectOn so the
+// toggle state is applied if rings come online after the user flipped it.
+window._obstacleReflectOn = false; // default OFF — A/B exploring no-obstacle-reflection look
+window._setObstacleReflect = function(on) {
+  window._obstacleReflectOn = !!on;
+  const L = on ? 0 : LAYER_NO_WATER_REFLECT;
+  // Cones (regular + fat) — obstaclePool[i].userData._meshes is the cached leaf list.
+  for (let i = 0; i < obstaclePool.length; i++) {
+    const meshes = obstaclePool[i].userData._meshes;
+    if (!meshes) continue;
+    for (let j = 0; j < meshes.length; j++) meshes[j].layers.set(L);
+  }
+  // Angled walls — each pool group has _mesh + _edges.
+  if (typeof _awPool !== 'undefined') {
+    for (let i = 0; i < _awPool.length; i++) {
+      const ud = _awPool[i].userData;
+      if (ud._mesh)  ud._mesh.layers.set(L);
+      if (ud._edges) ud._edges.layers.set(L);
+    }
+  }
+  // Lethal rings — lazy pool. Defined in src/40-main-late.js; reach via window scope.
+  if (typeof _lethalRingPool !== 'undefined') {
+    for (let i = 0; i < _lethalRingPool.length; i++) {
+      const rm = _lethalRingPool[i].userData._ringMesh;
+      if (rm) rm.layers.set(L);
+    }
+  }
+};
+
 // ═══════════════════════════════════════════════════
 //  TERRAIN WALLS — vaporwave mountain ridges on both sides
 // ═══════════════════════════════════════════════════

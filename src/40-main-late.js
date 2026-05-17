@@ -1839,6 +1839,15 @@ function _initLethalRings() {
     scene.add(group);
     _lethalRingPool.push(group);
   }
+  // Apply current obstacle-reflect toggle state (rings are lazy; toggle may have
+  // been flipped before they existed).
+  if (window._obstacleReflectOn === false) {
+    const L = (typeof LAYER_NO_WATER_REFLECT !== 'undefined') ? LAYER_NO_WATER_REFLECT : 4;
+    for (let i = 0; i < _lethalRingPool.length; i++) {
+      const rm = _lethalRingPool[i].userData._ringMesh;
+      if (rm) rm.layers.set(L);
+    }
+  }
 }
 // Expose so global prewarm can call it once at startup
 window._initLethalRings = _initLethalRings;

@@ -10904,6 +10904,40 @@ window._setConeNeonBand = function(on) {
   }
 };
 
+// ── DEV: toggle obstacle water-reflection (cones, fat cones, angled walls, lethal rings) ──
+// on=true  → leaf meshes on layer 0 → reflected in water (default Three.js behavior).
+// on=false → leaf meshes on layer LAYER_NO_WATER_REFLECT (=4) → skipped by mirrorCamera.
+// Three.js mirror traversal walks each leaf mesh, so parent Group layer doesn't help —
+// we have to set layers on the actual draw calls. Pools sweep their cached child meshes.
+// _lethalRingPool is lazy-built; _initLethalRings reads window._obstacleReflectOn so the
+// toggle state is applied if rings come online after the user flipped it.
+window._obstacleReflectOn = false; // default OFF — A/B exploring no-obstacle-reflection look
+window._setObstacleReflect = function(on) {
+  window._obstacleReflectOn = !!on;
+  const L = on ? 0 : LAYER_NO_WATER_REFLECT;
+  // Cones (regular + fat) — obstaclePool[i].userData._meshes is the cached leaf list.
+  for (let i = 0; i < obstaclePool.length; i++) {
+    const meshes = obstaclePool[i].userData._meshes;
+    if (!meshes) continue;
+    for (let j = 0; j < meshes.length; j++) meshes[j].layers.set(L);
+  }
+  // Angled walls — each pool group has _mesh + _edges.
+  if (typeof _awPool !== 'undefined') {
+    for (let i = 0; i < _awPool.length; i++) {
+      const ud = _awPool[i].userData;
+      if (ud._mesh)  ud._mesh.layers.set(L);
+      if (ud._edges) ud._edges.layers.set(L);
+    }
+  }
+  // Lethal rings — lazy pool. Defined in src/40-main-late.js; reach via window scope.
+  if (typeof _lethalRingPool !== 'undefined') {
+    for (let i = 0; i < _lethalRingPool.length; i++) {
+      const rm = _lethalRingPool[i].userData._ringMesh;
+      if (rm) rm.layers.set(L);
+    }
+  }
+};
+
 // ═══════════════════════════════════════════════════
 //  TERRAIN WALLS — vaporwave mountain ridges on both sides
 // ═══════════════════════════════════════════════════
@@ -16699,6 +16733,15 @@ function _initLethalRings() {
     group.userData._ringMesh = mesh;
     scene.add(group);
     _lethalRingPool.push(group);
+  }
+  // Apply current obstacle-reflect toggle state (rings are lazy; toggle may have
+  // been flipped before they existed).
+  if (window._obstacleReflectOn === false) {
+    const L = (typeof LAYER_NO_WATER_REFLECT !== 'undefined') ? LAYER_NO_WATER_REFLECT : 4;
+    for (let i = 0; i < _lethalRingPool.length; i++) {
+      const rm = _lethalRingPool[i].userData._ringMesh;
+      if (rm) rm.layers.set(L);
+    }
   }
 }
 // Expose so global prewarm can call it once at startup
@@ -29457,6 +29500,7 @@ window._renderHitchOverlay = _renderHitchOverlay;
   const godT   = document.getElementById('dev-god-toggle');
   const hitchT = document.getElementById('dev-hitch-toggle');
   const neonT  = document.getElementById('dev-neon-toggle');
+  const obsReflectT = document.getElementById('dev-obs-reflect-toggle');
   // Neon band defaults to OFF — visual A/B exploration of obsidian-only look.
   // On first load, apply the OFF state to the cone pool.
   if (window._coneNeonOn == null) {
@@ -29464,6 +29508,11 @@ window._renderHitchOverlay = _renderHitchOverlay;
     if (typeof window._setConeNeonBand === 'function') {
       window._setConeNeonBand(false);
     }
+  }
+  // Obstacle reflect defaults to OFF — A/B perf test of removing cones/walls/rings
+  // from water mirror. Default state is set in 20-main-early.js; sweep the pools now.
+  if (typeof window._setObstacleReflect === 'function') {
+    window._setObstacleReflect(!!window._obstacleReflectOn);
   }
   function _applyToggleVisual(el, on) {
     if (!el) return;
@@ -29475,6 +29524,7 @@ window._renderHitchOverlay = _renderHitchOverlay;
     _applyToggleVisual(godT,   !!window._godMode);
     _applyToggleVisual(hitchT, !!window._hitchMeterOn);
     _applyToggleVisual(neonT,  !!window._coneNeonOn);
+    _applyToggleVisual(obsReflectT, !!window._obstacleReflectOn);
     // Sync RT button highlight to whatever was last set (if any).
     const cur = window._curMirrorRT || 512;
     [256, 320, 512].forEach(n => {
@@ -29502,6 +29552,15 @@ window._renderHitchOverlay = _renderHitchOverlay;
     if (typeof window._setConeNeonBand === 'function') {
       window._setConeNeonBand(window._coneNeonOn);
     }
+  });
+  if (obsReflectT) obsReflectT.addEventListener('click', () => {
+    const next = !window._obstacleReflectOn;
+    if (typeof window._setObstacleReflect === 'function') {
+      window._setObstacleReflect(next);
+    } else {
+      window._obstacleReflectOn = next;
+    }
+    _applyToggleVisual(obsReflectT, window._obstacleReflectOn);
   });
 
   // ─ Mirror RT A/B test ─
@@ -36848,7 +36907,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 16;
+const BUILD_VERSION = 17;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

@@ -337,6 +337,7 @@ window._renderHitchOverlay = _renderHitchOverlay;
   const godT   = document.getElementById('dev-god-toggle');
   const hitchT = document.getElementById('dev-hitch-toggle');
   const neonT  = document.getElementById('dev-neon-toggle');
+  const obsReflectT = document.getElementById('dev-obs-reflect-toggle');
   // Neon band defaults to OFF — visual A/B exploration of obsidian-only look.
   // On first load, apply the OFF state to the cone pool.
   if (window._coneNeonOn == null) {
@@ -344,6 +345,11 @@ window._renderHitchOverlay = _renderHitchOverlay;
     if (typeof window._setConeNeonBand === 'function') {
       window._setConeNeonBand(false);
     }
+  }
+  // Obstacle reflect defaults to OFF — A/B perf test of removing cones/walls/rings
+  // from water mirror. Default state is set in 20-main-early.js; sweep the pools now.
+  if (typeof window._setObstacleReflect === 'function') {
+    window._setObstacleReflect(!!window._obstacleReflectOn);
   }
   function _applyToggleVisual(el, on) {
     if (!el) return;
@@ -355,6 +361,7 @@ window._renderHitchOverlay = _renderHitchOverlay;
     _applyToggleVisual(godT,   !!window._godMode);
     _applyToggleVisual(hitchT, !!window._hitchMeterOn);
     _applyToggleVisual(neonT,  !!window._coneNeonOn);
+    _applyToggleVisual(obsReflectT, !!window._obstacleReflectOn);
     // Sync RT button highlight to whatever was last set (if any).
     const cur = window._curMirrorRT || 512;
     [256, 320, 512].forEach(n => {
@@ -382,6 +389,15 @@ window._renderHitchOverlay = _renderHitchOverlay;
     if (typeof window._setConeNeonBand === 'function') {
       window._setConeNeonBand(window._coneNeonOn);
     }
+  });
+  if (obsReflectT) obsReflectT.addEventListener('click', () => {
+    const next = !window._obstacleReflectOn;
+    if (typeof window._setObstacleReflect === 'function') {
+      window._setObstacleReflect(next);
+    } else {
+      window._obstacleReflectOn = next;
+    }
+    _applyToggleVisual(obsReflectT, window._obstacleReflectOn);
   });
 
   // ─ Mirror RT A/B test ─
