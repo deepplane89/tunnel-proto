@@ -399,9 +399,11 @@
     <div class="hud-row">
       <span id="hud-score" class="hud-value">0</span>
       <span id="hud-multiplier" class="hud-mult hidden">✕2</span>
-      <span class="hud-divider"></span>
-      <img src="assets/images/single-coin-icon.png" class="hud-coin-icon"><span id="hud-coins" class="hud-coin-val">0</span>
-      <img src="assets/images/fuelcell-icon-new.png" class="hud-fuel-icon"><span id="hud-fuelcells" class="hud-fuel-val">0</span>
+      <!-- Coin + fuel-cell HUD removed 2026-05-17 (user-requested: top-left shows score only).
+           Hidden stubs kept so the readers in 40-main-late.js + daily-streak code
+           don't crash trying to update non-existent IDs. -->
+      <span id="hud-coins" class="hud-coin-val" style="display:none">0</span>
+      <span id="hud-fuelcells" class="hud-fuel-val" style="display:none">0</span>
     </div>
   </div>
   <!-- LEVEL and SPEED removed from HUD -->
@@ -780,6 +782,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1778975356"></script>
+<script type="module" src="./dist/game.js?v=1779040744"></script>
 </body>
 </html>

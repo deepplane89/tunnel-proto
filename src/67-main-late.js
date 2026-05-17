@@ -3991,6 +3991,15 @@ function killPlayer() {
         state.invincibleGrace = 3.0;
         document.getElementById('gameover-screen').classList.add('hidden');
         document.getElementById('hud').classList.remove('hidden');
+        // Repair-ship path bypasses startGame() so we have to restore the
+        // touch-pause button manually here. Hidden on death at line ~4139,
+        // shown by startGame() line ~419 — but this saveme handler resumes
+        // the existing run without calling startGame(), so pause stays
+        // stuck-hidden without this. User-reported 2026-05-17.
+        if (navigator.maxTouchPoints > 0) {
+          const _tp = document.getElementById('touch-pause');
+          if (_tp) _tp.classList.remove('hidden');
+        }
         // Position camera at establishing shot (same as retry sweep)
         killThrusterSputter();
         state.introActive = true; // block obstacle spawning during sweep
