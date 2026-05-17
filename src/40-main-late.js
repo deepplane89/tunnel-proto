@@ -2293,8 +2293,7 @@ function checkLevelUp() {
     // L3→L4 crossfade: fire immediately on L4 entry, 12s incoming fade, L3 fades out over 21.6s (12×1.8)
     if (newIdx === 3) { const t = setTimeout(() => { if (state.currentLevelIdx >= 3) crossfadeToL4(6.0); }, 5000); _musicTimers.push(t); }
     showBanner('LEVEL ' + (newIdx + 1), 'levelup', 2500);
-    // Update coin multiplier/colors for new level
-    updateCoinColors();
+    // (coin multiplier update removed 2026-05-17)
   }
 }
 
@@ -2313,47 +2312,17 @@ function updateHUDLevel() {
 // ═══════════════════════════════════════════════════
 
 let _totalCoins = loadCoinWallet();  // in-memory running total (persists via window._LS)
-// Coin Value: multiplier based on level + upgrade tier
-// Base: 2x at L3 (idx 2), 3x at L4 (idx 3)
-// Tier 2: 2x at L2, 3x at L4
-// Tier 3: 2x at L2, 3x at L3
-const COIN_MULT_TABLE = [
-  // [tier]: { levelIdx: multiplier }
-  { 2: 2, 3: 3 },  // tier 1 (base): 2x@L3, 3x@L4+
-  { 1: 2, 3: 3 },  // tier 2: 2x@L2, 3x@L4+
-  { 1: 2, 2: 3 },  // tier 3: 2x@L2, 3x@L3+
-];
-
-function getCoinMultiplier(levelIdx) {
-  const tier = loadUpgradeTier('coinvalue');
-  const table = COIN_MULT_TABLE[Math.min(tier - 1, COIN_MULT_TABLE.length - 1)] || COIN_MULT_TABLE[0];
-  let mult = 1;
-  for (const [lvl, m] of Object.entries(table)) {
-    if (levelIdx >= parseInt(lvl)) mult = Math.max(mult, m);
-  }
-  return mult;
-}
-
-// Coin colors: gold(1x), red(2x), blue(3x)
-function updateCoinColors() {
-  const mult = getCoinMultiplier(state.currentLevelIdx);
-  if (mult !== _activeCoinMult) {
-    const prevMult = _activeCoinMult;
-    _activeCoinMult = mult;
-    // Recolor all active coins
-    const color = COIN_MULT_COLORS[mult] || 0xffcc00;
-    for (const c of activeCoins) {
-      if (c.children[0] && c.children[0].material) c.children[0].material.color.setHex(color);
-    }
-    // Banner
-    if (mult > prevMult && state.phase === 'playing') {
-      showBanner(mult + 'x COINS', 'mission', 2000);
-    }
-  }
-}
+// Coin multiplier system removed 2026-05-17. Was a half-built mechanic:
+// garage card was gated behind profile level 3 (so it was effectively
+// invisible), and the runtime only repainted existing coins on level-up
+// without repainting fresh spawns (so colored coins never showed in game).
+// Deleted: COIN_MULT_TABLE, getCoinMultiplier(), updateCoinColors().
+// Coins are now always 1x value, always gold. The mission-reward "double
+// next run" mechanic (jetslide_double_next localStorage flag) is unrelated
+// and still works at game-over via _dcFlag in 67-main-late.js.
 
 function collectCoin(coin, worldPos) {
-  const mult = _activeCoinMult;
+  const mult = 1; // coin multiplier system removed 2026-05-17
   state.sessionCoins += mult;
   _totalCoins += mult;
   // Player-facing score: orb bonus

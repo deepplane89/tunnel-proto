@@ -2248,7 +2248,9 @@ const SVG_ICONS = {
   laser: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="6" y1="18" x2="18" y2="4"/><line x1="10" y1="18" x2="22" y2="4"/><circle cx="4" cy="20" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="20" r="1.5" fill="currentColor" stroke="none"/></svg>',
   invincible: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,2 16,9 23,9 17.5,14 19.5,21 13,17 6.5,21 8.5,14 3,9 10,9"/></svg>',
   magnet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V4h4v4a4 4 0 008 0V4h4v4a8 8 0 01-16 0z"/><line x1="4" y1="6" x2="8" y2="6"/><line x1="16" y1="6" x2="20" y2="6"/></svg>',
-  coinvalue: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="10" r="6"/><ellipse cx="12" cy="14" rx="6" ry="3"/><ellipse cx="12" cy="18" rx="6" ry="3"/></svg>',
+  // coinvalue icon removed 2026-05-17 — mechanic was half-built (card gated
+  // behind profile level 3 so player never saw it; runtime never repainted
+  // freshly-spawned coins so colored coins were never visible either).
 };
 
 const POWERUP_UPGRADES = {
@@ -2292,16 +2294,7 @@ const POWERUP_UPGRADES = {
       { desc: '+100% duration, +75% radius, pulls powerups' },
     ]
   },
-  coinvalue: {
-    name: 'COIN VALUE', icon: SVG_ICONS.coinvalue, color: '#ffaa00',
-    levelGate: 3,
-    maxTier: 3,
-    tiers: [
-      { desc: '2x at L3, 3x at L4' },
-      { desc: '2x at L2, 3x at L4' },
-      { desc: '2x at L2, 3x at L3' },
-    ]
-  },
+  // coinvalue removed 2026-05-17 — see comment on SVG_ICONS.coinvalue removal.
 };
 
 const STAT_UPGRADES = {
@@ -12681,9 +12674,10 @@ const POWERUP_TYPES = [
 ];
 
 
-// Coin multiplier state (must be above getPooledCoin which reads them)
-let _activeCoinMult = 1;
-const COIN_MULT_COLORS = { 1: 0xffcc00, 2: 0xff4444, 3: 0x4488ff };
+// Coin multiplier state removed 2026-05-17. _activeCoinMult was always 1 in
+// practice because the upgrade card was gated behind profile level 3 and the
+// spawn pipeline didn't repaint fresh coins anyway. getPooledCoin no longer
+// needs to set color — the pool meshes are created gold and stay gold.
 
 const COIN_POOL_SIZE    = 60;
 const COIN_POOL_ARC     = 40;   // extra pool slots for arc patterns
@@ -12772,9 +12766,6 @@ function getPooledCoin() {
     if (!c.userData.active) {
       c.userData.active = true;
       c.visible = true;
-      // Apply current coin color based on multiplier
-      const color = COIN_MULT_COLORS[_activeCoinMult] || 0xffcc00;
-      if (c.children[0] && c.children[0].material) c.children[0].material.color.setHex(color);
       return c;
     }
   }
@@ -17163,8 +17154,7 @@ function checkLevelUp() {
     // L3→L4 crossfade: fire immediately on L4 entry, 12s incoming fade, L3 fades out over 21.6s (12×1.8)
     if (newIdx === 3) { const t = setTimeout(() => { if (state.currentLevelIdx >= 3) crossfadeToL4(6.0); }, 5000); _musicTimers.push(t); }
     showBanner('LEVEL ' + (newIdx + 1), 'levelup', 2500);
-    // Update coin multiplier/colors for new level
-    updateCoinColors();
+    // (coin multiplier update removed 2026-05-17)
   }
 }
 
@@ -17183,47 +17173,17 @@ function updateHUDLevel() {
 // ═══════════════════════════════════════════════════
 
 let _totalCoins = loadCoinWallet();  // in-memory running total (persists via window._LS)
-// Coin Value: multiplier based on level + upgrade tier
-// Base: 2x at L3 (idx 2), 3x at L4 (idx 3)
-// Tier 2: 2x at L2, 3x at L4
-// Tier 3: 2x at L2, 3x at L3
-const COIN_MULT_TABLE = [
-  // [tier]: { levelIdx: multiplier }
-  { 2: 2, 3: 3 },  // tier 1 (base): 2x@L3, 3x@L4+
-  { 1: 2, 3: 3 },  // tier 2: 2x@L2, 3x@L4+
-  { 1: 2, 2: 3 },  // tier 3: 2x@L2, 3x@L3+
-];
-
-function getCoinMultiplier(levelIdx) {
-  const tier = loadUpgradeTier('coinvalue');
-  const table = COIN_MULT_TABLE[Math.min(tier - 1, COIN_MULT_TABLE.length - 1)] || COIN_MULT_TABLE[0];
-  let mult = 1;
-  for (const [lvl, m] of Object.entries(table)) {
-    if (levelIdx >= parseInt(lvl)) mult = Math.max(mult, m);
-  }
-  return mult;
-}
-
-// Coin colors: gold(1x), red(2x), blue(3x)
-function updateCoinColors() {
-  const mult = getCoinMultiplier(state.currentLevelIdx);
-  if (mult !== _activeCoinMult) {
-    const prevMult = _activeCoinMult;
-    _activeCoinMult = mult;
-    // Recolor all active coins
-    const color = COIN_MULT_COLORS[mult] || 0xffcc00;
-    for (const c of activeCoins) {
-      if (c.children[0] && c.children[0].material) c.children[0].material.color.setHex(color);
-    }
-    // Banner
-    if (mult > prevMult && state.phase === 'playing') {
-      showBanner(mult + 'x COINS', 'mission', 2000);
-    }
-  }
-}
+// Coin multiplier system removed 2026-05-17. Was a half-built mechanic:
+// garage card was gated behind profile level 3 (so it was effectively
+// invisible), and the runtime only repainted existing coins on level-up
+// without repainting fresh spawns (so colored coins never showed in game).
+// Deleted: COIN_MULT_TABLE, getCoinMultiplier(), updateCoinColors().
+// Coins are now always 1x value, always gold. The mission-reward "double
+// next run" mechanic (jetslide_double_next localStorage flag) is unrelated
+// and still works at game-over via _dcFlag in 67-main-late.js.
 
 function collectCoin(coin, worldPos) {
-  const mult = _activeCoinMult;
+  const mult = 1; // coin multiplier system removed 2026-05-17
   state.sessionCoins += mult;
   _totalCoins += mult;
   // Player-facing score: orb bonus
@@ -20196,7 +20156,9 @@ function renderPowerupCards() {
     const cost = getUpgradeCost(id, tier);
     // Lock by level gate OR ladder unlock state
     const levelLocked = up.levelGate && playerLevel < up.levelGate;
-    const ladderLocked = (id !== 'shield' && id !== 'coinvalue') && !isPowerupUnlocked(id);
+    // shield is always unlocked; all other powerups gated by mission ladder.
+    // (coinvalue exemption removed 2026-05-17 — powerup itself was removed.)
+    const ladderLocked = (id !== 'shield') && !isPowerupUnlocked(id);
     const locked = levelLocked || ladderLocked;
     const mt = up.maxTier || 5;
     const maxed = tier >= mt;
@@ -22988,7 +22950,7 @@ function startGame() {
   }
   state.laserTimer     = 0;
   state.sessionCoins   = 0;
-  _activeCoinMult      = 1;  // reset coin multiplier for new run
+  // (_activeCoinMult reset removed 2026-05-17 — coin multiplier system gone)
   state.sessionPowerups = 0;
   state.sessionShields = 0;
   state.sessionLasers = 0;
@@ -25698,7 +25660,7 @@ function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
   playLevelUp();
   updateHUDLevel();
   showBanner('TIER ' + (targetVibeIdx + 1), 'levelup', 2500);
-  updateCoinColors();
+  // (updateCoinColors removed 2026-05-17 — coin multiplier system gone)
 }
 // checkDeathRunSpeed + BAND_SPEED table deleted in Pass 2C cleanup.
 // Speed is now 100% sequencer-driven via _setDRSpeed():
@@ -36886,7 +36848,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 15;
+const BUILD_VERSION = 16;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

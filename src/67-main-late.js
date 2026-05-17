@@ -323,7 +323,7 @@ function startGame() {
   }
   state.laserTimer     = 0;
   state.sessionCoins   = 0;
-  _activeCoinMult      = 1;  // reset coin multiplier for new run
+  // (_activeCoinMult reset removed 2026-05-17 — coin multiplier system gone)
   state.sessionPowerups = 0;
   state.sessionShields = 0;
   state.sessionLasers = 0;
@@ -3033,7 +3033,7 @@ function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
   playLevelUp();
   updateHUDLevel();
   showBanner('TIER ' + (targetVibeIdx + 1), 'levelup', 2500);
-  updateCoinColors();
+  // (updateCoinColors removed 2026-05-17 — coin multiplier system gone)
 }
 // checkDeathRunSpeed + BAND_SPEED table deleted in Pass 2C cleanup.
 // Speed is now 100% sequencer-driven via _setDRSpeed():

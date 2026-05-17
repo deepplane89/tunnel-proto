@@ -299,7 +299,9 @@ function renderPowerupCards() {
     const cost = getUpgradeCost(id, tier);
     // Lock by level gate OR ladder unlock state
     const levelLocked = up.levelGate && playerLevel < up.levelGate;
-    const ladderLocked = (id !== 'shield' && id !== 'coinvalue') && !isPowerupUnlocked(id);
+    // shield is always unlocked; all other powerups gated by mission ladder.
+    // (coinvalue exemption removed 2026-05-17 — powerup itself was removed.)
+    const ladderLocked = (id !== 'shield') && !isPowerupUnlocked(id);
     const locked = levelLocked || ladderLocked;
     const mt = up.maxTier || 5;
     const maxed = tier >= mt;
