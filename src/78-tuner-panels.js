@@ -928,11 +928,11 @@ function _ringShowTuner() {
     // regardless of player level. drift=0 → no wobble (RAIL); drift=0.8 → loose (WIPEOUT).
     // Manual slider edits + reset clear the override (back to player-level driven).
     const _FEEL_PRESETS = {
-      DEFAULT: { resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
-      GLIDE:   { resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
-      JET:     { resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
+      DEFAULT: { resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.82, drift: 0.30 },
+      GLIDE:   { resp: 0.50, latSpd: 0.30, settle: 0.50, bank: 0.20, horizon: 0.40, juice: 0.82, drift: 0.55 },
+      JET:     { resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.80, drift: 0.30 },
       RAIL:    { resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },
-      WIPEOUT: { resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
+      WIPEOUT: { resp: 0.55, latSpd: 0.90, settle: 0.45, bank: 0.85, horizon: 0.60, juice: 0.95, drift: 0.55 },
     };
     if (window._feelMacro._presetName === undefined) window._feelMacro._presetName = null;
     function _applyFeelPreset(name) {
