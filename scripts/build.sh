@@ -31,7 +31,13 @@ set -euo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 SRC_DIR="$REPO_ROOT/src"
-OUT_PATH="$REPO_ROOT/dist/game.js"
+DEFAULT_OUT_PATH="$REPO_ROOT/dist/game.js"
+OUT_PATH="$DEFAULT_OUT_PATH"
+# Capacitor webDir mirror. PROD builds also write here so `npx cap copy ios`
+# picks up the fresh bundle. DEV builds do NOT mirror — :8080 serves from
+# dist/ directly, and shipping --dev tuners into the iOS bundle would bloat
+# the App Store binary and leak admin UI. See IOS_CONTINUITY.md section 2.
+WWW_MIRROR_PATH="$REPO_ROOT/www/dist/game.js"
 PROD_BUILD=1   # DEFAULT: prod. Use --dev to opt out.
 mkdir -p "$(dirname "$OUT_PATH")"
 
@@ -186,3 +192,18 @@ fi
 for f in "${FILES[@]}"; do
   echo "  - ${f#$REPO_ROOT/}"
 done
+
+# ── Capacitor webDir mirror ──────────────────────────────────────────────
+# Mirror PROD bundles to www/dist/game.js so `npx cap copy ios` (which reads
+# from webDir=www/) picks up the fresh build. Without this, the Capacitor
+# iOS bundle silently ships whatever stale www/dist/game.js was last there —
+# bit us May 17 2026 when the iPhone got May 14 code for three days.
+#
+# Skip the mirror if OUT_PATH was overridden via -o (caller knows what they
+# want), and skip for DEV builds (don't pollute the App Store-bound webDir
+# with tuner panels).
+if [[ "$PROD_BUILD" -eq 1 && "$OUT_PATH" == "$DEFAULT_OUT_PATH" ]]; then
+  mkdir -p "$(dirname "$WWW_MIRROR_PATH")"
+  cp "$OUT_PATH" "$WWW_MIRROR_PATH"
+  echo "Mirrored to $WWW_MIRROR_PATH (Capacitor webDir)"
+fi
