@@ -24700,8 +24700,12 @@ function _tutShowHint(title, sub, color) {
     document.body.appendChild(exitBtn);
   }
   el.innerHTML = [
-    `<div style="color:${color};font-family:monospace;font-size:clamp(18px,3.5vw,28px);font-weight:bold;letter-spacing:3px;text-shadow:0 0 14px ${color}">${title}</div>`,
-    `<div style="color:#fff;font-family:monospace;font-size:clamp(11px,2vw,15px);margin-top:6px;opacity:0.8">${sub}</div>`
+    // Permanent Marker for tutorial hint headline + sub (user-requested 2026-05-17).
+    // Dropped letter-spacing from 3px → 1px because brush-script connecting strokes
+    // look broken with wide tracking. Bumped font-size slightly so the
+    // less-condensed brush face reads at the same visual weight as monospace.
+    `<div style="color:${color};font-family:'Permanent Marker',cursive;font-size:clamp(20px,3.8vw,30px);letter-spacing:1px;text-shadow:0 0 14px ${color}">${title}</div>`,
+    `<div style="color:#fff;font-family:'Permanent Marker',cursive;font-size:clamp(12px,2.2vw,16px);margin-top:6px;letter-spacing:0.5px;opacity:0.85">${sub}</div>`
   ].join('');
   el.style.opacity = '1';
 }
@@ -24719,7 +24723,11 @@ function _tutSignal() {
   if (!el) {
     el = document.createElement('div');
     el.id = 'tut-signal-flash';
-    el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Knewave',monospace;font-size:16px;letter-spacing:4px;color:#ffffff;opacity:0;pointer-events:none;z-index:19000;transition:opacity 0.15s ease;text-align:center;";
+    // Permanent Marker for SIGNAL RECEIVED flash (user-requested 2026-05-17).
+    // Was 'Knewave',monospace with 4px tracking — Knewave wasn't even loaded so it
+    // was falling back to monospace. Brush-script reads better with tighter tracking.
+    // Added warm glow text-shadow to match the streak-claim popup vibe.
+    el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Permanent Marker',cursive;font-size:22px;letter-spacing:1.5px;color:#ffffff;text-shadow:0 0 14px rgba(255,160,0,0.6),0 0 24px rgba(255,100,0,0.3);opacity:0;pointer-events:none;z-index:19000;transition:opacity 0.15s ease;text-align:center;";
     document.body.appendChild(el);
   }
   el.textContent = 'SIGNAL RECEIVED...';
@@ -36878,7 +36886,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 14;
+const BUILD_VERSION = 15;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
