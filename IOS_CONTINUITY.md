@@ -387,6 +387,7 @@ Every doc update commit message must start with `docs(ios-continuity):` so it's 
 
 - **May 15, 2026** — Doc created. Baseline `d7e7824` tagged as `ios-baseline-working`. Captures: strip fix via `contentInset: "never"` + `webView.isOpaque = false`; garage isolation contract; agent workflow lessons from a session that burned ~3 hours on whack-a-mole.
 - **May 17, 2026** — Stale-bundle bug fixed. `scripts/build.sh` now mirrors PROD output to `www/dist/game.js` automatically; previously `www/dist/game.js` was hand-maintained and silently stale (3 days old when discovered). Section 1 PROD-build description rewritten, section 2 pipeline diagram + build chain updated to reflect the auto-mirror, new "Verifying the bundle is actually fresh" subsection added with diagnostic commands. Symptom: PROD builds appeared to work (xcodebuild succeeded, devicectl install succeeded) but the iPhone ran code from days earlier.
+- **May 17, 2026 (App Store prep)** — App Store / TestFlight prep work locked in. `WKAppBoundDomains` removed from `Info.plist` and `limitsNavigationsToAppBoundDomains` removed from `capacitor.config.json` (app is 100% local bundle, no remote JS). `_comment`/`_warning` keys stripped from `capacitor.config.json` and moved to sibling `CAPACITOR_CONFIG_NOTES.md` (reviewers nitpick unknown manifest keys). New section 12 documents the full TestFlight upload pipeline including build-number bump contract, archive command, ExportOptions.plist template, and one-time App Store Connect setup. SKU recommendation for the App Store record: `jethorizon-ios-001`.
 - **May 17, 2026 (late)** — Stale-mirror bug bit again, this time on `index.html`. New HUD commit `4a68701` edited both `src/67-main-late.js` AND `index.html`; the JS half reached the phone (caught by morning's `dist/` mirror), but the HTML half didn't (`index.html` had no mirror). Phone ran new JS rendering old DOM — looked like the build was broken when really only half the diff propagated. Fix: extended `WWW_MIRROR_FILES` in `scripts/build.sh` from `[dist/game.js]` to the full set (HTML, CSS, manifest, privacy). Build chain in section 2 simplified — manual `cp` steps for CSS removed since the mirror now covers them. Verified in sandbox: PROD writes all 6 files to www/, DEV writes none.
 
 ---
@@ -395,3 +396,98 @@ Every doc update commit message must start with `docs(ios-continuity):` so it's 
 
 - `.gitignore` already has `www/` covered (confirmed May 17 2026). Files inside `www/` never get committed; they're regenerated every PROD build.
 - If a new top-level asset is added to the repo root (e.g. a new HTML page, new CSS file, new manifest), it must be added to `WWW_MIRROR_FILES` in `scripts/build.sh`. Otherwise the iOS bundle silently ships nothing for it. See section 2.
+
+---
+
+## 12. App Store / TestFlight prep (May 17 2026)
+
+### 12.1 Decisions locked in for App Store builds
+
+- **Ship as a 100% local bundle**. No `server.url`, no remote JS loading. Apple guideline 4.7 explicitly rejects thin clients that load executable JS from the web. Local bundle also enables offline play and faster cold start.
+- **`WKAppBoundDomains` removed** from `Info.plist`. **`limitsNavigationsToAppBoundDomains` removed** from `capacitor.config.json`. Both are paired settings only meaningful when the app loads web content. The `capacitor://` scheme used by the local bundle is treated as app-bound automatically. See `CAPACITOR_CONFIG_NOTES.md` for the re-enable procedure if you ever go hybrid.
+- **`_comment` / `_warning` keys stripped** from `capacitor.config.json`. App Store reviewers nitpick unknown keys in shipped JSON manifests. The notes moved to sibling `CAPACITOR_CONFIG_NOTES.md`.
+- **Encryption declaration**: `ITSAppUsesNonExemptEncryption = false` already in Info.plist. The app uses only standard HTTPS calls, nothing custom — no annual self-classification report needed.
+
+### 12.2 Build number contract (READ BEFORE EVERY TESTFLIGHT UPLOAD)
+
+- **`MARKETING_VERSION`** stays at `1.0.0` until a real user-visible version bump.
+- **`CURRENT_PROJECT_VERSION`** MUST increment by 1 for every TestFlight upload (1, 2, 3, ...). Apple rejects duplicate build numbers. Bump it in `ios/App/App.xcodeproj/project.pbxproj` (two occurrences — Debug + Release) before each `xcodebuild archive`.
+- A pre-archive helper script can auto-bump this; for now bump by hand and verify with:
+  ```bash
+  grep CURRENT_PROJECT_VERSION ios/App/App.xcodeproj/project.pbxproj | head -2
+  ```
+
+### 12.3 One-time App Store Connect setup (user-side)
+
+1. Sign in: https://appstoreconnect.apple.com
+2. My Apps → "+" → New App
+   - Platform: iOS
+   - Name: Jet Horizon
+   - Primary Language: English (U.S.)
+   - Bundle ID: `com.deepplane.jethorizon` (picks from registered identifiers)
+   - SKU: any unique-to-account string (recommendation: `jethorizon-ios-001`)
+   - User Access: Full Access
+3. Generate App Store Connect API key at https://appstoreconnect.apple.com/access/api
+   - Role: App Manager (or Admin)
+   - Download the `.p8` file (only available once — keep safe)
+   - Note the Key ID and Issuer ID
+
+### 12.4 Archive + TestFlight upload command (run on Mac)
+
+```bash
+cd ~/Developer/tunnel-proto && \
+git pull origin dev && \
+npm run build && \
+cp capacitor.config.json ios/App/App/capacitor.config.json && \
+npx cap copy ios && \
+cd ios/App && \
+xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+  -archivePath /tmp/JetHorizon.xcarchive \
+  -destination "generic/platform=iOS" \
+  -allowProvisioningUpdates archive && \
+xcodebuild -exportArchive \
+  -archivePath /tmp/JetHorizon.xcarchive \
+  -exportPath /tmp/JetHorizon-export \
+  -exportOptionsPlist ExportOptions.plist && \
+xcrun altool --upload-app \
+  --type ios \
+  --file /tmp/JetHorizon-export/App.ipa \
+  --apiKey <KEY_ID> \
+  --apiIssuer <ISSUER_ID>
+```
+
+Requires:
+- `ios/App/ExportOptions.plist` with method=app-store-connect (template below)
+- API key `.p8` at `~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8`
+- `CURRENT_PROJECT_VERSION` bumped vs the last upload
+
+### 12.5 ExportOptions.plist template
+
+Save to `ios/App/ExportOptions.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>app-store-connect</string>
+    <key>teamID</key>
+    <string>64KJWV8765</string>
+    <key>uploadBitcode</key>
+    <false/>
+    <key>uploadSymbols</key>
+    <true/>
+    <key>signingStyle</key>
+    <string>automatic</string>
+    <key>destination</key>
+    <string>export</string>
+</dict>
+</plist>
+```
+
+### 12.6 After upload
+
+- Build processes in App Store Connect for ~5-30 min.
+- Add internal testers under TestFlight → Internal Testing (no review required, instant install).
+- External testers require Beta App Review (~24h, one-time per significant change).
