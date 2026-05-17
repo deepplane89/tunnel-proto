@@ -3991,6 +3991,15 @@ function killPlayer() {
         state.invincibleGrace = 3.0;
         document.getElementById('gameover-screen').classList.add('hidden');
         document.getElementById('hud').classList.remove('hidden');
+        // Repair-ship path bypasses startGame() so we have to restore the
+        // touch-pause button manually here. Hidden on death at line ~4139,
+        // shown by startGame() line ~419 — but this saveme handler resumes
+        // the existing run without calling startGame(), so pause stays
+        // stuck-hidden without this. User-reported 2026-05-17.
+        if (navigator.maxTouchPoints > 0) {
+          const _tp = document.getElementById('touch-pause');
+          if (_tp) _tp.classList.remove('hidden');
+        }
         // Position camera at establishing shot (same as retry sweep)
         killThrusterSputter();
         state.introActive = true; // block obstacle spawning during sweep
@@ -5869,7 +5878,11 @@ function update(dt) {
       // to -16 (cones rolling in fast) as t01 goes 0→1.
       if (state._seqConeDensity === 'ramp') {
         const _t01 = state._seqRampT01 || 0;
-        _spawnZBase = -36 + 20 * _t01; // -36 → -16
+        // Mild ramp — was -36 → -16 (2.25× faster row cadence by stage end,
+        // felt like a cone wall). Now -32 → -26 (~1.23× faster) so stage 1
+        // stays close to the same cone density start-to-finish but still has
+        // a small progression for variety. User-requested 2026-05-16.
+        _spawnZBase = -32 + 6 * _t01; // -32 → -26
       }
       state.nextSpawnZ = _spawnZBase + (Math.random() - 0.5) * 10;
       state.frameCount++;
