@@ -15407,6 +15407,8 @@ function maybeStartGauntlet() {
 // to false to restore it.
 // ============================================================================
 function _startL3KnifeCanyon() {
+  // Wipe any in-flight bonus rings — they'd be trapped between canyon walls.
+  if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
   // NOTE: do NOT wipe activeObstacles here. The DR sequencer
   // stops spawning cones before L3 trigger, so the last batch will z-scroll
   // past the player naturally during the ~1s before canyon slabs reach play
@@ -15664,6 +15666,9 @@ const _PRE_T4A_LT_TUNER = {
 };
 
 function _startPreT4ACanyon() {
+  // Wipe any in-flight bonus rings — they'd be trapped between canyon walls
+  // and read as broken (player can't reach them, they collide with walls).
+  if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
   // State flags
   state.preT4ACanyon       = true;
   state.preT4AElapsed      = 0;
@@ -15842,6 +15847,8 @@ const _PRE_T4B_LT_TUNER = {
 };
 
 function _startPreT4BCanyon() {
+  // Wipe any in-flight bonus rings — they'd be trapped between canyon walls.
+  if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
   state.preT4BCanyon       = true;
   state.preT4BElapsed      = 0;
   state.preT4BDone         = false;
@@ -23221,7 +23228,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x05091a),
     floorLine: new THREE.Color(0x00eeff),
     thrusterColor: new THREE.Color(0xaaddff),
-    sunShader: 0, tendrils: 'none',
+    sunShader: 0, tendrils: 'aurora',
     obstaclesPerSpawn: 6, maxObstaclesPerSpawn: 8, gapFactor: 1.0, speedTier: 1,
   },
   {
@@ -23232,7 +23239,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x080018),
     floorLine: new THREE.Color(0xcc44ff),
     thrusterColor: new THREE.Color(0xee00ff),
-    sunShader: 1, tendrils: 'none',
+    sunShader: 1, tendrils: 'aurora',
     obstaclesPerSpawn: 7, maxObstaclesPerSpawn: 9, gapFactor: 0.95, speedTier: 1,
   },
   {
@@ -23248,7 +23255,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x020001),
     floorLine: new THREE.Color(0x00ffaa),
     thrusterColor: new THREE.Color(0x00eeff),
-    sunShader: 3, tendrils: 'none',
+    sunShader: 3, tendrils: 'aurora',
     // Warp palette: dark=(1,1,1) mid=(0.05,0,0) bright=(0,0,0.08)
     warpCol1: [1.00, 1.00, 1.00],
     warpCol2: [0.05, 0.00, 0.00],
@@ -23265,7 +23272,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x00080f),
     floorLine: new THREE.Color(0x44ccff),
     thrusterColor: new THREE.Color(0x88ddff),
-    sunShader: 4, tendrils: 'none',
+    sunShader: 4, tendrils: 'aurora',
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 3,
   },
   {
@@ -23291,7 +23298,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x000a04),
     floorLine: new THREE.Color(0x00ff88),
     thrusterColor: new THREE.Color(0x44ffaa),
-    sunShader: 0, tendrils: 'none',
+    sunShader: 0, tendrils: 'aurora',
     obstaclesPerSpawn: 7, maxObstaclesPerSpawn: 9, gapFactor: 0.92, speedTier: 4,
   },
   {
@@ -23313,7 +23320,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x0a0012),
     floorLine: new THREE.Color(0xff44aa),
     thrusterColor: new THREE.Color(0xff66bb),
-    sunShader: 1, tendrils: 'none',
+    sunShader: 1, tendrils: 'aurora',
     obstaclesPerSpawn: 8, maxObstaclesPerSpawn: 10, gapFactor: 0.9, speedTier: 4,
   },
   {
@@ -23324,7 +23331,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x040800),
     floorLine: new THREE.Color(0x88ff00),
     thrusterColor: new THREE.Color(0xaaff22),
-    sunShader: 4, tendrils: 'none',
+    sunShader: 4, tendrils: 'aurora',
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 4,
   },
   {
@@ -23335,7 +23342,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x000810),
     floorLine: new THREE.Color(0xccddff),
     thrusterColor: new THREE.Color(0xbbccee),
-    sunShader: 3, tendrils: 'none',
+    sunShader: 3, tendrils: 'aurora',
     obstaclesPerSpawn: 8, maxObstaclesPerSpawn: 10, gapFactor: 0.9, speedTier: 4,
   },
   {
@@ -23346,7 +23353,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x080000),
     floorLine: new THREE.Color(0xaa0000),
     thrusterColor: new THREE.Color(0xff2200),
-    sunShader: 2, tendrils: 'none',
+    sunShader: 2, tendrils: 'aurora',
     obstaclesPerSpawn: 10, maxObstaclesPerSpawn: 13, gapFactor: 0.82, speedTier: 4,
   },
   {
@@ -23379,7 +23386,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x000408),
     floorLine: new THREE.Color(0xaaccff),
     thrusterColor: new THREE.Color(0xccddff),
-    sunShader: 3, tendrils: 'none',
+    sunShader: 3, tendrils: 'aurora',
     obstaclesPerSpawn: 10, maxObstaclesPerSpawn: 12, gapFactor: 0.85, speedTier: 4,
   },
   {
@@ -23390,7 +23397,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x020202),
     floorLine: new THREE.Color(0x442200),
     thrusterColor: new THREE.Color(0x664422),
-    sunShader: 0, tendrils: 'none',
+    sunShader: 0, tendrils: 'aurora',
     obstaclesPerSpawn: 10, maxObstaclesPerSpawn: 13, gapFactor: 0.82, speedTier: 4,
   },
   {
@@ -23412,7 +23419,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x040410),
     floorLine: new THREE.Color(0x8866cc),
     thrusterColor: new THREE.Color(0x9977dd),
-    sunShader: 1, tendrils: 'none',
+    sunShader: 1, tendrils: 'aurora',
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 4,
   },
   {
@@ -23423,7 +23430,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x000818),
     floorLine: new THREE.Color(0x0066cc),
     thrusterColor: new THREE.Color(0x4488dd),
-    sunShader: 3, tendrils: 'none',
+    sunShader: 3, tendrils: 'aurora',
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 4,
   },
   {
@@ -23445,7 +23452,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x040404),
     floorLine: new THREE.Color(0xdddddd),
     thrusterColor: new THREE.Color(0xeeeeee),
-    sunShader: 3, tendrils: 'none',
+    sunShader: 3, tendrils: 'aurora',
     obstaclesPerSpawn: 10, maxObstaclesPerSpawn: 13, gapFactor: 0.82, speedTier: 4,
   },
 ];
@@ -24204,24 +24211,23 @@ function _drSequencerTick(dt) {
       state._drStageSpeed = undefined;
       if (_restoreT4A) Object.assign(_PRE_T4A_CANYON_TUNER, _restoreT4A);
     }
-    // If stage has a duration, use time — more reliable than row count at variable speeds
-    if (stage.duration) {
-      state.seqStageElapsed += dt;
-      if (state.seqStageElapsed >= stage.duration) {
-        state._seqCorridorStarted = false;
-        state.deathRunRestBeat = 0;
-        clearAllCorridorFlags();
-        state.l5CorridorDone = true; // mark done so campaign ending path never fires
-        _drSeqAdvance();
-      }
-    } else {
-      // No duration — wait for corridor to finish by row count
+    // Advance on whichever comes first: stage.duration timer OR family naturally
+    // finishing (e.g. L5 corridor hits its 420-row cap at ~33s but S11 duration
+    // is 60s — without the early-out, that's ~27s of empty road).
+    state.seqStageElapsed += dt;
+    const _famDone = (() => {
       const fam = DR_MECHANIC_FAMILIES[stage.family];
-      if (!fam.isActive()) {
-        state._seqCorridorStarted = false;
-        state.deathRunRestBeat = 0;
-        _drSeqAdvance();
-      }
+      // Only treat as done if we actually started the family this stage (avoid
+      // first-frame false positives before activate() ran).
+      return state._seqCorridorStarted && fam && !fam.isActive();
+    })();
+    const _timerDone = stage.duration && state.seqStageElapsed >= stage.duration;
+    if (_famDone || _timerDone) {
+      state._seqCorridorStarted = false;
+      state.deathRunRestBeat = 0;
+      clearAllCorridorFlags();
+      state.l5CorridorDone = true; // mark done so campaign ending path never fires
+      _drSeqAdvance();
     }
     return;
   }
@@ -24439,7 +24445,11 @@ function _drSequencerTick(dt) {
     if (state.drPhase === 'RELEASE') {
       state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
     } else if (_endlessType === 'random_cones') {
-      state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
+      // Endless random_cones uses 'sparse' (5-7 cones, gap 1.0) instead of
+      // 'normal' (9-11 cones, tight gap). At 2.5x with physTier 5 the dense
+      // version was an unfair wall — sparse mimics S1 spacing so the player
+      // can actually thread the cones.
+      state._seqSpawnMode = 'cones'; state._seqConeDensity = 'sparse';
     } else if (_endlessType === 'angled_random') {
       state._seqSpawnMode = 'angled';
     } else if (_endlessType === 'lethal') {
@@ -24864,12 +24874,20 @@ function _drEndlessTick(dt) {
       state.deathRunRestBeat = 4.0;
       state.drPhase = 'RELEASE'; state.drPhaseTimer = 0;
       state.drWaveCount++;
-      if (!state._tutorialActive && _bonusRings.length === 0) _ringSpawnRow(0);
+      // Spawn fuel ring centered on the ship's current X so it lands within
+      // reach — world-origin spawn was uncollectable if the player was off-axis
+      // when the wave ended. Only spawn if next mechanic isn't a corridor
+      // (rings would get trapped inside canyon walls).
+      const _nextEndlessType = _ENDLESS_ROTATION[(state._endlessRotationIdx || 0) % _ENDLESS_ROTATION.length];
+      const _nextIsCorridor = _nextEndlessType === 'L3_CORRIDOR' || _nextEndlessType === 'L4_SINE_CORRIDOR';
+      if (!state._tutorialActive && !_nextIsCorridor && _bonusRings.length === 0) {
+        _ringSpawnRow(state.shipX || 0);
+      }
       // Cycle vibes through the full palette on each endless wave
       const _totalVibes = DEATH_RUN_VIBES.length;
       const _nextVibeIdx = ((state._endlessVibeIdx || 0) + 1) % _totalVibes;
       state._endlessVibeIdx = _nextVibeIdx;
-      _applyVibeTransition(_nextVibeIdx, true);
+      _applyVibeTransition(_nextVibeIdx, true, /*suppressBanner=*/true);
     }
   } else if (phase === 'RECOVERY') {
     state.drPhase = 'RELEASE'; state.drPhaseTimer = 0;
@@ -25005,6 +25023,8 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['build', 'peak'],
     minBand: 3,
     activate(band, role) {
+      // Wipe in-flight bonus rings — would get trapped between corridor walls.
+      if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
       // Full campaign L4 corridor: 518 rows (48s at 2.1x speed)
       const rows = 518;
       state.l4CorridorActive = true;
@@ -25025,6 +25045,8 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['peak'],
     minBand: 3,
     activate(band, role) {
+      // Wipe in-flight bonus rings — would get trapped between corridor walls.
+      if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
       // Full campaign L5 corridor: 420 rows (33s at 2.5x speed)
       const rows = 420;
       state.l5CorridorActive    = true;
@@ -25674,7 +25696,7 @@ function updateDeathRunTransition(dt) {
 // (per-stage stage.vibeIdx + _drEndlessTick wave rotation calling
 // _applyVibeTransition directly).
 let _pendingVibeIdx = -1;
-function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
+function _applyVibeTransition(targetVibeIdx, suppressRestBeat, suppressBanner) {
   const fromVibe = DEATH_RUN_VIBES[state.deathRunVibeIdx];
   const toVibe   = DEATH_RUN_VIBES[targetVibeIdx];
   state.deathRunVibeIdx = targetVibeIdx;
@@ -25702,7 +25724,10 @@ function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
   }
   playLevelUp();
   updateHUDLevel();
-  showBanner('TIER ' + (targetVibeIdx + 1), 'levelup', 2500);
+  // Endless cycles vibes between waves cosmetically — the player is already
+  // past the tier ladder, so a 'TIER N' banner is misleading. Caller passes
+  // suppressBanner=true from the endless wave-rotation site.
+  if (!suppressBanner) showBanner('TIER ' + (targetVibeIdx + 1), 'levelup', 2500);
   // (updateCoinColors removed 2026-05-17 — coin multiplier system gone)
 }
 // checkDeathRunSpeed + BAND_SPEED table deleted in Pass 2C cleanup.
@@ -36907,7 +36932,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 18;
+const BUILD_VERSION = 19;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

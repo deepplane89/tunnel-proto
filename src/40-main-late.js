@@ -512,6 +512,8 @@ function maybeStartGauntlet() {
 // to false to restore it.
 // ============================================================================
 function _startL3KnifeCanyon() {
+  // Wipe any in-flight bonus rings — they'd be trapped between canyon walls.
+  if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
   // NOTE: do NOT wipe activeObstacles here. The DR sequencer
   // stops spawning cones before L3 trigger, so the last batch will z-scroll
   // past the player naturally during the ~1s before canyon slabs reach play
@@ -769,6 +771,9 @@ const _PRE_T4A_LT_TUNER = {
 };
 
 function _startPreT4ACanyon() {
+  // Wipe any in-flight bonus rings — they'd be trapped between canyon walls
+  // and read as broken (player can't reach them, they collide with walls).
+  if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
   // State flags
   state.preT4ACanyon       = true;
   state.preT4AElapsed      = 0;
@@ -947,6 +952,8 @@ const _PRE_T4B_LT_TUNER = {
 };
 
 function _startPreT4BCanyon() {
+  // Wipe any in-flight bonus rings — they'd be trapped between canyon walls.
+  if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
   state.preT4BCanyon       = true;
   state.preT4BElapsed      = 0;
   state.preT4BDone         = false;
