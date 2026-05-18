@@ -23324,14 +23324,14 @@ const DEATH_RUN_VIBES = [
     obstaclesPerSpawn: 8, maxObstaclesPerSpawn: 10, gapFactor: 0.9, speedTier: 4,
   },
   {
-    name: 'TOXIC',
-    skyTop: new THREE.Color(0x000000), skyBot: new THREE.Color(0x0a0f00),
-    gridColor: new THREE.Color(0x88ff00), sunColor: new THREE.Color(0xccff44),
-    sunStripeColor: new THREE.Color(0x66aa00), bloomStrength: 0.38,
-    fogColor: new THREE.Color(0x040800),
-    floorLine: new THREE.Color(0x88ff00),
-    thrusterColor: new THREE.Color(0xaaff22),
-    sunShader: 4, tendrils: 'aurora',
+    name: 'HOT MAGENTA',
+    skyTop: new THREE.Color(0x0a0008), skyBot: new THREE.Color(0x18021a),
+    gridColor: new THREE.Color(0xff22cc), sunColor: new THREE.Color(0xff44dd),
+    sunStripeColor: new THREE.Color(0xaa1188), bloomStrength: 0.40,
+    fogColor: new THREE.Color(0x10020c),
+    floorLine: new THREE.Color(0xff44dd),
+    thrusterColor: new THREE.Color(0xff66ee),
+    sunShader: 1, tendrils: 'aurora',
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 4,
   },
   {
@@ -36932,7 +36932,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 19;
+const BUILD_VERSION = 20;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
