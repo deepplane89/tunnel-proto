@@ -5251,14 +5251,15 @@ let skyConstellLines = null;  // constellation LineSegments
 
 const AURORA_COUNT = 80;
 const AURORA_SEGS  = 32;
-const AURORA_LEN   = 180;
+const AURORA_LEN   = 260;          // beefed 180→260 to match L5F reach
 
 // Each tendril is TWO overlapping ribbon meshes:
 //   outer: wide + dim  → soft glow halo
 //   inner: narrow + bright → glowing core
 // This fakes the thick glowing neon look without post-processing.
-const TENDRIL_WIDTH_OUTER = 3.2;   // world units wide (outer glow)
-const TENDRIL_WIDTH_INNER = 1.1;   // world units wide (bright core)
+// Widened to match L5F's juicier presence (L5F outer=7.0, inner=1.2).
+const TENDRIL_WIDTH_OUTER = 6.5;   // was 3.2 — soft glow halo
+const TENDRIL_WIDTH_INNER = 1.6;   // was 1.1 — bright core
 
 const AURORA_COLORS = [
   0xff00ff, 0xff00cc, 0xff0088,

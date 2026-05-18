@@ -6675,14 +6675,15 @@ let skyConstellLines = null;  // constellation LineSegments
 
 const AURORA_COUNT = 80;
 const AURORA_SEGS  = 32;
-const AURORA_LEN   = 180;
+const AURORA_LEN   = 260;          // beefed 180→260 to match L5F reach
 
 // Each tendril is TWO overlapping ribbon meshes:
 //   outer: wide + dim  → soft glow halo
 //   inner: narrow + bright → glowing core
 // This fakes the thick glowing neon look without post-processing.
-const TENDRIL_WIDTH_OUTER = 3.2;   // world units wide (outer glow)
-const TENDRIL_WIDTH_INNER = 1.1;   // world units wide (bright core)
+// Widened to match L5F's juicier presence (L5F outer=7.0, inner=1.2).
+const TENDRIL_WIDTH_OUTER = 6.5;   // was 3.2 — soft glow halo
+const TENDRIL_WIDTH_INNER = 1.6;   // was 1.1 — bright core
 
 const AURORA_COLORS = [
   0xff00ff, 0xff00cc, 0xff0088,
@@ -23291,13 +23292,13 @@ const DEATH_RUN_VIBES = [
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 4,
   },
   {
-    name: 'DEEP EMERALD',
-    skyTop: new THREE.Color(0x000f06), skyBot: new THREE.Color(0x001a0a),
-    gridColor: new THREE.Color(0x00ff88), sunColor: new THREE.Color(0x66ffaa),
-    sunStripeColor: new THREE.Color(0x22aa55), bloomStrength: 0.32,
-    fogColor: new THREE.Color(0x000a04),
-    floorLine: new THREE.Color(0x00ff88),
-    thrusterColor: new THREE.Color(0x44ffaa),
+    name: 'DEEP VIOLET',
+    skyTop: new THREE.Color(0x06000f), skyBot: new THREE.Color(0x0a001a),
+    gridColor: new THREE.Color(0xaa44ff), sunColor: new THREE.Color(0xcc88ff),
+    sunStripeColor: new THREE.Color(0x6622aa), bloomStrength: 0.34,
+    fogColor: new THREE.Color(0x06000c),
+    floorLine: new THREE.Color(0xaa44ff),
+    thrusterColor: new THREE.Color(0xcc88ff),
     sunShader: 0, tendrils: 'aurora',
     obstaclesPerSpawn: 7, maxObstaclesPerSpawn: 9, gapFactor: 0.92, speedTier: 4,
   },
@@ -36932,7 +36933,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 20;
+const BUILD_VERSION = 21;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
