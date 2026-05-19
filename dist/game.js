@@ -20779,6 +20779,13 @@ function togglePause() {
     state._argonSteering = false;
     state._argonOpen = 0;
     _stopMagnetWhir();
+    // Bank-water hiss: BankWaterEffect.update only runs from the gameplay
+    // update() loop, which the animate gate skips during pause — so the hiss
+    // gain freezes at its last value and the wake noise persists. Force it to
+    // 0 here. resume path naturally re-ramps it from the next update() tick.
+    if (window.BankWaterHiss && typeof window.BankWaterHiss.silence === 'function') {
+      try { window.BankWaterHiss.silence(); } catch(_) {}
+    }
     // Laser intervals/timeouts (module-local handles) so the loop can't re-
     // trigger the laser SFX during pause.
     if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
@@ -37050,7 +37057,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 36;
+const BUILD_VERSION = 37;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

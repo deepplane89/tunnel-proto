@@ -93,6 +93,13 @@ function togglePause() {
     state._argonSteering = false;
     state._argonOpen = 0;
     _stopMagnetWhir();
+    // Bank-water hiss: BankWaterEffect.update only runs from the gameplay
+    // update() loop, which the animate gate skips during pause — so the hiss
+    // gain freezes at its last value and the wake noise persists. Force it to
+    // 0 here. resume path naturally re-ramps it from the next update() tick.
+    if (window.BankWaterHiss && typeof window.BankWaterHiss.silence === 'function') {
+      try { window.BankWaterHiss.silence(); } catch(_) {}
+    }
     // Laser intervals/timeouts (module-local handles) so the loop can't re-
     // trigger the laser SFX during pause.
     if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
