@@ -20539,7 +20539,7 @@ function applyPowerup(typeIdx) {
         const _lsfx = document.getElementById('laser-beam-sfx');
         if (_lsfx && !isSfxMuted()) {
           _lsfx.loop = false;
-          _lsfx.volume = 0.2 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+          _lsfx.volume = 0.12 * (typeof sfxMult === 'function' ? sfxMult() : 1); // 2026-05-19: 0.2→0.12 — too loud over radio even after duck
           try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           const _retriggerMs = 120; // ~8 shots/sec
           if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
@@ -20549,7 +20549,7 @@ function applyPowerup(typeIdx) {
           state._laserSfxIv = setInterval(() => {
             // Re-apply sfxMult on every retrigger so the radio duck takes
             // effect mid-laser if the player toggles the station.
-            try { _lsfx.volume = 0.2 * (typeof sfxMult === 'function' ? sfxMult() : 1); _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
+            try { _lsfx.volume = 0.12 * (typeof sfxMult === 'function' ? sfxMult() : 1); _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           }, _retriggerMs);
           // Stop retriggering when laser ends, but DON'T cut the in-flight shot.
           // It plays out naturally to its end (final tail rings out).
@@ -20825,7 +20825,7 @@ function togglePause() {
       const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
-        if (_laserU) { _laserU.volume = 0.2 * _sM; _laserU.loop = true; _laserU.play().catch(()=>{}); }
+        if (_laserU) { _laserU.volume = 0.12 * _sM; _laserU.loop = true; _laserU.play().catch(()=>{}); } // 2026-05-19: match shop.js base 0.12
       } else {
         const _ubeamU = document.getElementById('unibeam-sfx');
         if (_ubeamU) { _ubeamU.volume = 0.6 * _sM; _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
@@ -37050,7 +37050,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 35;
+const BUILD_VERSION = 36;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

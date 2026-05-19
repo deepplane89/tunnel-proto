@@ -139,7 +139,7 @@ function togglePause() {
       const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
-        if (_laserU) { _laserU.volume = 0.2 * _sM; _laserU.loop = true; _laserU.play().catch(()=>{}); }
+        if (_laserU) { _laserU.volume = 0.12 * _sM; _laserU.loop = true; _laserU.play().catch(()=>{}); } // 2026-05-19: match shop.js base 0.12
       } else {
         const _ubeamU = document.getElementById('unibeam-sfx');
         if (_ubeamU) { _ubeamU.volume = 0.6 * _sM; _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
