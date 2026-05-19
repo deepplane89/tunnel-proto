@@ -136,12 +136,13 @@ function togglePause() {
     // Resume looped weapon SFX if their power-up timer is still running.
     if (state.laserActive && !isSfxMuted()) {
       const _tier = state.laserTier || 1;
+      const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
-        if (_laserU) { _laserU.loop = true; _laserU.play().catch(()=>{}); }
+        if (_laserU) { _laserU.volume = 0.2 * _sM; _laserU.loop = true; _laserU.play().catch(()=>{}); }
       } else {
         const _ubeamU = document.getElementById('unibeam-sfx');
-        if (_ubeamU) { _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
+        if (_ubeamU) { _ubeamU.volume = 0.6 * _sM; _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
       }
     }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }

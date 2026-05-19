@@ -568,7 +568,7 @@ function applyPowerup(typeIdx) {
       shieldWire.visible = false;
       shieldLight.intensity = 0;
       const _tShAct = _hS ? _hS() : 0;
-      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx && !isSfxMuted()) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
+      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx && !isSfxMuted()) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18 * (typeof sfxMult === 'function' ? sfxMult() : 1); _shActSfx.play().catch(()=>{}); }
       if (_hE) _hE('shld-act', _tShAct);
       if (_hE) _hE('shld-set', _tShld);
       break;
@@ -595,7 +595,7 @@ function applyPowerup(typeIdx) {
         const _lsfx = document.getElementById('laser-beam-sfx');
         if (_lsfx && !isSfxMuted()) {
           _lsfx.loop = false;
-          _lsfx.volume = 0.2;
+          _lsfx.volume = 0.2 * (typeof sfxMult === 'function' ? sfxMult() : 1);
           try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           const _retriggerMs = 120; // ~8 shots/sec
           if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
@@ -603,7 +603,9 @@ function applyPowerup(typeIdx) {
           // mid-second-laser and kill the new interval before its time.
           if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
           state._laserSfxIv = setInterval(() => {
-            try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
+            // Re-apply sfxMult on every retrigger so the radio duck takes
+            // effect mid-laser if the player toggles the station.
+            try { _lsfx.volume = 0.2 * (typeof sfxMult === 'function' ? sfxMult() : 1); _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           }, _retriggerMs);
           // Stop retriggering when laser ends, but DON'T cut the in-flight shot.
           // It plays out naturally to its end (final tail rings out).
@@ -639,7 +641,7 @@ function applyPowerup(typeIdx) {
         state.laserBoltTimer = 0;
         state._laserScanActive = false;
         const _ubsfx = document.getElementById('unibeam-sfx');
-        if (_ubsfx && !isSfxMuted()) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6; _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
+        if (_ubsfx && !isSfxMuted()) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6 * (typeof sfxMult === 'function' ? sfxMult() : 1); _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
         setTimeout(() => { const s = document.getElementById('unibeam-sfx'); if (s) { s.loop = false; s.pause(); s.currentTime = 0; } }, state.laserTimer * 1000);
       } else {
         // T5: scanning unibeam
@@ -648,7 +650,7 @@ function applyPowerup(typeIdx) {
         state._laserScanActive = true;
         state.laserBoltTimer   = 0;
         const _ubsfx = document.getElementById('unibeam-sfx');
-        if (_ubsfx && !isSfxMuted()) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6; _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
+        if (_ubsfx && !isSfxMuted()) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6 * (typeof sfxMult === 'function' ? sfxMult() : 1); _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
         setTimeout(() => { const s = document.getElementById('unibeam-sfx'); if (s) { s.loop = false; s.pause(); s.currentTime = 0; } }, state.laserTimer * 1000);
       }
       break;
@@ -666,7 +668,7 @@ function applyPowerup(typeIdx) {
       // Force-field loop: starts at 0 during speed phase
       const _invSfx = document.getElementById('invincible-loop-sfx');
       if (_invSfx && !isSfxMuted()) {
-        try { _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45; _invSfx.play().catch(()=>{}); } catch(_) {}
+        try { _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45 * (typeof sfxMult === 'function' ? sfxMult() : 1); _invSfx.play().catch(()=>{}); } catch(_) {}
       }
       break;
     }

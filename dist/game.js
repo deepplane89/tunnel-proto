@@ -20501,7 +20501,7 @@ function applyPowerup(typeIdx) {
       shieldWire.visible = false;
       shieldLight.intensity = 0;
       const _tShAct = _hS ? _hS() : 0;
-      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx && !isSfxMuted()) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18; _shActSfx.play().catch(()=>{}); }
+      const _shActSfx = document.getElementById('shield-activate-sfx'); if (_shActSfx && !isSfxMuted()) { _shActSfx.currentTime = 0; _shActSfx.volume = 0.18 * (typeof sfxMult === 'function' ? sfxMult() : 1); _shActSfx.play().catch(()=>{}); }
       if (_hE) _hE('shld-act', _tShAct);
       if (_hE) _hE('shld-set', _tShld);
       break;
@@ -20528,7 +20528,7 @@ function applyPowerup(typeIdx) {
         const _lsfx = document.getElementById('laser-beam-sfx');
         if (_lsfx && !isSfxMuted()) {
           _lsfx.loop = false;
-          _lsfx.volume = 0.2;
+          _lsfx.volume = 0.2 * (typeof sfxMult === 'function' ? sfxMult() : 1);
           try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           const _retriggerMs = 120; // ~8 shots/sec
           if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
@@ -20536,7 +20536,9 @@ function applyPowerup(typeIdx) {
           // mid-second-laser and kill the new interval before its time.
           if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
           state._laserSfxIv = setInterval(() => {
-            try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
+            // Re-apply sfxMult on every retrigger so the radio duck takes
+            // effect mid-laser if the player toggles the station.
+            try { _lsfx.volume = 0.2 * (typeof sfxMult === 'function' ? sfxMult() : 1); _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           }, _retriggerMs);
           // Stop retriggering when laser ends, but DON'T cut the in-flight shot.
           // It plays out naturally to its end (final tail rings out).
@@ -20572,7 +20574,7 @@ function applyPowerup(typeIdx) {
         state.laserBoltTimer = 0;
         state._laserScanActive = false;
         const _ubsfx = document.getElementById('unibeam-sfx');
-        if (_ubsfx && !isSfxMuted()) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6; _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
+        if (_ubsfx && !isSfxMuted()) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6 * (typeof sfxMult === 'function' ? sfxMult() : 1); _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
         setTimeout(() => { const s = document.getElementById('unibeam-sfx'); if (s) { s.loop = false; s.pause(); s.currentTime = 0; } }, state.laserTimer * 1000);
       } else {
         // T5: scanning unibeam
@@ -20581,7 +20583,7 @@ function applyPowerup(typeIdx) {
         state._laserScanActive = true;
         state.laserBoltTimer   = 0;
         const _ubsfx = document.getElementById('unibeam-sfx');
-        if (_ubsfx && !isSfxMuted()) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6; _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
+        if (_ubsfx && !isSfxMuted()) { _ubsfx.currentTime = 0; _ubsfx.volume = 0.6 * (typeof sfxMult === 'function' ? sfxMult() : 1); _ubsfx.loop = true; _ubsfx.play().catch(()=>{}); }
         setTimeout(() => { const s = document.getElementById('unibeam-sfx'); if (s) { s.loop = false; s.pause(); s.currentTime = 0; } }, state.laserTimer * 1000);
       }
       break;
@@ -20599,7 +20601,7 @@ function applyPowerup(typeIdx) {
       // Force-field loop: starts at 0 during speed phase
       const _invSfx = document.getElementById('invincible-loop-sfx');
       if (_invSfx && !isSfxMuted()) {
-        try { _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45; _invSfx.play().catch(()=>{}); } catch(_) {}
+        try { _invSfx.currentTime = 0; _invSfx.loop = true; _invSfx.volume = 0.45 * (typeof sfxMult === 'function' ? sfxMult() : 1); _invSfx.play().catch(()=>{}); } catch(_) {}
       }
       break;
     }
@@ -20809,12 +20811,13 @@ function togglePause() {
     // Resume looped weapon SFX if their power-up timer is still running.
     if (state.laserActive && !isSfxMuted()) {
       const _tier = state.laserTier || 1;
+      const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
-        if (_laserU) { _laserU.loop = true; _laserU.play().catch(()=>{}); }
+        if (_laserU) { _laserU.volume = 0.2 * _sM; _laserU.loop = true; _laserU.play().catch(()=>{}); }
       } else {
         const _ubeamU = document.getElementById('unibeam-sfx');
-        if (_ubeamU) { _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
+        if (_ubeamU) { _ubeamU.volume = 0.6 * _sM; _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
       }
     }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
@@ -22216,9 +22219,10 @@ loadSettings();
 function musicMult() { return _settings.musicMuted ? 0 : _settings.musicVol / 100; }
 // When the shuffle station is on, duck every gameplay SFX/VFX through the
 // global sfxMult() so the music stays foreground and the player can groove.
-// 0.60 = -4.4 dB — noticeably quieter without going inaudible. The lateral
-// whoosh has its own _lateralDuck on top of this.
-const _SFX_RADIO_DUCK = 0.60;
+// 0.35 = -9.1 dB — substantially quieter so the music clearly dominates,
+// but SFX still audible as cues. The lateral whoosh has its own
+// _lateralDuck on top of this for an even harder pull.
+const _SFX_RADIO_DUCK = 0.35;
 function _sfxRadioDuck() {
   try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _SFX_RADIO_DUCK : 1; } catch(_) { return 1; }
 }
@@ -36998,7 +37002,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 25;
+const BUILD_VERSION = 26;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
