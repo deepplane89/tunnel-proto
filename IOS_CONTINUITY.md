@@ -387,6 +387,7 @@ Every doc update commit message must start with `docs(ios-continuity):` so it's 
 
 - **May 15, 2026** — Doc created. Baseline `d7e7824` tagged as `ios-baseline-working`. Captures: strip fix via `contentInset: "never"` + `webView.isOpaque = false`; garage isolation contract; agent workflow lessons from a session that burned ~3 hours on whack-a-mole.
 - **May 17, 2026** — Stale-bundle bug fixed. `scripts/build.sh` now mirrors PROD output to `www/dist/game.js` automatically; previously `www/dist/game.js` was hand-maintained and silently stale (3 days old when discovered). Section 1 PROD-build description rewritten, section 2 pipeline diagram + build chain updated to reflect the auto-mirror, new "Verifying the bundle is actually fresh" subsection added with diagnostic commands. Symptom: PROD builds appeared to work (xcodebuild succeeded, devicectl install succeeded) but the iPhone ran code from days earlier.
+- **May 19, 2026 (monetization plan + cross-chat boundaries)** — Game shipped successfully to TestFlight (Build 2, status "Ready to Test", Robert is sole internal tester). Locked in monetization roadmap in new repo-root file `MONETIZATION_PLAN.md`: free + ads (AppLovin MAX) + premium tier ($4.99 remove-ads / $7.99 bundle) + consumable currency packs (coins + fuel cells). Build trigger is "~2 weeks before App Store submission," NOT now — polish + friend TestFlight feedback first. New section 13 here documents cross-chat boundary rules: iOS chat never touches `src/`, web chat never bumps build numbers or touches `ios/`, and the small list of things that legitimately require both chats to coordinate (new top-level assets, Capacitor plugins, bundle ID changes). Companion edit to `BUILD_WORKFLOW.md` section 3 (May 18) added the same boundary clarification on the web-chat-facing side.
 - **May 17, 2026 (App Store prep)** — App Store / TestFlight prep work locked in. `WKAppBoundDomains` removed from `Info.plist` and `limitsNavigationsToAppBoundDomains` removed from `capacitor.config.json` (app is 100% local bundle, no remote JS). `_comment`/`_warning` keys stripped from `capacitor.config.json` and moved to sibling `CAPACITOR_CONFIG_NOTES.md` (reviewers nitpick unknown manifest keys). New section 12 documents the full TestFlight upload pipeline including build-number bump contract, archive command, ExportOptions.plist template, and one-time App Store Connect setup. SKU recommendation for the App Store record: `jethorizon-ios-001`.
 - **May 17, 2026 (late)** — Stale-mirror bug bit again, this time on `index.html`. New HUD commit `4a68701` edited both `src/67-main-late.js` AND `index.html`; the JS half reached the phone (caught by morning's `dist/` mirror), but the HTML half didn't (`index.html` had no mirror). Phone ran new JS rendering old DOM — looked like the build was broken when really only half the diff propagated. Fix: extended `WWW_MIRROR_FILES` in `scripts/build.sh` from `[dist/game.js]` to the full set (HTML, CSS, manifest, privacy). Build chain in section 2 simplified — manual `cp` steps for CSS removed since the mirror now covers them. Verified in sandbox: PROD writes all 6 files to www/, DEV writes none.
 
@@ -491,3 +492,39 @@ Save to `ios/App/ExportOptions.plist`:
 - Build processes in App Store Connect for ~5-30 min.
 - Add internal testers under TestFlight → Internal Testing (no review required, instant install).
 - External testers require Beta App Review (~24h, one-time per significant change).
+
+---
+
+## 13. Cross-chat boundaries — what iOS chat does and does NOT do (May 18 2026)
+
+This section exists because the agent ownership rules have grown enough that "implicit" is no longer safe. Read this before assuming you can do something on the other chat's behalf.
+
+### 13.1 iOS chat does NOT touch web-chat-owned files
+
+Reaffirming the rule from `BUILD_WORKFLOW.md`: iOS chat NEVER edits `src/`, `style.css`, or `index.html`. That's web chat's exclusive domain. If a TestFlight-only bug looks like it might need a JS change to fix, the right move is:
+
+1. Report the bug + the diagnosis to Robert
+2. Wait for web chat to fix it on the web side
+3. Re-archive + re-upload after the fix lands on `dev` / `main`
+
+NEVER try to "patch" a JS issue from iOS chat by editing `src/`. It will get clobbered by web chat's next push, and worse, it teaches Robert that the ownership rules are flexible. They are not.
+
+### 13.2 Web chat does NOT bump build numbers or touch native config
+
+Per `BUILD_WORKFLOW.md` section 3 (added May 18 2026), web chat does not bump `CURRENT_PROJECT_VERSION`, does not edit anything under `ios/`, and does not need to know TestFlight exists. If web chat asks "do I need to bump the build number?" — the answer is always NO, that's iOS chat's job.
+
+When web chat ships a `dist/game.js` change to `main`, the next iOS Archive will automatically pick it up (the build chain in section 2 mirrors `dist/` → `www/` → `ios/App/App/public/`). No coordination needed.
+
+### 13.3 Things that REQUIRE coordination
+
+A small list of changes that legitimately need both chats to talk:
+
+- **Adding a new top-level web asset** (new file in repo root that needs to ship in the iOS bundle). iOS chat must extend `WWW_MIRROR_FILES` in `scripts/build.sh` (see section 2). Web chat creates the file; iOS chat adds it to the mirror.
+- **Capacitor plugins that require JS-side calls** (e.g. IAP, ads — see Monetization Plan below). Plugin install + native config is iOS chat. JS wrapper + UI is web chat. Coordinate the API surface before either side starts.
+- **Bundle ID / app rename**. Touches both Info.plist (iOS) and manifest.json (web). Should not happen, but if it does, do it together.
+
+### 13.4 Monetization work — see separate plan doc
+
+A full monetization roadmap (ads, premium tier, currency IAP) is locked in `MONETIZATION_PLAN.md` at repo root. The plan is NOT to be built yet — trigger is "I'm ready to schedule App Store submission in ~2 weeks." When that day comes, iOS chat reads `MONETIZATION_PLAN.md` first, then begins Phase 0 prerequisites (Apple banking/tax, AppLovin signup, privacy form re-declaration).
+
+The plan doc owns file-touching ownership for the monetization phases; check it before assuming who does what.
