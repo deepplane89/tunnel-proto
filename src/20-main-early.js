@@ -1008,13 +1008,9 @@ function saveFreeHeadStarts(n) { window._LS.setItem(FREE_HS_KEY, String(Math.max
 
 const HEAD_START_BASE  = 100;  // fuel cells
 const MEGA_START_BASE  = 250;
-const HEAD_START_DISCOUNTS = [0, 0.10, 0.20, 0.35, 0.50, 0.70]; // tier 0-5
 
 function getHeadStartCost(mega) {
-  // Discount comes from mission ladder stat rewards
-  const discount = getStatValue('headstart') || 0;
-  const base = mega ? MEGA_START_BASE : HEAD_START_BASE;
-  return Math.floor(base * (1 - discount));
+  return mega ? MEGA_START_BASE : HEAD_START_BASE;
 }
 function loadLifetimeStats() {
   const raw = window._LS.getItem(LIFETIME_STATS_KEY);

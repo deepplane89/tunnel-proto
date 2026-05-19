@@ -3985,9 +3985,7 @@ function killPlayer() {
   }
 
   // ── Save Me button setup (fuel cells) ──
-  const baseFuelCost = [50, 100, 150, 200][Math.min(state.saveMeCount, 3)];
-  const saveMeDiscount = getStatValue('saveme');
-  const saveMeFuelCost = Math.floor(baseFuelCost * (1 - saveMeDiscount));
+  const saveMeFuelCost = [50, 100, 150, 200][Math.min(state.saveMeCount, 3)];
   const currentFuel = loadFuelCells();
   const canAfford = currentFuel >= saveMeFuelCost;
   const _saveMeWrap = document.getElementById('go-saveme-wrap');

@@ -2432,13 +2432,9 @@ function saveFreeHeadStarts(n) { window._LS.setItem(FREE_HS_KEY, String(Math.max
 
 const HEAD_START_BASE  = 100;  // fuel cells
 const MEGA_START_BASE  = 250;
-const HEAD_START_DISCOUNTS = [0, 0.10, 0.20, 0.35, 0.50, 0.70]; // tier 0-5
 
 function getHeadStartCost(mega) {
-  // Discount comes from mission ladder stat rewards
-  const discount = getStatValue('headstart') || 0;
-  const base = mega ? MEGA_START_BASE : HEAD_START_BASE;
-  return Math.floor(base * (1 - discount));
+  return mega ? MEGA_START_BASE : HEAD_START_BASE;
 }
 function loadLifetimeStats() {
   const raw = window._LS.getItem(LIFETIME_STATS_KEY);
@@ -26698,9 +26694,7 @@ function killPlayer() {
   }
 
   // ── Save Me button setup (fuel cells) ──
-  const baseFuelCost = [50, 100, 150, 200][Math.min(state.saveMeCount, 3)];
-  const saveMeDiscount = getStatValue('saveme');
-  const saveMeFuelCost = Math.floor(baseFuelCost * (1 - saveMeDiscount));
+  const saveMeFuelCost = [50, 100, 150, 200][Math.min(state.saveMeCount, 3)];
   const currentFuel = loadFuelCells();
   const canAfford = currentFuel >= saveMeFuelCost;
   const _saveMeWrap = document.getElementById('go-saveme-wrap');
@@ -37002,7 +36996,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 27;
+const BUILD_VERSION = 28;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
