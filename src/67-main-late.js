@@ -152,6 +152,29 @@ function startGame() {
       window._reprewarmShaders('post-start');
     }
   } catch(_){}
+  // AUDIO GRAPH DRY-RUN (post-start) — first powerup pickup of the session
+  // (typically shield, since it spawns earliest) was hitching ~30-60ms on
+  // iOS Safari while WebKit JIT'd the OscillatorNode + GainNode construction
+  // path inside playSFX(). Boot prewarm couldn't help because audioCtx is
+  // null until first user gesture. Here — after the player tapped to start —
+  // audioCtx exists and we can warm the path silently. Two short
+  // volume-0 oscillators cover the two freq tiers playPickup uses; one
+  // empty AudioBufferSourceNode covers the _playBuffer code path.
+  try {
+    if (typeof playSFX === 'function' && typeof audioCtx !== 'undefined' && audioCtx) {
+      playSFX(880,  0.02, 'sine', 0);
+      playSFX(1100, 0.02, 'sine', 0);
+      try {
+        const _empty = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
+        const _src = audioCtx.createBufferSource();
+        const _g = audioCtx.createGain();
+        _g.gain.value = 0;
+        _src.buffer = _empty;
+        _src.connect(_g).connect(audioCtx.destination);
+        _src.start();
+      } catch(_) {}
+    }
+  } catch(_){}
   state.phase          = 'playing';
   shipGroup.visible    = true;
   _killExplosion();

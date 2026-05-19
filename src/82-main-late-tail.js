@@ -5,7 +5,7 @@
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 29;
+const BUILD_VERSION = 30;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
@@ -452,6 +452,36 @@ window._uploadAllBuffers = _uploadAllBuffers;
       try {
         if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
           navigator.vibrate(0);
+        }
+      } catch(_) {}
+      // e) Oscillator graph dry-run: playPickup() is what shield/laser/etc all
+      //    funnel through, and it calls playSFX() which constructs a fresh
+      //    OscillatorNode + GainNode pair per call. First-pickup of the
+      //    session pays a one-time WebKit cost wiring up the audio graph —
+      //    visible as a small hitch on the first shield smash (since shield
+      //    is typically the earliest powerup the player meets).
+      //
+      //    Fire two silent oscillators (volume 0, short duration) covering
+      //    both freq tiers playPickup uses, so the node-construction +
+      //    .connect() + .start() path is hot by the time gameplay begins.
+      try {
+        if (typeof playSFX === 'function' && typeof audioCtx !== 'undefined' && audioCtx) {
+          playSFX(880,  0.02, 'sine', 0);
+          playSFX(1100, 0.02, 'sine', 0);
+        }
+      } catch(_) {}
+      // e2) Buffer-source dry-run for _playBuffer paths used by cone-hit,
+      //    nearmiss, whoosh, etc. Creating an AudioBufferSourceNode + gain
+      //    + connect chain has a similar first-call JIT cost on iOS.
+      try {
+        if (typeof audioCtx !== 'undefined' && audioCtx && audioCtx.createBuffer) {
+          const _empty = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
+          const _src = audioCtx.createBufferSource();
+          const _g = audioCtx.createGain();
+          _g.gain.value = 0;
+          _src.buffer = _empty;
+          _src.connect(_g).connect(audioCtx.destination);
+          _src.start();
         }
       } catch(_) {}
       if (window._perfDiag && typeof window._perfDiag.tag === 'function') {
