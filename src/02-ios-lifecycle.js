@@ -25,23 +25,16 @@
 
   let lastHiddenState = null;
 
-  // Audio-ready gate: on a cold-boot launch under Capacitor, iOS often fires
-  // pageshow (and sometimes a spurious appStateChange) BEFORE the AudioContext
-  // and music elements have been wired by initAudio(). If we dispatch a
-  // synthetic visibilitychange in that window, the resume handler in
-  // 72-main-late-mid.js runs against an uninitialized snapshot — symptom:
-  // first-launch silence until you tap into a screen.
-  //
-  // We queue any pre-init events and replay the LAST one once audio is ready.
-  // The web side signals readiness by setting window.__jhAudioReady = true at
-  // the end of initAudio(). If the flag never gets set (e.g. user didn't tap
-  // to satisfy mobile autoplay), the queued event is still drained on the
-  // first real user gesture so backgrounding-before-first-tap still pauses.
-  let queuedEvent = null;
-  function isAudioReady() { return window.__jhAudioReady === true; }
-
-  function _dispatch(hidden, source) {
+  function fireVisibility(hidden, source) {
+    if (lastHiddenState === hidden) return;       // dedupe
+    lastHiddenState = hidden;
     try {
+      // Some browsers won't let us redefine document.hidden; we just
+      // dispatch the event and let listeners read document.hidden as-is.
+      // The handler in 72-main-late-mid.js checks document.hidden, which
+      // WKWebView updates based on its own page-lifecycle signals — and
+      // for cases where it doesn't, the synthetic dispatch + our own
+      // tracking is enough to trigger the pause/resume flow.
       console.log('[ios-lifecycle]', source, 'hidden=' + hidden);
       window.dispatchEvent(new Event('visibilitychange'));
       document.dispatchEvent(new Event('visibilitychange'));
@@ -49,43 +42,6 @@
       console.warn('[ios-lifecycle] dispatch failed', e);
     }
   }
-
-  function fireVisibility(hidden, source) {
-    if (lastHiddenState === hidden) return;       // dedupe
-    lastHiddenState = hidden;
-    if (!isAudioReady()) {
-      // Queue ONLY the most recent transition so a hide→show before init
-      // resolves to a single show (the current truth).
-      queuedEvent = { hidden: hidden, source: source + '+queued' };
-      console.log('[ios-lifecycle]', source, 'queued (audio not ready) hidden=' + hidden);
-      return;
-    }
-    _dispatch(hidden, source);
-  }
-
-  // Drain queued event once audio init has finished. Polls because we don't
-  // want a hard dependency on whatever module sets __jhAudioReady (could be
-  // initAudio, could be the first-tap handler — both legitimate signals).
-  let _drainPoll = setInterval(() => {
-    if (!isAudioReady()) return;
-    clearInterval(_drainPoll); _drainPoll = null;
-    if (queuedEvent) {
-      const q = queuedEvent; queuedEvent = null;
-      _dispatch(q.hidden, q.source + '+drain');
-    }
-  }, 100);
-  // Safety: if init never completes (e.g. user-gesture path failed), stop
-  // polling after 30s and drain whatever's queued anyway so backgrounding
-  // still gets handled (better partial than silent).
-  setTimeout(() => {
-    if (!_drainPoll) return;
-    clearInterval(_drainPoll); _drainPoll = null;
-    if (queuedEvent) {
-      const q = queuedEvent; queuedEvent = null;
-      console.warn('[ios-lifecycle] audio never ready, draining queued event anyway');
-      _dispatch(q.hidden, q.source + '+timeout-drain');
-    }
-  }, 30000);
 
   if (App && App.addListener) {
     App.addListener('appStateChange', (state) => {
