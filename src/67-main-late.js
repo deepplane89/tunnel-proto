@@ -2136,7 +2136,8 @@ function _drEndlessTick(dt) {
 
   const _drMechActive = state.slalomActive || state.zipperActive ||
     state.angledWallsActive || state.drCustomPatternActive || state.corridorMode ||
-    state.l4CorridorActive || state.l5CorridorActive || state._arcActive;
+    state.l4CorridorActive || state.l5CorridorActive || state._arcActive ||
+    state.l3KnifeCanyon;
 
   const phase = state.drPhase;
 
@@ -2211,9 +2212,14 @@ function _drEndlessTick(dt) {
   } else if (phase === 'BUILD' || phase === 'SUSTAIN') {
     state._endlessBlockTimer += dt;
     const _type = state._endlessActiveType || '';
+    // L3 knife canyon runs its own 40s lifecycle and self-stops via
+    // _stopL3KnifeCanyon. Don't end the block until the canyon is fully done —
+    // otherwise clearAllCorridorFlags fires mid-canyon and leaks state
+    // (speed/LT/physTier restore + canyon tuner reset) into the next wave.
+    const _knifeStillRunning = state.l3KnifeCanyon === true;
     // For spawn-mode types, tick the timer
-    const _done = state._endlessBlockTimer >= BLOCK_DURATION ||
-      (!_drMechActive && !['random_cones','angled_random','lethal','fat_cones','angled_struct','slalom'].includes(_type));
+    const _done = !_knifeStillRunning && (state._endlessBlockTimer >= BLOCK_DURATION ||
+      (!_drMechActive && !['random_cones','angled_random','lethal','fat_cones','angled_struct','slalom'].includes(_type)));
     if (_done) {
       clearAllCorridorFlags();
       state.zipperActive = false;

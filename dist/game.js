@@ -21082,6 +21082,12 @@ function clearAllCorridorFlags() {
   state.l4CorridorDone     = false;
   state.l5CorridorActive   = false;
   state.l5CorridorDone     = false;
+  // L3 knife canyon — used to leak across endless waves and restart paths.
+  // NOTE: this won't restore speed/LT/physTier saved in _startL3KnifeCanyon.
+  // The endless tick now waits for _stopL3KnifeCanyon to flip these naturally;
+  // this is a safety wipe for hotkey jumps and startGame() resets.
+  state.l3KnifeCanyon      = false;
+  state.l3KnifeDone        = false;
   state.zipperActive       = false;
   state.slalomActive       = false;
   state.slalomRowsDone     = 0;
@@ -24839,7 +24845,8 @@ function _drEndlessTick(dt) {
 
   const _drMechActive = state.slalomActive || state.zipperActive ||
     state.angledWallsActive || state.drCustomPatternActive || state.corridorMode ||
-    state.l4CorridorActive || state.l5CorridorActive || state._arcActive;
+    state.l4CorridorActive || state.l5CorridorActive || state._arcActive ||
+    state.l3KnifeCanyon;
 
   const phase = state.drPhase;
 
@@ -24914,9 +24921,14 @@ function _drEndlessTick(dt) {
   } else if (phase === 'BUILD' || phase === 'SUSTAIN') {
     state._endlessBlockTimer += dt;
     const _type = state._endlessActiveType || '';
+    // L3 knife canyon runs its own 40s lifecycle and self-stops via
+    // _stopL3KnifeCanyon. Don't end the block until the canyon is fully done —
+    // otherwise clearAllCorridorFlags fires mid-canyon and leaks state
+    // (speed/LT/physTier restore + canyon tuner reset) into the next wave.
+    const _knifeStillRunning = state.l3KnifeCanyon === true;
     // For spawn-mode types, tick the timer
-    const _done = state._endlessBlockTimer >= BLOCK_DURATION ||
-      (!_drMechActive && !['random_cones','angled_random','lethal','fat_cones','angled_struct','slalom'].includes(_type));
+    const _done = !_knifeStillRunning && (state._endlessBlockTimer >= BLOCK_DURATION ||
+      (!_drMechActive && !['random_cones','angled_random','lethal','fat_cones','angled_struct','slalom'].includes(_type)));
     if (_done) {
       clearAllCorridorFlags();
       state.zipperActive = false;
@@ -36986,7 +36998,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 22;
+const BUILD_VERSION = 23;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

@@ -409,6 +409,12 @@ function clearAllCorridorFlags() {
   state.l4CorridorDone     = false;
   state.l5CorridorActive   = false;
   state.l5CorridorDone     = false;
+  // L3 knife canyon — used to leak across endless waves and restart paths.
+  // NOTE: this won't restore speed/LT/physTier saved in _startL3KnifeCanyon.
+  // The endless tick now waits for _stopL3KnifeCanyon to flip these naturally;
+  // this is a safety wipe for hotkey jumps and startGame() resets.
+  state.l3KnifeCanyon      = false;
+  state.l3KnifeDone        = false;
   state.zipperActive       = false;
   state.slalomActive       = false;
   state.slalomRowsDone     = 0;
