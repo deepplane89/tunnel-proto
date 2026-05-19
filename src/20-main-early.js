@@ -766,11 +766,11 @@ function claimHandlingUpgrade() {
 // Order: Glide → Wipeout → Rail → Jet. Jet is the final unlock around
 // 3/4 through the handling-level ladder (handling tops at L22, jet at L20).
 window._FLIGHT_MODELS = {
-  DEFAULT: { unlock: 1,  color: '#aaaaaa', resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.50, drift: 0.30 },
-  GLIDE:   { unlock: 4,  color: '#7bbbff', resp: 0.40, latSpd: 0.30, settle: 0.30, bank: 0.20, horizon: 0.40, juice: 0.35, drift: 0.55 },
-  WIPEOUT: { unlock: 8,  color: '#ff77aa', resp: 0.50, latSpd: 0.75, settle: 0.50, bank: 0.70, horizon: 0.55, juice: 0.40, drift: 0.40 },
+  DEFAULT: { unlock: 1,  color: '#aaaaaa', resp: 0.50, latSpd: 0.50, settle: 0.50, bank: 0.50, horizon: 0.50, juice: 0.82, drift: 0.30 },
+  GLIDE:   { unlock: 4,  color: '#7bbbff', resp: 0.50, latSpd: 0.30, settle: 0.50, bank: 0.20, horizon: 0.40, juice: 0.82, drift: 0.55 },
+  WIPEOUT: { unlock: 8,  color: '#ff77aa', resp: 0.55, latSpd: 0.90, settle: 0.45, bank: 0.85, horizon: 0.60, juice: 0.95, drift: 0.55 },
   RAIL:    { unlock: 14, color: '#ffff77', resp: 0.70, latSpd: 0.45, settle: 0.80, bank: 0.30, horizon: 0.10, juice: 0.05, drift: 0.10 },
-  JET:     { unlock: 20, color: '#00ffaa', resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.68, drift: 0.30 },
+  JET:     { unlock: 20, color: '#00ffaa', resp: 0.65, latSpd: 0.46, settle: 0.82, bank: 1.00, horizon: 0.50, juice: 0.80, drift: 0.30 },
 };
 const FLIGHT_MODEL_KEY = 'jetslide_flight_model';
 const FLIGHT_MODEL_CLAIMED_KEY = 'jetslide_flight_model_claimed'; // tracks highest unlock level user has "seen"
@@ -824,7 +824,9 @@ const SVG_ICONS = {
   laser: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="6" y1="18" x2="18" y2="4"/><line x1="10" y1="18" x2="22" y2="4"/><circle cx="4" cy="20" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="20" r="1.5" fill="currentColor" stroke="none"/></svg>',
   invincible: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,2 16,9 23,9 17.5,14 19.5,21 13,17 6.5,21 8.5,14 3,9 10,9"/></svg>',
   magnet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V4h4v4a4 4 0 008 0V4h4v4a8 8 0 01-16 0z"/><line x1="4" y1="6" x2="8" y2="6"/><line x1="16" y1="6" x2="20" y2="6"/></svg>',
-  coinvalue: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="10" r="6"/><ellipse cx="12" cy="14" rx="6" ry="3"/><ellipse cx="12" cy="18" rx="6" ry="3"/></svg>',
+  // coinvalue icon removed 2026-05-17 — mechanic was half-built (card gated
+  // behind profile level 3 so player never saw it; runtime never repainted
+  // freshly-spawned coins so colored coins were never visible either).
 };
 
 const POWERUP_UPGRADES = {
@@ -868,16 +870,7 @@ const POWERUP_UPGRADES = {
       { desc: '+100% duration, +75% radius, pulls powerups' },
     ]
   },
-  coinvalue: {
-    name: 'COIN VALUE', icon: SVG_ICONS.coinvalue, color: '#ffaa00',
-    levelGate: 3,
-    maxTier: 3,
-    tiers: [
-      { desc: '2x at L3, 3x at L4' },
-      { desc: '2x at L2, 3x at L4' },
-      { desc: '2x at L2, 3x at L3' },
-    ]
-  },
+  // coinvalue removed 2026-05-17 — see comment on SVG_ICONS.coinvalue removal.
 };
 
 const STAT_UPGRADES = {
@@ -1015,13 +1008,9 @@ function saveFreeHeadStarts(n) { window._LS.setItem(FREE_HS_KEY, String(Math.max
 
 const HEAD_START_BASE  = 100;  // fuel cells
 const MEGA_START_BASE  = 250;
-const HEAD_START_DISCOUNTS = [0, 0.10, 0.20, 0.35, 0.50, 0.70]; // tier 0-5
 
 function getHeadStartCost(mega) {
-  // Discount comes from mission ladder stat rewards
-  const discount = getStatValue('headstart') || 0;
-  const base = mega ? MEGA_START_BASE : HEAD_START_BASE;
-  return Math.floor(base * (1 - discount));
+  return mega ? MEGA_START_BASE : HEAD_START_BASE;
 }
 function loadLifetimeStats() {
   const raw = window._LS.getItem(LIFETIME_STATS_KEY);
@@ -5258,14 +5247,15 @@ let skyConstellLines = null;  // constellation LineSegments
 
 const AURORA_COUNT = 80;
 const AURORA_SEGS  = 32;
-const AURORA_LEN   = 180;
+const AURORA_LEN   = 260;          // beefed 180→260 to match L5F reach
 
 // Each tendril is TWO overlapping ribbon meshes:
 //   outer: wide + dim  → soft glow halo
 //   inner: narrow + bright → glowing core
 // This fakes the thick glowing neon look without post-processing.
-const TENDRIL_WIDTH_OUTER = 3.2;   // world units wide (outer glow)
-const TENDRIL_WIDTH_INNER = 1.1;   // world units wide (bright core)
+// Widened to match L5F's juicier presence (L5F outer=7.0, inner=1.2).
+const TENDRIL_WIDTH_OUTER = 6.5;   // was 3.2 — soft glow halo
+const TENDRIL_WIDTH_INNER = 1.6;   // was 1.1 — bright core
 
 const AURORA_COLORS = [
   0xff00ff, 0xff00cc, 0xff0088,
@@ -9487,6 +9477,40 @@ window._setConeNeonBand = function(on) {
   }
 };
 
+// ── DEV: toggle obstacle water-reflection (cones, fat cones, angled walls, lethal rings) ──
+// on=true  → leaf meshes on layer 0 → reflected in water (default Three.js behavior).
+// on=false → leaf meshes on layer LAYER_NO_WATER_REFLECT (=4) → skipped by mirrorCamera.
+// Three.js mirror traversal walks each leaf mesh, so parent Group layer doesn't help —
+// we have to set layers on the actual draw calls. Pools sweep their cached child meshes.
+// _lethalRingPool is lazy-built; _initLethalRings reads window._obstacleReflectOn so the
+// toggle state is applied if rings come online after the user flipped it.
+window._obstacleReflectOn = false; // default OFF — A/B exploring no-obstacle-reflection look
+window._setObstacleReflect = function(on) {
+  window._obstacleReflectOn = !!on;
+  const L = on ? 0 : LAYER_NO_WATER_REFLECT;
+  // Cones (regular + fat) — obstaclePool[i].userData._meshes is the cached leaf list.
+  for (let i = 0; i < obstaclePool.length; i++) {
+    const meshes = obstaclePool[i].userData._meshes;
+    if (!meshes) continue;
+    for (let j = 0; j < meshes.length; j++) meshes[j].layers.set(L);
+  }
+  // Angled walls — each pool group has _mesh + _edges.
+  if (typeof _awPool !== 'undefined') {
+    for (let i = 0; i < _awPool.length; i++) {
+      const ud = _awPool[i].userData;
+      if (ud._mesh)  ud._mesh.layers.set(L);
+      if (ud._edges) ud._edges.layers.set(L);
+    }
+  }
+  // Lethal rings — lazy pool. Defined in src/40-main-late.js; reach via window scope.
+  if (typeof _lethalRingPool !== 'undefined') {
+    for (let i = 0; i < _lethalRingPool.length; i++) {
+      const rm = _lethalRingPool[i].userData._ringMesh;
+      if (rm) rm.layers.set(L);
+    }
+  }
+};
+
 // ═══════════════════════════════════════════════════
 //  TERRAIN WALLS — vaporwave mountain ridges on both sides
 // ═══════════════════════════════════════════════════
@@ -9760,6 +9784,21 @@ const _canyonTuner = {
 };
 // Expose for window._exportScene() — mirrors live tuner state after B/V edits
 window._canyonTuner = _canyonTuner;
+
+// Snapshot of _canyonTuner's initial keys+values. Used by _canyonTunerReset()
+// to wipe leaked keys from a previous canyon preset before applying the next.
+// Footgun #5 (see CANYON_ARCHITECTURE.md): Object.assign(_canyonTuner, preset)
+// only overwrites keys IN preset. If preset A has ~30 keys and preset B has ~9,
+// activating B after A leaves A's extra keys in _canyonTuner — B's canyon
+// renders with A's leaked geometry. This bit us on second-run-after-long-run.
+const _CANYON_TUNER_DEFAULTS = Object.freeze(Object.assign({}, _canyonTuner));
+function _canyonTunerReset() {
+  // Wipe every key currently on _canyonTuner.
+  for (const k of Object.keys(_canyonTuner)) delete _canyonTuner[k];
+  // Restore defaults.
+  Object.assign(_canyonTuner, _CANYON_TUNER_DEFAULTS);
+}
+window._canyonTunerReset = _canyonTunerReset;
 let _canyonWalls     = null;
 let _canyonTexCache  = null; // pre-warmed textures + materials to avoid first-spawn stutter
 let _canyonFillLight = null;
@@ -11257,9 +11296,10 @@ const POWERUP_TYPES = [
 ];
 
 
-// Coin multiplier state (must be above getPooledCoin which reads them)
-let _activeCoinMult = 1;
-const COIN_MULT_COLORS = { 1: 0xffcc00, 2: 0xff4444, 3: 0x4488ff };
+// Coin multiplier state removed 2026-05-17. _activeCoinMult was always 1 in
+// practice because the upgrade card was gated behind profile level 3 and the
+// spawn pipeline didn't repaint fresh coins anyway. getPooledCoin no longer
+// needs to set color — the pool meshes are created gold and stay gold.
 
 const COIN_POOL_SIZE    = 60;
 const COIN_POOL_ARC     = 40;   // extra pool slots for arc patterns
@@ -11348,9 +11388,6 @@ function getPooledCoin() {
     if (!c.userData.active) {
       c.userData.active = true;
       c.visible = true;
-      // Apply current coin color based on multiplier
-      const color = COIN_MULT_COLORS[_activeCoinMult] || 0xffcc00;
-      if (c.children[0] && c.children[0].material) c.children[0].material.color.setHex(color);
       return c;
     }
   }

@@ -19,11 +19,8 @@
   "ios": {
     "contentInset": "never",
     "scrollEnabled": false,
-    "limitsNavigationsToAppBoundDomains": true,
     "allowsLinkPreview": false,
     "preferredContentMode": "mobile",
     "backgroundColor": "#050614"
-  },
-  "_comment": "iOS-specific config. Game code lives in src/ + style.css + index.html. To enable live-load from Vercel during dev: uncomment server.url. MUST be removed/commented before App Store submission.",
-  "_warning": "NEW CHAT? READ /IOS_CONTINUITY.md AT REPO ROOT FIRST. ios.contentInset MUST stay 'never' — changing it brings back the home-indicator black strip. backgroundColor MUST stay #050614 at both top-level and ios.backgroundColor. Baseline tag: ios-baseline-working (commit d7e7824)."
+  }
 }

@@ -88,9 +88,10 @@ loadSettings();
 function musicMult() { return _settings.musicMuted ? 0 : _settings.musicVol / 100; }
 // When the shuffle station is on, duck every gameplay SFX/VFX through the
 // global sfxMult() so the music stays foreground and the player can groove.
-// 0.60 = -4.4 dB — noticeably quieter without going inaudible. The lateral
-// whoosh has its own _lateralDuck on top of this.
-const _SFX_RADIO_DUCK = 0.60;
+// 0.35 = -9.1 dB — substantially quieter so the music clearly dominates,
+// but SFX still audible as cues. The lateral whoosh has its own
+// _lateralDuck on top of this for an even harder pull.
+const _SFX_RADIO_DUCK = 0.35;
 function _sfxRadioDuck() {
   try { return (typeof isRadioOn === 'function' && isRadioOn()) ? _SFX_RADIO_DUCK : 1; } catch(_) { return 1; }
 }

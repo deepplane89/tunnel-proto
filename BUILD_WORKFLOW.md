@@ -1,6 +1,6 @@
 # Jet Horizon Build & Deploy Workflow
 
-**Last updated:** May 15, 2026
+**Last updated:** May 18, 2026 (added TestFlight context + web-chat ownership clarification)
 **Companion doc:** `IOS_CONTINUITY.md` (iOS-specific rules + failed-attempts log)
 **Repo:** `deepplane89/tunnel-proto`
 
@@ -95,17 +95,25 @@ Because `dist/game.js` is the file the browser actually loads. The dev tools (tu
 - Capacitor wraps the web app in a native iOS WebView (WKWebView).
 - The web assets get copied into the iOS bundle: `ios/App/App/public/` is a copy of `www/`, which itself mirrors the repo root.
 - Capacitor expects PROD build behavior — the dev tools are not designed to work inside the WebView, and shipping them would bloat the binary and expose dev surfaces.
-- Build chain (Robert runs this on his Mac after a PR merges to `main`):
-  ```bash
-  git checkout main && git pull origin main
-  cp capacitor.config.json ios/App/App/capacitor.config.json
-  cp style.capacitor.css   www/style.capacitor.css
-  cp style.capacitor.css   ios/App/App/public/style.capacitor.css
-  # dist/game.js on main is already the PROD build — no rebuild needed
-  cd ios/App
-  xcodebuild ... && xcrun devicectl device install ... && launch
-  ```
-- See `IOS_CONTINUITY.md` section 2 for the full pre-build chain.
+- **As of May 17 2026 there are TWO on-device install paths, both owned by iOS chat:**
+  1. **Dev install via `devicectl`** — fast (1–2 min from save to phone), Debug-signed, USB-tethered the first time. Use for daily on-device iteration. This is the long-standing flow.
+  2. **TestFlight upload** — slower (~15 min including Apple processing), Release-signed, no tether. Use when validating a shipping-quality candidate or sharing with other testers. See `IOS_CONTINUITY.md` section 12 for the archive/upload procedure and the `CURRENT_PROJECT_VERSION` bump contract.
+- Web chat never needs to touch either flow. iOS chat handles all native side ceremony, including TestFlight build numbers.
+- See `IOS_CONTINUITY.md` section 2 for the full pre-build chain and section 12 for TestFlight.
+
+### Heads-up for web chat: TestFlight does not change web chat's workflow
+TestFlight is iOS chat's domain. Web chat's dev → prod loop is unchanged:
+
+1. Edit `src/*` / `style.css` / `index.html`.
+2. `bash scripts/build.sh --dev`, commit, push to `dev`. Vercel-preview updates, local 8080 works, Robert tests in Safari / PWA.
+3. When Robert says "push to main," promote as usual. Vercel auto-deploys prod.
+
+TestFlight inherits whatever `dist/game.js` is on `main` at archive time — web chat does not need to coordinate or notify iOS chat. The shared mirror in `scripts/build.sh` handles propagation. Web chat does NOT:
+- Bump `CURRENT_PROJECT_VERSION` (lives in `ios/App/App.xcodeproj/project.pbxproj`, iOS-only)
+- Edit anything under `ios/`
+- Care that TestFlight exists
+
+The one and only thing web chat should know: if Robert reports a bug "in the TestFlight build" that does NOT reproduce on Vercel or local 8080, it is almost always a native-side issue (Capacitor config, iOS-specific WebView quirk, signing) — hand it to iOS chat, do not try to fix it from `src/`.
 
 ---
 

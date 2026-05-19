@@ -512,6 +512,8 @@ function maybeStartGauntlet() {
 // to false to restore it.
 // ============================================================================
 function _startL3KnifeCanyon() {
+  // Wipe any in-flight bonus rings — they'd be trapped between canyon walls.
+  if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
   // NOTE: do NOT wipe activeObstacles here. The DR sequencer
   // stops spawning cones before L3 trigger, so the last batch will z-scroll
   // past the player naturally during the ~1s before canyon slabs reach play
@@ -550,6 +552,9 @@ function _startL3KnifeCanyon() {
   // K-hotkey handler in 67-main-late.js:5470 but without the manual toggle.
   const vals = _CANYON_PRESETS[1];
   if (!vals) return;
+  // Reset tuner to defaults first to wipe any leaked keys from a prior preset.
+  // See CANYON_ARCHITECTURE.md footgun #5.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode = 1;
   _canyonTuner._allCyan = false;
   _canyonTuner._allDark = false;
@@ -726,7 +731,7 @@ function _updateL3KnifeCanyon(dt) {
 // values + RANDOM lightning loop instead of knife-arches preset.
 // Triggered by DR sequencer family registry entry 'PRE_T4A_CANYON'.
 // ============================================================================
-const _PRE_T4A_DURATION         = 40.0;   // seconds
+const _PRE_T4A_DURATION         = 20.0;   // seconds (was 40 — user request 2026-05-18)
 const _PRE_T4A_EXIT_WINDOW      = 4.0;    // last-N seconds = scroll-out, no new slabs
 const _PRE_T4A_RAMP_DURATION    = 0.4;    // entry-ramp seconds (matches L3 knife)
 const _PRE_T4A_TARGET_SPEED_MULT = 2.2;   // BASE_SPEED * this during canyon
@@ -769,6 +774,9 @@ const _PRE_T4A_LT_TUNER = {
 };
 
 function _startPreT4ACanyon() {
+  // Wipe any in-flight bonus rings — they'd be trapped between canyon walls
+  // and read as broken (player can't reach them, they collide with walls).
+  if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
   // State flags
   state.preT4ACanyon       = true;
   state.preT4AElapsed      = 0;
@@ -786,6 +794,9 @@ function _startPreT4ACanyon() {
   state._preT4ASavedLT        = window._LT ? Object.assign({}, window._LT) : null;
 
   // Apply canyon tuner (mode 5, NOT _l4Recreation — standard canyon).
+  // Reset tuner to defaults first to wipe any leaked keys from a prior preset.
+  // See CANYON_ARCHITECTURE.md footgun #5.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode = 5;
   _canyonTuner._allCyan      = false;
   _canyonTuner._allDark      = false;
@@ -914,7 +925,7 @@ function _updatePreT4ACanyon(dt) {
 // (all-cyan smooth sine) with low-frequency lightning for atmosphere.
 // Triggered by DR sequencer family registry entry 'PRE_T4B_CANYON'.
 // ============================================================================
-const _PRE_T4B_DURATION         = 40.0;
+const _PRE_T4B_DURATION         = 20.0;   // was 40 — user request 2026-05-18
 const _PRE_T4B_EXIT_WINDOW      = 4.0;
 const _PRE_T4B_RAMP_DURATION    = 0.4;
 const _PRE_T4B_TARGET_SPEED_MULT = 2.2;
@@ -947,6 +958,8 @@ const _PRE_T4B_LT_TUNER = {
 };
 
 function _startPreT4BCanyon() {
+  // Wipe any in-flight bonus rings — they'd be trapped between canyon walls.
+  if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
   state.preT4BCanyon       = true;
   state.preT4BElapsed      = 0;
   state.preT4BDone         = false;
@@ -958,6 +971,10 @@ function _startPreT4BCanyon() {
   // FOV restore removed — speed-lerp owns it (see _startL3KnifeCanyon).
   state._preT4BSavedLT        = window._LT ? Object.assign({}, window._LT) : null;
 
+  // Reset tuner to defaults first to wipe any leaked keys from a prior preset.
+  // T4B's preset is sparse (~9 keys); without this, ~21 T4A keys leak and
+  // T4B canyons render with T4A's high-wall geometry. See CANYON_ARCHITECTURE.md footgun #5.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode = 1;
   _canyonTuner._allCyan      = false; // cleared first; preset re-asserts true below
   _canyonTuner._allDark      = false;
@@ -1839,6 +1856,15 @@ function _initLethalRings() {
     scene.add(group);
     _lethalRingPool.push(group);
   }
+  // Apply current obstacle-reflect toggle state (rings are lazy; toggle may have
+  // been flipped before they existed).
+  if (window._obstacleReflectOn === false) {
+    const L = (typeof LAYER_NO_WATER_REFLECT !== 'undefined') ? LAYER_NO_WATER_REFLECT : 4;
+    for (let i = 0; i < _lethalRingPool.length; i++) {
+      const rm = _lethalRingPool[i].userData._ringMesh;
+      if (rm) rm.layers.set(L);
+    }
+  }
 }
 // Expose so global prewarm can call it once at startup
 window._initLethalRings = _initLethalRings;
@@ -2293,8 +2319,7 @@ function checkLevelUp() {
     // L3→L4 crossfade: fire immediately on L4 entry, 12s incoming fade, L3 fades out over 21.6s (12×1.8)
     if (newIdx === 3) { const t = setTimeout(() => { if (state.currentLevelIdx >= 3) crossfadeToL4(6.0); }, 5000); _musicTimers.push(t); }
     showBanner('LEVEL ' + (newIdx + 1), 'levelup', 2500);
-    // Update coin multiplier/colors for new level
-    updateCoinColors();
+    // (coin multiplier update removed 2026-05-17)
   }
 }
 
@@ -2313,47 +2338,17 @@ function updateHUDLevel() {
 // ═══════════════════════════════════════════════════
 
 let _totalCoins = loadCoinWallet();  // in-memory running total (persists via window._LS)
-// Coin Value: multiplier based on level + upgrade tier
-// Base: 2x at L3 (idx 2), 3x at L4 (idx 3)
-// Tier 2: 2x at L2, 3x at L4
-// Tier 3: 2x at L2, 3x at L3
-const COIN_MULT_TABLE = [
-  // [tier]: { levelIdx: multiplier }
-  { 2: 2, 3: 3 },  // tier 1 (base): 2x@L3, 3x@L4+
-  { 1: 2, 3: 3 },  // tier 2: 2x@L2, 3x@L4+
-  { 1: 2, 2: 3 },  // tier 3: 2x@L2, 3x@L3+
-];
-
-function getCoinMultiplier(levelIdx) {
-  const tier = loadUpgradeTier('coinvalue');
-  const table = COIN_MULT_TABLE[Math.min(tier - 1, COIN_MULT_TABLE.length - 1)] || COIN_MULT_TABLE[0];
-  let mult = 1;
-  for (const [lvl, m] of Object.entries(table)) {
-    if (levelIdx >= parseInt(lvl)) mult = Math.max(mult, m);
-  }
-  return mult;
-}
-
-// Coin colors: gold(1x), red(2x), blue(3x)
-function updateCoinColors() {
-  const mult = getCoinMultiplier(state.currentLevelIdx);
-  if (mult !== _activeCoinMult) {
-    const prevMult = _activeCoinMult;
-    _activeCoinMult = mult;
-    // Recolor all active coins
-    const color = COIN_MULT_COLORS[mult] || 0xffcc00;
-    for (const c of activeCoins) {
-      if (c.children[0] && c.children[0].material) c.children[0].material.color.setHex(color);
-    }
-    // Banner
-    if (mult > prevMult && state.phase === 'playing') {
-      showBanner(mult + 'x COINS', 'mission', 2000);
-    }
-  }
-}
+// Coin multiplier system removed 2026-05-17. Was a half-built mechanic:
+// garage card was gated behind profile level 3 (so it was effectively
+// invisible), and the runtime only repainted existing coins on level-up
+// without repainting fresh spawns (so colored coins never showed in game).
+// Deleted: COIN_MULT_TABLE, getCoinMultiplier(), updateCoinColors().
+// Coins are now always 1x value, always gold. The mission-reward "double
+// next run" mechanic (jetslide_double_next localStorage flag) is unrelated
+// and still works at game-over via _dcFlag in 67-main-late.js.
 
 function collectCoin(coin, worldPos) {
-  const mult = _activeCoinMult;
+  const mult = 1; // coin multiplier system removed 2026-05-17
   state.sessionCoins += mult;
   _totalCoins += mult;
   // Player-facing score: orb bonus

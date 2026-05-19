@@ -136,12 +136,13 @@ function togglePause() {
     // Resume looped weapon SFX if their power-up timer is still running.
     if (state.laserActive && !isSfxMuted()) {
       const _tier = state.laserTier || 1;
+      const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
-        if (_laserU) { _laserU.loop = true; _laserU.play().catch(()=>{}); }
+        if (_laserU) { _laserU.volume = 0.2 * _sM; _laserU.loop = true; _laserU.play().catch(()=>{}); }
       } else {
         const _ubeamU = document.getElementById('unibeam-sfx');
-        if (_ubeamU) { _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
+        if (_ubeamU) { _ubeamU.volume = 0.6 * _sM; _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
       }
     }
     if (state._tutorialActive) { const el = document.getElementById('tutorial-overlay'); if (el) el.style.opacity = '1'; }
@@ -409,6 +410,12 @@ function clearAllCorridorFlags() {
   state.l4CorridorDone     = false;
   state.l5CorridorActive   = false;
   state.l5CorridorDone     = false;
+  // L3 knife canyon — used to leak across endless waves and restart paths.
+  // NOTE: this won't restore speed/LT/physTier saved in _startL3KnifeCanyon.
+  // The endless tick now waits for _stopL3KnifeCanyon to flip these naturally;
+  // this is a safety wipe for hotkey jumps and startGame() resets.
+  state.l3KnifeCanyon      = false;
+  state.l3KnifeDone        = false;
   state.zipperActive       = false;
   state.slalomActive       = false;
   state.slalomRowsDone     = 0;

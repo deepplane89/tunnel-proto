@@ -31,7 +31,12 @@ set -euo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 SRC_DIR="$REPO_ROOT/src"
-OUT_PATH="$REPO_ROOT/dist/game.js"
+DEFAULT_OUT_PATH="$REPO_ROOT/dist/game.js"
+OUT_PATH="$DEFAULT_OUT_PATH"
+# PROD-mode behavior: after the bundle is written, mirror root assets into
+# www/ (Capacitor's webDir). See the "Capacitor webDir mirror" block near
+# the bottom of this file for the full list of mirrored files and the
+# history of why this exists. DEV builds skip the mirror entirely.
 PROD_BUILD=1   # DEFAULT: prod. Use --dev to opt out.
 mkdir -p "$(dirname "$OUT_PATH")"
 
@@ -186,3 +191,51 @@ fi
 for f in "${FILES[@]}"; do
   echo "  - ${f#$REPO_ROOT/}"
 done
+
+# ── Capacitor webDir mirror ──────────────────────────────────────────────
+# Mirror PROD assets from repo root → www/ so `npx cap copy ios` (which reads
+# from webDir=www/) picks up fresh content. Without this mirror, Capacitor
+# silently ships whatever stale copy was last there.
+#
+# History of this class of bug:
+#   * May 17 2026 — www/dist/game.js stale by 3 days. Phone ran May 14 code.
+#     Fix: added dist/game.js → www/dist/game.js mirror.
+#   * May 17 2026 (later) — www/index.html stale. New HUD shipped JS-side but
+#     the HTML still showed old coin/fuel-cell <img> tags. Phone ran new JS
+#     against old DOM, so the touch-pause fix worked but the visual HUD
+#     change did not. Fix: extended mirror to cover index.html + CSS + other
+#     root-level shared assets.
+#
+# WHEN ADDING A NEW SHARED FILE AT REPO ROOT (e.g. a new HTML page, new
+# global CSS file, new top-level asset that the running game references):
+# add it to WWW_MIRROR_FILES below. Otherwise the iOS bundle will silently
+# ship a stale copy or no copy at all. The doc trail for this lives in
+# IOS_CONTINUITY.md section 2.
+#
+# Skip the mirror if OUT_PATH was overridden via -o (caller knows what they
+# want), and skip for DEV builds (don't pollute the App Store-bound webDir
+# with tuner panels). Per-file: source must exist; if absent we warn but
+# don't fail — some assets are optional / environment-specific.
+WWW_MIRROR_FILES=(
+  "dist/game.js"
+  "index.html"
+  "style.capacitor.css"
+  "style.css"
+  "manifest.json"
+  "privacy.html"
+)
+
+if [[ "$PROD_BUILD" -eq 1 && "$OUT_PATH" == "$DEFAULT_OUT_PATH" ]]; then
+  echo "Mirroring root → www/ (Capacitor webDir):"
+  for rel in "${WWW_MIRROR_FILES[@]}"; do
+    SRC="$REPO_ROOT/$rel"
+    DST="$REPO_ROOT/www/$rel"
+    if [[ ! -f "$SRC" ]]; then
+      echo "  ⚠️  skip $rel (not present at repo root)" >&2
+      continue
+    fi
+    mkdir -p "$(dirname "$DST")"
+    cp "$SRC" "$DST"
+    echo "  → www/$rel"
+  done
+fi

@@ -286,9 +286,35 @@ function startGame() {
   // from a prior run (rapid game-over→retry, double-tap, backgrounded tab, etc).
   // _retryIsFromDead / _retryPending are released at end of fn (after retry branches consume them).
   state._seqSpawnMode  = 'cones';   // default; startDeathRun re-sets to 'cones' explicitly
-  state.preT4ADone     = false;
-  state.preT4BDone     = false;
-  state.l3KnifeDone    = false;
+  // Canyon state nuke — belt-and-suspenders for the "first canyon of a new run
+  // wrong" bug. Done flags reset BUT also wipe active flags, elapsed timers,
+  // exit-started flags, saved restore values, and ramp state. If any of these
+  // leak from a prior run (death mid-canyon, hot reload, etc) the next canyon
+  // will read stale state and render the wrong family/look.
+  state.preT4ACanyon       = false;
+  state.preT4BCanyon       = false;
+  state.l3KnifeCanyon      = false;
+  state.preT4ADone         = false;
+  state.preT4BDone         = false;
+  state.l3KnifeDone        = false;
+  state.preT4AElapsed      = 0;
+  state.preT4BElapsed      = 0;
+  state.l3KnifeElapsed     = 0;
+  state._preT4AExitStarted = false;
+  state._preT4BExitStarted = false;
+  state._l3KnifeExitStarted = false;
+  state.preT4ARampPhase    = 'off';
+  state.preT4ARampT        = 0;
+  state.preT4BRampPhase    = 'off';
+  state.preT4BRampT        = 0;
+  state._preT4ASavedSpeed     = undefined;
+  state._preT4ASavedLT        = undefined;
+  state._preT4ASavedPhysLevel = undefined;
+  state._preT4BSavedSpeed     = undefined;
+  state._preT4BSavedLT        = undefined;
+  state._preT4BSavedPhysLevel = undefined;
+  // Also wipe any leaked _canyonTuner keys before first canyon of this run.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   state.angledWallsActive = false;
   state._ringsActive   = false;
   // Reset invariant-assertion bookkeeping (watchdogs that detect stuck states).
@@ -323,7 +349,7 @@ function startGame() {
   }
   state.laserTimer     = 0;
   state.sessionCoins   = 0;
-  _activeCoinMult      = 1;  // reset coin multiplier for new run
+  // (_activeCoinMult reset removed 2026-05-17 — coin multiplier system gone)
   state.sessionPowerups = 0;
   state.sessionShields = 0;
   state.sessionLasers = 0;
@@ -562,7 +588,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x080018),
     floorLine: new THREE.Color(0xcc44ff),
     thrusterColor: new THREE.Color(0xee00ff),
-    sunShader: 1, tendrils: 'none',
+    sunShader: 1, tendrils: 'aurora',
     obstaclesPerSpawn: 7, maxObstaclesPerSpawn: 9, gapFactor: 0.95, speedTier: 1,
   },
   {
@@ -614,14 +640,14 @@ const DEATH_RUN_VIBES = [
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 4,
   },
   {
-    name: 'DEEP EMERALD',
-    skyTop: new THREE.Color(0x000f06), skyBot: new THREE.Color(0x001a0a),
-    gridColor: new THREE.Color(0x00ff88), sunColor: new THREE.Color(0x66ffaa),
-    sunStripeColor: new THREE.Color(0x22aa55), bloomStrength: 0.32,
-    fogColor: new THREE.Color(0x000a04),
-    floorLine: new THREE.Color(0x00ff88),
-    thrusterColor: new THREE.Color(0x44ffaa),
-    sunShader: 0, tendrils: 'none',
+    name: 'DEEP VIOLET',
+    skyTop: new THREE.Color(0x06000f), skyBot: new THREE.Color(0x0a001a),
+    gridColor: new THREE.Color(0xaa44ff), sunColor: new THREE.Color(0xcc88ff),
+    sunStripeColor: new THREE.Color(0x6622aa), bloomStrength: 0.34,
+    fogColor: new THREE.Color(0x06000c),
+    floorLine: new THREE.Color(0xaa44ff),
+    thrusterColor: new THREE.Color(0xcc88ff),
+    sunShader: 0, tendrils: 'aurora',
     obstaclesPerSpawn: 7, maxObstaclesPerSpawn: 9, gapFactor: 0.92, speedTier: 4,
   },
   {
@@ -643,18 +669,18 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x0a0012),
     floorLine: new THREE.Color(0xff44aa),
     thrusterColor: new THREE.Color(0xff66bb),
-    sunShader: 1, tendrils: 'none',
+    sunShader: 1, tendrils: 'aurora',
     obstaclesPerSpawn: 8, maxObstaclesPerSpawn: 10, gapFactor: 0.9, speedTier: 4,
   },
   {
-    name: 'TOXIC',
-    skyTop: new THREE.Color(0x000000), skyBot: new THREE.Color(0x0a0f00),
-    gridColor: new THREE.Color(0x88ff00), sunColor: new THREE.Color(0xccff44),
-    sunStripeColor: new THREE.Color(0x66aa00), bloomStrength: 0.38,
-    fogColor: new THREE.Color(0x040800),
-    floorLine: new THREE.Color(0x88ff00),
-    thrusterColor: new THREE.Color(0xaaff22),
-    sunShader: 4, tendrils: 'none',
+    name: 'HOT MAGENTA',
+    skyTop: new THREE.Color(0x0a0008), skyBot: new THREE.Color(0x18021a),
+    gridColor: new THREE.Color(0xff22cc), sunColor: new THREE.Color(0xff44dd),
+    sunStripeColor: new THREE.Color(0xaa1188), bloomStrength: 0.40,
+    fogColor: new THREE.Color(0x10020c),
+    floorLine: new THREE.Color(0xff44dd),
+    thrusterColor: new THREE.Color(0xff66ee),
+    sunShader: 1, tendrils: 'aurora',
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 4,
   },
   {
@@ -742,7 +768,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x040410),
     floorLine: new THREE.Color(0x8866cc),
     thrusterColor: new THREE.Color(0x9977dd),
-    sunShader: 1, tendrils: 'none',
+    sunShader: 1, tendrils: 'aurora',
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 4,
   },
   {
@@ -1246,9 +1272,9 @@ const DR_SEQUENCE = [
   { name: 'CA_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 1.8, vibeIdx: 0, physTier: 1 },
   { name: 'CA_REST',          type: 'rest', duration: 3, speed: 1.8, vibeIdx: 1, physTier: 1 },
 
-  // Stage 2 — cones + zippers (holds CA's 1.8x — no drop, no yo-yo).
+  // Stage 2 — fat cones (was cones+zippers; zippers too hard this early).
   // physTier promoted 1→2 to match speed bump.
-  { name: 'S2_CONES_ZIPS',    type: 'cones_and_zips', duration: 30, speed: 1.8, vibeIdx: 1, physTier: 2 },
+  { name: 'S2_FAT_CONES',     type: 'fat_cones',      duration: 30, speed: 1.8, vibeIdx: 1, physTier: 2 },
   // Canyon B (placeholder = CC1 mild)
   // physTier lifted 1→2 to keep ladder monotonic non-decreasing after S2's promotion.
   { name: 'CB_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 1, physTier: 2 },
@@ -1534,24 +1560,23 @@ function _drSequencerTick(dt) {
       state._drStageSpeed = undefined;
       if (_restoreT4A) Object.assign(_PRE_T4A_CANYON_TUNER, _restoreT4A);
     }
-    // If stage has a duration, use time — more reliable than row count at variable speeds
-    if (stage.duration) {
-      state.seqStageElapsed += dt;
-      if (state.seqStageElapsed >= stage.duration) {
-        state._seqCorridorStarted = false;
-        state.deathRunRestBeat = 0;
-        clearAllCorridorFlags();
-        state.l5CorridorDone = true; // mark done so campaign ending path never fires
-        _drSeqAdvance();
-      }
-    } else {
-      // No duration — wait for corridor to finish by row count
+    // Advance on whichever comes first: stage.duration timer OR family naturally
+    // finishing (e.g. L5 corridor hits its 420-row cap at ~33s but S11 duration
+    // is 60s — without the early-out, that's ~27s of empty road).
+    state.seqStageElapsed += dt;
+    const _famDone = (() => {
       const fam = DR_MECHANIC_FAMILIES[stage.family];
-      if (!fam.isActive()) {
-        state._seqCorridorStarted = false;
-        state.deathRunRestBeat = 0;
-        _drSeqAdvance();
-      }
+      // Only treat as done if we actually started the family this stage (avoid
+      // first-frame false positives before activate() ran).
+      return state._seqCorridorStarted && fam && !fam.isActive();
+    })();
+    const _timerDone = stage.duration && state.seqStageElapsed >= stage.duration;
+    if (_famDone || _timerDone) {
+      state._seqCorridorStarted = false;
+      state.deathRunRestBeat = 0;
+      clearAllCorridorFlags();
+      state.l5CorridorDone = true; // mark done so campaign ending path never fires
+      _drSeqAdvance();
     }
     return;
   }
@@ -1769,7 +1794,11 @@ function _drSequencerTick(dt) {
     if (state.drPhase === 'RELEASE') {
       state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
     } else if (_endlessType === 'random_cones') {
-      state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
+      // Endless random_cones uses 'sparse' (5-7 cones, gap 1.0) instead of
+      // 'normal' (9-11 cones, tight gap). At 2.5x with physTier 5 the dense
+      // version was an unfair wall — sparse mimics S1 spacing so the player
+      // can actually thread the cones.
+      state._seqSpawnMode = 'cones'; state._seqConeDensity = 'sparse';
     } else if (_endlessType === 'angled_random') {
       state._seqSpawnMode = 'angled';
     } else if (_endlessType === 'lethal') {
@@ -2035,8 +2064,12 @@ function _tutShowHint(title, sub, color) {
     document.body.appendChild(exitBtn);
   }
   el.innerHTML = [
-    `<div style="color:${color};font-family:monospace;font-size:clamp(18px,3.5vw,28px);font-weight:bold;letter-spacing:3px;text-shadow:0 0 14px ${color}">${title}</div>`,
-    `<div style="color:#fff;font-family:monospace;font-size:clamp(11px,2vw,15px);margin-top:6px;opacity:0.8">${sub}</div>`
+    // Permanent Marker for tutorial hint headline + sub (user-requested 2026-05-17).
+    // Dropped letter-spacing from 3px → 1px because brush-script connecting strokes
+    // look broken with wide tracking. Bumped font-size slightly so the
+    // less-condensed brush face reads at the same visual weight as monospace.
+    `<div style="color:${color};font-family:'Permanent Marker',cursive;font-size:clamp(20px,3.8vw,30px);letter-spacing:1px;text-shadow:0 0 14px ${color}">${title}</div>`,
+    `<div style="color:#fff;font-family:'Permanent Marker',cursive;font-size:clamp(12px,2.2vw,16px);margin-top:6px;letter-spacing:0.5px;opacity:0.85">${sub}</div>`
   ].join('');
   el.style.opacity = '1';
 }
@@ -2054,7 +2087,11 @@ function _tutSignal() {
   if (!el) {
     el = document.createElement('div');
     el.id = 'tut-signal-flash';
-    el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Knewave',monospace;font-size:16px;letter-spacing:4px;color:#ffffff;opacity:0;pointer-events:none;z-index:19000;transition:opacity 0.15s ease;text-align:center;";
+    // Permanent Marker for SIGNAL RECEIVED flash (user-requested 2026-05-17).
+    // Was 'Knewave',monospace with 4px tracking — Knewave wasn't even loaded so it
+    // was falling back to monospace. Brush-script reads better with tighter tracking.
+    // Added warm glow text-shadow to match the streak-claim popup vibe.
+    el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Permanent Marker',cursive;font-size:22px;letter-spacing:1.5px;color:#ffffff;text-shadow:0 0 14px rgba(255,160,0,0.6),0 0 24px rgba(255,100,0,0.3);opacity:0;pointer-events:none;z-index:19000;transition:opacity 0.15s ease;text-align:center;";
     document.body.appendChild(el);
   }
   el.textContent = 'SIGNAL RECEIVED...';
@@ -2099,7 +2136,8 @@ function _drEndlessTick(dt) {
 
   const _drMechActive = state.slalomActive || state.zipperActive ||
     state.angledWallsActive || state.drCustomPatternActive || state.corridorMode ||
-    state.l4CorridorActive || state.l5CorridorActive || state._arcActive;
+    state.l4CorridorActive || state.l5CorridorActive || state._arcActive ||
+    state.l3KnifeCanyon;
 
   const phase = state.drPhase;
 
@@ -2174,9 +2212,14 @@ function _drEndlessTick(dt) {
   } else if (phase === 'BUILD' || phase === 'SUSTAIN') {
     state._endlessBlockTimer += dt;
     const _type = state._endlessActiveType || '';
+    // L3 knife canyon runs its own 40s lifecycle and self-stops via
+    // _stopL3KnifeCanyon. Don't end the block until the canyon is fully done —
+    // otherwise clearAllCorridorFlags fires mid-canyon and leaks state
+    // (speed/LT/physTier restore + canyon tuner reset) into the next wave.
+    const _knifeStillRunning = state.l3KnifeCanyon === true;
     // For spawn-mode types, tick the timer
-    const _done = state._endlessBlockTimer >= BLOCK_DURATION ||
-      (!_drMechActive && !['random_cones','angled_random','lethal','fat_cones','angled_struct','slalom'].includes(_type));
+    const _done = !_knifeStillRunning && (state._endlessBlockTimer >= BLOCK_DURATION ||
+      (!_drMechActive && !['random_cones','angled_random','lethal','fat_cones','angled_struct','slalom'].includes(_type)));
     if (_done) {
       clearAllCorridorFlags();
       state.zipperActive = false;
@@ -2186,12 +2229,20 @@ function _drEndlessTick(dt) {
       state.deathRunRestBeat = 4.0;
       state.drPhase = 'RELEASE'; state.drPhaseTimer = 0;
       state.drWaveCount++;
-      if (!state._tutorialActive && _bonusRings.length === 0) _ringSpawnRow(0);
+      // Spawn fuel ring centered on the ship's current X so it lands within
+      // reach — world-origin spawn was uncollectable if the player was off-axis
+      // when the wave ended. Only spawn if next mechanic isn't a corridor
+      // (rings would get trapped inside canyon walls).
+      const _nextEndlessType = _ENDLESS_ROTATION[(state._endlessRotationIdx || 0) % _ENDLESS_ROTATION.length];
+      const _nextIsCorridor = _nextEndlessType === 'L3_CORRIDOR' || _nextEndlessType === 'L4_SINE_CORRIDOR';
+      if (!state._tutorialActive && !_nextIsCorridor && _bonusRings.length === 0) {
+        _ringSpawnRow(state.shipX || 0);
+      }
       // Cycle vibes through the full palette on each endless wave
       const _totalVibes = DEATH_RUN_VIBES.length;
       const _nextVibeIdx = ((state._endlessVibeIdx || 0) + 1) % _totalVibes;
       state._endlessVibeIdx = _nextVibeIdx;
-      _applyVibeTransition(_nextVibeIdx, true);
+      _applyVibeTransition(_nextVibeIdx, true, /*suppressBanner=*/true);
     }
   } else if (phase === 'RECOVERY') {
     state.drPhase = 'RELEASE'; state.drPhaseTimer = 0;
@@ -2327,6 +2378,8 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['build', 'peak'],
     minBand: 3,
     activate(band, role) {
+      // Wipe in-flight bonus rings — would get trapped between corridor walls.
+      if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
       // Full campaign L4 corridor: 518 rows (48s at 2.1x speed)
       const rows = 518;
       state.l4CorridorActive = true;
@@ -2347,6 +2400,8 @@ const DR_MECHANIC_FAMILIES = {
     roles: ['peak'],
     minBand: 3,
     activate(band, role) {
+      // Wipe in-flight bonus rings — would get trapped between corridor walls.
+      if (typeof _ringRemoveAll === 'function') _ringRemoveAll();
       // Full campaign L5 corridor: 420 rows (33s at 2.5x speed)
       const rows = 420;
       state.l5CorridorActive    = true;
@@ -2996,7 +3051,7 @@ function updateDeathRunTransition(dt) {
 // (per-stage stage.vibeIdx + _drEndlessTick wave rotation calling
 // _applyVibeTransition directly).
 let _pendingVibeIdx = -1;
-function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
+function _applyVibeTransition(targetVibeIdx, suppressRestBeat, suppressBanner) {
   const fromVibe = DEATH_RUN_VIBES[state.deathRunVibeIdx];
   const toVibe   = DEATH_RUN_VIBES[targetVibeIdx];
   state.deathRunVibeIdx = targetVibeIdx;
@@ -3024,8 +3079,11 @@ function _applyVibeTransition(targetVibeIdx, suppressRestBeat) {
   }
   playLevelUp();
   updateHUDLevel();
-  showBanner('TIER ' + (targetVibeIdx + 1), 'levelup', 2500);
-  updateCoinColors();
+  // Endless cycles vibes between waves cosmetically — the player is already
+  // past the tier ladder, so a 'TIER N' banner is misleading. Caller passes
+  // suppressBanner=true from the endless wave-rotation site.
+  if (!suppressBanner) showBanner('TIER ' + (targetVibeIdx + 1), 'levelup', 2500);
+  // (updateCoinColors removed 2026-05-17 — coin multiplier system gone)
 }
 // checkDeathRunSpeed + BAND_SPEED table deleted in Pass 2C cleanup.
 // Speed is now 100% sequencer-driven via _setDRSpeed():
@@ -3927,9 +3985,7 @@ function killPlayer() {
   }
 
   // ── Save Me button setup (fuel cells) ──
-  const baseFuelCost = [50, 100, 150, 200][Math.min(state.saveMeCount, 3)];
-  const saveMeDiscount = getStatValue('saveme');
-  const saveMeFuelCost = Math.floor(baseFuelCost * (1 - saveMeDiscount));
+  const saveMeFuelCost = [50, 100, 150, 200][Math.min(state.saveMeCount, 3)];
   const currentFuel = loadFuelCells();
   const canAfford = currentFuel >= saveMeFuelCost;
   const _saveMeWrap = document.getElementById('go-saveme-wrap');
