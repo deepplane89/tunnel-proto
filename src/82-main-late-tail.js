@@ -5,7 +5,7 @@
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 23;
+const BUILD_VERSION = 24;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

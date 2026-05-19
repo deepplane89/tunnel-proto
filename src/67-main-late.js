@@ -2114,7 +2114,7 @@ const _ENDLESS_ROTATION = [
   'lethal',          // lethal rings
   'fat_cones',       // fat cone slalom
   'angled_struct',   // structural angled walls
-  'zipper',          // zip lines
+  'fat_cones',       // fat cones (was zipper — too hard early)
   'slalom',          // slalom
   'L3_CORRIDOR',     // L3 corridor (after cooldown)
   'L4_SINE_CORRIDOR',// L4 corridor (after cooldown)

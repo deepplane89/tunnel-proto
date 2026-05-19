@@ -24823,7 +24823,7 @@ const _ENDLESS_ROTATION = [
   'lethal',          // lethal rings
   'fat_cones',       // fat cone slalom
   'angled_struct',   // structural angled walls
-  'zipper',          // zip lines
+  'fat_cones',       // fat cones (was zipper — too hard early)
   'slalom',          // slalom
   'L3_CORRIDOR',     // L3 corridor (after cooldown)
   'L4_SINE_CORRIDOR',// L4 corridor (after cooldown)
@@ -36998,7 +36998,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 23;
+const BUILD_VERSION = 24;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
