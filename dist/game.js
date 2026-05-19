@@ -33290,8 +33290,8 @@ window._jlDebug = {
     jaggedness:   1.9,
     hitboxScale:  1.0,    // multiplier on glowRadius — hitbox always matches bolt visual
     warnRadius:   3.5,
-    shakeAmt:     0.18,
-    shakeDuration:0.35,
+    shakeAmt:     0.09,    // 2026-05-19: halved (was 0.18) — strikes felt too jarring
+    shakeDuration:0.22,    // 2026-05-19: shortened (was 0.35) — quicker recovery
     glowColor:    0x88ccff,
     coreColor:    0xffffff,
     flashColor:   0x99ddff,
@@ -37047,7 +37047,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 31;
+const BUILD_VERSION = 32;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
