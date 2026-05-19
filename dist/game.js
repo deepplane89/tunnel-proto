@@ -13873,10 +13873,11 @@ const RADIO_TRACKS = [
   { id: 'neon-underworld',   name: 'NEON UNDERWORLD',       src: './assets/audio/l4music.m4a' },
   { id: 'brazilian-street',  name: 'BRAZILIAN STREET FIGHT',src: './assets/audio/l3music.m4a' },
   { id: 'synesthetic-gears', name: 'SYNESTHETIC GEARS',     src: './assets/audio/radio-gears-1.m4a' },
-  { id: 'synthetic-gears-2', name: 'SYNTHETIC GEARS II',    src: './assets/audio/radio-gears-2.m4a' },
+  // SYNTHETIC GEARS II removed from rotation (file kept on disk for future use).
   { id: 'funk-of-the-night', name: 'FUNK OF THE NIGHT',     src: './assets/audio/radio-funk.m4a' },
   { id: 'orbital-ordinance', name: 'ORBITAL ORDINANCE',     src: './assets/audio/radio-orbital.m4a' },
-  { id: 'neon-mountain',     name: 'NEON MOUNTAIN',         src: './assets/audio/radio-neon-mtn.m4a' },
+  // NEON MOUNTAIN: 10s fade-in — comes in hot otherwise.
+  { id: 'neon-mountain',     name: 'NEON MOUNTAIN',         src: './assets/audio/radio-neon-mtn.m4a', fadeInSec: 10 },
   { id: 'house-of-fuel',     name: 'HOUSE OF FUEL',         src: './assets/audio/radio-house-of-fuel.m4a' },
   { id: 'grannies-synth',    name: 'GRANNIES SYNTH',        src: './assets/audio/radio-grannies-synth.m4a' },
   { id: 'andracid',          name: 'ANDRACID',              src: './assets/audio/radio-andracid.m4a' },
@@ -14023,7 +14024,15 @@ function _playRadioIdx(idx) {
     radioMusic.src = tr.src;
   }
   try { radioMusic.currentTime = 0; } catch(_) {}
-  // Volume is gated by the gain node ('radio' track) — don't fight it here.
+  // Per-track fade-in: some tracks (e.g. NEON MOUNTAIN) hit hard at t=0 and
+  // overwhelm the gameplay mix. fadeInSec on the track entry ramps the
+  // 'radio' gain from 0 to its full target across that many seconds.
+  if (tr.fadeInSec && typeof rampTrackVol === 'function') {
+    try { rampTrackVol('radio', 0, 0); } catch(_) {}
+    try { rampTrackVol('radio', TRACK_VOL.radio, tr.fadeInSec); } catch(_) {}
+  } else {
+    // Volume is gated by the gain node ('radio' track) — don't fight it here.
+  }
   radioMusic.play().catch(() => {});
   // Notify pause-menu UI to refresh "now playing".
   try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_) {}
@@ -14232,7 +14241,13 @@ function _previewRadioTrack(idx) {
     try { if (typeof rampTrackVol === 'function') rampTrackVol('title', 0, 0.18); else setTrackVol('title', 0); } catch(_) {}
     setTimeout(() => { try { if (titleMusic && !titleMusic.paused) titleMusic.pause(); } catch(_) {} }, 220);
   }
-  try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+  // Per-track fade-in mirrors _playRadioIdx so previews don't punch in either.
+  if (tr.fadeInSec && typeof rampTrackVol === 'function') {
+    try { rampTrackVol('radio', 0, 0); } catch(_) {}
+    try { rampTrackVol('radio', TRACK_VOL.radio, tr.fadeInSec); } catch(_) {}
+  } else {
+    try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
+  }
   radioMusic.play().catch(() => {});
   _radioPreviewIdx = idx;
   // Keep _radioCurrentIdx in sync so the 'ended' handler (and any later
@@ -36996,7 +37011,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 28;
+const BUILD_VERSION = 29;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
