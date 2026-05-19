@@ -291,6 +291,7 @@ function _frameBudgetMs() {
   return _FRAME_BUDGET_60;
 }
 let _lastFrameMs = 0;
+let _pauseRenderLastMs = 0;
 
 // ── Adaptive DPR (thermal/perf throttle defense) ──────────────────────────
 // Watches the recent frame budget. When > 35% of the last ~120 frames blew
@@ -421,14 +422,26 @@ function animate(now) {
   // ── PAUSE: render last frame, skip ALL ticks (sim, FOV lerp, shaders) ──
   // Single guard at the top — obviates per-system pause gates throughout
   // update() and the visual phase. Composer renders so the screen isn't black.
+  //
+  // Pause render throttle: scene is frozen (no sim, no camera move, no uniform
+  // tick), so a full composer.render() at 60-120Hz is pure heat. Throttle to
+  // ~10fps (100ms cadence). Always render the first frame after entering pause
+  // so the screen captures the freeze without artifacts.
   if (state.phase === 'paused') {
     _syncOptionalLightVisibility();
-    _perfDiag.markRenderStart();
-    composer.render();
-    _perfDiag.markRenderEnd();
+    const _nowMs = (typeof now === 'number') ? now : performance.now();
+    if (!_pauseRenderLastMs || (_nowMs - _pauseRenderLastMs) >= 100) {
+      _perfDiag.markRenderStart();
+      composer.render();
+      _perfDiag.markRenderEnd();
+      _pauseRenderLastMs = _nowMs;
+    }
     _perfDiag.frameEnd();
     return;
   }
+  // Reset pause render timestamp once we leave pause so the next pause entry
+  // renders immediately.
+  if (_pauseRenderLastMs) _pauseRenderLastMs = 0;
 
   // ── TITLE SCREEN: render title scene only, skip all gameplay ──────
   if (state.phase === 'title') {
