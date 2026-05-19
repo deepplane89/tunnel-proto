@@ -24541,11 +24541,14 @@ function _drSequencerTick(dt) {
     if (state.drPhase === 'RELEASE') {
       state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
     } else if (_endlessType === 'random_cones') {
-      // Endless random_cones uses 'sparse' (5-7 cones, gap 1.0) instead of
-      // 'normal' (9-11 cones, tight gap). At 2.5x with physTier 5 the dense
-      // version was an unfair wall — sparse mimics S1 spacing so the player
-      // can actually thread the cones.
-      state._seqSpawnMode = 'cones'; state._seqConeDensity = 'sparse';
+      // Endless random_cones mirrors S1_CONES exactly: 'ramp' density picks the
+      // 4-5 cones/row count AND triggers the anti-bunch min-lane-gap rule in
+      // spawnObstacles(). Pinning _seqRampT01 to 1 keeps the ramp at its peak
+      // (S1's late-stage feel) for the whole endless segment.
+      // (Previously 'sparse' = 5-7 cones with no anti-bunch rule — looked clumped
+      // even though the per-row count was reasonable.)
+      state._seqSpawnMode = 'cones'; state._seqConeDensity = 'ramp';
+      state._seqRampT01 = 1;
     } else if (_endlessType === 'angled_random') {
       state._seqSpawnMode = 'angled';
     } else if (_endlessType === 'lethal') {
@@ -37047,7 +37050,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 33;
+const BUILD_VERSION = 34;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
