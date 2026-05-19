@@ -577,7 +577,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x05091a),
     floorLine: new THREE.Color(0x00eeff),
     thrusterColor: new THREE.Color(0xaaddff),
-    sunShader: 0, tendrils: 'aurora',
+    sunShader: 0, tendrils: 'none',
     obstaclesPerSpawn: 6, maxObstaclesPerSpawn: 8, gapFactor: 1.0, speedTier: 1,
   },
   {
@@ -604,7 +604,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x020001),
     floorLine: new THREE.Color(0x00ffaa),
     thrusterColor: new THREE.Color(0x00eeff),
-    sunShader: 3, tendrils: 'aurora',
+    sunShader: 3, tendrils: 'none',
     // Warp palette: dark=(1,1,1) mid=(0.05,0,0) bright=(0,0,0.08)
     warpCol1: [1.00, 1.00, 1.00],
     warpCol2: [0.05, 0.00, 0.00],
@@ -621,7 +621,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x00080f),
     floorLine: new THREE.Color(0x44ccff),
     thrusterColor: new THREE.Color(0x88ddff),
-    sunShader: 4, tendrils: 'aurora',
+    sunShader: 4, tendrils: 'none',
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 3,
   },
   {
@@ -691,7 +691,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x000810),
     floorLine: new THREE.Color(0xccddff),
     thrusterColor: new THREE.Color(0xbbccee),
-    sunShader: 3, tendrils: 'aurora',
+    sunShader: 3, tendrils: 'none',
     obstaclesPerSpawn: 8, maxObstaclesPerSpawn: 10, gapFactor: 0.9, speedTier: 4,
   },
   {
@@ -702,7 +702,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x080000),
     floorLine: new THREE.Color(0xaa0000),
     thrusterColor: new THREE.Color(0xff2200),
-    sunShader: 2, tendrils: 'aurora',
+    sunShader: 2, tendrils: 'none',
     obstaclesPerSpawn: 10, maxObstaclesPerSpawn: 13, gapFactor: 0.82, speedTier: 4,
   },
   {
@@ -735,7 +735,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x000408),
     floorLine: new THREE.Color(0xaaccff),
     thrusterColor: new THREE.Color(0xccddff),
-    sunShader: 3, tendrils: 'aurora',
+    sunShader: 3, tendrils: 'none',
     obstaclesPerSpawn: 10, maxObstaclesPerSpawn: 12, gapFactor: 0.85, speedTier: 4,
   },
   {
@@ -746,7 +746,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x020202),
     floorLine: new THREE.Color(0x442200),
     thrusterColor: new THREE.Color(0x664422),
-    sunShader: 0, tendrils: 'aurora',
+    sunShader: 0, tendrils: 'none',
     obstaclesPerSpawn: 10, maxObstaclesPerSpawn: 13, gapFactor: 0.82, speedTier: 4,
   },
   {
@@ -779,7 +779,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x000818),
     floorLine: new THREE.Color(0x0066cc),
     thrusterColor: new THREE.Color(0x4488dd),
-    sunShader: 3, tendrils: 'aurora',
+    sunShader: 3, tendrils: 'none',
     obstaclesPerSpawn: 9, maxObstaclesPerSpawn: 11, gapFactor: 0.88, speedTier: 4,
   },
   {
@@ -801,7 +801,7 @@ const DEATH_RUN_VIBES = [
     fogColor: new THREE.Color(0x040404),
     floorLine: new THREE.Color(0xdddddd),
     thrusterColor: new THREE.Color(0xeeeeee),
-    sunShader: 3, tendrils: 'aurora',
+    sunShader: 3, tendrils: 'none',
     obstaclesPerSpawn: 10, maxObstaclesPerSpawn: 13, gapFactor: 0.82, speedTier: 4,
   },
 ];
