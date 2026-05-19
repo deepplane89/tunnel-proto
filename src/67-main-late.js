@@ -1272,9 +1272,9 @@ const DR_SEQUENCE = [
   { name: 'CA_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 1.8, vibeIdx: 0, physTier: 1 },
   { name: 'CA_REST',          type: 'rest', duration: 3, speed: 1.8, vibeIdx: 1, physTier: 1 },
 
-  // Stage 2 — cones + zippers (holds CA's 1.8x — no drop, no yo-yo).
+  // Stage 2 — fat cones (was cones+zippers; zippers too hard this early).
   // physTier promoted 1→2 to match speed bump.
-  { name: 'S2_CONES_ZIPS',    type: 'cones_and_zips', duration: 30, speed: 1.8, vibeIdx: 1, physTier: 2 },
+  { name: 'S2_FAT_CONES',     type: 'fat_cones',      duration: 30, speed: 1.8, vibeIdx: 1, physTier: 2 },
   // Canyon B (placeholder = CC1 mild)
   // physTier lifted 1→2 to keep ladder monotonic non-decreasing after S2's promotion.
   { name: 'CB_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 2.0, vibeIdx: 1, physTier: 2 },
@@ -2114,7 +2114,7 @@ const _ENDLESS_ROTATION = [
   'lethal',          // lethal rings
   'fat_cones',       // fat cone slalom
   'angled_struct',   // structural angled walls
-  'fat_cones',       // fat cones (was zipper — too hard early)
+  'zipper',          // zip lines
   'slalom',          // slalom
   'L3_CORRIDOR',     // L3 corridor (after cooldown)
   'L4_SINE_CORRIDOR',// L4 corridor (after cooldown)
