@@ -20819,6 +20819,13 @@ function togglePause() {
     resumeGameTrackInPlace(currentGameTrack());
     // Resume baseline whir on unpause (smooth fade-in)
     startEngineBaseline(0.5);
+    // Magnet whir: pause path nukes the oscillator (line 95). Without this
+    // restart, the magnet stays active for the rest of its duration but the
+    // whir is silent. _startMagnetWhir is idempotent so safe to call.
+    if (state.magnetActive && state.magnetTimer > 0 && !isSfxMuted() &&
+        typeof _startMagnetWhir === 'function') {
+      try { _startMagnetWhir(); } catch(_) {}
+    }
     // Argon is edge-triggered — will fire on next steer input, nothing to resume
     // Resume invincible loop if active. The kill-switch on pause cleared the
     // loop flag, so re-set it before play().
@@ -37089,7 +37096,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 38;
+const BUILD_VERSION = 39;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
