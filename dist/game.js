@@ -16961,14 +16961,14 @@ function spawnObstacles() {
     // For rings/walls/mix: enforce minimum lane gap so they don't overlap
     if ((_isRingBand || _isMixBand) && blocked.some(b => Math.abs(b - lane) < 4)) continue;
     if (_isWallBand && blocked.some(b => Math.abs(b - lane) < (window._awRand ? window._awRand.laneGap : 3))) continue;
-    if (_isFatConeBand && blocked.some(b => Math.abs(b - lane) < 8)) continue; // wide gap between fat cones (original)
+    if (_isFatConeBand && blocked.some(b => Math.abs(b - lane) < 7)) continue; // 2026-05-19: 8→7 — ~10% tighter lane gap
     if (_isRampBand && blocked.some(b => Math.abs(b - lane) < _rampMinGap)) continue;
     blocked.push(lane);
   }
 
   // Fat cones use a wider lateral spread so the row covers more of the road —
   // makes lateral camping more punishing without changing density.
-  const _laneSpreadMul = _isFatConeBand ? 1.5 : 1.0;
+  const _laneSpreadMul = _isFatConeBand ? 1.35 : 1.0; // 2026-05-19: 1.5→1.35 — ~10% tighter lateral spread
   blocked.forEach(lane => {
     const laneX = shipX + (lane - (_spawnLaneCount - 1) / 2) * LANE_WIDTH * _laneSpreadMul;
     // Skip if cone would land inside a bonus ring
@@ -37047,7 +37047,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 32;
+const BUILD_VERSION = 33;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
