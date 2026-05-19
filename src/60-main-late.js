@@ -141,13 +141,45 @@ function togglePause() {
       _invU.loop = true; _invU.play().catch(()=>{});
     }
     // Resume looped weapon SFX if their power-up timer is still running.
-    if (state.laserActive && !isSfxMuted()) {
+    // 2026-05-19 (v38): MG (T1-T3) is NOT a looped <audio>; it's a 120ms
+    // retrigger interval (see shop.js:600). Resume must rearm the interval
+    // + stop-timeout for the remaining laserTimer, NOT call play() with
+    // loop=true (that produced a continuous tone with no kill path —
+    // "laser sound wouldn't stop" bug).
+    if (state.laserActive && state.laserTimer > 0 && !isSfxMuted()) {
       const _tier = state.laserTier || 1;
       const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
-        if (_laserU) { _laserU.volume = 0.12 * _sM; _laserU.loop = true; _laserU.play().catch(()=>{}); } // 2026-05-19: match shop.js base 0.12
+        if (_laserU) {
+          _laserU.loop = false;
+          _laserU.volume = 0.12 * _sM;
+          try { _laserU.currentTime = 0; _laserU.play().catch(()=>{}); } catch(_) {}
+          // Rearm retrigger interval (matches shop.js cadence).
+          if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+          if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
+          state._laserSfxIv = setInterval(() => {
+            try {
+              const _u = document.getElementById('laser-beam-sfx');
+              if (!_u) return;
+              _u.volume = 0.12 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+              _u.currentTime = 0;
+              _u.play().catch(()=>{});
+            } catch(_) {}
+          }, 120);
+          // Stop-timeout uses REMAINING laserTimer (already paused-frozen, so
+          // it's whatever was left at pause-time).
+          state._laserSfxStopTo = setTimeout(() => {
+            state._laserSfxStopTo = null;
+            if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+            const _u = document.getElementById('laser-beam-sfx');
+            if (_u) { try { _u.loop = false; _u.pause(); _u.currentTime = 0; } catch(_) {} }
+          }, Math.max(0, state.laserTimer * 1000));
+        }
       } else {
+        // Unibeam (T4/T5): true looped element. The original stop-setTimeout
+        // from shop.js (line 645/654) is plain setTimeout and not cleared on
+        // pause, so it's still pending and will silence the loop on schedule.
         const _ubeamU = document.getElementById('unibeam-sfx');
         if (_ubeamU) { _ubeamU.volume = 0.6 * _sM; _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
       }
