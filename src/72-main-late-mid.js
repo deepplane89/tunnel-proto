@@ -2794,6 +2794,7 @@ function _jlCanyonStart(mode) {
   // spawns in distance" symptom when K-mode is used during JL playback.
   if (_canyonTuner._l4Recreation) return;
   if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode    = mode;
   _canyonExiting = false;
   Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
@@ -2810,6 +2811,7 @@ function _jlCanyonStartOpen(mode) {
   // Same L4 guard as _jlCanyonStart
   if (_canyonTuner._l4Recreation) return;
   if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode    = mode;
   _canyonExiting = false;
   Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);

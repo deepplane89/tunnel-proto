@@ -286,9 +286,35 @@ function startGame() {
   // from a prior run (rapid game-over→retry, double-tap, backgrounded tab, etc).
   // _retryIsFromDead / _retryPending are released at end of fn (after retry branches consume them).
   state._seqSpawnMode  = 'cones';   // default; startDeathRun re-sets to 'cones' explicitly
-  state.preT4ADone     = false;
-  state.preT4BDone     = false;
-  state.l3KnifeDone    = false;
+  // Canyon state nuke — belt-and-suspenders for the "first canyon of a new run
+  // wrong" bug. Done flags reset BUT also wipe active flags, elapsed timers,
+  // exit-started flags, saved restore values, and ramp state. If any of these
+  // leak from a prior run (death mid-canyon, hot reload, etc) the next canyon
+  // will read stale state and render the wrong family/look.
+  state.preT4ACanyon       = false;
+  state.preT4BCanyon       = false;
+  state.l3KnifeCanyon      = false;
+  state.preT4ADone         = false;
+  state.preT4BDone         = false;
+  state.l3KnifeDone        = false;
+  state.preT4AElapsed      = 0;
+  state.preT4BElapsed      = 0;
+  state.l3KnifeElapsed     = 0;
+  state._preT4AExitStarted = false;
+  state._preT4BExitStarted = false;
+  state._l3KnifeExitStarted = false;
+  state.preT4ARampPhase    = 'off';
+  state.preT4ARampT        = 0;
+  state.preT4BRampPhase    = 'off';
+  state.preT4BRampT        = 0;
+  state._preT4ASavedSpeed     = undefined;
+  state._preT4ASavedLT        = undefined;
+  state._preT4ASavedPhysLevel = undefined;
+  state._preT4BSavedSpeed     = undefined;
+  state._preT4BSavedLT        = undefined;
+  state._preT4BSavedPhysLevel = undefined;
+  // Also wipe any leaked _canyonTuner keys before first canyon of this run.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   state.angledWallsActive = false;
   state._ringsActive   = false;
   // Reset invariant-assertion bookkeeping (watchdogs that detect stuck states).

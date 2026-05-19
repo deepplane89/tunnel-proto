@@ -552,6 +552,9 @@ function _startL3KnifeCanyon() {
   // K-hotkey handler in 67-main-late.js:5470 but without the manual toggle.
   const vals = _CANYON_PRESETS[1];
   if (!vals) return;
+  // Reset tuner to defaults first to wipe any leaked keys from a prior preset.
+  // See CANYON_ARCHITECTURE.md footgun #5.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode = 1;
   _canyonTuner._allCyan = false;
   _canyonTuner._allDark = false;
@@ -728,7 +731,7 @@ function _updateL3KnifeCanyon(dt) {
 // values + RANDOM lightning loop instead of knife-arches preset.
 // Triggered by DR sequencer family registry entry 'PRE_T4A_CANYON'.
 // ============================================================================
-const _PRE_T4A_DURATION         = 40.0;   // seconds
+const _PRE_T4A_DURATION         = 20.0;   // seconds (was 40 — user request 2026-05-18)
 const _PRE_T4A_EXIT_WINDOW      = 4.0;    // last-N seconds = scroll-out, no new slabs
 const _PRE_T4A_RAMP_DURATION    = 0.4;    // entry-ramp seconds (matches L3 knife)
 const _PRE_T4A_TARGET_SPEED_MULT = 2.2;   // BASE_SPEED * this during canyon
@@ -791,6 +794,9 @@ function _startPreT4ACanyon() {
   state._preT4ASavedLT        = window._LT ? Object.assign({}, window._LT) : null;
 
   // Apply canyon tuner (mode 5, NOT _l4Recreation — standard canyon).
+  // Reset tuner to defaults first to wipe any leaked keys from a prior preset.
+  // See CANYON_ARCHITECTURE.md footgun #5.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode = 5;
   _canyonTuner._allCyan      = false;
   _canyonTuner._allDark      = false;
@@ -919,7 +925,7 @@ function _updatePreT4ACanyon(dt) {
 // (all-cyan smooth sine) with low-frequency lightning for atmosphere.
 // Triggered by DR sequencer family registry entry 'PRE_T4B_CANYON'.
 // ============================================================================
-const _PRE_T4B_DURATION         = 40.0;
+const _PRE_T4B_DURATION         = 20.0;   // was 40 — user request 2026-05-18
 const _PRE_T4B_EXIT_WINDOW      = 4.0;
 const _PRE_T4B_RAMP_DURATION    = 0.4;
 const _PRE_T4B_TARGET_SPEED_MULT = 2.2;
@@ -965,6 +971,10 @@ function _startPreT4BCanyon() {
   // FOV restore removed — speed-lerp owns it (see _startL3KnifeCanyon).
   state._preT4BSavedLT        = window._LT ? Object.assign({}, window._LT) : null;
 
+  // Reset tuner to defaults first to wipe any leaked keys from a prior preset.
+  // T4B's preset is sparse (~9 keys); without this, ~21 T4A keys leak and
+  // T4B canyons render with T4A's high-wall geometry. See CANYON_ARCHITECTURE.md footgun #5.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode = 1;
   _canyonTuner._allCyan      = false; // cleared first; preset re-asserts true below
   _canyonTuner._allDark      = false;

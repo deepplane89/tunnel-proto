@@ -9788,6 +9788,21 @@ const _canyonTuner = {
 };
 // Expose for window._exportScene() — mirrors live tuner state after B/V edits
 window._canyonTuner = _canyonTuner;
+
+// Snapshot of _canyonTuner's initial keys+values. Used by _canyonTunerReset()
+// to wipe leaked keys from a previous canyon preset before applying the next.
+// Footgun #5 (see CANYON_ARCHITECTURE.md): Object.assign(_canyonTuner, preset)
+// only overwrites keys IN preset. If preset A has ~30 keys and preset B has ~9,
+// activating B after A leaves A's extra keys in _canyonTuner — B's canyon
+// renders with A's leaked geometry. This bit us on second-run-after-long-run.
+const _CANYON_TUNER_DEFAULTS = Object.freeze(Object.assign({}, _canyonTuner));
+function _canyonTunerReset() {
+  // Wipe every key currently on _canyonTuner.
+  for (const k of Object.keys(_canyonTuner)) delete _canyonTuner[k];
+  // Restore defaults.
+  Object.assign(_canyonTuner, _CANYON_TUNER_DEFAULTS);
+}
+window._canyonTunerReset = _canyonTunerReset;
 let _canyonWalls     = null;
 let _canyonTexCache  = null; // pre-warmed textures + materials to avoid first-spawn stutter
 let _canyonFillLight = null;

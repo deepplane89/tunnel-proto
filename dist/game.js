@@ -11212,6 +11212,21 @@ const _canyonTuner = {
 };
 // Expose for window._exportScene() — mirrors live tuner state after B/V edits
 window._canyonTuner = _canyonTuner;
+
+// Snapshot of _canyonTuner's initial keys+values. Used by _canyonTunerReset()
+// to wipe leaked keys from a previous canyon preset before applying the next.
+// Footgun #5 (see CANYON_ARCHITECTURE.md): Object.assign(_canyonTuner, preset)
+// only overwrites keys IN preset. If preset A has ~30 keys and preset B has ~9,
+// activating B after A leaves A's extra keys in _canyonTuner — B's canyon
+// renders with A's leaked geometry. This bit us on second-run-after-long-run.
+const _CANYON_TUNER_DEFAULTS = Object.freeze(Object.assign({}, _canyonTuner));
+function _canyonTunerReset() {
+  // Wipe every key currently on _canyonTuner.
+  for (const k of Object.keys(_canyonTuner)) delete _canyonTuner[k];
+  // Restore defaults.
+  Object.assign(_canyonTuner, _CANYON_TUNER_DEFAULTS);
+}
+window._canyonTunerReset = _canyonTunerReset;
 let _canyonWalls     = null;
 let _canyonTexCache  = null; // pre-warmed textures + materials to avoid first-spawn stutter
 let _canyonFillLight = null;
@@ -15448,6 +15463,9 @@ function _startL3KnifeCanyon() {
   // K-hotkey handler in 67-main-late.js:5470 but without the manual toggle.
   const vals = _CANYON_PRESETS[1];
   if (!vals) return;
+  // Reset tuner to defaults first to wipe any leaked keys from a prior preset.
+  // See CANYON_ARCHITECTURE.md footgun #5.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode = 1;
   _canyonTuner._allCyan = false;
   _canyonTuner._allDark = false;
@@ -15624,7 +15642,7 @@ function _updateL3KnifeCanyon(dt) {
 // values + RANDOM lightning loop instead of knife-arches preset.
 // Triggered by DR sequencer family registry entry 'PRE_T4A_CANYON'.
 // ============================================================================
-const _PRE_T4A_DURATION         = 40.0;   // seconds
+const _PRE_T4A_DURATION         = 20.0;   // seconds (was 40 — user request 2026-05-18)
 const _PRE_T4A_EXIT_WINDOW      = 4.0;    // last-N seconds = scroll-out, no new slabs
 const _PRE_T4A_RAMP_DURATION    = 0.4;    // entry-ramp seconds (matches L3 knife)
 const _PRE_T4A_TARGET_SPEED_MULT = 2.2;   // BASE_SPEED * this during canyon
@@ -15687,6 +15705,9 @@ function _startPreT4ACanyon() {
   state._preT4ASavedLT        = window._LT ? Object.assign({}, window._LT) : null;
 
   // Apply canyon tuner (mode 5, NOT _l4Recreation — standard canyon).
+  // Reset tuner to defaults first to wipe any leaked keys from a prior preset.
+  // See CANYON_ARCHITECTURE.md footgun #5.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode = 5;
   _canyonTuner._allCyan      = false;
   _canyonTuner._allDark      = false;
@@ -15815,7 +15836,7 @@ function _updatePreT4ACanyon(dt) {
 // (all-cyan smooth sine) with low-frequency lightning for atmosphere.
 // Triggered by DR sequencer family registry entry 'PRE_T4B_CANYON'.
 // ============================================================================
-const _PRE_T4B_DURATION         = 40.0;
+const _PRE_T4B_DURATION         = 20.0;   // was 40 — user request 2026-05-18
 const _PRE_T4B_EXIT_WINDOW      = 4.0;
 const _PRE_T4B_RAMP_DURATION    = 0.4;
 const _PRE_T4B_TARGET_SPEED_MULT = 2.2;
@@ -15861,6 +15882,10 @@ function _startPreT4BCanyon() {
   // FOV restore removed — speed-lerp owns it (see _startL3KnifeCanyon).
   state._preT4BSavedLT        = window._LT ? Object.assign({}, window._LT) : null;
 
+  // Reset tuner to defaults first to wipe any leaked keys from a prior preset.
+  // T4B's preset is sparse (~9 keys); without this, ~21 T4A keys leak and
+  // T4B canyons render with T4A's high-wall geometry. See CANYON_ARCHITECTURE.md footgun #5.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode = 1;
   _canyonTuner._allCyan      = false; // cleared first; preset re-asserts true below
   _canyonTuner._allDark      = false;
@@ -22964,9 +22989,35 @@ function startGame() {
   // from a prior run (rapid game-over→retry, double-tap, backgrounded tab, etc).
   // _retryIsFromDead / _retryPending are released at end of fn (after retry branches consume them).
   state._seqSpawnMode  = 'cones';   // default; startDeathRun re-sets to 'cones' explicitly
-  state.preT4ADone     = false;
-  state.preT4BDone     = false;
-  state.l3KnifeDone    = false;
+  // Canyon state nuke — belt-and-suspenders for the "first canyon of a new run
+  // wrong" bug. Done flags reset BUT also wipe active flags, elapsed timers,
+  // exit-started flags, saved restore values, and ramp state. If any of these
+  // leak from a prior run (death mid-canyon, hot reload, etc) the next canyon
+  // will read stale state and render the wrong family/look.
+  state.preT4ACanyon       = false;
+  state.preT4BCanyon       = false;
+  state.l3KnifeCanyon      = false;
+  state.preT4ADone         = false;
+  state.preT4BDone         = false;
+  state.l3KnifeDone        = false;
+  state.preT4AElapsed      = 0;
+  state.preT4BElapsed      = 0;
+  state.l3KnifeElapsed     = 0;
+  state._preT4AExitStarted = false;
+  state._preT4BExitStarted = false;
+  state._l3KnifeExitStarted = false;
+  state.preT4ARampPhase    = 'off';
+  state.preT4ARampT        = 0;
+  state.preT4BRampPhase    = 'off';
+  state.preT4BRampT        = 0;
+  state._preT4ASavedSpeed     = undefined;
+  state._preT4ASavedLT        = undefined;
+  state._preT4ASavedPhysLevel = undefined;
+  state._preT4BSavedSpeed     = undefined;
+  state._preT4BSavedLT        = undefined;
+  state._preT4BSavedPhysLevel = undefined;
+  // Also wipe any leaked _canyonTuner keys before first canyon of this run.
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   state.angledWallsActive = false;
   state._ringsActive   = false;
   // Reset invariant-assertion bookkeeping (watchdogs that detect stuck states).
@@ -33035,6 +33086,7 @@ function _jlCanyonStart(mode) {
   // spawns in distance" symptom when K-mode is used during JL playback.
   if (_canyonTuner._l4Recreation) return;
   if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode    = mode;
   _canyonExiting = false;
   Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
@@ -33051,6 +33103,7 @@ function _jlCanyonStartOpen(mode) {
   // Same L4 guard as _jlCanyonStart
   if (_canyonTuner._l4Recreation) return;
   if (_canyonActive || _canyonExiting || _canyonWalls) _destroyCanyonWalls();
+  if (typeof _canyonTunerReset === 'function') _canyonTunerReset();
   _canyonMode    = mode;
   _canyonExiting = false;
   Object.assign(_canyonTuner, _CANYON_PRESETS[mode] || _CANYON_PRESETS[1]);
@@ -36933,7 +36986,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 21;
+const BUILD_VERSION = 22;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
