@@ -35,6 +35,7 @@ const KNOWN_TYPES = new Set([
   'crash',
   'purchase',
   'skin_equip',
+  'feedback',
 ]);
 
 // ── Redis (REST, zero deps) ─────────────────────────────────────────────

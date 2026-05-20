@@ -93,6 +93,13 @@ function togglePause() {
     state._argonSteering = false;
     state._argonOpen = 0;
     _stopMagnetWhir();
+    // Bank-water hiss: BankWaterEffect.update only runs from the gameplay
+    // update() loop, which the animate gate skips during pause — so the hiss
+    // gain freezes at its last value and the wake noise persists. Force it to
+    // 0 here. resume path naturally re-ramps it from the next update() tick.
+    if (window.BankWaterHiss && typeof window.BankWaterHiss.silence === 'function') {
+      try { window.BankWaterHiss.silence(); } catch(_) {}
+    }
     // Laser intervals/timeouts (module-local handles) so the loop can't re-
     // trigger the laser SFX during pause.
     if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
@@ -126,6 +133,13 @@ function togglePause() {
     resumeGameTrackInPlace(currentGameTrack());
     // Resume baseline whir on unpause (smooth fade-in)
     startEngineBaseline(0.5);
+    // Magnet whir: pause path nukes the oscillator (line 95). Without this
+    // restart, the magnet stays active for the rest of its duration but the
+    // whir is silent. _startMagnetWhir is idempotent so safe to call.
+    if (state.magnetActive && state.magnetTimer > 0 && !isSfxMuted() &&
+        typeof _startMagnetWhir === 'function') {
+      try { _startMagnetWhir(); } catch(_) {}
+    }
     // Argon is edge-triggered — will fire on next steer input, nothing to resume
     // Resume invincible loop if active. The kill-switch on pause cleared the
     // loop flag, so re-set it before play().
@@ -134,13 +148,45 @@ function togglePause() {
       _invU.loop = true; _invU.play().catch(()=>{});
     }
     // Resume looped weapon SFX if their power-up timer is still running.
-    if (state.laserActive && !isSfxMuted()) {
+    // 2026-05-19 (v38): MG (T1-T3) is NOT a looped <audio>; it's a 120ms
+    // retrigger interval (see shop.js:600). Resume must rearm the interval
+    // + stop-timeout for the remaining laserTimer, NOT call play() with
+    // loop=true (that produced a continuous tone with no kill path —
+    // "laser sound wouldn't stop" bug).
+    if (state.laserActive && state.laserTimer > 0 && !isSfxMuted()) {
       const _tier = state.laserTier || 1;
       const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
-        if (_laserU) { _laserU.volume = 0.2 * _sM; _laserU.loop = true; _laserU.play().catch(()=>{}); }
+        if (_laserU) {
+          _laserU.loop = false;
+          _laserU.volume = 0.12 * _sM;
+          try { _laserU.currentTime = 0; _laserU.play().catch(()=>{}); } catch(_) {}
+          // Rearm retrigger interval (matches shop.js cadence).
+          if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+          if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
+          state._laserSfxIv = setInterval(() => {
+            try {
+              const _u = document.getElementById('laser-beam-sfx');
+              if (!_u) return;
+              _u.volume = 0.12 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+              _u.currentTime = 0;
+              _u.play().catch(()=>{});
+            } catch(_) {}
+          }, 120);
+          // Stop-timeout uses REMAINING laserTimer (already paused-frozen, so
+          // it's whatever was left at pause-time).
+          state._laserSfxStopTo = setTimeout(() => {
+            state._laserSfxStopTo = null;
+            if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+            const _u = document.getElementById('laser-beam-sfx');
+            if (_u) { try { _u.loop = false; _u.pause(); _u.currentTime = 0; } catch(_) {} }
+          }, Math.max(0, state.laserTimer * 1000));
+        }
       } else {
+        // Unibeam (T4/T5): true looped element. The original stop-setTimeout
+        // from shop.js (line 645/654) is plain setTimeout and not cleared on
+        // pause, so it's still pending and will silence the loop on schedule.
         const _ubeamU = document.getElementById('unibeam-sfx');
         if (_ubeamU) { _ubeamU.volume = 0.6 * _sM; _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
       }

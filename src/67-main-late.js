@@ -152,6 +152,29 @@ function startGame() {
       window._reprewarmShaders('post-start');
     }
   } catch(_){}
+  // AUDIO GRAPH DRY-RUN (post-start) — first powerup pickup of the session
+  // (typically shield, since it spawns earliest) was hitching ~30-60ms on
+  // iOS Safari while WebKit JIT'd the OscillatorNode + GainNode construction
+  // path inside playSFX(). Boot prewarm couldn't help because audioCtx is
+  // null until first user gesture. Here — after the player tapped to start —
+  // audioCtx exists and we can warm the path silently. Two short
+  // volume-0 oscillators cover the two freq tiers playPickup uses; one
+  // empty AudioBufferSourceNode covers the _playBuffer code path.
+  try {
+    if (typeof playSFX === 'function' && typeof audioCtx !== 'undefined' && audioCtx) {
+      playSFX(880,  0.02, 'sine', 0);
+      playSFX(1100, 0.02, 'sine', 0);
+      try {
+        const _empty = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
+        const _src = audioCtx.createBufferSource();
+        const _g = audioCtx.createGain();
+        _g.gain.value = 0;
+        _src.buffer = _empty;
+        _src.connect(_g).connect(audioCtx.destination);
+        _src.start();
+      } catch(_) {}
+    }
+  } catch(_){}
   state.phase          = 'playing';
   shipGroup.visible    = true;
   _killExplosion();
@@ -1794,11 +1817,14 @@ function _drSequencerTick(dt) {
     if (state.drPhase === 'RELEASE') {
       state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
     } else if (_endlessType === 'random_cones') {
-      // Endless random_cones uses 'sparse' (5-7 cones, gap 1.0) instead of
-      // 'normal' (9-11 cones, tight gap). At 2.5x with physTier 5 the dense
-      // version was an unfair wall — sparse mimics S1 spacing so the player
-      // can actually thread the cones.
-      state._seqSpawnMode = 'cones'; state._seqConeDensity = 'sparse';
+      // Endless random_cones mirrors S1_CONES exactly: 'ramp' density picks the
+      // 4-5 cones/row count AND triggers the anti-bunch min-lane-gap rule in
+      // spawnObstacles(). Pinning _seqRampT01 to 1 keeps the ramp at its peak
+      // (S1's late-stage feel) for the whole endless segment.
+      // (Previously 'sparse' = 5-7 cones with no anti-bunch rule — looked clumped
+      // even though the per-row count was reasonable.)
+      state._seqSpawnMode = 'cones'; state._seqConeDensity = 'ramp';
+      state._seqRampT01 = 1;
     } else if (_endlessType === 'angled_random') {
       state._seqSpawnMode = 'angled';
     } else if (_endlessType === 'lethal') {

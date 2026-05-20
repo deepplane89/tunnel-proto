@@ -16916,7 +16916,7 @@ function spawnObstacles() {
       else    clampedCount = 6 + Math.floor(Math.random() * 3);
     }
     else if (_sm === 'lethal')    { _isRingBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
-    else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); } // 3-4 cones (cranked 2026-05-05); predicted-X spawning provides the lateral punish (rows track ship's projected position)
+    else if (_sm === 'fat_cones') { _isFatConeBand = true; clampedCount = 4 + Math.floor(Math.random() * 2); } // 2026-05-19: 3-4 → 4-5 cones — density bump (pairs with min-gap 7→5)
     else if (_sm === 'endless')   { _isMixBand = true; clampedCount = 3 + Math.floor(Math.random() * 2); }
   } else if (state.isDeathRun) {
     for (let bi = 0; bi < DR2_RUN_BANDS.length; bi++) { if (state.elapsed < DR2_RUN_BANDS[bi].maxTime) { _obsBandIdx = bi; break; } _obsBandIdx = bi; }
@@ -16961,14 +16961,14 @@ function spawnObstacles() {
     // For rings/walls/mix: enforce minimum lane gap so they don't overlap
     if ((_isRingBand || _isMixBand) && blocked.some(b => Math.abs(b - lane) < 4)) continue;
     if (_isWallBand && blocked.some(b => Math.abs(b - lane) < (window._awRand ? window._awRand.laneGap : 3))) continue;
-    if (_isFatConeBand && blocked.some(b => Math.abs(b - lane) < 8)) continue; // wide gap between fat cones (original)
+    if (_isFatConeBand && blocked.some(b => Math.abs(b - lane) < 5)) continue; // 2026-05-19: 8→7→5 — supports +1 cone per row without bunching
     if (_isRampBand && blocked.some(b => Math.abs(b - lane) < _rampMinGap)) continue;
     blocked.push(lane);
   }
 
   // Fat cones use a wider lateral spread so the row covers more of the road —
   // makes lateral camping more punishing without changing density.
-  const _laneSpreadMul = _isFatConeBand ? 1.5 : 1.0;
+  const _laneSpreadMul = _isFatConeBand ? 1.35 : 1.0; // 2026-05-19: 1.5→1.35 — ~10% tighter lateral spread
   blocked.forEach(lane => {
     const laneX = shipX + (lane - (_spawnLaneCount - 1) / 2) * LANE_WIDTH * _laneSpreadMul;
     // Skip if cone would land inside a bonus ring
@@ -20189,7 +20189,7 @@ function applyPowerup(typeIdx) {
         const _lsfx = document.getElementById('laser-beam-sfx');
         if (_lsfx && !isSfxMuted()) {
           _lsfx.loop = false;
-          _lsfx.volume = 0.2 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+          _lsfx.volume = 0.12 * (typeof sfxMult === 'function' ? sfxMult() : 1); // 2026-05-19: 0.2→0.12 — too loud over radio even after duck
           try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           const _retriggerMs = 120; // ~8 shots/sec
           if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
@@ -20199,7 +20199,7 @@ function applyPowerup(typeIdx) {
           state._laserSfxIv = setInterval(() => {
             // Re-apply sfxMult on every retrigger so the radio duck takes
             // effect mid-laser if the player toggles the station.
-            try { _lsfx.volume = 0.2 * (typeof sfxMult === 'function' ? sfxMult() : 1); _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
+            try { _lsfx.volume = 0.12 * (typeof sfxMult === 'function' ? sfxMult() : 1); _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           }, _retriggerMs);
           // Stop retriggering when laser ends, but DON'T cut the in-flight shot.
           // It plays out naturally to its end (final tail rings out).
@@ -20429,6 +20429,13 @@ function togglePause() {
     state._argonSteering = false;
     state._argonOpen = 0;
     _stopMagnetWhir();
+    // Bank-water hiss: BankWaterEffect.update only runs from the gameplay
+    // update() loop, which the animate gate skips during pause — so the hiss
+    // gain freezes at its last value and the wake noise persists. Force it to
+    // 0 here. resume path naturally re-ramps it from the next update() tick.
+    if (window.BankWaterHiss && typeof window.BankWaterHiss.silence === 'function') {
+      try { window.BankWaterHiss.silence(); } catch(_) {}
+    }
     // Laser intervals/timeouts (module-local handles) so the loop can't re-
     // trigger the laser SFX during pause.
     if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
@@ -20462,6 +20469,13 @@ function togglePause() {
     resumeGameTrackInPlace(currentGameTrack());
     // Resume baseline whir on unpause (smooth fade-in)
     startEngineBaseline(0.5);
+    // Magnet whir: pause path nukes the oscillator (line 95). Without this
+    // restart, the magnet stays active for the rest of its duration but the
+    // whir is silent. _startMagnetWhir is idempotent so safe to call.
+    if (state.magnetActive && state.magnetTimer > 0 && !isSfxMuted() &&
+        typeof _startMagnetWhir === 'function') {
+      try { _startMagnetWhir(); } catch(_) {}
+    }
     // Argon is edge-triggered — will fire on next steer input, nothing to resume
     // Resume invincible loop if active. The kill-switch on pause cleared the
     // loop flag, so re-set it before play().
@@ -20470,13 +20484,45 @@ function togglePause() {
       _invU.loop = true; _invU.play().catch(()=>{});
     }
     // Resume looped weapon SFX if their power-up timer is still running.
-    if (state.laserActive && !isSfxMuted()) {
+    // 2026-05-19 (v38): MG (T1-T3) is NOT a looped <audio>; it's a 120ms
+    // retrigger interval (see shop.js:600). Resume must rearm the interval
+    // + stop-timeout for the remaining laserTimer, NOT call play() with
+    // loop=true (that produced a continuous tone with no kill path —
+    // "laser sound wouldn't stop" bug).
+    if (state.laserActive && state.laserTimer > 0 && !isSfxMuted()) {
       const _tier = state.laserTier || 1;
       const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
       if (_tier <= 3) {
         const _laserU = document.getElementById('laser-beam-sfx');
-        if (_laserU) { _laserU.volume = 0.2 * _sM; _laserU.loop = true; _laserU.play().catch(()=>{}); }
+        if (_laserU) {
+          _laserU.loop = false;
+          _laserU.volume = 0.12 * _sM;
+          try { _laserU.currentTime = 0; _laserU.play().catch(()=>{}); } catch(_) {}
+          // Rearm retrigger interval (matches shop.js cadence).
+          if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+          if (state._laserSfxStopTo) { clearTimeout(state._laserSfxStopTo); state._laserSfxStopTo = null; }
+          state._laserSfxIv = setInterval(() => {
+            try {
+              const _u = document.getElementById('laser-beam-sfx');
+              if (!_u) return;
+              _u.volume = 0.12 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+              _u.currentTime = 0;
+              _u.play().catch(()=>{});
+            } catch(_) {}
+          }, 120);
+          // Stop-timeout uses REMAINING laserTimer (already paused-frozen, so
+          // it's whatever was left at pause-time).
+          state._laserSfxStopTo = setTimeout(() => {
+            state._laserSfxStopTo = null;
+            if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
+            const _u = document.getElementById('laser-beam-sfx');
+            if (_u) { try { _u.loop = false; _u.pause(); _u.currentTime = 0; } catch(_) {} }
+          }, Math.max(0, state.laserTimer * 1000));
+        }
       } else {
+        // Unibeam (T4/T5): true looped element. The original stop-setTimeout
+        // from shop.js (line 645/654) is plain setTimeout and not cleared on
+        // pause, so it's still pending and will silence the loop on schedule.
         const _ubeamU = document.getElementById('unibeam-sfx');
         if (_ubeamU) { _ubeamU.volume = 0.6 * _sM; _ubeamU.loop = true; _ubeamU.play().catch(()=>{}); }
       }
@@ -22526,6 +22572,29 @@ function startGame() {
       window._reprewarmShaders('post-start');
     }
   } catch(_){}
+  // AUDIO GRAPH DRY-RUN (post-start) — first powerup pickup of the session
+  // (typically shield, since it spawns earliest) was hitching ~30-60ms on
+  // iOS Safari while WebKit JIT'd the OscillatorNode + GainNode construction
+  // path inside playSFX(). Boot prewarm couldn't help because audioCtx is
+  // null until first user gesture. Here — after the player tapped to start —
+  // audioCtx exists and we can warm the path silently. Two short
+  // volume-0 oscillators cover the two freq tiers playPickup uses; one
+  // empty AudioBufferSourceNode covers the _playBuffer code path.
+  try {
+    if (typeof playSFX === 'function' && typeof audioCtx !== 'undefined' && audioCtx) {
+      playSFX(880,  0.02, 'sine', 0);
+      playSFX(1100, 0.02, 'sine', 0);
+      try {
+        const _empty = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
+        const _src = audioCtx.createBufferSource();
+        const _g = audioCtx.createGain();
+        _g.gain.value = 0;
+        _src.buffer = _empty;
+        _src.connect(_g).connect(audioCtx.destination);
+        _src.start();
+      } catch(_) {}
+    }
+  } catch(_){}
   state.phase          = 'playing';
   shipGroup.visible    = true;
   _killExplosion();
@@ -24168,11 +24237,14 @@ function _drSequencerTick(dt) {
     if (state.drPhase === 'RELEASE') {
       state._seqSpawnMode = 'cones'; state._seqConeDensity = 'normal';
     } else if (_endlessType === 'random_cones') {
-      // Endless random_cones uses 'sparse' (5-7 cones, gap 1.0) instead of
-      // 'normal' (9-11 cones, tight gap). At 2.5x with physTier 5 the dense
-      // version was an unfair wall — sparse mimics S1 spacing so the player
-      // can actually thread the cones.
-      state._seqSpawnMode = 'cones'; state._seqConeDensity = 'sparse';
+      // Endless random_cones mirrors S1_CONES exactly: 'ramp' density picks the
+      // 4-5 cones/row count AND triggers the anti-bunch min-lane-gap rule in
+      // spawnObstacles(). Pinning _seqRampT01 to 1 keeps the ramp at its peak
+      // (S1's late-stage feel) for the whole endless segment.
+      // (Previously 'sparse' = 5-7 cones with no anti-bunch rule — looked clumped
+      // even though the per-row count was reasonable.)
+      state._seqSpawnMode = 'cones'; state._seqConeDensity = 'ramp';
+      state._seqRampT01 = 1;
     } else if (_endlessType === 'angled_random') {
       state._seqSpawnMode = 'angled';
     } else if (_endlessType === 'lethal') {
@@ -29206,6 +29278,7 @@ function _frameBudgetMs() {
   return _FRAME_BUDGET_60;
 }
 let _lastFrameMs = 0;
+let _pauseRenderLastMs = 0;
 
 // ── Adaptive DPR (thermal/perf throttle defense) ──────────────────────────
 // Watches the recent frame budget. When > 35% of the last ~120 frames blew
@@ -29336,14 +29409,26 @@ function animate(now) {
   // ── PAUSE: render last frame, skip ALL ticks (sim, FOV lerp, shaders) ──
   // Single guard at the top — obviates per-system pause gates throughout
   // update() and the visual phase. Composer renders so the screen isn't black.
+  //
+  // Pause render throttle: scene is frozen (no sim, no camera move, no uniform
+  // tick), so a full composer.render() at 60-120Hz is pure heat. Throttle to
+  // ~10fps (100ms cadence). Always render the first frame after entering pause
+  // so the screen captures the freeze without artifacts.
   if (state.phase === 'paused') {
     _syncOptionalLightVisibility();
-    _perfDiag.markRenderStart();
-    composer.render();
-    _perfDiag.markRenderEnd();
+    const _nowMs = (typeof now === 'number') ? now : performance.now();
+    if (!_pauseRenderLastMs || (_nowMs - _pauseRenderLastMs) >= 100) {
+      _perfDiag.markRenderStart();
+      composer.render();
+      _perfDiag.markRenderEnd();
+      _pauseRenderLastMs = _nowMs;
+    }
     _perfDiag.frameEnd();
     return;
   }
+  // Reset pause render timestamp once we leave pause so the next pause entry
+  // renders immediately.
+  if (_pauseRenderLastMs) _pauseRenderLastMs = 0;
 
   // ── TITLE SCREEN: render title scene only, skip all gameplay ──────
   if (state.phase === 'title') {
@@ -32488,8 +32573,8 @@ window._jlDebug = {
     jaggedness:   1.9,
     hitboxScale:  1.0,    // multiplier on glowRadius — hitbox always matches bolt visual
     warnRadius:   3.5,
-    shakeAmt:     0.18,
-    shakeDuration:0.35,
+    shakeAmt:     0.09,    // 2026-05-19: halved (was 0.18) — strikes felt too jarring
+    shakeDuration:0.22,    // 2026-05-19: shortened (was 0.35) — quicker recovery
     glowColor:    0x88ccff,
     coreColor:    0xffffff,
     flashColor:   0x99ddff,
@@ -33637,6 +33722,185 @@ window._jlDebug = {
     return snap;
   };
 })();
+// ═══════════════════════════════════════════════════
+//  TESTER FEEDBACK — Game-over modal → jhTrack pipe
+// ═══════════════════════════════════════════════════
+// Surfaces a tiny "Send feedback" link under the TRY AGAIN / EXIT row on
+// the game-over screen. Opens a self-contained modal (#feedback-overlay)
+// that submits a `feedback` event through the existing analytics pipe
+// (window.jhTrack → /api/analytics). Diagnostic context is attached
+// automatically so testers don't have to remember build/stage/score.
+//
+// Layout safety: the link lives INSIDE .go-actions with flex-basis:100%
+// so it wraps to its own line in both portrait (row flex) and landscape
+// (column flex) without disturbing the existing two-button layout.
+
+(function () {
+  'use strict';
+
+  let _selectedTag = 'bug';
+
+  function _collectContext() {
+    const ctx = {};
+    try {
+      // Build version (set at the top of 82-main-late-tail.js, lives in
+      // shared scope thanks to the unity-build concat).
+      if (typeof BUILD_VERSION !== 'undefined') ctx.build = BUILD_VERSION;
+    } catch (_) {}
+    try {
+      if (typeof state !== 'undefined' && state) {
+        ctx.phase           = state.phase || 'unknown';
+        ctx.score           = state.score || 0;
+        ctx.distance        = Math.round(state.distance || 0);
+        ctx.elapsed         = +(state.elapsed || 0).toFixed(2);
+        ctx.seqStageIdx     = state.seqStageIdx || 0;
+        ctx.drTier          = state.deathRunSpeedTier || 0;
+        ctx.endlessActive   = !!state._endlessActive;
+        ctx.endlessTier     = state._endlessTier || 0;
+        ctx.endlessType     = state._endlessType || null;
+        ctx.laserActive     = !!state.laserActive;
+        ctx.laserTier       = state.laserTier || 0;
+        ctx.laserTimer      = +(state.laserTimer || 0).toFixed(2);
+        ctx.magnetActive    = !!state.magnetActive;
+        ctx.shieldActive    = !!state.shieldActive;
+        ctx.invincibleTimer = +(state.invincibleTimer || 0).toFixed(2);
+        ctx.multiplier      = state.multiplier || 1;
+        ctx.shipSkin        = (typeof activeSkinIdx !== 'undefined') ? activeSkinIdx : null;
+      }
+    } catch (_) {}
+    try {
+      // Current sequence stage name — useful for "what level was I in".
+      if (typeof DR_SEQUENCE !== 'undefined' && typeof state !== 'undefined' &&
+          DR_SEQUENCE[state.seqStageIdx]) {
+        ctx.seqStageName = DR_SEQUENCE[state.seqStageIdx].name;
+      }
+    } catch (_) {}
+    try {
+      if (typeof window._lastHitchMs === 'number') ctx.lastHitchMs = Math.round(window._lastHitchMs);
+    } catch (_) {}
+    try {
+      ctx.dpr = window.devicePixelRatio || 1;
+      ctx.w = window.innerWidth;
+      ctx.h = window.innerHeight;
+    } catch (_) {}
+    try {
+      // Radio: what was playing (if anything).
+      if (typeof isRadioOn === 'function' && isRadioOn()) {
+        const _t = document.getElementById('pp-title');
+        ctx.radioTrack = _t ? (_t.textContent || '').slice(0, 60) : '';
+      }
+    } catch (_) {}
+    return ctx;
+  }
+
+  function _showToast(msg) {
+    let toast = document.getElementById('feedback-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'feedback-toast';
+      toast.style.cssText =
+        'position:fixed;top:28px;left:50%;transform:translateX(-50%);' +
+        'background:rgba(10,14,22,0.78);border:1px solid rgba(0,240,255,0.5);' +
+        'color:rgba(0,240,255,0.95);padding:12px 22px;border-radius:12px;' +
+        "font-family:'Zain',sans-serif;font-weight:300;font-size:13px;" +
+        'letter-spacing:0.32em;text-transform:uppercase;z-index:200;' +
+        'pointer-events:none;opacity:0;' +
+        'backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);' +
+        'box-shadow:0 8px 24px rgba(0,0,0,0.5),0 0 22px rgba(0,240,255,0.18),' +
+        'inset 0 1px 0 rgba(255,255,255,0.18);' +
+        'text-shadow:0 0 10px rgba(0,240,255,0.4);' +
+        'transition:opacity 220ms ease;';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    // Force reflow so the opacity transition runs from 0.
+    void toast.offsetWidth;
+    toast.style.opacity = '1';
+    clearTimeout(toast._jhTimer);
+    toast._jhTimer = setTimeout(() => {
+      toast.style.opacity = '0';
+    }, 1800);
+  }
+
+  function _openFeedback() {
+    const ov = document.getElementById('feedback-overlay');
+    if (!ov) return;
+    // Reset state
+    _selectedTag = 'bug';
+    const chips = document.querySelectorAll('#feedback-chips .feedback-chip');
+    chips.forEach(c => c.classList.toggle('active', c.dataset.tag === 'bug'));
+    const ta = document.getElementById('feedback-text');
+    if (ta) { ta.value = ''; }
+    ov.classList.remove('hidden');
+    // Autofocus textarea on next frame — required for iOS to actually open the keyboard.
+    setTimeout(() => { if (ta) try { ta.focus(); } catch(_) {} }, 60);
+  }
+
+  function _closeFeedback() {
+    const ov = document.getElementById('feedback-overlay');
+    if (ov) ov.classList.add('hidden');
+  }
+
+  function _send() {
+    const ta = document.getElementById('feedback-text');
+    const text = (ta && ta.value || '').trim();
+    if (!text) {
+      _showToast('Type something first');
+      return;
+    }
+    const payload = {
+      tag: _selectedTag,
+      text: text.slice(0, 800),
+      ctx: _collectContext(),
+    };
+    try {
+      if (typeof window.jhTrack === 'function') {
+        window.jhTrack('feedback', payload);
+      }
+    } catch (_) {}
+    _closeFeedback();
+    _showToast('Thanks — sent');
+  }
+
+  // ── Wire up after DOM is ready ────────────────────────────────────
+  function _init() {
+    const openBtn = document.getElementById('gameover-feedback-btn');
+    if (openBtn) {
+      openBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        _openFeedback();
+      });
+    }
+    const cancelBtn = document.getElementById('feedback-cancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', _closeFeedback);
+    const sendBtn = document.getElementById('feedback-send');
+    if (sendBtn) sendBtn.addEventListener('click', _send);
+
+    // Tag-chip selection
+    const chips = document.querySelectorAll('#feedback-chips .feedback-chip');
+    chips.forEach(c => {
+      c.addEventListener('click', () => {
+        _selectedTag = c.dataset.tag || 'other';
+        chips.forEach(x => x.classList.toggle('active', x === c));
+      });
+    });
+
+    // Backdrop click closes
+    const ov = document.getElementById('feedback-overlay');
+    if (ov) {
+      ov.addEventListener('click', (e) => {
+        if (e.target.id === 'feedback-overlay') _closeFeedback();
+      });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _init);
+  } else {
+    _init();
+  }
+})();
 // cache bust 1777249800
 
 // ── DEV-ONLY BUILD VERSION HUD ──
@@ -33644,7 +33908,7 @@ window._jlDebug = {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 29;
+const BUILD_VERSION = 41;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
@@ -34091,6 +34355,36 @@ window._uploadAllBuffers = _uploadAllBuffers;
       try {
         if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
           navigator.vibrate(0);
+        }
+      } catch(_) {}
+      // e) Oscillator graph dry-run: playPickup() is what shield/laser/etc all
+      //    funnel through, and it calls playSFX() which constructs a fresh
+      //    OscillatorNode + GainNode pair per call. First-pickup of the
+      //    session pays a one-time WebKit cost wiring up the audio graph —
+      //    visible as a small hitch on the first shield smash (since shield
+      //    is typically the earliest powerup the player meets).
+      //
+      //    Fire two silent oscillators (volume 0, short duration) covering
+      //    both freq tiers playPickup uses, so the node-construction +
+      //    .connect() + .start() path is hot by the time gameplay begins.
+      try {
+        if (typeof playSFX === 'function' && typeof audioCtx !== 'undefined' && audioCtx) {
+          playSFX(880,  0.02, 'sine', 0);
+          playSFX(1100, 0.02, 'sine', 0);
+        }
+      } catch(_) {}
+      // e2) Buffer-source dry-run for _playBuffer paths used by cone-hit,
+      //    nearmiss, whoosh, etc. Creating an AudioBufferSourceNode + gain
+      //    + connect chain has a similar first-call JIT cost on iOS.
+      try {
+        if (typeof audioCtx !== 'undefined' && audioCtx && audioCtx.createBuffer) {
+          const _empty = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
+          const _src = audioCtx.createBufferSource();
+          const _g = audioCtx.createGain();
+          _g.gain.value = 0;
+          _src.buffer = _empty;
+          _src.connect(_g).connect(audioCtx.destination);
+          _src.start();
         }
       } catch(_) {}
       if (window._perfDiag && typeof window._perfDiag.tag === 'function') {
