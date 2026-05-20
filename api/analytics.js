@@ -166,8 +166,16 @@ async function handlePost(req, res) {
 }
 
 // ── GET: dashboard data (password-gated) ────────────────────────────────
+// Auth via `Authorization: Bearer <password>` header (preferred — never logged
+// in URLs/access logs) or `X-Analytics-Password` header. URL query fallback
+// removed 2026-05-19 to prevent credential leakage into Vercel access logs.
 async function handleGet(req, res) {
-  const pw = String(req.query?.password || '');
+  const authHeader = String(req.headers?.authorization || '');
+  const bearerPw = authHeader.toLowerCase().startsWith('bearer ')
+    ? authHeader.slice(7).trim()
+    : '';
+  const xHeaderPw = String(req.headers?.['x-analytics-password'] || '').trim();
+  const pw = bearerPw || xHeaderPw;
   if (!PASSWORD || pw !== PASSWORD) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
