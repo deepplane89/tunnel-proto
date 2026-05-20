@@ -75,12 +75,17 @@
       toast = document.createElement('div');
       toast.id = 'feedback-toast';
       toast.style.cssText =
-        'position:fixed;top:24px;left:50%;transform:translateX(-50%);' +
-        'background:rgba(0,240,255,0.18);border:1px solid rgba(0,240,255,0.5);' +
-        'color:rgba(0,240,255,0.95);padding:10px 18px;border-radius:8px;' +
-        'font-family:inherit;font-size:12px;letter-spacing:0.18em;' +
-        'text-transform:uppercase;z-index:200;pointer-events:none;' +
-        'opacity:0;transition:opacity 200ms ease;';
+        'position:fixed;top:28px;left:50%;transform:translateX(-50%);' +
+        'background:rgba(10,14,22,0.78);border:1px solid rgba(0,240,255,0.5);' +
+        'color:rgba(0,240,255,0.95);padding:12px 22px;border-radius:12px;' +
+        "font-family:'Zain',sans-serif;font-weight:300;font-size:13px;" +
+        'letter-spacing:0.32em;text-transform:uppercase;z-index:200;' +
+        'pointer-events:none;opacity:0;' +
+        'backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);' +
+        'box-shadow:0 8px 24px rgba(0,0,0,0.5),0 0 22px rgba(0,240,255,0.18),' +
+        'inset 0 1px 0 rgba(255,255,255,0.18);' +
+        'text-shadow:0 0 10px rgba(0,240,255,0.4);' +
+        'transition:opacity 220ms ease;';
       document.body.appendChild(toast);
     }
     toast.textContent = msg;
