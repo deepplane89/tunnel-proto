@@ -1663,18 +1663,17 @@ window._isMobile = _mobAA;
 
 // ── Initial DPR resolution (graphics quality setting lives in 65-settings.js,
 // loaded after this file). Read the saved setting directly from localStorage so
-// the renderer boots at the correct DPR on first frame. Default 'balanced' (1.5).
+// the renderer boots at the correct DPR on first frame. Default 'sharp'.
 function _bootDPR() {
   const native = window.devicePixelRatio || 1;
-  let q = 'balanced';
+  let q = 'sharp';
   try {
     const raw = (window._LS || localStorage).getItem('jh_settings');
     if (raw) { const s = JSON.parse(raw); if (s && s.graphicsQuality) q = s.graphicsQuality; }
   } catch(e) {}
-  if (q === 'performance') return 1.0;
-  if (q === 'sharp')       return Math.min(native, 3);
-  if (q === 'ultra')       return Math.min(native, 3);
-  return Math.min(native, 1.5); // balanced (default)
+  if (q === 'sharp') return Math.min(native, 3);
+  if (q === 'ultra') return Math.min(native, 3);
+  return Math.min(native, 1.25); // balanced
 }
 const _initialDPR = _bootDPR();
 
@@ -1983,7 +1982,7 @@ try {
   const _gq = (window._settings && window._settings.graphicsQuality) ||
               ((window._LS && JSON.parse(window._LS.getItem('jh_settings')||'{}').graphicsQuality)) ||
               'balanced';
-  _composerSamples = (_gq === 'sharp' || _gq === 'ultra') ? 4 : _gq === 'balanced' ? 2 : 0;
+  _composerSamples = (_gq === 'sharp' || _gq === 'ultra') ? 4 : 2;
 } catch(_) { _composerSamples = 2; }
 // NOTE: We do NOT set `type: HalfFloatType` here. Half-float FBOs caused a
 // visible horizon banding/artifact on iOS (Apple GPU + tonemapping). MSAA

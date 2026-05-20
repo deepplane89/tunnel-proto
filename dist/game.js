@@ -3087,18 +3087,17 @@ window._isMobile = _mobAA;
 
 // ── Initial DPR resolution (graphics quality setting lives in 65-settings.js,
 // loaded after this file). Read the saved setting directly from localStorage so
-// the renderer boots at the correct DPR on first frame. Default 'balanced' (1.5).
+// the renderer boots at the correct DPR on first frame. Default 'sharp'.
 function _bootDPR() {
   const native = window.devicePixelRatio || 1;
-  let q = 'balanced';
+  let q = 'sharp';
   try {
     const raw = (window._LS || localStorage).getItem('jh_settings');
     if (raw) { const s = JSON.parse(raw); if (s && s.graphicsQuality) q = s.graphicsQuality; }
   } catch(e) {}
-  if (q === 'performance') return 1.0;
-  if (q === 'sharp')       return Math.min(native, 3);
-  if (q === 'ultra')       return Math.min(native, 3);
-  return Math.min(native, 1.5); // balanced (default)
+  if (q === 'sharp') return Math.min(native, 3);
+  if (q === 'ultra') return Math.min(native, 3);
+  return Math.min(native, 1.25); // balanced
 }
 const _initialDPR = _bootDPR();
 
@@ -3407,7 +3406,7 @@ try {
   const _gq = (window._settings && window._settings.graphicsQuality) ||
               ((window._LS && JSON.parse(window._LS.getItem('jh_settings')||'{}').graphicsQuality)) ||
               'balanced';
-  _composerSamples = (_gq === 'sharp' || _gq === 'ultra') ? 4 : _gq === 'balanced' ? 2 : 0;
+  _composerSamples = (_gq === 'sharp' || _gq === 'ultra') ? 4 : 2;
 } catch(_) { _composerSamples = 2; }
 // NOTE: We do NOT set `type: HalfFloatType` here. Half-float FBOs caused a
 // visible horizon banding/artifact on iOS (Apple GPU + tonemapping). MSAA
@@ -22264,10 +22263,9 @@ let _settings = {
   hapticsOn: true,
   // Graphics quality → DPR clamp + water-reflection extras. Defaults to 'sharp';
   // first-time-ever load shows a picker (see _showGfxPicker below).
-  // 'performance' = DPR 1.0, no obstacle reflections
-  // 'balanced'    = DPR 1.5, no obstacle reflections
-  // 'sharp'       = DPR min(native,2), no obstacle reflections (default)
-  // 'ultra'       = DPR min(native,2), FULL obstacle reflections in water
+  // 'balanced' = DPR min(native,1.25), no obstacle reflections, MSAA 2x
+  // 'sharp'    = DPR min(native,2),    no obstacle reflections, MSAA 4x (default)
+  // 'ultra'    = DPR min(native,2),    FULL obstacle reflections,  MSAA 4x
   // SHARP/ULTRA capped at 2 (not 3) because higher DPR causes additive-blend
   // points (stars, thruster particles) to oversaturate via bloom.
   graphicsQuality: 'sharp',
@@ -22282,11 +22280,10 @@ window.getSetting = function(k) { return _settings[k]; };
 function _baseTargetDPR() {
   const native = window.devicePixelRatio || 1;
   switch (_settings.graphicsQuality) {
-    case 'performance': return 1.0;
     case 'ultra':
-    case 'sharp':       return Math.min(native, 2);
+    case 'sharp':    return Math.min(native, 2);
     case 'balanced':
-    default:            return Math.min(native, 1.25);
+    default:         return Math.min(native, 1.25);
   }
 }
 
@@ -22416,8 +22413,6 @@ function openSettings() {
   const lbBtn2 = document.getElementById('litebloom-toggle');
   if (lbBtn2) { lbBtn2.textContent = _settings.liteBloom ? 'ON' : 'OFF'; lbBtn2.classList.toggle('off', !_settings.liteBloom); }
   // Sync graphics quality button states.
-  // NOTE: 'performance' kept in code paths (legacy saved settings + adaptive
-  // DPR fallback floor) but no longer surfaced as a picker button.
   ['balanced','sharp','ultra'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
     if (b) b.classList.toggle('active', _settings.graphicsQuality === q);
@@ -22697,7 +22692,7 @@ function _initSettingsAccordion() {
     saveSettings();
   }, { moveCancel: true });
 
-  // Graphics quality 4-way toggle (Performance / Balanced / Sharp / Ultra)
+  // Graphics quality 3-way toggle (Balanced / Sharp / Ultra)
   ['balanced','sharp','ultra'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
     if (!b) return;
@@ -37445,7 +37440,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 73;
+const BUILD_VERSION = 74;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

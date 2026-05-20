@@ -10,10 +10,9 @@ let _settings = {
   hapticsOn: true,
   // Graphics quality → DPR clamp + water-reflection extras. Defaults to 'sharp';
   // first-time-ever load shows a picker (see _showGfxPicker below).
-  // 'performance' = DPR 1.0, no obstacle reflections
-  // 'balanced'    = DPR 1.5, no obstacle reflections
-  // 'sharp'       = DPR min(native,2), no obstacle reflections (default)
-  // 'ultra'       = DPR min(native,2), FULL obstacle reflections in water
+  // 'balanced' = DPR min(native,1.25), no obstacle reflections, MSAA 2x
+  // 'sharp'    = DPR min(native,2),    no obstacle reflections, MSAA 4x (default)
+  // 'ultra'    = DPR min(native,2),    FULL obstacle reflections,  MSAA 4x
   // SHARP/ULTRA capped at 2 (not 3) because higher DPR causes additive-blend
   // points (stars, thruster particles) to oversaturate via bloom.
   graphicsQuality: 'sharp',
@@ -28,11 +27,10 @@ window.getSetting = function(k) { return _settings[k]; };
 function _baseTargetDPR() {
   const native = window.devicePixelRatio || 1;
   switch (_settings.graphicsQuality) {
-    case 'performance': return 1.0;
     case 'ultra':
-    case 'sharp':       return Math.min(native, 2);
+    case 'sharp':    return Math.min(native, 2);
     case 'balanced':
-    default:            return Math.min(native, 1.25);
+    default:         return Math.min(native, 1.25);
   }
 }
 
@@ -162,8 +160,6 @@ function openSettings() {
   const lbBtn2 = document.getElementById('litebloom-toggle');
   if (lbBtn2) { lbBtn2.textContent = _settings.liteBloom ? 'ON' : 'OFF'; lbBtn2.classList.toggle('off', !_settings.liteBloom); }
   // Sync graphics quality button states.
-  // NOTE: 'performance' kept in code paths (legacy saved settings + adaptive
-  // DPR fallback floor) but no longer surfaced as a picker button.
   ['balanced','sharp','ultra'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
     if (b) b.classList.toggle('active', _settings.graphicsQuality === q);
@@ -443,7 +439,7 @@ function _initSettingsAccordion() {
     saveSettings();
   }, { moveCancel: true });
 
-  // Graphics quality 4-way toggle (Performance / Balanced / Sharp / Ultra)
+  // Graphics quality 3-way toggle (Balanced / Sharp / Ultra)
   ['balanced','sharp','ultra'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
     if (!b) return;
