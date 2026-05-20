@@ -4071,9 +4071,14 @@ function killPlayer() {
         } else if (state._deathCorridorType === 'l3') {
           state.corridorMode = true; state.corridorSpawnZ = -7; state.corridorRowsDone = 0; state.corridorSineT = 0;
         } else if (state._deathCorridorType === 'l4') {
+          // Re-anchor corridor center to ship's reset X (0) — without this the
+          // corridor stays around the pre-death anchor and the respawned ship
+          // (at x=0) is left OUTSIDE the corridor walls. Same fix for L5 below.
           state.l4CorridorActive = true; state.l4SpawnZ = -7; state.l4RowsDone = 0; state.l4SineT = 0;
+          state.l4Delay = 1.5; state._l4CenterAnchor = 0;
         } else if (state._deathCorridorType === 'l5') {
           state.l5CorridorActive = true; state.l5CorridorSpawnZ = -7; state.l5CorridorRowsDone = 0;
+          state.l5SineT = 0; state._l5CenterAnchor = 0;
         }
         state.invincibleSpeedActive = false; // no speed boost, just invincible visual
         state.invincibleGrace = 3.0;
