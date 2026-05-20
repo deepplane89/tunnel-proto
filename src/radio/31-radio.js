@@ -15,8 +15,8 @@ const RADIO_TRACKS = [
   // SYNTHETIC GEARS II removed from rotation (file kept on disk for future use).
   { id: 'funk-of-the-night', name: 'FUNK OF THE NIGHT',     src: './assets/audio/radio-funk.m4a' },
   { id: 'orbital-ordinance', name: 'ORBITAL ORDINANCE',     src: './assets/audio/radio-orbital.m4a' },
-  // NEON MOUNTAIN: 10s fade-in — comes in hot otherwise.
-  { id: 'neon-mountain',     name: 'NEON MOUNTAIN',         src: './assets/audio/radio-neon-mtn.m4a', fadeInSec: 10 },
+  // NEON MOUNTAIN: 10s fade-in baked into the audio file itself (afade=t=in:d=10) — comes in hot otherwise.
+  { id: 'neon-mountain',     name: 'NEON MOUNTAIN',         src: './assets/audio/radio-neon-mtn.m4a' },
   { id: 'house-of-fuel',     name: 'HOUSE OF FUEL',         src: './assets/audio/radio-house-of-fuel.m4a' },
   { id: 'grannies-synth',    name: 'GRANNIES SYNTH',        src: './assets/audio/radio-grannies-synth.m4a' },
   { id: 'andracid',          name: 'ANDRACID',              src: './assets/audio/radio-andracid.m4a' },
@@ -163,24 +163,9 @@ function _playRadioIdx(idx) {
     radioMusic.src = tr.src;
   }
   try { radioMusic.currentTime = 0; } catch(_) {}
-  // Per-track fade-in: some tracks (e.g. NEON MOUNTAIN) hit hard at t=0 and
-  // overwhelm the gameplay mix. fadeInSec on the track entry snaps the
-  // 'radio' gain to 0 instantly, then ramps to its full target across that
-  // many seconds.
-  //
-  // Prior bug: used rampTrackVol(radio, 0, 0) for the snap-to-zero. With
-  // sec=0 Web Audio's linearRampToValueAtTime is a no-op (endTime ==
-  // startTime), so the gain stayed at whatever it was — then the long
-  // 10s ramp anchored on that value and ramped "full to full" with no
-  // audible fade. Fix: use setTrackVol() for the instant zero (which goes
-  // through setValueAtTime), then the second rampTrackVol anchors on 0
-  // and ramps cleanly to TRACK_VOL.radio.
-  if (tr.fadeInSec && typeof rampTrackVol === 'function' && typeof setTrackVol === 'function') {
-    try { setTrackVol('radio', 0); } catch(_) {}
-    try { rampTrackVol('radio', TRACK_VOL.radio, tr.fadeInSec); } catch(_) {}
-  } else {
-    // Volume is gated by the gain node ('radio' track) — don't fight it here.
-  }
+  // Fade-ins are baked into the audio files themselves (e.g. NEON MOUNTAIN
+  // has a 10s afade=t=in:d=10 in the .m4a) — simpler than gain-ramp gymnastics.
+  // Volume is gated by the gain node ('radio' track) — don't fight it here.
   radioMusic.play().catch(() => {});
   // Notify pause-menu UI to refresh "now playing".
   try { if (typeof updatePauseRadioRow === 'function') updatePauseRadioRow(); } catch(_) {}
@@ -389,14 +374,8 @@ function _previewRadioTrack(idx) {
     try { if (typeof rampTrackVol === 'function') rampTrackVol('title', 0, 0.18); else setTrackVol('title', 0); } catch(_) {}
     setTimeout(() => { try { if (titleMusic && !titleMusic.paused) titleMusic.pause(); } catch(_) {} }, 220);
   }
-  // Per-track fade-in mirrors _playRadioIdx so previews don't punch in either.
-  // Same fix as _playRadioIdx: setTrackVol for the instant zero, then ramp.
-  if (tr.fadeInSec && typeof rampTrackVol === 'function' && typeof setTrackVol === 'function') {
-    try { setTrackVol('radio', 0); } catch(_) {}
-    try { rampTrackVol('radio', TRACK_VOL.radio, tr.fadeInSec); } catch(_) {}
-  } else {
-    try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
-  }
+  // Fade-ins baked into the audio file itself — just set target gain.
+  try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
   radioMusic.play().catch(() => {});
   _radioPreviewIdx = idx;
   // Keep _radioCurrentIdx in sync so the 'ended' handler (and any later
