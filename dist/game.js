@@ -15147,11 +15147,11 @@ function playPickup(typeIdx) {
   // Lowered 2026-05-10 (user request): pickup smash was too loud relative to
   // engine + radio mix. ~50% drop on all three layers — synth tone + harmonic
   // overtone + electron-burst sample.
-  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.22);          // was 0.45
-  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.18), 80); // was 0.35
+  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.35);          // bumped 2026-05-19 (radio mix): 0.22→0.35
+  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.28), 80); // bumped 0.18→0.28
   const _pb = document.getElementById('powerup-burst-sfx');
   if (_pb) {
-    try { _pb.currentTime = 0; _pb.volume = 0.09; _pb.play().catch(() => {}); } catch (_) {}  // was 0.18
+    try { _pb.currentTime = 0; _pb.volume = 0.15; _pb.play().catch(() => {}); } catch (_) {}  // bumped 0.09→0.15
   }
 }
 
@@ -20539,7 +20539,7 @@ function applyPowerup(typeIdx) {
         const _lsfx = document.getElementById('laser-beam-sfx');
         if (_lsfx && !isSfxMuted()) {
           _lsfx.loop = false;
-          _lsfx.volume = 0.06 * (typeof sfxMult === 'function' ? sfxMult() : 1); // 2026-05-19: 0.2→0.12→0.06 — still too loud over radio even after duck
+          _lsfx.volume = 0.04 * (typeof sfxMult === 'function' ? sfxMult() : 1); // 2026-05-19: 0.2→0.12→0.06→0.04 — dial down further per user feedback
           try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           const _retriggerMs = 120; // ~8 shots/sec
           if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
@@ -20549,7 +20549,7 @@ function applyPowerup(typeIdx) {
           state._laserSfxIv = setInterval(() => {
             // Re-apply sfxMult on every retrigger so the radio duck takes
             // effect mid-laser if the player toggles the station.
-            try { _lsfx.volume = 0.06 * (typeof sfxMult === 'function' ? sfxMult() : 1); _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
+            try { _lsfx.volume = 0.04 * (typeof sfxMult === 'function' ? sfxMult() : 1); _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           }, _retriggerMs);
           // Stop retriggering when laser ends, but DON'T cut the in-flight shot.
           // It plays out naturally to its end (final tail rings out).
@@ -20846,7 +20846,7 @@ function togglePause() {
         const _laserU = document.getElementById('laser-beam-sfx');
         if (_laserU) {
           _laserU.loop = false;
-          _laserU.volume = 0.06 * _sM;
+          _laserU.volume = 0.04 * _sM;
           try { _laserU.currentTime = 0; _laserU.play().catch(()=>{}); } catch(_) {}
           // Rearm retrigger interval (matches shop.js cadence).
           if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
@@ -20855,7 +20855,7 @@ function togglePause() {
             try {
               const _u = document.getElementById('laser-beam-sfx');
               if (!_u) return;
-              _u.volume = 0.06 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+              _u.volume = 0.04 * (typeof sfxMult === 'function' ? sfxMult() : 1);
               _u.currentTime = 0;
               _u.play().catch(()=>{});
             } catch(_) {}
@@ -24298,9 +24298,9 @@ function _drSequencerTick(dt) {
         // Beeps trigger when stage has 1500ms left; roar lands at +1500ms
         // which is the exact moment _drSeqAdvance() bumps the speed tier.
         // Sequence: beep0, beep500, beep1000, ROAR1500 (= speed change beat).
-        _playBuffer('klaxon', 0.18, 1.0, null);
-        _sfxTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
-        _sfxTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
+        _playBuffer('klaxon', 0.32, 1.0, null);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.32, 1.0, null), 500);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.36, 1.0, null), 1000);
         // Speed-up burst fires right as speed kicks in (beat 4 of the countdown).
         // Use retry-warp sound for the speed-up surge.
         // Speed-up surge — plasma-punch on its own (no warp, no roar).
@@ -24359,6 +24359,10 @@ function _drSequencerTick(dt) {
       fam.activate(dummyBand, 'peak');
       state._drStageSpeed = undefined;
       if (_restoreT4A) Object.assign(_PRE_T4A_CANYON_TUNER, _restoreT4A);
+      // L4/L5 cone corridors get the neon band (random cone gen stays band-less).
+      if (stage.family === 'L4_SINE_CORRIDOR' || stage.family === 'L5_SINE_CORRIDOR') {
+        try { if (typeof window._setConeNeonBand === 'function') window._setConeNeonBand(true); } catch (_) {}
+      }
     }
     // Advance on whichever comes first: stage.duration timer OR family naturally
     // finishing (e.g. L5 corridor hits its 420-row cap at ~33s but S11 duration
@@ -24376,6 +24380,8 @@ function _drSequencerTick(dt) {
       state.deathRunRestBeat = 0;
       clearAllCorridorFlags();
       state.l5CorridorDone = true; // mark done so campaign ending path never fires
+      // Restore prior neon band state (default OFF for random cones).
+      try { if (typeof window._setConeNeonBand === 'function') window._setConeNeonBand(window._coneNeonOn === true); } catch (_) {}
       _drSeqAdvance();
     }
     return;
@@ -24624,9 +24630,9 @@ function _drSequencerTick(dt) {
       if (!isSfxMuted()) {
         // Klaxon countdown — 500ms grid (120 BPM), roar lands on the
         // speed-change beat. Same cadence as the corridor handler above.
-        _playBuffer('klaxon', 0.18, 1.0, null);
-        _sfxTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
-        _sfxTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
+        _playBuffer('klaxon', 0.32, 1.0, null);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.32, 1.0, null), 500);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.36, 1.0, null), 1000);
         // Speed-up surge — plasma-punch on its own (no warp, no roar).
         _sfxTimeout(() => { playThrusterImpact(0.7); }, 1500);
       }
@@ -37282,7 +37288,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 52;
+const BUILD_VERSION = 53;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

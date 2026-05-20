@@ -1521,9 +1521,9 @@ function _drSequencerTick(dt) {
         // Beeps trigger when stage has 1500ms left; roar lands at +1500ms
         // which is the exact moment _drSeqAdvance() bumps the speed tier.
         // Sequence: beep0, beep500, beep1000, ROAR1500 (= speed change beat).
-        _playBuffer('klaxon', 0.18, 1.0, null);
-        _sfxTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
-        _sfxTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
+        _playBuffer('klaxon', 0.32, 1.0, null);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.32, 1.0, null), 500);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.36, 1.0, null), 1000);
         // Speed-up burst fires right as speed kicks in (beat 4 of the countdown).
         // Use retry-warp sound for the speed-up surge.
         // Speed-up surge — plasma-punch on its own (no warp, no roar).
@@ -1582,6 +1582,10 @@ function _drSequencerTick(dt) {
       fam.activate(dummyBand, 'peak');
       state._drStageSpeed = undefined;
       if (_restoreT4A) Object.assign(_PRE_T4A_CANYON_TUNER, _restoreT4A);
+      // L4/L5 cone corridors get the neon band (random cone gen stays band-less).
+      if (stage.family === 'L4_SINE_CORRIDOR' || stage.family === 'L5_SINE_CORRIDOR') {
+        try { if (typeof window._setConeNeonBand === 'function') window._setConeNeonBand(true); } catch (_) {}
+      }
     }
     // Advance on whichever comes first: stage.duration timer OR family naturally
     // finishing (e.g. L5 corridor hits its 420-row cap at ~33s but S11 duration
@@ -1599,6 +1603,8 @@ function _drSequencerTick(dt) {
       state.deathRunRestBeat = 0;
       clearAllCorridorFlags();
       state.l5CorridorDone = true; // mark done so campaign ending path never fires
+      // Restore prior neon band state (default OFF for random cones).
+      try { if (typeof window._setConeNeonBand === 'function') window._setConeNeonBand(window._coneNeonOn === true); } catch (_) {}
       _drSeqAdvance();
     }
     return;
@@ -1847,9 +1853,9 @@ function _drSequencerTick(dt) {
       if (!isSfxMuted()) {
         // Klaxon countdown — 500ms grid (120 BPM), roar lands on the
         // speed-change beat. Same cadence as the corridor handler above.
-        _playBuffer('klaxon', 0.18, 1.0, null);
-        _sfxTimeout(() => _playBuffer('klaxon', 0.18, 1.0, null), 500);
-        _sfxTimeout(() => _playBuffer('klaxon', 0.20, 1.0, null), 1000);
+        _playBuffer('klaxon', 0.32, 1.0, null);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.32, 1.0, null), 500);
+        _sfxTimeout(() => _playBuffer('klaxon', 0.36, 1.0, null), 1000);
         // Speed-up surge — plasma-punch on its own (no warp, no roar).
         _sfxTimeout(() => { playThrusterImpact(0.7); }, 1500);
       }

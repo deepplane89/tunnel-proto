@@ -236,11 +236,11 @@ function playPickup(typeIdx) {
   // Lowered 2026-05-10 (user request): pickup smash was too loud relative to
   // engine + radio mix. ~50% drop on all three layers — synth tone + harmonic
   // overtone + electron-burst sample.
-  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.22);          // was 0.45
-  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.18), 80); // was 0.35
+  playSFX(freqs[typeIdx] || 880, 0.2, 'sine', 0.35);          // bumped 2026-05-19 (radio mix): 0.22→0.35
+  setTimeout(() => playSFX((freqs[typeIdx] || 880) * 1.25, 0.15, 'sine', 0.28), 80); // bumped 0.18→0.28
   const _pb = document.getElementById('powerup-burst-sfx');
   if (_pb) {
-    try { _pb.currentTime = 0; _pb.volume = 0.09; _pb.play().catch(() => {}); } catch (_) {}  // was 0.18
+    try { _pb.currentTime = 0; _pb.volume = 0.15; _pb.play().catch(() => {}); } catch (_) {}  // bumped 0.09→0.15
   }
 }
 

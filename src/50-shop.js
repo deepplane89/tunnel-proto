@@ -595,7 +595,7 @@ function applyPowerup(typeIdx) {
         const _lsfx = document.getElementById('laser-beam-sfx');
         if (_lsfx && !isSfxMuted()) {
           _lsfx.loop = false;
-          _lsfx.volume = 0.06 * (typeof sfxMult === 'function' ? sfxMult() : 1); // 2026-05-19: 0.2→0.12→0.06 — still too loud over radio even after duck
+          _lsfx.volume = 0.04 * (typeof sfxMult === 'function' ? sfxMult() : 1); // 2026-05-19: 0.2→0.12→0.06→0.04 — dial down further per user feedback
           try { _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           const _retriggerMs = 120; // ~8 shots/sec
           if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
@@ -605,7 +605,7 @@ function applyPowerup(typeIdx) {
           state._laserSfxIv = setInterval(() => {
             // Re-apply sfxMult on every retrigger so the radio duck takes
             // effect mid-laser if the player toggles the station.
-            try { _lsfx.volume = 0.06 * (typeof sfxMult === 'function' ? sfxMult() : 1); _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
+            try { _lsfx.volume = 0.04 * (typeof sfxMult === 'function' ? sfxMult() : 1); _lsfx.currentTime = 0; _lsfx.play().catch(()=>{}); } catch(_) {}
           }, _retriggerMs);
           // Stop retriggering when laser ends, but DON'T cut the in-flight shot.
           // It plays out naturally to its end (final tail rings out).
