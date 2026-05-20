@@ -1341,7 +1341,7 @@ function _broadcastHoloUniform(name, value) {
 
 (function () {
   const TUNING = {
-    peakGain:        0.028,   // max volume — very subtle (lowered per user feedback)
+    peakGain:        0.05,    // max volume — audible but subtle
     attackRate:      8,       // how fast gain ramps up   (per second)
     releaseRate:     3,       // how fast gain ramps down
     bandpassFreq:    3200,    // hiss center (Hz) — water skim is high-mid
@@ -37379,7 +37379,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 60;
+const BUILD_VERSION = 63;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
