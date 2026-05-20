@@ -538,39 +538,6 @@ html, body {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-/* Coins shown inside the BEST pill as a small chip on the right */
-.go-best-coins {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: 8px;
-  padding-left: 8px;
-  border-left: 1px solid rgba(255,255,255,0.15);
-  font-family: 'Rajdhani', sans-serif;
-  font-size: clamp(13px, 1.5vw, 16px);
-  font-weight: 700;
-  color: #ffd700;
-  letter-spacing: 0.05em;
-}
-.go-best-coins .go-coins-total-val { font-variant-numeric: tabular-nums; }
-
-/* Paired CTA row: REPAIR SHIP + TRY AGAIN side-by-side on portrait */
-.go-cta-row {
-  display: flex;
-  gap: 10px;
-  align-items: stretch;
-  justify-content: center;
-  margin: 8px 0 6px;
-  width: 100%;
-  max-width: 360px;
-}
-.go-cta-row .btn-saveme,
-.go-cta-row .btn-retry {
-  flex: 1 1 0;
-  margin: 0;
-  max-width: none;
-}
-
 /* Subtle coins · bonus line */
 .go-sub {
   font-family: var(--font-display);
@@ -667,18 +634,11 @@ html, body {
   opacity: 0.7;
 }
 
-/* Game over action buttons row — EXIT button + SEND FEEDBACK link side-by-side.
-   (TRY AGAIN moved up to the paired CTA row alongside REPAIR SHIP.) */
+/* Game over action buttons row */
 .go-actions {
   display: flex;
-  gap: 14px;
+  gap: 10px;
   align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-.go-actions .btn-feedback-link {
-  flex-basis: auto;
-  margin-top: 0;
 }
 .btn-exit {
   background: rgba(255,255,255,0.04);
@@ -4239,7 +4199,7 @@ html, body {
   box-shadow: 0 0 10px rgba(0,220,255,0.4), inset 0 0 6px rgba(0,220,255,0.15);
 }
 
-/* Game over: single coin total line (legacy — now lives inside BEST pill) */
+/* Game over: single coin total line */
 .go-coins-line {
   display: flex;
   align-items: center;
@@ -4254,17 +4214,14 @@ html, body {
 .go-level-section {
   width: 100%;
   max-width: 280px;
-  margin-top: 4px;
 }
-/* Tighten gap between XP and handling bars so they read as a paired stat */
-.go-handling-section { margin-top: 2px !important; }
 .go-level-header {
   font-family: var(--font-display, 'Rajdhani', sans-serif);
   font-size: 13px;
   font-weight: 600;
   color: rgba(255,255,255,0.6);
   letter-spacing: 0.15em;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 /* ── FPS Overlay ── */
