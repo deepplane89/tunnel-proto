@@ -26347,116 +26347,6 @@ function showIntroText() {
   }, 18500));
 }
 
-// ── GAME-OVER REWARD TOAST QUEUE ────────────────────────────────────
-// Builds a queue of milestone toasts (level-up, handling-tier crossed,
-// skin unlocked, flight-model unlocked) and shows them sequentially with
-// a CLAIM button. Returns a Promise that resolves when the queue is drained
-// so the game-over panel can be unlocked. If the queue is empty, resolves
-// immediately. The toast DOM (#go-toast / #go-toast-backdrop) is reused
-// across toasts — content is repopulated per toast.
-function _runGameOverToasts(toasts) {
-  return new Promise((resolve) => {
-    if (!toasts || toasts.length === 0) { resolve(); return; }
-    const toast    = document.getElementById('go-toast');
-    const backdrop = document.getElementById('go-toast-backdrop');
-    const head     = document.getElementById('go-toast-headline');
-    const sub      = document.getElementById('go-toast-sub');
-    const barWrap  = document.getElementById('go-toast-bar-wrap');
-    const barFill  = document.getElementById('go-toast-bar-fill');
-    const claim    = document.getElementById('go-toast-claim');
-    const goScreen = document.getElementById('gameover-screen');
-    if (!toast || !backdrop || !head || !claim) { resolve(); return; }
-
-    if (goScreen) goScreen.classList.add('toast-locked');
-    backdrop.classList.remove('hidden');
-    requestAnimationFrame(() => backdrop.classList.add('show'));
-
-    let idx = 0;
-    function showNext() {
-      if (idx >= toasts.length) {
-        // Drain complete — fade backdrop + unlock panel
-        backdrop.classList.remove('show');
-        setTimeout(() => {
-          backdrop.classList.add('hidden');
-          if (goScreen) goScreen.classList.remove('toast-locked');
-          resolve();
-        }, 380);
-        return;
-      }
-      const t = toasts[idx++];
-      head.textContent = t.headline || '';
-      if (t.sub) { sub.textContent = t.sub; sub.classList.remove('hidden'); }
-      else { sub.classList.add('hidden'); }
-
-      // Bar setup
-      if (t.bar) {
-        barWrap.classList.remove('hidden');
-        barFill.classList.remove('comet', 'handling');
-        if (t.bar.kind === 'handling') barFill.classList.add('handling');
-        barFill.style.transition = 'none';
-        barFill.style.width = (t.bar.startPct || 0) + '%';
-        barWrap.classList.remove('flash');
-      } else {
-        barWrap.classList.add('hidden');
-      }
-
-      toast.classList.remove('hidden');
-      requestAnimationFrame(() => {
-        toast.classList.add('show');
-        // Animate the mini-bar on entry — fill to 100% then flash then
-        // reset to 0 and fill to endPct (for level-up clink), OR just fill
-        // start→end for a single-tier handling crossing.
-        if (t.bar) {
-          setTimeout(() => {
-            barFill.classList.add('comet');
-            if (t.bar.kind === 'level') {
-              // Phase 1: fill to 100% (the level-up clink)
-              barFill.style.transition = 'width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-              barFill.style.width = '100%';
-              setTimeout(() => {
-                barWrap.classList.add('flash');
-                setTimeout(() => {
-                  barWrap.classList.remove('flash');
-                  barFill.style.transition = 'none';
-                  barFill.style.width = '0%';
-                  requestAnimationFrame(() => { requestAnimationFrame(() => {
-                    barFill.style.transition = 'width 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-                    barFill.style.width = (t.bar.endPct || 0) + '%';
-                  }); });
-                  setTimeout(() => barFill.classList.remove('comet'), 800);
-                }, 380);
-              }, 850);
-            } else {
-              // Handling tier — single fill from start to tier boundary
-              barFill.style.transition = 'width 0.9s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-              barFill.style.width = (t.bar.endPct || 0) + '%';
-              setTimeout(() => {
-                barWrap.classList.add('flash');
-                setTimeout(() => barWrap.classList.remove('flash'), 380);
-                setTimeout(() => barFill.classList.remove('comet'), 400);
-              }, 950);
-            }
-          }, 260);
-        }
-      });
-
-      // CLAIM handler — fresh per toast (clone to wipe old listener).
-      // Always re-query the LIVE button by id so we don't reference a stale
-      // detached node after the first iteration.
-      const liveClaim = document.getElementById('go-toast-claim');
-      const newClaim = liveClaim.cloneNode(true);
-      liveClaim.parentNode.replaceChild(newClaim, liveClaim);
-      newClaim.addEventListener('click', () => {
-        toast.classList.remove('show');
-        setTimeout(() => { toast.classList.add('hidden'); showNext(); }, 380);
-      }, { once: true });
-      newClaim.addEventListener('touchstart', (e) => { e.preventDefault(); newClaim.click(); }, { passive: false, once: true });
-    }
-    showNext();
-  });
-}
-window._runGameOverToasts = _runGameOverToasts;
-
 function killPlayer() {
   // Reentry guard: if we're already dead/dying this frame, swallow duplicate calls.
   // Prevents double-fire from same-frame collisions (e.g. cone + laser + obstacle
@@ -26844,17 +26734,38 @@ function killPlayer() {
     }
   }
 
-  // Inline LEVEL-UP banner is replaced by the reward-toast queue at end of
-  // _runGameOverPrep — always keep hidden here. Unlock-claim bookkeeping
-  // (flight-model garage dot) still needs to fire so the toast doesn't
-  // re-trigger next run.
-  if (_levelUpWrap) _levelUpWrap.classList.add('hidden');
-  if (xpResult.newLevel && window._FLIGHT_MODELS) {
-    for (const [name, m] of Object.entries(window._FLIGHT_MODELS)) {
-      if (m.unlock > (xpResult.level - xpResult.levelsGained) && m.unlock <= xpResult.level) {
-        try { if (typeof claimFlightModelUnlock === 'function') claimFlightModelUnlock(); } catch(_){}
-        break;
-      }
+  if (_levelUpWrap) {
+    if (xpResult.newLevel) {
+      const showDelay = xpResult.newLevel ? 1000 : 0;
+      setTimeout(() => {
+        _levelUpWrap.classList.remove('hidden');
+        _levelUpWrap.querySelector('.go-levelup-text').textContent = 'LEVEL ' + xpResult.level;
+        const unlockedSkin = Object.entries(SKIN_LEVEL_UNLOCKS).find(([idx, lvl]) => lvl === xpResult.level);
+        const unlockEl = _levelUpWrap.querySelector('.go-levelup-unlock');
+        // Flight model unlock takes precedence in the toast — it's a bigger
+        // change to gameplay than a cosmetic skin. Skin unlock still claims
+        // its dot via existing path.
+        let _fmUnlockedAtThisLevel = null;
+        if (window._FLIGHT_MODELS) {
+          for (const [name, m] of Object.entries(window._FLIGHT_MODELS)) {
+            if (m.unlock === xpResult.level) { _fmUnlockedAtThisLevel = { name, m }; break; }
+          }
+        }
+        if (_fmUnlockedAtThisLevel && unlockEl) {
+          unlockEl.textContent = '\u{1F513} ' + _fmUnlockedAtThisLevel.name + ' flight model unlocked!';
+          unlockEl.classList.remove('hidden');
+          // Mark claimed so the garage "new" dot clears next time it opens.
+          try { if (typeof claimFlightModelUnlock === 'function') claimFlightModelUnlock(); } catch(_){}
+        } else if (unlockedSkin && unlockEl) {
+          const skinName = SHIP_SKINS[parseInt(unlockedSkin[0])].name;
+          unlockEl.textContent = '\u{1F513} ' + skinName + ' unlocked!';
+          unlockEl.classList.remove('hidden');
+        } else if (unlockEl) {
+          unlockEl.classList.add('hidden');
+        }
+      }, showDelay);
+    } else {
+      _levelUpWrap.classList.add('hidden');
     }
   }
 
@@ -26923,8 +26834,13 @@ function killPlayer() {
           setTimeout(() => _handlingBarEl.classList.remove('handling-comet'), 900);
         }, 400);
       }, 750);
-      // Inline upgrade text is replaced by the reward-toast queue — hide.
-      if (_handlingUpgradeWrap) _handlingUpgradeWrap.classList.add('hidden');
+      // Show upgrade text
+      if (_handlingUpgradeWrap) {
+        setTimeout(() => {
+          _handlingUpgradeWrap.classList.remove('hidden');
+          _handlingUpgradeWrap.querySelector('.go-handling-upgrade-text').textContent = crossedTier.label.toUpperCase();
+        }, 800);
+      }
     } else {
       // Normal fill with comet
       requestAnimationFrame(() => { requestAnimationFrame(() => {
@@ -26935,13 +26851,6 @@ function killPlayer() {
       setTimeout(() => _handlingBarEl.classList.remove('handling-comet'), 1300);
       if (_handlingUpgradeWrap) _handlingUpgradeWrap.classList.add('hidden');
     }
-    // Stash handling-bar math for the toast builder below — we need
-    // startPct/endPct + crossedTier to compute the toast mini-bar.
-    window._goToastHandlingData = crossedTier ? {
-      crossedTier,
-      startPct,
-      tierPct: Math.min(100, ((crossedTier.level - firstTierLvl) / totalRange) * 100)
-    } : null;
   }
 
   // ── Save Me button setup (fuel cells) ──
@@ -27159,73 +27068,6 @@ function killPlayer() {
       });
     }
     } // end else (startedFromL1)
-  }
-
-  // ── BUILD REWARD-TOAST QUEUE ─────────────────────────────────
-  // Per-level toast for every level gained this run, plus a final toast
-  // if a handling tier was crossed. CLAIM-button gated; the game-over
-  // panel is dimmed + tap-blocked while toasts are up. Only fires when
-  // the player actually leveled this run.
-  try {
-    const toastQueue = [];
-    if (xpResult.newLevel && xpResult.levelsGained > 0) {
-      const startLevel = xpResult.level - xpResult.levelsGained;
-      // Final XP fraction after run (only relevant on LAST level-up toast)
-      const finalEndPct = Math.min(100, (xpResult.xp / xpResult.xpForNext) * 100);
-      for (let i = 1; i <= xpResult.levelsGained; i++) {
-        const lvl = startLevel + i;
-        const isLastLevelGained = (i === xpResult.levelsGained);
-        // Subtitle: skin or flight-model unlocked AT this level
-        let subText = null;
-        if (window._FLIGHT_MODELS) {
-          for (const [name, m] of Object.entries(window._FLIGHT_MODELS)) {
-            if (m.unlock === lvl) { subText = name + ' FLIGHT MODEL UNLOCKED'; break; }
-          }
-        }
-        if (!subText) {
-          const skinUnlock = Object.entries(SKIN_LEVEL_UNLOCKS).find(([idx, l]) => l === lvl);
-          if (skinUnlock) {
-            const skinName = SHIP_SKINS[parseInt(skinUnlock[0])].name;
-            subText = skinName + ' UNLOCKED';
-          }
-        }
-        toastQueue.push({
-          headline: 'LEVEL ' + lvl,
-          sub: subText,
-          bar: {
-            kind: 'level',
-            // First toast starts from saved start fraction; subsequent
-            // toasts start at 0 (level just leveled). End fraction is
-            // only meaningful on the LAST level-up toast — prior toasts
-            // "clink" to 100% then reset to 0 for the next toast.
-            startPct: (i === 1) ? Math.min(100, xpResult.startPct * 100) : 0,
-            endPct: isLastLevelGained ? finalEndPct : 0
-          }
-        });
-      }
-    }
-    // Handling-tier crossing toast (one max, even if multiple tiers crossed)
-    const ht = window._goToastHandlingData;
-    if (ht && ht.crossedTier) {
-      toastQueue.push({
-        headline: ht.crossedTier.label.toUpperCase(),
-        sub: 'HANDLING UPGRADED',
-        bar: {
-          kind: 'handling',
-          startPct: ht.startPct,
-          endPct: ht.tierPct
-        }
-      });
-    }
-    window._goToastHandlingData = null; // consume
-
-    if (toastQueue.length > 0 && typeof window._runGameOverToasts === 'function') {
-      // Slight delay so the panel reveal animation has time to settle
-      // before the toast steals focus.
-      setTimeout(() => { window._runGameOverToasts(toastQueue); }, 450);
-    }
-  } catch (e) {
-    // Toast queue must never break the game-over flow.
   }
   }; // end _runGameOverPrep
 
@@ -37537,7 +37379,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 61;
+const BUILD_VERSION = 60;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
