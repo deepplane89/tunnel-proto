@@ -160,7 +160,7 @@ function togglePause() {
         const _laserU = document.getElementById('laser-beam-sfx');
         if (_laserU) {
           _laserU.loop = false;
-          _laserU.volume = 0.04 * _sM;
+          _laserU.volume = 0.02 * _sM;
           try { _laserU.currentTime = 0; _laserU.play().catch(()=>{}); } catch(_) {}
           // Rearm retrigger interval (matches shop.js cadence).
           if (state._laserSfxIv) { clearInterval(state._laserSfxIv); state._laserSfxIv = null; }
@@ -169,7 +169,7 @@ function togglePause() {
             try {
               const _u = document.getElementById('laser-beam-sfx');
               if (!_u) return;
-              _u.volume = 0.04 * (typeof sfxMult === 'function' ? sfxMult() : 1);
+              _u.volume = 0.02 * (typeof sfxMult === 'function' ? sfxMult() : 1);
               _u.currentTime = 0;
               _u.play().catch(()=>{});
             } catch(_) {}
