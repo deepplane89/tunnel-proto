@@ -1099,7 +1099,12 @@ html, body {
   margin-bottom: 10px;
 }
 .gfx-row {
-  display: flex; gap: 6px; flex: 1; justify-content: flex-end;
+  display: flex; gap: 4px; flex: 1; justify-content: flex-end;
+}
+.gfx-row .gfx-btn {
+  padding-left: 8px; padding-right: 8px;
+  font-size: 11px; letter-spacing: 1px;
+  min-width: 0;
 }
 
 /* ── Landscape mobile: keep panel inside viewport, scroll if needed ───
@@ -6225,15 +6230,17 @@ body.sr-open #title-leaderboard {
   background: radial-gradient(ellipse at center,#001a24 0%,#000810 70%,#000406 100%);
   display: none;
   flex-direction: column; align-items: center; justify-content: center;
-  font-family: monospace; color: #00f0ff;
+  font-family: 'Permanent Marker', cursive; color: #00f0ff;
   transition: opacity .5s ease;
   padding: 24px;
 }
 #gfx-picker.show { display: flex; }
 #gfx-picker.hide { opacity: 0; pointer-events: none; }
 .gfxp-msg {
-  font-size: 11px; letter-spacing: 3px; opacity: .7;
+  font-family: 'Permanent Marker', cursive;
+  font-size: 18px; letter-spacing: 4px; opacity: .85;
   text-transform: uppercase; margin-bottom: 28px;
+  text-shadow: 0 0 12px rgba(0,240,255,.5);
 }
 .gfxp-row {
   display: flex; flex-direction: column; gap: 14px;
@@ -6242,7 +6249,7 @@ body.sr-open #title-leaderboard {
 .gfxp-btn {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   width: 100%; padding: 16px 24px;
-  font-family: monospace; color: #7ff5ff;
+  font-family: 'Permanent Marker', cursive; color: #7ff5ff;
   background: rgba(0,240,255,.08);
   border: 1px solid rgba(0,240,255,.5);
   text-transform: uppercase; cursor: pointer;
@@ -6261,12 +6268,13 @@ body.sr-open #title-leaderboard {
   border-color: rgba(0,240,255,.85);
   background: rgba(0,240,255,.14);
 }
-.gfxp-name { font-size: 16px; letter-spacing: 4px; }
-.gfxp-sub  { font-size: 9px; letter-spacing: 2px; opacity: .55; }
+.gfxp-name { font-family: 'Permanent Marker', cursive; font-size: 20px; letter-spacing: 3px; }
+.gfxp-sub  { font-family: 'Permanent Marker', cursive; font-size: 11px; letter-spacing: 2px; opacity: .6; }
 .gfxp-hint {
+  font-family: 'Permanent Marker', cursive;
   margin-top: 22px;
-  font-size: 9px; letter-spacing: 2px;
-  opacity: .4; text-transform: uppercase;
+  font-size: 11px; letter-spacing: 2px;
+  opacity: .45; text-transform: uppercase;
 }
 
 /* ═══════════════════════════════════════════════════

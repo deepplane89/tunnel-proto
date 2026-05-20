@@ -8,12 +8,14 @@ let _settings = {
   musicMuted: false,
   sfxMuted: false,
   hapticsOn: true,
-  // Graphics quality → DPR clamp. Defaults to 'sharp'; first-time-ever load
-  // shows a picker (see _showGfxPicker below) so the player can choose.
-  // 'performance' = 1.0, 'balanced' = 1.5, 'sharp' = min(devicePixelRatio, 2)
-  // SHARP capped at 2 (not 3) because higher DPR causes additive-blend points
-  // (stars, thruster particles) to oversaturate via bloom — 1.5→3 is 4x the
-  // framebuffer pixels and the visible glow grows beyond what looks crisp.
+  // Graphics quality → DPR clamp + water-reflection extras. Defaults to 'sharp';
+  // first-time-ever load shows a picker (see _showGfxPicker below).
+  // 'performance' = DPR 1.0, no obstacle reflections
+  // 'balanced'    = DPR 1.5, no obstacle reflections
+  // 'sharp'       = DPR min(native,2), no obstacle reflections (default)
+  // 'ultra'       = DPR min(native,2), FULL obstacle reflections in water
+  // SHARP/ULTRA capped at 2 (not 3) because higher DPR causes additive-blend
+  // points (stars, thruster particles) to oversaturate via bloom.
   graphicsQuality: 'sharp',
   // Battery saver options — both default OFF so existing players see no change.
   fpsCap30: false,     // cap framerate at 30fps to cut sustained GPU power ~50%
@@ -27,11 +29,25 @@ function _baseTargetDPR() {
   const native = window.devicePixelRatio || 1;
   switch (_settings.graphicsQuality) {
     case 'performance': return 1.0;
+    case 'ultra':
     case 'sharp':       return Math.min(native, 2);
     case 'balanced':
     default:            return Math.min(native, 1.5);
   }
 }
+
+// Apply obstacle-reflection toggle based on graphics quality. Ultra = ON
+// (full water reflections), all other modes = OFF (skip cones/walls/rings/
+// lightning/powerups/thrusters in the mirror RT for GPU win). Safe to call
+// before _setObstacleReflect exists — it's defined in 20-main-early.js.
+function _applyReflectForQuality() {
+  try {
+    if (typeof window._setObstacleReflect === 'function') {
+      window._setObstacleReflect(_settings.graphicsQuality === 'ultra');
+    }
+  } catch (_) {}
+}
+window._applyReflectForQuality = _applyReflectForQuality;
 
 // Adaptive DPR scale (0.5–1.0). When the rAF frame loop detects sustained
 // slow frames (thermal throttling on iOS, or just a struggling device), it
@@ -146,7 +162,7 @@ function openSettings() {
   const lbBtn2 = document.getElementById('litebloom-toggle');
   if (lbBtn2) { lbBtn2.textContent = _settings.liteBloom ? 'ON' : 'OFF'; lbBtn2.classList.toggle('off', !_settings.liteBloom); }
   // Sync graphics quality button states
-  ['performance','balanced','sharp'].forEach(q => {
+  ['performance','balanced','sharp','ultra'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
     if (b) b.classList.toggle('active', _settings.graphicsQuality === q);
   });
@@ -425,17 +441,18 @@ function _initSettingsAccordion() {
     saveSettings();
   }, { moveCancel: true });
 
-  // Graphics quality 3-way toggle (Performance / Balanced / Sharp)
-  ['performance','balanced','sharp'].forEach(q => {
+  // Graphics quality 4-way toggle (Performance / Balanced / Sharp / Ultra)
+  ['performance','balanced','sharp','ultra'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
     if (!b) return;
     _tapBind(b, () => {
       _settings.graphicsQuality = q;
-      ['performance','balanced','sharp'].forEach(qq => {
+      ['performance','balanced','sharp','ultra'].forEach(qq => {
         const bb = document.getElementById('gfx-' + qq);
         if (bb) bb.classList.toggle('active', qq === q);
       });
       applyGraphicsQuality();
+      _applyReflectForQuality();
       saveSettings();
     });
   });
@@ -509,6 +526,10 @@ window._showGfxPicker = function _showGfxPicker(onDone) {
           '<span class="gfxp-name">SHARP</span>',
           '<span class="gfxp-sub">CRISPEST</span>',
         '</button>',
+        '<button type="button" class="gfxp-btn" data-q="ultra">',
+          '<span class="gfxp-name">ULTRA</span>',
+          '<span class="gfxp-sub">FULL REFLECTIONS</span>',
+        '</button>',
       '</div>',
       '<div class="gfxp-hint">CHANGE ANYTIME IN SETTINGS</div>',
     ].join('');
@@ -520,6 +541,7 @@ window._showGfxPicker = function _showGfxPicker(onDone) {
     saveSettings();
     try { window._LS.setItem('jh_gfx_picked', '1'); } catch (_) {}
     try { applyGraphicsQuality(); } catch (_) {}
+    try { _applyReflectForQuality(); } catch (_) {}
     pick.classList.add('hide');
     setTimeout(() => { if (pick.parentNode) pick.parentNode.removeChild(pick); }, 500);
     if (typeof onDone === 'function') onDone();

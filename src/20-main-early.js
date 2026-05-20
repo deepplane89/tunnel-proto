@@ -1659,6 +1659,7 @@ function _bootDPR() {
   } catch(e) {}
   if (q === 'performance') return 1.0;
   if (q === 'sharp')       return Math.min(native, 3);
+  if (q === 'ultra')       return Math.min(native, 3);
   return Math.min(native, 1.5); // balanced (default)
 }
 const _initialDPR = _bootDPR();
@@ -1968,7 +1969,7 @@ try {
   const _gq = (window._settings && window._settings.graphicsQuality) ||
               ((window._LS && JSON.parse(window._LS.getItem('jh_settings')||'{}').graphicsQuality)) ||
               'balanced';
-  _composerSamples = _gq === 'sharp' ? 4 : _gq === 'balanced' ? 2 : 0;
+  _composerSamples = (_gq === 'sharp' || _gq === 'ultra') ? 4 : _gq === 'balanced' ? 2 : 0;
 } catch(_) { _composerSamples = 2; }
 // NOTE: We do NOT set `type: HalfFloatType` here. Half-float FBOs caused a
 // visible horizon banding/artifact on iOS (Apple GPU + tonemapping). MSAA
@@ -11890,4 +11891,15 @@ function spawnLaserBolt(side) {
 //  FOG
 // ═══════════════════════════════════════════════════
 scene.fog = new THREE.FogExp2(0x0d0428, 0.008);
+
+// ── Apply saved graphics-quality reflection state on boot ──
+// Default _obstacleReflectOn is false. If the user saved 'ultra', flip it ON
+// now — every pool (obstacles, walls, rings, powerups) exists by this point,
+// and the lightning pool is lazy so it reads the live value at init.
+try {
+  const _bootGq = (window._settings && window._settings.graphicsQuality) ||
+                  ((window._LS && JSON.parse(window._LS.getItem('jh_settings')||'{}').graphicsQuality)) ||
+                  'sharp';
+  if (_bootGq === 'ultra') window._setObstacleReflect(true);
+} catch(_) {}
 

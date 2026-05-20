@@ -3083,6 +3083,7 @@ function _bootDPR() {
   } catch(e) {}
   if (q === 'performance') return 1.0;
   if (q === 'sharp')       return Math.min(native, 3);
+  if (q === 'ultra')       return Math.min(native, 3);
   return Math.min(native, 1.5); // balanced (default)
 }
 const _initialDPR = _bootDPR();
@@ -3392,7 +3393,7 @@ try {
   const _gq = (window._settings && window._settings.graphicsQuality) ||
               ((window._LS && JSON.parse(window._LS.getItem('jh_settings')||'{}').graphicsQuality)) ||
               'balanced';
-  _composerSamples = _gq === 'sharp' ? 4 : _gq === 'balanced' ? 2 : 0;
+  _composerSamples = (_gq === 'sharp' || _gq === 'ultra') ? 4 : _gq === 'balanced' ? 2 : 0;
 } catch(_) { _composerSamples = 2; }
 // NOTE: We do NOT set `type: HalfFloatType` here. Half-float FBOs caused a
 // visible horizon banding/artifact on iOS (Apple GPU + tonemapping). MSAA
@@ -13315,6 +13316,17 @@ function spawnLaserBolt(side) {
 // ═══════════════════════════════════════════════════
 scene.fog = new THREE.FogExp2(0x0d0428, 0.008);
 
+// ── Apply saved graphics-quality reflection state on boot ──
+// Default _obstacleReflectOn is false. If the user saved 'ultra', flip it ON
+// now — every pool (obstacles, walls, rings, powerups) exists by this point,
+// and the lightning pool is lazy so it reads the live value at init.
+try {
+  const _bootGq = (window._settings && window._settings.graphicsQuality) ||
+                  ((window._LS && JSON.parse(window._LS.getItem('jh_settings')||'{}').graphicsQuality)) ||
+                  'sharp';
+  if (_bootGq === 'ultra') window._setObstacleReflect(true);
+} catch(_) {}
+
 // ═══════════════════════════════════════════════════
 //  AUDIO (procedural Web Audio)
 // ═══════════════════════════════════════════════════
@@ -22230,12 +22242,14 @@ let _settings = {
   musicMuted: false,
   sfxMuted: false,
   hapticsOn: true,
-  // Graphics quality → DPR clamp. Defaults to 'sharp'; first-time-ever load
-  // shows a picker (see _showGfxPicker below) so the player can choose.
-  // 'performance' = 1.0, 'balanced' = 1.5, 'sharp' = min(devicePixelRatio, 2)
-  // SHARP capped at 2 (not 3) because higher DPR causes additive-blend points
-  // (stars, thruster particles) to oversaturate via bloom — 1.5→3 is 4x the
-  // framebuffer pixels and the visible glow grows beyond what looks crisp.
+  // Graphics quality → DPR clamp + water-reflection extras. Defaults to 'sharp';
+  // first-time-ever load shows a picker (see _showGfxPicker below).
+  // 'performance' = DPR 1.0, no obstacle reflections
+  // 'balanced'    = DPR 1.5, no obstacle reflections
+  // 'sharp'       = DPR min(native,2), no obstacle reflections (default)
+  // 'ultra'       = DPR min(native,2), FULL obstacle reflections in water
+  // SHARP/ULTRA capped at 2 (not 3) because higher DPR causes additive-blend
+  // points (stars, thruster particles) to oversaturate via bloom.
   graphicsQuality: 'sharp',
   // Battery saver options — both default OFF so existing players see no change.
   fpsCap30: false,     // cap framerate at 30fps to cut sustained GPU power ~50%
@@ -22249,11 +22263,25 @@ function _baseTargetDPR() {
   const native = window.devicePixelRatio || 1;
   switch (_settings.graphicsQuality) {
     case 'performance': return 1.0;
+    case 'ultra':
     case 'sharp':       return Math.min(native, 2);
     case 'balanced':
     default:            return Math.min(native, 1.5);
   }
 }
+
+// Apply obstacle-reflection toggle based on graphics quality. Ultra = ON
+// (full water reflections), all other modes = OFF (skip cones/walls/rings/
+// lightning/powerups/thrusters in the mirror RT for GPU win). Safe to call
+// before _setObstacleReflect exists — it's defined in 20-main-early.js.
+function _applyReflectForQuality() {
+  try {
+    if (typeof window._setObstacleReflect === 'function') {
+      window._setObstacleReflect(_settings.graphicsQuality === 'ultra');
+    }
+  } catch (_) {}
+}
+window._applyReflectForQuality = _applyReflectForQuality;
 
 // Adaptive DPR scale (0.5–1.0). When the rAF frame loop detects sustained
 // slow frames (thermal throttling on iOS, or just a struggling device), it
@@ -22368,7 +22396,7 @@ function openSettings() {
   const lbBtn2 = document.getElementById('litebloom-toggle');
   if (lbBtn2) { lbBtn2.textContent = _settings.liteBloom ? 'ON' : 'OFF'; lbBtn2.classList.toggle('off', !_settings.liteBloom); }
   // Sync graphics quality button states
-  ['performance','balanced','sharp'].forEach(q => {
+  ['performance','balanced','sharp','ultra'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
     if (b) b.classList.toggle('active', _settings.graphicsQuality === q);
   });
@@ -22647,17 +22675,18 @@ function _initSettingsAccordion() {
     saveSettings();
   }, { moveCancel: true });
 
-  // Graphics quality 3-way toggle (Performance / Balanced / Sharp)
-  ['performance','balanced','sharp'].forEach(q => {
+  // Graphics quality 4-way toggle (Performance / Balanced / Sharp / Ultra)
+  ['performance','balanced','sharp','ultra'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
     if (!b) return;
     _tapBind(b, () => {
       _settings.graphicsQuality = q;
-      ['performance','balanced','sharp'].forEach(qq => {
+      ['performance','balanced','sharp','ultra'].forEach(qq => {
         const bb = document.getElementById('gfx-' + qq);
         if (bb) bb.classList.toggle('active', qq === q);
       });
       applyGraphicsQuality();
+      _applyReflectForQuality();
       saveSettings();
     });
   });
@@ -22731,6 +22760,10 @@ window._showGfxPicker = function _showGfxPicker(onDone) {
           '<span class="gfxp-name">SHARP</span>',
           '<span class="gfxp-sub">CRISPEST</span>',
         '</button>',
+        '<button type="button" class="gfxp-btn" data-q="ultra">',
+          '<span class="gfxp-name">ULTRA</span>',
+          '<span class="gfxp-sub">FULL REFLECTIONS</span>',
+        '</button>',
       '</div>',
       '<div class="gfxp-hint">CHANGE ANYTIME IN SETTINGS</div>',
     ].join('');
@@ -22742,6 +22775,7 @@ window._showGfxPicker = function _showGfxPicker(onDone) {
     saveSettings();
     try { window._LS.setItem('jh_gfx_picked', '1'); } catch (_) {}
     try { applyGraphicsQuality(); } catch (_) {}
+    try { _applyReflectForQuality(); } catch (_) {}
     pick.classList.add('hide');
     setTimeout(() => { if (pick.parentNode) pick.parentNode.removeChild(pick); }, 500);
     if (typeof onDone === 'function') onDone();
@@ -30114,13 +30148,13 @@ function _tickAdaptiveDPR(frameMs) {
   // Don't run if disabled or if we're paused / not in gameplay.
   if (typeof window._setAdaptiveDPRScale !== 'function') return;
   if (state && (state.phase === 'paused' || state.phase === 'title' || state.phase === 'dead')) return;
-  // SHARP means "don't downgrade my image" — user opted into max DPR, leave it alone.
+  // SHARP/ULTRA mean "don't downgrade my image" — user opted into max DPR, leave it alone.
   // Adaptive only runs on Balanced/Performance where the user accepted trade-offs.
   try {
     const _gq = (typeof getSetting === 'function') ? getSetting('graphicsQuality') :
                 (window._settings && window._settings.graphicsQuality);
-    if (_gq === 'sharp') {
-      // Pin to full while on Sharp so prior drops don't linger.
+    if (_gq === 'sharp' || _gq === 'ultra') {
+      // Pin to full while on Sharp/Ultra so prior drops don't linger.
       if (window._getAdaptiveDPRScale && window._getAdaptiveDPRScale() < 1.0) {
         window._setAdaptiveDPRScale(1.0);
       }
@@ -37346,7 +37380,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 56;
+const BUILD_VERSION = 57;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
