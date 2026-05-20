@@ -3,7 +3,18 @@ function playThrusterImpact(vol) {
   if (isSfxMuted()) return;
   const _sM = (typeof sfxMult === 'function' ? sfxMult() : 1);
   if (_sM <= 0) return;
-  const _baseV = (vol == null ? 0.7 : vol) * _sM;
+  // Takeoff/speed-tier-up is a marquee SFX — the radio duck (0.35x) makes it
+  // too quiet over music. Partially un-duck just this impact when the radio
+  // is on so it stays audible as a cue without overpowering the track.
+  // Preserves the user's sfx volume preference (slider %), just rolls back
+  // most of the radio-specific gain reduction.
+  const _radioOn = (typeof isRadioOn === 'function') && isRadioOn();
+  const _unDuck = _radioOn ? (1 / 0.35) * 0.85 : 1; // ~2.43x — restores most of the -9 dB duck
+  // 2026-05-19: bumped from 0.7→0.95 base — takeoff/speed-tier-up was too
+  // quiet even with radio off; punchier impact reads as a clear cue. All
+  // existing callsites pass 0.7, so applying a 0.95/0.7 ≈ 1.357 boost.
+  const _IMPACT_BOOST = 1.357;
+  const _baseV = (vol == null ? 0.7 : vol) * _sM * _unDuck * _IMPACT_BOOST;
   const _ti = document.getElementById('thruster-impact-sfx');
   if (_ti) {
     try {
