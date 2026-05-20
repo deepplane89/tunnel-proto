@@ -404,6 +404,19 @@ function animate(now) {
       else if (typeof _canyonActive !== 'undefined' && _canyonActive) _hitchArmSoft('cnyn-act');
     } catch(_) {}
   }
+  // ── Neon-band gate: cone neon band ON only during cone corridors (L3/L4/L5) ──
+  // Regular + fat cones share the obstacle pool, so a single sweep covers both.
+  // Transitions only — cheap pool-sweep runs on edge change, not every frame.
+  try {
+    const _gate = (typeof state !== 'undefined') && !!(
+      state.l3KnifeCanyon || state.corridorMode ||
+      state.l4CorridorActive || state.l5CorridorActive
+    );
+    if (_gate !== window._neonBandGateOn) {
+      window._neonBandGateOn = _gate;
+      if (typeof window._setConeNeonBand === 'function') window._setConeNeonBand(_gate);
+    }
+  } catch(_) {}
   // FPS + draw call measurement
   if (_fpsOn) {
     _fpsFrames++;

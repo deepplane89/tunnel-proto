@@ -3828,11 +3828,13 @@ window._jlDebug = {
       obs.userData.isFatCone    = true;
       // Apply shape tuner overrides
       const _mc = obs.userData._meshes;
+      // Neon band gate: ON only inside cone corridors (L3/L4/L5). Respect global flag.
+      const _bandOn = !!window._neonBandGateOn;
       for (let mi = 0; mi < _mc.length; mi++) {
         const mat = _mc[mi].material;
         if (mat.uniforms) {
-          if (mat.uniforms.uGlowBot)  mat.uniforms.uGlowBot.value  = FCT.glowBot;
-          if (mat.uniforms.uGlowTop)  mat.uniforms.uGlowTop.value  = FCT.glowTop;
+          if (mat.uniforms.uGlowBot)  mat.uniforms.uGlowBot.value  = _bandOn ? FCT.glowBot : 0.0;
+          if (mat.uniforms.uGlowTop)  mat.uniforms.uGlowTop.value  = _bandOn ? FCT.glowTop : 0.0;
           if (mat.uniforms.uNeon)     mat.uniforms.uNeon.value.setHex(FCT.neonColor);
           if (mat.uniforms.uObsidian) mat.uniforms.uObsidian.value.setHex(FCT.obsidianColor);
         }
@@ -3856,11 +3858,12 @@ window._jlDebug = {
     obs.userData.slalomScaled = true;
     obs.userData.isFatCone    = true;
     const _mc = obs.userData._meshes;
+    const _bandOn = !!window._neonBandGateOn;
     for (let mi = 0; mi < _mc.length; mi++) {
       const mat = _mc[mi].material;
       if (mat.uniforms) {
-        if (mat.uniforms.uGlowBot)  mat.uniforms.uGlowBot.value  = FCT.glowBot;
-        if (mat.uniforms.uGlowTop)  mat.uniforms.uGlowTop.value  = FCT.glowTop;
+        if (mat.uniforms.uGlowBot)  mat.uniforms.uGlowBot.value  = _bandOn ? FCT.glowBot : 0.0;
+        if (mat.uniforms.uGlowTop)  mat.uniforms.uGlowTop.value  = _bandOn ? FCT.glowTop : 0.0;
         if (mat.uniforms.uNeon)     mat.uniforms.uNeon.value.setHex(FCT.neonColor);
         if (mat.uniforms.uObsidian) mat.uniforms.uObsidian.value.setHex(FCT.obsidianColor);
       }

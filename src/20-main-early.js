@@ -9402,8 +9402,10 @@ function createObstacleMesh(type) {
       uNeon:    { value: neonCol },
       uObsidian:{ value: new THREE.Color(0x12121a) },
       uOpacity: { value: 0.0 },
-      uGlowBot: { value: 0.255 },  // neon starts ~0.8 above waterline
-      uGlowTop: { value: 0.345 },  // neon ends at ~20% up visible cone
+      // Neon band defaults OFF (collapsed band) — gated ON only inside cone corridors
+      // (L3 knife/legacy, L4 sine, L5 sine). See _neonBandGateTick() in animate().
+      uGlowBot: { value: 0.0 },
+      uGlowTop: { value: 0.0 },
     },
     vertexShader: `
       varying vec2 vUv;
