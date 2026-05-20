@@ -278,6 +278,26 @@
     <div class="go-actions go-anim" style="--d:5">
       <button id="restart-btn" class="btn-space btn-retry">TRY AGAIN</button>
       <button id="gameover-exit-btn" class="btn-space btn-exit">EXIT</button>
+      <button id="gameover-feedback-btn" class="btn-feedback-link">Send feedback</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── FEEDBACK MODAL ───────────────────────────────── -->
+<div id="feedback-overlay" class="overlay hidden" style="z-index:160;">
+  <div class="feedback-modal">
+    <div class="feedback-title">SEND FEEDBACK</div>
+    <div class="feedback-chips" id="feedback-chips">
+      <button class="feedback-chip active" data-tag="bug">BUG</button>
+      <button class="feedback-chip" data-tag="balance">BALANCE</button>
+      <button class="feedback-chip" data-tag="av">AUDIO/VISUAL</button>
+      <button class="feedback-chip" data-tag="other">OTHER</button>
+    </div>
+    <textarea id="feedback-text" class="feedback-text" rows="5" maxlength="800" placeholder="What happened? (max 800 chars)" spellcheck="false"></textarea>
+    <div class="feedback-hint" id="feedback-hint">Run context attached automatically.</div>
+    <div class="feedback-actions">
+      <button id="feedback-cancel" class="btn-space btn-exit">CANCEL</button>
+      <button id="feedback-send" class="btn-space btn-retry">SEND</button>
     </div>
   </div>
 </div>
@@ -786,6 +806,6 @@
 <!-- Retry fade overlay -->
 <div id="retry-fade" style="position:fixed;inset:0;z-index:9999;background:#000;opacity:0;pointer-events:none;transition:opacity 0.15s ease;"></div>
 
-<script type="module" src="./dist/game.js?v=1779235116"></script>
+<script type="module" src="./dist/game.js?v=1779235405"></script>
 </body>
 </html>
