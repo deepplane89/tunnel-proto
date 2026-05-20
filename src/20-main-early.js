@@ -740,6 +740,20 @@ function getHandlingStartBoost() {
   return t.startBoost;
 }
 
+// Tier-based JUICE ramp — juice decreases sequentially as the player upgrades
+// handling. Stock (tier 0) keeps the baked 0.82 organic-but-controlled feel;
+// each subsequent tier shaves ≈0.07 off until Full Control (tier 6) lands at
+// 0.40 (taut/surgical). Layered ON TOP of the equipped FLIGHT MODEL juice in
+// startGame() so it always reflects current handling tier, regardless of which
+// flight model the player picked.
+const _HANDLING_JUICE_RAMP = [0.82, 0.75, 0.68, 0.61, 0.54, 0.47, 0.40];
+function getHandlingJuice() {
+  const idx = loadEquippedBoostTierIndex();
+  const v = _HANDLING_JUICE_RAMP[idx];
+  return (v == null) ? 0.82 : v;
+}
+window.getHandlingJuice = getHandlingJuice;
+
 function getPendingHandlingUpgrade() {
   const level = loadPlayerLevel();
   const claimed = parseInt(window._LS.getItem(HANDLING_UPGRADE_KEY) || '1', 10);

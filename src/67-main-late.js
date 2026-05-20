@@ -134,6 +134,15 @@ function startGame() {
       const _useFM = (typeof isFlightModelUnlocked === 'function' && !isFlightModelUnlocked(_eqFM)) ? 'DEFAULT' : _eqFM;
       window._applyFeelPresetByName(_useFM);
     }
+    // ── Tier-based JUICE ramp ──
+    // Layered ON TOP of the flight-model preset so juice steps down as the
+    // player progresses through handling tiers (0.82 → 0.40 across tiers 0–6),
+    // regardless of which flight model is equipped.
+    if (typeof window.getHandlingJuice === 'function' && typeof window._applyJuice === 'function') {
+      const _tierJuice = window.getHandlingJuice();
+      if (window._feelMacro) window._feelMacro.juice = _tierJuice;
+      window._applyJuice(_tierJuice);
+    }
   } catch(_){}
   // POST-SETTINGS RE-PREWARM — the boot prewarm (_globalShaderPrewarm) ran
   // BEFORE skin/thruster/flight-model/perf-mode were applied to the live

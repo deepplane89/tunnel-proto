@@ -897,6 +897,8 @@ function _ringShowTuner() {
       if (_wobbleDamping > 30)  _wobbleDamping = 30;
       if (_overshootAmt  > 1.0) _overshootAmt  = 1.0;
     }
+    // Expose so startGame() can layer tier-based juice on top of FLIGHT_MODEL juice.
+    window._applyJuice = _applyJuice;
 
     // Apply on initial build so live values reflect current macro state.
     _applyResponsiveness(_fm.resp);
