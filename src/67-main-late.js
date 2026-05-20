@@ -487,11 +487,23 @@ function startGame() {
   // Ensure audio context and all elements are ready
   initAudio();
   // Warm up audio elements on user gesture so iOS/mobile allows deferred play
-  // All set to volume 0 during warmup to prevent audible blips
-  // Warm up engine-start on user gesture so mobile allows deferred play (campaign only)
+  // Use muted=true (synchronous) instead of volume=0 (iOS Safari sometimes applies
+  // volume changes a frame late, producing a brief audible blip during warmup).
   if (!_skipL1Intro) {
     const _eng = document.getElementById('engine-start');
-    if (_eng) { _eng.volume = 0; _eng.play().then(() => { _eng.pause(); _eng.currentTime = 0; _eng.volume = 1; }).catch(() => { _eng.volume = 1; }); }
+    if (_eng) {
+      _eng.muted = true;
+      _eng.volume = 0;
+      _eng.play().then(() => {
+        _eng.pause();
+        _eng.currentTime = 0;
+        _eng.muted = false;
+        _eng.volume = 1;
+      }).catch(() => {
+        _eng.muted = false;
+        _eng.volume = 1;
+      });
+    }
   }
   [['l3', l3Music], ['l4', l4Music]].forEach(([k, el]) => {
     if (el && el.paused) { setTrackVol(k, 0); el.play().then(() => { el.pause(); el.currentTime = 0; }).catch(() => {}); }
