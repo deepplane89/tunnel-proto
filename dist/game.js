@@ -10939,6 +10939,19 @@ window._setObstacleReflect = function(on) {
   if (typeof window._setLightningReflect === 'function') {
     try { window._setLightningReflect(on); } catch (_) {}
   }
+  // Powerup holo cubes — pre-built pool. Sweep cube + inner icon meshes so
+  // they honor the toggle on live flips (init-time set in createPowerupMesh
+  // handles boot). Wrapped in try because powerupPool is declared later in
+  // this same file — TDZ safety even though the toggle only runs post-boot.
+  try {
+    if (powerupPool) {
+      for (let i = 0; i < powerupPool.length; i++) {
+        const ud = powerupPool[i].userData;
+        if (ud._cubeMesh) ud._cubeMesh.layers.set(L);
+        if (ud._iconMesh) ud._iconMesh.layers.set(L);
+      }
+    }
+  } catch (_) {}
 };
 
 // ═══════════════════════════════════════════════════
@@ -12907,6 +12920,14 @@ function createPowerupMesh(typeIdx) {
   group.userData._iconMesh    = iconMesh;  // for icon-to-ship
   group.visible               = false;
   group.position.set(0, -9999, 0);
+  // Honor obstacle-reflect toggle: powerup holo cube + inner icon skip water
+  // reflection pass when reflections are OFF. Holo material is fresnel-heavy
+  // and shading it into the 512×512 mirror RT is wasted fill on mobile.
+  {
+    const _L = (window._obstacleReflectOn === false) ? LAYER_NO_WATER_REFLECT : 0;
+    cubeMesh.layers.set(_L);
+    iconMesh.layers.set(_L);
+  }
   scene.add(group);
   return group;
 }
@@ -37325,7 +37346,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 55;
+const BUILD_VERSION = 56;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
