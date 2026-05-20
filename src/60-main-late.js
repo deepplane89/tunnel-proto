@@ -534,6 +534,11 @@ function _drFullStateWipe() {
 }
 
 window.addEventListener('keydown', e => {
+  // Skip all game-key handling when the user is typing into a form field
+  // (e.g. feedback modal textarea). Otherwise space gets preventDefault'd
+  // and never reaches the input.
+  const _tgt = e.target;
+  if (_tgt && (_tgt.tagName === 'TEXTAREA' || _tgt.tagName === 'INPUT' || _tgt.isContentEditable)) return;
   keys[e.key] = true;
   const isSpace = (e.key === ' ' || e.code === 'Space');
   if (isSpace) e.preventDefault();
@@ -830,6 +835,8 @@ window.addEventListener('keydown', e => {
   } // end DEV-ONLY hotkeys
 });
 window.addEventListener('keyup', e => {
+  const _tgt2 = e.target;
+  if (_tgt2 && (_tgt2.tagName === 'TEXTAREA' || _tgt2.tagName === 'INPUT' || _tgt2.isContentEditable)) return;
   keys[e.key] = false;
   // Release thrust on spacebar up
   // if (e.key === ' ') _thrustHeld = false; // JUMP QUARANTINED
