@@ -164,10 +164,19 @@ function _playRadioIdx(idx) {
   }
   try { radioMusic.currentTime = 0; } catch(_) {}
   // Per-track fade-in: some tracks (e.g. NEON MOUNTAIN) hit hard at t=0 and
-  // overwhelm the gameplay mix. fadeInSec on the track entry ramps the
-  // 'radio' gain from 0 to its full target across that many seconds.
-  if (tr.fadeInSec && typeof rampTrackVol === 'function') {
-    try { rampTrackVol('radio', 0, 0); } catch(_) {}
+  // overwhelm the gameplay mix. fadeInSec on the track entry snaps the
+  // 'radio' gain to 0 instantly, then ramps to its full target across that
+  // many seconds.
+  //
+  // Prior bug: used rampTrackVol(radio, 0, 0) for the snap-to-zero. With
+  // sec=0 Web Audio's linearRampToValueAtTime is a no-op (endTime ==
+  // startTime), so the gain stayed at whatever it was — then the long
+  // 10s ramp anchored on that value and ramped "full to full" with no
+  // audible fade. Fix: use setTrackVol() for the instant zero (which goes
+  // through setValueAtTime), then the second rampTrackVol anchors on 0
+  // and ramps cleanly to TRACK_VOL.radio.
+  if (tr.fadeInSec && typeof rampTrackVol === 'function' && typeof setTrackVol === 'function') {
+    try { setTrackVol('radio', 0); } catch(_) {}
     try { rampTrackVol('radio', TRACK_VOL.radio, tr.fadeInSec); } catch(_) {}
   } else {
     // Volume is gated by the gain node ('radio' track) — don't fight it here.
@@ -381,8 +390,9 @@ function _previewRadioTrack(idx) {
     setTimeout(() => { try { if (titleMusic && !titleMusic.paused) titleMusic.pause(); } catch(_) {} }, 220);
   }
   // Per-track fade-in mirrors _playRadioIdx so previews don't punch in either.
-  if (tr.fadeInSec && typeof rampTrackVol === 'function') {
-    try { rampTrackVol('radio', 0, 0); } catch(_) {}
+  // Same fix as _playRadioIdx: setTrackVol for the instant zero, then ramp.
+  if (tr.fadeInSec && typeof rampTrackVol === 'function' && typeof setTrackVol === 'function') {
+    try { setTrackVol('radio', 0); } catch(_) {}
     try { rampTrackVol('radio', TRACK_VOL.radio, tr.fadeInSec); } catch(_) {}
   } else {
     try { setTrackVol('radio', TRACK_VOL.radio); } catch(_) {}
