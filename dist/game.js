@@ -21101,6 +21101,7 @@ function returnToTitle() {
   _tEl.classList.remove('hidden');
   _tEl.classList.remove('fading-out');
   document.getElementById('gameover-screen').classList.add('hidden');
+  { const _nm = document.getElementById('name-modal-overlay'); if (_nm) _nm.classList.add('hidden'); }
   document.getElementById('reward-wheel-overlay').classList.add('hidden');
   document.getElementById('hud').classList.add('hidden');
   setPauseOverlay(false);
@@ -23292,6 +23293,7 @@ function startGame() {
   const _lb = document.getElementById('title-leaderboard');
   if (_lb) _lb.classList.add('hidden');
   document.getElementById('gameover-screen').classList.add('hidden');
+  { const _nm = document.getElementById('name-modal-overlay'); if (_nm) _nm.classList.add('hidden'); }
   document.getElementById('hud').classList.remove('hidden');
   setPauseOverlay(false);
   document.getElementById('settings-btn').style.display = 'none'; // hide gear during gameplay
@@ -26920,6 +26922,7 @@ function killPlayer() {
         state.invincibleSpeedActive = false; // no speed boost, just invincible visual
         state.invincibleGrace = 3.0;
         document.getElementById('gameover-screen').classList.add('hidden');
+        { const _nm = document.getElementById('name-modal-overlay'); if (_nm) _nm.classList.add('hidden'); }
         document.getElementById('hud').classList.remove('hidden');
         // Repair-ship path bypasses startGame() so we have to restore the
         // touch-pause button manually here. Hidden on death at line ~4139,
@@ -27023,49 +27026,58 @@ function killPlayer() {
 
     const _savedName = window._LS.getItem('jet-horizon-player-name') || '';
 
-    const _showSaved = () => {
-      _submitDiv.classList.add('hidden');
+    const _showSubmitted = () => {
       const _msg = document.createElement('div');
       _msg.id = 'score-saved-msg';
       _msg.className = 'score-saved-msg go-anim';
       _msg.style.setProperty('--d', '4');
-      _msg.textContent = 'SCORE SAVED \u2713';
+      _msg.textContent = 'SCORE SUBMITTED \u2713';
       _submitDiv.parentNode.insertBefore(_msg, _submitDiv);
-      // Fade out after 2s
       setTimeout(() => { _msg.style.opacity = '0'; _msg.style.transition = 'opacity 0.6s'; }, 2000);
     };
 
-    if (_savedName) {
-      // Returning player — auto-submit silently
-      _submitDiv.classList.add('hidden');
-      submitScore(_savedName, finalScore).then(_showSaved);
-    } else {
-      // First time — show compact name input
-      _submitDiv.classList.remove('hidden');
+    // Inline submit row is now always hidden; name entry uses the modal below.
+    _submitDiv.classList.add('hidden');
 
-      const _oldInput = document.getElementById('player-name');
+    if (_savedName) {
+      // Returning player — silent auto-submit, no toast.
+      submitScore(_savedName, finalScore);
+    } else {
+      // First death — open the name modal over the game-over screen.
+      const _nameOverlay = document.getElementById('name-modal-overlay');
+      const _oldInput = document.getElementById('name-modal-input');
       const _newInput = _oldInput.cloneNode(true);
       _oldInput.parentNode.replaceChild(_newInput, _oldInput);
       _newInput.value = '';
 
-      const _oldConfirm = document.getElementById('submit-confirm-btn');
-      const _newConfirm = _oldConfirm.cloneNode(true);
-      _oldConfirm.parentNode.replaceChild(_newConfirm, _oldConfirm);
+      const _oldSubmit = document.getElementById('name-modal-submit');
+      const _newSubmit = _oldSubmit.cloneNode(true);
+      _oldSubmit.parentNode.replaceChild(_newSubmit, _oldSubmit);
+      _newSubmit.disabled = false;
+      _newSubmit.textContent = 'SUBMIT';
+
+      const _closeModal = () => { if (_nameOverlay) _nameOverlay.classList.add('hidden'); };
 
       const _doSubmit = async () => {
         const _name = _newInput.value.trim();
         if (!_name) { _newInput.focus(); return; }
-        _newConfirm.disabled = true;
-        _newConfirm.textContent = '...';
+        _newSubmit.disabled = true;
+        _newSubmit.textContent = 'SAVING...';
         window._LS.setItem('jet-horizon-player-name', _name);
         await submitScore(_name, finalScore);
-        _showSaved();
+        _closeModal();
+        _showSubmitted(); // "SCORE SUBMITTED ✓" — only after first manual submission
       };
 
-      _tapBind(_newConfirm, _doSubmit);
+      _tapBind(_newSubmit, _doSubmit);
       _newInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); _doSubmit(); }
       });
+
+      setTimeout(() => {
+        if (_nameOverlay) _nameOverlay.classList.remove('hidden');
+        try { _newInput.focus(); } catch (_) {}
+      }, 520);
     }
     } // end else (startedFromL1)
   }
@@ -37379,7 +37391,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 63;
+const BUILD_VERSION = 69;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

@@ -634,11 +634,33 @@ html, body {
   opacity: 0.7;
 }
 
-/* Game over action buttons row */
+/* Game over action buttons — three stacked rectangles: REPAIR SHIP / TRY AGAIN / EXIT.
+ * Send feedback link sits below as a low-emphasis tertiary action. */
 .go-actions {
   display: flex;
+  flex-direction: column;
   gap: 10px;
-  align-items: center;
+  align-items: stretch;
+  width: 100%;
+  max-width: 320px;
+  margin: 8px auto 0;
+}
+.go-actions > .go-saveme {
+  margin: 0;
+  width: 100%;
+}
+.go-actions .btn-saveme {
+  max-width: none;
+  padding: 16px 40px;
+  font-size: clamp(14px, 1.5vw, 18px);
+  letter-spacing: 0.25em;
+}
+.go-actions .btn-saveme .saveme-cost {
+  font-size: 0.7em;
+  opacity: 0.85;
+}
+.go-actions > .btn-feedback-link {
+  margin-top: 2px;
 }
 .btn-exit {
   background: rgba(255,255,255,0.04);
@@ -1769,8 +1791,8 @@ html, body {
     grid-template-areas:
       "title    hero"
       "title    best"
-      "saveme   coins"
-      "saveme   level"
+      "actions  coins"
+      "actions  level"
       "actions  levelup"
       "actions  handling"
       "actions  handup"
@@ -1840,12 +1862,10 @@ html, body {
     align-self: stretch;
   }
   .go-actions .btn-space { width: 100%; }
-  .go-saveme {
-    grid-area: saveme;
-    margin: 0 8px;
-    width: calc(100% - 16px);
-    align-self: center;
-    padding-top: 6px;
+  /* .go-saveme is now nested inside .go-actions — reset its old grid placement */
+  .go-actions .go-saveme {
+    margin: 0;
+    width: 100%;
   }
 
   /* RIGHT PANEL: all run stats. */
@@ -6708,6 +6728,85 @@ html.platform-ios-native .sr-overlay {
   padding-left: max(env(safe-area-inset-left, 16px), 16px);
   padding-right: max(env(safe-area-inset-right, 16px), 16px);
   padding-bottom: 16px;
+}
+
+/* ─── NAME ENTRY MODAL (first death only) ───────────────────── */
+#name-modal-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+#name-modal-overlay.hidden { display: none; }
+.name-modal {
+  background: linear-gradient(180deg, rgba(0, 20, 40, 0.92), rgba(0, 10, 22, 0.88));
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  border-radius: 12px;
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.18), 0 0 48px rgba(34, 211, 238, 0.08);
+  padding: 22px 24px;
+  width: min(340px, 86vw);
+  text-align: center;
+  animation: menuFade 0.18s ease both, menuPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.name-modal-title {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 18px;
+  letter-spacing: 0.22em;
+  color: rgba(0, 240, 255, 0.95);
+  text-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+  margin-bottom: 6px;
+}
+.name-modal-sub {
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 16px;
+}
+.name-modal-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  border-radius: 6px;
+  color: #fff;
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 16px;
+  letter-spacing: 0.15em;
+  text-align: center;
+  text-transform: uppercase;
+  outline: none;
+  margin-bottom: 12px;
+  box-sizing: border-box;
+}
+.name-modal-input:focus {
+  border-color: rgba(0, 240, 255, 0.7);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
+}
+.name-modal-submit {
+  width: 100%;
+  padding: 14px 20px;
+  background: rgba(0, 240, 255, 0.14);
+  border: 1px solid rgba(0, 240, 255, 0.5);
+  border-radius: 6px;
+  color: rgba(0, 240, 255, 0.95);
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  cursor: pointer;
+  text-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.name-modal-submit:hover,
+.name-modal-submit:active {
+  background: rgba(0, 240, 255, 0.22);
+  border-color: rgba(0, 240, 255, 0.75);
+}
+.name-modal-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ─── FEEDBACK LINK (game-over) ────────────────────────────────────────

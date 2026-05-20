@@ -373,6 +373,7 @@ function returnToTitle() {
   _tEl.classList.remove('hidden');
   _tEl.classList.remove('fading-out');
   document.getElementById('gameover-screen').classList.add('hidden');
+  { const _nm = document.getElementById('name-modal-overlay'); if (_nm) _nm.classList.add('hidden'); }
   document.getElementById('reward-wheel-overlay').classList.add('hidden');
   document.getElementById('hud').classList.add('hidden');
   setPauseOverlay(false);
