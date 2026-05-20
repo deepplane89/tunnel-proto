@@ -13842,12 +13842,12 @@ function playPauseExit() { _playBufferUI('pause-exit', 0.7, 1.0, null); }
 window.playPauseExit = playPauseExit;
 
 // Title-screen UI exits (garage/settings/etc back) — VR mecha interlock.
-function playTitleExit() { _playBufferUI('title-exit', 0.7, 1.0, null); }
+function playTitleExit() { _playBufferUI('title-exit', 0.5, 1.0, null); }
 window.playTitleExit = playTitleExit;
 
 // Tap-to-play on title screen — uses the same title-tap cue as other UI taps.
 // (Was a 25.7s whoosh — way too long for a tap cue, sounded like a stuck loop.)
-function playTapToPlay() { _playBufferUI('title-exit', 0.7, 1.0, null); }
+function playTapToPlay() { _playBufferUI('title-exit', 0.5, 1.0, null); }
 window.playTapToPlay = playTapToPlay;
 
 function playCrash() {
@@ -37293,7 +37293,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 47;
+const BUILD_VERSION = 48;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
