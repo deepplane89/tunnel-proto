@@ -8438,9 +8438,12 @@ let _bankReturnSmoothing = 8;    // bank lerp speed when NOT steering — contro
 let _bankReturnRate = 12;        // how fast _bankVelX (the roll TARGET) decays back to 0 when not steering; bigger = target zeroes faster
 let _camRollAmt = 0.4;           // camera-roll multiplier — horizon mirrors shipGroup.rotation.z * this; ship-roll lerp already handles smoothing
 let _bankVelX = 0;               // smoothed velocity used for banking (decoupled from drift physics)
-let _wobbleMaxAmp = 0.05;        // max wobble amplitude (baked)
-let _wobbleDamping = 10;         // how fast wobble fades (baked)
-let _overshootAmt  = 0.0;        // roll overshoot (off by default)
+// Boot defaults match FEEL_PRESETS.DEFAULT juice=0.82 (organic-but-controlled).
+// Tuner panel's _applyJuice() can override live; these are what the game runs
+// with on a fresh boot when the dev tuner hasn't been opened.
+let _wobbleMaxAmp = 0.116;       // _macroLerp3(0.82, 0, 0.05, 0.15)
+let _wobbleDamping = 6.16;       // _macroLerp3(0.82, 20, 10, 4)
+let _overshootAmt  = 0.32;       // _macroLerp3(0.82, 0, 0, 0.5)
 let _overshootDamp = 6;          // how fast overshoot damps out
 let _turbulence    = 0.0;        // micro-drift turbulence (off by default)
 let _wobbleSpeedMult = 0.0;      // speed wobble amplification (baked)
