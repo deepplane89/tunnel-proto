@@ -3255,6 +3255,17 @@ window._jlDebug = {
       coreMesh.frustumCulled = false;
       glowMesh.frustumCulled = false;
       boltGroup.frustumCulled = false;
+      // Honor obstacle-reflect toggle: when OFF, lightning skips water reflection pass.
+      // Pool is lazy-built so we read the live toggle state here.
+      {
+        const _LNR = (typeof LAYER_NO_WATER_REFLECT !== 'undefined') ? LAYER_NO_WATER_REFLECT : 4;
+        const _L = (window._obstacleReflectOn === false) ? _LNR : 0;
+        warnMesh.layers.set(_L);
+        flash.layers.set(_L);
+        ring.layers.set(_L);
+        coreMesh.layers.set(_L);
+        glowMesh.layers.set(_L);
+      }
       scene.add(boltGroup);
 
       _ltPool.push({
@@ -3276,6 +3287,21 @@ window._jlDebug = {
   }
   // Expose so global prewarm can call it once at startup
   window._ltInitPool = _ltInitPool;
+  // Live-flip handler called by _setObstacleReflect in 20-main-early.js.
+  // No-op until the pool has been built (first strike or boot prewarm).
+  window._setLightningReflect = function(on) {
+    if (!_ltPoolReady) return;
+    const _LNR = (typeof LAYER_NO_WATER_REFLECT !== 'undefined') ? LAYER_NO_WATER_REFLECT : 4;
+    const _L = on ? 0 : _LNR;
+    for (let i = 0; i < _ltPool.length; i++) {
+      const s = _ltPool[i];
+      if (s.warnMesh) s.warnMesh.layers.set(_L);
+      if (s.flash)    s.flash.layers.set(_L);
+      if (s.ring)     s.ring.layers.set(_L);
+      if (s.coreMesh) s.coreMesh.layers.set(_L);
+      if (s.glowMesh) s.glowMesh.layers.set(_L);
+    }
+  };
   // Force every pooled bolt to draw EVERY material variant during boot prewarm.
   // Without this, the warn/flash/ring materials never get opacity > 0 during
   // skipWarn=true prewarm spawns, so their GL programs aren't compiled until

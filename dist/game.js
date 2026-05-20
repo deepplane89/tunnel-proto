@@ -10933,6 +10933,12 @@ window._setObstacleReflect = function(on) {
       if (rm) rm.layers.set(L);
     }
   }
+  // Lightning pool — lazy-built in 72-main-late-mid.js. Sweep all five mesh
+  // variants per slot (warn disc, ground flash sprite, shockwave ring, bolt
+  // core, bolt glow) so live toggle-flips apply to bolts already in the pool.
+  if (typeof window._setLightningReflect === 'function') {
+    try { window._setLightningReflect(on); } catch (_) {}
+  }
 };
 
 // ═══════════════════════════════════════════════════
@@ -33675,6 +33681,17 @@ window._jlDebug = {
       coreMesh.frustumCulled = false;
       glowMesh.frustumCulled = false;
       boltGroup.frustumCulled = false;
+      // Honor obstacle-reflect toggle: when OFF, lightning skips water reflection pass.
+      // Pool is lazy-built so we read the live toggle state here.
+      {
+        const _LNR = (typeof LAYER_NO_WATER_REFLECT !== 'undefined') ? LAYER_NO_WATER_REFLECT : 4;
+        const _L = (window._obstacleReflectOn === false) ? _LNR : 0;
+        warnMesh.layers.set(_L);
+        flash.layers.set(_L);
+        ring.layers.set(_L);
+        coreMesh.layers.set(_L);
+        glowMesh.layers.set(_L);
+      }
       scene.add(boltGroup);
 
       _ltPool.push({
@@ -33696,6 +33713,21 @@ window._jlDebug = {
   }
   // Expose so global prewarm can call it once at startup
   window._ltInitPool = _ltInitPool;
+  // Live-flip handler called by _setObstacleReflect in 20-main-early.js.
+  // No-op until the pool has been built (first strike or boot prewarm).
+  window._setLightningReflect = function(on) {
+    if (!_ltPoolReady) return;
+    const _LNR = (typeof LAYER_NO_WATER_REFLECT !== 'undefined') ? LAYER_NO_WATER_REFLECT : 4;
+    const _L = on ? 0 : _LNR;
+    for (let i = 0; i < _ltPool.length; i++) {
+      const s = _ltPool[i];
+      if (s.warnMesh) s.warnMesh.layers.set(_L);
+      if (s.flash)    s.flash.layers.set(_L);
+      if (s.ring)     s.ring.layers.set(_L);
+      if (s.coreMesh) s.coreMesh.layers.set(_L);
+      if (s.glowMesh) s.glowMesh.layers.set(_L);
+    }
+  };
   // Force every pooled bolt to draw EVERY material variant during boot prewarm.
   // Without this, the warn/flash/ring materials never get opacity > 0 during
   // skipWarn=true prewarm spawns, so their GL programs aren't compiled until
@@ -37293,7 +37325,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 54;
+const BUILD_VERSION = 55;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

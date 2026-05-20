@@ -9509,6 +9509,12 @@ window._setObstacleReflect = function(on) {
       if (rm) rm.layers.set(L);
     }
   }
+  // Lightning pool — lazy-built in 72-main-late-mid.js. Sweep all five mesh
+  // variants per slot (warn disc, ground flash sprite, shockwave ring, bolt
+  // core, bolt glow) so live toggle-flips apply to bolts already in the pool.
+  if (typeof window._setLightningReflect === 'function') {
+    try { window._setLightningReflect(on); } catch (_) {}
+  }
 };
 
 // ═══════════════════════════════════════════════════
