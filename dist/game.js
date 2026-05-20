@@ -22753,19 +22753,15 @@ window._showGfxPicker = function _showGfxPicker(onDone) {
       '<div class="gfxp-row">',
         '<button type="button" class="gfxp-btn" data-q="performance">',
           '<span class="gfxp-name">PERFORMANCE</span>',
-          '<span class="gfxp-sub">SMOOTHEST</span>',
         '</button>',
         '<button type="button" class="gfxp-btn" data-q="balanced">',
           '<span class="gfxp-name">BALANCED</span>',
-          '<span class="gfxp-sub">MIDDLE</span>',
         '</button>',
         '<button type="button" class="gfxp-btn primary" data-q="sharp">',
           '<span class="gfxp-name">SHARP</span>',
-          '<span class="gfxp-sub">RECOMMENDED</span>',
         '</button>',
         '<button type="button" class="gfxp-btn" data-q="ultra">',
           '<span class="gfxp-name">ULTRA</span>',
-          '<span class="gfxp-sub">FULL REFLECTIONS</span>',
         '</button>',
       '</div>',
       '<div class="gfxp-hint">CHANGE ANYTIME IN SETTINGS</div>',
@@ -37383,7 +37379,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 59;
+const BUILD_VERSION = 60;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
