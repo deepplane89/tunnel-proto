@@ -32,7 +32,7 @@ function _baseTargetDPR() {
     case 'ultra':
     case 'sharp':       return Math.min(native, 2);
     case 'balanced':
-    default:            return Math.min(native, 1.5);
+    default:            return Math.min(native, 1.25);
   }
 }
 
@@ -161,8 +161,10 @@ function openSettings() {
   if (fpsBtn) { fpsBtn.textContent = _settings.fpsCap30 ? 'ON' : 'OFF'; fpsBtn.classList.toggle('off', !_settings.fpsCap30); }
   const lbBtn2 = document.getElementById('litebloom-toggle');
   if (lbBtn2) { lbBtn2.textContent = _settings.liteBloom ? 'ON' : 'OFF'; lbBtn2.classList.toggle('off', !_settings.liteBloom); }
-  // Sync graphics quality button states
-  ['performance','balanced','sharp','ultra'].forEach(q => {
+  // Sync graphics quality button states.
+  // NOTE: 'performance' kept in code paths (legacy saved settings + adaptive
+  // DPR fallback floor) but no longer surfaced as a picker button.
+  ['balanced','sharp','ultra'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
     if (b) b.classList.toggle('active', _settings.graphicsQuality === q);
   });
@@ -442,12 +444,12 @@ function _initSettingsAccordion() {
   }, { moveCancel: true });
 
   // Graphics quality 4-way toggle (Performance / Balanced / Sharp / Ultra)
-  ['performance','balanced','sharp','ultra'].forEach(q => {
+  ['balanced','sharp','ultra'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
     if (!b) return;
     _tapBind(b, () => {
       _settings.graphicsQuality = q;
-      ['performance','balanced','sharp','ultra'].forEach(qq => {
+      ['balanced','sharp','ultra'].forEach(qq => {
         const bb = document.getElementById('gfx-' + qq);
         if (bb) bb.classList.toggle('active', qq === q);
       });
@@ -514,9 +516,6 @@ window._showGfxPicker = function _showGfxPicker(onDone) {
     pick.innerHTML = [
       '<div class="gfxp-msg">SELECT RENDER MODE</div>',
       '<div class="gfxp-row">',
-        '<button type="button" class="gfxp-btn" data-q="performance">',
-          '<span class="gfxp-name">PERFORMANCE</span>',
-        '</button>',
         '<button type="button" class="gfxp-btn" data-q="balanced">',
           '<span class="gfxp-name">BALANCED</span>',
         '</button>',
