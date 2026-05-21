@@ -2542,7 +2542,9 @@ function buildSkinTunerSliders() {
     if (tapCount === 1) tapTimer = setTimeout(() => { tapCount = 0; }, 1000);
     if (tapCount >= 3) {
       clearTimeout(tapTimer); tapCount = 0;
-      panel.classList.toggle('hidden');
+      // Admin panel UI hidden permanently per user request 2026-05-21.
+      // Triple-tap still toggles cheats below; just no visible popup.
+      // panel.classList.toggle('hidden');
       // Toggle skin admin mode + grant cheats
       _skinAdminMode = !_skinAdminMode;
       try { updateSkinViewerDisplay(); } catch(_) {}
