@@ -498,7 +498,10 @@ function startGame() {
   // Warm up audio elements on user gesture so iOS/mobile allows deferred play
   // Use muted=true (synchronous) instead of volume=0 (iOS Safari sometimes applies
   // volume changes a frame late, producing a brief audible blip during warmup).
-  if (!_skipL1Intro) {
+  // Skip during tutorial — tutorial has no campaign prologue, no engine-start
+  // play, and warmup can leak audible on iOS even with muted=true (race between
+  // play() rendering start and .then(muted=false) flip).
+  if (!_skipL1Intro && !state._tutorialActive) {
     const _eng = document.getElementById('engine-start');
     if (_eng) {
       _eng.muted = true;
