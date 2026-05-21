@@ -171,13 +171,34 @@ function _clearAudioInterrupted() {
 // nodes — the original graph (source → gain → destination) is still wired.
 // Just plays a 1-sample silent buffer to nudge the audio engine and re-issues
 // play() on the elements that were playing when the interruption hit.
+//
+// 2026-05-21 fix for iOS PWA swipe-away-and-return silent-audio bug:
+// iOS Safari rejects audioCtx.resume() when called outside a user-gesture
+// call-stack after a long background interruption — the .catch() silently
+// swallows it, the rest of the rewire runs against an interrupted context
+// (which no-ops), and the _audioInterrupted flag gets cleared. Result: next
+// user tap finds the flag cleared, so the recovery never re-runs from inside
+// a real gesture. Fix: (1) keep _audioInterrupted set if resume didn't take,
+// (2) Phaser-style suspend()→resume() cycle to break out of 'interrupted'
+// state, (3) one-shot pointerdown listener as a backup that re-runs recovery
+// from inside a user gesture if visibility-driven resume failed.
+// See: phaserjs/phaser#6829, babylonjs forum 63232, Phaser CE CHANGELOG #748.
+let _pendingGestureRecovery = false;
 function _rewireTrackGains() {
   if (!audioCtx) return;
-  // Make sure context is actually running before we kick the elements.
-  if (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted') {
-    audioCtx.resume().catch(() => {});
-  }
+  // Phaser-style cycle: suspend then resume to break out of iOS 'interrupted'
+  // state. Guard both calls — calling suspend()/resume() while state is
+  // 'interrupted' itself can throw per the Babylon.js findings. Only suspend
+  // if state is 'running'; only resume if state is not 'running'.
+  try {
+    if (audioCtx.state === 'running') {
+      audioCtx.suspend().then(() => audioCtx.resume()).catch(() => {});
+    } else if (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted') {
+      audioCtx.resume().catch(() => {});
+    }
+  } catch (_) {}
   // iOS sample-rate renegotiation: 1-sample silent buffer through destination.
+  // Wrapped — createBuffer/start can throw on a still-interrupted context.
   try {
     const _silent = audioCtx.createBuffer(1, 1, 22050);
     const _src = audioCtx.createBufferSource();
@@ -197,6 +218,15 @@ function _rewireTrackGains() {
   const tracks = (typeof allTracks === 'function') ? allTracks() : {};
   requestAnimationFrame(() => requestAnimationFrame(() => {
     if (state.muted) { _clearAudioInterrupted(); return; }
+    // CRITICAL: only clear the interrupted flag if the context actually came
+    // back to 'running'. If it didn't (resume rejected silently outside a
+    // gesture), keep the flag set and arm a one-shot pointerdown listener so
+    // the next user tap re-runs the recovery from inside a real gesture.
+    const _ctxLive = audioCtx && audioCtx.state === 'running';
+    if (!_ctxLive) {
+      _armGestureRecovery();
+      return;  // leave flag set; don't try to play() against a dead context
+    }
     Object.keys(snap).forEach(k => {
       const el = tracks[k];
       if (!el) return;
@@ -212,6 +242,35 @@ function _rewireTrackGains() {
     });
     _clearAudioInterrupted();
   }));
+}
+
+// Backup recovery path: if _rewireTrackGains ran outside a user gesture and
+// audioCtx.resume() didn't take, arm a one-shot listener that re-runs the
+// rewire from inside the next pointerdown/touchstart/click. iOS Safari only
+// honors resume() inside a UI-event call-stack, so this is the reliable path
+// for swipe-away-and-return on PWAs.
+function _armGestureRecovery() {
+  if (_pendingGestureRecovery) return;  // already armed
+  _pendingGestureRecovery = true;
+  const _opts = { capture: true, passive: true };
+  const _events = ['pointerdown', 'touchstart', 'click', 'keydown'];
+  const _recover = () => {
+    _pendingGestureRecovery = false;
+    _events.forEach(evt => document.removeEventListener(evt, _recover, _opts));
+    // Synchronously resume inside the gesture call-stack — this is the key
+    // moment where iOS will accept the resume.
+    if (!audioCtx) return;
+    try {
+      if (audioCtx.state !== 'running') audioCtx.resume().catch(() => {});
+    } catch (_) {}
+    // Re-run the full rewire so the snapshot tracks get their play() kick.
+    // The flag is still set (we left it set in _rewireTrackGains above) so
+    // the next visibility-resume won't double-fire.
+    try { _rewireTrackGains(); } catch (_) {}
+  };
+  // Capture phase so we run before any element-level handler that might
+  // stopPropagation. passive: true is fine — we don't preventDefault.
+  _events.forEach(evt => document.addEventListener(evt, _recover, _opts));
 }
 function _initSFXBuffers() {
   if (!audioCtx) return;
