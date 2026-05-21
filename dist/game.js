@@ -30566,10 +30566,12 @@ function updateCameraFOV() {
     _skyQuadMat.uniforms.uOffsetY.value = -0.24;
   }
   // Apply pivot offsets immediately (not just in animate loop)
-  // X must be zeroed here — if a resize fires mid-gameplay the animate loop
-  // will restore it to shipX on the next frame, but lookAt must be computed
-  // from a centered pivot or the camera angle drifts permanently.
-  cameraPivot.position.x = (state && state.phase === 'playing') ? (camTargetX || 0) : 0;
+  // X MUST be zeroed here regardless of phase — lookAt aims at world (0,*,-50)
+  // from the pivot, so if pivot.x is non-zero (mid-turn), lookAt yaws camera
+  // back toward world origin and the camera permanently loses center on ship.
+  // Animate loop restores pivot.x to camTargetX on the very next frame.
+  // v77 fix: was `(camTargetX || 0)` during playing — that was the bug.
+  cameraPivot.position.x = 0;
   cameraPivot.position.y = 2.8 + _camPivotYOffset;
   cameraPivot.position.z = 9 + _camPivotZOffset;
   camera.lookAt(new THREE.Vector3(0, -2.8 + _camLookYOffset, -50 + _camLookZOffset));
@@ -37434,7 +37436,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 76;
+const BUILD_VERSION = 77;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
