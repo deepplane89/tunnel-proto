@@ -130,11 +130,14 @@ document.addEventListener('visibilitychange', () => {
     if (_needsReprewarm) {
       try { window._jhResumeOverlay && window._jhResumeOverlay.show('RESUMING…'); } catch(_) {}
     }
-    // Tab/app regained focus — resume AudioContext so sounds work again.
-    // 'interrupted' is iOS-specific (phone call, Bluetooth route change).
-    if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
-      audioCtx.resume().catch(() => {});
-    }
+    // Audio recovery: do NOT call audioCtx.resume() or _rewireTrackGains() here.
+    // Per iOS Safari's strict rule, resume() outside a gesture call-stack is
+    // silently rejected and leaves the context interrupted. The _jhResumeGate
+    // (src/85-resume-gate.js) shows a tap-to-resume overlay above this
+    // threshold and runs the audio recovery synchronously inside the resulting
+    // tap gesture — which is the only place iOS will actually honor it.
+    // See: WebKit Bug 276687, SO #57510426, phaserjs/phaser#6829.
+    //
     // Re-acquire screen wake lock if we were mid-run when the tab went hidden
     // (browser auto-releases on hidden; iOS Safari requires re-request on visible).
     try { window._jhWakeLock && window._jhWakeLock.reacquireIfWanted(); } catch(_) {}
@@ -150,31 +153,11 @@ document.addEventListener('visibilitychange', () => {
         }));
       });
     }
-    // If we came back from an iOS interruption, _rewireTrackGains handles
-    // the silent-buffer sample-rate kick AND re-issues play() on tracks
-    // that were playing pre-interrupt (using the snapshot captured in
-    // _markAudioInterrupted). Don't double-up the play() calls below.
-    const _wasInterrupt = (typeof _wasAudioInterrupted === 'function' && _wasAudioInterrupted());
-    if (_wasInterrupt && typeof _rewireTrackGains === 'function') {
-      try { _rewireTrackGains(); } catch (_) {}
-    }
-    // Normal (non-interrupt) tab-focus restore: re-kick screen music. After
-    // an interruption, _rewireTrackGains already kicks the snapshot tracks,
-    // so skip this branch to avoid racing two play() calls on the same el.
-    // IMPORTANT: do NOT play titleMusic when state.phase === 'paused' — the
-    // gameplay was force-paused by the hide handler above, and the user will
-    // tap to unpause; togglePause() restarts the proper game track. Playing
-    // titleMusic here causes a music loop (title music keeps running on top
-    // of the gameplay track after unpause).
-    if (!_wasInterrupt && !state.muted) {
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (state.phase === 'title' || state.phase === 'dead') {
-          if (titleMusic) titleMusic.play().catch(() => {});
-        }
-        // Paused: gameplay tracks stay paused until the user unpauses. Don't
-        // resurrect titleMusic or lakeMusic here — togglePause handles it.
-      }));
-    }
+    // Audio re-kick is intentionally NOT done here. The _jhResumeGate handles
+    // it inside the tap-to-resume gesture (the only place iOS honors
+    // play() + resume() after a long background). If hidden duration was
+    // under the gate's threshold (2s), audio routing typically survives the
+    // short backgrounding intact and no recovery is needed anyway.
   }
 });
 
