@@ -87,6 +87,22 @@ window._jhResumeGate = (function _resumeGateFactory() {
   function _nuclearRecover() {
     if (typeof audioCtx === 'undefined' || !audioCtx) return;
 
+    // 0. Capacitor iOS bridge: ask native to rebuild AVAudioSession
+    //    (setActive(false) -> setActive(true) + brief silent AVAudioPlayer kick).
+    //    Posted synchronously BEFORE audioCtx.resume() so Swift's session
+    //    rebuild completes within the same gesture window the JS resume() rides.
+    //    No-op on web: window.webkit.messageHandlers.jhAudio is undefined
+    //    outside Capacitor's WKWebView (and is only registered by the iOS
+    //    AppDelegate — absent on Mobile Safari and desktop browsers).
+    //    JS does NOT await the result; Swift handles the rebuild synchronously
+    //    enough within the bridge call that the subsequent resume() still rides
+    //    the trusted-activation context.
+    try {
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.jhAudio) {
+        window.webkit.messageHandlers.jhAudio.postMessage({ action: 'rebuildSession' });
+      }
+    } catch (_) { /* no-op on web */ }
+
     // 1. SYNCHRONOUS resume() inside the gesture. No .then(), no await.
     //    iOS Safari evaluates the call right here; .catch() handles rejection
     //    on the microtask queue but doesn't move the resume itself.
@@ -193,7 +209,8 @@ window._jhResumeGate = (function _resumeGateFactory() {
     _attachListeners();
   }
 
-  // Public API: called by the visibilitychange handler in 72-main-late-mid.js.
+  // Public API: called by the visibilitychange handler in 72-main-late-mid.js,
+  // and by the iOS Capacitor AppDelegate via WKWebView evaluateJavaScript.
   return {
     onHide() {
       hiddenAt = (typeof performance !== 'undefined') ? performance.now() : Date.now();
@@ -208,6 +225,56 @@ window._jhResumeGate = (function _resumeGateFactory() {
     // that want to force a gesture-gated audio recovery.
     forceShow() { _show(); },
     isArmed() { return armed; },
+
+    // Native-bridge auto-recovery, called by Swift's AppDelegate observers
+    // (applicationDidBecomeActive, AVAudioSession.interruptionNotification
+    // —> .ended) via WKWebView evaluateJavaScript.
+    //
+    // On most iOS versions, evaluateJavaScript from a system lifecycle
+    // notification counts as a trusted activation context — enough to let
+    // audioCtx.resume() run successfully WITHOUT the user tapping the overlay.
+    // We try that first; if it works (audioCtx.state === 'running' after the
+    // recovery), no overlay is shown. If it fails (state still suspended /
+    // interrupted), we fall back to the regular overlay flow and the user
+    // can tap RESUME themselves.
+    //
+    // The resume() call inside _nuclearRecover() MUST be synchronous on the
+    // call-stack of this function invocation — i.e. on the call-stack of the
+    // WKWebView.evaluateJavaScript that Swift made. Awaits AFTER resume() are
+    // fine; the trusted-activation check happens at the resume() call site.
+    //
+    // Returns Promise<boolean>: true if audio is running after the attempt,
+    // false if the overlay was shown as fallback.
+    tryNativeResume() {
+      return new Promise((resolve) => {
+        // Fast-path: already running, nothing to do.
+        try {
+          if (typeof audioCtx !== 'undefined' && audioCtx && audioCtx.state === 'running') {
+            return resolve(true);
+          }
+        } catch (_) {}
+
+        // Synchronously run the same recovery the overlay-tap path runs.
+        // Order matters: resume() must be reached on this exact call-stack.
+        try { _nuclearRecover(); } catch (_) {}
+
+        // resume() is queued on the microtask/audio-thread — give it a beat
+        // to update state before deciding success. ~100ms is enough on iOS
+        // for the state machine to settle but short enough that a failed
+        // attempt still feels responsive when the overlay shows.
+        setTimeout(() => {
+          let running = false;
+          try {
+            running = !!(typeof audioCtx !== 'undefined' && audioCtx && audioCtx.state === 'running');
+          } catch (_) {}
+          if (running) return resolve(true);
+          // Fallback: trusted-activation didn't take — surface the overlay so
+          // the user can tap and recover via a real gesture.
+          try { _show(); } catch (_) {}
+          resolve(false);
+        }, 120);
+      });
+    },
   };
 })();
 
