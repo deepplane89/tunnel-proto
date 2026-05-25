@@ -9398,106 +9398,6 @@ const activeObstacles = [];
   }, 500);
 })();
 
-// ─── BOULDER GEOMETRIES (pre-baked SDF -> MarchingCubes mesh) ───
-// 5 procedural boulder variants. Baked ONCE at boot; obstacle pool
-// just clones one of these per instance. Per-frame cost = same as
-// any other static mesh. Replaces ConeGeometry below.
-// Technique inspired by Alekseev "Wet stone" — unit sphere with 9
-// smooth-subtracted random spheres + fBm noise displacement.
-(function bakeBoulderPool() {
-  if (window._boulderPool && window._boulderPool.length) return;
-  // ── SDF helpers (pure JS, deterministic per seed) ──
-  const fract = (x) => x - Math.floor(x);
-  function hash11(p) { return fract(Math.sin(p * 727.1) * 435.545); }
-  function hash31(p) {
-    return [
-      fract(Math.sin(p * 127.231) * 435.543),
-      fract(Math.sin(p * 491.7)   * 435.543),
-      fract(Math.sin(p * 718.423) * 435.543),
-    ];
-  }
-  function hash12(x, y) { return fract(Math.sin(x * 127.1 + y * 311.7) * 437.545); }
-  function smooth01(t) { return t * t * (3 - 2 * t); }
-  function lerp(a, b, t) { return a + (b - a) * t; }
-  function noise3(x, y, z) {
-    const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
-    const ux = smooth01(x - ix), uy = smooth01(y - iy), uz = smooth01(z - iz);
-    const lyr = (oz) => {
-      const ii = iy + (iz + oz) * 5;
-      const a = hash12(ix    , ii    );
-      const b = hash12(ix + 1, ii    );
-      const c = hash12(ix    , ii + 5);
-      const d = hash12(ix + 1, ii + 5);
-      return lerp(lerp(a, b, ux), lerp(c, d, ux), uy);
-    };
-    return Math.max(lerp(lyr(0), lyr(5), uz), 0);
-  }
-  function makeBoulderSDF(seed) {
-    const subs = [];
-    for (let i = 0; i < 9; i++) {
-      const ii = (i + 1) * seed * 0.731 + i;
-      const r = 2.5 + hash11(ii);
-      let [vx, vy, vz] = hash31(ii);
-      vx = vx * 2 - 1; vy = vy * 2 - 1; vz = vz * 2 - 1;
-      const len = Math.sqrt(vx*vx + vy*vy + vz*vz) || 1;
-      subs.push({ cx: vx / len * r, cy: vy / len * r, cz: vz / len * r, sr: r * 0.8 });
-    }
-    return function sdf(x, y, z) {
-      let d = Math.sqrt(x*x + y*y + z*z) - 1.0;
-      for (let i = 0; i < 9; i++) {
-        const s = subs[i];
-        const dx = x + s.cx, dy = y + s.cy, dz = z + s.cz;
-        const sd = Math.sqrt(dx*dx + dy*dy + dz*dz) - s.sr;
-        const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (-sd - d) / 0.03));
-        d = lerp(d, -sd, h) + 0.03 * h * (1 - h);
-      }
-      d += noise3(x * 4, y * 4, z * 4) * 0.1;
-      return d;
-    };
-  }
-  function bakeBoulderGeometry(seed, resolution) {
-    const mc = new MarchingCubes(resolution, new THREE.MeshNormalMaterial(), false, false, 60000);
-    mc.isolation = 0.0;
-    mc.reset();
-    const sdf = makeBoulderSDF(seed);
-    const size = resolution;
-    for (let z = 0; z < size; z++) {
-      const wz = (z / (size - 1)) * 2 - 1;
-      for (let y = 0; y < size; y++) {
-        const wy = (y / (size - 1)) * 2 - 1;
-        const yOff = z * size * size + y * size;
-        for (let x = 0; x < size; x++) {
-          const wx = (x / (size - 1)) * 2 - 1;
-          mc.field[yOff + x] = -sdf(wx, wy, wz);
-        }
-      }
-    }
-    mc.update();
-    const n = mc.count;
-    const positions = new Float32Array(n * 3);
-    const normals   = new Float32Array(n * 3);
-    const uvs       = new Float32Array(n * 2); // dummy UVs so cone shader (vUv) stays happy
-    positions.set(mc.positionArray.subarray(0, n * 3));
-    normals.set(mc.normalArray.subarray(0, n * 3));
-    // UV.y = normalized world Y (used by neon-band shader, mostly zeroed in-game)
-    for (let i = 0; i < n; i++) {
-      uvs[i * 2 + 0] = 0.5;
-      uvs[i * 2 + 1] = (positions[i * 3 + 1] + 1) * 0.5;
-    }
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geom.setAttribute('normal',   new THREE.BufferAttribute(normals, 3));
-    geom.setAttribute('uv',       new THREE.BufferAttribute(uvs, 2));
-    geom.computeVertexNormals();
-    geom.computeBoundingSphere();
-    return geom;
-  }
-  const RES = 20;
-  const pool = [];
-  for (let s = 1; s <= 5; s++) pool.push(bakeBoulderGeometry(s, RES));
-  window._boulderPool = pool;
-})();
-
 function createObstacleMesh(type) {
   const group = new THREE.Group();
   const SINK = 2.0;
@@ -9555,16 +9455,7 @@ function createObstacleMesh(type) {
   // caused flicker; depthWrite itself was never tested in isolation.
   // If this re-introduces obstacle flicker during fade-in, revert.
   bodyMat.depthWrite = true;
-  // ── BOULDER swap (was ConeGeometry(1.6, totalH, SEGS)) ──
-  // Unit-sphere-ish baked geometry; scale to match cone footprint + height.
-  // Pick variant from the 5-deep pool, varied per instance for visual diversity.
-  const _boulderVariant = window._boulderPool[(Math.random() * window._boulderPool.length) | 0];
-  const bodyMesh = new THREE.Mesh(_boulderVariant, bodyMat);
-  // Cone was: base radius 1.6, height totalH, centered at y = totalH/2 - SINK.
-  // Boulder is unit-radius (-1..1). Scale X/Z by 1.6, Y by totalH * 0.5
-  // so it spans the same vertical footprint. Random Y rotation = free variety.
-  bodyMesh.scale.set(1.6, totalH * 0.5, 1.6);
-  bodyMesh.rotation.y = Math.random() * Math.PI * 2;
+  const bodyMesh = new THREE.Mesh(new THREE.ConeGeometry(1.6, totalH, SEGS), bodyMat);
   bodyMesh.position.y = totalH / 2 - SINK;
   group.add(bodyMesh);
 
