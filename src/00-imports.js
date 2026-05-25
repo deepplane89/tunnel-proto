@@ -8,6 +8,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MarchingCubes } from 'three/addons/objects/MarchingCubes.js';
 
 // ── BOOT LOAD GATE ─────────────────────────────────────
 // Modules push readiness promises into window.__loadGate.promises.
