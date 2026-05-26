@@ -27230,17 +27230,19 @@ function update(dt) {
     // it ever reached the visible rotation. Diagnosis confirmed via runtime
     // logging: source wobble ±0.018 rad survived as ~±0.005 rad on rot.z.
     const _rollTargetNoWobble = targetRoll + _shipRotZOffset;
+    // Camera track target excludes the overshoot spring too — only pure
+    // steering bank reaches the horizon. Overshoot stays on the ship.
+    const _camTargetPureBank = (-_velNorm * _steerBankRadMax) + _shipRotZOffset;
     const _crossingZero = (shipGroup.rotation.z > 0.01 && _rollTargetNoWobble < -0.01) || (shipGroup.rotation.z < -0.01 && _rollTargetNoWobble > 0.01);
     // Use _bankSmoothing while steering, _bankReturnSmoothing when releasing — decoupled into/out of bank.
     const _baseSmooth = isSteering ? _bankSmoothing : _bankReturnSmoothing;
     const _lerpSpeed = _crossingZero ? _baseSmooth * 3 : _baseSmooth;
     shipGroup.rotation.z = THREE.MathUtils.lerp(shipGroup.rotation.z, _rollTargetNoWobble, Math.min(1, _lerpSpeed * dt));
-    // Parallel pure-bank track for horizon. Same lerp math, but wobble never
-    // touches it — so the camera roll mirrors deliberate bank only and never
-    // inherits the wobble residue that the visible shipGroup.rotation.z carries
-    // forward each frame from the wobble add below.
+    // Parallel pure-bank track for horizon. Same lerp math, but neither wobble
+    // NOR overshoot touches it — camera roll mirrors deliberate steering bank
+    // only. Eliminates the release-spring horizon dip that read as a tilt.
     if (typeof state._shipBankNoWobble !== 'number') state._shipBankNoWobble = 0;
-    state._shipBankNoWobble = THREE.MathUtils.lerp(state._shipBankNoWobble, _rollTargetNoWobble, Math.min(1, _lerpSpeed * dt));
+    state._shipBankNoWobble = THREE.MathUtils.lerp(state._shipBankNoWobble, _camTargetPureBank, Math.min(1, _lerpSpeed * dt));
     cameraRoll = state._shipBankNoWobble * _camRollAmt;
     // Wobble is added AFTER capturing camera roll — lives only on the ship.
     shipGroup.rotation.z += wobbleOffset;
@@ -34109,7 +34111,7 @@ window._jlDebug = {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 88;
+const BUILD_VERSION = 89;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
