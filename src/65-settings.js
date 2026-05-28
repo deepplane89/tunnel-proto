@@ -19,6 +19,10 @@ let _settings = {
   // Battery saver options — both default OFF so existing players see no change.
   fpsCap30: false,     // cap framerate at 30fps to cut sustained GPU power ~50%
   liteBloom: false,    // drop bloom resolution /2 → /3 + 1 fewer mip level
+  // Background Audio: when ON, do NOT pause music/SFX on tab visibilitychange.
+  // Web/desktop only — iOS native always pauses (system policy + battery).
+  // Read by the visibilitychange handler in 72-main-late-mid.js.
+  bgAudioOn: false,
 };
 window.getSetting = function(k) { return _settings[k]; };
 
@@ -159,6 +163,12 @@ function openSettings() {
   if (fpsBtn) { fpsBtn.textContent = _settings.fpsCap30 ? 'ON' : 'OFF'; fpsBtn.classList.toggle('off', !_settings.fpsCap30); }
   const lbBtn2 = document.getElementById('litebloom-toggle');
   if (lbBtn2) { lbBtn2.textContent = _settings.liteBloom ? 'ON' : 'OFF'; lbBtn2.classList.toggle('off', !_settings.liteBloom); }
+  // Background Audio toggle — hide row on iOS native (system manages audio session)
+  const _bgRow = document.getElementById('bg-audio-row');
+  const _isIosNative = document.documentElement.classList.contains('platform-ios-native');
+  if (_bgRow) _bgRow.style.display = _isIosNative ? 'none' : '';
+  const bgBtn = document.getElementById('bg-audio-toggle');
+  if (bgBtn) { bgBtn.textContent = _settings.bgAudioOn ? 'ON' : 'OFF'; bgBtn.classList.toggle('off', !_settings.bgAudioOn); }
   // Sync graphics quality button states.
   ['balanced','sharp','ultra'].forEach(q => {
     const b = document.getElementById('gfx-' + q);
@@ -453,6 +463,16 @@ function _initSettingsAccordion() {
       _applyReflectForQuality();
       saveSettings();
     });
+  });
+
+  // Background Audio toggle — when ON, audio keeps playing when tab is hidden.
+  // Read by visibilitychange handler (72-main-late-mid.js) via getSetting('bgAudioOn').
+  _tapBind(document.getElementById('bg-audio-toggle'), () => {
+    _settings.bgAudioOn = !_settings.bgAudioOn;
+    const btn = document.getElementById('bg-audio-toggle');
+    btn.textContent = _settings.bgAudioOn ? 'ON' : 'OFF';
+    btn.classList.toggle('off', !_settings.bgAudioOn);
+    saveSettings();
   });
 
   // Haptics toggle

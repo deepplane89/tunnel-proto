@@ -107,6 +107,16 @@ const _JH_LONG_HIDE_MS = 30000; // >30s hidden → reprewarm shaders on resume (
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     _jhHiddenAt = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+    // Background Audio toggle: when ON (web only), skip the audio pause + game
+    // pause so the radio keeps playing while the user is on another tab.
+    // Always force-pause on iOS native (system policy + battery), regardless
+    // of the setting — the toggle row is hidden in settings on iOS native.
+    const _isIosNative = document.documentElement.classList.contains('platform-ios-native');
+    const _bgAudioOn = !_isIosNative && (typeof getSetting === 'function') && getSetting('bgAudioOn');
+    if (_bgAudioOn) {
+      // Keep audio + game running in background. Skip everything below.
+      return;
+    }
     // Pause all audio immediately regardless of game state
     const tracks = allTracks();
     Object.values(tracks).forEach(el => { if (el && !el.paused) el.pause(); });
