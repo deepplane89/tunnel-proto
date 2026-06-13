@@ -1,4 +1,4 @@
-/* JH_BUILD: prod */ window.__JH_DEV__=false;
+/* JH_BUILD: prod */ window.__JH_DEV__=false;try{var _jh_noop=function(){};console.log=_jh_noop;console.warn=_jh_noop;console.debug=_jh_noop;console.info=_jh_noop;}catch(_){}
 import * as THREE from 'three';
 import { Water } from 'three/addons/objects/Water.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -34141,7 +34141,7 @@ window._jlDebug = {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 90;
+const BUILD_VERSION = 91;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
