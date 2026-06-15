@@ -136,6 +136,18 @@ document.addEventListener('visibilitychange', () => {
     // before anything else paints. iOS otherwise flashes a stale game frame.
     const _hiddenMs = _jhHiddenAt ? (((typeof performance !== 'undefined') ? performance.now() : Date.now()) - _jhHiddenAt) : 0;
     _jhHiddenAt = 0;
+    // Very-long-background escape hatch: after ~10 minutes hidden, recovery
+    // of AudioContext + WebGL program cache is unreliable across iOS versions
+    // and we've seen audio get into states the suspend/resume cycle can't
+    // unstick. Big mobile web games (Roblox/Genshin web wrappers) handle this
+    // by force-reloading the page on return — deterministic fresh state
+    // beats a flaky resume. Done BEFORE any other resume work to avoid
+    // running recovery logic against a context we're about to throw away.
+    const _HARD_RELOAD_MS = 10 * 60 * 1000;
+    if (_hiddenMs > _HARD_RELOAD_MS) {
+      try { window.location.reload(); } catch (_) {}
+      return;
+    }
     const _needsReprewarm = (_hiddenMs > _JH_LONG_HIDE_MS && typeof window._reprewarmShaders === 'function');
     if (_needsReprewarm) {
       try { window._jhResumeOverlay && window._jhResumeOverlay.show('RESUMING…'); } catch(_) {}

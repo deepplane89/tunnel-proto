@@ -103,23 +103,17 @@ window._jhResumeGate = (function _resumeGateFactory() {
       }
     } catch (_) { /* no-op on web */ }
 
-    // 1. SYNCHRONOUS resume() inside the gesture. No .then(), no await.
-    //    iOS Safari evaluates the call right here; .catch() handles rejection
-    //    on the microtask queue but doesn't move the resume itself.
+    // 1. SYNCHRONOUS suspend()->resume() cycle inside the gesture. iOS Safari
+    //    lies about audioCtx.state (WebKit Bug 276687) — it can claim
+    //    'running' while the OS audio resources are actually released. A bare
+    //    resume() in that state is a no-op. The cycle forces the state machine
+    //    to reset. Per CreateJS / WebKit Bug 276687 comment 6 + comment 4:
+    //    'manually suspend/resume on visibility change, even when the context
+    //    is set to running'. Both calls fire synchronously in the gesture;
+    //    .catch() lives on the microtask queue but does not move the calls.
     try {
-      if (audioCtx.state !== 'running') {
-        audioCtx.resume().catch(() => {});
-      }
-    } catch (_) {}
-
-    // 2. SYNCHRONOUS silent-buffer kick to nudge iOS sample-rate negotiation.
-    //    This is the part that historically pulls a stuck context to running.
-    try {
-      const sb = audioCtx.createBuffer(1, 1, 22050);
-      const src = audioCtx.createBufferSource();
-      src.buffer = sb;
-      src.connect(audioCtx.destination);
-      src.start(0);
+      audioCtx.suspend().catch(() => {});
+      audioCtx.resume().catch(() => {});
     } catch (_) {}
 
     // 3. Lazy-init any track gains that never wired up (cold-start race).
@@ -157,10 +151,21 @@ window._jhResumeGate = (function _resumeGateFactory() {
       });
     }
 
-    // 5. Clear the interrupted flag so subsequent visibility events get a
-    //    clean slate. We just successfully ran the recovery from inside a
-    //    real gesture, so by iOS's rules this is the recovery moment.
-    try { if (typeof _clearAudioInterrupted === 'function') _clearAudioInterrupted(); } catch (_) {}
+    // 5. Clear the interrupted flag — but ONLY after verifying the resume
+    //    actually took. Clearing synchronously (pre-v92 behavior) meant a
+    //    silently-rejected resume left the flag clean while audio was dead,
+    //    so the next visibility event wouldn't re-arm the recovery. Wait
+    //    ~120ms for the audio thread to settle, then check state before
+    //    clearing. If state is still not 'running', leave the flag set so
+    //    the next gesture or visibility event tries again.
+    setTimeout(() => {
+      try {
+        if (audioCtx && audioCtx.state === 'running' &&
+            typeof _clearAudioInterrupted === 'function') {
+          _clearAudioInterrupted();
+        }
+      } catch (_) {}
+    }, 120);
   }
 
   function _onTap(e) {
