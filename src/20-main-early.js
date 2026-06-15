@@ -747,10 +747,14 @@ function getHandlingStartBoost() {
 // startGame() so it always reflects current handling tier, regardless of which
 // flight model the player picked.
 const _HANDLING_JUICE_RAMP = [0.82, 0.75, 0.68, 0.61, 0.54, 0.47, 0.40];
+// 2026-06-15: wobble/juice disabled per user feedback — the organic feedback
+// layer was working against the precision feel of the ship. Force juice=0
+// across all tiers, which makes _applyJuice set _wobbleMaxAmp=0,
+// _overshootAmt=0, _wobbleDamping=20 (snap in ~150ms). Surgical mode.
+// _HANDLING_JUICE_RAMP retained above so the per-tier ramp is easy to
+// restore if we change our mind.
 function getHandlingJuice() {
-  const idx = loadEquippedBoostTierIndex();
-  const v = _HANDLING_JUICE_RAMP[idx];
-  return (v == null) ? 0.82 : v;
+  return 0;
 }
 window.getHandlingJuice = getHandlingJuice;
 

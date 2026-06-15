@@ -2171,10 +2171,14 @@ function getHandlingStartBoost() {
 // startGame() so it always reflects current handling tier, regardless of which
 // flight model the player picked.
 const _HANDLING_JUICE_RAMP = [0.82, 0.75, 0.68, 0.61, 0.54, 0.47, 0.40];
+// 2026-06-15: wobble/juice disabled per user feedback — the organic feedback
+// layer was working against the precision feel of the ship. Force juice=0
+// across all tiers, which makes _applyJuice set _wobbleMaxAmp=0,
+// _overshootAmt=0, _wobbleDamping=20 (snap in ~150ms). Surgical mode.
+// _HANDLING_JUICE_RAMP retained above so the per-tier ramp is easy to
+// restore if we change our mind.
 function getHandlingJuice() {
-  const idx = loadEquippedBoostTierIndex();
-  const v = _HANDLING_JUICE_RAMP[idx];
-  return (v == null) ? 0.82 : v;
+  return 0;
 }
 window.getHandlingJuice = getHandlingJuice;
 
@@ -23156,6 +23160,10 @@ function startGame() {
   state._introLiftActive = false;
   state._introLiftTimer = 0;
   state._introShipY = _hoverBaseY;
+  // Reset post-launch grace timer (2s of empty gameplay after lift) so retries
+  // also get the grace beat. Null = uninitialized; the spawn-gate code seeds
+  // it to 2.0 on the first frame after lift ends.
+  state._postLaunchGrace = null;
   state.tiltTimer      = 0;
   state.corridorCenter = 0;
   state.corridorMode       = false;
@@ -28902,7 +28910,15 @@ function update(dt) {
       });
     }
   }
-  if (!_preBumpRestDrain && !state._tutorialActive && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
+  // Post-launch grace period: 2s of "empty" gameplay after the intro lift ends
+  // before the first cone can spawn. Gives the player a beat to orient before
+  // obstacles start coming. Counts down only while the lift is NOT active and
+  // the prologue is finished. User-requested 2026-06-15.
+  if (!state.introActive && !state._introLiftActive && state.phase === 'playing') {
+    if (state._postLaunchGrace == null) state._postLaunchGrace = 2.0;
+    else if (state._postLaunchGrace > 0) state._postLaunchGrace = Math.max(0, state._postLaunchGrace - dt);
+  }
+  if (!_preBumpRestDrain && !state._tutorialActive && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !state._introLiftActive && !(state._postLaunchGrace > 0) && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
     state.nextSpawnZ += effectiveSpeed * dt;
     if (state.nextSpawnZ >= 0) {
       // DIAG: mark first successful spawn so logging stops
@@ -37520,7 +37536,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 94;
+const BUILD_VERSION = 95;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

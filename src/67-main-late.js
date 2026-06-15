@@ -238,6 +238,10 @@ function startGame() {
   state._introLiftActive = false;
   state._introLiftTimer = 0;
   state._introShipY = _hoverBaseY;
+  // Reset post-launch grace timer (2s of empty gameplay after lift) so retries
+  // also get the grace beat. Null = uninitialized; the spawn-gate code seeds
+  // it to 2.0 on the first frame after lift ends.
+  state._postLaunchGrace = null;
   state.tiltTimer      = 0;
   state.corridorCenter = 0;
   state.corridorMode       = false;
@@ -5984,7 +5988,15 @@ function update(dt) {
       });
     }
   }
-  if (!_preBumpRestDrain && !state._tutorialActive && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
+  // Post-launch grace period: 2s of "empty" gameplay after the intro lift ends
+  // before the first cone can spawn. Gives the player a beat to orient before
+  // obstacles start coming. Counts down only while the lift is NOT active and
+  // the prologue is finished. User-requested 2026-06-15.
+  if (!state.introActive && !state._introLiftActive && state.phase === 'playing') {
+    if (state._postLaunchGrace == null) state._postLaunchGrace = 2.0;
+    else if (state._postLaunchGrace > 0) state._postLaunchGrace = Math.max(0, state._postLaunchGrace - dt);
+  }
+  if (!_preBumpRestDrain && !state._tutorialActive && !state.zipperActive && !state.l5EndingActive && !state.l5CorridorActive && !state.drCustomPatternActive && !state.angledWallsActive && !state.introActive && !state._introLiftActive && !(state._postLaunchGrace > 0) && !(state.isDeathRun && state.deathRunRestBeat > 0) && !_awTunerPaused && !state._ringsActive) {
     state.nextSpawnZ += effectiveSpeed * dt;
     if (state.nextSpawnZ >= 0) {
       // DIAG: mark first successful spawn so logging stops
