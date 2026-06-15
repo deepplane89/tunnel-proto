@@ -8469,7 +8469,7 @@ let _wobbleSpeedMult = 0.0;      // speed wobble amplification (baked)
 // untouched; this is pure body-cosmetics. Macro 0..1: 0 = rigid, 0.7 = baked
 // default (alive but subtle), 1 = pronounced. Time-scales picked non-harmonic
 // so it never reads as a loop.
-let _cruiseMacro   = 0.4;         // master CRUISE 0..1 (default subtle baseline)
+let _cruiseMacro   = 0;           // CRUISE wobble disabled — rigid ship body
 let _cruiseBobAmp  = 0.004;       // pos.y — tiny (hover bob still owns most vertical)
 let _cruiseBobFreq = 1.4;         // (unused)
 let _cruisePitchAmp  = 0.010;     // rot.x — subtle pitch (multi-band keeps it from reading as bounce)
