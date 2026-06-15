@@ -177,13 +177,21 @@ window._jhResumeGate = (function _resumeGateFactory() {
       try { e.preventDefault(); } catch (_) {}
     }
     armed = false;
-    // Run recovery synchronously RIGHT HERE in the gesture call-stack.
-    _nuclearRecover();
-    // Hide the overlay. Use display:none so it definitely doesn't intercept
-    // anything else after this tap.
-    if (overlayEl) overlayEl.style.display = 'none';
-    // Remove the listeners so we don't fire on every subsequent tap.
-    _detachListeners();
+    // Industry-standard mobile web game pattern: on resume from background,
+    // just reload the page. MediaElementSource on iOS PWA is fundamentally
+    // unrecoverable after the audio session is released (Howler.js #1194,
+    // WebKit Bug 276687). Roblox, Genshin web wrappers, and other shipped
+    // HTML5 games all reload on background-return rather than attempt
+    // recovery. Deterministic fresh state beats a flaky resume path.
+    // The overlay stays visible during the reload so the user sees an
+    // explicit "reloading" beat rather than a stale game frame.
+    try { window.location.reload(); } catch (_) {
+      // Reload threw (shouldn't happen) — fall back to the in-place recovery
+      // so we at least try something. Hide the overlay since reload failed.
+      _nuclearRecover();
+      if (overlayEl) overlayEl.style.display = 'none';
+      _detachListeners();
+    }
   }
 
   function _attachListeners() {

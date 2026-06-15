@@ -30747,18 +30747,10 @@ document.addEventListener('visibilitychange', () => {
     // before anything else paints. iOS otherwise flashes a stale game frame.
     const _hiddenMs = _jhHiddenAt ? (((typeof performance !== 'undefined') ? performance.now() : Date.now()) - _jhHiddenAt) : 0;
     _jhHiddenAt = 0;
-    // Very-long-background escape hatch: after ~10 minutes hidden, recovery
-    // of AudioContext + WebGL program cache is unreliable across iOS versions
-    // and we've seen audio get into states the suspend/resume cycle can't
-    // unstick. Big mobile web games (Roblox/Genshin web wrappers) handle this
-    // by force-reloading the page on return — deterministic fresh state
-    // beats a flaky resume. Done BEFORE any other resume work to avoid
-    // running recovery logic against a context we're about to throw away.
-    const _HARD_RELOAD_MS = 10 * 60 * 1000;
-    if (_hiddenMs > _HARD_RELOAD_MS) {
-      try { window.location.reload(); } catch (_) {}
-      return;
-    }
+    // Note: hard-reload-on-resume is now handled by _jhResumeGate on overlay
+    // tap (industry-standard mobile web game pattern). The 10-minute
+    // visibility-driven hard reload that lived here was redundant once the
+    // overlay path started reloading on every tap.
     const _needsReprewarm = (_hiddenMs > _JH_LONG_HIDE_MS && typeof window._reprewarmShaders === 'function');
     if (_needsReprewarm) {
       try { window._jhResumeOverlay && window._jhResumeOverlay.show('RESUMING…'); } catch(_) {}
@@ -37524,7 +37516,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 92;
+const BUILD_VERSION = 93;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
@@ -38407,13 +38399,21 @@ window._jhResumeGate = (function _resumeGateFactory() {
       try { e.preventDefault(); } catch (_) {}
     }
     armed = false;
-    // Run recovery synchronously RIGHT HERE in the gesture call-stack.
-    _nuclearRecover();
-    // Hide the overlay. Use display:none so it definitely doesn't intercept
-    // anything else after this tap.
-    if (overlayEl) overlayEl.style.display = 'none';
-    // Remove the listeners so we don't fire on every subsequent tap.
-    _detachListeners();
+    // Industry-standard mobile web game pattern: on resume from background,
+    // just reload the page. MediaElementSource on iOS PWA is fundamentally
+    // unrecoverable after the audio session is released (Howler.js #1194,
+    // WebKit Bug 276687). Roblox, Genshin web wrappers, and other shipped
+    // HTML5 games all reload on background-return rather than attempt
+    // recovery. Deterministic fresh state beats a flaky resume path.
+    // The overlay stays visible during the reload so the user sees an
+    // explicit "reloading" beat rather than a stale game frame.
+    try { window.location.reload(); } catch (_) {
+      // Reload threw (shouldn't happen) — fall back to the in-place recovery
+      // so we at least try something. Hide the overlay since reload failed.
+      _nuclearRecover();
+      if (overlayEl) overlayEl.style.display = 'none';
+      _detachListeners();
+    }
   }
 
   function _attachListeners() {
