@@ -26450,6 +26450,10 @@ function showIntroText() {
     fadeOutIntroOverlay(overlay);
     state.introActive = false;
     beginThrusterSputter();
+    // Plasma-punch on liftoff — mirrors the tap-to-skip path at line ~3484.
+    // Was missing here, so letting the prologue auto-complete had no liftoff
+    // SFX. (engine-roar replaced with plasma-punch only per user request 2026-04-27)
+    playThrusterImpact(0.7);
   }, 18500));
 }
 
@@ -37516,7 +37520,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 93;
+const BUILD_VERSION = 94;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

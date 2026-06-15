@@ -3532,6 +3532,10 @@ function showIntroText() {
     fadeOutIntroOverlay(overlay);
     state.introActive = false;
     beginThrusterSputter();
+    // Plasma-punch on liftoff — mirrors the tap-to-skip path at line ~3484.
+    // Was missing here, so letting the prologue auto-complete had no liftoff
+    // SFX. (engine-roar replaced with plasma-punch only per user request 2026-04-27)
+    playThrusterImpact(0.7);
   }, 18500));
 }
 
