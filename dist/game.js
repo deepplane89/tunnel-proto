@@ -17181,7 +17181,7 @@ function spawnObstacles() {
         }
       } else if (roll < 0.75) {
         if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
-          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, false,
+          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, true,
             { coreRadius: 0.4, glowRadius: 0.8 });
         } else {
           const type = Math.floor(Math.random() * 3);
@@ -17196,7 +17196,7 @@ function spawnObstacles() {
         }
       } else {
         if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
-          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, false,
+          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, true,
             { coreRadius: 0.4, glowRadius: 0.8 });
         } else {
           const type = Math.floor(Math.random() * 3);
@@ -17216,7 +17216,7 @@ function spawnObstacles() {
     }
     if (_isFatConeBand) {
       if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
-        window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, false,
+        window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, true,
           { coreRadius: 0.4, glowRadius: 0.8 });
         return;
       }
@@ -17257,7 +17257,7 @@ function spawnObstacles() {
       }
     }
     if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
-      window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, false,
+      window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, true,
         { coreRadius: 0.4, glowRadius: 0.8 });
       return;
     }
@@ -37639,7 +37639,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 103;
+const BUILD_VERSION = 104;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
