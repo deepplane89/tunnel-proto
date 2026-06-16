@@ -374,6 +374,30 @@ function updateTransition(dt) {
 // ═══════════════════════════════════════════════════
 //  SPAWN LOGIC
 // ═══════════════════════════════════════════════════
+// BOLT_OBSTACLES — apply the same _LT tuner that real in-game lightning
+// (PRE_T4A canyon) uses, so bolts look identical: coreRadius 0.45, full
+// shake, fattened glow. Applied lazily on first spawn so _LT is initialized.
+let _boltLtTunerApplied = false;
+function _ensureBoltLtTuner() {
+  if (_boltLtTunerApplied) return;
+  if (!window._LT) return;
+  // Same numbers as _PRE_T4A_LT_TUNER (which is the in-game lightning setting).
+  Object.assign(window._LT, {
+    frequency: 0.3, leadFactor: 0.6, skyHeight: 55,
+    warningTime: 0.3, boltDuration: 0.5, lingerDuration: 4,
+    coreRadius: 0.45, glowRadius: 0.25,
+    segments: 10, jaggedness: 1.9,
+    hitboxScale: 1, warnRadius: 3.5,
+    shakeAmt: 0.18, shakeDuration: 0.35,
+    glowColor: 0x88c8ff, coreColor: 0xffffff,
+    flashColor: 0x99e8ff, warnColor: 0x44a0ff,
+    pattern: 'random', laneMin: -8, laneMax: 8,
+    sweepSpeed: 0.4, staggerGap: 0.6, salvoCount: 3, pinchSpread: 1,
+    count: 1, spawnZ: -83,
+  });
+  _boltLtTunerApplied = true;
+}
+
 // BOLT_OBSTACLES — borrow a bolt instance from the lightning system's pool
 // and reparent its boltGroup under the obstacle group. This way the bolt is
 // the REAL in-game lightning mesh, with the lightning system's own runtime
@@ -2155,6 +2179,7 @@ function spawnObstacles() {
         }
       } else if (roll < 0.75) {
         if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+          _ensureBoltLtTuner();
           window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6);
         } else {
           const type = Math.floor(Math.random() * 3);
@@ -2169,6 +2194,7 @@ function spawnObstacles() {
         }
       } else {
         if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+          _ensureBoltLtTuner();
           window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6);
         } else {
           const type = Math.floor(Math.random() * 3);
@@ -2188,6 +2214,7 @@ function spawnObstacles() {
     }
     if (_isFatConeBand) {
       if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+        _ensureBoltLtTuner();
         window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6);
         return;
       }
@@ -2228,6 +2255,7 @@ function spawnObstacles() {
       }
     }
     if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+      _ensureBoltLtTuner();
       window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6);
       return;
     }
