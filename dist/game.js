@@ -9886,9 +9886,9 @@ let _bankVelX = 0;               // smoothed velocity used for banking (decouple
 // Boot defaults match FEEL_PRESETS.DEFAULT juice=0.82 (organic-but-controlled).
 // Tuner panel's _applyJuice() can override live; these are what the game runs
 // with on a fresh boot when the dev tuner hasn't been opened.
-let _wobbleMaxAmp = 0.116;       // _macroLerp3(0.82, 0, 0.05, 0.15)
-let _wobbleDamping = 6.16;       // _macroLerp3(0.82, 20, 10, 4)
-let _overshootAmt  = 0.32;       // _macroLerp3(0.82, 0, 0, 0.5)
+let _wobbleMaxAmp = 0;           // 2026-06-15: zeroed — wobble disabled (was 0.116)
+let _wobbleDamping = 20;         // snap (was 6.16); irrelevant when amp=0 but kept consistent
+let _overshootAmt  = 0;          // 2026-06-15: zeroed — overshoot disabled (was 0.32)
 let _overshootDamp = 6;          // how fast overshoot damps out
 let _turbulence    = 0.0;        // micro-drift turbulence (off by default)
 let _wobbleSpeedMult = 0.0;      // speed wobble amplification (baked)
@@ -27570,7 +27570,9 @@ function update(dt) {
   if (isSteering && state.wobbleAmp > 0) state.wobbleAmp = 0;
 
   // Wobble kicks in at L2+ in campaign, or always in DR (uses deathRunSpeedTier instead of currentLevelIdx)
-  if (state.wasSteering && !isSteering && (state.isDeathRun || state.currentLevelIdx >= 1) && Math.abs(state.shipVelX) > 4) {
+  // 2026-06-15: hard-gate when _wobbleMaxAmp is zeroed — the equation below
+  // has a 0.02 baseline that produces visible wobble even when JUICE=0.
+  if (state.wasSteering && !isSteering && (state.isDeathRun || state.currentLevelIdx >= 1) && Math.abs(state.shipVelX) > 4 && _wobbleMaxAmp > 0.001) {
     // velRatio: 0 at threshold (4), 1 at absolute max (18) — fixed scale so it works at all levels
     const velRatio = (Math.abs(state.shipVelX) - 4) / 14;
     const clamped  = Math.max(0, Math.min(1, velRatio));
@@ -35688,12 +35690,13 @@ function _ringShowTuner() {
     // shimmy on the ship X-axis. Turbulence stays at 0 unless the dev tuner
     // explicitly sets it.
     function _applyJuice(m) {
-      _wobbleMaxAmp  = _macroLerp3(m, 0.0,  0.05, 0.15);
-      // Damping inverts with JUICE — high JUICE = low damping = wobble rings
-      // longer. At 20 the wobble dies in ~150ms (surgical); at 4 it rings
-      // for ~750ms (alive). 10 = baked legacy feel.
-      _wobbleDamping = _macroLerp3(m, 20,   10,   4);
-      _overshootAmt  = _macroLerp3(m, 0.0,  0.0,  0.5);
+      // 2026-06-15: wobble + overshoot HARD-DISABLED at the source. Ignore
+      // incoming JUICE value for these knobs; nothing should ever produce
+      // wobble or overshoot regardless of FLIGHT_MODEL preset, tier ramp,
+      // tuner slider, or anything else. Damping pinned to snap.
+      _wobbleMaxAmp  = 0;
+      _wobbleDamping = 20;
+      _overshootAmt  = 0;
       // Hard-clamp to fine-slider ranges.
       if (_wobbleMaxAmp  > 0.5) _wobbleMaxAmp  = 0.5;
       if (_wobbleDamping < 1)   _wobbleDamping = 1;
@@ -37592,7 +37595,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 99;
+const BUILD_VERSION = 100;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');

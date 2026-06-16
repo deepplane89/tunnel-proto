@@ -8462,9 +8462,9 @@ let _bankVelX = 0;               // smoothed velocity used for banking (decouple
 // Boot defaults match FEEL_PRESETS.DEFAULT juice=0.82 (organic-but-controlled).
 // Tuner panel's _applyJuice() can override live; these are what the game runs
 // with on a fresh boot when the dev tuner hasn't been opened.
-let _wobbleMaxAmp = 0.116;       // _macroLerp3(0.82, 0, 0.05, 0.15)
-let _wobbleDamping = 6.16;       // _macroLerp3(0.82, 20, 10, 4)
-let _overshootAmt  = 0.32;       // _macroLerp3(0.82, 0, 0, 0.5)
+let _wobbleMaxAmp = 0;           // 2026-06-15: zeroed — wobble disabled (was 0.116)
+let _wobbleDamping = 20;         // snap (was 6.16); irrelevant when amp=0 but kept consistent
+let _overshootAmt  = 0;          // 2026-06-15: zeroed — overshoot disabled (was 0.32)
 let _overshootDamp = 6;          // how fast overshoot damps out
 let _turbulence    = 0.0;        // micro-drift turbulence (off by default)
 let _wobbleSpeedMult = 0.0;      // speed wobble amplification (baked)

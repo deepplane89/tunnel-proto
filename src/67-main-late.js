@@ -4605,7 +4605,9 @@ function update(dt) {
   if (isSteering && state.wobbleAmp > 0) state.wobbleAmp = 0;
 
   // Wobble kicks in at L2+ in campaign, or always in DR (uses deathRunSpeedTier instead of currentLevelIdx)
-  if (state.wasSteering && !isSteering && (state.isDeathRun || state.currentLevelIdx >= 1) && Math.abs(state.shipVelX) > 4) {
+  // 2026-06-15: hard-gate when _wobbleMaxAmp is zeroed — the equation below
+  // has a 0.02 baseline that produces visible wobble even when JUICE=0.
+  if (state.wasSteering && !isSteering && (state.isDeathRun || state.currentLevelIdx >= 1) && Math.abs(state.shipVelX) > 4 && _wobbleMaxAmp > 0.001) {
     // velRatio: 0 at threshold (4), 1 at absolute max (18) — fixed scale so it works at all levels
     const velRatio = (Math.abs(state.shipVelX) - 4) / 14;
     const clamped  = Math.max(0, Math.min(1, velRatio));

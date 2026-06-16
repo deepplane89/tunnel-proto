@@ -885,12 +885,13 @@ function _ringShowTuner() {
     // shimmy on the ship X-axis. Turbulence stays at 0 unless the dev tuner
     // explicitly sets it.
     function _applyJuice(m) {
-      _wobbleMaxAmp  = _macroLerp3(m, 0.0,  0.05, 0.15);
-      // Damping inverts with JUICE — high JUICE = low damping = wobble rings
-      // longer. At 20 the wobble dies in ~150ms (surgical); at 4 it rings
-      // for ~750ms (alive). 10 = baked legacy feel.
-      _wobbleDamping = _macroLerp3(m, 20,   10,   4);
-      _overshootAmt  = _macroLerp3(m, 0.0,  0.0,  0.5);
+      // 2026-06-15: wobble + overshoot HARD-DISABLED at the source. Ignore
+      // incoming JUICE value for these knobs; nothing should ever produce
+      // wobble or overshoot regardless of FLIGHT_MODEL preset, tier ramp,
+      // tuner slider, or anything else. Damping pinned to snap.
+      _wobbleMaxAmp  = 0;
+      _wobbleDamping = 20;
+      _overshootAmt  = 0;
       // Hard-clamp to fine-slider ranges.
       if (_wobbleMaxAmp  > 0.5) _wobbleMaxAmp  = 0.5;
       if (_wobbleDamping < 1)   _wobbleDamping = 1;
