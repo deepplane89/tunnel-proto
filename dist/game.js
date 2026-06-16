@@ -15421,11 +15421,10 @@ const BOLT_WAVE_REST_MIN = 1500;     // ms — minimum rest between waves
 const BOLT_WAVE_REST_MAX = 2500;     // ms — maximum rest between waves
 let _nextBoltAt   = 0;               // slot time for next bolt
 let _lastReqAt    = 0;               // last time _spawnBoltStaggered was called
-// Lane jitter — mimics the real canyon lightning 'random' pattern, which
-// targets shipX + (rand-0.5)*3.0. No predictive lead, no full-lane spread.
-// The dodge fairness comes from the wave timing + Z spread, NOT from
-// trying to out-guess the player's lateral input.
-const BOLT_LANE_JITTER = 3.0;
+// Caller passes `laneX + jitter(0.6)` — that's the SAME laneX the random
+// fat cone gen uses (shipX + (lane - center)*LANE_WIDTH*spread). So bolts
+// inherit the cone layout: spread across ship-centered lane band per row,
+// not jittered around shipX. We just trust the caller X and use it as-is.
 function _spawnBoltStaggered(_callerX) {
   if (typeof window._spawnLightning !== 'function') return;
   // Re-assert flash/ring kill in case the pool grew after first apply.
@@ -15447,12 +15446,10 @@ function _spawnBoltStaggered(_callerX) {
   const zRoll = Math.random();
   const zT = zRoll < 0.5 ? zRoll * 2 * 0.3 : 0.7 + (zRoll - 0.5) * 2 * 0.3;
   const landZ = BOLT_Z_FAR + zT * (BOLT_Z_NEAR - BOLT_Z_FAR);
-  // Mimic real canyon lightning 'random' pattern exactly:
-  //   targetX = shipX + (rand-0.5) * 3.0
-  // No predictive lead. No full-lane spread. The bolt lands near where the
-  // ship IS at fire time. Dodge fairness comes from wave/Z timing.
-  const sx = (state && state.shipX) || 0;
-  const boltX = sx + (Math.random() - 0.5) * BOLT_LANE_JITTER;
+  // Use caller's laneX directly — caller is the cone-gen path picking
+  // lane indices the same way fat cones do. This gives the bolts the same
+  // lateral layout as random fat cone gen.
+  const boltX = _callerX;
   const delay = Math.max(0, slotTime - now);
   const radii = { coreRadius: BOLT_CORE_RADIUS, glowRadius: BOLT_GLOW_RADIUS };
   if (delay < 1) {
@@ -37741,7 +37738,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 111;
+const BUILD_VERSION = 112;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
