@@ -2155,8 +2155,7 @@ function spawnObstacles() {
         }
       } else if (roll < 0.75) {
         if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
-          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, true,
-            { coreRadius: 0.4, glowRadius: 0.8 });
+          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6);
         } else {
           const type = Math.floor(Math.random() * 3);
           const obs = getPooledObstacle(type);
@@ -2170,8 +2169,7 @@ function spawnObstacles() {
         }
       } else {
         if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
-          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, true,
-            { coreRadius: 0.4, glowRadius: 0.8 });
+          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6);
         } else {
           const type = Math.floor(Math.random() * 3);
           const obs = getPooledObstacle(type);
@@ -2190,8 +2188,7 @@ function spawnObstacles() {
     }
     if (_isFatConeBand) {
       if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
-        window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, true,
-          { coreRadius: 0.4, glowRadius: 0.8 });
+        window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6);
         return;
       }
       const type = Math.floor(Math.random() * 3);
@@ -2231,8 +2228,7 @@ function spawnObstacles() {
       }
     }
     if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
-      window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, undefined, true,
-        { coreRadius: 0.4, glowRadius: 0.8 });
+      window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6);
       return;
     }
     const type  = Math.floor(Math.random() * 3);
