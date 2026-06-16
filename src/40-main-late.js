@@ -377,23 +377,33 @@ function updateTransition(dt) {
 // BOLT_OBSTACLES — apply the same _LT tuner that real in-game lightning
 // (PRE_T4A canyon) uses, so bolts look identical: coreRadius 0.45, full
 // shake, fattened glow. Applied lazily on first spawn so _LT is initialized.
-// BOLT_OBSTACLES — staggered spawn helper. Each bolt is placed at the next
-// available slot — NEVER two on the same frame. Slots are spaced by a
-// random gap (BOLT_MIN_GAP..BOLT_MAX_GAP ms), so bolts arrive as a real
-// cascade. landZ is randomized for depth variation.
+// BOLT_OBSTACLES — wave-based bolt scheduler.
+//   - Within a wave: rapid-fire (BOLT_MIN_GAP..BOLT_MAX_GAP ms) so it reads
+//     as a lightning storm hitting all at once.
+//   - Between waves: a real BREAK (BOLT_WAVE_REST_MIN..MAX ms) of silence
+//     so the player can fly through clean air before the next storm hits.
+//   - Wave boundary is detected by idle time: if no spawn requested in
+//     BOLT_WAVE_IDLE_MS, the next request starts a new wave (rest gap inserted).
 const BOLT_Z_NEAR = -90;
 const BOLT_Z_FAR  = -200;
-const BOLT_MIN_GAP = 90;     // ms — minimum spacing between two bolts
-const BOLT_MAX_GAP = 220;    // ms — maximum spacing
-const BOLT_QUEUE_HORIZON = 2200; // ms — if next slot is further than this, snap back to now+min
-let _nextBoltAt = 0;         // monotonically increasing slot time (ms since epoch)
+const BOLT_MIN_GAP = 40;             // ms — within-wave min spacing (rapid)
+const BOLT_MAX_GAP = 90;             // ms — within-wave max spacing
+const BOLT_WAVE_IDLE_MS = 250;       // ms idle → caller's row has ended
+const BOLT_WAVE_REST_MIN = 1500;     // ms — minimum rest between waves
+const BOLT_WAVE_REST_MAX = 2500;     // ms — maximum rest between waves
+let _nextBoltAt   = 0;               // slot time for next bolt
+let _lastReqAt    = 0;               // last time _spawnBoltStaggered was called
 function _spawnBoltStaggered(x) {
   if (typeof window._spawnLightning !== 'function') return;
   const now = performance.now();
-  // If the queue has fallen behind (idle period), reset to now.
-  // If it's drifted too far ahead (huge backlog), cap so bolts still arrive within the wave.
-  if (_nextBoltAt < now) _nextBoltAt = now;
-  else if (_nextBoltAt - now > BOLT_QUEUE_HORIZON) _nextBoltAt = now + BOLT_MIN_GAP;
+  const sinceLastReq = now - _lastReqAt;
+  _lastReqAt = now;
+
+  // New wave? (Either first ever call, or caller has been idle for a while.)
+  if (_nextBoltAt < now || sinceLastReq > BOLT_WAVE_IDLE_MS) {
+    const rest = BOLT_WAVE_REST_MIN + Math.random() * (BOLT_WAVE_REST_MAX - BOLT_WAVE_REST_MIN);
+    _nextBoltAt = now + rest;
+  }
   const slotTime = _nextBoltAt;
   const gap = BOLT_MIN_GAP + Math.random() * (BOLT_MAX_GAP - BOLT_MIN_GAP);
   _nextBoltAt = slotTime + gap;
