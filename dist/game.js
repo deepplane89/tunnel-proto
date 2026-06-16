@@ -15400,9 +15400,48 @@ function updateTransition(dt) {
 // ═══════════════════════════════════════════════════
 //  SPAWN LOGIC
 // ═══════════════════════════════════════════════════
+// BOLT_OBSTACLES — build a pair of bolt meshes (core + glow) sized + colored
+// IDENTICALLY to the real in-game lightning bolt. Built lazily at first
+// activation of each obstacle slot (because _ltBoltGeo lives in 72-main-late-mid.js
+// which loads after the obstacle pool is constructed). Cached on userData so
+// subsequent activations just toggle visibility.
+function _ensureBoltMeshes(o) {
+  if (o.userData._boltBuilt) return;
+  if (typeof window._ltBoltGeo !== 'function' || !window._LT_PARAMS) return;
+  const P = window._LT_PARAMS;
+  // Geometry: same params as the real bolt. topY = skyHeight (55) so it spans
+  // the full vertical range, landX = 0 (centered on group's X), segs / jagg /
+  // radii all match _LT defaults exactly. CatmullRom + TubeGeometry under the
+  // hood — same look as the lightning system's pool slot.
+  const coreGeo = window._ltBoltGeo(P.skyHeight, 0, P.segments, P.jaggedness,       P.coreRadius);
+  const glowGeo = window._ltBoltGeo(P.skyHeight, 0, P.segments, P.jaggedness * 1.4, P.glowRadius);
+  const coreMat = new THREE.MeshBasicMaterial({ color: P.coreColor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  const glowMat = new THREE.MeshBasicMaterial({ color: P.glowColor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+  const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+  coreMesh.frustumCulled = false;
+  glowMesh.frustumCulled = false;
+  // Hide the cone body mesh, attach the bolt meshes. The obstacle group itself
+  // continues to be moved by the cone scroll loop — bolt meshes ride along.
+  o.children.forEach(c => { c.visible = false; });
+  o.add(coreMesh);
+  o.add(glowMesh);
+  // Override the cached _meshes list so the fade-in loop in getPooledObstacle
+  // (which iterates _meshes and writes opacity) targets the bolt mats instead
+  // of the now-hidden cone shader. Set baseOpacity contract.
+  coreMat.userData.baseOpacity = 1.0;
+  glowMat.userData.baseOpacity = 0.5;
+  o.userData._meshes = [coreMesh, glowMesh];
+  o.userData._boltCoreMat = coreMat;
+  o.userData._boltGlowMat = glowMat;
+  o.userData._boltBuilt   = true;
+}
+
 function getPooledObstacle(type) {
   for (const o of obstaclePool) {
     if (!o.userData.active) {
+      // Lazy-build bolt meshes on first use if the experiment is on.
+      if (window._useBoltObstacles) _ensureBoltMeshes(o);
       o.userData.active = true;
       o.userData.type   = type;
       o.visible         = true;
@@ -17180,15 +17219,6 @@ function spawnObstacles() {
         _awActive.push(wall);
         return;
       }
-    }
-    // BOLT_OBSTACLES experiment — reuse the existing in-game lightning mesh
-    // (real bolt: jagged TubeGeometry, core + glow, additive electric).
-    // Same lane pick, same SPAWN_Z, same scroll velocity. We hand the lightning
-    // system the chosen laneX with a tiny jitter to match the cone path, and
-    // it spawns its own bolt that scrolls toward the ship just like a cone.
-    if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
-      window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6);
-      return;
     }
     const type  = Math.floor(Math.random() * 3);
     const obs   = getPooledObstacle(type);
@@ -33930,6 +33960,19 @@ window._jlDebug = {
   }
   // Expose so global prewarm can call it once at startup
   window._ltInitPool = _ltInitPool;
+  // Expose bolt geometry builder + colors so the obstacle factory can build a
+  // visually-identical bolt mesh per obstacle slot (lazy-built at first
+  // activation, since this file loads AFTER the obstacle pool is constructed).
+  window._ltBoltGeo = _ltBoltGeo;
+  window._LT_PARAMS = {
+    skyHeight: _LT.skyHeight,
+    segments:  _LT.segments,
+    jaggedness:_LT.jaggedness,
+    coreRadius:_LT.coreRadius,
+    glowRadius:_LT.glowRadius,
+    coreColor: _LT.coreColor,
+    glowColor: _LT.glowColor,
+  };
   // Live-flip handler called by _setObstacleReflect in 20-main-early.js.
   // No-op until the pool has been built (first strike or boot prewarm).
   window._setLightningReflect = function(on) {
@@ -37549,7 +37592,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 98;
+const BUILD_VERSION = 99;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
