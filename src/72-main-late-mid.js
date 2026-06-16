@@ -3286,6 +3286,11 @@ window._jlDebug = {
   }
   // Expose so global prewarm can call it once at startup
   window._ltInitPool = _ltInitPool;
+  // Expose bolt geometry builder so obstacle factory can reuse it for the
+  // BOLT_OBSTACLES experiment (cones → bolts swap). Pure geometry; no pool
+  // side-effects. See createObstacleMesh() in 20-main-early.js.
+  window._ltBoltGeo = _ltBoltGeo;
+  window._LT_COLORS = { glow: _LT.glowColor, core: _LT.coreColor };
   // Live-flip handler called by _setObstacleReflect in 20-main-early.js.
   // No-op until the pool has been built (first strike or boot prewarm).
   window._setLightningReflect = function(on) {
