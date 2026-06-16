@@ -2155,6 +2155,15 @@ function spawnObstacles() {
         return;
       }
     }
+    // BOLT_OBSTACLES experiment — reuse the existing in-game lightning mesh
+    // (real bolt: jagged TubeGeometry, core + glow, additive electric).
+    // Same lane pick, same SPAWN_Z, same scroll velocity. We hand the lightning
+    // system the chosen laneX with a tiny jitter to match the cone path, and
+    // it spawns its own bolt that scrolls toward the ship just like a cone.
+    if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+      window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6);
+      return;
+    }
     const type  = Math.floor(Math.random() * 3);
     const obs   = getPooledObstacle(type);
     if (!obs) return;

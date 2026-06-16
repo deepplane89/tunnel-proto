@@ -1646,9 +1646,9 @@ const GRID_TILES         = 40;
 const SPAWN_Z            = -160;  // spawn further out so cones fade in from deep horizon
 const DESPAWN_Z          = 6;
 const OBSTACLE_POOL_SIZE = 500;  // measured peak 318 active in god-mode; was 3000 (10x oversized)
-// BOLT_OBSTACLES experiment — swap cone mesh for jagged lightning bolt.
-// Must be set BEFORE the obstacle pool is built (line ~9525). Spawn algorithm,
-// lane picks, ramp logic, scroll velocity, collision all unchanged.
+// BOLT_OBSTACLES experiment — random cone gen calls _spawnLightning(x) at the
+// chosen lane X instead of placing a cone. Uses the real in-game lightning
+// mesh (jagged tube core + glow, additive electric). Set false to revert.
 window._useBoltObstacles = true;
 const POWERUP_POOL_SIZE  = 10;
 const STAR_COUNT         = 1800;
@@ -10887,59 +10887,8 @@ function createObstacleMesh(type) {
   // caused flicker; depthWrite itself was never tested in isolation.
   // If this re-introduces obstacle flicker during fade-in, revert.
   bodyMat.depthWrite = true;
-
-  // ── BOLT_OBSTACLES experiment ──────────────────────────────────────────
-  // When window._useBoltObstacles is truthy, the obstacle visual is a jagged
-  // lightning-bolt TubeGeometry instead of the hex cone. Spawn logic, lane
-  // assignment, scroll velocity, and collision are unchanged — collision
-  // uses group.position + radius math, not the mesh shape.
-  //
-  // Inlined bolt builder (not window._ltBoltGeo — that lives in
-  // 72-main-late-mid.js which loads AFTER this file's pool construction).
-  // Same midpoint-displacement algorithm as the lightning system.
-  let bodyMesh;
-  if (window._useBoltObstacles) {
-    // Build jagged 2D points (X,Y) top-down: top at (0, totalH), bottom at
-    // (0, 0.5). Midpoint-displace iteratively for jaggedness.
-    const _segs = 32;
-    const _jagg = 1.6;
-    const _radius = 0.55;
-    const _xs = [0, 0];
-    const _ys = [totalH, 0.5];
-    const _iters = Math.max(1, Math.round(Math.log2(Math.max(4, _segs))));
-    for (let d = 0; d < _iters; d++) {
-      const jaggScale = _jagg * (1 - d * 0.2);
-      const newXs = [], newYs = [];
-      for (let i = 0; i < _xs.length - 1; i++) {
-        newXs.push(_xs[i]); newYs.push(_ys[i]);
-        const mx = (_xs[i] + _xs[i+1]) * 0.5 + (Math.random() - 0.5) * jaggScale;
-        const my = (_ys[i] + _ys[i+1]) * 0.5;
-        newXs.push(mx); newYs.push(my);
-      }
-      newXs.push(_xs[_xs.length-1]); newYs.push(_ys[_ys.length-1]);
-      _xs.length = 0; _ys.length = 0;
-      for (let k = 0; k < newXs.length; k++) { _xs.push(newXs[k]); _ys.push(newYs[k]); }
-    }
-    const _v3pts = [];
-    for (let i = 0; i < _xs.length; i++) _v3pts.push(new THREE.Vector3(_xs[i], _ys[i], 0));
-    const _curve = new THREE.CatmullRomCurve3(_v3pts);
-    const _boltGeo = new THREE.TubeGeometry(_curve, Math.max(4, _v3pts.length), _radius, 5, false);
-    // Additive electric-glow material per cone color so types stay readable.
-    const _boltMat = new THREE.MeshBasicMaterial({
-      color:        neonCol,
-      transparent:  true,
-      opacity:      0,                   // fade-in path sets to baseOpacity
-      depthWrite:   false,
-      blending:     THREE.AdditiveBlending,
-    });
-    _boltMat.userData.baseOpacity = 1.0;
-    _boltMat.userData.baseColor   = CONE_COLORS[type];
-    bodyMesh = new THREE.Mesh(_boltGeo, _boltMat);
-    bodyMesh.position.y = -SINK;  // sink bottom below waterline like the cone
-  } else {
-    bodyMesh = new THREE.Mesh(new THREE.ConeGeometry(1.6, totalH, SEGS), bodyMat);
-    bodyMesh.position.y = totalH / 2 - SINK;
-  }
+  const bodyMesh = new THREE.Mesh(new THREE.ConeGeometry(1.6, totalH, SEGS), bodyMat);
+  bodyMesh.position.y = totalH / 2 - SINK;
   group.add(bodyMesh);
 
   group.userData.type   = type;
@@ -17231,6 +17180,15 @@ function spawnObstacles() {
         _awActive.push(wall);
         return;
       }
+    }
+    // BOLT_OBSTACLES experiment — reuse the existing in-game lightning mesh
+    // (real bolt: jagged TubeGeometry, core + glow, additive electric).
+    // Same lane pick, same SPAWN_Z, same scroll velocity. We hand the lightning
+    // system the chosen laneX with a tiny jitter to match the cone path, and
+    // it spawns its own bolt that scrolls toward the ship just like a cone.
+    if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+      window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6);
+      return;
     }
     const type  = Math.floor(Math.random() * 3);
     const obs   = getPooledObstacle(type);
@@ -33972,11 +33930,6 @@ window._jlDebug = {
   }
   // Expose so global prewarm can call it once at startup
   window._ltInitPool = _ltInitPool;
-  // Expose bolt geometry builder so obstacle factory can reuse it for the
-  // BOLT_OBSTACLES experiment (cones → bolts swap). Pure geometry; no pool
-  // side-effects. See createObstacleMesh() in 20-main-early.js.
-  window._ltBoltGeo = _ltBoltGeo;
-  window._LT_COLORS = { glow: _LT.glowColor, core: _LT.coreColor };
   // Live-flip handler called by _setObstacleReflect in 20-main-early.js.
   // No-op until the pool has been built (first strike or boot prewarm).
   window._setLightningReflect = function(on) {
@@ -37596,7 +37549,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 97;
+const BUILD_VERSION = 98;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
