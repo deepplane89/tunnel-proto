@@ -3199,7 +3199,7 @@ window._jlDebug = {
   // _ltKill hides it and marks it free. Tube geometries are still rebuilt by
   // _ltRejag (preserves visual flicker — that's the whole point of the rejag).
   // Sized for SALVO=9 + PINCH=10 + auto + lateral + linger overlap with margin.
-  const _LT_POOL_SIZE = 32;
+  const _LT_POOL_SIZE = 250;  // bumped from 32 to cover bolt-as-obstacle density
   const _ltPool = [];
   let _ltPoolReady = false;
   // Exposed on window so the global prewarm pass (end of file) can force-init
@@ -3286,19 +3286,18 @@ window._jlDebug = {
   }
   // Expose so global prewarm can call it once at startup
   window._ltInitPool = _ltInitPool;
-  // Expose bolt geometry builder + colors so the obstacle factory can build a
-  // visually-identical bolt mesh per obstacle slot (lazy-built at first
-  // activation, since this file loads AFTER the obstacle pool is constructed).
-  window._ltBoltGeo = _ltBoltGeo;
-  window._LT_PARAMS = {
-    skyHeight: _LT.skyHeight,
-    segments:  _LT.segments,
-    jaggedness:_LT.jaggedness,
-    coreRadius:_LT.coreRadius,
-    glowRadius:_LT.glowRadius,
-    coreColor: _LT.coreColor,
-    glowColor: _LT.glowColor,
+  // Expose pool + helpers so the obstacle layer can borrow a bolt slot,
+  // reparent its boltGroup to an obstacle group, and return it on despawn.
+  window._ltPool       = _ltPool;
+  window._ltAcquire    = () => {
+    if (!_ltPoolReady) _ltInitPool();
+    for (let i = 0; i < _ltPool.length; i++) {
+      if (!_ltPool[i]._active) { _ltPool[i]._active = true; return _ltPool[i]; }
+    }
+    return null;
   };
+  window._ltRejagInst  = (inst) => _ltRejag(inst);
+  window._LT_REF       = _LT;  // read-only access to skyHeight, segments, etc.
   // Live-flip handler called by _setObstacleReflect in 20-main-early.js.
   // No-op until the pool has been built (first strike or boot prewarm).
   window._setLightningReflect = function(on) {

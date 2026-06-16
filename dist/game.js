@@ -15400,48 +15400,68 @@ function updateTransition(dt) {
 // ═══════════════════════════════════════════════════
 //  SPAWN LOGIC
 // ═══════════════════════════════════════════════════
-// BOLT_OBSTACLES — build a pair of bolt meshes (core + glow) sized + colored
-// IDENTICALLY to the real in-game lightning bolt. Built lazily at first
-// activation of each obstacle slot (because _ltBoltGeo lives in 72-main-late-mid.js
-// which loads after the obstacle pool is constructed). Cached on userData so
-// subsequent activations just toggle visibility.
-function _ensureBoltMeshes(o) {
-  if (o.userData._boltBuilt) return;
-  if (typeof window._ltBoltGeo !== 'function' || !window._LT_PARAMS) return;
-  const P = window._LT_PARAMS;
-  // Geometry: same params as the real bolt. topY = skyHeight (55) so it spans
-  // the full vertical range, landX = 0 (centered on group's X), segs / jagg /
-  // radii all match _LT defaults exactly. CatmullRom + TubeGeometry under the
-  // hood — same look as the lightning system's pool slot.
-  const coreGeo = window._ltBoltGeo(P.skyHeight, 0, P.segments, P.jaggedness,       P.coreRadius);
-  const glowGeo = window._ltBoltGeo(P.skyHeight, 0, P.segments, P.jaggedness * 1.4, P.glowRadius);
-  const coreMat = new THREE.MeshBasicMaterial({ color: P.coreColor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
-  const glowMat = new THREE.MeshBasicMaterial({ color: P.glowColor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
-  const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-  const glowMesh = new THREE.Mesh(glowGeo, glowMat);
-  coreMesh.frustumCulled = false;
-  glowMesh.frustumCulled = false;
-  // Hide the cone body mesh, attach the bolt meshes. The obstacle group itself
-  // continues to be moved by the cone scroll loop — bolt meshes ride along.
-  o.children.forEach(c => { c.visible = false; });
-  o.add(coreMesh);
-  o.add(glowMesh);
-  // Override the cached _meshes list so the fade-in loop in getPooledObstacle
-  // (which iterates _meshes and writes opacity) targets the bolt mats instead
-  // of the now-hidden cone shader. Set baseOpacity contract.
-  coreMat.userData.baseOpacity = 1.0;
-  glowMat.userData.baseOpacity = 0.5;
-  o.userData._meshes = [coreMesh, glowMesh];
-  o.userData._boltCoreMat = coreMat;
-  o.userData._boltGlowMat = glowMat;
-  o.userData._boltBuilt   = true;
+// BOLT_OBSTACLES — borrow a bolt instance from the lightning system's pool
+// and reparent its boltGroup under the obstacle group. This way the bolt is
+// the REAL in-game lightning mesh, with the lightning system's own runtime
+// (rejag flicker, additive glow). Released back to the pool on despawn.
+function _attachBolt(o) {
+  if (o.userData._boltInst) return;  // already has one
+  if (typeof window._ltAcquire !== 'function') return;
+  const inst = window._ltAcquire();
+  if (!inst) return;  // pool exhausted — obstacle silently has no visual
+  // Reparent the bolt group from scene to the obstacle group. Local pos 0:
+  // the bolt now rides at the obstacle's world position, scrolled by the
+  // cone update loop.
+  if (inst.boltGroup.parent) inst.boltGroup.parent.remove(inst.boltGroup);
+  inst.boltGroup.position.set(0, 0, 0);
+  o.add(inst.boltGroup);
+  inst.boltGroup.visible = true;
+  // Make sure the bolt is in 'strike' phase so the lightning system doesn't
+  // try to advance it through warn/strike/linger lifecycle. We want it to
+  // just SIT (rejag tick runs from our own obstacle update loop).
+  inst.phase = 'attached';  // unknown phase — lightning system's switch will fall through
+  inst.coreMat.opacity = 1.0;
+  inst.glowMat.opacity = 0.5;
+  // Hide warn/flash/ring — we just want the bolt body.
+  inst.warnMesh.visible = false;
+  inst.flash.visible    = false;
+  inst.ring.visible     = false;
+  // Hide the cone body so only the bolt shows.
+  o.userData._coneChildrenVis = [];
+  for (let i = 0; i < o.children.length; i++) {
+    const c = o.children[i];
+    if (c === inst.boltGroup) continue;
+    o.userData._coneChildrenVis.push({ child: c, vis: c.visible });
+    c.visible = false;
+  }
+  o.userData._boltInst = inst;
 }
+
+function _releaseBolt(o) {
+  const inst = o.userData._boltInst;
+  if (!inst) return;
+  // Detach from obstacle group, return to scene root, hide, release slot.
+  if (inst.boltGroup.parent === o) o.remove(inst.boltGroup);
+  if (typeof scene !== 'undefined') scene.add(inst.boltGroup);
+  inst.boltGroup.visible = false;
+  inst._active = false;
+  o.userData._boltInst = null;
+  // Restore cone children visibility (in case obstacle gets reused without bolt).
+  if (o.userData._coneChildrenVis) {
+    for (let i = 0; i < o.userData._coneChildrenVis.length; i++) {
+      const r = o.userData._coneChildrenVis[i];
+      r.child.visible = r.vis;
+    }
+    o.userData._coneChildrenVis = null;
+  }
+}
+window._releaseBolt = _releaseBolt;
 
 function getPooledObstacle(type) {
   for (const o of obstaclePool) {
     if (!o.userData.active) {
-      // Lazy-build bolt meshes on first use if the experiment is on.
-      if (window._useBoltObstacles) _ensureBoltMeshes(o);
+      // Borrow a real bolt instance from the lightning pool on activation.
+      if (window._useBoltObstacles) _attachBolt(o);
       o.userData.active = true;
       o.userData.type   = type;
       o.visible         = true;
@@ -27297,6 +27317,10 @@ function resetObsColor(obs) {
 function returnObstacleToPool(obs) {
   obs.userData.isCorridor = false;
   // echo system removed
+  // BOLT_OBSTACLES: return borrowed bolt instance to the lightning pool.
+  if (window._useBoltObstacles && typeof window._releaseBolt === 'function') {
+    window._releaseBolt(obs);
+  }
   obs.userData.active = false;
   obs.visible = false;
   if (obs.userData.slalomScaled) {
@@ -29072,9 +29096,20 @@ function update(dt) {
   _ringTickRipples(dt);
 
   // ── Move obstacles
+  // BOLT_OBSTACLES: rejag tick — every frame, throttled per-obstacle, rebuild
+  // the jagged tube geometry so the bolt flickers like the real lightning.
+  // Same throttle as the lightning system's strike/linger rejag (~every 2nd-3rd frame).
+  const _rejagBolts = window._useBoltObstacles && typeof window._ltRejagInst === 'function';
+  const _rejagFrame = (state._frameCount = (state._frameCount || 0) + 1);
   for (let i = activeObstacles.length - 1; i >= 0; i--) {
     const obs = activeObstacles[i];
     obs.position.z += effectiveSpeed * dt;
+    if (_rejagBolts && obs.userData._boltInst && ((_rejagFrame + i) % 2 === 0)) {
+      // landX must be 0 in local space — bolt is centered on the obstacle group.
+      const inst = obs.userData._boltInst;
+      inst.landX = 0;
+      window._ltRejagInst(inst);
+    }
 
     // Smooth fade-in from horizon: invisible at spawn, fully opaque by z=-80
     const FADE_START_Z = SPAWN_Z;       // -160: totally transparent at birth
@@ -33875,7 +33910,7 @@ window._jlDebug = {
   // _ltKill hides it and marks it free. Tube geometries are still rebuilt by
   // _ltRejag (preserves visual flicker — that's the whole point of the rejag).
   // Sized for SALVO=9 + PINCH=10 + auto + lateral + linger overlap with margin.
-  const _LT_POOL_SIZE = 32;
+  const _LT_POOL_SIZE = 250;  // bumped from 32 to cover bolt-as-obstacle density
   const _ltPool = [];
   let _ltPoolReady = false;
   // Exposed on window so the global prewarm pass (end of file) can force-init
@@ -33962,19 +33997,18 @@ window._jlDebug = {
   }
   // Expose so global prewarm can call it once at startup
   window._ltInitPool = _ltInitPool;
-  // Expose bolt geometry builder + colors so the obstacle factory can build a
-  // visually-identical bolt mesh per obstacle slot (lazy-built at first
-  // activation, since this file loads AFTER the obstacle pool is constructed).
-  window._ltBoltGeo = _ltBoltGeo;
-  window._LT_PARAMS = {
-    skyHeight: _LT.skyHeight,
-    segments:  _LT.segments,
-    jaggedness:_LT.jaggedness,
-    coreRadius:_LT.coreRadius,
-    glowRadius:_LT.glowRadius,
-    coreColor: _LT.coreColor,
-    glowColor: _LT.glowColor,
+  // Expose pool + helpers so the obstacle layer can borrow a bolt slot,
+  // reparent its boltGroup to an obstacle group, and return it on despawn.
+  window._ltPool       = _ltPool;
+  window._ltAcquire    = () => {
+    if (!_ltPoolReady) _ltInitPool();
+    for (let i = 0; i < _ltPool.length; i++) {
+      if (!_ltPool[i]._active) { _ltPool[i]._active = true; return _ltPool[i]; }
+    }
+    return null;
   };
+  window._ltRejagInst  = (inst) => _ltRejag(inst);
+  window._LT_REF       = _LT;  // read-only access to skyHeight, segments, etc.
   // Live-flip handler called by _setObstacleReflect in 20-main-early.js.
   // No-op until the pool has been built (first strike or boot prewarm).
   window._setLightningReflect = function(on) {
@@ -37595,7 +37629,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 100;
+const BUILD_VERSION = 101;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
