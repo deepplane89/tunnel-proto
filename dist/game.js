@@ -15410,17 +15410,23 @@ function updateTransition(dt) {
 //     so the player can fly through clean air before the next storm hits.
 //   - Wave boundary is detected by idle time: if no spawn requested in
 //     BOLT_WAVE_IDLE_MS, the next request starts a new wave (rest gap inserted).
-const BOLT_Z_NEAR = -70;             // closer — slams in fast
-const BOLT_Z_FAR  = -260;            // deeper — long travel, arrives later
-const BOLT_MIN_GAP = 40;             // ms — within-wave min spacing (rapid)
-const BOLT_MAX_GAP = 90;             // ms — within-wave max spacing
-const BOLT_CORE_RADIUS = 0.75;       // fatter than PRE_T4A's 0.45
-const BOLT_GLOW_RADIUS = 0.45;       // fatter glow
-const BOLT_WAVE_IDLE_MS = 250;       // ms idle → caller's row has ended
+const BOLT_Z_NEAR = -70;             // closer — BIG impact, slower follow-up
+const BOLT_Z_FAR  = -260;            // deeper — smaller, faster follow-up ok
+const BOLT_GAP_NEAR = 380;           // ms — gap AFTER a near-Z bolt (feel the hit)
+const BOLT_GAP_FAR  = 160;           // ms — gap AFTER a far-Z bolt (lighter, quicker)
+const BOLT_CORE_RADIUS_NEAR = 0.95;  // near bolts are FAT — oomph
+const BOLT_CORE_RADIUS_FAR  = 0.55;  // far bolts are slimmer
+const BOLT_GLOW_RADIUS_NEAR = 0.55;
+const BOLT_GLOW_RADIUS_FAR  = 0.32;
+const BOLT_WAVE_IDLE_MS = 350;       // ms idle → caller's row has ended
 const BOLT_WAVE_REST_MIN = 1500;     // ms — minimum rest between waves
 const BOLT_WAVE_REST_MAX = 2500;     // ms — maximum rest between waves
+const BOLT_MIN_X_SEP = 6.0;          // units — reject same-column re-strikes within wave
+const BOLT_X_HISTORY = 3;            // remember last N X positions in wave
 let _nextBoltAt   = 0;               // slot time for next bolt
 let _lastReqAt    = 0;               // last time _spawnBoltStaggered was called
+let _waveXHist    = [];              // recent X positions in current wave
+let _waveStartedAt = 0;              // when current wave began
 // Caller passes `laneX + jitter(0.6)` — that's the SAME laneX the random
 // fat cone gen uses (shipX + (lane - center)*LANE_WIDTH*spread). So bolts
 // inherit the cone layout: spread across ship-centered lane band per row,
@@ -15434,24 +15440,43 @@ function _spawnBoltStaggered(_callerX) {
   _lastReqAt = now;
 
   // New wave? (Either first ever call, or caller has been idle for a while.)
-  if (_nextBoltAt < now || sinceLastReq > BOLT_WAVE_IDLE_MS) {
+  const isNewWave = _nextBoltAt < now || sinceLastReq > BOLT_WAVE_IDLE_MS;
+  if (isNewWave) {
     const rest = BOLT_WAVE_REST_MIN + Math.random() * (BOLT_WAVE_REST_MAX - BOLT_WAVE_REST_MIN);
     _nextBoltAt = now + rest;
+    _waveXHist.length = 0;
+    _waveStartedAt = _nextBoltAt;
   }
   const slotTime = _nextBoltAt;
-  const gap = BOLT_MIN_GAP + Math.random() * (BOLT_MAX_GAP - BOLT_MIN_GAP);
-  _nextBoltAt = slotTime + gap;
-  // Skewed Z: bias toward extremes so some bolts arrive near-instant, others
-  // are slow planters — creates natural arrival-time stagger inside the wave.
+  // Z is biased to extremes — some bolts slam in close, others plant far.
   const zRoll = Math.random();
   const zT = zRoll < 0.5 ? zRoll * 2 * 0.3 : 0.7 + (zRoll - 0.5) * 2 * 0.3;
   const landZ = BOLT_Z_FAR + zT * (BOLT_Z_NEAR - BOLT_Z_FAR);
-  // Use caller's laneX directly — caller is the cone-gen path picking
-  // lane indices the same way fat cones do. This gives the bolts the same
-  // lateral layout as random fat cone gen.
-  const boltX = _callerX;
+  // Normalize Z to [0..1] where 0=far, 1=near. Drives radius + post-gap.
+  const zNorm = (landZ - BOLT_Z_FAR) / (BOLT_Z_NEAR - BOLT_Z_FAR);
+  // Gap AFTER this bolt scales with Z: near-Z = long gap (oomph), far-Z = short.
+  const gap = BOLT_GAP_FAR + zNorm * (BOLT_GAP_NEAR - BOLT_GAP_FAR);
+  _nextBoltAt = slotTime + gap;
+  // Lateral de-stack: if proposed X is too close to a recent X in this wave,
+  // nudge it sideways so we don't pile bolts in the same column.
+  let boltX = _callerX;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let collision = false;
+    for (let i = 0; i < _waveXHist.length; i++) {
+      if (Math.abs(boltX - _waveXHist[i]) < BOLT_MIN_X_SEP) { collision = true; break; }
+    }
+    if (!collision) break;
+    // Nudge: flip + add lateral spread (signed) outside the conflict zone
+    boltX = _callerX + (Math.random() < 0.5 ? -1 : 1) * (BOLT_MIN_X_SEP + Math.random() * 4);
+  }
+  _waveXHist.push(boltX);
+  if (_waveXHist.length > BOLT_X_HISTORY) _waveXHist.shift();
+  // Per-bolt radii scale with Z: near = fat (oomph), far = slim.
+  const radii = {
+    coreRadius: BOLT_CORE_RADIUS_FAR + zNorm * (BOLT_CORE_RADIUS_NEAR - BOLT_CORE_RADIUS_FAR),
+    glowRadius: BOLT_GLOW_RADIUS_FAR + zNorm * (BOLT_GLOW_RADIUS_NEAR - BOLT_GLOW_RADIUS_FAR),
+  };
   const delay = Math.max(0, slotTime - now);
-  const radii = { coreRadius: BOLT_CORE_RADIUS, glowRadius: BOLT_GLOW_RADIUS };
   if (delay < 1) {
     window._spawnLightning(boltX, landZ, false, radii);
   } else {
@@ -37738,7 +37763,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 112;
+const BUILD_VERSION = 113;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
