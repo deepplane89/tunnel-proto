@@ -384,22 +384,26 @@ function updateTransition(dt) {
 //     so the player can fly through clean air before the next storm hits.
 //   - Wave boundary is detected by idle time: if no spawn requested in
 //     BOLT_WAVE_IDLE_MS, the next request starts a new wave (rest gap inserted).
-const BOLT_Z_NEAR = -90;
-const BOLT_Z_FAR  = -200;
+const BOLT_Z_NEAR = -70;             // closer — slams in fast
+const BOLT_Z_FAR  = -260;            // deeper — long travel, arrives later
 const BOLT_MIN_GAP = 40;             // ms — within-wave min spacing (rapid)
 const BOLT_MAX_GAP = 90;             // ms — within-wave max spacing
+const BOLT_CORE_RADIUS = 0.75;       // fatter than PRE_T4A's 0.45
+const BOLT_GLOW_RADIUS = 0.45;       // fatter glow
 const BOLT_WAVE_IDLE_MS = 250;       // ms idle → caller's row has ended
 const BOLT_WAVE_REST_MIN = 1500;     // ms — minimum rest between waves
 const BOLT_WAVE_REST_MAX = 2500;     // ms — maximum rest between waves
 let _nextBoltAt   = 0;               // slot time for next bolt
 let _lastReqAt    = 0;               // last time _spawnBoltStaggered was called
-// Lane range — covers the full playable road so holding left/right can't
-// just slide out of the bolt zone. Bolts are spread across this whole range
-// instead of clustering on ship X.
-const BOLT_LANE_MIN = -8;
-const BOLT_LANE_MAX =  8;
+// Lane jitter — mimics the real canyon lightning 'random' pattern, which
+// targets shipX + (rand-0.5)*3.0. No predictive lead, no full-lane spread.
+// The dodge fairness comes from the wave timing + Z spread, NOT from
+// trying to out-guess the player's lateral input.
+const BOLT_LANE_JITTER = 3.0;
 function _spawnBoltStaggered(_callerX) {
   if (typeof window._spawnLightning !== 'function') return;
+  // Re-assert flash/ring kill in case the pool grew after first apply.
+  _killBoltFlashRing();
   const now = performance.now();
   const sinceLastReq = now - _lastReqAt;
   _lastReqAt = now;
@@ -412,28 +416,42 @@ function _spawnBoltStaggered(_callerX) {
   const slotTime = _nextBoltAt;
   const gap = BOLT_MIN_GAP + Math.random() * (BOLT_MAX_GAP - BOLT_MIN_GAP);
   _nextBoltAt = slotTime + gap;
-  const landZ = BOLT_Z_FAR + Math.random() * (BOLT_Z_NEAR - BOLT_Z_FAR);
-  // Spread bolts across the FULL lane range — ignore caller X so the ship
-  // can't escape by holding one direction. 70% pure random across road,
-  // 30% bias toward ship X with predictive lead (kills the "camp center" gap).
+  // Skewed Z: bias toward extremes so some bolts arrive near-instant, others
+  // are slow planters — creates natural arrival-time stagger inside the wave.
+  const zRoll = Math.random();
+  const zT = zRoll < 0.5 ? zRoll * 2 * 0.3 : 0.7 + (zRoll - 0.5) * 2 * 0.3;
+  const landZ = BOLT_Z_FAR + zT * (BOLT_Z_NEAR - BOLT_Z_FAR);
+  // Mimic real canyon lightning 'random' pattern exactly:
+  //   targetX = shipX + (rand-0.5) * 3.0
+  // No predictive lead. No full-lane spread. The bolt lands near where the
+  // ship IS at fire time. Dodge fairness comes from wave/Z timing.
   const sx = (state && state.shipX) || 0;
-  const velX = (state && state.shipVelX) || 0;
-  const travelTime = Math.abs(landZ) / Math.max(1, (state && state.speed) || 73);
-  let boltX;
-  if (Math.random() < 0.7) {
-    boltX = BOLT_LANE_MIN + Math.random() * (BOLT_LANE_MAX - BOLT_LANE_MIN);
-  } else {
-    // Predictive shot — lead the ship's slide so holding a direction doesn't escape
-    boltX = sx + velX * travelTime * 0.8 + (Math.random() - 0.5) * 4;
-  }
+  const boltX = sx + (Math.random() - 0.5) * BOLT_LANE_JITTER;
   const delay = Math.max(0, slotTime - now);
+  const radii = { coreRadius: BOLT_CORE_RADIUS, glowRadius: BOLT_GLOW_RADIUS };
   if (delay < 1) {
-    window._spawnLightning(boltX, landZ);
+    window._spawnLightning(boltX, landZ, false, radii);
   } else {
     setTimeout(() => {
-      if (state && state.phase === 'playing') window._spawnLightning(boltX, landZ);
+      if (state && state.phase === 'playing') window._spawnLightning(boltX, landZ, false, radii);
     }, delay);
   }
+}
+
+// One-shot: hide the flash mesh (ground-burst quad) and ring (shockwave)
+// on every bolt in the pool. They visually clash with the rapid-fire wave
+// look — user wants just the bolt body, no ground burst.
+let _boltFlashKilled = false;
+function _killBoltFlashRing() {
+  if (_boltFlashKilled) return;
+  const pool = window._ltPool;
+  if (!pool || !pool.length) return;
+  for (let i = 0; i < pool.length; i++) {
+    const inst = pool[i];
+    if (inst.flash) { inst.flash.visible = false; inst.flashMat.opacity = 0; }
+    if (inst.ring)  { inst.ring.visible  = false; inst.ringMat.opacity  = 0; }
+  }
+  _boltFlashKilled = true;
 }
 
 let _boltLtTunerApplied = false;
@@ -455,6 +473,7 @@ function _ensureBoltLtTuner() {
     count: 1, spawnZ: -83,
   });
   _boltLtTunerApplied = true;
+  _killBoltFlashRing();
 }
 
 // BOLT_OBSTACLES — borrow a bolt instance from the lightning system's pool
