@@ -393,7 +393,12 @@ const BOLT_WAVE_REST_MIN = 1500;     // ms — minimum rest between waves
 const BOLT_WAVE_REST_MAX = 2500;     // ms — maximum rest between waves
 let _nextBoltAt   = 0;               // slot time for next bolt
 let _lastReqAt    = 0;               // last time _spawnBoltStaggered was called
-function _spawnBoltStaggered(x) {
+// Lane range — covers the full playable road so holding left/right can't
+// just slide out of the bolt zone. Bolts are spread across this whole range
+// instead of clustering on ship X.
+const BOLT_LANE_MIN = -8;
+const BOLT_LANE_MAX =  8;
+function _spawnBoltStaggered(_callerX) {
   if (typeof window._spawnLightning !== 'function') return;
   const now = performance.now();
   const sinceLastReq = now - _lastReqAt;
@@ -408,12 +413,25 @@ function _spawnBoltStaggered(x) {
   const gap = BOLT_MIN_GAP + Math.random() * (BOLT_MAX_GAP - BOLT_MIN_GAP);
   _nextBoltAt = slotTime + gap;
   const landZ = BOLT_Z_FAR + Math.random() * (BOLT_Z_NEAR - BOLT_Z_FAR);
+  // Spread bolts across the FULL lane range — ignore caller X so the ship
+  // can't escape by holding one direction. 70% pure random across road,
+  // 30% bias toward ship X with predictive lead (kills the "camp center" gap).
+  const sx = (state && state.shipX) || 0;
+  const velX = (state && state.shipVelX) || 0;
+  const travelTime = Math.abs(landZ) / Math.max(1, (state && state.speed) || 73);
+  let boltX;
+  if (Math.random() < 0.7) {
+    boltX = BOLT_LANE_MIN + Math.random() * (BOLT_LANE_MAX - BOLT_LANE_MIN);
+  } else {
+    // Predictive shot — lead the ship's slide so holding a direction doesn't escape
+    boltX = sx + velX * travelTime * 0.8 + (Math.random() - 0.5) * 4;
+  }
   const delay = Math.max(0, slotTime - now);
   if (delay < 1) {
-    window._spawnLightning(x, landZ);
+    window._spawnLightning(boltX, landZ);
   } else {
     setTimeout(() => {
-      if (state && state.phase === 'playing') window._spawnLightning(x, landZ);
+      if (state && state.phase === 'playing') window._spawnLightning(boltX, landZ);
     }, delay);
   }
 }
