@@ -434,8 +434,9 @@ window._releaseBolt = _releaseBolt;
 function getPooledObstacle(type) {
   for (const o of obstaclePool) {
     if (!o.userData.active) {
-      // Borrow a real bolt instance from the lightning pool on activation.
-      if (window._useBoltObstacles) _attachBolt(o);
+      // BOLT_OBSTACLES note: bolt mode does NOT use this path. Random-cone spawn
+      // sites call window._spawnLightning() directly so the lightning system's
+      // own runtime (warn/strike/linger, scroll, rejag, despawn) drives them.
       o.userData.active = true;
       o.userData.type   = type;
       o.visible         = true;
@@ -2153,22 +2154,30 @@ function spawnObstacles() {
           _awActive.push(wall);
         }
       } else if (roll < 0.75) {
-        const type = Math.floor(Math.random() * 3);
-        const obs = getPooledObstacle(type);
-        if (obs) {
-          obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
-          obs.scale.set(4, 1, 4);
-          obs.userData.velX = 0;
-          obs.userData.slalomScaled = true;
-          activeObstacles.push(obs);
+        if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z, true);
+        } else {
+          const type = Math.floor(Math.random() * 3);
+          const obs = getPooledObstacle(type);
+          if (obs) {
+            obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
+            obs.scale.set(4, 1, 4);
+            obs.userData.velX = 0;
+            obs.userData.slalomScaled = true;
+            activeObstacles.push(obs);
+          }
         }
       } else {
-        const type = Math.floor(Math.random() * 3);
-        const obs = getPooledObstacle(type);
-        if (obs) {
-          obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
-          obs.userData.velX = 0;
-          activeObstacles.push(obs);
+        if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z, true);
+        } else {
+          const type = Math.floor(Math.random() * 3);
+          const obs = getPooledObstacle(type);
+          if (obs) {
+            obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
+            obs.userData.velX = 0;
+            activeObstacles.push(obs);
+          }
         }
       }
       return;
@@ -2178,6 +2187,10 @@ function spawnObstacles() {
       return;
     }
     if (_isFatConeBand) {
+      if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+        window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z, true);
+        return;
+      }
       const type = Math.floor(Math.random() * 3);
       const obs = getPooledObstacle(type);
       if (!obs) return;
@@ -2213,6 +2226,10 @@ function spawnObstacles() {
         _awActive.push(wall);
         return;
       }
+    }
+    if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+      window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z, true);
+      return;
     }
     const type  = Math.floor(Math.random() * 3);
     const obs   = getPooledObstacle(type);

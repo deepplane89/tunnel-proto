@@ -4332,10 +4332,6 @@ function resetObsColor(obs) {
 function returnObstacleToPool(obs) {
   obs.userData.isCorridor = false;
   // echo system removed
-  // BOLT_OBSTACLES: return borrowed bolt instance to the lightning pool.
-  if (window._useBoltObstacles && typeof window._releaseBolt === 'function') {
-    window._releaseBolt(obs);
-  }
   obs.userData.active = false;
   obs.visible = false;
   if (obs.userData.slalomScaled) {
@@ -6111,20 +6107,12 @@ function update(dt) {
   _ringTickRipples(dt);
 
   // ── Move obstacles
-  // BOLT_OBSTACLES: rejag tick — every frame, throttled per-obstacle, rebuild
-  // the jagged tube geometry so the bolt flickers like the real lightning.
-  // Same throttle as the lightning system's strike/linger rejag (~every 2nd-3rd frame).
-  const _rejagBolts = window._useBoltObstacles && typeof window._ltRejagInst === 'function';
-  const _rejagFrame = (state._frameCount = (state._frameCount || 0) + 1);
+  // BOLT_OBSTACLES note: when bolt mode is on, random-cone spawn sites call
+  // _spawnLightning() instead of getPooledObstacle() — bolts live entirely
+  // inside the lightning system and never enter activeObstacles.
   for (let i = activeObstacles.length - 1; i >= 0; i--) {
     const obs = activeObstacles[i];
     obs.position.z += effectiveSpeed * dt;
-    if (_rejagBolts && obs.userData._boltInst && ((_rejagFrame + i) % 2 === 0)) {
-      // landX must be 0 in local space — bolt is centered on the obstacle group.
-      const inst = obs.userData._boltInst;
-      inst.landX = 0;
-      window._ltRejagInst(inst);
-    }
 
     // Smooth fade-in from horizon: invisible at spawn, fully opaque by z=-80
     const FADE_START_Z = SPAWN_Z;       // -160: totally transparent at birth

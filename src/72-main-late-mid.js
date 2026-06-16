@@ -3706,7 +3706,8 @@ window._jlDebug = {
     const dt  = Math.min((now - _ltLastTime)*0.001, 0.05);
     _ltLastTime = now;
     if (state.phase === 'playing' && !state.introActive &&
-        (state._tutorialActive || _chaosMode || state.preT4ACanyon || state.preT4BCanyon)) {
+        (state._tutorialActive || _chaosMode || state.preT4ACanyon || state.preT4BCanyon ||
+         window._useBoltObstacles)) {
       _updateLightning(dt);
     }
     _ltOrigRender(...args);

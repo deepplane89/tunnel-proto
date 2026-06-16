@@ -15460,8 +15460,9 @@ window._releaseBolt = _releaseBolt;
 function getPooledObstacle(type) {
   for (const o of obstaclePool) {
     if (!o.userData.active) {
-      // Borrow a real bolt instance from the lightning pool on activation.
-      if (window._useBoltObstacles) _attachBolt(o);
+      // BOLT_OBSTACLES note: bolt mode does NOT use this path. Random-cone spawn
+      // sites call window._spawnLightning() directly so the lightning system's
+      // own runtime (warn/strike/linger, scroll, rejag, despawn) drives them.
       o.userData.active = true;
       o.userData.type   = type;
       o.visible         = true;
@@ -17179,22 +17180,30 @@ function spawnObstacles() {
           _awActive.push(wall);
         }
       } else if (roll < 0.75) {
-        const type = Math.floor(Math.random() * 3);
-        const obs = getPooledObstacle(type);
-        if (obs) {
-          obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
-          obs.scale.set(4, 1, 4);
-          obs.userData.velX = 0;
-          obs.userData.slalomScaled = true;
-          activeObstacles.push(obs);
+        if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z, true);
+        } else {
+          const type = Math.floor(Math.random() * 3);
+          const obs = getPooledObstacle(type);
+          if (obs) {
+            obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
+            obs.scale.set(4, 1, 4);
+            obs.userData.velX = 0;
+            obs.userData.slalomScaled = true;
+            activeObstacles.push(obs);
+          }
         }
       } else {
-        const type = Math.floor(Math.random() * 3);
-        const obs = getPooledObstacle(type);
-        if (obs) {
-          obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
-          obs.userData.velX = 0;
-          activeObstacles.push(obs);
+        if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+          window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z, true);
+        } else {
+          const type = Math.floor(Math.random() * 3);
+          const obs = getPooledObstacle(type);
+          if (obs) {
+            obs.position.set(laneX + (Math.random() - 0.5) * 0.6, 0, SPAWN_Z);
+            obs.userData.velX = 0;
+            activeObstacles.push(obs);
+          }
         }
       }
       return;
@@ -17204,6 +17213,10 @@ function spawnObstacles() {
       return;
     }
     if (_isFatConeBand) {
+      if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+        window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z, true);
+        return;
+      }
       const type = Math.floor(Math.random() * 3);
       const obs = getPooledObstacle(type);
       if (!obs) return;
@@ -17239,6 +17252,10 @@ function spawnObstacles() {
         _awActive.push(wall);
         return;
       }
+    }
+    if (window._useBoltObstacles && typeof window._spawnLightning === 'function') {
+      window._spawnLightning(laneX + (Math.random() - 0.5) * 0.6, SPAWN_Z, true);
+      return;
     }
     const type  = Math.floor(Math.random() * 3);
     const obs   = getPooledObstacle(type);
@@ -27317,10 +27334,6 @@ function resetObsColor(obs) {
 function returnObstacleToPool(obs) {
   obs.userData.isCorridor = false;
   // echo system removed
-  // BOLT_OBSTACLES: return borrowed bolt instance to the lightning pool.
-  if (window._useBoltObstacles && typeof window._releaseBolt === 'function') {
-    window._releaseBolt(obs);
-  }
   obs.userData.active = false;
   obs.visible = false;
   if (obs.userData.slalomScaled) {
@@ -29096,20 +29109,12 @@ function update(dt) {
   _ringTickRipples(dt);
 
   // ── Move obstacles
-  // BOLT_OBSTACLES: rejag tick — every frame, throttled per-obstacle, rebuild
-  // the jagged tube geometry so the bolt flickers like the real lightning.
-  // Same throttle as the lightning system's strike/linger rejag (~every 2nd-3rd frame).
-  const _rejagBolts = window._useBoltObstacles && typeof window._ltRejagInst === 'function';
-  const _rejagFrame = (state._frameCount = (state._frameCount || 0) + 1);
+  // BOLT_OBSTACLES note: when bolt mode is on, random-cone spawn sites call
+  // _spawnLightning() instead of getPooledObstacle() — bolts live entirely
+  // inside the lightning system and never enter activeObstacles.
   for (let i = activeObstacles.length - 1; i >= 0; i--) {
     const obs = activeObstacles[i];
     obs.position.z += effectiveSpeed * dt;
-    if (_rejagBolts && obs.userData._boltInst && ((_rejagFrame + i) % 2 === 0)) {
-      // landX must be 0 in local space — bolt is centered on the obstacle group.
-      const inst = obs.userData._boltInst;
-      inst.landX = 0;
-      window._ltRejagInst(inst);
-    }
 
     // Smooth fade-in from horizon: invisible at spawn, fully opaque by z=-80
     const FADE_START_Z = SPAWN_Z;       // -160: totally transparent at birth
@@ -34417,7 +34422,8 @@ window._jlDebug = {
     const dt  = Math.min((now - _ltLastTime)*0.001, 0.05);
     _ltLastTime = now;
     if (state.phase === 'playing' && !state.introActive &&
-        (state._tutorialActive || _chaosMode || state.preT4ACanyon || state.preT4BCanyon)) {
+        (state._tutorialActive || _chaosMode || state.preT4ACanyon || state.preT4BCanyon ||
+         window._useBoltObstacles)) {
       _updateLightning(dt);
     }
     _ltOrigRender(...args);
@@ -37629,7 +37635,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 101;
+const BUILD_VERSION = 102;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
