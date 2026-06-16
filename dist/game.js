@@ -15403,17 +15403,28 @@ function updateTransition(dt) {
 // BOLT_OBSTACLES — apply the same _LT tuner that real in-game lightning
 // (PRE_T4A canyon) uses, so bolts look identical: coreRadius 0.45, full
 // shake, fattened glow. Applied lazily on first spawn so _LT is initialized.
-// BOLT_OBSTACLES — staggered spawn helper. Random landZ between BOLT_Z_NEAR
-// and BOLT_Z_FAR so bolts arrive in depth-staggered waves instead of a flat
-// row. Per-bolt random delay (0–BOLT_MAX_DELAY ms) so a row cascades in
-// instead of triggering same frame.
-const BOLT_Z_NEAR = -90;     // closer than default _LT.spawnZ (-83)
-const BOLT_Z_FAR  = -200;    // deeper than default — more reaction time
-const BOLT_MAX_DELAY = 600;  // ms — per-bolt random delay across a row
+// BOLT_OBSTACLES — staggered spawn helper. Each bolt is placed at the next
+// available slot — NEVER two on the same frame. Slots are spaced by a
+// random gap (BOLT_MIN_GAP..BOLT_MAX_GAP ms), so bolts arrive as a real
+// cascade. landZ is randomized for depth variation.
+const BOLT_Z_NEAR = -90;
+const BOLT_Z_FAR  = -200;
+const BOLT_MIN_GAP = 90;     // ms — minimum spacing between two bolts
+const BOLT_MAX_GAP = 220;    // ms — maximum spacing
+const BOLT_QUEUE_HORIZON = 2200; // ms — if next slot is further than this, snap back to now+min
+let _nextBoltAt = 0;         // monotonically increasing slot time (ms since epoch)
 function _spawnBoltStaggered(x) {
   if (typeof window._spawnLightning !== 'function') return;
+  const now = performance.now();
+  // If the queue has fallen behind (idle period), reset to now.
+  // If it's drifted too far ahead (huge backlog), cap so bolts still arrive within the wave.
+  if (_nextBoltAt < now) _nextBoltAt = now;
+  else if (_nextBoltAt - now > BOLT_QUEUE_HORIZON) _nextBoltAt = now + BOLT_MIN_GAP;
+  const slotTime = _nextBoltAt;
+  const gap = BOLT_MIN_GAP + Math.random() * (BOLT_MAX_GAP - BOLT_MIN_GAP);
+  _nextBoltAt = slotTime + gap;
   const landZ = BOLT_Z_FAR + Math.random() * (BOLT_Z_NEAR - BOLT_Z_FAR);
-  const delay = Math.random() * BOLT_MAX_DELAY;
+  const delay = Math.max(0, slotTime - now);
   if (delay < 1) {
     window._spawnLightning(x, landZ);
   } else {
@@ -37683,7 +37694,7 @@ function buildSkinTunerSliders() {
 // is loaded on device. DEV ONLY — hidden in prod via __JH_DEV__ gate.
 // BUILD_VERSION is bumped manually on every push so you have a real
 // monotonically-incrementing number to confirm latest-build.
-const BUILD_VERSION = 107;
+const BUILD_VERSION = 108;
 if (window.__JH_DEV__) {
   try {
     const chip = document.createElement('div');
