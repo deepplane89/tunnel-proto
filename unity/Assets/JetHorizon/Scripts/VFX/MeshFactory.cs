@@ -9,6 +9,56 @@ namespace JetHorizon
     /// </summary>
     public static class MeshFactory
     {
+        /// <summary>High-resolution UV sphere for the one-off hero sun.</summary>
+        public static Mesh Sphere(float radius = 0.5f, int longitude = 64, int latitude = 32)
+        {
+            longitude = Mathf.Max(8, longitude);
+            latitude = Mathf.Max(4, latitude);
+            int stride = longitude + 1;
+            var verts = new Vector3[(latitude + 1) * stride];
+            var normals = new Vector3[verts.Length];
+            var uvs = new Vector2[verts.Length];
+            var tris = new int[latitude * longitude * 6];
+
+            for (int iy = 0; iy <= latitude; iy++)
+            {
+                float v = iy / (float)latitude;
+                float phi = v * Mathf.PI;
+                float ring = Mathf.Sin(phi);
+                float py = Mathf.Cos(phi);
+                for (int ix = 0; ix <= longitude; ix++)
+                {
+                    float u = ix / (float)longitude;
+                    float theta = u * Mathf.PI * 2f;
+                    Vector3 n = new Vector3(ring * Mathf.Cos(theta), py, ring * Mathf.Sin(theta));
+                    int i = iy * stride + ix;
+                    verts[i] = n * radius;
+                    normals[i] = n;
+                    uvs[i] = new Vector2(u, 1f - v);
+                }
+            }
+
+            int ti = 0;
+            for (int iy = 0; iy < latitude; iy++)
+                for (int ix = 0; ix < longitude; ix++)
+                {
+                    int a = iy * stride + ix;
+                    int b = a + 1;
+                    int c = a + stride;
+                    int d = c + 1;
+                    tris[ti++] = a; tris[ti++] = b; tris[ti++] = c;
+                    tris[ti++] = b; tris[ti++] = d; tris[ti++] = c;
+                }
+
+            var mesh = new Mesh { name = "JH_HeroSunSphere" };
+            mesh.vertices = verts;
+            mesh.normals = normals;
+            mesh.uv = uvs;
+            mesh.triangles = tris;
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
         /// <summary>Cone: 6-sided like the JS ConeGeometry(1.6, h, 6). Base at y=0, tip +Y.</summary>
         public static Mesh Cone(float radius, float height, int segments = 6)
         {

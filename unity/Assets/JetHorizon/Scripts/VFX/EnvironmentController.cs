@@ -25,6 +25,9 @@ namespace JetHorizon
         Vignette _vignette;
         ChromaticAberration _chromaticAberration;
         Light _keyLight, _rimLight, _fillLight, _sunRakeR, _sunRakeL;
+        Renderer _corona;
+        Texture2D _runtimeCorona;
+        Mesh _runtimeSunMesh;
 
         // Three.js and URP do not map identical light/post values to identical pixels.
         // These are Unity presentation calibrations; simulation and vibe data stay untouched.
@@ -41,6 +44,12 @@ namespace JetHorizon
             Apply(_current);
         }
         void OnDisable() => GameEvents.VibeChanged -= OnVibeChanged;
+
+        void OnDestroy()
+        {
+            if (_runtimeCorona != null) Destroy(_runtimeCorona);
+            if (_runtimeSunMesh != null) Destroy(_runtimeSunMesh);
+        }
 
         void OnVibeChanged(int idx)
         {
@@ -66,6 +75,18 @@ namespace JetHorizon
                 SunGroup.position = new Vector3(s.ShipX, SunGroup.position.y, SunGroup.position.z);
                 if (WaterMaterial != null) WaterMaterial.SetFloat("_ShipX", s.ShipX);
             }
+        }
+
+        void LateUpdate()
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+            // Match the source's billboarded corona/seam so the hero sun remains clean
+            // during steering roll, retry sweeps and the death camera orbit.
+            if (_corona != null)
+                _corona.transform.LookAt(cam.transform.position, cam.transform.up);
+            if (HorizonSeam != null)
+                HorizonSeam.transform.LookAt(cam.transform.position, cam.transform.up);
         }
 
         static Vibe LerpVibe(Vibe a, Vibe b, float t)
@@ -98,6 +119,12 @@ namespace JetHorizon
             {
                 SkyboxMaterial.SetColor("_TopColor", v.skyTop);
                 SkyboxMaterial.SetColor("_BotColor", v.skyBot);
+                SkyboxMaterial.SetFloat("_PanoBrightness", 0f);
+                SkyboxMaterial.SetFloat("_StarBrightness", 3.7f);
+                SkyboxMaterial.SetFloat("_StarDensity", 1f);
+                SkyboxMaterial.SetFloat("_MilkyWayStrength", 0.55f);
+                SkyboxMaterial.SetFloat("_Twinkle", 0.18f);
+                SkyboxMaterial.SetColor("_StarTint", Color.Lerp(new Color(0.40f, 0.56f, 0.78f), v.nebulaTint, 0.12f));
             }
             if (SunMaterial != null)
             {
@@ -111,12 +138,19 @@ namespace JetHorizon
                             v.sunShader == 3 ? Color.Lerp(v.sunColor, Color.white, 0.4f) :
                             new Color(1f, 0.45f, 0.08f);
                 SunMaterial.SetColor("_WarpCol3", hot);
+                SunMaterial.SetFloat("_Emission", 1.25f);
             }
             if (WaterMaterial != null)
                 WaterMaterial.SetColor("_SkyColor", v.skyBot);
             if (HorizonSeam != null)
                 HorizonSeam.material.SetColor("_Tint", new Color(
                     Mathf.Min(1f, v.sunColor.r + 0.15f), Mathf.Min(1f, v.sunColor.g + 0.05f), v.sunColor.b, 1f));
+            if (_corona != null)
+            {
+                Color coronaTint = Color.Lerp(Color.white, v.sunColor, 0.22f);
+                coronaTint.a = 1f;
+                _corona.material.SetColor("_Tint", coronaTint);
+            }
 
             ApplyLightingCalibration();
             if (_colorAdjustments != null) _colorAdjustments.postExposure.value = PostExposure;
@@ -151,6 +185,28 @@ namespace JetHorizon
             _fillLight = FindLight("FillLight");
             _sunRakeR = FindLight("SunRakeR");
             _sunRakeL = FindLight("SunRakeL");
+
+            if (SunGroup != null)
+            {
+                var sunTransform = SunGroup.Find("Sun");
+                var sunFilter = sunTransform != null ? sunTransform.GetComponent<MeshFilter>() : null;
+                if (sunFilter != null)
+                {
+                    _runtimeSunMesh = MeshFactory.Sphere(0.5f, 64, 32);
+                    sunFilter.sharedMesh = _runtimeSunMesh;
+                }
+                var coronaTransform = SunGroup.Find("Corona");
+                _corona = coronaTransform != null ? coronaTransform.GetComponent<Renderer>() : null;
+                if (_corona != null && _corona.sharedMaterial != null)
+                {
+                    _runtimeCorona = TextureFactory.SunCorona(512);
+                    _runtimeCorona.name = "RuntimeSunCorona";
+                    _runtimeCorona.wrapMode = TextureWrapMode.Clamp;
+                    _runtimeCorona.filterMode = FilterMode.Trilinear;
+                    _runtimeCorona.anisoLevel = 4;
+                    _corona.material.SetTexture("_MainTex", _runtimeCorona);
+                }
+            }
         }
 
         static Light FindLight(string objectName)

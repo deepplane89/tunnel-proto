@@ -168,12 +168,18 @@ namespace JetHorizon
             var tex = NewTex(size, size);
             var px = new Color[size * size];
             float half = size / 2f;
+            float ringR = half * 0.625f;
+            float crownY = half + ringR; // Unity texture UVs grow upward
+            float crownR = ringR * 0.85f;
             for (int y = 0; y < size; y++)
                 for (int x = 0; x < size; x++)
                 {
-                    // scaled 2.2x horizontally → ellipse distance
-                    float dx = (x - half) / (half * 2.2f), dy = (y - half) / half;
-                    float d = Mathf.Sqrt(dx * dx * 4.84f + dy * dy); // undo for radial stops
+                    // Wide bloom centered on the crown and clipped inside the limb circle.
+                    float clipD = Vector2.Distance(new Vector2(x, y), new Vector2(half, half));
+                    if (clipD > ringR) continue;
+                    float dx = (x - half) / (crownR * 2.2f);
+                    float dy = (y - crownY) / crownR;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
                     float a = d < 0.15f ? Mathf.Lerp(0.22f, 0.16f, d / 0.15f)
                             : d < 0.40f ? Mathf.Lerp(0.16f, 0.08f, (d - 0.15f) / 0.25f)
                             : d < 1f ? Mathf.Lerp(0.08f, 0f, (d - 0.40f) / 0.60f) : 0f;
@@ -183,7 +189,6 @@ namespace JetHorizon
 
             // ── limb arcs: 6 stacked strokes hugging the sun's upper limb ──
             float scale = size / 2048f;
-            float ringR = half * 0.625f;
             float[] rOff   = { -8f, -4.8f, -1.6f, 1.6f, 4.8f, 8f };
             float[] widths = { 16f, 12f, 10f, 4f, 10f, 16f };
             Color[] cols =
