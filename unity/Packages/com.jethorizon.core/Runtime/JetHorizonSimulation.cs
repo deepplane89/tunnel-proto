@@ -18,8 +18,14 @@ namespace JetHorizon.Simulation
             public float Y;
             public float Z;
             public float HalfWidth;
+            public float HalfHeight;
             public float HalfDepth;
             public float VisualScale;
+            public float VisualScaleY;
+            public float VisualScaleZ;
+            public float RotationXRadians;
+            public float RotationYRadians;
+            public float RotationZRadians;
             public float RingRadius;
             public float RingTubeRadius;
         }
@@ -394,8 +400,14 @@ namespace JetHorizon.Simulation
                 Y = spawn.Y,
                 Z = spawn.Z,
                 HalfWidth = spawn.CollisionHalfWidth,
+                HalfHeight = spawn.CollisionHalfHeight,
                 HalfDepth = spawn.CollisionHalfDepth,
                 VisualScale = spawn.VisualScale,
+                VisualScaleY = spawn.VisualScaleY,
+                VisualScaleZ = spawn.VisualScaleZ,
+                RotationXRadians = spawn.RotationXRadians,
+                RotationYRadians = spawn.RotationYRadians,
+                RotationZRadians = spawn.RotationZRadians,
                 RingRadius = spawn.RingRadius,
                 RingTubeRadius = spawn.RingTubeRadius
             };
@@ -428,9 +440,13 @@ namespace JetHorizon.Simulation
                 float dz = Math.Abs(hazard.Z - _config.ShipZ);
                 float collisionX = shipHalfWidth + hazard.HalfWidth;
 
-                bool hit = hazard.Kind == HazardKind.Ring
-                    ? dz < hazard.HalfDepth && RingHit(hazard)
-                    : dx < collisionX && dz < hazard.HalfDepth;
+                bool hit;
+                if (hazard.Kind == HazardKind.Ring)
+                    hit = dz < hazard.HalfDepth && RingHit(hazard);
+                else if (hazard.Kind == HazardKind.Wall)
+                    hit = WallHit(hazard);
+                else
+                    hit = dx < collisionX && dz < hazard.HalfDepth;
                 if (_config.CollisionEnabled && !collisionSuppressed && hit)
                 {
                     hazard.Active = false;
@@ -512,7 +528,12 @@ namespace JetHorizon.Simulation
                     hazard.Y,
                     hazard.Z,
                     hazard.HalfWidth,
-                    hazard.VisualScale));
+                    hazard.VisualScale,
+                    hazard.VisualScaleY,
+                    hazard.VisualScaleZ,
+                    hazard.RotationXRadians,
+                    hazard.RotationYRadians,
+                    hazard.RotationZRadians));
             }
             Snapshot.HazardCount = count;
 
@@ -570,12 +591,39 @@ namespace JetHorizon.Simulation
             return false;
         }
 
+        bool WallHit(HazardState wall)
+        {
+            float dx = _shipX - wall.X;
+            float dy = _shipY - wall.Y;
+            float dz = _config.ShipZ - wall.Z;
+
+            // Unity's Quaternion.Euler(x, y, 0) applies X then Y. Inverting the
+            // transform therefore removes yaw first and pitch second. Keeping this
+            // math here makes the gameplay shape replayable without UnityEngine.
+            float cy = (float)Math.Cos(wall.RotationYRadians);
+            float sy = (float)Math.Sin(wall.RotationYRadians);
+            float localX = cy * dx - sy * dz;
+            float yawRemovedZ = sy * dx + cy * dz;
+
+            float cx = (float)Math.Cos(wall.RotationXRadians);
+            float sx = (float)Math.Sin(wall.RotationXRadians);
+            float localY = cx * dy + sx * yawRemovedZ;
+            float localZ = -sx * dy + cx * yawRemovedZ;
+
+            const float shipHalf = 0.3f;
+            return Math.Abs(localX) < wall.HalfWidth + shipHalf
+                && Math.Abs(localY) < wall.HalfHeight + shipHalf
+                && Math.Abs(localZ) < wall.HalfDepth + shipHalf;
+        }
+
         static void ValidateHazard(HazardSpawn spawn)
         {
             if (float.IsNaN(spawn.X) || float.IsNaN(spawn.Y) || float.IsNaN(spawn.Z))
                 throw new ArgumentOutOfRangeException(nameof(spawn));
             if (spawn.CollisionHalfDepth <= 0f) throw new ArgumentOutOfRangeException(nameof(spawn.CollisionHalfDepth));
             if (spawn.VisualScale <= 0f) throw new ArgumentOutOfRangeException(nameof(spawn.VisualScale));
+            if (spawn.Kind == HazardKind.Wall && spawn.CollisionHalfHeight <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(spawn.CollisionHalfHeight));
             if (spawn.Kind == HazardKind.Ring && (spawn.RingRadius <= 0f || spawn.RingTubeRadius <= 0f))
                 throw new ArgumentOutOfRangeException(nameof(spawn.RingRadius));
         }

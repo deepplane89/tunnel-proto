@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using JetHorizon.Simulation;
 
 namespace JetHorizon
 {
@@ -14,10 +15,12 @@ namespace JetHorizon
         sealed class Wall
         {
             public Transform T; public MeshRenderer R; public MaterialPropertyBlock Mpb; public bool Active;
+            public int CoreId;
         }
 
         const int PoolSize = 160;
         readonly List<Wall> _pool = new List<Wall>(PoolSize);
+        readonly Dictionary<int, HazardSnapshot> _coreWalls = new Dictionary<int, HazardSnapshot>(PoolSize);
 
         // structured burst state (grid tuner _awTuner)
         bool _burstActive;
@@ -63,7 +66,7 @@ namespace JetHorizon
 
         public void WipeAll()
         {
-            foreach (var w in _pool) if (w.Active) { w.Active = false; w.T.gameObject.SetActive(false); }
+            foreach (var w in _pool) if (w.Active) Return(w);
         }
 
         public int ActiveCount
@@ -124,38 +127,32 @@ namespace JetHorizon
             if (!_burstActive && s.AngledWallsActive && ActiveCount == 0)
                 s.AngledWallsActive = false;
 
-            // movement + fade + OBB collision
-            float shipX = s.ShipX, shipY = s.ShipY;
-            bool invulnerable = s.InvincibleTimer > 0f || s.IntroActive;
+            // Core owns movement and OBB collision. Unity only projects snapshots.
+            _coreWalls.Clear();
+            var snapshot = GameManager.I.CoreSnapshot;
+            if (snapshot != null)
+            {
+                for (int i = 0; i < snapshot.HazardCount; i++)
+                {
+                    var hazard = snapshot.GetHazard(i);
+                    if (hazard.Kind == HazardKind.Wall) _coreWalls[hazard.Id] = hazard;
+                }
+            }
             foreach (var w in _pool)
             {
                 if (!w.Active) continue;
-                var p = w.T.position;
-                p.z += eff * dt;
+                if (!_coreWalls.TryGetValue(w.CoreId, out var hazard))
+                {
+                    Return(w, removeFromCore: false);
+                    continue;
+                }
+
+                var p = new Vector3(hazard.X, hazard.Y, hazard.Z);
                 w.T.position = p;
 
                 float fadeT = Mathf.Clamp01((p.z - Tuning.SpawnZ) / (-Tuning.SpawnZ * 0.4f));
                 w.Mpb.SetFloat(FadeId, fadeT);
                 w.R.SetPropertyBlock(w.Mpb);
-
-                if (p.z > Tuning.DespawnZ) { w.Active = false; w.T.gameObject.SetActive(false); continue; }
-                if (invulnerable) continue;
-
-                // rotated-OBB vs ship 0.3-cube (spec/01 §4.3)
-                if (Mathf.Abs(p.z - Tuning.ShipZ) < 6f)
-                {
-                    Vector3 delta = new Vector3(shipX, shipY, Tuning.ShipZ) - p;
-                    Vector3 local = Quaternion.Inverse(w.T.rotation) * delta;
-                    Vector3 half = w.T.localScale * 0.5f;
-                    const float shipHalf = 0.3f;
-                    if (Mathf.Abs(local.x) < half.x + shipHalf &&
-                        Mathf.Abs(local.y) < half.y + shipHalf &&
-                        Mathf.Abs(local.z) < half.z + shipHalf)
-                    {
-                        GameManager.I.KillPlayer();
-                        return;
-                    }
-                }
             }
         }
 
@@ -179,8 +176,20 @@ namespace JetHorizon
             foreach (var wall in _pool)
             {
                 if (wall.Active) continue;
+                float worldY = y < 0f ? h / 2f : y;
+                int coreId = GameManager.I.RegisterHazard(HazardSpawn.Wall(
+                    x,
+                    worldY,
+                    z,
+                    w,
+                    h,
+                    0.3f,
+                    rotX * Mathf.Deg2Rad,
+                    angleY * Mathf.Deg2Rad));
+                if (coreId == 0) return;
                 wall.Active = true;
-                wall.T.position = new Vector3(x, y < 0f ? h / 2f : y, z);
+                wall.CoreId = coreId;
+                wall.T.position = new Vector3(x, worldY, z);
                 wall.T.rotation = Quaternion.Euler(rotX, angleY, 0f);
                 wall.T.localScale = new Vector3(w, h, 0.3f);
                 wall.Mpb.SetColor(TintId, Vibes.ConeColors[Random.Range(0, 3)]);
@@ -189,6 +198,14 @@ namespace JetHorizon
                 wall.T.gameObject.SetActive(true);
                 return;
             }
+        }
+
+        void Return(Wall wall, bool removeFromCore = true)
+        {
+            if (removeFromCore && wall.CoreId != 0) GameManager.I?.RemoveHazard(wall.CoreId);
+            wall.Active = false;
+            wall.CoreId = 0;
+            wall.T.gameObject.SetActive(false);
         }
     }
 }

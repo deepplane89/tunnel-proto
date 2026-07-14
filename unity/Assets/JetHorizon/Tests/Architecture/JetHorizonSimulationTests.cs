@@ -309,6 +309,36 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void RegisteredAngledWallUsesEngineNeutralObbCollision()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = true
+            }, 921u);
+            simulation.StartRun();
+            int id = simulation.RegisterHazard(HazardSpawn.Wall(
+                0f,
+                1.2f,
+                3.3f,
+                8f,
+                4f,
+                0.3f,
+                0f,
+                35f * (float)(System.Math.PI / 180.0)));
+
+            Assert.That(id, Is.GreaterThan(0));
+            var wall = simulation.Snapshot.GetHazard(0);
+            Assert.That(wall.Kind, Is.EqualTo(HazardKind.Wall));
+            Assert.That(wall.RotationYRadians, Is.Not.Zero);
+
+            simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Dead));
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.PlayerDied), Is.True);
+        }
+
+        [Test]
         public void RegisteredCoinMovesCollectsAndAwardsScoreInCore()
         {
             var simulation = new JetHorizonSimulation(new SimulationConfig

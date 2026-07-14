@@ -139,8 +139,14 @@ namespace JetHorizon.Simulation
         public float Y;
         public float Z;
         public float CollisionHalfWidth;
+        public float CollisionHalfHeight;
         public float CollisionHalfDepth;
         public float VisualScale;
+        public float VisualScaleY;
+        public float VisualScaleZ;
+        public float RotationXRadians;
+        public float RotationYRadians;
+        public float RotationZRadians;
         public float RingRadius;
         public float RingTubeRadius;
         public bool NearMissEnabled;
@@ -153,8 +159,11 @@ namespace JetHorizon.Simulation
                 X = x,
                 Z = z,
                 CollisionHalfWidth = collisionHalfWidth,
+                CollisionHalfHeight = 5.25f,
                 CollisionHalfDepth = 1.5f,
                 VisualScale = visualScale,
+                VisualScaleY = 1f,
+                VisualScaleZ = visualScale,
                 NearMissEnabled = true
             };
         }
@@ -167,10 +176,43 @@ namespace JetHorizon.Simulation
                 X = x,
                 Y = y,
                 Z = z,
+                CollisionHalfHeight = radius + tubeRadius,
                 CollisionHalfDepth = tubeRadius + 1f,
                 VisualScale = 1f,
+                VisualScaleY = 1f,
+                VisualScaleZ = 1f,
                 RingRadius = radius,
                 RingTubeRadius = tubeRadius,
+                NearMissEnabled = false
+            };
+        }
+
+        public static HazardSpawn Wall(
+            float x,
+            float y,
+            float z,
+            float width,
+            float height,
+            float depth,
+            float rotationXRadians,
+            float rotationYRadians,
+            float rotationZRadians = 0f)
+        {
+            return new HazardSpawn
+            {
+                Kind = HazardKind.Wall,
+                X = x,
+                Y = y,
+                Z = z,
+                CollisionHalfWidth = width * 0.5f,
+                CollisionHalfHeight = height * 0.5f,
+                CollisionHalfDepth = depth * 0.5f,
+                VisualScale = width,
+                VisualScaleY = height,
+                VisualScaleZ = depth,
+                RotationXRadians = rotationXRadians,
+                RotationYRadians = rotationYRadians,
+                RotationZRadians = rotationZRadians,
                 NearMissEnabled = false
             };
         }
@@ -185,8 +227,25 @@ namespace JetHorizon.Simulation
         public float Z { get; }
         public float HalfWidth { get; }
         public float VisualScale { get; }
+        public float VisualScaleY { get; }
+        public float VisualScaleZ { get; }
+        public float RotationXRadians { get; }
+        public float RotationYRadians { get; }
+        public float RotationZRadians { get; }
 
-        internal HazardSnapshot(int id, HazardKind kind, float x, float y, float z, float halfWidth, float visualScale)
+        internal HazardSnapshot(
+            int id,
+            HazardKind kind,
+            float x,
+            float y,
+            float z,
+            float halfWidth,
+            float visualScale,
+            float visualScaleY,
+            float visualScaleZ,
+            float rotationXRadians,
+            float rotationYRadians,
+            float rotationZRadians)
         {
             Id = id;
             Kind = kind;
@@ -195,6 +254,11 @@ namespace JetHorizon.Simulation
             Z = z;
             HalfWidth = halfWidth;
             VisualScale = visualScale;
+            VisualScaleY = visualScaleY;
+            VisualScaleZ = visualScaleZ;
+            RotationXRadians = rotationXRadians;
+            RotationYRadians = rotationYRadians;
+            RotationZRadians = rotationZRadians;
         }
     }
 
