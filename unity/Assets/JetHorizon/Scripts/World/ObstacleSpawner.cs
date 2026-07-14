@@ -242,12 +242,19 @@ namespace JetHorizon
                 c.Active = true;
                 c.CoreId = hazard.Id;
                 c.IsFatCone = hazard.Style == HazardStyle.FatCone;
-                c.IsCorridor = hazard.Style == HazardStyle.CorridorCone;
+                c.IsCorridor = hazard.Style == HazardStyle.CorridorCone
+                    || hazard.Style == HazardStyle.L4CorridorCone
+                    || hazard.Style == HazardStyle.L5CorridorCone;
                 c.SlalomScaled = scaleXZ != 1f;
                 c.ColorType = Mathf.Abs(hazard.VisualVariant) % Vibes.ConeColors.Length;
                 c.T.position = new Vector3(hazard.X, hazard.Y, hazard.Z);
                 c.T.localScale = new Vector3(scaleXZ, (height + sink) / 10.5f, scaleXZ);
-                c.Mpb.SetColor(TintId, Vibes.ConeColors[c.ColorType]);
+                Color tint = hazard.Style == HazardStyle.L4CorridorCone
+                    ? Vibes.L4Tint
+                    : hazard.Style == HazardStyle.L5CorridorCone
+                        ? Vibes.L5Tint
+                        : Vibes.ConeColors[c.ColorType];
+                c.Mpb.SetColor(TintId, tint);
                 c.Mpb.SetFloat(FadeId, 0f);
                 c.R.SetPropertyBlock(c.Mpb);
                 c.T.gameObject.SetActive(true);

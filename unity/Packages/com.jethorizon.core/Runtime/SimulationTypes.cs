@@ -150,7 +150,9 @@ namespace JetHorizon.Simulation
         AngledWall,
         StructuredWall,
         Lightning,
-        CorridorCone
+        CorridorCone,
+        L4CorridorCone,
+        L5CorridorCone
     }
 
     /// <summary>Engine-neutral hazard creation request. Visual identity is carried separately by the presenter.</summary>
@@ -411,6 +413,7 @@ namespace JetHorizon.Simulation
         public float ShipRollRadians { get; internal set; }
         public float ShipTiltTimer { get; internal set; }
         public bool StageDirectorEnabled { get; internal set; }
+        public bool SineCorridorActive { get; internal set; }
         public bool ZipperActive { get; internal set; }
         public bool SlalomActive { get; internal set; }
         public float CorridorGapCenter { get; internal set; }

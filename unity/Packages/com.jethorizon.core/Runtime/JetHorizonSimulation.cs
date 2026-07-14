@@ -88,6 +88,14 @@ namespace JetHorizon.Simulation
         float _slalomDistanceUntilRow;
         float _slalomGapCenter;
         float _slalomGapVelocity;
+        bool _sineCorridorActive;
+        SineCorridorDefinition _sineCorridor;
+        int _sineRowsDone;
+        float _sineSpawnZ;
+        float _sinePhase;
+        float _sineAnchor;
+        float _sineDelaySeconds;
+        float _sineGapCenter;
 
         public CoreGamePhase Phase { get; private set; }
         public SimulationSnapshot Snapshot { get; }
@@ -271,20 +279,23 @@ namespace JetHorizon.Simulation
 
             if (_stageDirector != null)
             {
-                world.ZipperActive |= _zipperActive;
-                world.SlalomActive |= _slalomActive;
+                world.SineCorridorActive = _sineCorridorActive;
+                world.ZipperActive = _zipperActive;
+                world.SlalomActive = _slalomActive;
                 _stageDirector.Tick(dt, world, _random, Events, StageCommands);
                 _speed = _stageDirector.Speed;
                 ApplyStageCommandsToCore();
-                world.ZipperActive |= _zipperActive;
-                world.SlalomActive |= _slalomActive;
+                world.SineCorridorActive = _sineCorridorActive;
+                world.ZipperActive = _zipperActive;
+                world.SlalomActive = _slalomActive;
             }
 
+            _effectiveSpeed = world.OverdriveActive ? _speed * 1.8f : _speed;
             TickLightningSpawner(dt, world);
             TickZipper(dt);
             TickSlalom(dt);
+            TickSineCorridor(dt);
 
-            _effectiveSpeed = world.OverdriveActive ? _speed * 1.8f : _speed;
             float step = _effectiveSpeed * dt;
             if (_config.ProgressionEnabled && !world.ProgressionSuspended)
             {
@@ -359,6 +370,14 @@ namespace JetHorizon.Simulation
             _slalomDistanceUntilRow = 0f;
             _slalomGapCenter = 0f;
             _slalomGapVelocity = 0f;
+            _sineCorridorActive = false;
+            _sineCorridor = null;
+            _sineRowsDone = 0;
+            _sineSpawnZ = 0f;
+            _sinePhase = 0f;
+            _sineAnchor = 0f;
+            _sineDelaySeconds = 0f;
+            _sineGapCenter = 0f;
             if (_stageDirector != null)
             {
                 _stageDirector.Reset(events);
@@ -747,6 +766,7 @@ namespace JetHorizon.Simulation
                         _slalomRowsLeft = 0;
                         _zipperActive = false;
                         _zipperRowsLeft = 0;
+                        StopSineCorridor();
                         break;
                     case StageCommandType.AbortZipper:
                         _zipperActive = false;
@@ -759,8 +779,80 @@ namespace JetHorizon.Simulation
                     case StageCommandType.StartZipper:
                         if (!_zipperActive) StartZipper(Math.Max(1, (int)Math.Round(command.ValueA)));
                         break;
+                    case StageCommandType.LaunchCorridor:
+                        if (command.Family == CorridorFamily.L4Sine || command.Family == CorridorFamily.L5Sine)
+                            StartSineCorridor(command.Family);
+                        break;
                 }
             }
+        }
+
+        void StartSineCorridor(CorridorFamily family)
+        {
+            _sineCorridor = SineCorridorCatalog.For(family);
+            _sineRowsDone = 0;
+            _sineSpawnZ = -7f;
+            _sinePhase = 0f;
+            _sineAnchor = _shipX;
+            _sineDelaySeconds = _sineCorridor.StartDelaySeconds;
+            _sineGapCenter = _sineAnchor;
+            _sineCorridorActive = true;
+        }
+
+        void StopSineCorridor()
+        {
+            _sineCorridorActive = false;
+            _sineCorridor = null;
+            _sineRowsDone = 0;
+            _sineDelaySeconds = 0f;
+        }
+
+        void TickSineCorridor(float dt)
+        {
+            if (!_sineCorridorActive || _sineCorridor == null) return;
+            if (_sineDelaySeconds > 0f)
+            {
+                _sineDelaySeconds -= dt;
+                return;
+            }
+
+            _sineSpawnZ += _effectiveSpeed * dt;
+            while (_sineSpawnZ >= 0f && _sineRowsDone < _sineCorridor.TotalRows)
+            {
+                _sineSpawnZ = -7f + (_random.NextFloat() - 0.5f) * 2f;
+                SpawnSineCorridorRow();
+                _sineRowsDone++;
+            }
+            if (_sineRowsDone >= _sineCorridor.TotalRows) _sineCorridorActive = false;
+        }
+
+        void SpawnSineCorridorRow()
+        {
+            float halfWidth = _sineCorridor.HalfWidthAtRow(_sineRowsDone);
+            float center = _sineCorridor.CenterAtRow(_sineRowsDone, _sineAnchor, ref _sinePhase);
+            _sineGapCenter = center;
+
+            SpawnSineCorridorCone(center - halfWidth, true);
+            SpawnSineCorridorCone(center - halfWidth - _config.LaneWidth, true);
+            SpawnSineCorridorCone(center + halfWidth, true);
+            SpawnSineCorridorCone(center + halfWidth + _config.LaneWidth, true);
+            if (_sineCorridor.ShouldSpawnCenterCone(_sineRowsDone))
+                SpawnSineCorridorCone(center, false);
+        }
+
+        void SpawnSineCorridorCone(float x, bool jitter)
+        {
+            int visualVariant = _random.NextInt(0, 3);
+            if (jitter) x += (_random.NextFloat() - 0.5f) * 0.6f;
+            HazardSpawn cone = HazardSpawn.Cone(
+                x,
+                _config.SpawnZ,
+                1f,
+                0.9f,
+                _sineCorridor.ConeStyle,
+                visualVariant);
+            cone.CollisionHalfDepth = _config.CollisionHalfDepth;
+            SpawnHazard(cone);
         }
 
         void StartZipper(int rows)
@@ -1020,9 +1112,10 @@ namespace JetHorizon.Simulation
             Snapshot.ShipRollRadians = _rollRadians;
             Snapshot.ShipTiltTimer = _tiltTimer;
             Snapshot.StageDirectorEnabled = _stageDirector != null;
+            Snapshot.SineCorridorActive = _sineCorridorActive;
             Snapshot.ZipperActive = _zipperActive;
             Snapshot.SlalomActive = _slalomActive;
-            Snapshot.CorridorGapCenter = _slalomGapCenter;
+            Snapshot.CorridorGapCenter = _sineCorridorActive ? _sineGapCenter : _slalomGapCenter;
             if (_stageDirector != null)
             {
                 Snapshot.StageIndex = _stageDirector.StageIndex;

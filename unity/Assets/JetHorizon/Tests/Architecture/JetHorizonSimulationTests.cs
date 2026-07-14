@@ -118,6 +118,49 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void SineCorridorDefinitionsMatchProductionRowMath()
+        {
+            var l4 = SineCorridorCatalog.L4;
+            var l5 = SineCorridorCatalog.L5;
+
+            Assert.That(l4.TotalRows, Is.EqualTo(518));
+            Assert.That(l4.HalfWidthAtRow(0), Is.EqualTo(80f));
+            Assert.That(l4.HalfWidthAtRow(l4.SineStartRow + 120), Is.EqualTo(4.5f).Within(0.0001f));
+            Assert.That(l4.HalfWidthAtRow(l4.SineStartRow + 382), Is.EqualTo(3.06f).Within(0.001f));
+            Assert.That(l5.TotalRows, Is.EqualTo(420));
+            Assert.That(l5.HalfWidthAtRow(l5.SineStartRow + 180), Is.EqualTo(8f).Within(0.0001f));
+            Assert.That(l5.ShouldSpawnCenterCone(l5.SineStartRow + 12), Is.True);
+            Assert.That(l5.ShouldSpawnCenterCone(l5.SineStartRow + 11), Is.False);
+            Assert.That(l5.ShouldSpawnCenterCone(l5.TotalRows - l5.ExitRows), Is.False);
+        }
+
+        [Test]
+        public void L4SineCorridorUsesSourceDelayCadenceAndPortableHazards()
+        {
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("L4", StageKind.Corridor, 90f, 2.1f, 2, 3, CorridorFamily.L4Sine)
+            });
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false
+            }, 74u, run);
+            simulation.StartRun();
+
+            simulation.Step(default);
+            Assert.That(simulation.Snapshot.SineCorridorActive, Is.True);
+            Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+            for (int i = 0; i < 89; i++) simulation.Step(default);
+            Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+            for (int i = 0; i < 12 && simulation.Snapshot.HazardCount == 0; i++) simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.HazardCount, Is.EqualTo(4));
+            for (int i = 0; i < simulation.Snapshot.HazardCount; i++)
+                Assert.That(simulation.Snapshot.GetHazard(i).Style, Is.EqualTo(HazardStyle.L4CorridorCone));
+        }
+
+        [Test]
         public void ForcedCenterHazardProducesAReproducibleDeathEvent()
         {
             var config = new SimulationConfig

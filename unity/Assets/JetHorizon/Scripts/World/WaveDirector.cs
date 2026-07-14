@@ -243,10 +243,9 @@ namespace JetHorizon
                     Canyon.Activate(CanyonPresets.L3Knife(), command.ValueA);
                     break;
                 case CorridorFamily.L4Sine:
-                    SineCorridor.Begin(SineCorridorSystem.Kind.L4);
-                    break;
                 case CorridorFamily.L5Sine:
-                    SineCorridor.Begin(SineCorridorSystem.Kind.L5);
+                    // The engine-neutral simulation now owns sine row geometry,
+                    // cadence, lifecycle, and hazard creation. Unity only presents it.
                     break;
             }
         }
