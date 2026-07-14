@@ -25,11 +25,11 @@ Shader "JH/Sun"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
-                half4 _SunColor;
-                half  _Warp;
-                half4 _WarpCol1, _WarpCol2, _WarpCol3;
-                half  _Mode;
-                half  _Emission;
+                float4 _SunColor;
+                float  _Warp;
+                float4 _WarpCol1, _WarpCol2, _WarpCol3;
+                float  _Mode;
+                float  _Emission;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float2 uv : TEXCOORD0; };
@@ -141,7 +141,7 @@ Shader "JH/Sun"
                 return OUT;
             }
 
-            half4 frag(Varyings IN) : SV_Target
+            float4 frag(Varyings IN) : SV_Target
             {
                 float t = _Time.y;
                 float3 viewNormal = normalize(IN.normalVS);
@@ -154,13 +154,13 @@ Shader "JH/Sun"
                 // Plain and L3 red-shifted source branches.
                 float isL3 = step(1.5, _Mode) * (1.0 - step(2.5, _Mode));
                 float churn = lerp(0.94 + n * 0.12, 0.85 + n * 0.30, isL3);
-                half3 coreCol = lerp(half3(0.68, 0.24, 0.02), half3(0.58, 0.12, 0.02), isL3);
-                half3 rimCol = lerp(half3(0.90, 0.38, 0.04), half3(0.95, 0.28, 0.04), isL3);
-                half3 col = lerp(coreCol, rimCol, smoothstep(0.15, 0.85, rd));
-                col += lerp(half3(0.18, 0.10, 0.02), half3(0.18, 0.06, 0.02), isL3)
+                float3 coreCol = lerp(float3(0.68, 0.24, 0.02), float3(0.58, 0.12, 0.02), isL3);
+                float3 rimCol = lerp(float3(0.90, 0.38, 0.04), float3(0.95, 0.28, 0.04), isL3);
+                float3 col = lerp(coreCol, rimCol, smoothstep(0.15, 0.85, rd));
+                col += lerp(float3(0.18, 0.10, 0.02), float3(0.18, 0.06, 0.02), isL3)
                     * smoothstep(0.45, 0.85, yN);
                 col *= 1.0 - 0.08 * smoothstep(0.60, 0.48, yN);
-                half3 corona = lerp(half3(1.0, 0.55, 0.08), half3(1.0, 0.35, 0.06), isL3);
+                float3 corona = lerp(float3(1.0, 0.55, 0.08), float3(1.0, 0.35, 0.06), isL3);
                 float coronaBlend = smoothstep(0.82, 0.97, rd);
                 float coronaBias = 0.3 + 0.7 * max(smoothstep(0.4, 0.9, yN), smoothstep(0.58, 0.50, yN) * 0.85);
                 col = lerp(col, corona, coronaBlend * coronaBias);
@@ -168,19 +168,19 @@ Shader "JH/Sun"
                 col *= smoothstep(0.0, 0.05, limb);
 
                 // Ultraviolet branch.
-                half3 uvCore = _SunColor.rgb * 0.42;
-                half3 uvRim = _SunColor.rgb * 0.82;
-                half3 uvCol = lerp(uvCore, uvRim, smoothstep(0.15, 0.88, rd));
+                float3 uvCore = _SunColor.rgb * 0.42;
+                float3 uvRim = _SunColor.rgb * 0.82;
+                float3 uvCol = lerp(uvCore, uvRim, smoothstep(0.15, 0.88, rd));
                 uvCol *= 0.92 + n * 0.16;
                 uvCol += _SunColor.rgb * 0.20 * smoothstep(0.45, 0.85, yN);
-                half3 uvCorona = saturate(_SunColor.rgb * 1.5 + half3(0.25, 0.12, 0.25));
+                float3 uvCorona = saturate(_SunColor.rgb * 1.5 + float3(0.25, 0.12, 0.25));
                 uvCol = lerp(uvCol, uvCorona, coronaBlend * coronaBias);
                 uvCol *= smoothstep(0.0, 0.05, limb);
                 if (_Mode > 0.5 && _Mode < 1.5)
-                    return half4(uvCol * _Emission, 1);
+                    return float4(uvCol * _Emission, 1);
 
                 if (_Mode < 1.5 && _Warp <= 0.001)
-                    return half4(col * _Emission, 1);
+                    return float4(col * _Emission, 1);
 
                 // Gold branch: its own slower domain motion plus Podgursky sunspots.
                 if (_Mode > 3.5)
@@ -199,15 +199,15 @@ Shader "JH/Sun"
                     float spots = max(0.0, snoise(normalize(IN.normalWS) * 1.1 + float3(t * 0.009, t * 0.006, t * 0.004)) * 2.5 - 1.7);
                     float brightSpot = max(0.0, snoise(normalize(IN.normalWS) * 0.5 + float3(t * 0.005, t * 0.003, t * 0.002)) * 1.3 - 0.7);
                     float total = saturate(gf - spots * 0.4 + brightSpot * 0.3);
-                    half3 deepAmber = _SunColor.rgb * 0.30;
-                    half3 goldCol = lerp(deepAmber, _SunColor.rgb, smoothstep(0.2, 0.65, total));
-                    goldCol = lerp(goldCol, half3(1.0, 0.95, 0.6), smoothstep(0.62, 0.88, total));
+                    float3 deepAmber = _SunColor.rgb * 0.30;
+                    float3 goldCol = lerp(deepAmber, _SunColor.rgb, smoothstep(0.2, 0.65, total));
+                    goldCol = lerp(goldCol, float3(1.0, 0.95, 0.6), smoothstep(0.62, 0.88, total));
                     goldCol = lerp(goldCol, _SunColor.rgb * 1.15, smoothstep(0.4, 0.8, length(gq) / 1.73) * 0.30);
                     goldCol = lerp(goldCol, deepAmber, smoothstep(0.6, 0.9, gr.y) * 0.35);
                     float edge = smoothstep(0.0, 0.30, pow(limb, 2.2));
                     goldCol *= edge;
                     goldCol = lerp(goldCol, goldCol * 1.15, smoothstep(0.5, 1.0, pow(limb, 2.2)));
-                    return half4(goldCol * _Emission, 1);
+                    return float4(goldCol * _Emission, 1);
                 }
 
                 // Shared Quilez double-domain field for ice and crimson modes.
@@ -226,21 +226,21 @@ Shader "JH/Sun"
 
                 if (_Mode > 2.5)
                 {
-                    half3 deepTeal = _SunColor.rgb * 0.35;
-                    half3 hotWhite = saturate(_SunColor.rgb * 1.25);
-                    half3 iceCol = lerp(deepTeal, _SunColor.rgb, smoothstep(0.2, 0.7, f));
+                    float3 deepTeal = _SunColor.rgb * 0.35;
+                    float3 hotWhite = saturate(_SunColor.rgb * 1.25);
+                    float3 iceCol = lerp(deepTeal, _SunColor.rgb, smoothstep(0.2, 0.7, f));
                     iceCol = lerp(iceCol, hotWhite, smoothstep(0.6, 0.9, f));
                     iceCol = lerp(iceCol, _SunColor.rgb * 1.1, smoothstep(0.4, 0.8, qMag) * 0.35);
                     iceCol = lerp(iceCol, deepTeal, smoothstep(0.6, 0.9, r.y) * 0.4);
                     float darkening = pow(limb, 2.2);
                     iceCol *= smoothstep(0.0, 0.30, darkening);
                     iceCol = lerp(iceCol, iceCol * 1.15, smoothstep(0.5, 1.0, darkening));
-                    return half4(iceCol * _Emission, 1);
+                    return float4(iceCol * _Emission, 1);
                 }
 
                 if (_Warp > 0.001)
                 {
-                    half3 warpCol = lerp(_WarpCol1.rgb, _WarpCol2.rgb, smoothstep(0.2, 0.7, f));
+                    float3 warpCol = lerp(_WarpCol1.rgb, _WarpCol2.rgb, smoothstep(0.2, 0.7, f));
                     warpCol = lerp(warpCol, _WarpCol3.rgb, smoothstep(0.6, 0.9, f));
                     warpCol = lerp(warpCol, _WarpCol2.rgb * 1.1, smoothstep(0.4, 0.8, qMag) * 0.35);
                     warpCol = lerp(warpCol, _WarpCol1.rgb, smoothstep(0.6, 0.9, r.y) * 0.4);
@@ -249,7 +249,7 @@ Shader "JH/Sun"
                     warpCol = lerp(warpCol, warpCol * 1.15, smoothstep(0.5, 1.0, darkening));
                     col = lerp(col, warpCol, saturate(_Warp));
                 }
-                return half4(col * _Emission, 1);
+                return float4(col * _Emission, 1);
             }
             ENDHLSL
         }

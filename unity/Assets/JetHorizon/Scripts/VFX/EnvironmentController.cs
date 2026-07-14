@@ -125,25 +125,16 @@ namespace JetHorizon
             if (SunMaterial != null)
             {
                 SunMaterial.SetColor("_SunColor", v.sunColor);
-                // Keep the opening orange sun's Quilez plasma alive. Its base sphere
-                // remains the Three.js plain-sun profile, with the warp blended over it
-                // instead of replacing it. Crimson retains its full source warp.
-                float warp = v.sunShader == 0 ? 0.58f : (v.sunShader == 2 ? 1f : 0f);
-                SunMaterial.SetFloat("_Warp", warp);
+                // The user wants the source's fully-enabled Quilez treatment on the
+                // opening sun too: use the exact 1.0 branch blend, not a diluted overlay.
+                bool explicitQuilez = v.sunShader == 0 || v.sunShader == 2;
+                SunMaterial.SetFloat("_Warp", explicitQuilez ? 1f : 0f);
                 SunMaterial.SetFloat("_Mode", v.sunShader);
-                // Neon Dawn follows its orange source palette. Crimson uses its exact
-                // dark-red constants; ice and gold own their palettes inside JH_Sun.
-                bool crimson = v.sunShader == 2;
-                SunMaterial.SetColor("_WarpCol1", crimson
-                    ? new Color(0.25f, 0.04f, 0.02f)
-                    : v.sunColor * 0.35f);
-                SunMaterial.SetColor("_WarpCol2", crimson
-                    ? new Color(0.85f, 0.15f, 0.04f)
-                    : v.sunColor);
-                Color hot = v.sunShader == 4 ? new Color(1f, 0.95f, 0.6f) :
-                            v.sunShader == 3 ? Color.Lerp(v.sunColor, Color.white, 0.4f) :
-                            new Color(1f, 0.45f, 0.08f);
-                SunMaterial.SetColor("_WarpCol3", hot);
+                // Exact source Quilez palette. Ice and gold use their dedicated
+                // built-in palettes in JH_Sun and ignore these three uniforms.
+                SunMaterial.SetColor("_WarpCol1", new Color(0.25f, 0.04f, 0.02f));
+                SunMaterial.SetColor("_WarpCol2", new Color(0.85f, 0.15f, 0.04f));
+                SunMaterial.SetColor("_WarpCol3", new Color(1f, 0.45f, 0.08f));
                 SunMaterial.SetFloat("_Emission", 1f);
             }
             if (WaterMaterial != null)
