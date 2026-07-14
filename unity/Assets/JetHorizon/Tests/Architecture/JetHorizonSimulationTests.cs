@@ -161,6 +161,51 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void StructuredWallDefinitionMatchesProductionGridAndMeshCenter()
+        {
+            var field = StructuredWallFieldCatalog.Production;
+            var first = field.CreateWall(0, 0, 0, 0, 0f, -160f);
+            var last = field.CreateWall(0, 5, 1, 1, 0f, -160f);
+            var nextRow = field.CreateWall(1, 0, 0, 0, 0f, -160f);
+
+            Assert.That(field.WallsPerRow, Is.EqualTo(24));
+            Assert.That(first.X, Is.EqualTo(-102.5f).Within(0.0001f));
+            Assert.That(last.X, Is.EqualTo(107.5f).Within(0.0001f));
+            Assert.That(first.Y, Is.EqualTo(-3f + 2f * (float)System.Math.Cos(-36f * System.Math.PI / 180f)).Within(0.0001f));
+            Assert.That(first.Z, Is.EqualTo(-162.5f + 2f * (float)System.Math.Sin(-36f * System.Math.PI / 180f)).Within(0.0001f));
+            Assert.That(first.RotationYRadians, Is.GreaterThan(0f));
+            Assert.That(nextRow.RotationYRadians, Is.LessThan(0f));
+        }
+
+        [Test]
+        public void StructuredWallStageWaitsThenSpawnsAllTwentyFourCopiesInCore()
+        {
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("WALLS", StageKind.StructuredWalls, 30f, 2f, 2, 2)
+            });
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false,
+                MaxHazards = 600
+            }, 75u, run);
+            simulation.StartRun();
+
+            for (int i = 0; i < 170; i++) simulation.Step(default);
+            Assert.That(simulation.Snapshot.AngledWallsActive, Is.False);
+            Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+            for (int i = 0; i < 25 && !simulation.Snapshot.AngledWallsActive; i++) simulation.Step(default);
+            Assert.That(simulation.Snapshot.AngledWallsActive, Is.True);
+            Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+            for (int i = 0; i < 50 && simulation.Snapshot.HazardCount == 0; i++) simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.HazardCount, Is.EqualTo(24));
+            for (int i = 0; i < simulation.Snapshot.HazardCount; i++)
+                Assert.That(simulation.Snapshot.GetHazard(i).Style, Is.EqualTo(HazardStyle.StructuredWall));
+        }
+
+        [Test]
         public void ForcedCenterHazardProducesAReproducibleDeathEvent()
         {
             var config = new SimulationConfig

@@ -220,7 +220,7 @@ namespace JetHorizon
                     LaunchCoreCorridor(command);
                     break;
                 case StageCommandType.StartStructuredWalls:
-                    if (!S.AngledWallsActive) AngledWalls.StartStructuredBurst();
+                    // Core owns the structured field; the wall system presents snapshots.
                     break;
                 case StageCommandType.StartSlalom:
                     break;

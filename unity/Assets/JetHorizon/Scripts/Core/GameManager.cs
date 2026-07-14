@@ -214,6 +214,7 @@ namespace JetHorizon
             Session.SineCorridorActive = snapshot.SineCorridorActive;
             Session.ZipperActive = snapshot.ZipperActive;
             Session.SlalomActive = snapshot.SlalomActive;
+            Session.AngledWallsActive = snapshot.AngledWallsActive;
             if (snapshot.SineCorridorActive || snapshot.SlalomActive)
                 Session.CorridorGapCenter = snapshot.CorridorGapCenter;
         }

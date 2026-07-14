@@ -96,6 +96,11 @@ namespace JetHorizon.Simulation
         float _sineAnchor;
         float _sineDelaySeconds;
         float _sineGapCenter;
+        readonly StructuredWallFieldDefinition _structuredWallField;
+        bool _structuredWallsActive;
+        bool _structuredWallsScheduling;
+        int _structuredWallRowsDone;
+        float _structuredWallSpawnZ;
 
         public CoreGamePhase Phase { get; private set; }
         public SimulationSnapshot Snapshot { get; }
@@ -114,6 +119,7 @@ namespace JetHorizon.Simulation
             _hazards = new HazardState[_config.MaxHazards];
             _pickups = new PickupState[_config.MaxPickups];
             _stageDirector = runDefinition == null ? null : new StageDirector(runDefinition);
+            _structuredWallField = StructuredWallFieldCatalog.Production;
             _laneScratch = new int[_config.LaneCount];
             _blockedLaneScratch = new int[_config.LaneCount];
             Snapshot = new SimulationSnapshot(_config.MaxHazards, _config.MaxPickups);
@@ -282,12 +288,14 @@ namespace JetHorizon.Simulation
                 world.SineCorridorActive = _sineCorridorActive;
                 world.ZipperActive = _zipperActive;
                 world.SlalomActive = _slalomActive;
+                world.AngledWallsActive = _structuredWallsActive;
                 _stageDirector.Tick(dt, world, _random, Events, StageCommands);
                 _speed = _stageDirector.Speed;
                 ApplyStageCommandsToCore();
                 world.SineCorridorActive = _sineCorridorActive;
                 world.ZipperActive = _zipperActive;
                 world.SlalomActive = _slalomActive;
+                world.AngledWallsActive = _structuredWallsActive;
             }
 
             _effectiveSpeed = world.OverdriveActive ? _speed * 1.8f : _speed;
@@ -295,6 +303,7 @@ namespace JetHorizon.Simulation
             TickZipper(dt);
             TickSlalom(dt);
             TickSineCorridor(dt);
+            TickStructuredWalls(dt);
 
             float step = _effectiveSpeed * dt;
             if (_config.ProgressionEnabled && !world.ProgressionSuspended)
@@ -378,6 +387,10 @@ namespace JetHorizon.Simulation
             _sineAnchor = 0f;
             _sineDelaySeconds = 0f;
             _sineGapCenter = 0f;
+            _structuredWallsActive = false;
+            _structuredWallsScheduling = false;
+            _structuredWallRowsDone = 0;
+            _structuredWallSpawnZ = 0f;
             if (_stageDirector != null)
             {
                 _stageDirector.Reset(events);
@@ -767,6 +780,7 @@ namespace JetHorizon.Simulation
                         _zipperActive = false;
                         _zipperRowsLeft = 0;
                         StopSineCorridor();
+                        StopStructuredWalls();
                         break;
                     case StageCommandType.AbortZipper:
                         _zipperActive = false;
@@ -782,6 +796,9 @@ namespace JetHorizon.Simulation
                     case StageCommandType.LaunchCorridor:
                         if (command.Family == CorridorFamily.L4Sine || command.Family == CorridorFamily.L5Sine)
                             StartSineCorridor(command.Family);
+                        break;
+                    case StageCommandType.StartStructuredWalls:
+                        if (!_structuredWallsActive) StartStructuredWalls();
                         break;
                 }
             }
@@ -853,6 +870,63 @@ namespace JetHorizon.Simulation
                 visualVariant);
             cone.CollisionHalfDepth = _config.CollisionHalfDepth;
             SpawnHazard(cone);
+        }
+
+        void StartStructuredWalls()
+        {
+            _structuredWallsActive = true;
+            _structuredWallsScheduling = true;
+            _structuredWallRowsDone = 0;
+            _structuredWallSpawnZ = -_structuredWallField.RowSpacing;
+        }
+
+        void StopStructuredWalls()
+        {
+            _structuredWallsActive = false;
+            _structuredWallsScheduling = false;
+            _structuredWallRowsDone = 0;
+        }
+
+        void TickStructuredWalls(float dt)
+        {
+            if (!_structuredWallsActive) return;
+            if (_structuredWallsScheduling)
+            {
+                _structuredWallSpawnZ += _effectiveSpeed * dt;
+                if (_structuredWallSpawnZ >= 0f && _structuredWallRowsDone < _structuredWallField.RowCount)
+                {
+                    _structuredWallSpawnZ = -_structuredWallField.RowSpacing;
+                    SpawnStructuredWallRow(_structuredWallRowsDone);
+                    _structuredWallRowsDone++;
+                    if (_structuredWallRowsDone >= _structuredWallField.RowCount)
+                        _structuredWallsScheduling = false;
+                }
+            }
+
+            if (!_structuredWallsScheduling && !HasActiveStructuredWalls())
+                _structuredWallsActive = false;
+        }
+
+        void SpawnStructuredWallRow(int row)
+        {
+            for (int copyX = 0; copyX < _structuredWallField.CopiesX; copyX++)
+                for (int copyY = 0; copyY < _structuredWallField.CopiesY; copyY++)
+                    for (int copyZ = 0; copyZ < _structuredWallField.CopiesZ; copyZ++)
+                        SpawnHazard(_structuredWallField.CreateWall(
+                            row,
+                            copyX,
+                            copyY,
+                            copyZ,
+                            _shipX,
+                            _config.SpawnZ));
+        }
+
+        bool HasActiveStructuredWalls()
+        {
+            for (int i = 0; i < _hazards.Length; i++)
+                if (_hazards[i].Active && _hazards[i].Style == HazardStyle.StructuredWall)
+                    return true;
+            return false;
         }
 
         void StartZipper(int rows)
@@ -1115,6 +1189,7 @@ namespace JetHorizon.Simulation
             Snapshot.SineCorridorActive = _sineCorridorActive;
             Snapshot.ZipperActive = _zipperActive;
             Snapshot.SlalomActive = _slalomActive;
+            Snapshot.AngledWallsActive = _structuredWallsActive;
             Snapshot.CorridorGapCenter = _sineCorridorActive ? _sineGapCenter : _slalomGapCenter;
             if (_stageDirector != null)
             {
@@ -1228,18 +1303,18 @@ namespace JetHorizon.Simulation
             float dy = _shipY - wall.Y;
             float dz = _config.ShipZ - wall.Z;
 
-            // Unity's Quaternion.Euler(x, y, 0) applies X then Y. Inverting the
-            // transform therefore removes yaw first and pitch second. Keeping this
-            // math here makes the gameplay shape replayable without UnityEngine.
-            float cy = (float)Math.Cos(wall.RotationYRadians);
-            float sy = (float)Math.Sin(wall.RotationYRadians);
-            float localX = cy * dx - sy * dz;
-            float yawRemovedZ = sy * dx + cy * dz;
-
+            // Source geometry uses three.js Euler XYZ (R_x * R_y * R_z). With
+            // the production walls' zero Z rotation, inverse OBB projection
+            // removes pitch first and yaw second.
             float cx = (float)Math.Cos(wall.RotationXRadians);
             float sx = (float)Math.Sin(wall.RotationXRadians);
-            float localY = cx * dy + sx * yawRemovedZ;
-            float localZ = -sx * dy + cx * yawRemovedZ;
+            float localY = cx * dy + sx * dz;
+            float pitchRemovedZ = -sx * dy + cx * dz;
+
+            float cy = (float)Math.Cos(wall.RotationYRadians);
+            float sy = (float)Math.Sin(wall.RotationYRadians);
+            float localX = cy * dx - sy * pitchRemovedZ;
+            float localZ = sy * dx + cy * pitchRemovedZ;
 
             const float shipHalf = 0.3f;
             return Math.Abs(localX) < wall.HalfWidth + shipHalf

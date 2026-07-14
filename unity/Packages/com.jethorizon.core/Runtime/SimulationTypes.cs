@@ -416,6 +416,7 @@ namespace JetHorizon.Simulation
         public bool SineCorridorActive { get; internal set; }
         public bool ZipperActive { get; internal set; }
         public bool SlalomActive { get; internal set; }
+        public bool AngledWallsActive { get; internal set; }
         public float CorridorGapCenter { get; internal set; }
         public int StageIndex { get; internal set; }
         public string StageName { get; internal set; }

@@ -237,7 +237,7 @@ namespace JetHorizon
                 wall.Active = true;
                 wall.CoreId = hazard.Id;
                 wall.T.position = new Vector3(hazard.X, hazard.Y, hazard.Z);
-                wall.T.rotation = Quaternion.Euler(
+                wall.T.rotation = SourceEulerXYZ(
                     hazard.RotationXRadians * Mathf.Rad2Deg,
                     hazard.RotationYRadians * Mathf.Rad2Deg,
                     hazard.RotationZRadians * Mathf.Rad2Deg);
@@ -246,7 +246,9 @@ namespace JetHorizon
                     Mathf.Max(0.01f, hazard.VisualScaleY),
                     Mathf.Max(0.01f, hazard.VisualScaleZ));
                 int colorType = Mathf.Abs(hazard.VisualVariant) % Vibes.ConeColors.Length;
-                wall.Mpb.SetColor(TintId, Vibes.ConeColors[colorType]);
+                wall.Mpb.SetColor(TintId, hazard.Style == HazardStyle.StructuredWall
+                    ? Vibes.StructuredWallTint
+                    : Vibes.ConeColors[colorType]);
                 wall.Mpb.SetFloat(FadeId, 0f);
                 wall.R.SetPropertyBlock(wall.Mpb);
                 wall.T.gameObject.SetActive(true);
@@ -260,6 +262,13 @@ namespace JetHorizon
             wall.Active = false;
             wall.CoreId = 0;
             wall.T.gameObject.SetActive(false);
+        }
+
+        static Quaternion SourceEulerXYZ(float xDegrees, float yDegrees, float zDegrees)
+        {
+            return Quaternion.AngleAxis(xDegrees, Vector3.right)
+                * Quaternion.AngleAxis(yDegrees, Vector3.up)
+                * Quaternion.AngleAxis(zDegrees, Vector3.forward);
         }
     }
 }

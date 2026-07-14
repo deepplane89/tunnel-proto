@@ -239,10 +239,10 @@ namespace JetHorizon.Simulation
                     break;
                 case StageKind.StructuredWalls:
                     SpawnPattern = SpawnPattern.None;
-                    _structuredWallTimer -= dt;
-                    if (!quiet && _structuredWallTimer <= 0f && !world.AngledWallsActive)
+                    _structuredWallTimer += dt;
+                    if (!quiet && _structuredWallTimer >= 3f && !world.AngledWallsActive)
                     {
-                        _structuredWallTimer = 3f;
+                        _structuredWallTimer = 0f;
                         commands.Add(new StageCommand(StageCommandType.StartStructuredWalls));
                     }
                     break;

@@ -40,6 +40,7 @@ namespace JetHorizon
         public static readonly Color L4Tint = H(0xff00aa);
         public static readonly Color L5Tint = H(0xffcc00);
         public static readonly Color L3Tint = H(0x00ffcc);
+        public static readonly Color StructuredWallTint = new Color(0f, 0.4f, 1f);
         public static readonly Color RingRed = H(0xff1a1a);
         public static readonly Color CoinGold = H(0xffd700);
     }
