@@ -20,7 +20,7 @@ Current scope:
 - allocation-free snapshot and event buffers;
 - replay-oriented editor tests.
 
-The shipping `GameManager` feeds player/world input into the core and mirrors its snapshot into the legacy `RunSession`. `WaveDirector` is now an adapter that realizes core stage commands with the existing pooled obstacle systems. Unity still owns rendering, audio, input devices, and platform services.
+The shipping `GameManager` feeds player/world input into the core and mirrors its snapshot into the legacy `RunSession`. `WaveDirector` realizes core stage commands, while `ObstacleSpawner` registers pooled cones/rings and projects core hazard snapshots back onto their render objects. Unity still owns rendering, audio, input devices, and platform services.
 
 ## Revert boundary
 

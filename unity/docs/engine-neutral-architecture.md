@@ -2,7 +2,7 @@
 
 ## Status
 
-Checkpoint 1 established the reversible package and adapters. Checkpoint 2 made the core authoritative for live ship steering, glide, roll, banking, hover, and ship position. Checkpoint 3 moved progression and score into the core. Checkpoint 4 moves campaign content, stage timing, the speed ladder, spawn policy, quiet windows, structured-mechanic decisions, klaxons, and endless rotation behind the same boundary.
+Checkpoint 1 established the reversible package and adapters. Checkpoint 2 made the core authoritative for live ship steering. Checkpoint 3 moved progression and score. Checkpoint 4 moved campaign direction. Checkpoint 5 adds platform ports and persistent run records. Checkpoint 6 connects the live pooled cone/ring hazards to core identity, movement, near-miss, collision, and death.
 
 The new code is split into three boundaries:
 
@@ -56,7 +56,7 @@ Only then should the corresponding legacy gameplay code be disabled. Presentatio
 
 ## Next checkpoint
 
-Connect the existing Unity cone/ring pools to the new hazard registry, then move angled-wall/corridor collision and pickup spawn decisions behind engine-neutral APIs. After that, add:
+Move angled-wall/corridor collision and pickup identity/spawn decisions behind engine-neutral APIs. After that, add:
 
 - a `ShipDefinition` with explicit thruster sockets;
 - a GPU-driven procedural starfield presenter;

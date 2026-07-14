@@ -151,6 +151,12 @@ namespace JetHorizon.Simulation
             return false;
         }
 
+        public void ClearHazards()
+        {
+            Array.Clear(_hazards, 0, _hazards.Length);
+            RefreshSnapshot();
+        }
+
         public void Step(InputFrame input)
         {
             Step(input, default);

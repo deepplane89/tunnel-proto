@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using JetHorizon.Simulation;
 
 namespace JetHorizon
 {
@@ -25,12 +26,12 @@ namespace JetHorizon
             public bool Active;
             public bool IsFatCone, SlalomScaled, IsCorridor;
             public int ColorType;
-            public float NearMissArmed;   // 1 = can still trigger near-miss
+            public int CoreId;
         }
 
         sealed class RingObs
         {
-            public Transform T; public MeshRenderer R; public MaterialPropertyBlock Mpb; public bool Active;
+            public Transform T; public MeshRenderer R; public MaterialPropertyBlock Mpb; public bool Active; public int CoreId;
         }
 
         // Lethal ring constants (spec/02 §1.4)
@@ -40,8 +41,8 @@ namespace JetHorizon
 
         readonly List<ConeObs> _cones = new List<ConeObs>(Tuning.ObstaclePoolSize);
         readonly List<RingObs> _rings = new List<RingObs>(RingPoolSize);
+        readonly Dictionary<int, HazardSnapshot> _coreHazards = new Dictionary<int, HazardSnapshot>(Tuning.ObstaclePoolSize + RingPoolSize);
         Mesh _coneMesh, _ringMesh;
-        float _nearMissSfxCooldown;
         int _wavesSinceCoin;
 
         RunSession S => GameManager.I.Session;
@@ -92,8 +93,15 @@ namespace JetHorizon
 
         public void WipeAllHazards()
         {
-            foreach (var c in _cones) if (c.Active) Return(c);
-            foreach (var r in _rings) if (r.Active) { r.Active = false; r.T.gameObject.SetActive(false); }
+            GameManager.I?.ClearRegisteredHazards();
+            foreach (var c in _cones) if (c.Active) Return(c, removeFromCore: false);
+            foreach (var r in _rings)
+            {
+                if (!r.Active) continue;
+                r.Active = false;
+                r.CoreId = 0;
+                r.T.gameObject.SetActive(false);
+            }
         }
 
         public int ActiveHazardCount
@@ -114,11 +122,25 @@ namespace JetHorizon
             foreach (var c in _cones)
             {
                 if (c.Active) continue;
+                float h = 8f + Random.value * 3f, sink = 2f, totalH = h + sink;
+                float collisionWidth = Mathf.Max(0f, scaleXZ - 1f) * (isFat ? 0.9f : 1.2f);
+                int coreId = GameManager.I.RegisterHazard(new HazardSpawn
+                {
+                    Kind = HazardKind.Cone,
+                    X = x,
+                    Y = -sink,
+                    Z = z,
+                    CollisionHalfWidth = collisionWidth,
+                    CollisionHalfDepth = Tuning.ColDistZ + Mathf.Max(0f, scaleXZ - 1f) * 0.4f,
+                    VisualScale = scaleXZ,
+                    NearMissEnabled = true
+                });
+                if (coreId == 0) return null;
+
                 c.Active = true;
+                c.CoreId = coreId;
                 c.IsFatCone = isFat; c.SlalomScaled = scaleXZ != 1f; c.IsCorridor = isCorridor;
                 c.ColorType = Random.Range(0, 3);
-                c.NearMissArmed = 1f;
-                float h = 8f + Random.value * 3f, sink = 2f, totalH = h + sink;
                 c.T.position = new Vector3(x, -sink, z);
                 c.T.localScale = new Vector3(scaleXZ, totalH / 10.5f, scaleXZ);
                 Color col = tint ?? Vibes.ConeColors[c.ColorType];
@@ -131,9 +153,11 @@ namespace JetHorizon
             return null; // pool exhausted
         }
 
-        void Return(ConeObs c)
+        void Return(ConeObs c, bool removeFromCore = true)
         {
+            if (removeFromCore && c.CoreId != 0) GameManager.I?.RemoveHazard(c.CoreId);
             c.Active = false;
+            c.CoreId = 0;
             c.T.localScale = Vector3.one;
             c.IsFatCone = c.SlalomScaled = c.IsCorridor = false;
             c.T.gameObject.SetActive(false);
@@ -240,7 +264,10 @@ namespace JetHorizon
             foreach (var r in _rings)
             {
                 if (r.Active) continue;
+                int coreId = GameManager.I.RegisterHazard(HazardSpawn.Ring(x, RingY, z, RingR, RingTube));
+                if (coreId == 0) return;
                 r.Active = true;
+                r.CoreId = coreId;
                 r.T.position = new Vector3(x, RingY, z);
                 r.Mpb.SetColor(TintId, Vibes.RingRed);
                 r.Mpb.SetFloat(FadeId, 0f);
@@ -250,88 +277,53 @@ namespace JetHorizon
             }
         }
 
-        // ── Tick: move, fade, collide (spec/01 §4.1–4.4) ─────────────────────
+        // ── Tick: project core snapshots onto pooled render objects ───────────
         public void SimTick(float dt)
         {
-            var s = S;
-            float eff = s.EffectiveSpeed;
-            float shipX = s.ShipX;
-            float colDistX = Ship.CollisionHalfX;
-            bool invulnerable = s.InvincibleTimer > 0f || s.IntroActive;
-            if (_nearMissSfxCooldown > 0f) _nearMissSfxCooldown -= dt;
+            var snapshot = GameManager.I.CoreSnapshot;
+            _coreHazards.Clear();
+            if (snapshot != null)
+            {
+                for (int i = 0; i < snapshot.HazardCount; i++)
+                {
+                    var hazard = snapshot.GetHazard(i);
+                    _coreHazards[hazard.Id] = hazard;
+                }
+            }
 
             foreach (var c in _cones)
             {
                 if (!c.Active) continue;
-                var p = c.T.position;
-                p.z += eff * dt;
+                if (!_coreHazards.TryGetValue(c.CoreId, out var hazard) || hazard.Kind != HazardKind.Cone)
+                {
+                    Return(c, removeFromCore: false);
+                    continue;
+                }
+                var p = new Vector3(hazard.X, hazard.Y, hazard.Z);
                 c.T.position = p;
 
                 // fade-in −160 → −110
                 float fade = Mathf.Clamp01((p.z - Tuning.SpawnZ) / (Tuning.FadeInEndZ - Tuning.SpawnZ));
                 c.Mpb.SetFloat(FadeId, fade * Vibes.ConeOpacity[c.ColorType]);
                 c.R.SetPropertyBlock(c.Mpb);
-
-                if (p.z > Tuning.DespawnZ) { Return(c); continue; }
-
-                float dx = Mathf.Abs(p.x - shipX);
-                float dz = Mathf.Abs(p.z - Tuning.ShipZ);
-                float cScale = c.SlalomScaled ? c.T.localScale.x : 1f;
-                float cMult = c.IsFatCone ? 0.9f : 1.2f;
-
-                if (!invulnerable &&
-                    dx < colDistX + (cScale - 1f) * cMult &&
-                    dz < Tuning.ColDistZ + (cScale - 1f) * 0.4f)
-                {
-                    Return(c);
-                    GameManager.I.KillPlayer();
-                    return;
-                }
-
-                // near-miss band
-                if (c.NearMissArmed > 0f && dx > colDistX && dx < colDistX + Tuning.NearMissBand && dz < Tuning.NearMissZ)
-                {
-                    c.NearMissArmed = 0f;
-                    GameManager.I.ReportNearMiss();
-                }
             }
 
             foreach (var r in _rings)
             {
                 if (!r.Active) continue;
-                var p = r.T.position;
-                p.z += eff * dt;
+                if (!_coreHazards.TryGetValue(r.CoreId, out var hazard) || hazard.Kind != HazardKind.Ring)
+                {
+                    r.Active = false;
+                    r.CoreId = 0;
+                    r.T.gameObject.SetActive(false);
+                    continue;
+                }
+                var p = new Vector3(hazard.X, hazard.Y, hazard.Z);
                 r.T.position = p;
                 float fade = Mathf.Clamp01((p.z - Tuning.SpawnZ) / (Tuning.FadeInEndZ - Tuning.SpawnZ));
                 r.Mpb.SetFloat(FadeId, fade * 0.92f);
                 r.R.SetPropertyBlock(r.Mpb);
-                if (p.z > Tuning.DespawnZ) { r.Active = false; r.T.gameObject.SetActive(false); continue; }
-
-                if (invulnerable) continue;
-                // exact distance from ship point to octagon tube path (spec/01 §4.4)
-                Vector3 ship = new Vector3(shipX, s.ShipY, Tuning.ShipZ);
-                if (Mathf.Abs(p.z - Tuning.ShipZ) < RingTube + 1f && RingHit(ship, p))
-                {
-                    GameManager.I.KillPlayer();
-                    return;
-                }
             }
-        }
-
-        static bool RingHit(Vector3 ship, Vector3 ringCenter)
-        {
-            // distance from ship to each octagon edge segment; hit if < tube radius
-            for (int i = 0; i < RingSides; i++)
-            {
-                float a0 = (i / (float)RingSides) * Mathf.PI * 2f + Mathf.PI / RingSides;
-                float a1 = ((i + 1) / (float)RingSides) * Mathf.PI * 2f + Mathf.PI / RingSides;
-                Vector3 p0 = ringCenter + new Vector3(Mathf.Cos(a0), Mathf.Sin(a0), 0) * RingR;
-                Vector3 p1 = ringCenter + new Vector3(Mathf.Cos(a1), Mathf.Sin(a1), 0) * RingR;
-                Vector3 seg = p1 - p0;
-                float t = Mathf.Clamp01(Vector3.Dot(ship - p0, seg) / seg.sqrMagnitude);
-                if (Vector3.Distance(ship, p0 + seg * t) < RingTube) return true;
-            }
-            return false;
         }
     }
 }

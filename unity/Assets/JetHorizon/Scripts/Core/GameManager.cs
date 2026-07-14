@@ -57,11 +57,13 @@ namespace JetHorizon
             var runDefinition = SequenceAsset.Load().ToCoreDefinition();
             _coreSimulation = new JetHorizonSimulation(new SimulationConfig
             {
-                // The core owns live ship motion, score, and distance. Existing Unity
-                // systems temporarily retain the stage director and rendered hazards.
+                // The core owns live ship, progression, stages, and registered hazards.
+                // Unity retains pooled hazard presentation during this migration step.
                 ProgressionEnabled = true,
                 HazardSpawningEnabled = false,
-                CollisionEnabled = false
+                HazardSimulationEnabled = true,
+                CollisionEnabled = true,
+                MaxHazards = 600
             }, 20260714u, runDefinition);
             _applicationEvents = new RunEventRouter(UnityGameServicesFactory.CreateDefault());
             // Match the web build: 60 fps cap (sim is fixed 60 Hz; rendering above it
@@ -113,6 +115,7 @@ namespace JetHorizon
             var s = Session;
             _killedThisFrame = false;
             TickCoreShip(dt);                                    // engine-neutral input→snapshot→Unity presentation
+            if (_killedThisFrame) return;
             float eff = s.EffectiveSpeed;
             Camera.SimTick(dt);                                  // 5: pivot follow (fixed part)
 
@@ -172,18 +175,25 @@ namespace JetHorizon
                 SineCorridorActive = s.SineCorridorActive,
                 ZipperActive = s.ZipperActive,
                 SlalomActive = s.SlalomActive,
-                AngledWallsActive = s.AngledWallsActive
+                AngledWallsActive = s.AngledWallsActive,
+                CollisionSuppressed = s.InvincibleTimer > 0f || s.IntroActive || s.IntroLiftActive
             };
             world.HazardsClear = (Obstacles == null || Obstacles.ActiveHazardCount == 0)
                 && !world.AnyStructuredMechanicActive;
             _coreSimulation.Step(frame, world);
-            _applicationEvents.Dispatch(_coreSimulation.Events);
 
             var snapshot = _coreSimulation.Snapshot;
             SyncCoreSession(snapshot);
             Session.RollHeld = input != null && input.RollHeld;
             Session.RollDir = input != null ? input.RollDir : 0;
             Ship.ApplyCorePresentation(snapshot, dt);
+            DispatchCorePresentationEvents();
+            if (snapshot.Phase == CoreGamePhase.Dead)
+            {
+                FinishPlayerDeath(coreAlreadyDead: true);
+                return;
+            }
+            _applicationEvents.Dispatch(_coreSimulation.Events);
         }
 
         void SyncCoreSession(SimulationSnapshot snapshot = null)
@@ -220,6 +230,21 @@ namespace JetHorizon
             _coreSimulation?.AwardScore(Tuning.CoinScore, ScoreSource.Pickup);
             SyncCoreSession();
             GameEvents.RaiseCoinCollected();
+        }
+
+        public int RegisterHazard(HazardSpawn spawn) => _coreSimulation?.RegisterHazard(spawn) ?? 0;
+        public bool RemoveHazard(int id) => _coreSimulation != null && _coreSimulation.RemoveHazard(id);
+        public void ClearRegisteredHazards() => _coreSimulation?.ClearHazards();
+
+        void DispatchCorePresentationEvents()
+        {
+            var events = _coreSimulation?.Events;
+            if (events == null) return;
+            for (int i = 0; i < events.Count; i++)
+            {
+                if (events[i].Type == SimulationEventType.NearMiss)
+                    GameEvents.RaiseNearMiss();
+            }
         }
 
         bool CanSpawnWaves()
@@ -299,13 +324,18 @@ namespace JetHorizon
         /// <summary>killPlayer() port — resolution order per spec/01 §4.6 (no shields yet: 1:1 minus meta).</summary>
         public void KillPlayer()
         {
+            FinishPlayerDeath(coreAlreadyDead: false);
+        }
+
+        void FinishPlayerDeath(bool coreAlreadyDead)
+        {
             var s = Session;
             if (State.Phase != GamePhase.Playing) return;      // duplicate-frame guard
             if (s.InvincibleTimer > 0f) return;                 // grace absorbs
 
             _killedThisFrame = true;
             _deathTimer = 0f;
-            _coreSimulation?.ForcePlayerDeath();
+            if (!coreAlreadyDead) _coreSimulation?.ForcePlayerDeath();
             if (_coreSimulation != null) _applicationEvents.Dispatch(_coreSimulation.Events);
             SyncCoreSession();
 
