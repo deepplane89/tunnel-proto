@@ -46,6 +46,8 @@ namespace JetHorizon
         RunEventRouter _applicationEvents;
 
         public GamePhase Phase => State.Phase;
+        /// <summary>Viewer toggle: gameplay continues, but every lethal collision is suppressed.</summary>
+        public bool GodMode { get; private set; }
         public SimulationSnapshot CoreSnapshot => _coreSimulation?.Snapshot;
         public SimulationEventBuffer CoreEvents => _coreSimulation?.Events;
         public StageCommandBuffer CoreStageCommands => _coreSimulation?.StageCommands;
@@ -168,7 +170,7 @@ namespace JetHorizon
                 ZipperActive = s.ZipperActive,
                 SlalomActive = s.SlalomActive,
                 AngledWallsActive = s.AngledWallsActive,
-                CollisionSuppressed = s.InvincibleTimer > 0f || s.IntroActive || s.IntroLiftActive,
+                CollisionSuppressed = GodMode || s.InvincibleTimer > 0f || s.IntroActive || s.IntroLiftActive,
                 SpawningSuppressed = s.IntroActive || s.IntroLiftActive || s.PostLaunchGrace > 0f,
                 ShipMovementSuppressed = s.IntroActive || s.IntroLiftActive
             };
@@ -315,6 +317,16 @@ namespace JetHorizon
             }
         }
 
+        /// <summary>Enables or disables uninterrupted viewer mode without changing simulation speed.</summary>
+        public void SetGodMode(bool enabled)
+        {
+            GodMode = enabled;
+            if (enabled)
+                Session.InvincibleTimer = Mathf.Max(Session.InvincibleTimer, Tuning.FixedDt * 2f);
+        }
+
+        public void ToggleGodMode() => SetGodMode(!GodMode);
+
         void ResetAllSystems()
         {
             Ship.ResetSystem(); Camera.ResetSystem(); Waves.ResetSystem();
@@ -333,6 +345,7 @@ namespace JetHorizon
         {
             var s = Session;
             if (State.Phase != GamePhase.Playing) return;      // duplicate-frame guard
+            if (GodMode) return;                                // viewer mode never ends the run
             if (s.InvincibleTimer > 0f) return;                 // grace absorbs
 
             _killedThisFrame = true;

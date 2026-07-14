@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace JetHorizon
@@ -27,6 +28,9 @@ namespace JetHorizon
         float _hudTimer;
         float _klaxonTimer;
         bool _gameOverShown;
+        Button _godModeButton;
+        Image _godModeBackground;
+        Text _godModeLabel;
 
         void OnEnable()
         {
@@ -39,12 +43,19 @@ namespace JetHorizon
             GameEvents.KlaxonCountdown -= OnKlaxon;
         }
 
-        void Start() => Show(GamePhase.Title);
+        void Start()
+        {
+            EnsureEventSystem();
+            BuildGodModeButton();
+            Show(GamePhase.Title);
+            RefreshGodModeButton();
+        }
 
         void OnPhase(GamePhase from, GamePhase to)
         {
             _gameOverShown = false;
             Show(to);
+            RefreshGodModeButton();
         }
 
         void OnKlaxon() => _klaxonTimer = 1.5f;
@@ -63,6 +74,66 @@ namespace JetHorizon
             g.alpha = on ? 1f : 0f;
             g.interactable = on;
             g.blocksRaycasts = on;
+        }
+
+        static void EnsureEventSystem()
+        {
+            if (EventSystem.current != null) return;
+            var go = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            Object.DontDestroyOnLoad(go);
+        }
+
+        void BuildGodModeButton()
+        {
+            if (HudScreen == null || _godModeButton != null) return;
+
+            var go = new GameObject("GodModeButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(HudScreen.transform, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.92f, 0.075f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(240f, 68f);
+
+            _godModeBackground = go.GetComponent<Image>();
+            _godModeBackground.color = new Color(0.025f, 0.04f, 0.07f, 0.88f);
+
+            _godModeButton = go.GetComponent<Button>();
+            _godModeButton.targetGraphic = _godModeBackground;
+            _godModeButton.navigation = new Navigation { mode = Navigation.Mode.None };
+            _godModeButton.onClick.AddListener(OnGodModeClicked);
+
+            var labelGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            labelGo.transform.SetParent(go.transform, false);
+            var labelRt = (RectTransform)labelGo.transform;
+            labelRt.anchorMin = Vector2.zero;
+            labelRt.anchorMax = Vector2.one;
+            labelRt.offsetMin = labelRt.offsetMax = Vector2.zero;
+            _godModeLabel = labelGo.GetComponent<Text>();
+            _godModeLabel.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _godModeLabel.fontSize = 24;
+            _godModeLabel.fontStyle = FontStyle.Bold;
+            _godModeLabel.alignment = TextAnchor.MiddleCenter;
+            _godModeLabel.raycastTarget = false;
+        }
+
+        void OnGodModeClicked()
+        {
+            var gm = GameManager.I;
+            if (gm == null) return;
+            gm.ToggleGodMode();
+            RefreshGodModeButton();
+        }
+
+        void RefreshGodModeButton()
+        {
+            if (_godModeLabel == null || _godModeBackground == null) return;
+            bool enabled = GameManager.I != null && GameManager.I.GodMode;
+            _godModeLabel.text = enabled ? "GOD MODE  ON" : "GOD MODE  OFF";
+            _godModeLabel.color = enabled ? new Color(0.01f, 0.06f, 0.08f, 1f) : Color.white;
+            _godModeBackground.color = enabled
+                ? new Color(0f, 0.93f, 1f, 0.94f)
+                : new Color(0.025f, 0.04f, 0.07f, 0.88f);
         }
 
         void Update()
