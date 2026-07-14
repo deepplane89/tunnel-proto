@@ -76,6 +76,11 @@ namespace JetHorizon.Simulation
         int _wavesSinceCoin;
         CorridorFamily _lightningFamily;
         float _lightningTimer;
+        bool _zipperActive;
+        int _zipperRowsLeft;
+        int _zipperRowsTotal;
+        int _zipperSide;
+        float _zipperTimer;
 
         public CoreGamePhase Phase { get; private set; }
         public SimulationSnapshot Snapshot { get; }
@@ -259,11 +264,15 @@ namespace JetHorizon.Simulation
 
             if (_stageDirector != null)
             {
+                world.ZipperActive |= _zipperActive;
                 _stageDirector.Tick(dt, world, _random, Events, StageCommands);
                 _speed = _stageDirector.Speed;
+                ApplyStageCommandsToCore();
+                world.ZipperActive |= _zipperActive;
             }
 
             TickLightningSpawner(dt, world);
+            TickZipper(dt);
 
             _effectiveSpeed = world.OverdriveActive ? _speed * 1.8f : _speed;
             float step = _effectiveSpeed * dt;
@@ -328,6 +337,11 @@ namespace JetHorizon.Simulation
             _wavesSinceCoin = 99;
             _lightningFamily = CorridorFamily.None;
             _lightningTimer = 0f;
+            _zipperActive = false;
+            _zipperRowsLeft = 0;
+            _zipperRowsTotal = 0;
+            _zipperSide = 1;
+            _zipperTimer = 0f;
             if (_stageDirector != null)
             {
                 _stageDirector.Reset(events);
@@ -690,6 +704,80 @@ namespace JetHorizon.Simulation
             }
         }
 
+        void ApplyStageCommandsToCore()
+        {
+            for (int i = 0; i < StageCommands.Count; i++)
+            {
+                StageCommand command = StageCommands[i];
+                switch (command.Type)
+                {
+                    case StageCommandType.WipeHazards:
+                        Array.Clear(_hazards, 0, _hazards.Length);
+                        break;
+                    case StageCommandType.AbortTransientMechanics:
+                    case StageCommandType.AbortZipper:
+                        _zipperActive = false;
+                        _zipperRowsLeft = 0;
+                        break;
+                    case StageCommandType.StartZipper:
+                        if (!_zipperActive) StartZipper(Math.Max(1, (int)Math.Round(command.ValueA)));
+                        break;
+                }
+            }
+        }
+
+        void StartZipper(int rows)
+        {
+            _zipperRowsTotal = rows;
+            _zipperRowsLeft = rows;
+            _zipperSide = _random.NextFloat() < 0.5f ? -1 : 1;
+            _zipperTimer = -1f;
+            _zipperActive = true;
+        }
+
+        void TickZipper(float dt)
+        {
+            if (!_zipperActive) return;
+            if (_zipperRowsLeft <= 0)
+            {
+                _zipperActive = false;
+                return;
+            }
+
+            _zipperTimer += dt;
+            int rowsDone = _zipperRowsTotal - _zipperRowsLeft;
+            float ramp = Math.Min(rowsDone / (float)Math.Max(1, _zipperRowsTotal - 1), 1f);
+            float interval = 1.5f - ramp * 0.65f;
+            if (_zipperTimer < interval) return;
+            _zipperTimer = 0f;
+            SpawnZipperRow(rowsDone);
+            _zipperRowsLeft--;
+        }
+
+        void SpawnZipperRow(int rowsDone)
+        {
+            float gapCenter = _shipX + _zipperSide * _config.ZipperLateralOffset;
+            float gapHalf = rowsDone >= _config.ZipperReferenceRows - 2
+                ? _config.ZipperGapHalfWidth * 1.9f
+                : _config.ZipperGapHalfWidth;
+            float span = _config.LaneCount * _config.ZipperSpanPerLane;
+            for (float x = _shipX - span * 0.5f; x <= _shipX + span * 0.5f; x += _config.LaneWidth)
+            {
+                if (Math.Abs(x - gapCenter) <= gapHalf) continue;
+                HazardSpawn cone = HazardSpawn.Cone(
+                    x + (_random.NextFloat() - 0.5f) * 0.5f,
+                    _config.SpawnZ,
+                    1f,
+                    0f,
+                    HazardStyle.CorridorCone,
+                    _random.NextInt(0, 3));
+                cone.Y = -2f;
+                cone.CollisionHalfDepth = _config.CollisionHalfDepth;
+                SpawnHazard(cone);
+            }
+            _zipperSide = -_zipperSide;
+        }
+
         int SpawnHazard(HazardSpawn spawn)
         {
             int slot = -1;
@@ -810,6 +898,7 @@ namespace JetHorizon.Simulation
             Snapshot.ShipRollRadians = _rollRadians;
             Snapshot.ShipTiltTimer = _tiltTimer;
             Snapshot.StageDirectorEnabled = _stageDirector != null;
+            Snapshot.ZipperActive = _zipperActive;
             if (_stageDirector != null)
             {
                 Snapshot.StageIndex = _stageDirector.StageIndex;

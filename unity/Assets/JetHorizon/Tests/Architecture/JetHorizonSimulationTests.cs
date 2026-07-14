@@ -567,6 +567,38 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(effect.ConeLength, Is.EqualTo(3.30f));
         }
 
+        [Test]
+        public void ZipperPatternSchedulingAndRowsAreCoreOwnedAndDeterministic()
+        {
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("ZIPPER", StageKind.ZipperOnly, 20f, 1.5f, 2, 1)
+            });
+            var config = new SimulationConfig { CollisionEnabled = false };
+            var first = new JetHorizonSimulation(config, 98u, run);
+            var replay = new JetHorizonSimulation(config, 98u, run);
+            first.StartRun();
+            replay.StartRun();
+
+            for (int i = 0; i < 155; i++)
+            {
+                first.Step(default);
+                replay.Step(default);
+            }
+
+            Assert.That(first.Snapshot.ZipperActive, Is.True);
+            Assert.That(first.Snapshot.HazardCount, Is.GreaterThan(30));
+            Assert.That(replay.Snapshot.HazardCount, Is.EqualTo(first.Snapshot.HazardCount));
+            for (int i = 0; i < first.Snapshot.HazardCount; i++)
+            {
+                var a = first.Snapshot.GetHazard(i);
+                var b = replay.Snapshot.GetHazard(i);
+                Assert.That(a.Style, Is.EqualTo(HazardStyle.CorridorCone));
+                Assert.That(b.X, Is.EqualTo(a.X));
+                Assert.That(b.Z, Is.EqualTo(a.Z));
+            }
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);

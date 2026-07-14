@@ -130,7 +130,6 @@ namespace JetHorizon
             Canyon.SimTick(dt);                                  // 16: canyon slabs + collision
             if (_killedThisFrame) return;
             SineCorridor.SimTick(dt);                            // 16: L3/L4/L5 row spawners
-            Zipper.SimTick(dt);
             Slalom.SimTick(dt);
             AngledWalls.SimTick(dt);                             // walls move + OBB collision
             if (_killedThisFrame) return;
@@ -213,6 +212,7 @@ namespace JetHorizon
             Session.RollAngle = snapshot.ShipRollRadians;
             Session.BankRoll = snapshot.ShipBankRadians;
             Session.TiltTimer = snapshot.ShipTiltTimer;
+            Session.ZipperActive = snapshot.ZipperActive;
         }
 
         public void ReportNearMiss()

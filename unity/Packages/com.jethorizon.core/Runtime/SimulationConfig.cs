@@ -52,6 +52,10 @@ namespace JetHorizon.Simulation
         public float NearMissBand = 0.6f;
         public float NearMissDepth = 2f;
         public float NearMissScore = 25f;
+        public int ZipperReferenceRows = 13;
+        public float ZipperGapHalfWidth = 7.5f;
+        public float ZipperLateralOffset = 11f;
+        public float ZipperSpanPerLane = 8f;
         public float DistanceBonusStep = 5000f;
         public float DistanceBonusPerStep = 0.1f;
         public int MaxHazards = 64;

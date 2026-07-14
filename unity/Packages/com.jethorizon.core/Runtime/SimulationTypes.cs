@@ -409,6 +409,7 @@ namespace JetHorizon.Simulation
         public float ShipRollRadians { get; internal set; }
         public float ShipTiltTimer { get; internal set; }
         public bool StageDirectorEnabled { get; internal set; }
+        public bool ZipperActive { get; internal set; }
         public int StageIndex { get; internal set; }
         public string StageName { get; internal set; }
         public float StageElapsed { get; internal set; }

@@ -212,12 +212,10 @@ namespace JetHorizon
                     Obstacles.WipeAllHazards();
                     break;
                 case StageCommandType.AbortTransientMechanics:
-                    Zipper.Abort();
                     Slalom.Abort();
                     AngledWalls.Abort();
                     break;
                 case StageCommandType.AbortZipper:
-                    Zipper.Abort();
                     break;
                 case StageCommandType.LaunchCorridor:
                     LaunchCoreCorridor(command);
@@ -230,7 +228,6 @@ namespace JetHorizon
                         Slalom.Begin(command.ValueA, Mathf.RoundToInt(command.ValueB));
                     break;
                 case StageCommandType.StartZipper:
-                    if (!S.ZipperActive) Zipper.Begin(Mathf.RoundToInt(command.ValueA));
                     break;
             }
         }
