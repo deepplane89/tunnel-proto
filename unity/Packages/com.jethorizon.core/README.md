@@ -10,6 +10,8 @@ Current scope:
 - production lateral movement and counter-steering values;
 - roll-aware collision width and visual bank output;
 - deterministic standard-hazard spawning;
+- typed cone/ring/wall/corridor hazard identities with external register/remove APIs;
+- core-owned hazard movement, stable IDs, collision suppression, and octagonal ring geometry;
 - scoring, near misses, and death events;
 - live-run distance, passive score, pickup awards, and final score multiplier;
 - engine-supplied world facts represented as value-only `WorldFrame` input;

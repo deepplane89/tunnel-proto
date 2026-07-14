@@ -269,6 +269,45 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(analytics.Last.Name, Is.EqualTo("run_finished"));
         }
 
+        [Test]
+        public void RegisteredHazardsAreCoreOwnedAndRespectCollisionSuppression()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                HazardSimulationEnabled = true,
+                CollisionEnabled = true
+            }, 91u);
+            simulation.StartRun();
+            int id = simulation.RegisterHazard(HazardSpawn.Cone(0f, 3f));
+            Assert.That(id, Is.GreaterThan(0));
+            Assert.That(simulation.Snapshot.HazardCount, Is.EqualTo(1));
+
+            simulation.Step(default, new WorldFrame(false, false) { CollisionSuppressed = true });
+            Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Playing));
+            Assert.That(simulation.Snapshot.GetHazard(0).Z, Is.GreaterThan(3f));
+
+            simulation.Step(default, new WorldFrame(false, false));
+            Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Dead));
+        }
+
+        [Test]
+        public void RegisteredHazardCanBeRemovedByStableIdentity()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false
+            }, 92u);
+            simulation.StartRun();
+            int id = simulation.RegisterHazard(HazardSpawn.Ring(4f, 2f, -10f, 5.25f, 2.2f));
+
+            Assert.That(simulation.Snapshot.GetHazard(0).Kind, Is.EqualTo(HazardKind.Ring));
+            Assert.That(simulation.RemoveHazard(id), Is.True);
+            Assert.That(simulation.RemoveHazard(id), Is.False);
+            Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);

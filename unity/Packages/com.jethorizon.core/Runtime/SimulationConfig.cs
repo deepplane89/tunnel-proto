@@ -56,6 +56,7 @@ namespace JetHorizon.Simulation
         public bool CollisionEnabled = true;
         public bool ProgressionEnabled = true;
         public bool HazardSpawningEnabled = true;
+        public bool HazardSimulationEnabled = true;
 
         public float Acceleration => (AccelBase + Snap * AccelSnap) * AccelMultiplier;
         public float Deceleration => (10f + Snap * 26f) * DecelBasePercent;

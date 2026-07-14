@@ -13,9 +13,15 @@ namespace JetHorizon.Simulation
             public bool Active;
             public bool NearMissArmed;
             public int Id;
+            public HazardKind Kind;
             public float X;
+            public float Y;
             public float Z;
             public float HalfWidth;
+            public float HalfDepth;
+            public float VisualScale;
+            public float RingRadius;
+            public float RingTubeRadius;
         }
 
         readonly SimulationConfig _config;
@@ -123,6 +129,28 @@ namespace JetHorizon.Simulation
             RefreshSnapshot();
         }
 
+        public int RegisterHazard(HazardSpawn spawn)
+        {
+            if (Phase != CoreGamePhase.Playing) return 0;
+            ValidateHazard(spawn);
+            int id = SpawnHazard(spawn);
+            RefreshSnapshot();
+            return id;
+        }
+
+        public bool RemoveHazard(int id)
+        {
+            if (id <= 0) return false;
+            for (int i = 0; i < _hazards.Length; i++)
+            {
+                if (!_hazards[i].Active || _hazards[i].Id != id) continue;
+                _hazards[i].Active = false;
+                RefreshSnapshot();
+                return true;
+            }
+            return false;
+        }
+
         public void Step(InputFrame input)
         {
             Step(input, default);
@@ -160,9 +188,10 @@ namespace JetHorizon.Simulation
                     SpawnStandardHazard();
                     _distanceUntilSpawn += _config.SpawnIntervalDistance;
                 }
-
-                UpdateHazards(step);
             }
+
+            if (_config.HazardSimulationEnabled)
+                UpdateHazards(step, world.CollisionSuppressed);
 
             if (_stageDirector != null && Phase == CoreGamePhase.Playing)
             {
@@ -271,31 +300,51 @@ namespace JetHorizon.Simulation
 
         void SpawnStandardHazard()
         {
+            int lane = _random.NextInt(0, _config.LaneCount);
+            float centerLane = (_config.LaneCount - 1) * 0.5f;
+            float x = _shipX + (lane - centerLane) * _config.LaneWidth;
+            SpawnHazard(new HazardSpawn
+            {
+                Kind = HazardKind.Cone,
+                X = x,
+                Z = _config.SpawnZ,
+                CollisionHalfWidth = _config.HazardHalfWidth,
+                CollisionHalfDepth = _config.CollisionHalfDepth,
+                VisualScale = 1f,
+                NearMissEnabled = true
+            });
+        }
+
+        int SpawnHazard(HazardSpawn spawn)
+        {
             int slot = -1;
             for (int i = 0; i < _hazards.Length; i++)
             {
                 if (!_hazards[i].Active) { slot = i; break; }
             }
-            if (slot < 0) return;
+            if (slot < 0) return 0;
 
-            int lane = _random.NextInt(0, _config.LaneCount);
-            float centerLane = (_config.LaneCount - 1) * 0.5f;
-            float x = _shipX + (lane - centerLane) * _config.LaneWidth;
             int id = _nextEntityId++;
-
             _hazards[slot] = new HazardState
             {
                 Active = true,
-                NearMissArmed = true,
+                NearMissArmed = spawn.NearMissEnabled,
                 Id = id,
-                X = x,
-                Z = _config.SpawnZ,
-                HalfWidth = _config.HazardHalfWidth
+                Kind = spawn.Kind,
+                X = spawn.X,
+                Y = spawn.Y,
+                Z = spawn.Z,
+                HalfWidth = spawn.CollisionHalfWidth,
+                HalfDepth = spawn.CollisionHalfDepth,
+                VisualScale = spawn.VisualScale,
+                RingRadius = spawn.RingRadius,
+                RingTubeRadius = spawn.RingTubeRadius
             };
-            Events.Add(new SimulationEvent(SimulationEventType.HazardSpawned, id, x, _config.SpawnZ));
+            Events.Add(new SimulationEvent(SimulationEventType.HazardSpawned, id, spawn.X, spawn.Z));
+            return id;
         }
 
-        void UpdateHazards(float step)
+        void UpdateHazards(float step, bool collisionSuppressed)
         {
             float rollFraction = Clamp01(Math.Abs(_rollRadians) / _config.RollMaxRadians);
             float shipHalfWidth = Lerp(
@@ -320,7 +369,10 @@ namespace JetHorizon.Simulation
                 float dz = Math.Abs(hazard.Z - _config.ShipZ);
                 float collisionX = shipHalfWidth + hazard.HalfWidth;
 
-                if (_config.CollisionEnabled && dx < collisionX && dz < _config.CollisionHalfDepth)
+                bool hit = hazard.Kind == HazardKind.Ring
+                    ? dz < hazard.HalfDepth && RingHit(hazard)
+                    : dx < collisionX && dz < hazard.HalfDepth;
+                if (_config.CollisionEnabled && !collisionSuppressed && hit)
                 {
                     hazard.Active = false;
                     _hazards[i] = hazard;
@@ -331,6 +383,7 @@ namespace JetHorizon.Simulation
                 }
 
                 if (hazard.NearMissArmed
+                    && hazard.Kind != HazardKind.Ring
                     && dx >= collisionX
                     && dx < collisionX + _config.NearMissBand
                     && dz < _config.NearMissDepth)
@@ -393,7 +446,14 @@ namespace JetHorizon.Simulation
             {
                 HazardState hazard = _hazards[i];
                 if (!hazard.Active) continue;
-                Snapshot.SetHazard(count++, new HazardSnapshot(hazard.Id, hazard.X, hazard.Z, hazard.HalfWidth));
+                Snapshot.SetHazard(count++, new HazardSnapshot(
+                    hazard.Id,
+                    hazard.Kind,
+                    hazard.X,
+                    hazard.Y,
+                    hazard.Z,
+                    hazard.HalfWidth,
+                    hazard.VisualScale));
             }
             Snapshot.HazardCount = count;
         }
@@ -411,6 +471,40 @@ namespace JetHorizon.Simulation
             float delta = target - current;
             if (Math.Abs(delta) <= maximumDelta) return target;
             return current + Math.Sign(delta) * maximumDelta;
+        }
+
+        bool RingHit(HazardState ring)
+        {
+            const int sides = 8;
+            for (int i = 0; i < sides; i++)
+            {
+                float a0 = i / (float)sides * (float)(Math.PI * 2.0) + (float)Math.PI / sides;
+                float a1 = (i + 1) / (float)sides * (float)(Math.PI * 2.0) + (float)Math.PI / sides;
+                float x0 = ring.X + (float)Math.Cos(a0) * ring.RingRadius;
+                float y0 = ring.Y + (float)Math.Sin(a0) * ring.RingRadius;
+                float x1 = ring.X + (float)Math.Cos(a1) * ring.RingRadius;
+                float y1 = ring.Y + (float)Math.Sin(a1) * ring.RingRadius;
+                float sx = x1 - x0;
+                float sy = y1 - y0;
+                float lengthSquared = sx * sx + sy * sy;
+                float t = lengthSquared > 0f
+                    ? Clamp(((_shipX - x0) * sx + (_shipY - y0) * sy) / lengthSquared, 0f, 1f)
+                    : 0f;
+                float dx = _shipX - (x0 + sx * t);
+                float dy = _shipY - (y0 + sy * t);
+                if (dx * dx + dy * dy < ring.RingTubeRadius * ring.RingTubeRadius) return true;
+            }
+            return false;
+        }
+
+        static void ValidateHazard(HazardSpawn spawn)
+        {
+            if (float.IsNaN(spawn.X) || float.IsNaN(spawn.Y) || float.IsNaN(spawn.Z))
+                throw new ArgumentOutOfRangeException(nameof(spawn));
+            if (spawn.CollisionHalfDepth <= 0f) throw new ArgumentOutOfRangeException(nameof(spawn.CollisionHalfDepth));
+            if (spawn.VisualScale <= 0f) throw new ArgumentOutOfRangeException(nameof(spawn.VisualScale));
+            if (spawn.Kind == HazardKind.Ring && (spawn.RingRadius <= 0f || spawn.RingTubeRadius <= 0f))
+                throw new ArgumentOutOfRangeException(nameof(spawn.RingRadius));
         }
 
         void ApplyFinalScoreMultiplier()

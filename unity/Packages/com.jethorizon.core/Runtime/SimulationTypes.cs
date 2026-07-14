@@ -39,6 +39,7 @@ namespace JetHorizon.Simulation
         public bool ZipperActive;
         public bool SlalomActive;
         public bool AngledWallsActive;
+        public bool CollisionSuppressed;
 
         public bool AnyCorridorActive => CanyonActive || SineCorridorActive;
         public bool AnyStructuredMechanicActive => AnyCorridorActive || ZipperActive || SlalomActive || AngledWallsActive;
@@ -54,6 +55,7 @@ namespace JetHorizon.Simulation
             ZipperActive = false;
             SlalomActive = false;
             AngledWallsActive = false;
+            CollisionSuppressed = false;
         }
     }
 
@@ -120,19 +122,78 @@ namespace JetHorizon.Simulation
         }
     }
 
+    public enum HazardKind
+    {
+        Cone,
+        Ring,
+        Wall,
+        Corridor
+    }
+
+    /// <summary>Engine-neutral hazard creation request. Visual identity is carried separately by the presenter.</summary>
+    public struct HazardSpawn
+    {
+        public HazardKind Kind;
+        public float X;
+        public float Y;
+        public float Z;
+        public float CollisionHalfWidth;
+        public float CollisionHalfDepth;
+        public float VisualScale;
+        public float RingRadius;
+        public float RingTubeRadius;
+        public bool NearMissEnabled;
+
+        public static HazardSpawn Cone(float x, float z, float visualScale = 1f, float collisionHalfWidth = 0.9f)
+        {
+            return new HazardSpawn
+            {
+                Kind = HazardKind.Cone,
+                X = x,
+                Z = z,
+                CollisionHalfWidth = collisionHalfWidth,
+                CollisionHalfDepth = 1.5f,
+                VisualScale = visualScale,
+                NearMissEnabled = true
+            };
+        }
+
+        public static HazardSpawn Ring(float x, float y, float z, float radius, float tubeRadius)
+        {
+            return new HazardSpawn
+            {
+                Kind = HazardKind.Ring,
+                X = x,
+                Y = y,
+                Z = z,
+                CollisionHalfDepth = tubeRadius + 1f,
+                VisualScale = 1f,
+                RingRadius = radius,
+                RingTubeRadius = tubeRadius,
+                NearMissEnabled = false
+            };
+        }
+    }
+
     public struct HazardSnapshot
     {
         public int Id { get; }
+        public HazardKind Kind { get; }
         public float X { get; }
+        public float Y { get; }
         public float Z { get; }
         public float HalfWidth { get; }
+        public float VisualScale { get; }
 
-        internal HazardSnapshot(int id, float x, float z, float halfWidth)
+        internal HazardSnapshot(int id, HazardKind kind, float x, float y, float z, float halfWidth, float visualScale)
         {
             Id = id;
+            Kind = kind;
             X = x;
+            Y = y;
             Z = z;
             HalfWidth = halfWidth;
+            VisualScale = visualScale;
         }
     }
 

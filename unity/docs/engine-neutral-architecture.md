@@ -36,6 +36,9 @@ Platform effects are one-way: simulation events enter the application router, wh
 - typed `RunDefinition`/`StageDefinition` content mapped from the existing JSON;
 - deterministic `StageDirector` with an allocation-free `StageCommandBuffer`;
 - live `WaveDirector` adapter for canyon, sine corridor, walls, slalom, and zipper presenters;
+- typed `HazardSpawn`/`HazardSnapshot` entities with stable registration IDs;
+- separate automatic-spawn and hazard-simulation switches for incremental presenter migration;
+- engine-neutral cone/AABB and octagonal-ring collision with explicit suppression input;
 - reused snapshot and event buffers;
 - start, pause, reset, and deterministic replay behavior.
 
@@ -53,7 +56,7 @@ Only then should the corresponding legacy gameplay code be disabled. Presentatio
 
 ## Next checkpoint
 
-Move rendered hazard identity, movement, collision shapes, and pickup spawn decisions behind engine-neutral APIs, then add:
+Connect the existing Unity cone/ring pools to the new hazard registry, then move angled-wall/corridor collision and pickup spawn decisions behind engine-neutral APIs. After that, add:
 
 - a `ShipDefinition` with explicit thruster sockets;
 - a GPU-driven procedural starfield presenter;
