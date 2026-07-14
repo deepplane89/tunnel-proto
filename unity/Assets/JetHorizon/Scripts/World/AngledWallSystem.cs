@@ -32,6 +32,7 @@ namespace JetHorizon
 
         static readonly int TintId = Shader.PropertyToID("_Tint");
         static readonly int FadeId = Shader.PropertyToID("_Fade");
+        static readonly int EdgeStrengthId = Shader.PropertyToID("_EdgeStrength");
 
         RunSession S => GameManager.I.Session;
 
@@ -208,6 +209,7 @@ namespace JetHorizon
                 wall.T.localScale = new Vector3(w, h, 0.3f);
                 wall.Mpb.SetColor(TintId, Vibes.ConeColors[colorType]);
                 wall.Mpb.SetFloat(FadeId, 0f);
+                wall.Mpb.SetFloat(EdgeStrengthId, 0.55f);
                 wall.R.SetPropertyBlock(wall.Mpb);
                 wall.T.gameObject.SetActive(true);
                 return;
@@ -250,6 +252,7 @@ namespace JetHorizon
                     ? Vibes.StructuredWallTint
                     : Vibes.ConeColors[colorType]);
                 wall.Mpb.SetFloat(FadeId, 0f);
+                wall.Mpb.SetFloat(EdgeStrengthId, 0.55f);
                 wall.R.SetPropertyBlock(wall.Mpb);
                 wall.T.gameObject.SetActive(true);
                 return;

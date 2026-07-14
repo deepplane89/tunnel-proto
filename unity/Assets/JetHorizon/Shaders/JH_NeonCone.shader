@@ -8,6 +8,8 @@ Shader "JH/NeonCone"
         _Fade ("Fade", Range(0,1)) = 1
         _BodyColor ("Body Color", Color) = (0.07, 0.07, 0.10, 1)
         _GlowStrength ("Glow Strength", Range(0,4)) = 1.6
+        _BandAmount ("Neon Band Amount", Range(0,1)) = 0
+        _EdgeStrength ("Edge Strength", Range(0,1)) = 0.12
     }
     SubShader
     {
@@ -38,6 +40,8 @@ Shader "JH/NeonCone"
                 half  _Fade;
                 half4 _BodyColor;
                 half  _GlowStrength;
+                half  _BandAmount;
+                half  _EdgeStrength;
             CBUFFER_END
 
             Varyings vert(Attributes IN)
@@ -54,13 +58,24 @@ Shader "JH/NeonCone"
 
             half4 frag(Varyings IN) : SV_Target
             {
-                half fresnel = 1.0 - saturate(dot(normalize(IN.normalWS), normalize(IN.viewDirWS)));
-                // neon UV band around the lower-middle (uGlowBot 0.255 / uGlowTop 0.345 vibe)
-                half band = smoothstep(0.18, 0.28, IN.uv.y) * smoothstep(0.45, 0.35, IN.uv.y);
-                half glow = saturate(band + pow(fresnel, 2.0));
-                half3 col = lerp(_BodyColor.rgb, _Tint.rgb * _GlowStrength, glow);
-                // HDR push on the band so URP bloom (threshold 1) picks it up
-                col += _Tint.rgb * band * _GlowStrength;
+                half3 n = normalize(IN.normalWS);
+                half fresnel = 1.0 - saturate(dot(n, normalize(IN.viewDirWS)));
+
+                // Source treatment: nearly-black obsidian with restrained facets. Standard
+                // cones do not become fully neon merely because they approach the camera.
+                half facet = 0.76 + 0.24 * saturate(dot(n, normalize(half3(-0.35, 0.75, 0.45))));
+                half3 col = _BodyColor.rgb * facet;
+
+                // The narrow floating band is opt-in for corridor/slalom language only.
+                half coreBand = smoothstep(0.255, 0.292, IN.uv.y)
+                              * (1.0 - smoothstep(0.308, 0.345, IN.uv.y));
+                half haloBand = smoothstep(0.215, 0.278, IN.uv.y)
+                              * (1.0 - smoothstep(0.322, 0.385, IN.uv.y));
+                half band = saturate(coreBand + haloBand * 0.24) * _BandAmount;
+                half edge = pow(fresnel, 3.0) * _EdgeStrength;
+
+                col = lerp(col, _Tint.rgb * _GlowStrength, saturate(band + edge));
+                col += _Tint.rgb * coreBand * _BandAmount * _GlowStrength * 0.85;
                 col = MixFog(col, IN.fogFactor);   // depth cueing like the JS FogExp2
                 return half4(col, _Fade);
             }

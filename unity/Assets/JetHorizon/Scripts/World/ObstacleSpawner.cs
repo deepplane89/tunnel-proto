@@ -48,6 +48,7 @@ namespace JetHorizon
 
         static readonly int TintId = Shader.PropertyToID("_Tint");
         static readonly int FadeId = Shader.PropertyToID("_Fade");
+        static readonly int BandAmountId = Shader.PropertyToID("_BandAmount");
 
         void Awake() => BuildPools();
 
@@ -144,6 +145,7 @@ namespace JetHorizon
                 Color col = tint ?? Vibes.ConeColors[c.ColorType];
                 c.Mpb.SetColor(TintId, col);
                 c.Mpb.SetFloat(FadeId, 0f);
+                c.Mpb.SetFloat(BandAmountId, isCorridor ? 1f : 0f);
                 c.R.SetPropertyBlock(c.Mpb);
                 c.T.gameObject.SetActive(true);
                 return c;
@@ -256,6 +258,7 @@ namespace JetHorizon
                         : Vibes.ConeColors[c.ColorType];
                 c.Mpb.SetColor(TintId, tint);
                 c.Mpb.SetFloat(FadeId, 0f);
+                c.Mpb.SetFloat(BandAmountId, c.IsCorridor ? 1f : 0f);
                 c.R.SetPropertyBlock(c.Mpb);
                 c.T.gameObject.SetActive(true);
                 return;

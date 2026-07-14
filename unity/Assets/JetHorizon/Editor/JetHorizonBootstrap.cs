@@ -49,15 +49,16 @@ namespace JetHorizon.EditorTools
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             // ── Materials ────────────────────────────────────────────────
-            var coneMat  = SaveMat(NewMat("JH/NeonCone", "ConeMat"));
+            var coneMat  = SaveMat(NewMat("JH/NeonCone", "ConeMat", m => {
+                m.SetFloat("_BandAmount", 0f); m.SetFloat("_EdgeStrength", 0.12f); }));
             var ringMat  = SaveMat(NewMat("JH/NeonCone", "RingMat", m => {
                 m.SetColor("_Tint", TextureFactory.Hex(0xff1a1a));
                 m.SetColor("_BodyColor", TextureFactory.Hex(0x0a0a0f));
-                m.SetFloat("_GlowStrength", 2.2f); }));
+                m.SetFloat("_GlowStrength", 2.2f); m.SetFloat("_EdgeStrength", 0.75f); }));
             var coinMat  = SaveMat(NewMat("JH/NeonCone", "CoinMat", m => {
                 m.SetColor("_Tint", TextureFactory.Hex(0xffd700));
                 m.SetColor("_BodyColor", TextureFactory.Hex(0x332200));
-                m.SetFloat("_GlowStrength", 2.5f); m.SetFloat("_Fade", 1f); }));
+                m.SetFloat("_GlowStrength", 2.5f); m.SetFloat("_EdgeStrength", 0.55f); m.SetFloat("_Fade", 1f); }));
             var addMat   = SaveMat(NewMat("JH/Additive", "AdditiveMat"));
             var radialTex = TextureFactory.RadialSprite(); radialTex.name = "RadialSprite";
             AssetDatabase.CreateAsset(radialTex, $"{GenDir}/RadialSprite.asset");
