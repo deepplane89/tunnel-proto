@@ -89,6 +89,13 @@ namespace JetHorizon.Simulation
         VibeChanged,
         KlaxonCountdown,
         PickupCollected,
+        PowerupCollected,
+        PowerupActivated,
+        PowerupExpired,
+        ShieldHit,
+        ShieldBroken,
+        LaserFired,
+        HazardDestroyed,
         PlayerDied
     }
 
@@ -347,9 +354,20 @@ namespace JetHorizon.Simulation
         Powerup
     }
 
+    /// <summary>Portable gameplay identity for the four production power-ups.</summary>
+    public enum PowerupType
+    {
+        None = 0,
+        Shield = 1,
+        Laser = 2,
+        Overdrive = 3,
+        Magnet = 4
+    }
+
     public struct PickupSpawn
     {
         public PickupKind Kind;
+        public PowerupType Powerup;
         public float X;
         public float Y;
         public float Z;
@@ -370,20 +388,38 @@ namespace JetHorizon.Simulation
                 CollectHalfDepth = 1.6f
             };
         }
+
+        public static PickupSpawn PowerupPickup(PowerupType type, float x, float y, float z)
+        {
+            if (type == PowerupType.None) throw new ArgumentOutOfRangeException(nameof(type));
+            return new PickupSpawn
+            {
+                Kind = PickupKind.Powerup,
+                Powerup = type,
+                X = x,
+                Y = y,
+                Z = z,
+                ScoreValue = 0f,
+                CollectHalfWidth = 2.5f,
+                CollectHalfDepth = 2.5f
+            };
+        }
     }
 
     public struct PickupSnapshot
     {
         public int Id { get; }
         public PickupKind Kind { get; }
+        public PowerupType Powerup { get; }
         public float X { get; }
         public float Y { get; }
         public float Z { get; }
 
-        internal PickupSnapshot(int id, PickupKind kind, float x, float y, float z)
+        internal PickupSnapshot(int id, PickupKind kind, PowerupType powerup, float x, float y, float z)
         {
             Id = id;
             Kind = kind;
+            Powerup = powerup;
             X = x;
             Y = y;
             Z = z;
@@ -430,6 +466,12 @@ namespace JetHorizon.Simulation
         public float StageRamp01 { get; internal set; }
         public int HazardCount { get; internal set; }
         public int PickupCount { get; internal set; }
+        public float ShieldSeconds { get; internal set; }
+        public int ShieldHits { get; internal set; }
+        public float LaserSeconds { get; internal set; }
+        public float OverdriveSeconds { get; internal set; }
+        public float OverdriveSpeedSeconds { get; internal set; }
+        public float MagnetSeconds { get; internal set; }
 
         internal SimulationSnapshot(int maxHazards, int maxPickups)
         {

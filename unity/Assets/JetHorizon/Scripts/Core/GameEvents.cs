@@ -1,4 +1,5 @@
 using System;
+using JetHorizon.Simulation;
 
 namespace JetHorizon
 {
@@ -17,6 +18,12 @@ namespace JetHorizon
         public static event Action<int> VibeChanged;                     // palette index
         public static event Action NearMiss;
         public static event Action CoinCollected;
+        public static event Action<PowerupType> PowerupCollected;
+        public static event Action<PowerupType, float> PowerupActivated;
+        public static event Action<PowerupType> PowerupExpired;
+        public static event Action<int> ShieldHit;
+        public static event Action ShieldBroken;
+        public static event Action<float> LaserFired;
         public static event Action CanyonRevealed;
         public static event Action KlaxonCountdown;                      // 1.5s before a speed bump
 
@@ -28,6 +35,12 @@ namespace JetHorizon
         public static void RaiseVibeChanged(int idx)        => VibeChanged?.Invoke(idx);
         public static void RaiseNearMiss()                  => NearMiss?.Invoke();
         public static void RaiseCoinCollected()             => CoinCollected?.Invoke();
+        public static void RaisePowerupCollected(PowerupType type) => PowerupCollected?.Invoke(type);
+        public static void RaisePowerupActivated(PowerupType type, float duration) => PowerupActivated?.Invoke(type, duration);
+        public static void RaisePowerupExpired(PowerupType type) => PowerupExpired?.Invoke(type);
+        public static void RaiseShieldHit(int remaining)    => ShieldHit?.Invoke(remaining);
+        public static void RaiseShieldBroken()              => ShieldBroken?.Invoke();
+        public static void RaiseLaserFired(float laneOffset) => LaserFired?.Invoke(laneOffset);
         public static void RaiseCanyonRevealed()            => CanyonRevealed?.Invoke();
         public static void RaiseKlaxonCountdown()           => KlaxonCountdown?.Invoke();
 
@@ -36,6 +49,8 @@ namespace JetHorizon
         {
             PhaseChanged = null; RunStarted = null; PlayerDied = null; StageChanged = null;
             SpeedChanged = null; VibeChanged = null; NearMiss = null; CoinCollected = null;
+            PowerupCollected = null; PowerupActivated = null; PowerupExpired = null;
+            ShieldHit = null; ShieldBroken = null; LaserFired = null;
             CanyonRevealed = null; KlaxonCountdown = null;
         }
     }

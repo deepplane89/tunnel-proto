@@ -40,6 +40,7 @@ namespace JetHorizon.Simulation
             public bool Active;
             public int Id;
             public PickupKind Kind;
+            public PowerupType Powerup;
             public float X;
             public float Y;
             public float Z;
@@ -74,6 +75,14 @@ namespace JetHorizon.Simulation
         float _distanceUntilSpawn;
         int _nextEntityId;
         int _wavesSinceCoin;
+        int _wavesSincePowerup;
+        int _nextPowerupType;
+        float _shieldSeconds;
+        int _shieldHits;
+        float _laserSeconds;
+        float _laserShotTimer;
+        float _overdriveSeconds;
+        float _magnetSeconds;
         CorridorFamily _lightningFamily;
         float _lightningTimer;
         bool _zipperActive;
@@ -240,6 +249,7 @@ namespace JetHorizon.Simulation
                 Active = true,
                 Id = id,
                 Kind = spawn.Kind,
+                Powerup = spawn.Powerup,
                 X = spawn.X,
                 Y = spawn.Y,
                 Z = spawn.Z,
@@ -274,6 +284,7 @@ namespace JetHorizon.Simulation
             float dt = _config.FixedDeltaSeconds;
             _tick++;
             _elapsed += dt;
+            TickPowerups(dt);
 
             UpdateShip(input, dt, world.ShipMovementSuppressed);
 
@@ -298,7 +309,9 @@ namespace JetHorizon.Simulation
                 world.AngledWallsActive = _structuredWallsActive;
             }
 
-            _effectiveSpeed = world.OverdriveActive ? _speed * 1.8f : _speed;
+            _effectiveSpeed = (world.OverdriveActive || OverdriveSpeedActive)
+                ? _speed * PowerupCatalog.OverdriveSpeedMultiplier
+                : _speed;
             TickLightningSpawner(dt, world);
             TickZipper(dt);
             TickSlalom(dt);
@@ -315,8 +328,11 @@ namespace JetHorizon.Simulation
             if (_config.HazardSpawningEnabled)
                 TickWorldSpawner(step, world);
 
+            if (_laserSeconds > 0f)
+                TickLaserWeapon(dt);
+
             if (_config.HazardSimulationEnabled)
-                UpdateHazards(step, world.CollisionSuppressed);
+                UpdateHazards(step, world.CollisionSuppressed || _overdriveSeconds > 0f);
 
             if (_config.PickupSimulationEnabled && Phase == CoreGamePhase.Playing)
                 UpdatePickups(step);
@@ -337,9 +353,80 @@ namespace JetHorizon.Simulation
             bool hitLeft = _shipX - halfWidth <= world.CorridorLeftBoundary - grace;
             if (!hitRight && !hitLeft) return false;
 
+            if (_overdriveSeconds > 0f) return false;
+            if (ConsumeShieldHit(0)) return false;
+
             ApplyFinalScoreMultiplier();
             Phase = CoreGamePhase.Dead;
             Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, 0, _score, _distance));
+            return true;
+        }
+
+        public bool OverdriveSpeedActive => _overdriveSeconds > PowerupCatalog.Overdrive.GraceSeconds;
+
+        public void ActivatePowerup(PowerupType type)
+        {
+            PowerupDefinition definition = PowerupCatalog.Get(type);
+            if (definition.Type == PowerupType.None) return;
+
+            switch (type)
+            {
+                case PowerupType.Shield:
+                    _shieldSeconds = Math.Max(_shieldSeconds, definition.DurationSeconds);
+                    _shieldHits = Math.Max(_shieldHits, definition.HitPoints);
+                    break;
+                case PowerupType.Laser:
+                    _laserSeconds = Math.Max(_laserSeconds, definition.DurationSeconds);
+                    _laserShotTimer = 0f;
+                    break;
+                case PowerupType.Overdrive:
+                    _overdriveSeconds = Math.Max(_overdriveSeconds, definition.DurationSeconds);
+                    break;
+                case PowerupType.Magnet:
+                    _magnetSeconds = Math.Max(_magnetSeconds, definition.DurationSeconds);
+                    break;
+            }
+            Events.Add(new SimulationEvent(SimulationEventType.PowerupActivated, 0, (float)type, definition.DurationSeconds));
+            RefreshSnapshot();
+        }
+
+        /// <summary>Migration seam for a legacy Unity collision presenter.</summary>
+        public bool TryAbsorbExternalHit(int hazardId = 0)
+        {
+            if (_overdriveSeconds > 0f) return true;
+            bool absorbed = ConsumeShieldHit(hazardId);
+            if (absorbed) RefreshSnapshot();
+            return absorbed;
+        }
+
+        void TickPowerups(float dt)
+        {
+            TickTimer(ref _shieldSeconds, PowerupType.Shield, dt);
+            TickTimer(ref _laserSeconds, PowerupType.Laser, dt);
+            TickTimer(ref _overdriveSeconds, PowerupType.Overdrive, dt);
+            TickTimer(ref _magnetSeconds, PowerupType.Magnet, dt);
+            if (_shieldSeconds <= 0f) _shieldHits = 0;
+        }
+
+        void TickTimer(ref float timer, PowerupType type, float dt)
+        {
+            if (timer <= 0f) return;
+            float previous = timer;
+            timer = Math.Max(0f, timer - dt);
+            if (previous > 0f && timer <= 0f)
+                Events.Add(new SimulationEvent(SimulationEventType.PowerupExpired, 0, (float)type));
+        }
+
+        bool ConsumeShieldHit(int hazardId)
+        {
+            if (_shieldSeconds <= 0f || _shieldHits <= 0) return false;
+            _shieldHits--;
+            Events.Add(new SimulationEvent(SimulationEventType.ShieldHit, hazardId, _shieldHits, _shieldSeconds));
+            if (_shieldHits <= 0)
+            {
+                _shieldSeconds = 0f;
+                Events.Add(new SimulationEvent(SimulationEventType.ShieldBroken, hazardId));
+            }
             return true;
         }
 
@@ -365,6 +452,14 @@ namespace JetHorizon.Simulation
             _distanceUntilSpawn = _config.InitialSpawnDistance;
             _nextEntityId = 1;
             _wavesSinceCoin = 99;
+            _wavesSincePowerup = 0;
+            _nextPowerupType = 0;
+            _shieldSeconds = 0f;
+            _shieldHits = 0;
+            _laserSeconds = 0f;
+            _laserShotTimer = 0f;
+            _overdriveSeconds = 0f;
+            _magnetSeconds = 0f;
             _lightningFamily = CorridorFamily.None;
             _lightningTimer = 0f;
             _zipperActive = false;
@@ -623,6 +718,45 @@ namespace JetHorizon.Simulation
                 SpawnCoinPattern(predictedX, blockedCount);
                 _wavesSinceCoin = 0;
             }
+
+            // Production attempts a pickup after roughly six eligible wave calls.
+            // Keep the cadence deterministic and rotate all four types so every run
+            // exposes the complete mechanic set instead of depending on unlock UI.
+            _wavesSincePowerup++;
+            if (_wavesSincePowerup >= 6 && CountActivePowerups() < 2)
+            {
+                SpawnPowerup(predictedX, blockedCount);
+                _wavesSincePowerup = 0;
+            }
+        }
+
+        int CountActivePowerups()
+        {
+            int count = 0;
+            for (int i = 0; i < _pickups.Length; i++)
+                if (_pickups[i].Active && _pickups[i].Kind == PickupKind.Powerup) count++;
+            return count;
+        }
+
+        void SpawnPowerup(float centerX, int blockedCount)
+        {
+            int freeCount = 0;
+            for (int lane = 0; lane < _config.LaneCount; lane++)
+            {
+                bool blocked = false;
+                for (int i = 0; i < blockedCount; i++)
+                {
+                    if (_blockedLaneScratch[i] == lane) { blocked = true; break; }
+                }
+                if (!blocked) _laneScratch[freeCount++] = lane;
+            }
+            if (freeCount == 0) return;
+
+            int laneIndex = _laneScratch[_random.NextInt(0, freeCount)];
+            float centerLane = (_config.LaneCount - 1) * 0.5f;
+            float x = centerX + (laneIndex - centerLane) * _config.LaneWidth;
+            PowerupType type = (PowerupType)(1 + (_nextPowerupType++ % 4));
+            SpawnPickup(PickupSpawn.PowerupPickup(type, x, 1.4f, _config.SpawnZ));
         }
 
         void SpawnPatternEntity(SpawnPattern pattern, float x, float z)
@@ -1148,6 +1282,7 @@ namespace JetHorizon.Simulation
                 {
                     hazard.Active = false;
                     _hazards[i] = hazard;
+                    if (ConsumeShieldHit(hazard.Id)) continue;
                     ApplyFinalScoreMultiplier();
                     Phase = CoreGamePhase.Dead;
                     Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, hazard.Id, _score, _distance));
@@ -1185,6 +1320,12 @@ namespace JetHorizon.Simulation
             Snapshot.ShipBankRadians = _bankRadians;
             Snapshot.ShipRollRadians = _rollRadians;
             Snapshot.ShipTiltTimer = _tiltTimer;
+            Snapshot.ShieldSeconds = _shieldSeconds;
+            Snapshot.ShieldHits = _shieldHits;
+            Snapshot.LaserSeconds = _laserSeconds;
+            Snapshot.OverdriveSeconds = _overdriveSeconds;
+            Snapshot.OverdriveSpeedSeconds = Math.Max(0f, _overdriveSeconds - PowerupCatalog.Overdrive.GraceSeconds);
+            Snapshot.MagnetSeconds = _magnetSeconds;
             Snapshot.StageDirectorEnabled = _stageDirector != null;
             Snapshot.SineCorridorActive = _sineCorridorActive;
             Snapshot.ZipperActive = _zipperActive;
@@ -1251,6 +1392,7 @@ namespace JetHorizon.Simulation
                 Snapshot.SetPickup(pickupCount++, new PickupSnapshot(
                     pickup.Id,
                     pickup.Kind,
+                    pickup.Powerup,
                     pickup.X,
                     pickup.Y,
                     pickup.Z));
@@ -1334,6 +1476,45 @@ namespace JetHorizon.Simulation
                 throw new ArgumentOutOfRangeException(nameof(spawn.RingRadius));
         }
 
+        void TickLaserWeapon(float dt)
+        {
+            _laserShotTimer += dt;
+            float interval = 1f / PowerupCatalog.LaserFireRate;
+            while (_laserShotTimer >= interval)
+            {
+                _laserShotTimer -= interval;
+                FireLaserLane(-0.35f);
+                FireLaserLane(0.35f);
+            }
+        }
+
+        void FireLaserLane(float laneOffset)
+        {
+            float laneX = _shipX + laneOffset;
+            int bestIndex = -1;
+            float bestZ = float.MinValue;
+            for (int i = 0; i < _hazards.Length; i++)
+            {
+                HazardState hazard = _hazards[i];
+                if (!hazard.Active || hazard.Style == HazardStyle.CorridorCone || hazard.Style == HazardStyle.L4CorridorCone || hazard.Style == HazardStyle.L5CorridorCone)
+                    continue;
+                if (hazard.Z >= _config.ShipZ || hazard.Z < -200f) continue;
+                if (Math.Abs(hazard.X - laneX) >= 1.5f) continue;
+                if (hazard.Z > bestZ) { bestZ = hazard.Z; bestIndex = i; }
+            }
+
+            int destroyedId = 0;
+            if (bestIndex >= 0)
+            {
+                HazardState hazard = _hazards[bestIndex];
+                destroyedId = hazard.Id;
+                hazard.Active = false;
+                _hazards[bestIndex] = hazard;
+                Events.Add(new SimulationEvent(SimulationEventType.HazardDestroyed, destroyedId, hazard.X, hazard.Z));
+            }
+            Events.Add(new SimulationEvent(SimulationEventType.LaserFired, destroyedId, laneOffset, bestZ));
+        }
+
         void UpdatePickups(float step)
         {
             for (int i = 0; i < _pickups.Length; i++)
@@ -1341,6 +1522,18 @@ namespace JetHorizon.Simulation
                 PickupState pickup = _pickups[i];
                 if (!pickup.Active) continue;
                 pickup.Z += step;
+
+                if (_magnetSeconds > 0f && pickup.Kind == PickupKind.Coin)
+                {
+                    float dx = pickup.X - _shipX;
+                    float dz = pickup.Z - _config.ShipZ;
+                    float radius = PowerupCatalog.Magnet.Radius;
+                    if (dx * dx + dz * dz < radius * radius)
+                    {
+                        pickup.X -= dx * 5f * _config.FixedDeltaSeconds;
+                        pickup.Z -= dz * 3f * _config.FixedDeltaSeconds;
+                    }
+                }
                 if (pickup.Z > _config.DespawnZ)
                 {
                     pickup.Active = false;
@@ -1353,12 +1546,23 @@ namespace JetHorizon.Simulation
                 {
                     pickup.Active = false;
                     _pickups[i] = pickup;
-                    AwardScore(pickup.ScoreValue, ScoreSource.Pickup, pickup.Id);
-                    Events.Add(new SimulationEvent(
-                        SimulationEventType.PickupCollected,
-                        pickup.Id,
-                        _score,
-                        pickup.ScoreValue));
+                    if (pickup.Kind == PickupKind.Powerup)
+                    {
+                        Events.Add(new SimulationEvent(
+                            SimulationEventType.PowerupCollected,
+                            pickup.Id,
+                            (float)pickup.Powerup));
+                        ActivatePowerup(pickup.Powerup);
+                    }
+                    else
+                    {
+                        AwardScore(pickup.ScoreValue, ScoreSource.Pickup, pickup.Id);
+                        Events.Add(new SimulationEvent(
+                            SimulationEventType.PickupCollected,
+                            pickup.Id,
+                            _score,
+                            pickup.ScoreValue));
+                    }
                     continue;
                 }
                 _pickups[i] = pickup;
@@ -1372,6 +1576,8 @@ namespace JetHorizon.Simulation
             if (spawn.ScoreValue < 0f) throw new ArgumentOutOfRangeException(nameof(spawn.ScoreValue));
             if (spawn.CollectHalfWidth <= 0f) throw new ArgumentOutOfRangeException(nameof(spawn.CollectHalfWidth));
             if (spawn.CollectHalfDepth <= 0f) throw new ArgumentOutOfRangeException(nameof(spawn.CollectHalfDepth));
+            if (spawn.Kind == PickupKind.Powerup && spawn.Powerup == PowerupType.None)
+                throw new ArgumentOutOfRangeException(nameof(spawn.Powerup));
         }
 
         void ApplyFinalScoreMultiplier()

@@ -34,6 +34,12 @@ namespace JetHorizon
         public float PostLaunchGrace;
         public float InvincibleTimer;
         public bool  OverdriveActive;    // world x1.8
+        public float ShieldTimer;
+        public int   ShieldHits;
+        public float LaserTimer;
+        public float OverdriveTimer;
+        public float OverdriveSpeedTimer;
+        public float MagnetTimer;
         public float RestBeat;           // suppresses spawner while > 0
         public float NextSpawnZ;         // spawn accumulator
         public float CorridorGapCenter;  // canyon / corridor centerline base
@@ -66,6 +72,8 @@ namespace JetHorizon
             IntroActive = false; IntroLiftActive = false; IntroLiftT = 0f;
             PostLaunchGrace = 0f;
             InvincibleTimer = 0f; OverdriveActive = false;
+            ShieldTimer = 0f; ShieldHits = 0; LaserTimer = 0f;
+            OverdriveTimer = 0f; OverdriveSpeedTimer = 0f; MagnetTimer = 0f;
             RestBeat = 0f;
             NextSpawnZ = -5f;
             CorridorGapCenter = 0f;

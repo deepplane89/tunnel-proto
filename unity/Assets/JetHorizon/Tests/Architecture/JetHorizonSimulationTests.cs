@@ -792,6 +792,58 @@ namespace JetHorizon.Simulation.Tests
                 Assert.That(replay.Snapshot.GetPickup(i).X, Is.EqualTo(first.Snapshot.GetPickup(i).X));
         }
 
+        [Test]
+        public void ShieldPickupActivatesAndAbsorbsOneCoreCollision()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false
+            }, 104u);
+            simulation.StartRun();
+            simulation.RegisterPickup(PickupSpawn.PowerupPickup(PowerupType.Shield, 0f, 1.4f, 3f));
+
+            simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.ShieldHits, Is.EqualTo(1));
+            Assert.That(simulation.Snapshot.ShieldSeconds, Is.GreaterThan(9f));
+            simulation.RegisterHazard(HazardSpawn.Cone(0f, 3f, collisionHalfWidth: 1f));
+            simulation.Step(default);
+
+            Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Playing));
+            Assert.That(simulation.Snapshot.ShieldHits, Is.Zero);
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.ShieldBroken), Is.True);
+        }
+
+        [Test]
+        public void AllProductionPowerupsExposePortableDurationsAndEffects()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false
+            }, 105u);
+            simulation.StartRun();
+            simulation.ActivatePowerup(PowerupType.Laser);
+            simulation.ActivatePowerup(PowerupType.Overdrive);
+            simulation.ActivatePowerup(PowerupType.Magnet);
+            simulation.RegisterHazard(HazardSpawn.Cone(-0.35f, -10f, collisionHalfWidth: 1f));
+
+            bool destroyed = false;
+            for (int i = 0; i < 12; i++)
+            {
+                simulation.Step(default);
+                destroyed |= ContainsEvent(simulation.Events, SimulationEventType.HazardDestroyed);
+            }
+
+            Assert.That(simulation.Snapshot.LaserSeconds, Is.GreaterThan(3f));
+            Assert.That(simulation.Snapshot.OverdriveSeconds, Is.GreaterThan(4f));
+            Assert.That(simulation.Snapshot.OverdriveSpeedSeconds, Is.GreaterThan(2f));
+            Assert.That(simulation.Snapshot.MagnetSeconds, Is.GreaterThan(3f));
+            Assert.That(simulation.Snapshot.EffectiveSpeed,
+                Is.EqualTo(simulation.Snapshot.Speed * PowerupCatalog.OverdriveSpeedMultiplier).Within(0.001f));
+            Assert.That(destroyed, Is.True);
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);
