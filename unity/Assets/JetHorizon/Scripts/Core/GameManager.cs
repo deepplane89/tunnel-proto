@@ -77,6 +77,11 @@ namespace JetHorizon
 
         void Start()
         {
+            // The scene's serialized transforms are only authoring defaults. Initialize
+            // the title presentation through the same reset paths used by StartRun so
+            // the title is an honest preview of the gameplay camera and ship framing.
+            Ship?.ResetSystem();
+            Camera?.ResetSystem();
             State.TransitionTo(GamePhase.Title);
         }
 
