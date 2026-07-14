@@ -56,6 +56,10 @@ namespace JetHorizon.Simulation
         public float ZipperGapHalfWidth = 7.5f;
         public float ZipperLateralOffset = 11f;
         public float ZipperSpanPerLane = 8f;
+        public float SlalomRowSpacing = 60f;
+        public float SlalomConeStep = 14f;
+        public float SlalomMinimumGapFromShip = 14f;
+        public float SlalomMaximumWander = 26f;
         public float DistanceBonusStep = 5000f;
         public float DistanceBonusPerStep = 0.1f;
         public int MaxHazards = 64;

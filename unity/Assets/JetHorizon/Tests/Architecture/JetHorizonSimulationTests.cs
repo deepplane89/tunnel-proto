@@ -599,6 +599,38 @@ namespace JetHorizon.Simulation.Tests
             }
         }
 
+        [Test]
+        public void SlalomFirstRowAndRewardLineAreCoreOwnedAndDeterministic()
+        {
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("SLALOM", StageKind.SlalomOnly, 20f, 1.5f, 2, 1)
+            });
+            var config = new SimulationConfig { CollisionEnabled = false };
+            var first = new JetHorizonSimulation(config, 99u, run);
+            var replay = new JetHorizonSimulation(config, 99u, run);
+            first.StartRun();
+            replay.StartRun();
+
+            first.Step(default);
+            replay.Step(default);
+
+            Assert.That(first.Snapshot.SlalomActive, Is.True);
+            Assert.That(System.Math.Abs(first.Snapshot.CorridorGapCenter), Is.EqualTo(18f));
+            Assert.That(first.Snapshot.HazardCount, Is.GreaterThan(5));
+            Assert.That(first.Snapshot.PickupCount, Is.EqualTo(3));
+            Assert.That(replay.Snapshot.HazardCount, Is.EqualTo(first.Snapshot.HazardCount));
+            for (int i = 0; i < first.Snapshot.HazardCount; i++)
+            {
+                var a = first.Snapshot.GetHazard(i);
+                var b = replay.Snapshot.GetHazard(i);
+                Assert.That(a.Style, Is.EqualTo(HazardStyle.FatCone));
+                Assert.That(b.X, Is.EqualTo(a.X));
+            }
+            for (int i = 0; i < 3; i++)
+                Assert.That(replay.Snapshot.GetPickup(i).X, Is.EqualTo(first.Snapshot.GetPickup(i).X));
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);

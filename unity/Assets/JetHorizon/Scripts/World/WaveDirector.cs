@@ -212,7 +212,6 @@ namespace JetHorizon
                     Obstacles.WipeAllHazards();
                     break;
                 case StageCommandType.AbortTransientMechanics:
-                    Slalom.Abort();
                     AngledWalls.Abort();
                     break;
                 case StageCommandType.AbortZipper:
@@ -224,8 +223,6 @@ namespace JetHorizon
                     if (!S.AngledWallsActive) AngledWalls.StartStructuredBurst();
                     break;
                 case StageCommandType.StartSlalom:
-                    if (!S.SlalomActive)
-                        Slalom.Begin(command.ValueA, Mathf.RoundToInt(command.ValueB));
                     break;
                 case StageCommandType.StartZipper:
                     break;
