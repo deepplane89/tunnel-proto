@@ -79,7 +79,10 @@ namespace JetHorizon
             _cyanMat.SetFloat("_Cull", 0f);
             _cyanMat.EnableKeyword("_CLEARCOAT");
             _cyanMat.EnableKeyword("_EMISSION");
-            _cyanMat.SetColor("_EmissionColor", TextureFactory.Hex(0x6ef2ff) * 1.1f);
+            // Keep the source neon edge language, but let the sun and ship remain
+            // the exposure anchors. The prior 1.1 multiplier made whole facets read
+            // self-lit instead of catching light from the scene.
+            _cyanMat.SetColor("_EmissionColor", TextureFactory.Hex(0x6ef2ff) * 0.72f);
             _cyanMat.SetTexture("_EmissionMap", TextureFactory.CyanSlab());
             _cyanMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
 
@@ -94,7 +97,7 @@ namespace JetHorizon
             _darkMat.SetFloat("_Cull", 0f);
             _darkMat.EnableKeyword("_CLEARCOAT");
             _darkMat.EnableKeyword("_EMISSION");
-            _darkMat.SetColor("_EmissionColor", TextureFactory.Hex(0xff00cc) * 1.15f);
+            _darkMat.SetColor("_EmissionColor", TextureFactory.Hex(0xff00cc) * 0.68f);
             _darkMat.SetTexture("_EmissionMap", TextureFactory.DarkSlab());
             _darkMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
         }
