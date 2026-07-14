@@ -221,7 +221,9 @@ namespace JetHorizon
             main.startSize = 0.06f;
             main.startRotation = new ParticleSystem.MinMaxCurve(-Mathf.PI, Mathf.PI);
             main.startColor = Color.white;
-            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            // LIGHT is visually welded to the nozzle. World-space particles produced
+            // an exaggerated sideways smear during strafes in Unity's camera scale.
+            main.simulationSpace = ParticleSystemSimulationSpace.Local;
             main.scalingMode = ParticleSystemScalingMode.Shape;
             main.maxParticles = MaxParticlesPerNozzle;
             main.gravityModifier = 0f;
@@ -469,13 +471,21 @@ namespace JetHorizon
             }
         }
 
-        static void SetStreamActive(ParticleSystem ps, bool on, float speedFrac, bool mini = false)
+        void SetStreamActive(ParticleSystem ps, bool on, float speedFrac, bool mini = false)
         {
             var main = ps.main;
             float sourceSpeedScale = Mathf.Clamp(speedFrac * 2.5f, 0f, 2.6f);
+            // Local simulation inherits the ship root's .30 scale. Compensate so the
+            // exhaust's world-space length still matches the Three.js LIGHT tuning.
+            float rootScale = Mathf.Max(0.001f, Mathf.Abs(transform.lossyScale.z));
+            float velocityScale = 1f / rootScale;
             main.startSpeed = mini
-                ? new ParticleSystem.MinMaxCurve(0.8f + sourceSpeedScale * 0.5f, 1.2f + sourceSpeedScale * 0.5f)
-                : new ParticleSystem.MinMaxCurve(2.5f + sourceSpeedScale * 1.5f, 4.5f + sourceSpeedScale * 1.5f);
+                ? new ParticleSystem.MinMaxCurve(
+                    (0.8f + sourceSpeedScale * 0.5f) * velocityScale,
+                    (1.2f + sourceSpeedScale * 0.5f) * velocityScale)
+                : new ParticleSystem.MinMaxCurve(
+                    (2.5f + sourceSpeedScale * 1.5f) * velocityScale,
+                    (4.5f + sourceSpeedScale * 1.5f) * velocityScale);
             var emission = ps.emission;
             emission.rateOverTime = mini ? 5000f : 12000f;
             if (on)
