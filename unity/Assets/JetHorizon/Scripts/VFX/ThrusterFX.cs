@@ -137,7 +137,7 @@ namespace JetHorizon
             _thrusterLight = lightGo.AddComponent<Light>();
             _thrusterLight.type = LightType.Point;
             _thrusterLight.color = Color.Lerp(_color, Color.white, 0.18f);
-            _thrusterLight.range = 6.5f;
+            _thrusterLight.range = 9f;
             _thrusterLight.intensity = 0f;
             _thrusterLight.shadows = LightShadows.None;
             _thrusterLight.renderMode = LightRenderMode.ForcePixel;
@@ -180,9 +180,9 @@ namespace JetHorizon
             main.loop = true;
             main.playOnAwake = false;
             main.duration = 1f;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(0.12f, 0.22f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(3.4f, 5.8f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.045f, 0.075f);
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.22f, 0.42f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(4.2f, 7.0f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.10f, 0.16f);
             main.startRotation = new ParticleSystem.MinMaxCurve(-Mathf.PI, Mathf.PI);
             main.startColor = Color.white;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
@@ -204,7 +204,7 @@ namespace JetHorizon
             var size = ps.sizeOverLifetime;
             size.enabled = true;
             size.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
-                new Keyframe(0f, 1.35f), new Keyframe(0.12f, 1.05f), new Keyframe(0.62f, 0.55f), new Keyframe(1f, 0.08f)));
+                new Keyframe(0f, 1.55f), new Keyframe(0.12f, 1.18f), new Keyframe(0.62f, 0.62f), new Keyframe(1f, 0.08f)));
 
             var renderer = ps.GetComponent<ParticleSystemRenderer>();
             renderer.sharedMaterial = material;
@@ -236,9 +236,9 @@ namespace JetHorizon
                 },
                 new[]
                 {
-                    new GradientAlphaKey(0.82f, 0f),
-                    new GradientAlphaKey(0.55f, 0.18f),
-                    new GradientAlphaKey(0.22f, 0.72f),
+                    new GradientAlphaKey(0.96f, 0f),
+                    new GradientAlphaKey(0.70f, 0.18f),
+                    new GradientAlphaKey(0.30f, 0.72f),
                     new GradientAlphaKey(0f, 1f),
                 });
             color.color = gradient;
@@ -315,7 +315,7 @@ namespace JetHorizon
 
             // Source bloom is 0.6 at idle and grows with speed; these are ship-local
             // values, so the root's .30 scale reproduces its visible world footprint.
-            float bloomSize = Mathf.Lerp(0.62f, 1.18f, speedFrac) * pulseWave;
+            float bloomSize = Mathf.Lerp(0.90f, 1.58f, speedFrac) * pulseWave;
             _bloomL.localScale = Vector3.one * bloomSize;
             _bloomR.localScale = Vector3.one * bloomSize;
 
@@ -323,7 +323,7 @@ namespace JetHorizon
             {
                 _thrusterLight.transform.localPosition = Vector3.Lerp(nozzleL, nozzleR, 0.5f) + new Vector3(0f, 0.08f, 0.12f);
                 _thrusterLight.color = Color.Lerp(_color, Color.white, 0.18f);
-                _thrusterLight.intensity = Mathf.Lerp(2.2f, 4.0f, speedFrac) * pulseWave;
+                _thrusterLight.intensity = Mathf.Lerp(4.5f, 8.5f, speedFrac) * pulseWave;
             }
         }
 
@@ -368,8 +368,12 @@ namespace JetHorizon
 
         static void SetStreamActive(ParticleSystem ps, bool on, float speedFrac)
         {
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(
+                Mathf.Lerp(0.22f, 0.30f, speedFrac),
+                Mathf.Lerp(0.42f, 0.58f, speedFrac));
             var emission = ps.emission;
-            emission.rateOverTime = Mathf.Lerp(760f, 1050f, speedFrac);
+            emission.rateOverTime = Mathf.Lerp(820f, 1180f, speedFrac);
             if (on)
             {
                 if (!ps.isPlaying) ps.Play();

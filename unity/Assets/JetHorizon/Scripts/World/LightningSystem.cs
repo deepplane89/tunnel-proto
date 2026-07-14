@@ -17,7 +17,11 @@ namespace JetHorizon
 
         const float WarningDiscRadius = 3.5f;
         const float WarningSeconds = 0.3f;
-        const float BoltVisibleSeconds = 0.72f;
+        const float StrikeSeconds = 0.5f;
+        const float LingerSeconds = 4f;
+        const float BoltVisibleSeconds = StrikeSeconds + LingerSeconds;
+        const float TunedCoreRadius = 0.45f;
+        const float TunedGlowRadius = 0.25f;
         const float SkyHeight = 55f;
         const int SegmentCount = 10;
         const float Jaggedness = 1.9f;
@@ -33,6 +37,7 @@ namespace JetHorizon
             public MeshRenderer GroundFlash;
             public Light FlashLight;
             public bool Struck;
+            public int CrackleFrame = -1;
         }
 
         readonly List<Strike> _strikes = new List<Strike>(20);
@@ -116,7 +121,9 @@ namespace JetHorizon
                 if (strike.Bolt != null)
                 {
                     strike.Bolt.transform.position = new Vector3(hazard.X, 0.08f, hazard.Z);
-                    UpdateStrikeFade(strike, Mathf.Max(0f, hazard.AgeSeconds - WarningSeconds));
+                    float strikeAge = Mathf.Max(0f, hazard.AgeSeconds - WarningSeconds);
+                    UpdateCrackle(strike, strikeAge);
+                    UpdateStrikeFade(strike, strikeAge);
                 }
 
                 if (!strike.Struck && hazard.CollisionActive)
@@ -185,9 +192,11 @@ namespace JetHorizon
             strike.Bolt = root;
 
             var points = BuildJaggedPath();
-            strike.Glow = MakeLine(root.transform, "Glow", 1.25f, points);
-            strike.Core = MakeLine(root.transform, "Core", 0.42f, points);
-            SetTint(strike.Glow, new Color(0.53f, 0.78f, 1f, 0.58f));
+            // Three.js tuned TubeGeometry uses radii 0.45 core / 0.25 glow.
+            // LineRenderer consumes diameter, and its glow must surround the core.
+            strike.Glow = MakeLine(root.transform, "Glow", (TunedCoreRadius + TunedGlowRadius) * 2f, points, 0);
+            strike.Core = MakeLine(root.transform, "Core", TunedCoreRadius * 2f, points, 1);
+            SetTint(strike.Glow, new Color(0.53f, 0.78f, 1f, 0.50f));
             SetTint(strike.Core, new Color(1f, 1f, 1f, 1f));
 
             var flash = GameObject.CreatePrimitive(PrimitiveType.Quad);
@@ -231,7 +240,7 @@ namespace JetHorizon
             return points;
         }
 
-        LineRenderer MakeLine(Transform parent, string name, float width, Vector3[] points)
+        LineRenderer MakeLine(Transform parent, string name, float width, Vector3[] points, int sortingOrder)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
@@ -248,13 +257,40 @@ namespace JetHorizon
             line.alignment = LineAlignment.View;
             line.shadowCastingMode = ShadowCastingMode.Off;
             line.receiveShadows = false;
+            line.sortingOrder = sortingOrder;
             return line;
+        }
+
+        void UpdateCrackle(Strike strike, float age)
+        {
+            float rate = age < StrikeSeconds ? 22f : 18f;
+            int frame = Mathf.FloorToInt(age * rate);
+            if (frame == strike.CrackleFrame || strike.Core == null || strike.Glow == null) return;
+            strike.CrackleFrame = frame;
+            var points = BuildJaggedPath();
+            strike.Core.SetPositions(points);
+            strike.Glow.SetPositions(points);
         }
 
         void UpdateStrikeFade(Strike strike, float age)
         {
-            float boltFade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.28f, BoltVisibleSeconds, age));
-            bool boltVisible = boltFade > 0.01f;
+            float boltFade;
+            float glowFade;
+            if (age <= StrikeSeconds)
+            {
+                float t = Mathf.Clamp01(age / StrikeSeconds);
+                boltFade = Mathf.Max(0.8f, 1f - t * 0.1f);
+                glowFade = Mathf.Max(0.4f, 0.5f - t * 0.05f);
+            }
+            else
+            {
+                float lingerT = Mathf.Clamp01((age - StrikeSeconds) / LingerSeconds);
+                float finalFade = Mathf.InverseLerp(1f, 0.75f, lingerT);
+                float flicker = 0.70f + 0.30f * Mathf.Abs(Mathf.Sin(age * 14f + strike.CoreId * 1.73f));
+                boltFade = finalFade * flicker;
+                glowFade = finalFade * flicker * 0.5f;
+            }
+            bool boltVisible = age < BoltVisibleSeconds && boltFade > 0.01f;
             if (strike.Core != null)
             {
                 strike.Core.enabled = boltVisible;
@@ -263,7 +299,7 @@ namespace JetHorizon
             if (strike.Glow != null)
             {
                 strike.Glow.enabled = boltVisible;
-                SetTint(strike.Glow, new Color(0.53f, 0.78f, 1f, 0.58f * boltFade));
+                SetTint(strike.Glow, new Color(0.53f, 0.78f, 1f, glowFade));
             }
 
             float groundFade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.18f, 1.35f, age));

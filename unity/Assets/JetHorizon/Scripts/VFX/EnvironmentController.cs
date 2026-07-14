@@ -35,6 +35,7 @@ namespace JetHorizon
         const float PostExposure = 0.90f;
         const float BloomScale = 1.65f;
         const float VignetteIntensity = 0.16f;
+        const int ReflectableLayer = 8;
 
         void OnEnable()
         {
@@ -125,7 +126,9 @@ namespace JetHorizon
             {
                 SunMaterial.SetColor("_SunColor", v.sunColor);
                 bool warped = v.sunShader >= 2;
-                SunMaterial.SetFloat("_Warp", warped ? 1f : 0f);
+                // Keep a visible amount of the source's Quilez plasma motion on the
+                // opening sun too; special sun modes still receive the full warp.
+                SunMaterial.SetFloat("_Warp", warped ? 1f : (v.sunShader == 1 ? 0.20f : 0.38f));
                 SunMaterial.SetFloat("_Mode", v.sunShader);
                 // warp palette derived from sun color per branch
                 SunMaterial.SetColor("_WarpCol1", v.sunColor * 0.35f);
@@ -137,7 +140,10 @@ namespace JetHorizon
                 SunMaterial.SetFloat("_Emission", 1.25f);
             }
             if (WaterMaterial != null)
+            {
                 WaterMaterial.SetColor("_SkyColor", v.skyBot);
+                WaterMaterial.SetColor("_SunColor", Color.Lerp(Color.black, v.sunColor, 0.72f));
+            }
             if (HorizonSeam != null)
                 HorizonSeam.material.SetColor("_Tint", new Color(
                     Mathf.Min(1f, v.sunColor.r + 0.15f), Mathf.Min(1f, v.sunColor.g + 0.05f), v.sunColor.b, 1f));
@@ -193,6 +199,10 @@ namespace JetHorizon
 
             if (SunGroup != null)
             {
+                // Three.js rendered the hero sun into Water's mirror. The original
+                // Unity pass only included ship/canyon layer 8, which removed the
+                // actual sun and left a synthetic straight specular strip instead.
+                SetLayerRecursively(SunGroup.gameObject, ReflectableLayer);
                 var sunTransform = SunGroup.Find("Sun");
                 var sunFilter = sunTransform != null ? sunTransform.GetComponent<MeshFilter>() : null;
                 if (sunFilter != null)
@@ -212,6 +222,13 @@ namespace JetHorizon
                     _corona.material.SetTexture("_MainTex", _runtimeCorona);
                 }
             }
+        }
+
+        static void SetLayerRecursively(GameObject root, int layer)
+        {
+            root.layer = layer;
+            foreach (Transform child in root.transform)
+                SetLayerRecursively(child.gameObject, layer);
         }
 
         static Light FindLight(string objectName)

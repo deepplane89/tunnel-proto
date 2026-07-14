@@ -39,6 +39,7 @@ Shader "JH/Sun"
                 float2 uv : TEXCOORD0;
                 float3 normalVS : TEXCOORD1;
                 float3 posOS : TEXCOORD2;
+                float3 normalWS : TEXCOORD3;
             };
 
             // ── 2D value-noise FBM (fbm2 port) ──────────────────────
@@ -67,6 +68,68 @@ Shader "JH/Sun"
                 return v;
             }
 
+            // Ashima Arts / Ian McEwan simplex noise (MIT), matching the source
+            // solar shader. 3D sampling keeps the plasma continuous around the sphere.
+            float3 mod289v3(float3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+            float4 mod289v4(float4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+            float4 permute(float4 x) { return mod289v4(((x * 34.0) + 1.0) * x); }
+            float4 taylorInvSqrt(float4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+            float snoise(float3 v)
+            {
+                const float2 C = float2(1.0 / 6.0, 1.0 / 3.0);
+                const float4 D = float4(0.0, 0.5, 1.0, 2.0);
+                float3 i = floor(v + dot(v, C.yyy));
+                float3 x0 = v - i + dot(i, C.xxx);
+                float3 g = step(x0.yzx, x0.xyz);
+                float3 l = 1.0 - g;
+                float3 i1 = min(g.xyz, l.zxy);
+                float3 i2 = max(g.xyz, l.zxy);
+                float3 x1 = x0 - i1 + C.xxx;
+                float3 x2 = x0 - i2 + C.yyy;
+                float3 x3 = x0 - D.yyy;
+                i = mod289v3(i);
+                float4 p = permute(permute(permute(
+                    i.z + float4(0.0, i1.z, i2.z, 1.0))
+                    + i.y + float4(0.0, i1.y, i2.y, 1.0))
+                    + i.x + float4(0.0, i1.x, i2.x, 1.0));
+                float n = 0.142857142857;
+                float3 ns = n * D.wyz - D.xzx;
+                float4 j = p - 49.0 * floor(p * ns.z * ns.z);
+                float4 x_ = floor(j * ns.z);
+                float4 y_ = floor(j - 7.0 * x_);
+                float4 x = x_ * ns.x + ns.yyyy;
+                float4 y = y_ * ns.x + ns.yyyy;
+                float4 h = 1.0 - abs(x) - abs(y);
+                float4 b0 = float4(x.xy, y.xy);
+                float4 b1 = float4(x.zw, y.zw);
+                float4 s0 = floor(b0) * 2.0 + 1.0;
+                float4 s1 = floor(b1) * 2.0 + 1.0;
+                float4 sh = -step(h, float4(0.0, 0.0, 0.0, 0.0));
+                float4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+                float4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+                float3 p0 = float3(a0.xy, h.x);
+                float3 p1 = float3(a0.zw, h.y);
+                float3 p2 = float3(a1.xy, h.z);
+                float3 p3 = float3(a1.zw, h.w);
+                float4 norm = taylorInvSqrt(float4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+                p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+                float4 m = max(0.6 - float4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+                m *= m;
+                return 42.0 * dot(m * m, float4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+            }
+
+            float fbmS(float3 p)
+            {
+                float v = 0.0, amp = 0.5;
+                for (int i = 0; i < 4; i++)
+                {
+                    v += amp * (snoise(p) * 0.5 + 0.5);
+                    p *= 2.1;
+                    amp *= 0.5;
+                }
+                return v;
+            }
+
             Varyings vert(Attributes IN)
             {
                 Varyings OUT;
@@ -74,6 +137,7 @@ Shader "JH/Sun"
                 OUT.uv = IN.uv;
                 OUT.normalVS = mul((float3x3)UNITY_MATRIX_IT_MV, IN.normalOS);
                 OUT.posOS = IN.positionOS.xyz;
+                OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
                 return OUT;
             }
 
@@ -115,17 +179,23 @@ Shader "JH/Sun"
                 float uvBlend = 1.0 - saturate(abs(_Mode - 1.0));
                 col = lerp(col, uvCol, uvBlend);
 
-                // ── WARP branch: Quilez double domain warp ──
-                float2 p = surfaceUv * 3.5;
-                float2 drift = float2(t * 0.021, t * 0.013);
-                float q1 = fbm2(p + drift);
-                float q2 = fbm2(p + drift + float2(5.2, 1.3));
-                float r1 = fbm2(p + 3.5 * float2(q1, q2) + float2(1.7, 9.2));
-                float r2 = fbm2(p + 3.5 * float2(q1, q2) + float2(8.3, 2.8));
-                float f  = fbm2(p + 3.5 * float2(r1, r2));
+                // ── WARP branch: source Quilez double domain warp ──
+                float3 p = normalize(IN.normalWS) * 3.5;
+                float3 q = float3(
+                    fbmS(p + float3(0.0, 0.0, 0.0) + float3(t * 0.031, t * 0.021, t * 0.013)),
+                    fbmS(p + float3(5.2, 1.3, 2.7) + float3(t * 0.025, t * 0.018, t * 0.011)),
+                    fbmS(p + float3(3.1, 4.4, 1.1) + float3(t * 0.019, t * 0.027, t * 0.015)));
+                float3 qOff = p + 3.5 * q;
+                float3 r = float3(
+                    fbmS(qOff + float3(1.7, 9.2, 4.3) + float3(t * 0.017, t * 0.012, t * 0.008)),
+                    fbmS(qOff + float3(8.3, 2.8, 6.1) + float3(t * 0.022, t * 0.016, t * 0.010)),
+                    fbmS(qOff + float3(2.9, 7.5, 0.8) + float3(t * 0.014, t * 0.020, t * 0.009)));
+                float f = fbmS(p + 3.5 * r + float3(t * 0.011, t * 0.008, t * 0.006));
                 half3 warpCol = lerp(_WarpCol1.rgb, _WarpCol2.rgb, smoothstep(0.2, 0.7, f));
                 warpCol = lerp(warpCol, _WarpCol3.rgb, smoothstep(0.6, 0.9, f));
-                warpCol = lerp(warpCol, _WarpCol2.rgb * 1.1, smoothstep(0.4, 0.8, abs(q1)) * 0.35);
+                float qMag = length(q) / 1.73;
+                warpCol = lerp(warpCol, _WarpCol2.rgb * 1.1, smoothstep(0.4, 0.8, qMag) * 0.35);
+                warpCol = lerp(warpCol, _WarpCol1.rgb, smoothstep(0.6, 0.9, r.y) * 0.4);
                 warpCol *= pow(limb, 1.2) * 0.5 + 0.5;
 
                 float warpBlend = saturate(max(_Warp, _Mode - 1.0));

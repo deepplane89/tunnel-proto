@@ -98,13 +98,19 @@ Shader "JH/Water"
                 // black base and wave distortion retain the source's liquid-metal feel.
                 col += refl * _ReflectionStrength * (0.42 + 0.72 * fresnel);
 
-                // amber sun streak: specular toward the horizon sun (locked to ship X illusion)
-                float3 sunPos = float3(_ShipX, -2.0, -340.0);
-                float3 L = normalize(sunPos - IN.posWS);
-                float3 H = normalize(L + V);
-                half spec = pow(saturate(dot(N, H)), 90.0);
-                half streak = pow(saturate(dot(N, H)), 700.0) * 2.0;
-                col += _SunColor.rgb * (spec * 1.2 + streak);
+                // The mirror texture now contains the actual hero sun. Layer a wide,
+                // low-energy sunlight path plus wave-broken micro-glints over it instead
+                // of the old razor-straight point-light strip.
+                float3 L = normalize(_SunDir.xyz);
+                float3 flatReflection = reflect(-V, float3(0.0, 1.0, 0.0));
+                float3 waveReflection = reflect(-V, N);
+                half flatAlignment = saturate(dot(flatReflection, L));
+                half waveAlignment = saturate(dot(waveReflection, L));
+                half broadPath = pow(flatAlignment, 18.0) * 0.15;
+                half warmBody = pow(flatAlignment, 46.0)
+                    * saturate(0.58 + N.x * 2.4 + N.z * 1.6) * 0.32;
+                half glints = pow(waveAlignment, 150.0) * 1.65;
+                col += _SunColor.rgb * (broadPath + warmBody + glints);
 
                 col = MixFog(col, IN.fogFactor);
                 return half4(col, 1);

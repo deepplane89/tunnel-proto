@@ -157,11 +157,13 @@ namespace JetHorizon.EditorTools
 
             // ── Sun group ────────────────────────────────────────────────
             var sunGroup = new GameObject("SunGroup");
+            sunGroup.layer = 8; // rendered by the water reflection camera
             sunGroup.transform.position = new Vector3(0f, -2f, -340f);
 
             var sun = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             Object.DestroyImmediate(sun.GetComponent<Collider>());
             sun.name = "Sun";
+            sun.layer = 8;
             sun.transform.SetParent(sunGroup.transform, false);
             sun.transform.localScale = Vector3.one * (112f * 0.95f * 2f);
             sun.GetComponent<MeshRenderer>().sharedMaterial = sunMat;
@@ -169,6 +171,7 @@ namespace JetHorizon.EditorTools
             var corona = GameObject.CreatePrimitive(PrimitiveType.Quad);
             Object.DestroyImmediate(corona.GetComponent<Collider>());
             corona.name = "Corona";
+            corona.layer = 8;
             corona.transform.SetParent(sunGroup.transform, false);
             corona.transform.localPosition = new Vector3(0f, 0f, 1f);
             corona.transform.localScale = new Vector3(112f * 3.2f, 112f * 3.2f, 1f);
@@ -180,6 +183,7 @@ namespace JetHorizon.EditorTools
             var seam = GameObject.CreatePrimitive(PrimitiveType.Quad);
             Object.DestroyImmediate(seam.GetComponent<Collider>());
             seam.name = "HorizonSeam";
+            seam.layer = 8;
             seam.transform.SetParent(sunGroup.transform, false);
             seam.transform.localPosition = new Vector3(0f, 2f, 2f);
             seam.transform.localScale = new Vector3(112f * 2.5f, 2.8f, 1f);

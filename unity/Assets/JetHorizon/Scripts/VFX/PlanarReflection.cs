@@ -8,8 +8,9 @@ namespace JetHorizon
     /// Planar reflection for the water plane (y = 0) — the Unity equivalent of the
     /// three.js Water mirror (512² RT). Only layer <see cref="ReflectLayer"/> renders
     /// into the mirror (ship + canyon slabs), matching the JS layer exclusions where
-    /// sky/sun/stars/obstacles were hidden from the reflection and the sun's presence
-    /// on the water comes from the shader's specular streak instead.
+    /// sky/stars/obstacles stay hidden from the reflection. The hero sun shares the
+    /// reflectable layer with ship/canyon so the water receives its real mirrored disc,
+    /// matching the Three.js Water pass rather than relying on a synthetic strip.
     /// </summary>
     public sealed class PlanarReflection : MonoBehaviour
     {
