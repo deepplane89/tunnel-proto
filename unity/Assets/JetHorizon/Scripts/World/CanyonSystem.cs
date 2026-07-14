@@ -84,7 +84,9 @@ namespace JetHorizon
             _cyanMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
 
             _darkMat = new Material(shader) { name = "JH_CanyonDark" };
-            _darkMat.SetColor("_BaseColor", TextureFactory.Hex(0x080810));
+            // Preserve the near-black crystal language without letting untextured
+            // facets collapse to invisible black under the gameplay camera.
+            _darkMat.SetColor("_BaseColor", TextureFactory.Hex(0x141425));
             _darkMat.SetFloat("_Smoothness", 0.78f);
             _darkMat.SetFloat("_Metallic", 0f);
             _darkMat.SetFloat("_ClearCoatMask", 0.40f);
@@ -92,7 +94,7 @@ namespace JetHorizon
             _darkMat.SetFloat("_Cull", 0f);
             _darkMat.EnableKeyword("_CLEARCOAT");
             _darkMat.EnableKeyword("_EMISSION");
-            _darkMat.SetColor("_EmissionColor", TextureFactory.Hex(0xff00cc) * 0.9f);
+            _darkMat.SetColor("_EmissionColor", TextureFactory.Hex(0xff00cc) * 1.15f);
             _darkMat.SetTexture("_EmissionMap", TextureFactory.DarkSlab());
             _darkMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
         }

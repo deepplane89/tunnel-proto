@@ -25,7 +25,7 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _Emission: 1
+    - _Emission: 1.25
     - _Mode: 0
     - _Warp: 0
     m_Colors:

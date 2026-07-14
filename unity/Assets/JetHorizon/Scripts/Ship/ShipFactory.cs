@@ -136,7 +136,7 @@ namespace JetHorizon
                 }
                 L("ShipKeyLight", LightType.Directional, Color.white, 2.2f, new Vector3(2f, 4f, -3f));
                 L("ShipFillLight", LightType.Directional, TextureFactory.Hex(0x8899bb), 0.9f, new Vector3(-2f, 1f, 2f));
-                L("ShipUnderlight", LightType.Point, TextureFactory.Hex(0xff6620), 0.35f, new Vector3(0f, -1.2f, 0f), 6f);
+                L("ShipUnderlight", LightType.Point, TextureFactory.Hex(0xff6620), 0.65f, new Vector3(0f, -1.2f, 0f), 6f);
             }
         }
     }

@@ -64,8 +64,13 @@ Shader "JH/SkyStars"
                 #if UNITY_REVERSED_Z
                     farDepth = 0.0001;
                 #endif
+                // Three.js authored these points in WebGL NDC (+Y is screen-up). This
+                // Unity Metal path presents direct clip-space geometry with the opposite
+                // screen Y convention, so convert the center explicitly. Without this,
+                // the dense upper-sky field appears beneath the waterline.
+                float2 screenNdc = float2(IN.positionOS.x, -IN.positionOS.y);
                 // Far-depth placement lets opaque water, sun, ship and hazards occlude stars.
-                OUT.positionHCS = float4(IN.positionOS.xy + ndcOffset, farDepth, 1.0);
+                OUT.positionHCS = float4(screenNdc + ndcOffset, farDepth, 1.0);
                 OUT.uv = IN.corner * 0.5 + 0.5;
                 OUT.alpha = twinkle;
                 OUT.size = sourceSize;

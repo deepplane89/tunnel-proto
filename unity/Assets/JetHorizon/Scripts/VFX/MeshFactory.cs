@@ -196,20 +196,39 @@ namespace JetHorizon
                     Quad(grid[ix, iy], grid[ix, iy + 1], grid[ix + 1, iy + 1], grid[ix + 1, iy], u00, u01, u11, u10);
                 }
 
-            // outer shell (simple box back at x = slabThick)
+            // Closed outer shell. Every cap follows the jagged boundary one grid
+            // segment at a time; a single quad across a displaced edge leaves holes
+            // that become visible when the camera banks past the slab.
             float bx = slabThick;
-            Vector3 b0 = new Vector3(bx, 0, -slabW / 2), b1 = new Vector3(bx, 0, slabW / 2);
-            Vector3 t0 = new Vector3(bx, slabH, -slabW / 2), t1 = new Vector3(bx, slabH, slabW / 2);
+            float bottomY = grid[0, 0].y;
+            float topY = grid[0, rows].y;
+            Vector3 b0 = new Vector3(bx, bottomY, grid[0, 0].z);
+            Vector3 b1 = new Vector3(bx, bottomY, grid[cols, 0].z);
+            Vector3 t0 = new Vector3(bx, topY, grid[0, rows].z);
+            Vector3 t1 = new Vector3(bx, topY, grid[cols, rows].z);
             Quad(b1, t1, t0, b0, Vector2.zero, Vector2.up, Vector2.one, Vector2.right); // back
-            // top cap: connect inner top edge to back top edge
-            Quad(grid[0, rows], new Vector3(bx, slabH, grid[0, rows].z),
-                 new Vector3(bx, slabH, grid[cols, rows].z), grid[cols, rows],
-                 Vector2.zero, Vector2.up, Vector2.one, Vector2.right);
-            // front/rear Z caps
-            Quad(grid[0, 0], grid[0, rows], new Vector3(bx, slabH, grid[0, rows].z), new Vector3(bx, 0, grid[0, 0].z),
-                 Vector2.zero, Vector2.up, Vector2.one, Vector2.right);
-            Quad(new Vector3(bx, 0, grid[cols, 0].z), new Vector3(bx, slabH, grid[cols, rows].z), grid[cols, rows], grid[cols, 0],
-                 Vector2.zero, Vector2.up, Vector2.one, Vector2.right);
+
+            for (int ix = 0; ix < cols; ix++)
+            {
+                // top and bottom caps
+                Vector3 topA = grid[ix, rows], topB = grid[ix + 1, rows];
+                Quad(topA, new Vector3(bx, topA.y, topA.z), new Vector3(bx, topB.y, topB.z), topB,
+                     Vector2.zero, Vector2.up, Vector2.one, Vector2.right);
+                Vector3 botA = grid[ix, 0], botB = grid[ix + 1, 0];
+                Quad(botB, new Vector3(bx, botB.y, botB.z), new Vector3(bx, botA.y, botA.z), botA,
+                     Vector2.zero, Vector2.up, Vector2.one, Vector2.right);
+            }
+
+            for (int iy = 0; iy < rows; iy++)
+            {
+                // front and rear caps
+                Vector3 frontA = grid[0, iy], frontB = grid[0, iy + 1];
+                Quad(frontA, frontB, new Vector3(bx, frontB.y, frontB.z), new Vector3(bx, frontA.y, frontA.z),
+                     Vector2.zero, Vector2.up, Vector2.one, Vector2.right);
+                Vector3 rearA = grid[cols, iy], rearB = grid[cols, iy + 1];
+                Quad(new Vector3(bx, rearA.y, rearA.z), new Vector3(bx, rearB.y, rearB.z), rearB, rearA,
+                     Vector2.zero, Vector2.up, Vector2.one, Vector2.right);
+            }
 
             var m = new Mesh { name = "JH_CanyonSlab", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
             m.SetVertices(verts); m.SetTriangles(tris, 0); m.SetUVs(0, uvs);

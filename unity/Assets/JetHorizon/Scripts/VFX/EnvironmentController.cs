@@ -32,9 +32,9 @@ namespace JetHorizon
         // Three.js and URP do not map identical light/post values to identical pixels.
         // These are Unity presentation calibrations; simulation and vibe data stay untouched.
         const float FogDensity = 0.0058f;
-        const float PostExposure = 0.52f;
+        const float PostExposure = 0.90f;
         const float BloomScale = 1.65f;
-        const float VignetteIntensity = 0.22f;
+        const float VignetteIntensity = 0.16f;
 
         void OnEnable()
         {
@@ -113,7 +113,7 @@ namespace JetHorizon
             RenderSettings.fogDensity = FogDensity;
             RenderSettings.fogColor = v.fogColor;
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.065f, 0.075f, 0.10f);
+            RenderSettings.ambientLight = new Color(0.10f, 0.11f, 0.15f);
 
             if (SkyboxMaterial != null)
             {
@@ -134,7 +134,7 @@ namespace JetHorizon
                             v.sunShader == 3 ? Color.Lerp(v.sunColor, Color.white, 0.4f) :
                             new Color(1f, 0.45f, 0.08f);
                 SunMaterial.SetColor("_WarpCol3", hot);
-                SunMaterial.SetFloat("_Emission", 1.0f);
+                SunMaterial.SetFloat("_Emission", 1.25f);
             }
             if (WaterMaterial != null)
                 WaterMaterial.SetColor("_SkyColor", v.skyBot);
@@ -231,11 +231,11 @@ namespace JetHorizon
         {
             // Preserve the source rig's direction and color, while lifting URP's dark
             // metallic midtones enough to keep the ship and hazards readable.
-            if (_keyLight != null) _keyLight.intensity = 3.25f;
-            if (_rimLight != null) _rimLight.intensity = 0.22f;
-            if (_fillLight != null) _fillLight.intensity = 0.50f;
-            if (_sunRakeR != null) _sunRakeR.intensity = 0.34f;
-            if (_sunRakeL != null) _sunRakeL.intensity = 0.20f;
+            if (_keyLight != null) _keyLight.intensity = 4.0f;
+            if (_rimLight != null) _rimLight.intensity = 0.32f;
+            if (_fillLight != null) _fillLight.intensity = 0.72f;
+            if (_sunRakeR != null) _sunRakeR.intensity = 0.42f;
+            if (_sunRakeL != null) _sunRakeL.intensity = 0.28f;
         }
 
         /// <summary>Lighting rig per spec/03 §2 — called by bootstrap at scene build.</summary>
@@ -252,13 +252,13 @@ namespace JetHorizon
                 l.color = c; l.intensity = intensity;
                 l.shadows = LightShadows.None;
             }
-            Dir("KeyLight",  Color.white,                       3.25f, new Vector3(2f, 8.8f, 8f));
-            Dir("RimLight",  TextureFactory.Hex(0x00f0ff),      0.22f, new Vector3(-3f, 6f, -8f));
-            Dir("FillLight", TextureFactory.Hex(0xff44cc),      0.50f, new Vector3(0f, -2f, 6f));
-            Dir("SunRakeR",  TextureFactory.Hex(0xff9500),      0.34f, new Vector3(2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
-            Dir("SunRakeL",  TextureFactory.Hex(0xff9500),      0.20f, new Vector3(-2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
+            Dir("KeyLight",  Color.white,                       4.0f, new Vector3(2f, 8.8f, 8f));
+            Dir("RimLight",  TextureFactory.Hex(0x00f0ff),      0.32f, new Vector3(-3f, 6f, -8f));
+            Dir("FillLight", TextureFactory.Hex(0xff44cc),      0.72f, new Vector3(0f, -2f, 6f));
+            Dir("SunRakeR",  TextureFactory.Hex(0xff9500),      0.42f, new Vector3(2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
+            Dir("SunRakeL",  TextureFactory.Hex(0xff9500),      0.28f, new Vector3(-2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.065f, 0.075f, 0.10f);
+            RenderSettings.ambientLight = new Color(0.10f, 0.11f, 0.15f);
         }
     }
 }
