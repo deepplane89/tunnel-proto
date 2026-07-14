@@ -9,6 +9,28 @@ rendered through **ACES filmic tonemapping at exposure 1.1** — reproduce with 
 = ACES, Post Exposure ≈ +0.14 EV (≈ ×1.1), or match by eye. Several materials opt OUT of
 tonemapping (`toneMapped:false`) — noted where relevant; in URP emulate with unlit/HDR-clamped shaders.
 
+## Unity URP presentation calibration
+
+The tables below remain the browser source of truth. The shipping Unity presentation deliberately
+does not copy every numeric value one-for-one because URP lights, ACES, bloom and vignette do not
+produce the same pixels as Three.js. Current Unity calibration is owned by
+`EnvironmentController`, the generated post profile, and the three `JH_*` shaders:
+
+- ACES post exposure `+0.28 EV`, bloom threshold `0.85`, scatter `0.30`, high-quality filtering on.
+- URP vignette `0.28 / 0.45` (intensity/smoothness) and chromatic aberration `0.015`; the former
+  `0.5 / 0.6` URP vignette crushed too much of the playable frame.
+- Global ambient `(0.045, 0.05, 0.065)`, key `3.0`, cyan rim `0.16`, pink fill `0.38`, amber rakes
+  `0.30 / 0.16`, and exponential fog density `0.0065`. These are presentation-only adjustments.
+- `JH_SkyboxGradient` owns the deterministic direction-space star backdrop and star-built Milky Way.
+  The panorama is disabled (`_PanoBrightness = 0`); `StarfieldController` now owns warp streaks only.
+- The sun uses a runtime 64x32 hero sphere, view-normal radial shading, a generated crown/limb
+  corona, and billboarded corona/seam layers. `JH_Sun` emission is `1.25` so the disc retains detail.
+- Standard cones are restrained obsidian facets. `ObstacleSpawner` enables the narrow neon band
+  only for corridor/slalom hazard language; walls, rings and coins retain independent edge strength.
+
+These calibrations must stay in Unity presentation code. They are not simulation/core state and
+must not leak into the engine-neutral package.
+
 ---
 
 ## 1. Renderer & Post-processing
