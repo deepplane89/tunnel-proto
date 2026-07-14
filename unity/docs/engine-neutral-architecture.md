@@ -2,7 +2,7 @@
 
 ## Status
 
-The live migration has passed its initial vertical slice. The core is now authoritative for ship motion, progression, campaign direction, standard waves, pickups, angled-wall collision, lightning gameplay, canyon bounds, zipper patterns, and slalom patterns. The Runner GLB placement and thruster attachment points are also portable content definitions rather than Unity-scene guesses.
+The live migration has passed its initial vertical slice. The core is now authoritative for ship motion, progression, campaign direction, standard waves, pickups, angled-wall collision, lightning gameplay, canyon bounds, zipper/slalom patterns, L4/L5 sine corridors, and the complete structured-wall field. The Runner GLB placement and thruster attachment points are also portable content definitions rather than Unity-scene guesses.
 
 The new code is split into three boundaries:
 
@@ -34,19 +34,21 @@ Platform effects are one-way: simulation events enter the application router, wh
 
 - fixed 60 Hz tick;
 - seeded xorshift32 random stream;
-- lateral acceleration, glide, counter-steer, banking, and knife-edge roll;
+- production-equation lateral acceleration, drift-scaled glide, left-biased dual input, counter-steer, banking, hover fade, and previous-tick knife-edge roll penalty;
 - roll-aware ship collision width;
 - deterministic standard, fat-cone, lethal-ring, angled-wall, zipper, and slalom spawning;
 - score, distance, near miss, pickup awards, final multiplier, collision, and death;
 - explicit `WorldFrame` values for temporary engine-owned facts such as intro suspension and overdrive;
 - typed `RunDefinition`/`StageDefinition` content mapped from the existing JSON;
 - deterministic `StageDirector` with an allocation-free `StageCommandBuffer`;
-- live `WaveDirector` adapter for remaining canyon, sine-corridor, and structured-wall launches;
+- live `WaveDirector` adapter for remaining canyon launches;
 - typed `HazardSpawn`/`HazardSnapshot` entities with stable registration IDs;
 - separate automatic-spawn and hazard-simulation switches for incremental presenter migration;
 - engine-neutral cone/AABB, rotated-wall OBB, octagonal-ring, lightning, and canyon-bound collision;
 - live pooled coins registered as `PickupSpawn` entities with core collection and score ownership;
 - deterministic single/curve/line reward patterns and slalom reward lines;
+- portable L4/L5 row definitions with source squeeze, sine, knife-spike, exit, center-cone, delay, and jitter rules;
+- portable 6x2x2 structured-wall geometry with source cadence, alternating lean, mesh-center transform, and 20-row lifecycle;
 - core-owned lightning targeting, warning/strike phases, lifetime, and narrow hitbox;
 - portable `ShipDefinition`, `ThrusterSocketDefinition`, and `ThrusterEffectDefinition` content;
 - a Unity `ShipSocketRig` that creates model-child sockets for the current GLB at runtime;
@@ -59,7 +61,7 @@ Unity camera, VFX, UI, procedural mesh generation, and device/platform integrati
 
 1. been represented in the core;
 2. received deterministic tests;
-3. been compared against a recorded Three.js/Unity reference run;
+3. had its constants, equation order, and boundary conditions checked directly against the GitHub `dev` source;
 4. been connected through a Unity adapter;
 5. passed play-mode visual and feel validation.
 
@@ -72,20 +74,19 @@ Only then should the corresponding legacy gameplay code be disabled. Presentatio
 | Ship steering, roll, bank | Core | input sampling and transform presentation |
 | Campaign and speed ladder | Core | stage event presentation and launch adapters |
 | Random waves and pickups | Core | pooled meshes, tint, bob, and spin |
-| Angled walls | Core identity, movement, and collision | pooled wall meshes |
+| Angled walls | Core random/structured scheduling, identity, source-order geometry, movement, and collision | pooled wall meshes and tint |
 | Lightning | Core timing, target, movement, and collision | warning disc, bolt mesh, shake |
 | Canyon slabs | Core collision decision from value bounds | slab path, mesh recycling, entry/exit visuals |
-| Zipper and slalom | Core scheduling, random choices, entities, rewards | cone/coin pooling |
+| Zipper, slalom, and sine corridors | Core scheduling, row geometry, random choices, entities, rewards | cone/coin pooling and corridor tint |
 | Runner ship and thruster tuning | Engine-neutral content | GLB loading, socket transforms, exhaust drawing |
-| Sine corridors and structured-wall bursts | Unity during migration | current gameplay and presentation |
+| Structured-wall field | Core 3-second gate, 20-row lifecycle, 6x2x2 transforms, and entities | pooled wall presentation |
 
 ## Next checkpoints
 
-1. Move the L4/L5 sine-corridor row generator and structured-wall burst scheduler into the core.
-2. Replace remaining engine-fed canyon geometry facts with a portable corridor definition and path evaluator.
-3. Add replay fixtures captured from the GitHub `dev` build, then compare entity timelines and ship paths.
-4. Build the aesthetic presentation layer from the same content contract: procedural starfield near the sun, pylon visual profiles, obstacle material profiles, atmosphere, and post-processing.
-5. Add build-safe runtime model loading so player builds do not depend on editor-only `AssetDatabase` lookup.
+1. Replace remaining engine-fed canyon geometry facts with a portable corridor definition, path evaluator, and lifecycle state machine.
+2. Retire the now-disabled Unity sine/structured schedulers after a play-mode projection check.
+3. Build the aesthetic presentation layer from the same content contract: procedural starfield near the sun, pylon visual profiles, obstacle material profiles, atmosphere, and post-processing.
+4. Add build-safe runtime model loading so player builds do not depend on editor-only `AssetDatabase` lookup.
 
 The shipping scene now consumes the core through `GameManager`; the standalone host remains useful for isolated previews and deterministic tests.
 

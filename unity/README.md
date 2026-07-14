@@ -39,10 +39,10 @@ GameManager (composition root)
  ├─ GameStateMachine     — validated transitions Boot/Title/Tutorial/Playing/Paused/Dead
  ├─ RunSession           — ALL per-run state in one object, reset in ONE method
  ├─ fixed-step loop      — 60 Hz accumulator, rawDt clamp 50 ms (same as web build)
- └─ ISimSystem tick order (mirrors the JS update() order):
-    ShipController → CameraRig → WaveDirector → CanyonSystem → SineCorridorSystem
-    → ZipperSystem → SlalomSystem → AngledWallSystem → LightningSystem
-    → ObstacleSpawner → PickupSystem
+ ├─ JetHorizonSimulation — engine-neutral authority for ship, stages, hazards,
+ │  pickups, sine corridors, zipper/slalom, lightning, and structured walls
+ └─ Unity presenters — CameraRig → WaveDirector/CanyonSystem → pooled wall,
+    obstacle, lightning, pickup, VFX, audio, and UI adapters
 ```
 
 Key fixes over the JS architecture:
@@ -54,7 +54,8 @@ Key fixes over the JS architecture:
   `Resources/dr_sequence.json` — edit stages/speeds/durations without touching code.
 - **One reset path.** `RunSession.ResetForNewRun()` + each system's `ResetSystem()`
   replaces the ~90 scattered reset fields audited in `RUN_RESET_AUDIT.md`.
-- Constants live in `Scripts/Core/Tuning.cs` with spec references.
+- Portable gameplay constants and formulas live in `Packages/com.jethorizon.core`;
+  Unity-only presentation tuning remains in `Scripts/Core/Tuning.cs`.
 
 ## What's ported vs deferred
 
