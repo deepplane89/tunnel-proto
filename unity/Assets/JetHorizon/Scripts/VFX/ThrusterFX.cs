@@ -1,4 +1,5 @@
 using UnityEngine;
+using JetHorizon.Simulation;
 
 namespace JetHorizon
 {
@@ -25,18 +26,8 @@ namespace JetHorizon
         [Tooltip("Anchor to the GLB's fire/nozzle nodes if present")]
         public bool AutoAnchorToModel = true;
 
-        // LIGHT preset numbers (JS: scale .80, bloomOp .43 pulse .15, life ~.20+.05, spawnJit .07)
-        const float PresetScale = 0.80f;
         const int   ParticlesPerNozzle = 22;
-        const float ParticleLifeBase = 0.20f, ParticleLifeJit = 0.10f;
-        const float ParticleSize = 0.34f;         // ship-local (≈0.10 world at 0.30 ship scale)
         const float ParticleDrift = 4.2f;         // ship-local u/s backward
-        const float SpawnJitter = 0.07f;
-        const float BloomScale = 0.95f;           // ship-local sprite size
-        const float BloomOpacity = 0.43f, BloomPulse = 0.15f;
-
-        // PYLON cone numbers
-        const float ConeLength = 3.30f, ConeRadius = 0.29f;
 
         sealed class Particle
         {
@@ -50,6 +41,8 @@ namespace JetHorizon
         MaterialPropertyBlock _bloomMpb;
         Transform _coneL, _coneR;
         Material _matL, _matR;
+        Transform _socketL, _socketR;
+        ThrusterEffectDefinition _effect;
         Color _color = new Color(0.27f, 0.67f, 1f);   // 0x44aaff
         static readonly int TintId = Shader.PropertyToID("_Tint");
 
@@ -59,6 +52,7 @@ namespace JetHorizon
 
         void Start()
         {
+            _effect = ThrusterEffectCatalog.Light;
             if (AutoAnchorToModel) AutoAnchor();
             if (Preset == Style.Pylon) BuildPylon();
             else BuildLight();
@@ -66,6 +60,25 @@ namespace JetHorizon
 
         void AutoAnchor()
         {
+            var rig = GetComponent<ShipSocketRig>();
+            if (rig == null)
+            {
+                var model = transform.Find("ShipModel");
+                if (model != null)
+                {
+                    rig = gameObject.AddComponent<ShipSocketRig>();
+                    rig.Configure(ShipCatalog.Runner, model);
+                }
+            }
+            if (rig != null && rig.MainThrusterLeft != null && rig.MainThrusterRight != null)
+            {
+                _socketL = rig.MainThrusterLeft;
+                _socketR = rig.MainThrusterRight;
+                NozzleL = SocketLocal(_socketL, NozzleL);
+                NozzleR = SocketLocal(_socketR, NozzleR);
+                return;
+            }
+
             Transform a = null, b = null;
             foreach (var t in GetComponentsInChildren<Transform>(true))
             {
@@ -86,16 +99,16 @@ namespace JetHorizon
         void BuildLight()
         {
             _bloomMpb = new MaterialPropertyBlock();
-            _bloomL = MakeSprite("nozzleBloomL", NozzleL, BloomScale, out _bloomLR);
-            _bloomR = MakeSprite("nozzleBloomR", NozzleR, BloomScale, out _bloomRR);
+            _bloomL = MakeSprite("nozzleBloomL", NozzleL, _effect.BloomScale, out _bloomLR);
+            _bloomR = MakeSprite("nozzleBloomR", NozzleR, _effect.BloomScale, out _bloomRR);
 
             _particles = new Particle[ParticlesPerNozzle * 2];
             for (int i = 0; i < _particles.Length; i++)
             {
                 var p = new Particle();
-                p.T = MakeSprite($"puff{i}", Vector3.zero, ParticleSize, out p.R);
+                p.T = MakeSprite($"puff{i}", Vector3.zero, _effect.ParticleSize, out p.R);
                 p.Mpb = new MaterialPropertyBlock();
-                p.MaxLife = 0.01f; p.Life = -Random.value * ParticleLifeBase;  // stagger
+                p.MaxLife = 0.01f; p.Life = -Random.value * _effect.ParticleLifeBase;  // stagger
                 _particles[i] = p;
             }
         }
@@ -107,7 +120,7 @@ namespace JetHorizon
             go.name = name;
             go.transform.SetParent(transform, false);
             go.transform.localPosition = localPos;
-            go.transform.localScale = Vector3.one * size * PresetScale;
+            go.transform.localScale = Vector3.one * size * _effect.Scale;
             mr = go.GetComponent<MeshRenderer>();
             mr.sharedMaterial = AdditiveMaterial;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -150,10 +163,11 @@ namespace JetHorizon
                 if (_coneL == null) return;
                 _coneL.gameObject.SetActive(on); _coneR.gameObject.SetActive(on);
                 if (!on) return;
-                float len = ConeLength * (0.7f + 0.5f * speedFrac) * (1f + Mathf.Sin(Time.time * 31f) * 0.04f);
-                var sc = new Vector3(ConeRadius * 2f, len, ConeRadius * 2f);
+                float len = _effect.ConeLength * (0.7f + 0.5f * speedFrac) * (1f + Mathf.Sin(Time.time * 31f) * 0.04f);
+                var sc = new Vector3(_effect.ConeRadius * 2f, len, _effect.ConeRadius * 2f);
                 _coneL.localScale = sc; _coneR.localScale = sc;
-                _coneL.localPosition = NozzleL; _coneR.localPosition = NozzleR;
+                _coneL.localPosition = SocketLocal(_socketL, NozzleL);
+                _coneR.localPosition = SocketLocal(_socketR, NozzleR);
                 _matL.SetColor("_Color", _color); _matR.SetColor("_Color", _color);
                 return;
             }
@@ -168,11 +182,13 @@ namespace JetHorizon
             }
 
             // nozzle bloom: pulse + face camera
-            float pulse = BloomOpacity * (1f + BloomPulse * Mathf.Sin(Time.time * 22f)) * (0.75f + 0.5f * speedFrac);
+            float pulse = _effect.BloomOpacity * (1f + _effect.BloomPulse * Mathf.Sin(Time.time * 22f)) * (0.75f + 0.5f * speedFrac);
             Color bloomCol = Color.Lerp(_color, Color.white, 0.35f); bloomCol.a = Mathf.Clamp01(pulse);
             _bloomMpb.SetColor(TintId, bloomCol);
             _bloomLR.SetPropertyBlock(_bloomMpb); _bloomRR.SetPropertyBlock(_bloomMpb);
-            _bloomL.localPosition = NozzleL; _bloomR.localPosition = NozzleR;
+            Vector3 nozzleL = SocketLocal(_socketL, NozzleL);
+            Vector3 nozzleR = SocketLocal(_socketR, NozzleR);
+            _bloomL.localPosition = nozzleL; _bloomR.localPosition = nozzleR;
             if (cam != null) { _bloomL.rotation = cam.transform.rotation; _bloomR.rotation = cam.transform.rotation; }
 
             // particles: recycle stream from alternating nozzles
@@ -184,24 +200,29 @@ namespace JetHorizon
                 {
                     // respawn at nozzle with jitter
                     bool left = i < ParticlesPerNozzle;
-                    Vector3 noz = left ? NozzleL : NozzleR;
-                    p.LocalPos = noz + Random.insideUnitSphere * SpawnJitter;
+                    Vector3 noz = left ? nozzleL : nozzleR;
+                    p.LocalPos = noz + Random.insideUnitSphere * _effect.SpawnJitter;
                     p.LocalVel = new Vector3((Random.value - 0.5f) * 0.6f, (Random.value - 0.5f) * 0.6f,
                                              ParticleDrift * (0.8f + 0.6f * speedFrac + Random.value * 0.4f));
                     p.Life = 0f;
-                    p.MaxLife = ParticleLifeBase + Random.value * ParticleLifeJit;
+                    p.MaxLife = _effect.ParticleLifeBase + Random.value * _effect.ParticleLifeJitter;
                     p.T.gameObject.SetActive(true);
                 }
                 p.LocalPos += p.LocalVel * rawDt;
                 p.T.localPosition = p.LocalPos;
                 float lifeT = p.Life / p.MaxLife;
-                float size = ParticleSize * PresetScale * (0.7f + lifeT * 0.9f);
+                float size = _effect.ParticleSize * _effect.Scale * (0.7f + lifeT * 0.9f);
                 p.T.localScale = Vector3.one * size;
                 if (cam != null) p.T.rotation = cam.transform.rotation;
-                Color c = _color; c.a = 0.48f * (1f - lifeT);
+                Color c = _color; c.a = _effect.ParticleOpacity * (1f - lifeT);
                 p.Mpb.SetColor(TintId, c);
                 p.R.SetPropertyBlock(p.Mpb);
             }
+        }
+
+        Vector3 SocketLocal(Transform socket, Vector3 fallback)
+        {
+            return socket != null ? transform.InverseTransformPoint(socket.position) : fallback;
         }
     }
 }

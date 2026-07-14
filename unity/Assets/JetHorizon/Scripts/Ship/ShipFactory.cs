@@ -1,4 +1,5 @@
 using UnityEngine;
+using JetHorizon.Simulation;
 
 namespace JetHorizon
 {
@@ -13,10 +14,11 @@ namespace JetHorizon
 
         public static GameObject Build(Transform parent, Skin skin, Material holographicMaterial)
         {
+            ShipDefinition definition = ShipCatalog.Runner;
             GameObject model = null;
 #if UNITY_EDITOR
             var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/JetHorizon/Models/Ships/spaceship_01.glb");
+                $"Assets/JetHorizon/Models/Ships/{definition.ModelKey}");
             if (prefab != null) model = Object.Instantiate(prefab);
 #endif
             if (model == null)
@@ -30,9 +32,10 @@ namespace JetHorizon
 
             model.name = "ShipModel";
             model.transform.SetParent(parent, false);
-            model.transform.localPosition = Vector3.zero;
-            // GLB forward is +Z; game forward is −Z (world scrolls +Z)
-            model.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+
+            var sockets = parent.GetComponent<ShipSocketRig>();
+            if (sockets == null) sockets = parent.gameObject.AddComponent<ShipSocketRig>();
+            sockets.Configure(definition, model.transform);
 
             // Layer 8 = "reflectable" — renders into the water's planar reflection
             SetLayerRecursively(model, 8);

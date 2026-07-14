@@ -538,6 +538,35 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Playing));
         }
 
+        [Test]
+        public void RunnerShipContentMatchesTheProductionGlbConfiguration()
+        {
+            var ship = ShipCatalog.Runner;
+
+            Assert.That(ship.ModelKey, Is.EqualTo("spaceship_01.glb"));
+            Assert.That(ship.ModelPosition.Y, Is.EqualTo(-0.590f));
+            Assert.That(ship.ModelRotationRadians.Y, Is.EqualTo(3.142f));
+            Assert.That(ship.ModelScale, Is.EqualTo(1f));
+            Assert.That(ship.Thrusters.MainLeft.X, Is.EqualTo(-0.480f));
+            Assert.That(ship.Thrusters.MainRight.X, Is.EqualTo(0.480f));
+            Assert.That(ship.Thrusters.MainLeft.Z, Is.EqualTo(5.100f));
+            Assert.That(ship.Thrusters.MiniThrustersEnabled, Is.True);
+        }
+
+        [Test]
+        public void LightThrusterPresetIsPortableContentData()
+        {
+            var effect = ThrusterEffectCatalog.Light;
+
+            Assert.That(effect.Scale, Is.EqualTo(0.80f));
+            Assert.That(effect.ParticleSize, Is.EqualTo(0.06f));
+            Assert.That(effect.ParticleLifeBase, Is.EqualTo(0.20f));
+            Assert.That(effect.ParticleLifeJitter, Is.EqualTo(0.05f));
+            Assert.That(effect.BloomScale, Is.EqualTo(0.10f));
+            Assert.That(effect.BloomOpacity, Is.EqualTo(0.43f));
+            Assert.That(effect.ConeLength, Is.EqualTo(3.30f));
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);
