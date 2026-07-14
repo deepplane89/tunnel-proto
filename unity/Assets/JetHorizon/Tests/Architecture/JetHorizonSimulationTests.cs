@@ -339,6 +339,71 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void StageDrivenWaveAndCoinChoicesReplayExactlyFromTheSeed()
+        {
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("OPEN", StageKind.RandomCones, 30f, 1.5f, 1, 0, density: DensityCurve.Ramp)
+            });
+            var config = new SimulationConfig
+            {
+                CollisionEnabled = false,
+                InitialSpawnDistance = 0f,
+                SpawnIntervalDistance = 1000f
+            };
+            var first = new JetHorizonSimulation(config, 2026u, run);
+            var replay = new JetHorizonSimulation(config, 2026u, run);
+            first.StartRun();
+            replay.StartRun();
+
+            first.Step(default);
+            replay.Step(default);
+
+            Assert.That(first.Snapshot.HazardCount, Is.EqualTo(5));
+            Assert.That(first.Snapshot.PickupCount, Is.GreaterThan(0));
+            Assert.That(replay.Snapshot.HazardCount, Is.EqualTo(first.Snapshot.HazardCount));
+            Assert.That(replay.Snapshot.PickupCount, Is.EqualTo(first.Snapshot.PickupCount));
+            for (int i = 0; i < first.Snapshot.HazardCount; i++)
+            {
+                var a = first.Snapshot.GetHazard(i);
+                var b = replay.Snapshot.GetHazard(i);
+                Assert.That(b.X, Is.EqualTo(a.X));
+                Assert.That(b.Z, Is.EqualTo(a.Z));
+                Assert.That(b.Style, Is.EqualTo(a.Style));
+                Assert.That(b.VisualVariant, Is.EqualTo(a.VisualVariant));
+            }
+            for (int i = 0; i < first.Snapshot.PickupCount; i++)
+            {
+                var a = first.Snapshot.GetPickup(i);
+                var b = replay.Snapshot.GetPickup(i);
+                Assert.That(b.X, Is.EqualTo(a.X));
+                Assert.That(b.Y, Is.EqualTo(a.Y));
+                Assert.That(b.Z, Is.EqualTo(a.Z));
+            }
+        }
+
+        [Test]
+        public void SpawnSuppressionPreservesThePendingFirstWave()
+        {
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("OPEN", StageKind.RandomCones, 30f, 1.5f, 1, 0)
+            });
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                InitialSpawnDistance = 0f
+            }, 303u, run);
+            simulation.StartRun();
+
+            simulation.Step(default, new WorldFrame(false, false) { SpawningSuppressed = true });
+            Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+
+            simulation.Step(default, new WorldFrame(false, false));
+            Assert.That(simulation.Snapshot.HazardCount, Is.GreaterThan(0));
+        }
+
+        [Test]
         public void RegisteredCoinMovesCollectsAndAwardsScoreInCore()
         {
             var simulation = new JetHorizonSimulation(new SimulationConfig

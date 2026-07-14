@@ -14,6 +14,8 @@ namespace JetHorizon.Simulation
             public bool NearMissArmed;
             public int Id;
             public HazardKind Kind;
+            public HazardStyle Style;
+            public int VisualVariant;
             public float X;
             public float Y;
             public float Z;
@@ -49,6 +51,8 @@ namespace JetHorizon.Simulation
         readonly HazardState[] _hazards;
         readonly PickupState[] _pickups;
         readonly StageDirector _stageDirector;
+        readonly int[] _laneScratch;
+        readonly int[] _blockedLaneScratch;
 
         long _tick;
         float _elapsed;
@@ -66,6 +70,7 @@ namespace JetHorizon.Simulation
         float _bobSteerBlend;
         float _distanceUntilSpawn;
         int _nextEntityId;
+        int _wavesSinceCoin;
 
         public CoreGamePhase Phase { get; private set; }
         public SimulationSnapshot Snapshot { get; }
@@ -84,6 +89,8 @@ namespace JetHorizon.Simulation
             _hazards = new HazardState[_config.MaxHazards];
             _pickups = new PickupState[_config.MaxPickups];
             _stageDirector = runDefinition == null ? null : new StageDirector(runDefinition);
+            _laneScratch = new int[_config.LaneCount];
+            _blockedLaneScratch = new int[_config.LaneCount];
             Snapshot = new SimulationSnapshot(_config.MaxHazards, _config.MaxPickups);
             Events = new SimulationEventBuffer(64);
             StageCommands = new StageCommandBuffer(16);
@@ -182,6 +189,13 @@ namespace JetHorizon.Simulation
         {
             if (Phase != CoreGamePhase.Playing) return 0;
             ValidatePickup(spawn);
+            int id = SpawnPickup(spawn);
+            RefreshSnapshot();
+            return id;
+        }
+
+        int SpawnPickup(PickupSpawn spawn)
+        {
             int slot = -1;
             for (int i = 0; i < _pickups.Length; i++)
             {
@@ -202,7 +216,6 @@ namespace JetHorizon.Simulation
                 CollectHalfWidth = spawn.CollectHalfWidth,
                 CollectHalfDepth = spawn.CollectHalfDepth
             };
-            RefreshSnapshot();
             return id;
         }
 
@@ -233,6 +246,12 @@ namespace JetHorizon.Simulation
 
             UpdateShip(input, dt);
 
+            if (_stageDirector != null)
+            {
+                _stageDirector.Tick(dt, world, _random, Events, StageCommands);
+                _speed = _stageDirector.Speed;
+            }
+
             _effectiveSpeed = world.OverdriveActive ? _speed * 1.8f : _speed;
             float step = _effectiveSpeed * dt;
             if (_config.ProgressionEnabled && !world.ProgressionSuspended)
@@ -242,14 +261,7 @@ namespace JetHorizon.Simulation
             }
 
             if (_config.HazardSpawningEnabled)
-            {
-                _distanceUntilSpawn -= step;
-                while (_distanceUntilSpawn <= 0f)
-                {
-                    SpawnStandardHazard();
-                    _distanceUntilSpawn += _config.SpawnIntervalDistance;
-                }
-            }
+                TickWorldSpawner(step, world);
 
             if (_config.HazardSimulationEnabled)
                 UpdateHazards(step, world.CollisionSuppressed);
@@ -257,12 +269,6 @@ namespace JetHorizon.Simulation
             if (_config.PickupSimulationEnabled && Phase == CoreGamePhase.Playing)
                 UpdatePickups(step);
 
-            if (_stageDirector != null && Phase == CoreGamePhase.Playing)
-            {
-                _stageDirector.Tick(dt, world, _random, Events, StageCommands);
-                _speed = _stageDirector.Speed;
-                _effectiveSpeed = world.OverdriveActive ? _speed * 1.8f : _speed;
-            }
             RefreshSnapshot();
         }
 
@@ -287,6 +293,7 @@ namespace JetHorizon.Simulation
             _bobSteerBlend = 1f;
             _distanceUntilSpawn = _config.InitialSpawnDistance;
             _nextEntityId = 1;
+            _wavesSinceCoin = 99;
             if (_stageDirector != null)
             {
                 _stageDirector.Reset(events);
@@ -380,6 +387,237 @@ namespace JetHorizon.Simulation
             });
         }
 
+        void TickWorldSpawner(float distanceStep, WorldFrame world)
+        {
+            if (_stageDirector == null)
+            {
+                _distanceUntilSpawn -= distanceStep;
+                while (_distanceUntilSpawn <= 0f)
+                {
+                    SpawnStandardHazard();
+                    _distanceUntilSpawn += _config.SpawnIntervalDistance;
+                }
+                return;
+            }
+
+            if (world.SpawningSuppressed
+                || world.AnyStructuredMechanicActive
+                || _stageDirector.RestBeat > 0f
+                || _stageDirector.SpawnPattern == SpawnPattern.None)
+                return;
+
+            _distanceUntilSpawn -= distanceStep;
+            int safety = 4;
+            while (_distanceUntilSpawn <= 0f && safety-- > 0)
+            {
+                SpawnStageWave();
+                _distanceUntilSpawn += NextWaveDistance();
+            }
+        }
+
+        float NextWaveDistance()
+        {
+            float distance;
+            switch (_stageDirector.SpawnPattern)
+            {
+                case SpawnPattern.FatCones:
+                    distance = 28f;
+                    break;
+                case SpawnPattern.Cones when _stageDirector.Density == DensityCurve.Ramp:
+                    distance = 32f - 6f * _stageDirector.StageRamp01;
+                    break;
+                default:
+                    distance = 30f;
+                    break;
+            }
+            return Math.Max(10f, distance + (_random.NextFloat() - 0.5f) * 10f);
+        }
+
+        void SpawnStageWave()
+        {
+            SpawnPattern pattern = _stageDirector.SpawnPattern;
+            float travelSeconds = Math.Abs(_config.SpawnZ) / Math.Max(1f, _speed);
+            float predictedX = Clamp(
+                _shipX + _shipVelocityX * travelSeconds * 0.85f,
+                _shipX - 8f,
+                _shipX + 8f);
+
+            int count;
+            int minimumLaneGap;
+            float spreadMultiplier = 1f;
+            switch (pattern)
+            {
+                case SpawnPattern.Lethal:
+                    count = _random.NextInt(3, 5);
+                    minimumLaneGap = 4;
+                    break;
+                case SpawnPattern.Angled:
+                    count = _random.NextInt(6, 9);
+                    minimumLaneGap = 4;
+                    break;
+                case SpawnPattern.FatCones:
+                    count = _random.NextInt(4, 6);
+                    minimumLaneGap = 5;
+                    spreadMultiplier = 1.35f;
+                    break;
+                case SpawnPattern.EndlessMix:
+                    count = _random.NextInt(3, 5);
+                    minimumLaneGap = 4;
+                    break;
+                default:
+                    count = _stageDirector.Density == DensityCurve.Ramp
+                        ? 5 + (int)Math.Floor(_stageDirector.StageRamp01 * 4.999f)
+                        : 7 + (int)Math.Floor(_stageDirector.PhysicsTier * 0.5f) + (_random.NextFloat() < 0.5f ? 1 : 0);
+                    minimumLaneGap = _stageDirector.Density == DensityCurve.Ramp ? 3 : 1;
+                    break;
+            }
+
+            for (int i = 0; i < _laneScratch.Length; i++) _laneScratch[i] = i;
+            for (int i = _laneScratch.Length - 1; i > 0; i--)
+            {
+                int j = _random.NextInt(0, i + 1);
+                int temp = _laneScratch[i];
+                _laneScratch[i] = _laneScratch[j];
+                _laneScratch[j] = temp;
+            }
+
+            int guaranteedGapStart = _random.NextInt(0, _config.LaneCount - 1);
+            int blockedCount = 0;
+            for (int i = 0; i < _laneScratch.Length && blockedCount < count; i++)
+            {
+                int lane = _laneScratch[i];
+                if (lane == guaranteedGapStart || lane == guaranteedGapStart + 1) continue;
+                bool clashes = false;
+                for (int b = 0; b < blockedCount; b++)
+                {
+                    if (Math.Abs(_blockedLaneScratch[b] - lane) < minimumLaneGap)
+                    {
+                        clashes = true;
+                        break;
+                    }
+                }
+                if (!clashes) _blockedLaneScratch[blockedCount++] = lane;
+            }
+
+            float centerLane = (_config.LaneCount - 1) * 0.5f;
+            for (int i = 0; i < blockedCount; i++)
+            {
+                int lane = _blockedLaneScratch[i];
+                float x = predictedX + (lane - centerLane) * _config.LaneWidth * spreadMultiplier
+                    + (_random.NextFloat() - 0.5f) * 0.6f;
+                float z = _config.SpawnZ + (_random.NextFloat() - 0.5f) * 8f;
+                SpawnPatternEntity(pattern, x, z);
+            }
+
+            _wavesSinceCoin++;
+            if (_wavesSinceCoin > 1)
+            {
+                SpawnCoinPattern(predictedX, blockedCount);
+                _wavesSinceCoin = 0;
+            }
+        }
+
+        void SpawnPatternEntity(SpawnPattern pattern, float x, float z)
+        {
+            int color = _random.NextInt(0, 3);
+            if (pattern == SpawnPattern.Lethal)
+            {
+                SpawnHazard(HazardSpawn.Ring(x, 2f, z, 5.25f, 2.2f));
+                return;
+            }
+            if (pattern == SpawnPattern.Angled)
+            {
+                SpawnRandomWall(x, z, color);
+                return;
+            }
+            if (pattern == SpawnPattern.FatCones)
+            {
+                SpawnHazard(HazardSpawn.Cone(x, z, 4f, 2.7f, HazardStyle.FatCone, color));
+                return;
+            }
+            if (pattern == SpawnPattern.EndlessMix)
+            {
+                float roll = _random.NextFloat();
+                if (roll < 0.25f)
+                    SpawnHazard(HazardSpawn.Ring(x, 2f, z, 5.25f, 2.2f));
+                else if (roll < 0.5f)
+                    SpawnRandomWall(x, z, color);
+                else
+                {
+                    bool fat = _random.NextFloat() < 0.5f;
+                    SpawnHazard(HazardSpawn.Cone(
+                        x,
+                        z,
+                        fat ? 4f : 1f,
+                        fat ? 2.7f : 0f,
+                        fat ? HazardStyle.FatCone : HazardStyle.StandardCone,
+                        color));
+                }
+                return;
+            }
+            SpawnHazard(HazardSpawn.Cone(x, z, 1f, 0f, HazardStyle.StandardCone, color));
+        }
+
+        void SpawnRandomWall(float x, float z, int color)
+        {
+            float sign = _random.NextFloat() < 0.5f ? -1f : 1f;
+            float angle = sign * (25f + _random.NextFloat() * 20f) * (float)(Math.PI / 180.0);
+            SpawnHazard(HazardSpawn.Wall(x, 2f, z, 8f, 4f, 0.3f, 0f, angle, 0f, HazardStyle.AngledWall, color));
+        }
+
+        void SpawnCoinPattern(float centerX, int blockedCount)
+        {
+            int freeCount = 0;
+            for (int lane = 0; lane < _config.LaneCount; lane++)
+            {
+                bool blocked = false;
+                for (int i = 0; i < blockedCount; i++)
+                {
+                    if (_blockedLaneScratch[i] == lane) { blocked = true; break; }
+                }
+                if (!blocked) _laneScratch[freeCount++] = lane;
+            }
+            if (freeCount == 0) return;
+
+            float roll = _random.NextFloat();
+            float centerLane = (_config.LaneCount - 1) * 0.5f;
+            if (roll < 0.45f)
+            {
+                int lane = _laneScratch[_random.NextInt(0, freeCount)];
+                float x = centerX + (lane - centerLane) * _config.LaneWidth;
+                SpawnPickup(PickupSpawn.Coin(x, 1.2f, _config.SpawnZ, 75f));
+                return;
+            }
+            if (roll < 0.80f)
+            {
+                int count = 10 + _random.NextInt(0, 6);
+                float zSpan = 28f + _random.NextFloat() * 16f;
+                float baseX = centerX + (_random.NextFloat() - 0.5f) * 8f;
+                float xSwing = (_random.NextFloat() - 0.5f) * 10f;
+                for (int i = 0; i < count; i++)
+                {
+                    float fraction = i / (float)(count - 1);
+                    float arc = (float)Math.Sin(fraction * Math.PI);
+                    SpawnPickup(PickupSpawn.Coin(
+                        baseX + arc * xSwing,
+                        1.2f + arc * 0.7f,
+                        _config.SpawnZ + fraction * zSpan,
+                        75f));
+                }
+                return;
+            }
+
+            int lineCount = 8 + _random.NextInt(0, 5);
+            float lineSpan = 20f + _random.NextFloat() * 12f;
+            int lineLane = _laneScratch[_random.NextInt(0, freeCount)];
+            float lineX = centerX + (lineLane - centerLane) * _config.LaneWidth;
+            for (int i = 0; i < lineCount; i++)
+            {
+                float fraction = i / (float)(lineCount - 1);
+                SpawnPickup(PickupSpawn.Coin(lineX, 1.2f, _config.SpawnZ + fraction * lineSpan, 75f));
+            }
+        }
+
         int SpawnHazard(HazardSpawn spawn)
         {
             int slot = -1;
@@ -396,6 +634,8 @@ namespace JetHorizon.Simulation
                 NearMissArmed = spawn.NearMissEnabled,
                 Id = id,
                 Kind = spawn.Kind,
+                Style = spawn.Style,
+                VisualVariant = spawn.VisualVariant,
                 X = spawn.X,
                 Y = spawn.Y,
                 Z = spawn.Z,
@@ -524,6 +764,8 @@ namespace JetHorizon.Simulation
                 Snapshot.SetHazard(count++, new HazardSnapshot(
                     hazard.Id,
                     hazard.Kind,
+                    hazard.Style,
+                    hazard.VisualVariant,
                     hazard.X,
                     hazard.Y,
                     hazard.Z,

@@ -60,40 +60,6 @@ namespace JetHorizon
 
         public void WipeBonusRings() { /* bonus fuel rings not ported yet — hook kept for parity */ }
 
-        /// <summary>Coin event roll (DR rates). Returns true if coins were spawned.</summary>
-        public bool TrySpawnCoinEvent(float centerX)
-        {
-            float roll = Random.value;
-            if (roll < 0.45f)
-            {
-                SpawnCoin(centerX + Random.Range(-8, 9) * Tuning.LaneWidth * 0.5f, 1.2f, Tuning.SpawnZ);
-                return true;
-            }
-            if (roll < 0.80f)
-            {
-                // curved chain: 10-15 coins, sine arc in X and Y
-                int count = 10 + Random.Range(0, 6);
-                float zSpan = 28f + Random.value * 16f;
-                float baseX = centerX + (Random.value < 0.5f ? -4f : 4f);
-                float xSwing = Random.value < 0.5f ? -5f : 5f;
-                for (int i = 0; i < count; i++)
-                {
-                    float frac = i / (float)(count - 1);
-                    SpawnCoin(baseX + Mathf.Sin(frac * Mathf.PI) * xSwing,
-                              1.2f + Mathf.Sin(frac * Mathf.PI) * 0.7f,
-                              Tuning.SpawnZ - frac * zSpan);
-                }
-                return true;
-            }
-            // straight chain: 8-12 coins, one lane
-            int n = 8 + Random.Range(0, 5);
-            float zs = 20f + Random.value * 12f;
-            float x = centerX + Random.Range(-8, 9) * Tuning.LaneWidth * 0.5f;
-            for (int i = 0; i < n; i++)
-                SpawnCoin(x, 1.2f, Tuning.SpawnZ - i / (float)(n - 1) * zs);
-            return true;
-        }
-
         /// <summary>Evenly spaced coin line (slalom gap reward).</summary>
         public void SpawnCoinLine(float centerX, float z, int count, float width)
         {
@@ -133,6 +99,7 @@ namespace JetHorizon
                     var pickup = snapshot.GetPickup(i);
                     _corePickups[pickup.Id] = pickup;
                 }
+                EnsureCorePresenters(snapshot);
             }
 
             foreach (var c in _coins)
@@ -151,6 +118,36 @@ namespace JetHorizon
                 p.y = c.BaseY + Mathf.Sin(s.Elapsed * 2.2f + c.Phase) * 0.12f;
                 c.T.position = p;
                 c.T.rotation = Quaternion.Euler(0f, (s.Elapsed * 2.8f + c.Phase) * Mathf.Rad2Deg, 0f);
+            }
+        }
+
+        void EnsureCorePresenters(SimulationSnapshot snapshot)
+        {
+            for (int i = 0; i < snapshot.PickupCount; i++)
+            {
+                var pickup = snapshot.GetPickup(i);
+                if (pickup.Kind != PickupKind.Coin) continue;
+                bool found = false;
+                foreach (var coin in _coins)
+                {
+                    if (coin.Active && coin.CoreId == pickup.Id) { found = true; break; }
+                }
+                if (!found) AcquireCoreCoin(pickup);
+            }
+        }
+
+        void AcquireCoreCoin(PickupSnapshot pickup)
+        {
+            foreach (var coin in _coins)
+            {
+                if (coin.Active) continue;
+                coin.Active = true;
+                coin.CoreId = pickup.Id;
+                coin.Phase = Random.value * Mathf.PI * 2f;
+                coin.BaseY = pickup.Y;
+                coin.T.position = new Vector3(pickup.X, pickup.Y, pickup.Z);
+                coin.T.gameObject.SetActive(true);
+                return;
             }
         }
     }

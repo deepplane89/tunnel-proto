@@ -40,6 +40,7 @@ namespace JetHorizon.Simulation
         public bool SlalomActive;
         public bool AngledWallsActive;
         public bool CollisionSuppressed;
+        public bool SpawningSuppressed;
 
         public bool AnyCorridorActive => CanyonActive || SineCorridorActive;
         public bool AnyStructuredMechanicActive => AnyCorridorActive || ZipperActive || SlalomActive || AngledWallsActive;
@@ -56,6 +57,7 @@ namespace JetHorizon.Simulation
             SlalomActive = false;
             AngledWallsActive = false;
             CollisionSuppressed = false;
+            SpawningSuppressed = false;
         }
     }
 
@@ -131,10 +133,22 @@ namespace JetHorizon.Simulation
         Corridor
     }
 
+    public enum HazardStyle
+    {
+        StandardCone,
+        FatCone,
+        LethalRing,
+        AngledWall,
+        StructuredWall,
+        CorridorCone
+    }
+
     /// <summary>Engine-neutral hazard creation request. Visual identity is carried separately by the presenter.</summary>
     public struct HazardSpawn
     {
         public HazardKind Kind;
+        public HazardStyle Style;
+        public int VisualVariant;
         public float X;
         public float Y;
         public float Z;
@@ -151,11 +165,19 @@ namespace JetHorizon.Simulation
         public float RingTubeRadius;
         public bool NearMissEnabled;
 
-        public static HazardSpawn Cone(float x, float z, float visualScale = 1f, float collisionHalfWidth = 0.9f)
+        public static HazardSpawn Cone(
+            float x,
+            float z,
+            float visualScale = 1f,
+            float collisionHalfWidth = 0.9f,
+            HazardStyle style = HazardStyle.StandardCone,
+            int visualVariant = 0)
         {
             return new HazardSpawn
             {
                 Kind = HazardKind.Cone,
+                Style = style,
+                VisualVariant = visualVariant,
                 X = x,
                 Z = z,
                 CollisionHalfWidth = collisionHalfWidth,
@@ -173,6 +195,7 @@ namespace JetHorizon.Simulation
             return new HazardSpawn
             {
                 Kind = HazardKind.Ring,
+                Style = HazardStyle.LethalRing,
                 X = x,
                 Y = y,
                 Z = z,
@@ -196,11 +219,15 @@ namespace JetHorizon.Simulation
             float depth,
             float rotationXRadians,
             float rotationYRadians,
-            float rotationZRadians = 0f)
+            float rotationZRadians = 0f,
+            HazardStyle style = HazardStyle.AngledWall,
+            int visualVariant = 0)
         {
             return new HazardSpawn
             {
                 Kind = HazardKind.Wall,
+                Style = style,
+                VisualVariant = visualVariant,
                 X = x,
                 Y = y,
                 Z = z,
@@ -222,6 +249,8 @@ namespace JetHorizon.Simulation
     {
         public int Id { get; }
         public HazardKind Kind { get; }
+        public HazardStyle Style { get; }
+        public int VisualVariant { get; }
         public float X { get; }
         public float Y { get; }
         public float Z { get; }
@@ -236,6 +265,8 @@ namespace JetHorizon.Simulation
         internal HazardSnapshot(
             int id,
             HazardKind kind,
+            HazardStyle style,
+            int visualVariant,
             float x,
             float y,
             float z,
@@ -249,6 +280,8 @@ namespace JetHorizon.Simulation
         {
             Id = id;
             Kind = kind;
+            Style = style;
+            VisualVariant = visualVariant;
             X = x;
             Y = y;
             Z = z;

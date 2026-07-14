@@ -43,7 +43,6 @@ namespace JetHorizon
         readonly List<RingObs> _rings = new List<RingObs>(RingPoolSize);
         readonly Dictionary<int, HazardSnapshot> _coreHazards = new Dictionary<int, HazardSnapshot>(Tuning.ObstaclePoolSize + RingPoolSize);
         Mesh _coneMesh, _ringMesh;
-        int _wavesSinceCoin;
 
         RunSession S => GameManager.I.Session;
 
@@ -88,7 +87,6 @@ namespace JetHorizon
         {
             BuildPools();
             WipeAllHazards();
-            _wavesSinceCoin = 99;
         }
 
         public void WipeAllHazards()
@@ -124,23 +122,23 @@ namespace JetHorizon
                 if (c.Active) continue;
                 float h = 8f + Random.value * 3f, sink = 2f, totalH = h + sink;
                 float collisionWidth = Mathf.Max(0f, scaleXZ - 1f) * (isFat ? 0.9f : 1.2f);
-                int coreId = GameManager.I.RegisterHazard(new HazardSpawn
-                {
-                    Kind = HazardKind.Cone,
-                    X = x,
-                    Y = -sink,
-                    Z = z,
-                    CollisionHalfWidth = collisionWidth,
-                    CollisionHalfDepth = Tuning.ColDistZ + Mathf.Max(0f, scaleXZ - 1f) * 0.4f,
-                    VisualScale = scaleXZ,
-                    NearMissEnabled = true
-                });
+                int colorType = Random.Range(0, 3);
+                var spawn = HazardSpawn.Cone(
+                    x,
+                    z,
+                    scaleXZ,
+                    collisionWidth,
+                    isFat ? HazardStyle.FatCone : isCorridor ? HazardStyle.CorridorCone : HazardStyle.StandardCone,
+                    colorType);
+                spawn.Y = -sink;
+                spawn.CollisionHalfDepth = Tuning.ColDistZ + Mathf.Max(0f, scaleXZ - 1f) * 0.4f;
+                int coreId = GameManager.I.RegisterHazard(spawn);
                 if (coreId == 0) return null;
 
                 c.Active = true;
                 c.CoreId = coreId;
                 c.IsFatCone = isFat; c.SlalomScaled = scaleXZ != 1f; c.IsCorridor = isCorridor;
-                c.ColorType = Random.Range(0, 3);
+                c.ColorType = colorType;
                 c.T.position = new Vector3(x, -sink, z);
                 c.T.localScale = new Vector3(scaleXZ, totalH / 10.5f, scaleXZ);
                 Color col = tint ?? Vibes.ConeColors[c.ColorType];
@@ -163,120 +161,6 @@ namespace JetHorizon
             c.T.gameObject.SetActive(false);
         }
 
-        // ── Random wave spawner (spec/02 §2) ─────────────────────────────────
-        public float CurrentSpawnZBase()
-        {
-            return Waves.SpawnMode switch
-            {
-                SpawnMode.FatCones => -28f,
-                _ => Waves.ConeDensity == "ramp" ? -32f + 6f * Waves.StageRampT01 : -30f,
-            };
-        }
-
-        public void SpawnWave()
-        {
-            var s = S;
-            var mode = Waves.SpawnMode;
-
-            // lane setup — predicted ship X
-            float predicted = s.ShipX + s.ShipVelX * (Mathf.Abs(Tuning.SpawnZ) / Mathf.Max(1f, s.Speed)) * 0.85f;
-            predicted = Mathf.Clamp(predicted, s.ShipX - 8f, s.ShipX + 8f);
-
-            int count;
-            int minLaneGap = 3;
-            float spreadMul = 1f;
-            switch (mode)
-            {
-                case SpawnMode.Lethal: count = Random.Range(3, 5); minLaneGap = 4; break;
-                case SpawnMode.Angled:
-                    AngledWalls.SpawnRandomRow(predicted, Random.Range(6, 9));
-                    MaybeCoins(predicted);
-                    return;
-                case SpawnMode.FatCones: count = Random.Range(4, 6); minLaneGap = 5; spreadMul = 1.35f; break;
-                case SpawnMode.EndlessMix: count = Random.Range(3, 5); minLaneGap = 4; break;
-                default:
-                    if (Waves.ConeDensity == "ramp") count = Random.Range(4, 6);
-                    else count = 7 + Mathf.FloorToInt(s.PhysTier * 0.5f) + (Random.value < 0.5f ? 1 : 0);
-                    break;
-            }
-
-            // Fisher-Yates lanes, reserve a guaranteed 2-lane gap
-            var lanes = new List<int>(Tuning.LaneCount);
-            for (int i = 0; i < Tuning.LaneCount; i++) lanes.Add(i);
-            for (int i = lanes.Count - 1; i > 0; i--)
-            {
-                int j = Random.Range(0, i + 1);
-                (lanes[i], lanes[j]) = (lanes[j], lanes[i]);
-            }
-            int gapLane = Random.Range(0, Tuning.LaneCount - 1);
-            var used = new List<int>();
-
-            int spawned = 0;
-            foreach (int lane in lanes)
-            {
-                if (spawned >= count) break;
-                if (lane == gapLane || lane == gapLane + 1) continue;
-                bool tooClose = false;
-                foreach (int u in used) if (Mathf.Abs(u - lane) < minLaneGap) { tooClose = true; break; }
-                if (tooClose) continue;
-                used.Add(lane);
-
-                float x = predicted + (lane - 10) * Tuning.LaneWidth * spreadMul + (Random.value - 0.5f) * 0.6f;
-                float z = Tuning.SpawnZ + (Random.value - 0.5f) * 8f;
-
-                switch (mode)
-                {
-                    case SpawnMode.Lethal:
-                        SpawnRing(x, z);
-                        break;
-                    case SpawnMode.FatCones:
-                        SpawnCone(x, z, null, 4f, isFat: true);
-                        break;
-                    case SpawnMode.EndlessMix:
-                        float roll = Random.value;
-                        if (roll < 0.25f) SpawnRing(x, z);
-                        else if (roll < 0.5f) AngledWalls.SpawnSingleRandomWall(x, z);
-                        else
-                        {
-                            bool fat = Random.value < 0.5f;
-                            SpawnCone(x, z, null, fat ? 4f : 1f, isFat: fat);
-                        }
-                        break;
-                    default:
-                        SpawnCone(x, z);
-                        break;
-                }
-                spawned++;
-            }
-
-            MaybeCoins(predicted);
-        }
-
-        void MaybeCoins(float centerX)
-        {
-            _wavesSinceCoin++;
-            if (_wavesSinceCoin <= 1) return;
-            if (Pickups.TrySpawnCoinEvent(centerX)) _wavesSinceCoin = 0;
-        }
-
-        void SpawnRing(float x, float z)
-        {
-            foreach (var r in _rings)
-            {
-                if (r.Active) continue;
-                int coreId = GameManager.I.RegisterHazard(HazardSpawn.Ring(x, RingY, z, RingR, RingTube));
-                if (coreId == 0) return;
-                r.Active = true;
-                r.CoreId = coreId;
-                r.T.position = new Vector3(x, RingY, z);
-                r.Mpb.SetColor(TintId, Vibes.RingRed);
-                r.Mpb.SetFloat(FadeId, 0f);
-                r.R.SetPropertyBlock(r.Mpb);
-                r.T.gameObject.SetActive(true);
-                return;
-            }
-        }
-
         // ── Tick: project core snapshots onto pooled render objects ───────────
         public void SimTick(float dt)
         {
@@ -289,6 +173,7 @@ namespace JetHorizon
                     var hazard = snapshot.GetHazard(i);
                     _coreHazards[hazard.Id] = hazard;
                 }
+                EnsureCorePresenters(snapshot);
             }
 
             foreach (var c in _cones)
@@ -323,6 +208,66 @@ namespace JetHorizon
                 float fade = Mathf.Clamp01((p.z - Tuning.SpawnZ) / (Tuning.FadeInEndZ - Tuning.SpawnZ));
                 r.Mpb.SetFloat(FadeId, fade * 0.92f);
                 r.R.SetPropertyBlock(r.Mpb);
+            }
+        }
+
+        void EnsureCorePresenters(SimulationSnapshot snapshot)
+        {
+            for (int i = 0; i < snapshot.HazardCount; i++)
+            {
+                var hazard = snapshot.GetHazard(i);
+                if (hazard.Kind == HazardKind.Cone)
+                {
+                    bool found = false;
+                    foreach (var c in _cones) if (c.Active && c.CoreId == hazard.Id) { found = true; break; }
+                    if (!found) AcquireCoreCone(hazard);
+                }
+                else if (hazard.Kind == HazardKind.Ring)
+                {
+                    bool found = false;
+                    foreach (var r in _rings) if (r.Active && r.CoreId == hazard.Id) { found = true; break; }
+                    if (!found) AcquireCoreRing(hazard);
+                }
+            }
+        }
+
+        void AcquireCoreCone(HazardSnapshot hazard)
+        {
+            foreach (var c in _cones)
+            {
+                if (c.Active) continue;
+                float scaleXZ = Mathf.Max(0.01f, hazard.VisualScale);
+                float height = 8f + Random.value * 3f;
+                const float sink = 2f;
+                c.Active = true;
+                c.CoreId = hazard.Id;
+                c.IsFatCone = hazard.Style == HazardStyle.FatCone;
+                c.IsCorridor = hazard.Style == HazardStyle.CorridorCone;
+                c.SlalomScaled = scaleXZ != 1f;
+                c.ColorType = Mathf.Abs(hazard.VisualVariant) % Vibes.ConeColors.Length;
+                c.T.position = new Vector3(hazard.X, hazard.Y, hazard.Z);
+                c.T.localScale = new Vector3(scaleXZ, (height + sink) / 10.5f, scaleXZ);
+                c.Mpb.SetColor(TintId, Vibes.ConeColors[c.ColorType]);
+                c.Mpb.SetFloat(FadeId, 0f);
+                c.R.SetPropertyBlock(c.Mpb);
+                c.T.gameObject.SetActive(true);
+                return;
+            }
+        }
+
+        void AcquireCoreRing(HazardSnapshot hazard)
+        {
+            foreach (var r in _rings)
+            {
+                if (r.Active) continue;
+                r.Active = true;
+                r.CoreId = hazard.Id;
+                r.T.position = new Vector3(hazard.X, hazard.Y, hazard.Z);
+                r.Mpb.SetColor(TintId, Vibes.RingRed);
+                r.Mpb.SetFloat(FadeId, 0f);
+                r.R.SetPropertyBlock(r.Mpb);
+                r.T.gameObject.SetActive(true);
+                return;
             }
         }
     }

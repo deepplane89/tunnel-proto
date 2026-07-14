@@ -137,6 +137,7 @@ namespace JetHorizon
                     var hazard = snapshot.GetHazard(i);
                     if (hazard.Kind == HazardKind.Wall) _coreWalls[hazard.Id] = hazard;
                 }
+                EnsureCorePresenters(snapshot);
             }
             foreach (var w in _pool)
             {
@@ -166,17 +167,27 @@ namespace JetHorizon
                 {
                     float x = baseX + (cx - 2.5f) * 42f;
                     float y = 2f + cy * 6f;
-                    Spawn(x, Tuning.SpawnZ, 22f, 4f, 35f * _burstAngleSign, y, rotX: -36f);
+                    Spawn(x, Tuning.SpawnZ, 22f, 4f, 35f * _burstAngleSign, y, rotX: -36f,
+                        style: HazardStyle.StructuredWall);
                 }
             _burstAngleSign = -_burstAngleSign;
         }
 
-        void Spawn(float x, float z, float w, float h, float angleY, float y = -1f, float rotX = 0f)
+        void Spawn(
+            float x,
+            float z,
+            float w,
+            float h,
+            float angleY,
+            float y = -1f,
+            float rotX = 0f,
+            HazardStyle style = HazardStyle.AngledWall)
         {
             foreach (var wall in _pool)
             {
                 if (wall.Active) continue;
                 float worldY = y < 0f ? h / 2f : y;
+                int colorType = Random.Range(0, 3);
                 int coreId = GameManager.I.RegisterHazard(HazardSpawn.Wall(
                     x,
                     worldY,
@@ -185,14 +196,57 @@ namespace JetHorizon
                     h,
                     0.3f,
                     rotX * Mathf.Deg2Rad,
-                    angleY * Mathf.Deg2Rad));
+                    angleY * Mathf.Deg2Rad,
+                    0f,
+                    style,
+                    colorType));
                 if (coreId == 0) return;
                 wall.Active = true;
                 wall.CoreId = coreId;
                 wall.T.position = new Vector3(x, worldY, z);
                 wall.T.rotation = Quaternion.Euler(rotX, angleY, 0f);
                 wall.T.localScale = new Vector3(w, h, 0.3f);
-                wall.Mpb.SetColor(TintId, Vibes.ConeColors[Random.Range(0, 3)]);
+                wall.Mpb.SetColor(TintId, Vibes.ConeColors[colorType]);
+                wall.Mpb.SetFloat(FadeId, 0f);
+                wall.R.SetPropertyBlock(wall.Mpb);
+                wall.T.gameObject.SetActive(true);
+                return;
+            }
+        }
+
+        void EnsureCorePresenters(SimulationSnapshot snapshot)
+        {
+            for (int i = 0; i < snapshot.HazardCount; i++)
+            {
+                var hazard = snapshot.GetHazard(i);
+                if (hazard.Kind != HazardKind.Wall) continue;
+                bool found = false;
+                foreach (var wall in _pool)
+                {
+                    if (wall.Active && wall.CoreId == hazard.Id) { found = true; break; }
+                }
+                if (!found) AcquireCoreWall(hazard);
+            }
+        }
+
+        void AcquireCoreWall(HazardSnapshot hazard)
+        {
+            foreach (var wall in _pool)
+            {
+                if (wall.Active) continue;
+                wall.Active = true;
+                wall.CoreId = hazard.Id;
+                wall.T.position = new Vector3(hazard.X, hazard.Y, hazard.Z);
+                wall.T.rotation = Quaternion.Euler(
+                    hazard.RotationXRadians * Mathf.Rad2Deg,
+                    hazard.RotationYRadians * Mathf.Rad2Deg,
+                    hazard.RotationZRadians * Mathf.Rad2Deg);
+                wall.T.localScale = new Vector3(
+                    Mathf.Max(0.01f, hazard.VisualScale),
+                    Mathf.Max(0.01f, hazard.VisualScaleY),
+                    Mathf.Max(0.01f, hazard.VisualScaleZ));
+                int colorType = Mathf.Abs(hazard.VisualVariant) % Vibes.ConeColors.Length;
+                wall.Mpb.SetColor(TintId, Vibes.ConeColors[colorType]);
                 wall.Mpb.SetFloat(FadeId, 0f);
                 wall.R.SetPropertyBlock(wall.Mpb);
                 wall.T.gameObject.SetActive(true);

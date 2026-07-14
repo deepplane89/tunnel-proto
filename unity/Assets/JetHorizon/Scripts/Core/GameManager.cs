@@ -57,12 +57,14 @@ namespace JetHorizon
             var runDefinition = SequenceAsset.Load().ToCoreDefinition();
             _coreSimulation = new JetHorizonSimulation(new SimulationConfig
             {
-                // The core owns live ship, progression, stages, and registered hazards.
-                // Unity retains pooled hazard presentation during this migration step.
+                // The core owns live ship, progression, stages, random wave decisions,
+                // registered hazards, and coin-pattern decisions. Unity presents snapshots.
                 ProgressionEnabled = true,
-                HazardSpawningEnabled = false,
+                HazardSpawningEnabled = true,
                 HazardSimulationEnabled = true,
                 CollisionEnabled = true,
+                InitialSpawnDistance = 5f,
+                SpawnIntervalDistance = 30f,
                 MaxHazards = 600,
                 MaxPickups = 128
             }, 20260714u, runDefinition);
@@ -117,7 +119,6 @@ namespace JetHorizon
             _killedThisFrame = false;
             TickCoreShip(dt);                                    // engine-neutral input→snapshot→Unity presentation
             if (_killedThisFrame) return;
-            float eff = s.EffectiveSpeed;
             Camera.SimTick(dt);                                  // 5: pivot follow (fixed part)
 
             if (s.InvincibleTimer > 0f) s.InvincibleTimer = Mathf.Max(0f, s.InvincibleTimer - dt);
@@ -135,18 +136,6 @@ namespace JetHorizon
             if (_killedThisFrame) return;
             Lightning.SimTick(dt);
             if (_killedThisFrame) return;
-
-            // 17: random spawner gate
-            if (CanSpawnWaves())
-            {
-                s.NextSpawnZ += eff * dt;
-                if (s.NextSpawnZ >= 0f)
-                {
-                    float baseZ = Obstacles.CurrentSpawnZBase();
-                    s.NextSpawnZ = baseZ + (Random.value - 0.5f) * 10f;
-                    Obstacles.SpawnWave();
-                }
-            }
 
             Obstacles.SimTick(dt);                               // 18: move + fade + collision + near-miss
             if (_killedThisFrame) return;
@@ -177,7 +166,8 @@ namespace JetHorizon
                 ZipperActive = s.ZipperActive,
                 SlalomActive = s.SlalomActive,
                 AngledWallsActive = s.AngledWallsActive,
-                CollisionSuppressed = s.InvincibleTimer > 0f || s.IntroActive || s.IntroLiftActive
+                CollisionSuppressed = s.InvincibleTimer > 0f || s.IntroActive || s.IntroLiftActive,
+                SpawningSuppressed = s.IntroActive || s.IntroLiftActive || s.PostLaunchGrace > 0f
             };
             world.HazardsClear = (Obstacles == null || Obstacles.ActiveHazardCount == 0)
                 && !world.AnyStructuredMechanicActive;
@@ -255,19 +245,6 @@ namespace JetHorizon
                         break;
                 }
             }
-        }
-
-        bool CanSpawnWaves()
-        {
-            var s = Session;
-            return !s.IntroActive
-                && s.PostLaunchGrace <= 0f
-                && s.RestBeat <= 0f
-                && !s.AnyCorridorActive
-                && !s.ZipperActive
-                && !s.SlalomActive
-                && !s.AngledWallsActive
-                && Waves.SpawnMode != SpawnMode.None;
         }
 
         // ── Flow control ───────────────────────────────────────────────────
