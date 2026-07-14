@@ -491,6 +491,53 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(b.Z, Is.EqualTo(a.Z));
         }
 
+        [Test]
+        public void CorridorBoundsAreResolvedByTheEngineNeutralCore()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = true
+            }, 96u);
+            simulation.StartRun();
+            var safe = new WorldFrame(false, false)
+            {
+                CorridorCollisionActive = true,
+                CorridorLeftBoundary = -2f,
+                CorridorRightBoundary = 2f
+            };
+
+            simulation.Step(default, safe);
+            Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Playing));
+
+            var lethal = safe;
+            lethal.CorridorRightBoundary = 0.9f;
+            simulation.Step(default, lethal);
+
+            Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Dead));
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.PlayerDied), Is.True);
+        }
+
+        [Test]
+        public void CorridorCollisionHonorsSharedCollisionSuppression()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = true
+            }, 97u);
+            simulation.StartRun();
+            simulation.Step(default, new WorldFrame(false, false)
+            {
+                CorridorCollisionActive = true,
+                CorridorLeftBoundary = -0.9f,
+                CorridorRightBoundary = 0.9f,
+                CollisionSuppressed = true
+            });
+
+            Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Playing));
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);

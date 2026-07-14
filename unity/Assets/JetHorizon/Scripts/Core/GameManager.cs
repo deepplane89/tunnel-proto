@@ -169,6 +169,12 @@ namespace JetHorizon
                 CollisionSuppressed = s.InvincibleTimer > 0f || s.IntroActive || s.IntroLiftActive,
                 SpawningSuppressed = s.IntroActive || s.IntroLiftActive || s.PostLaunchGrace > 0f
             };
+            if (Canyon != null && Canyon.TryGetCollisionBounds(out float leftBoundary, out float rightBoundary))
+            {
+                world.CorridorCollisionActive = true;
+                world.CorridorLeftBoundary = leftBoundary;
+                world.CorridorRightBoundary = rightBoundary;
+            }
             world.HazardsClear = (Obstacles == null || Obstacles.ActiveHazardCount == 0)
                 && !world.AnyStructuredMechanicActive;
             _coreSimulation.Step(frame, world);

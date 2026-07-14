@@ -251,6 +251,12 @@ namespace JetHorizon.Simulation
 
             UpdateShip(input, dt);
 
+            if (ResolveCorridorCollision(world))
+            {
+                RefreshSnapshot();
+                return;
+            }
+
             if (_stageDirector != null)
             {
                 _stageDirector.Tick(dt, world, _random, Events, StageCommands);
@@ -277,6 +283,25 @@ namespace JetHorizon.Simulation
                 UpdatePickups(step);
 
             RefreshSnapshot();
+        }
+
+        bool ResolveCorridorCollision(WorldFrame world)
+        {
+            if (!_config.CollisionEnabled
+                || world.CollisionSuppressed
+                || !world.CorridorCollisionActive)
+                return false;
+
+            float halfWidth = _config.CorridorShipHalfWidth;
+            float grace = _config.CorridorCollisionGrace;
+            bool hitRight = _shipX + halfWidth >= world.CorridorRightBoundary + grace;
+            bool hitLeft = _shipX - halfWidth <= world.CorridorLeftBoundary - grace;
+            if (!hitRight && !hitLeft) return false;
+
+            ApplyFinalScoreMultiplier();
+            Phase = CoreGamePhase.Dead;
+            Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, 0, _score, _distance));
+            return true;
         }
 
         void ResetRunState(SimulationEventBuffer events)

@@ -34,6 +34,8 @@ namespace JetHorizon.Simulation
         public float BankZeroCrossMultiplier = 3f;
         public float WingCollisionHalfWidth = 1.5f;
         public float BodyCollisionHalfWidth = 0.8f;
+        public float CorridorShipHalfWidth = 1.2f;
+        public float CorridorCollisionGrace = 0.3f;
 
         public float HoverAmplitude = 0.03f;
         public float HoverFrequency = 0.60f;

@@ -41,6 +41,9 @@ namespace JetHorizon.Simulation
         public bool AngledWallsActive;
         public bool CollisionSuppressed;
         public bool SpawningSuppressed;
+        public bool CorridorCollisionActive;
+        public float CorridorLeftBoundary;
+        public float CorridorRightBoundary;
 
         public bool AnyCorridorActive => CanyonActive || SineCorridorActive;
         public bool AnyStructuredMechanicActive => AnyCorridorActive || ZipperActive || SlalomActive || AngledWallsActive;
@@ -58,6 +61,9 @@ namespace JetHorizon.Simulation
             AngledWallsActive = false;
             CollisionSuppressed = false;
             SpawningSuppressed = false;
+            CorridorCollisionActive = false;
+            CorridorLeftBoundary = 0f;
+            CorridorRightBoundary = 0f;
         }
     }
 

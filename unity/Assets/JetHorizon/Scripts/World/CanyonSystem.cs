@@ -26,7 +26,6 @@ namespace JetHorizon
         const float EntranceSpawnZ = -500f;
         const float RevealZ = -210f;
         const float SafeZ = -150f;
-        const float CollisionGrace = 0.3f;
 
         CanyonPreset _p;
         float _stageSpeedMult;
@@ -283,7 +282,6 @@ namespace JetHorizon
                 return;
             }
 
-            if (s.CanyonActive && _revealed) CheckCollision();
         }
 
         void Reveal()
@@ -317,21 +315,37 @@ namespace JetHorizon
             AssignMaterial(slab, z);
         }
 
-        void CheckCollision()
+        /// <summary>
+        /// Supplies the current visual corridor's inner faces as plain values. The
+        /// engine-neutral simulation decides whether those bounds kill the ship.
+        /// </summary>
+        public bool TryGetCollisionBounds(out float leftBoundary, out float rightBoundary)
         {
-            var s = S;
+            leftBoundary = float.NegativeInfinity;
+            rightBoundary = float.PositiveInfinity;
+            if (!S.CanyonActive || !_revealed) return false;
+
             float spacing = _p.SlabW;
+            bool hasLeft = false;
+            bool hasRight = false;
             foreach (var slab in _slabs)
             {
                 if (slab.IsEntrance || !slab.T.gameObject.activeSelf) continue;
                 float z = slab.T.position.z;
                 if (z < Tuning.ShipZ - spacing || z > Tuning.ShipZ + spacing) continue;
 
-                if (slab.Side > 0 && s.ShipX + Tuning.ShipHalfWidth >= slab.BakedX + CollisionGrace)
-                { GameManager.I.KillPlayer(); return; }
-                if (slab.Side < 0 && s.ShipX - Tuning.ShipHalfWidth <= slab.BakedX - CollisionGrace)
-                { GameManager.I.KillPlayer(); return; }
+                if (slab.Side > 0)
+                {
+                    rightBoundary = Mathf.Min(rightBoundary, slab.BakedX);
+                    hasRight = true;
+                }
+                else
+                {
+                    leftBoundary = Mathf.Max(leftBoundary, slab.BakedX);
+                    hasLeft = true;
+                }
             }
+            return hasLeft && hasRight;
         }
 
         void DestroyWalls(bool clearFlags)
