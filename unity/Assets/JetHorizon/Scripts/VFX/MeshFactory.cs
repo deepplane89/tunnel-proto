@@ -59,6 +59,27 @@ namespace JetHorizon
             return mesh;
         }
 
+        public static Mesh Octahedron(float radius = 1f)
+        {
+            var vertices = new[]
+            {
+                Vector3.up * radius, Vector3.down * radius,
+                Vector3.left * radius, Vector3.right * radius,
+                Vector3.forward * radius, Vector3.back * radius
+            };
+            var triangles = new[]
+            {
+                0, 4, 3,  0, 2, 4,  0, 5, 2,  0, 3, 5,
+                1, 3, 4,  1, 4, 2,  1, 2, 5,  1, 5, 3
+            };
+            var mesh = new Mesh { name = "JH_Octahedron" };
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
         /// <summary>Cone: 6-sided like the JS ConeGeometry(1.6, h, 6). Base at y=0, tip +Y.</summary>
         public static Mesh Cone(float radius, float height, int segments = 6)
         {

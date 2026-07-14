@@ -55,12 +55,12 @@ namespace JetHorizon
         {
             var shader = Shader.Find("Universal Render Pipeline/Lit");
 
-            Material Std(int color, float metallic, float smooth, int emissive = 0, float emiStrength = 0f)
+            Material Std(string role, int color, float metallic, float roughness, int emissive = 0, float emiStrength = 0f)
             {
-                var m = new Material(shader);
+                var m = new Material(shader) { name = $"JH_Skin_{skin}_{role}" };
                 m.SetColor("_BaseColor", TextureFactory.Hex(color));
                 m.SetFloat("_Metallic", metallic);
-                m.SetFloat("_Smoothness", smooth);
+                m.SetFloat("_Smoothness", 1f - roughness);
                 if (emiStrength > 0f)
                 {
                     m.EnableKeyword("_EMISSION");
@@ -70,53 +70,88 @@ namespace JetHorizon
                 return m;
             }
 
+            Material CipherHull(string role)
+            {
+                var m = new Material(Shader.Find("JH/CipherHull")) { name = $"JH_Skin_{skin}_{role}" };
+                m.SetColor("_BaseColor", Color.black);
+                m.SetColor("_GlowColor", new Color(0.2f, 0.76f, 1f, 1f));
+                m.SetFloat("_DiamondScale", 0.5f);
+                m.SetFloat("_BumpStrength", 0.6f);
+                m.SetFloat("_GlowMultiplier", 0.9f);
+                m.SetFloat("_Smoothness", 1f);
+                return m;
+            }
+
+            if (holographicMaterial == null)
+            {
+                holographicMaterial = new Material(Shader.Find("JH/Holographic")) { name = "JH_Skin_Ghost_Hologram" };
+                holographicMaterial.SetColor("_HologramColor", TextureFactory.Hex(0x00e0ff));
+                holographicMaterial.SetFloat("_FresnelAmount", 0.70f);
+                holographicMaterial.SetFloat("_FresnelOpacity", 0.82f);
+                holographicMaterial.SetFloat("_ScanlineSize", 5.5f);
+                holographicMaterial.SetFloat("_HologramBrightness", 1.94f);
+                holographicMaterial.SetFloat("_SignalSpeed", 0f);
+                holographicMaterial.SetFloat("_HologramOpacity", 0.31f);
+                holographicMaterial.SetFloat("_ZWrite", 1f);
+                holographicMaterial.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                holographicMaterial.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            }
+
             // slot name → material, per skin (spec/03 §9 table)
             Material nozzle, gray, rocketLight, rocketBase, white, fallback;
             switch (skin)
             {
                 case Skin.Ghost:
-                    nozzle = Std(0x0a0a0a, 0.95f, 0.88f);
+                    nozzle = Std("nozzle", 0x0a0a0a, 0.95f, 0.12f);
                     gray = rocketLight = rocketBase = white = fallback = holographicMaterial;
                     break;
                 case Skin.BlackMamba:
-                    nozzle = Std(0x050505, 0f, 0.68f);
-                    gray = rocketBase = fallback = Std(0xd36b4a, 1.0f, 0.68f);
-                    rocketLight = Std(0x000000, 0.5f, 0.7f, 0x19d9e6, 11f);
-                    white = Std(0x797234, 0.5f, 0.6f, 0x19d9e6, 5f);
+                    nozzle = Std("nozzle", 0x050505, 0f, 0.32f);
+                    gray = rocketBase = fallback = Std("hull", 0xd36b4a, 1.0f, 0.32f);
+                    rocketLight = Std("rocket_light", 0x000000, 0f, 0.32f, 0x19d9e6, 11f);
+                    white = Std("white", 0x797234, 0f, 0.32f, 0x19d9e6, 5f);
                     break;
                 case Skin.Cipher:
-                    nozzle = Std(0x080808, 0.95f, 0.90f);
-                    rocketLight = Std(0x000000, 0.5f, 0.7f, 0x88bbff, 6f);
-                    gray = rocketBase = white = fallback = Std(0x000000, 0.98f, 1.0f, 0x33c2ff, 0.9f);
+                    nozzle = Std("nozzle", 0x080808, 0.95f, 0.10f);
+                    rocketLight = Std("rocket_light", 0x000000, 0f, 0.32f, 0x88bbff, 6f);
+                    gray = rocketBase = white = fallback = CipherHull("diamond_hull");
                     break;
                 default: // Runner
-                    // Source roughness is preserved as Unity smoothness. Metallic values
-                    // are calibrated down where URP lacks the browser's environment response,
-                    // preventing the dark hull from collapsing into a silhouette.
-                    nozzle = Std(0x0a0a0a, 0.65f, 0.88f);
-                    gray = Std(0x888899, 0.35f, 0.68f);
-                    rocketLight = Std(0x0044ff, 0.0f, 0.95f, 0x0033cc, 2.5f);
-                    rocketBase = Std(0x0e1014, 0.55f, 0.70f);
-                    white = Std(0xddeeff, 0.25f, 0.92f, 0x2255ff, 0.6f);
-                    fallback = Std(0x141820, 0.45f, 0.75f);
+                    nozzle = Std("nozzle", 0x0a0a0a, 0.95f, 0.12f);
+                    gray = Std("gray", 0x888899, 0.6f, 0.32f);
+                    rocketLight = Std("rocket_light", 0x0044ff, 0.0f, 0.05f, 0x0033cc, 2.5f);
+                    rocketBase = Std("rocket_base", 0x0e1014, 0.90f, 0.30f);
+                    white = Std("white", 0xddeeff, 0.5f, 0.08f, 0x2255ff, 0.6f);
+                    fallback = Std("fallback", 0x141820, 0.88f, 0.25f);
                     break;
             }
 
+            var oldRuntimeMaterials = new System.Collections.Generic.HashSet<Material>();
             foreach (var r in model.GetComponentsInChildren<Renderer>())
             {
                 var mats = r.sharedMaterials;
                 for (int i = 0; i < mats.Length; i++)
                 {
-                    string n = (mats[i] != null ? mats[i].name : "").ToLowerInvariant();
-                    if (n.Contains("fire")) continue;              // engine glow meshes left as-is
-                    if (n.Contains("nozzle")) mats[i] = nozzle;
-                    else if (n.Contains("rocket_light") || n.Contains("rocketlight")) mats[i] = rocketLight;
-                    else if (n.Contains("rocket_base") || n.Contains("rocketbase")) mats[i] = rocketBase;
-                    else if (n.Contains("gray") || n.Contains("grey")) mats[i] = gray;
-                    else if (n.Contains("white")) mats[i] = white;
+                    Material current = mats[i];
+                    string role = ResolveMaterialRole(r.name, i, mats.Length, current != null ? current.name : string.Empty);
+                    if (role == "fire") continue;
+                    if (current != null && current.name.StartsWith("JH_Skin_")) oldRuntimeMaterials.Add(current);
+                    if (role == "nozzle") mats[i] = nozzle;
+                    else if (role == "rocket_light") mats[i] = rocketLight;
+                    else if (role == "rocket_base") mats[i] = rocketBase;
+                    else if (role == "gray") mats[i] = gray;
+                    else if (role == "white") mats[i] = white;
                     else mats[i] = fallback;
                 }
                 r.sharedMaterials = mats;
+            }
+            foreach (var oldMaterial in oldRuntimeMaterials)
+            {
+                if (oldMaterial == nozzle || oldMaterial == gray || oldMaterial == rocketLight
+                    || oldMaterial == rocketBase || oldMaterial == white || oldMaterial == fallback
+                    || oldMaterial == holographicMaterial) continue;
+                if (UnityEngine.Application.isPlaying) Object.Destroy(oldMaterial);
+                else Object.DestroyImmediate(oldMaterial);
             }
 
             // Ship-local lights (spec/03 §2): key + fill + warm underlight pool
@@ -138,6 +173,29 @@ namespace JetHorizon
                 L("ShipFillLight", LightType.Directional, TextureFactory.Hex(0x8899bb), 0.9f, new Vector3(-2f, 1f, 2f));
                 L("ShipUnderlight", LightType.Point, TextureFactory.Hex(0xff6620), 0.65f, new Vector3(0f, -1.2f, 0f), 6f);
             }
+        }
+
+        static string ResolveMaterialRole(string rendererName, int slot, int slotCount, string materialName)
+        {
+            string n = materialName.ToLowerInvariant().Replace(' ', '_');
+            if (n.Contains("fire")) return "fire";
+            if (n.Contains("nozzle")) return "nozzle";
+            if (n.Contains("rocket_light") || n.Contains("rocketlight") || n == "light") return "rocket_light";
+            if (n.Contains("rocket_base") || n.Contains("rocketbase")) return "rocket_base";
+            if (n.Contains("gray") || n.Contains("grey")) return "gray";
+            if (n.Contains("white")) return "white";
+
+            // glTFast keeps mesh names and primitive slot order even after the
+            // first runtime skin replacement, so switching remains lossless.
+            string mesh = rendererName.ToLowerInvariant();
+            if (mesh.Contains("cube.008") || slotCount == 6)
+            {
+                string[] roles = { "rocket_base", "nozzle", "fire", "rocket_light", "white", "gray" };
+                if (slot >= 0 && slot < roles.Length) return roles[slot];
+            }
+            if (mesh.Contains("fins 01")) return slot == 1 ? "rocket_light" : "rocket_base";
+            if (mesh.Contains("cylinder.009")) return slot == 0 ? "nozzle" : "rocket_base";
+            return "rocket_base";
         }
     }
 }

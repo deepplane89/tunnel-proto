@@ -19,6 +19,7 @@ Shader "JH/Holographic"
         [Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("Src Blend", Float) = 5
         [Enum(UnityEngine.Rendering.BlendMode)] _DstBlend ("Dst Blend", Float) = 1
         [Enum(Off,0,On,1)] _ZWrite ("ZWrite", Float) = 0
+        [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("ZTest", Float) = 4
     }
     SubShader
     {
@@ -27,6 +28,7 @@ Shader "JH/Holographic"
         {
             Blend [_SrcBlend] [_DstBlend]
             ZWrite [_ZWrite]
+            ZTest [_ZTest]
             Cull Off
 
             HLSLPROGRAM
@@ -39,7 +41,7 @@ Shader "JH/Holographic"
                 half _FresnelOpacity, _FresnelAmount, _ScanlineSize, _SignalSpeed;
                 half _HologramBrightness, _HologramOpacity;
                 half _BlinkFresnelOnly, _EnableBlinking;
-                half _AdditiveBlend, _SrcBlend, _DstBlend, _ZWrite;
+                half _AdditiveBlend, _SrcBlend, _DstBlend, _ZWrite, _ZTest;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float2 uv : TEXCOORD0; };

@@ -92,7 +92,7 @@ namespace JetHorizon
             s.BankRoll = Mathf.Clamp(s.BankRoll, -Tuning.SteerBankRadMax * 1.15f, Tuning.SteerBankRadMax * 1.15f);
 
             // ── Yaw / pitch — §1.7 ───────────────────────────────────────
-            float yawTarget = -s.ShipVelX / 14f * Tuning.YawMax;
+            float yawTarget = s.ShipVelX / 14f * Tuning.YawMax;
             _yawSmooth += (yawTarget - _yawSmooth) * Mathf.Min(1f, dt * Tuning.YawSmoothing);
 
             float speedDelta = (s.Speed - _prevSpeed) / dt;
@@ -146,7 +146,10 @@ namespace JetHorizon
             if (snapshot == null) return;
             var s = S;
 
-            float yawTarget = -snapshot.ShipVelocityX / 14f * Tuning.YawMax;
+            // The core input adapter mirrors lateral X for Unity's -Z gameplay
+            // camera. Yaw is a presentation angle, so applying the browser sign
+            // again makes the nose point out of the turn. Undo that mirror here.
+            float yawTarget = snapshot.ShipVelocityX / 14f * Tuning.YawMax;
             _yawSmooth += (yawTarget - _yawSmooth) * Mathf.Min(1f, dt * Tuning.YawSmoothing);
 
             float speedDelta = (s.Speed - _prevSpeed) / Mathf.Max(dt, 0.0001f);

@@ -35,6 +35,8 @@ namespace JetHorizon
         public LightningSystem Lightning;
         public ObstacleSpawner Obstacles;
         public PickupSystem Pickups;
+        public PowerupPresentationSystem PowerupPresentation;
+        public ShipSkinController ShipSkins;
 
         public readonly GameStateMachine State = new GameStateMachine();
         public RunSession Session { get; private set; } = new RunSession();
@@ -84,6 +86,13 @@ namespace JetHorizon
             // the title is an honest preview of the gameplay camera and ship framing.
             Ship?.ResetSystem();
             Camera?.ResetSystem();
+            if (PowerupPresentation == null)
+                PowerupPresentation = gameObject.GetComponent<PowerupPresentationSystem>() ?? gameObject.AddComponent<PowerupPresentationSystem>();
+            PowerupPresentation.ShipRoot = Ship != null ? Ship.ShipRoot : null;
+            PowerupPresentation.ResetSystem();
+            if (ShipSkins == null)
+                ShipSkins = gameObject.GetComponent<ShipSkinController>() ?? gameObject.AddComponent<ShipSkinController>();
+            ShipSkins.Initialize(Ship != null ? Ship.ShipRoot : null);
             State.TransitionTo(GamePhase.Title);
         }
 
@@ -144,6 +153,7 @@ namespace JetHorizon
             Obstacles.SimTick(dt);                               // 18: move + fade + collision + near-miss
             if (_killedThisFrame) return;
             Pickups.SimTick(dt);                                 // 19: coins/powerups move + magnet + collect
+            PowerupPresentation?.SimTick(dt);                    // 20: snapshot/event-driven hero VFX
         }
 
         void TickCoreShip(float dt)
@@ -218,6 +228,13 @@ namespace JetHorizon
             Session.RollAngle = snapshot.ShipRollRadians;
             Session.BankRoll = snapshot.ShipBankRadians;
             Session.TiltTimer = snapshot.ShipTiltTimer;
+            Session.ShieldTimer = snapshot.ShieldSeconds;
+            Session.ShieldHits = snapshot.ShieldHits;
+            Session.LaserTimer = snapshot.LaserSeconds;
+            Session.OverdriveTimer = snapshot.OverdriveSeconds;
+            Session.OverdriveSpeedTimer = snapshot.OverdriveSpeedSeconds;
+            Session.OverdriveActive = snapshot.OverdriveSpeedSeconds > 0f;
+            Session.MagnetTimer = snapshot.MagnetSeconds;
             Session.SineCorridorActive = snapshot.SineCorridorActive;
             Session.ZipperActive = snapshot.ZipperActive;
             Session.SlalomActive = snapshot.SlalomActive;
@@ -259,6 +276,24 @@ namespace JetHorizon
                         break;
                     case SimulationEventType.PickupCollected:
                         GameEvents.RaiseCoinCollected();
+                        break;
+                    case SimulationEventType.PowerupCollected:
+                        GameEvents.RaisePowerupCollected((PowerupType)(int)events[i].ValueA);
+                        break;
+                    case SimulationEventType.PowerupActivated:
+                        GameEvents.RaisePowerupActivated((PowerupType)(int)events[i].ValueA, events[i].ValueB);
+                        break;
+                    case SimulationEventType.PowerupExpired:
+                        GameEvents.RaisePowerupExpired((PowerupType)(int)events[i].ValueA);
+                        break;
+                    case SimulationEventType.ShieldHit:
+                        GameEvents.RaiseShieldHit((int)events[i].ValueA);
+                        break;
+                    case SimulationEventType.ShieldBroken:
+                        GameEvents.RaiseShieldBroken();
+                        break;
+                    case SimulationEventType.LaserFired:
+                        GameEvents.RaiseLaserFired(events[i].ValueA);
                         break;
                 }
             }
@@ -333,6 +368,7 @@ namespace JetHorizon
             Canyon.ResetSystem(); SineCorridor.ResetSystem(); Zipper.ResetSystem();
             Slalom.ResetSystem(); AngledWalls.ResetSystem(); Lightning.ResetSystem();
             Obstacles.ResetSystem(); Pickups.ResetSystem();
+            PowerupPresentation?.ResetSystem();
         }
 
         /// <summary>killPlayer() port — resolution order per spec/01 §4.6 (no shields yet: 1:1 minus meta).</summary>
@@ -347,6 +383,12 @@ namespace JetHorizon
             if (State.Phase != GamePhase.Playing) return;      // duplicate-frame guard
             if (GodMode) return;                                // viewer mode never ends the run
             if (s.InvincibleTimer > 0f) return;                 // grace absorbs
+            if (_coreSimulation != null && _coreSimulation.TryAbsorbExternalHit())
+            {
+                SyncCoreSession();
+                DispatchCorePresentationEvents();
+                return;
+            }
 
             _killedThisFrame = true;
             _deathTimer = 0f;

@@ -17,14 +17,32 @@ namespace JetHorizon
             public Transform T; public bool Active; public float Phase; public float BaseY; public int CoreId;
         }
 
+        sealed class PowerupView
+        {
+            public Transform T;
+            public Transform Icon;
+            public bool Active;
+            public int CoreId;
+            public PowerupType Type;
+            public Vector3 LastPosition;
+        }
+
         const int PoolSize = 100;
         readonly List<Coin> _coins = new List<Coin>(PoolSize);
+        readonly List<PowerupView> _powerups = new List<PowerupView>(10);
         readonly Dictionary<int, PickupSnapshot> _corePickups = new Dictionary<int, PickupSnapshot>(PoolSize);
         Mesh _coinMesh;
+        Mesh _octahedronMesh, _torusMesh, _sphereMesh;
+        Material _powerupCubeMaterial;
+        readonly Dictionary<PowerupType, Material> _powerupIconMaterials = new Dictionary<PowerupType, Material>();
 
         RunSession S => GameManager.I.Session;
 
-        void Awake() => BuildPool();
+        void Awake()
+        {
+            BuildPool();
+            BuildPowerupPool();
+        }
 
         void BuildPool()
         {
@@ -45,9 +63,79 @@ namespace JetHorizon
             }
         }
 
+        Material CreateHologram(Color color, bool icon)
+        {
+            var shader = Shader.Find("JH/Holographic");
+            var material = new Material(shader) { name = icon ? "JH_PowerupIcon" : "JH_PowerupCube" };
+            material.SetColor("_HologramColor", color);
+            material.SetFloat("_FresnelAmount", 0.70f);
+            material.SetFloat("_FresnelOpacity", 1.0f);
+            material.SetFloat("_ScanlineSize", 3.70f);
+            material.SetFloat("_HologramBrightness", 1.60f);
+            material.SetFloat("_SignalSpeed", 0.01f);
+            material.SetFloat("_EnableBlinking", 1f);
+            material.SetFloat("_BlinkFresnelOnly", 1f);
+            material.SetFloat("_HologramOpacity", 0.70f);
+            material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetFloat("_ZWrite", icon ? 0f : 1f);
+            material.SetFloat("_ZTest", icon
+                ? (float)UnityEngine.Rendering.CompareFunction.Always
+                : (float)UnityEngine.Rendering.CompareFunction.LessEqual);
+            material.renderQueue = icon ? 3100 : 3000;
+            return material;
+        }
+
+        static Color PowerupColor(PowerupType type)
+        {
+            int rgb = PowerupCatalog.Get(type).ColorRgb;
+            return TextureFactory.Hex(rgb);
+        }
+
+        void BuildPowerupPool()
+        {
+            if (_powerups.Count > 0) return;
+            _octahedronMesh = MeshFactory.Octahedron(1.1f);
+            _torusMesh = MeshFactory.PolygonTorus(0.935f, 0.33f, 20, 10);
+            _sphereMesh = MeshFactory.Sphere(0.99f, 20, 16);
+            _powerupCubeMaterial = CreateHologram(TextureFactory.Hex(0x00d5ff), false);
+            for (int type = 1; type <= 4; type++)
+                _powerupIconMaterials[(PowerupType)type] = CreateHologram(PowerupColor((PowerupType)type), true);
+
+            var parent = new GameObject("PowerupPool").transform;
+            parent.SetParent(transform, false);
+            for (int i = 0; i < 10; i++)
+            {
+                var root = new GameObject("powerup");
+                root.layer = 8;
+                root.transform.SetParent(parent, false);
+
+                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Destroy(cube.GetComponent<Collider>());
+                cube.name = "HologramCube";
+                cube.layer = 8;
+                cube.transform.SetParent(root.transform, false);
+                cube.transform.localScale = Vector3.one * 3.5f;
+                var cubeRenderer = cube.GetComponent<MeshRenderer>();
+                cubeRenderer.sharedMaterial = _powerupCubeMaterial;
+                cubeRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+                var icon = new GameObject("PowerupIcon");
+                icon.layer = 8;
+                icon.transform.SetParent(root.transform, false);
+                icon.AddComponent<MeshFilter>();
+                var iconRenderer = icon.AddComponent<MeshRenderer>();
+                iconRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+                root.SetActive(false);
+                _powerups.Add(new PowerupView { T = root.transform, Icon = icon.transform });
+            }
+        }
+
         public void ResetSystem()
         {
             BuildPool();
+            BuildPowerupPool();
             GameManager.I?.ClearRegisteredPickups();
             foreach (var c in _coins)
             {
@@ -55,6 +143,13 @@ namespace JetHorizon
                 c.Active = false;
                 c.CoreId = 0;
                 c.T.gameObject.SetActive(false);
+            }
+            foreach (var powerup in _powerups)
+            {
+                powerup.Active = false;
+                powerup.CoreId = 0;
+                powerup.Type = PowerupType.None;
+                powerup.T.gameObject.SetActive(false);
             }
         }
 
@@ -119,6 +214,29 @@ namespace JetHorizon
                 c.T.position = p;
                 c.T.rotation = Quaternion.Euler(0f, (s.Elapsed * 2.8f + c.Phase) * Mathf.Rad2Deg, 0f);
             }
+
+            foreach (var powerup in _powerups)
+            {
+                if (!powerup.Active) continue;
+                if (!_corePickups.TryGetValue(powerup.CoreId, out var pickup) || pickup.Kind != PickupKind.Powerup)
+                {
+                    if (Mathf.Abs(powerup.LastPosition.z - Tuning.ShipZ) < 4f)
+                        PowerupCollectBurst.Spawn(transform, powerup.LastPosition, powerup.Type, powerup.Icon.GetComponent<MeshFilter>().sharedMesh,
+                            _powerupIconMaterials[powerup.Type]);
+                    powerup.Active = false;
+                    powerup.CoreId = 0;
+                    powerup.T.gameObject.SetActive(false);
+                    continue;
+                }
+
+                powerup.LastPosition = new Vector3(pickup.X, pickup.Y, pickup.Z);
+                powerup.T.position = powerup.LastPosition;
+                powerup.T.rotation = Quaternion.Euler(
+                    s.Elapsed * 0.2f * Mathf.Rad2Deg,
+                    s.Elapsed * 0.5f * Mathf.Rad2Deg,
+                    0f);
+                powerup.Icon.localRotation = Quaternion.Euler(0f, s.Elapsed * 1.4f * Mathf.Rad2Deg, 0f);
+            }
         }
 
         void EnsureCorePresenters(SimulationSnapshot snapshot)
@@ -126,13 +244,24 @@ namespace JetHorizon
             for (int i = 0; i < snapshot.PickupCount; i++)
             {
                 var pickup = snapshot.GetPickup(i);
-                if (pickup.Kind != PickupKind.Coin) continue;
-                bool found = false;
-                foreach (var coin in _coins)
+                if (pickup.Kind == PickupKind.Coin)
                 {
-                    if (coin.Active && coin.CoreId == pickup.Id) { found = true; break; }
+                    bool found = false;
+                    foreach (var coin in _coins)
+                    {
+                        if (coin.Active && coin.CoreId == pickup.Id) { found = true; break; }
+                    }
+                    if (!found) AcquireCoreCoin(pickup);
                 }
-                if (!found) AcquireCoreCoin(pickup);
+                else if (pickup.Kind == PickupKind.Powerup)
+                {
+                    bool found = false;
+                    foreach (var powerup in _powerups)
+                    {
+                        if (powerup.Active && powerup.CoreId == pickup.Id) { found = true; break; }
+                    }
+                    if (!found) AcquireCorePowerup(pickup);
+                }
             }
         }
 
@@ -147,6 +276,30 @@ namespace JetHorizon
                 coin.BaseY = pickup.Y;
                 coin.T.position = new Vector3(pickup.X, pickup.Y, pickup.Z);
                 coin.T.gameObject.SetActive(true);
+                return;
+            }
+        }
+
+        void AcquireCorePowerup(PickupSnapshot pickup)
+        {
+            foreach (var view in _powerups)
+            {
+                if (view.Active) continue;
+                view.Active = true;
+                view.CoreId = pickup.Id;
+                view.Type = pickup.Powerup;
+                view.LastPosition = new Vector3(pickup.X, pickup.Y, pickup.Z);
+                view.T.position = view.LastPosition;
+                view.T.rotation = Quaternion.identity;
+
+                var filter = view.Icon.GetComponent<MeshFilter>();
+                filter.sharedMesh = pickup.Powerup == PowerupType.Laser
+                    ? _torusMesh
+                    : pickup.Powerup == PowerupType.Magnet
+                        ? _sphereMesh
+                        : _octahedronMesh;
+                view.Icon.GetComponent<MeshRenderer>().sharedMaterial = _powerupIconMaterials[pickup.Powerup];
+                view.T.gameObject.SetActive(true);
                 return;
             }
         }
