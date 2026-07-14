@@ -1,33 +1,29 @@
 using System.Collections.Generic;
 using UnityEngine;
+using JetHorizon.Simulation;
 
 namespace JetHorizon
 {
     /// <summary>
-    /// Canyon lightning (spec/02 §1.10): telegraphed strike at a lane X —
-    /// 0.3 s warning ring, bolt lives 0.5 s, kill radius 3.5 u ground circle.
+    /// Presents core-owned canyon lightning. The 3.5-unit warning disc is visual;
+    /// the simulation owns the narrow bolt hitbox, timing, lifetime, and targeting.
     /// </summary>
     public sealed class LightningSystem : MonoBehaviour, ISimSystem
     {
         public CameraRig Camera;
         public Material BoltMaterial;   // additive white (JH/Additive)
 
-        const float WarnTime = 0.3f;
-        const float BoltLife = 0.5f;
-        const float KillRadius = 3.5f;
-        const float SpawnZ = -83f;
+        const float WarningDiscRadius = 3.5f;
 
         sealed class Strike
         {
-            public float X, Z;
-            public float Timer;          // counts up; < WarnTime = telegraph, then bolt
+            public int CoreId;
             public GameObject Warn, Bolt;
             public bool Struck;
         }
 
         readonly List<Strike> _strikes = new List<Strike>(8);
-        bool _patternActive;
-        float _freq, _timer;
+        readonly Dictionary<int, HazardSnapshot> _coreStrikes = new Dictionary<int, HazardSnapshot>(32);
         static MaterialPropertyBlock _mpb;
         static readonly int TintId = Shader.PropertyToID("_Tint");
 
@@ -39,12 +35,7 @@ namespace JetHorizon
             mr.SetPropertyBlock(_mpb);
         }
 
-        RunSession S => GameManager.I.Session;
-
-        public void ResetSystem() { StopPattern(); ClearAll(); }
-
-        public void BeginPattern(float frequency) { _patternActive = true; _freq = frequency; _timer = 0f; }
-        public void StopPattern() => _patternActive = false;
+        public void ResetSystem() => ClearAll();
 
         void ClearAll()
         {
@@ -54,64 +45,83 @@ namespace JetHorizon
 
         public void SimTick(float dt)
         {
-            var s = S;
-            float eff = s.EffectiveSpeed;
-
-            if (_patternActive && s.CanyonActive)
+            var snapshot = GameManager.I.CoreSnapshot;
+            _coreStrikes.Clear();
+            if (snapshot != null)
             {
-                _timer += dt;
-                if (_timer >= _freq)
+                for (int i = 0; i < snapshot.HazardCount; i++)
                 {
-                    _timer = 0f;
-                    SpawnStrike(s.ShipX + Random.Range(-8, 9) * 1f, SpawnZ);
+                    var hazard = snapshot.GetHazard(i);
+                    if (hazard.Kind == HazardKind.Lightning) _coreStrikes[hazard.Id] = hazard;
                 }
+                EnsureCorePresenters(snapshot);
             }
 
             for (int i = _strikes.Count - 1; i >= 0; i--)
             {
                 var st = _strikes[i];
-                st.Timer += dt;
-                st.Z += eff * dt;
-                if (st.Warn) st.Warn.transform.position = new Vector3(st.X, 0.05f, st.Z);
-                if (st.Bolt) st.Bolt.transform.position = new Vector3(st.X, 15f, st.Z);
+                if (!_coreStrikes.TryGetValue(st.CoreId, out var hazard))
+                {
+                    DestroyPresenter(st);
+                    _strikes.RemoveAt(i);
+                    continue;
+                }
 
-                if (!st.Struck && st.Timer >= WarnTime)
+                if (st.Warn) st.Warn.transform.position = new Vector3(hazard.X, 0.05f, hazard.Z);
+                if (st.Bolt) st.Bolt.transform.position = new Vector3(hazard.X, 15f, hazard.Z);
+
+                if (!st.Struck && hazard.CollisionActive)
                 {
                     st.Struck = true;
                     if (st.Warn) { Destroy(st.Warn); st.Warn = null; }
-                    st.Bolt = MakeBolt(st.X, st.Z);
+                    st.Bolt = MakeBolt(hazard.X, hazard.Z);
                     Camera.Shake();
-
-                    // kill check at strike moment
-                    float dx = s.ShipX - st.X, dz = Tuning.ShipZ - st.Z;
-                    if (s.InvincibleTimer <= 0f && !s.IntroActive && dx * dx + dz * dz < KillRadius * KillRadius)
-                    {
-                        GameManager.I.KillPlayer();
-                    }
-                }
-
-                if (st.Timer >= WarnTime + BoltLife || st.Z > Tuning.DespawnZ)
-                {
-                    if (st.Warn) Destroy(st.Warn);
-                    if (st.Bolt) Destroy(st.Bolt);
-                    _strikes.RemoveAt(i);
                 }
             }
         }
 
-        void SpawnStrike(float x, float z)
+        void EnsureCorePresenters(SimulationSnapshot snapshot)
+        {
+            for (int i = 0; i < snapshot.HazardCount; i++)
+            {
+                var hazard = snapshot.GetHazard(i);
+                if (hazard.Kind != HazardKind.Lightning) continue;
+                bool found = false;
+                foreach (var strike in _strikes)
+                {
+                    if (strike.CoreId == hazard.Id) { found = true; break; }
+                }
+                if (!found) SpawnPresenter(hazard);
+            }
+        }
+
+        void SpawnPresenter(HazardSnapshot hazard)
         {
             var warn = GameObject.CreatePrimitive(PrimitiveType.Quad);
             Destroy(warn.GetComponent<Collider>());
             warn.name = "lt_warn";
             warn.transform.SetParent(transform, false);
-            warn.transform.position = new Vector3(x, 0.05f, z);
+            warn.transform.position = new Vector3(hazard.X, 0.05f, hazard.Z);
             warn.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            warn.transform.localScale = Vector3.one * (KillRadius * 2f);
+            warn.transform.localScale = Vector3.one * (WarningDiscRadius * 2f);
             var mr = warn.GetComponent<MeshRenderer>();
             mr.sharedMaterial = BoltMaterial;
             SetTint(mr, new Color(1f, 0.9f, 0.3f, 0.35f));
-            _strikes.Add(new Strike { X = x, Z = z, Warn = warn });
+            var strike = new Strike { CoreId = hazard.Id, Warn = warn };
+            if (hazard.CollisionActive)
+            {
+                strike.Struck = true;
+                Destroy(warn);
+                strike.Warn = null;
+                strike.Bolt = MakeBolt(hazard.X, hazard.Z);
+            }
+            _strikes.Add(strike);
+        }
+
+        static void DestroyPresenter(Strike strike)
+        {
+            if (strike.Warn) Destroy(strike.Warn);
+            if (strike.Bolt) Destroy(strike.Bolt);
         }
 
         GameObject MakeBolt(float x, float z)

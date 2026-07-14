@@ -30,6 +30,9 @@ namespace JetHorizon.Simulation
             public float RotationZRadians;
             public float RingRadius;
             public float RingTubeRadius;
+            public float AgeSeconds;
+            public float CollisionDelaySeconds;
+            public float LifetimeSeconds;
         }
 
         struct PickupState
@@ -71,6 +74,8 @@ namespace JetHorizon.Simulation
         float _distanceUntilSpawn;
         int _nextEntityId;
         int _wavesSinceCoin;
+        CorridorFamily _lightningFamily;
+        float _lightningTimer;
 
         public CoreGamePhase Phase { get; private set; }
         public SimulationSnapshot Snapshot { get; }
@@ -252,6 +257,8 @@ namespace JetHorizon.Simulation
                 _speed = _stageDirector.Speed;
             }
 
+            TickLightningSpawner(dt, world);
+
             _effectiveSpeed = world.OverdriveActive ? _speed * 1.8f : _speed;
             float step = _effectiveSpeed * dt;
             if (_config.ProgressionEnabled && !world.ProgressionSuspended)
@@ -294,6 +301,8 @@ namespace JetHorizon.Simulation
             _distanceUntilSpawn = _config.InitialSpawnDistance;
             _nextEntityId = 1;
             _wavesSinceCoin = 99;
+            _lightningFamily = CorridorFamily.None;
+            _lightningTimer = 0f;
             if (_stageDirector != null)
             {
                 _stageDirector.Reset(events);
@@ -618,6 +627,44 @@ namespace JetHorizon.Simulation
             }
         }
 
+        void TickLightningSpawner(float dt, WorldFrame world)
+        {
+            CorridorFamily family = CorridorFamily.None;
+            if (_stageDirector != null
+                && _stageDirector.CurrentStage.Kind == StageKind.Corridor
+                && world.CanyonActive
+                && !world.CanyonExiting)
+            {
+                CorridorFamily candidate = _stageDirector.CurrentStage.Family;
+                if (candidate == CorridorFamily.PreT4A || candidate == CorridorFamily.PreT4B)
+                    family = candidate;
+            }
+
+            if (family == CorridorFamily.None)
+            {
+                _lightningFamily = CorridorFamily.None;
+                _lightningTimer = 0f;
+                return;
+            }
+            if (family != _lightningFamily)
+            {
+                _lightningFamily = family;
+                _lightningTimer = 0f;
+            }
+
+            float frequency = family == CorridorFamily.PreT4A ? 0.3f : 2f;
+            _lightningTimer += dt;
+            while (_lightningTimer >= frequency)
+            {
+                _lightningTimer -= frequency;
+                float travelTime = 83f / Math.Max(1f, _speed);
+                float targetX = _shipX
+                    + (_random.NextFloat() - 0.5f) * 3f
+                    + _shipVelocityX * travelTime * 0.6f;
+                SpawnHazard(HazardSpawn.Lightning(targetX, _config.ShipZ - 83f));
+            }
+        }
+
         int SpawnHazard(HazardSpawn spawn)
         {
             int slot = -1;
@@ -649,7 +696,10 @@ namespace JetHorizon.Simulation
                 RotationYRadians = spawn.RotationYRadians,
                 RotationZRadians = spawn.RotationZRadians,
                 RingRadius = spawn.RingRadius,
-                RingTubeRadius = spawn.RingTubeRadius
+                RingTubeRadius = spawn.RingTubeRadius,
+                AgeSeconds = 0f,
+                CollisionDelaySeconds = spawn.CollisionDelaySeconds,
+                LifetimeSeconds = spawn.LifetimeSeconds
             };
             Events.Add(new SimulationEvent(SimulationEventType.HazardSpawned, id, spawn.X, spawn.Z));
             return id;
@@ -668,8 +718,10 @@ namespace JetHorizon.Simulation
                 HazardState hazard = _hazards[i];
                 if (!hazard.Active) continue;
 
+                hazard.AgeSeconds += _config.FixedDeltaSeconds;
                 hazard.Z += step;
-                if (hazard.Z > _config.DespawnZ)
+                if (hazard.Z > _config.DespawnZ
+                    || (hazard.LifetimeSeconds > 0f && hazard.AgeSeconds >= hazard.LifetimeSeconds))
                 {
                     hazard.Active = false;
                     _hazards[i] = hazard;
@@ -685,6 +737,10 @@ namespace JetHorizon.Simulation
                     hit = dz < hazard.HalfDepth && RingHit(hazard);
                 else if (hazard.Kind == HazardKind.Wall)
                     hit = WallHit(hazard);
+                else if (hazard.Kind == HazardKind.Lightning)
+                    hit = hazard.AgeSeconds >= hazard.CollisionDelaySeconds
+                        && dx < hazard.HalfWidth
+                        && dz < hazard.HalfDepth;
                 else
                     hit = dx < collisionX && dz < hazard.HalfDepth;
                 if (_config.CollisionEnabled && !collisionSuppressed && hit)
@@ -775,7 +831,9 @@ namespace JetHorizon.Simulation
                     hazard.VisualScaleZ,
                     hazard.RotationXRadians,
                     hazard.RotationYRadians,
-                    hazard.RotationZRadians));
+                    hazard.RotationZRadians,
+                    hazard.AgeSeconds,
+                    hazard.AgeSeconds >= hazard.CollisionDelaySeconds));
             }
             Snapshot.HazardCount = count;
 

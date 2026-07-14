@@ -130,6 +130,7 @@ namespace JetHorizon.Simulation
         Cone,
         Ring,
         Wall,
+        Lightning,
         Corridor
     }
 
@@ -140,6 +141,7 @@ namespace JetHorizon.Simulation
         LethalRing,
         AngledWall,
         StructuredWall,
+        Lightning,
         CorridorCone
     }
 
@@ -164,6 +166,8 @@ namespace JetHorizon.Simulation
         public float RingRadius;
         public float RingTubeRadius;
         public bool NearMissEnabled;
+        public float CollisionDelaySeconds;
+        public float LifetimeSeconds;
 
         public static HazardSpawn Cone(
             float x,
@@ -243,6 +247,32 @@ namespace JetHorizon.Simulation
                 NearMissEnabled = false
             };
         }
+
+        public static HazardSpawn Lightning(
+            float x,
+            float z,
+            float warningSeconds = 0.3f,
+            float lifetimeSeconds = 4.8f,
+            float collisionHalfWidth = 0.25f,
+            float collisionHalfDepth = 4f)
+        {
+            return new HazardSpawn
+            {
+                Kind = HazardKind.Lightning,
+                Style = HazardStyle.Lightning,
+                X = x,
+                Z = z,
+                CollisionHalfWidth = collisionHalfWidth,
+                CollisionHalfHeight = 30f,
+                CollisionHalfDepth = collisionHalfDepth,
+                VisualScale = 1f,
+                VisualScaleY = 1f,
+                VisualScaleZ = 1f,
+                NearMissEnabled = false,
+                CollisionDelaySeconds = warningSeconds,
+                LifetimeSeconds = lifetimeSeconds
+            };
+        }
     }
 
     public struct HazardSnapshot
@@ -261,6 +291,8 @@ namespace JetHorizon.Simulation
         public float RotationXRadians { get; }
         public float RotationYRadians { get; }
         public float RotationZRadians { get; }
+        public float AgeSeconds { get; }
+        public bool CollisionActive { get; }
 
         internal HazardSnapshot(
             int id,
@@ -276,7 +308,9 @@ namespace JetHorizon.Simulation
             float visualScaleZ,
             float rotationXRadians,
             float rotationYRadians,
-            float rotationZRadians)
+            float rotationZRadians,
+            float ageSeconds,
+            bool collisionActive)
         {
             Id = id;
             Kind = kind;
@@ -292,6 +326,8 @@ namespace JetHorizon.Simulation
             RotationXRadians = rotationXRadians;
             RotationYRadians = rotationYRadians;
             RotationZRadians = rotationZRadians;
+            AgeSeconds = ageSeconds;
+            CollisionActive = collisionActive;
         }
     }
 

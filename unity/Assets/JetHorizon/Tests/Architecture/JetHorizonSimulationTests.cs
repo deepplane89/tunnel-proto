@@ -423,6 +423,74 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(ContainsEvent(simulation.Events, SimulationEventType.PickupCollected), Is.True);
         }
 
+        [Test]
+        public void LightningWarningIsVisualOnlyUntilTheCoreStrikeWindow()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = true
+            }, 94u);
+            simulation.StartRun();
+            simulation.SetSpeed(0f);
+            int id = simulation.RegisterHazard(HazardSpawn.Lightning(
+                0f,
+                simulation.Snapshot.ShipZ,
+                warningSeconds: 0.3f));
+
+            Assert.That(id, Is.GreaterThan(0));
+            Assert.That(simulation.Snapshot.GetHazard(0).CollisionActive, Is.False);
+            for (int i = 0; i < 17; i++) simulation.Step(default);
+            Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Playing));
+
+            simulation.Step(default);
+            simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Dead));
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.PlayerDied), Is.True);
+        }
+
+        [Test]
+        public void LightningDirectorUsesDeterministicCorridorTargeting()
+        {
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition(
+                    "LIGHTNING",
+                    StageKind.Corridor,
+                    10f,
+                    1.5f,
+                    2,
+                    1,
+                    CorridorFamily.PreT4A)
+            });
+            var config = new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false
+            };
+            var first = new JetHorizonSimulation(config, 95u, run);
+            var replay = new JetHorizonSimulation(config, 95u, run);
+            var world = new WorldFrame(false, false) { CanyonActive = true };
+            first.StartRun();
+            replay.StartRun();
+
+            for (int i = 0; i < 19; i++)
+            {
+                first.Step(default, world);
+                replay.Step(default, world);
+            }
+
+            Assert.That(first.Snapshot.HazardCount, Is.EqualTo(1));
+            Assert.That(replay.Snapshot.HazardCount, Is.EqualTo(1));
+            var a = first.Snapshot.GetHazard(0);
+            var b = replay.Snapshot.GetHazard(0);
+            Assert.That(a.Kind, Is.EqualTo(HazardKind.Lightning));
+            Assert.That(a.Style, Is.EqualTo(HazardStyle.Lightning));
+            Assert.That(b.X, Is.EqualTo(a.X));
+            Assert.That(b.Z, Is.EqualTo(a.Z));
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);

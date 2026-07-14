@@ -64,7 +64,6 @@ namespace JetHorizon
             EnsureMaterials();
             BuildWalls();
 
-            if (_p.LightningFreq > 0f) Lightning.BeginPattern(_p.LightningFreq);
         }
 
         void EnsureMaterials()
@@ -250,7 +249,6 @@ namespace JetHorizon
             {
                 s.CanyonActive = false;
                 s.CanyonExiting = true;
-                Lightning.StopPattern();
             }
 
             bool anyVisible = false;
@@ -348,7 +346,6 @@ namespace JetHorizon
                 S.CanyonActive = false;
                 S.CanyonExiting = false;
             }
-            if (Lightning != null) Lightning.StopPattern();
         }
     }
 }
