@@ -17,7 +17,11 @@ namespace JetHorizon.Simulation
         }
     }
 
-    /// <summary>Named attachment points that keep effects independent of a model importer.</summary>
+    /// <summary>
+    /// Named ship-root-local attachment points that keep effects independent of a model importer.
+    /// The production Three.js values were authored in its reference world pose; catalogue entries
+    /// convert those values once so every renderer can attach them without applying ship scale twice.
+    /// </summary>
     public sealed class ThrusterSocketDefinition
     {
         public Float3 MainLeft { get; }
@@ -125,11 +129,13 @@ namespace JetHorizon.Simulation
             new Float3(0f, -0.590f, 0f),
             new Float3(0f, 3.142f, 0f),
             1f,
+            // Source calibration pose: ship root (0, .28, 4.5), scale .30.
+            // Root-local = (source world socket - source root position) / source scale.
             new ThrusterSocketDefinition(
-                new Float3(-0.480f, 0.050f, 5.100f),
-                new Float3(0.480f, 0.050f, 5.100f),
-                new Float3(-0.150f, 0.060f, 5.100f),
-                new Float3(0.160f, 0.060f, 5.100f)));
+                new Float3(-1.600000f, -0.766667f, 2.000000f),
+                new Float3( 1.600000f, -0.766667f, 2.000000f),
+                new Float3(-0.500000f, -0.733333f, 2.000000f),
+                new Float3( 0.533333f, -0.733333f, 2.000000f)));
 
         public static ShipDefinition Runner => RunnerDefinition;
     }

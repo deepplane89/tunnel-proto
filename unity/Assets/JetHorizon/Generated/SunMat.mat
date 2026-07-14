@@ -25,12 +25,13 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _Emission: 1.25
+    - _Emission: 1
+    - _Mode: 0
     - _Warp: 0
     m_Colors:
-    - _SunColor: {r: 0.8, g: 0.26666668, b: 1, a: 1}
-    - _WarpCol1: {r: 0.28, g: 0.093333334, b: 0.35, a: 0.35}
-    - _WarpCol2: {r: 0.8, g: 0.26666668, b: 1, a: 1}
+    - _SunColor: {r: 1, g: 0.58431375, b: 0, a: 1}
+    - _WarpCol1: {r: 0.35, g: 0.20450981, b: 0, a: 0.35}
+    - _WarpCol2: {r: 1, g: 0.58431375, b: 0, a: 1}
     - _WarpCol3: {r: 1, g: 0.45, b: 0.08, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

@@ -20,28 +20,16 @@ namespace JetHorizon
 
         UnityEngine.Camera _reflCam;
         RenderTexture _rt;
+        UniversalRenderPipeline.SingleCameraRequest _renderRequest;
         static readonly int ReflTexId = Shader.PropertyToID("_ReflectionTex");
 
-        void OnEnable()
-        {
-            RenderPipelineManager.beginCameraRendering += OnBeginCamera;
-            RenderPipelineManager.endCameraRendering += OnEndCamera;
-        }
+        void OnEnable() => RenderPipelineManager.beginCameraRendering += OnBeginCamera;
 
         void OnDisable()
         {
             RenderPipelineManager.beginCameraRendering -= OnBeginCamera;
-            RenderPipelineManager.endCameraRendering -= OnEndCamera;
             if (_rt != null) { _rt.Release(); Destroy(_rt); _rt = null; }
             if (_reflCam != null) Destroy(_reflCam.gameObject);
-        }
-
-        void LateUpdate()
-        {
-            var main = UnityEngine.Camera.main;
-            if (main == null || WaterMaterial == null) return;
-            EnsureCamera(main);
-            UpdateMatrices(main);
         }
 
         void EnsureCamera(UnityEngine.Camera main)
@@ -51,17 +39,23 @@ namespace JetHorizon
             _rt = new RenderTexture(TextureSize, TextureSize, 16, RenderTextureFormat.DefaultHDR)
             { name = "JH_WaterReflection", useMipMap = false };
             _rt.Create();
+            _renderRequest = new UniversalRenderPipeline.SingleCameraRequest { destination = _rt };
 
-            var go = new GameObject("WaterReflectionCam");
+            var go = new GameObject("WaterReflectionCam")
+            {
+                hideFlags = HideFlags.HideAndDontSave
+            };
             go.transform.SetParent(transform, false);
             _reflCam = go.AddComponent<UnityEngine.Camera>();
             _reflCam.CopyFrom(main);
+            _reflCam.enabled = false;             // rendered explicitly before the gameplay camera
+            _reflCam.cameraType = CameraType.Reflection;
             _reflCam.targetTexture = _rt;
             _reflCam.cullingMask = 1 << ReflectLayer;
             _reflCam.clearFlags = CameraClearFlags.SolidColor;
             _reflCam.backgroundColor = Color.black;
-            _reflCam.depth = main.depth - 10f;      // render before main
             _reflCam.allowMSAA = false;
+            _reflCam.useOcclusionCulling = false;
 
             var data = go.AddComponent<UniversalAdditionalCameraData>();
             data.renderPostProcessing = false;
@@ -92,12 +86,22 @@ namespace JetHorizon
 
         void OnBeginCamera(ScriptableRenderContext ctx, UnityEngine.Camera cam)
         {
-            if (cam == _reflCam) GL.invertCulling = true;   // mirror flips winding
-        }
+            if (WaterMaterial == null || cam == null || cam != UnityEngine.Camera.main || cam == _reflCam) return;
 
-        void OnEndCamera(ScriptableRenderContext ctx, UnityEngine.Camera cam)
-        {
-            if (cam == _reflCam) GL.invertCulling = false;
+            EnsureCamera(cam);
+            UpdateMatrices(cam);
+
+            // An explicit render is deterministic in URP and avoids relying on a
+            // dynamically-created disabled camera being discovered in the frame list.
+            GL.invertCulling = true;
+            try
+            {
+                RenderPipeline.SubmitRenderRequest(_reflCam, _renderRequest);
+            }
+            finally
+            {
+                GL.invertCulling = false;
+            }
         }
 
         static Matrix4x4 CalculateReflectionMatrix(Vector4 p)

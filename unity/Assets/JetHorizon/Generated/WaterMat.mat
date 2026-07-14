@@ -30,11 +30,12 @@ Material:
     m_Ints: []
     m_Floats:
     - _Distortion: 0.6
-    - _FlowZ: -6622.899
+    - _FlowZ: 0
+    - _ReflectionStrength: 1.15
     - _RippleSize: 8
-    - _ShipX: -23.802685
+    - _ShipX: 0
     m_Colors:
-    - _SkyColor: {r: 0.05490196, g: 0.011764706, b: 0.1254902, a: 1}
+    - _SkyColor: {r: 0.03137255, g: 0.0627451, b: 0.16470589, a: 1}
     - _SunColor: {r: 0.55, g: 0.28, b: 0.03, a: 1}
     - _SunDir: {r: 0, g: 0.3, b: -1, a: 0}
     - _WaterColor: {r: 0, g: 0, b: 0, a: 1}

@@ -1,13 +1,13 @@
-using UnityEngine;
 using JetHorizon.Simulation;
+using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace JetHorizon
 {
     /// <summary>
-    /// Thruster exhaust. Default = the shipping "LIGHT" preset (spec/03 §9): a subtle
-    /// particle stream + small pulsing nozzle-bloom sprite per nozzle (scale 0.80,
-    /// bloom scale ~0.10 opacity 0.43 pulse 0.15, short particle life ~0.20 s).
-    /// PYLON (the unlockable shader-cone preset) is kept as an option.
+    /// Unity presentation of the production Runner exhaust. Attachment comes from the
+    /// engine-neutral ship sockets; rendering uses two world-space particle streams,
+    /// nozzle bloom and a small local light so the exhaust reads on both hull and water.
     /// </summary>
     public sealed class ThrusterFX : MonoBehaviour
     {
@@ -17,41 +17,59 @@ namespace JetHorizon
         public Style Preset = Style.Light;
 
         [Header("Materials (wired by bootstrap)")]
-        public Material ExhaustMaterial;    // JH/ConeExhaust (Pylon)
-        public Material AdditiveMaterial;   // JH/Additive + radial sprite (Light)
+        public Material ExhaustMaterial;
+        public Material AdditiveMaterial;
 
-        [Header("Fallback offsets (ship-local) — tweak live in Play mode if misaligned")]
-        public Vector3 NozzleL = new Vector3(-0.48f, 0.05f, 5.16f);
-        public Vector3 NozzleR = new Vector3(0.50f, -0.01f, 5.10f);
-        [Tooltip("Anchor to the GLB's fire/nozzle nodes if present")]
+        [Header("Fallback offsets (ship-root-local)")]
+        public Vector3 NozzleL = new Vector3(-1.600000f, -0.766667f, 2.000000f);
+        public Vector3 NozzleR = new Vector3( 1.600000f, -0.766667f, 2.000000f);
+        [Tooltip("Anchor to the imported ship's calibrated socket rig")]
         public bool AutoAnchorToModel = true;
 
-        const int   ParticlesPerNozzle = 22;
-        const float ParticleDrift = 4.2f;         // ship-local u/s backward
+        const int MaxParticlesPerNozzle = 160;
 
-        sealed class Particle
-        {
-            public Transform T; public MeshRenderer R; public MaterialPropertyBlock Mpb;
-            public Vector3 LocalPos, LocalVel; public float Life, MaxLife;
-        }
+        // Production Runner's user-tuned full-roll particle anchors, converted from
+        // its Three.js reference pose into ship-root-local coordinates.
+        static readonly Vector3 RollUpL = new Vector3(-0.900000f, -0.666667f, 1.366667f);
+        static readonly Vector3 RollUpR = new Vector3( 2.466667f, -0.633333f, 1.700000f);
+        static readonly Vector3 RollDownL = new Vector3(-1.833333f, -0.600000f, 2.200000f);
+        static readonly Vector3 RollDownR = new Vector3( 1.333333f, -0.633333f, 2.000000f);
 
-        Particle[] _particles;
+        ParticleSystem _particlesL, _particlesR;
         Transform _bloomL, _bloomR;
         MeshRenderer _bloomLR, _bloomRR;
         MaterialPropertyBlock _bloomMpb;
         Transform _coneL, _coneR;
         Material _matL, _matR;
         Transform _socketL, _socketR;
+        Light _thrusterLight;
         ThrusterEffectDefinition _effect;
-        Color _color = new Color(0.27f, 0.67f, 1f);   // 0x44aaff
+        Material _fallbackAdditive;
+        Texture2D _fallbackTexture;
+        Color _color = new Color(0.27f, 0.67f, 1f);
+
         static readonly int TintId = Shader.PropertyToID("_Tint");
 
         void OnEnable() => GameEvents.VibeChanged += OnVibe;
         void OnDisable() => GameEvents.VibeChanged -= OnVibe;
-        void OnVibe(int idx) => _color = Vibes.Get(idx).thrusterColor;
+
+        void OnDestroy()
+        {
+            if (_fallbackAdditive != null) Destroy(_fallbackAdditive);
+            if (_fallbackTexture != null) Destroy(_fallbackTexture);
+        }
+
+        void OnVibe(int idx)
+        {
+            _color = Vibes.Get(idx).thrusterColor;
+            ApplyParticleColor(_particlesL);
+            ApplyParticleColor(_particlesR);
+            if (_thrusterLight != null) _thrusterLight.color = Color.Lerp(_color, Color.white, 0.18f);
+        }
 
         void Start()
         {
+            _bloomMpb = new MaterialPropertyBlock();
             _effect = ThrusterEffectCatalog.Light;
             if (AutoAnchorToModel) AutoAnchor();
             if (Preset == Style.Pylon) BuildPylon();
@@ -60,10 +78,12 @@ namespace JetHorizon
 
         void AutoAnchor()
         {
+            var model = transform.Find("ShipModel");
+            if (model != null) SetLayerRecursively(model.gameObject, 8);
+
             var rig = GetComponent<ShipSocketRig>();
             if (rig == null)
             {
-                var model = transform.Find("ShipModel");
                 if (model != null)
                 {
                     rig = gameObject.AddComponent<ShipSocketRig>();
@@ -79,6 +99,7 @@ namespace JetHorizon
                 return;
             }
 
+            // Last-resort support for a differently imported GLB that exposes named nozzle nodes.
             Transform a = null, b = null;
             foreach (var t in GetComponentsInChildren<Transform>(true))
             {
@@ -92,39 +113,135 @@ namespace JetHorizon
             Vector3 pb = b != null ? transform.InverseTransformPoint(b.position) : pa;
             NozzleL = pa.x <= pb.x ? pa : pb;
             NozzleR = pa.x <= pb.x ? pb : pa;
-            if (b == null) { NozzleL += Vector3.left * 0.48f; NozzleR += Vector3.right * 0.48f; }
+        }
+
+        static void SetLayerRecursively(GameObject go, int layer)
+        {
+            go.layer = layer;
+            foreach (Transform child in go.transform)
+                SetLayerRecursively(child.gameObject, layer);
         }
 
         // ── LIGHT ────────────────────────────────────────────────────────
         void BuildLight()
         {
-            _bloomMpb = new MaterialPropertyBlock();
-            _bloomL = MakeSprite("nozzleBloomL", NozzleL, _effect.BloomScale, out _bloomLR);
-            _bloomR = MakeSprite("nozzleBloomR", NozzleR, _effect.BloomScale, out _bloomRR);
+            Material additive = ResolveAdditiveMaterial();
+            _bloomL = MakeSprite("NozzleBloomL", NozzleL, out _bloomLR, additive);
+            _bloomR = MakeSprite("NozzleBloomR", NozzleR, out _bloomRR, additive);
+            _particlesL = MakeParticleStream("ThrusterParticlesL", NozzleL, additive);
+            _particlesR = MakeParticleStream("ThrusterParticlesR", NozzleR, additive);
 
-            _particles = new Particle[ParticlesPerNozzle * 2];
-            for (int i = 0; i < _particles.Length; i++)
-            {
-                var p = new Particle();
-                p.T = MakeSprite($"puff{i}", Vector3.zero, _effect.ParticleSize, out p.R);
-                p.Mpb = new MaterialPropertyBlock();
-                p.MaxLife = 0.01f; p.Life = -Random.value * _effect.ParticleLifeBase;  // stagger
-                _particles[i] = p;
-            }
+            var lightGo = new GameObject("ThrusterCastLight");
+            lightGo.transform.SetParent(transform, false);
+            lightGo.transform.localPosition = (NozzleL + NozzleR) * 0.5f;
+            _thrusterLight = lightGo.AddComponent<Light>();
+            _thrusterLight.type = LightType.Point;
+            _thrusterLight.color = Color.Lerp(_color, Color.white, 0.18f);
+            _thrusterLight.range = 6.5f;
+            _thrusterLight.intensity = 0f;
+            _thrusterLight.shadows = LightShadows.None;
+            _thrusterLight.renderMode = LightRenderMode.ForcePixel;
         }
 
-        Transform MakeSprite(string name, Vector3 localPos, float size, out MeshRenderer mr)
+        Material ResolveAdditiveMaterial()
+        {
+            if (AdditiveMaterial != null) return AdditiveMaterial;
+            var shader = Shader.Find("JH/Additive");
+            if (shader == null) return ExhaustMaterial;
+            _fallbackTexture = TextureFactory.RadialSprite();
+            _fallbackAdditive = new Material(shader) { name = "RuntimeThrusterAdditive" };
+            _fallbackAdditive.SetTexture("_MainTex", _fallbackTexture);
+            return _fallbackAdditive;
+        }
+
+        Transform MakeSprite(string name, Vector3 localPos, out MeshRenderer mr, Material material)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
             Destroy(go.GetComponent<Collider>());
             go.name = name;
             go.transform.SetParent(transform, false);
             go.transform.localPosition = localPos;
-            go.transform.localScale = Vector3.one * size * _effect.Scale;
             mr = go.GetComponent<MeshRenderer>();
-            mr.sharedMaterial = AdditiveMaterial;
-            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.sharedMaterial = material;
+            mr.shadowCastingMode = ShadowCastingMode.Off;
+            mr.receiveShadows = false;
             return go.transform;
+        }
+
+        ParticleSystem MakeParticleStream(string name, Vector3 localPos, Material material)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = localPos;
+            var ps = go.AddComponent<ParticleSystem>();
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            var main = ps.main;
+            main.loop = true;
+            main.playOnAwake = false;
+            main.duration = 1f;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.12f, 0.22f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(3.4f, 5.8f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.045f, 0.075f);
+            main.startRotation = new ParticleSystem.MinMaxCurve(-Mathf.PI, Mathf.PI);
+            main.startColor = Color.white;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.scalingMode = ParticleSystemScalingMode.Shape;
+            main.maxParticles = MaxParticlesPerNozzle;
+            main.gravityModifier = 0f;
+
+            var emission = ps.emission;
+            emission.rateOverTime = 820f;
+
+            var shape = ps.shape;
+            shape.enabled = true;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 2.5f;
+            shape.radius = 0.07f;
+            shape.radiusThickness = 1f;
+            shape.length = 0.04f;
+
+            var size = ps.sizeOverLifetime;
+            size.enabled = true;
+            size.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+                new Keyframe(0f, 1.35f), new Keyframe(0.12f, 1.05f), new Keyframe(0.62f, 0.55f), new Keyframe(1f, 0.08f)));
+
+            var renderer = ps.GetComponent<ParticleSystemRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.alignment = ParticleSystemRenderSpace.View;
+            renderer.sortMode = ParticleSystemSortMode.YoungestInFront;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            renderer.minParticleSize = 0f;
+            renderer.maxParticleSize = 0.12f;
+
+            ApplyParticleColor(ps);
+            return ps;
+        }
+
+        void ApplyParticleColor(ParticleSystem ps)
+        {
+            if (ps == null) return;
+            var color = ps.colorOverLifetime;
+            color.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(1f, 0.94f, 0.88f), 0f),
+                    new GradientColorKey(Color.Lerp(_color, Color.white, 0.18f), 0.12f),
+                    new GradientColorKey(_color, 0.55f),
+                    new GradientColorKey(_color * 0.25f, 1f),
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0.82f, 0f),
+                    new GradientAlphaKey(0.55f, 0.18f),
+                    new GradientAlphaKey(0.22f, 0.72f),
+                    new GradientAlphaKey(0f, 1f),
+                });
+            color.color = gradient;
         }
 
         // ── PYLON ────────────────────────────────────────────────────────
@@ -136,16 +253,15 @@ namespace JetHorizon
 
         Transform MakeCone(Vector3 localPos, out Material mat)
         {
-            var go = new GameObject("exhaust");
+            var go = new GameObject("ExhaustCone");
             go.transform.SetParent(transform, false);
             go.transform.localPosition = localPos;
-            go.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);   // tip → +Z (behind)
-            var mf = go.AddComponent<MeshFilter>();
-            mf.sharedMesh = MeshFactory.Cone(1f, 1f, 16);
+            go.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            go.AddComponent<MeshFilter>().sharedMesh = MeshFactory.Cone(1f, 1f, 16);
             var mr = go.AddComponent<MeshRenderer>();
             mat = new Material(ExhaustMaterial);
             mr.sharedMaterial = mat;
-            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.shadowCastingMode = ShadowCastingMode.Off;
             return go.transform;
         }
 
@@ -154,69 +270,113 @@ namespace JetHorizon
             if (GameManager.I == null) return;
             bool on = GameManager.I.Phase == GamePhase.Playing;
             var s = GameManager.I.Session;
-            float rawDt = Mathf.Min(Time.deltaTime, Tuning.MaxRawDt);
             float speedFrac = Mathf.Clamp01(s.EffectiveSpeed / (Tuning.BaseSpeed * 2.5f));
-            var cam = UnityEngine.Camera.main;
 
             if (Preset == Style.Pylon)
             {
-                if (_coneL == null) return;
-                _coneL.gameObject.SetActive(on); _coneR.gameObject.SetActive(on);
-                if (!on) return;
-                float len = _effect.ConeLength * (0.7f + 0.5f * speedFrac) * (1f + Mathf.Sin(Time.time * 31f) * 0.04f);
-                var sc = new Vector3(_effect.ConeRadius * 2f, len, _effect.ConeRadius * 2f);
-                _coneL.localScale = sc; _coneR.localScale = sc;
-                _coneL.localPosition = SocketLocal(_socketL, NozzleL);
-                _coneR.localPosition = SocketLocal(_socketR, NozzleR);
-                _matL.SetColor("_Color", _color); _matR.SetColor("_Color", _color);
+                UpdatePylon(on, speedFrac);
                 return;
             }
 
-            // LIGHT
-            if (_particles == null) return;
-            _bloomL.gameObject.SetActive(on); _bloomR.gameObject.SetActive(on);
-            if (!on)
-            {
-                foreach (var p in _particles) p.T.gameObject.SetActive(false);
-                return;
-            }
-
-            // nozzle bloom: pulse + face camera
-            float pulse = _effect.BloomOpacity * (1f + _effect.BloomPulse * Mathf.Sin(Time.time * 22f)) * (0.75f + 0.5f * speedFrac);
-            Color bloomCol = Color.Lerp(_color, Color.white, 0.35f); bloomCol.a = Mathf.Clamp01(pulse);
-            _bloomMpb.SetColor(TintId, bloomCol);
-            _bloomLR.SetPropertyBlock(_bloomMpb); _bloomRR.SetPropertyBlock(_bloomMpb);
+            if (_particlesL == null) return;
             Vector3 nozzleL = SocketLocal(_socketL, NozzleL);
             Vector3 nozzleR = SocketLocal(_socketR, NozzleR);
-            _bloomL.localPosition = nozzleL; _bloomR.localPosition = nozzleR;
-            if (cam != null) { _bloomL.rotation = cam.transform.rotation; _bloomR.rotation = cam.transform.rotation; }
+            ApplyRollPose(s.RollAngle, ref nozzleL, ref nozzleR);
+            PositionEmitter(_particlesL, nozzleL);
+            PositionEmitter(_particlesR, nozzleR);
+            _bloomL.localPosition = nozzleL;
+            _bloomR.localPosition = nozzleR;
 
-            // particles: recycle stream from alternating nozzles
-            for (int i = 0; i < _particles.Length; i++)
+            SetStreamActive(_particlesL, on, speedFrac);
+            SetStreamActive(_particlesR, on, speedFrac);
+            _bloomL.gameObject.SetActive(on);
+            _bloomR.gameObject.SetActive(on);
+            if (!on)
             {
-                var p = _particles[i];
-                p.Life += rawDt;
-                if (p.Life >= p.MaxLife)
-                {
-                    // respawn at nozzle with jitter
-                    bool left = i < ParticlesPerNozzle;
-                    Vector3 noz = left ? nozzleL : nozzleR;
-                    p.LocalPos = noz + Random.insideUnitSphere * _effect.SpawnJitter;
-                    p.LocalVel = new Vector3((Random.value - 0.5f) * 0.6f, (Random.value - 0.5f) * 0.6f,
-                                             ParticleDrift * (0.8f + 0.6f * speedFrac + Random.value * 0.4f));
-                    p.Life = 0f;
-                    p.MaxLife = _effect.ParticleLifeBase + Random.value * _effect.ParticleLifeJitter;
-                    p.T.gameObject.SetActive(true);
-                }
-                p.LocalPos += p.LocalVel * rawDt;
-                p.T.localPosition = p.LocalPos;
-                float lifeT = p.Life / p.MaxLife;
-                float size = _effect.ParticleSize * _effect.Scale * (0.7f + lifeT * 0.9f);
-                p.T.localScale = Vector3.one * size;
-                if (cam != null) p.T.rotation = cam.transform.rotation;
-                Color c = _color; c.a = _effect.ParticleOpacity * (1f - lifeT);
-                p.Mpb.SetColor(TintId, c);
-                p.R.SetPropertyBlock(p.Mpb);
+                if (_thrusterLight != null) _thrusterLight.intensity = 0f;
+                return;
+            }
+
+            var cam = UnityEngine.Camera.main;
+            if (cam != null)
+            {
+                _bloomL.rotation = cam.transform.rotation;
+                _bloomR.rotation = cam.transform.rotation;
+            }
+
+            float pulseWave = 0.86f + 0.14f * Mathf.Sin(Time.time * 22f);
+            float bloomOpacity = Mathf.Lerp(0.68f, 0.92f, speedFrac) * pulseWave;
+            Color bloomCol = Color.Lerp(_color, Color.white, 0.20f);
+            bloomCol.a = bloomOpacity;
+            _bloomMpb.Clear();
+            _bloomMpb.SetColor(TintId, bloomCol);
+            _bloomLR.SetPropertyBlock(_bloomMpb);
+            _bloomRR.SetPropertyBlock(_bloomMpb);
+
+            // Source bloom is 0.6 at idle and grows with speed; these are ship-local
+            // values, so the root's .30 scale reproduces its visible world footprint.
+            float bloomSize = Mathf.Lerp(0.62f, 1.18f, speedFrac) * pulseWave;
+            _bloomL.localScale = Vector3.one * bloomSize;
+            _bloomR.localScale = Vector3.one * bloomSize;
+
+            if (_thrusterLight != null)
+            {
+                _thrusterLight.transform.localPosition = Vector3.Lerp(nozzleL, nozzleR, 0.5f) + new Vector3(0f, 0.08f, 0.12f);
+                _thrusterLight.color = Color.Lerp(_color, Color.white, 0.18f);
+                _thrusterLight.intensity = Mathf.Lerp(2.2f, 4.0f, speedFrac) * pulseWave;
+            }
+        }
+
+        void UpdatePylon(bool on, float speedFrac)
+        {
+            if (_coneL == null) return;
+            _coneL.gameObject.SetActive(on);
+            _coneR.gameObject.SetActive(on);
+            if (!on) return;
+            float len = _effect.ConeLength * (0.7f + 0.5f * speedFrac) * (1f + Mathf.Sin(Time.time * 31f) * 0.04f);
+            var sc = new Vector3(_effect.ConeRadius * 2f, len, _effect.ConeRadius * 2f);
+            _coneL.localScale = sc;
+            _coneR.localScale = sc;
+            _coneL.localPosition = SocketLocal(_socketL, NozzleL);
+            _coneR.localPosition = SocketLocal(_socketR, NozzleR);
+            _matL.SetColor("_Color", _color);
+            _matR.SetColor("_Color", _color);
+        }
+
+        static void PositionEmitter(ParticleSystem ps, Vector3 localPosition)
+        {
+            ps.transform.localPosition = localPosition;
+            ps.transform.localRotation = Quaternion.identity;
+        }
+
+        static void ApplyRollPose(float rollAngle, ref Vector3 left, ref Vector3 right)
+        {
+            float ratio = Mathf.Clamp(rollAngle / (Mathf.PI * 0.5f), -1f, 1f);
+            float amount = Mathf.Abs(ratio);
+            if (amount <= 0.001f) return;
+            if (ratio < 0f)
+            {
+                left = Vector3.Lerp(left, RollUpL, amount);
+                right = Vector3.Lerp(right, RollUpR, amount);
+            }
+            else
+            {
+                left = Vector3.Lerp(left, RollDownL, amount);
+                right = Vector3.Lerp(right, RollDownR, amount);
+            }
+        }
+
+        static void SetStreamActive(ParticleSystem ps, bool on, float speedFrac)
+        {
+            var emission = ps.emission;
+            emission.rateOverTime = Mathf.Lerp(760f, 1050f, speedFrac);
+            if (on)
+            {
+                if (!ps.isPlaying) ps.Play();
+            }
+            else if (ps.isPlaying || ps.particleCount > 0)
+            {
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             }
         }
 

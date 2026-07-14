@@ -12,6 +12,24 @@ namespace JetHorizon
         const float FlowScale = 0.45f;
         float _flowZ;
 
+        void Awake()
+        {
+            // The hand-authored scene predates the reflection component. Keep this
+            // self-healing so existing scenes and future bootstrapped scenes both get
+            // the same source-accurate mirror without requiring a scene rebuild.
+            if (WaterMaterial == null)
+            {
+                var renderer = GetComponent<Renderer>();
+                if (renderer != null) WaterMaterial = renderer.sharedMaterial;
+            }
+
+            var reflection = GetComponent<PlanarReflection>();
+            if (reflection == null) reflection = gameObject.AddComponent<PlanarReflection>();
+            reflection.WaterMaterial = WaterMaterial;
+            reflection.PlaneY = transform.position.y;
+            reflection.ReflectLayer = 8;
+        }
+
         void Update()
         {
             if (GameManager.I == null || WaterMaterial == null) return;

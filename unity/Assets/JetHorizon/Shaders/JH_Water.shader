@@ -14,6 +14,7 @@ Shader "JH/Water"
         _FlowZ ("Flow Z", Float) = 0
         _RippleSize ("Ripple Size", Float) = 8.0
         _Distortion ("Distortion", Float) = 0.6
+        _ReflectionStrength ("Reflection Strength", Range(0, 2)) = 1.15
         _SunDir ("Sun Direction", Vector) = (0, 0.3, -1, 0)
         _ShipX ("Ship X", Float) = 0
     }
@@ -35,7 +36,7 @@ Shader "JH/Water"
             CBUFFER_START(UnityPerMaterial)
                 float4 _NormalMap_ST;
                 half4 _WaterColor, _SunColor, _SkyColor;
-                float _FlowZ, _RippleSize, _Distortion;
+                float _FlowZ, _RippleSize, _Distortion, _ReflectionStrength;
                 float4 _SunDir;
                 float _ShipX;
             CBUFFER_END
@@ -93,7 +94,9 @@ Shader "JH/Water"
                 float2 reflUV = IN.screenPos.xy / IN.screenPos.w;
                 reflUV += N.xz * 0.045 * _Distortion;
                 half3 refl = SAMPLE_TEXTURE2D(_ReflectionTex, sampler_ReflectionTex, saturate(reflUV)).rgb;
-                col += refl * (0.30 + 0.55 * fresnel);
+                // Strong enough to read at the low gameplay camera angle while the
+                // black base and wave distortion retain the source's liquid-metal feel.
+                col += refl * _ReflectionStrength * (0.42 + 0.72 * fresnel);
 
                 // amber sun streak: specular toward the horizon sun (locked to ship X illusion)
                 float3 sunPos = float3(_ShipX, -2.0, -340.0);

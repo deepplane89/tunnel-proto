@@ -126,6 +126,7 @@ namespace JetHorizon
                 SunMaterial.SetColor("_SunColor", v.sunColor);
                 bool warped = v.sunShader >= 2;
                 SunMaterial.SetFloat("_Warp", warped ? 1f : 0f);
+                SunMaterial.SetFloat("_Mode", v.sunShader);
                 // warp palette derived from sun color per branch
                 SunMaterial.SetColor("_WarpCol1", v.sunColor * 0.35f);
                 SunMaterial.SetColor("_WarpCol2", v.sunColor);
@@ -133,7 +134,7 @@ namespace JetHorizon
                             v.sunShader == 3 ? Color.Lerp(v.sunColor, Color.white, 0.4f) :
                             new Color(1f, 0.45f, 0.08f);
                 SunMaterial.SetColor("_WarpCol3", hot);
-                SunMaterial.SetFloat("_Emission", 1.25f);
+                SunMaterial.SetFloat("_Emission", 1.0f);
             }
             if (WaterMaterial != null)
                 WaterMaterial.SetColor("_SkyColor", v.skyBot);
@@ -181,6 +182,15 @@ namespace JetHorizon
             _sunRakeR = FindLight("SunRakeR");
             _sunRakeL = FindLight("SunRakeL");
 
+            // Three.js directional lights point from their position toward their
+            // target (the origin unless explicitly overridden). Reapply that rule
+            // here so scene serialization or hierarchy changes cannot reverse them.
+            AimDirectional(_keyLight, new Vector3(2f, 8.8f, 8f), Vector3.zero);
+            AimDirectional(_rimLight, new Vector3(-3f, 6f, -8f), Vector3.zero);
+            AimDirectional(_fillLight, new Vector3(0f, -2f, 6f), Vector3.zero);
+            AimDirectional(_sunRakeR, new Vector3(2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
+            AimDirectional(_sunRakeL, new Vector3(-2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
+
             if (SunGroup != null)
             {
                 var sunTransform = SunGroup.Find("Sun");
@@ -194,7 +204,7 @@ namespace JetHorizon
                 _corona = coronaTransform != null ? coronaTransform.GetComponent<Renderer>() : null;
                 if (_corona != null && _corona.sharedMaterial != null)
                 {
-                    _runtimeCorona = TextureFactory.SunCorona(512);
+                    _runtimeCorona = TextureFactory.SunCorona(1024);
                     _runtimeCorona.name = "RuntimeSunCorona";
                     _runtimeCorona.wrapMode = TextureWrapMode.Clamp;
                     _runtimeCorona.filterMode = FilterMode.Trilinear;
@@ -208,6 +218,13 @@ namespace JetHorizon
         {
             var go = GameObject.Find(objectName);
             return go != null ? go.GetComponent<Light>() : null;
+        }
+
+        static void AimDirectional(Light light, Vector3 sourcePosition, Vector3 targetPosition)
+        {
+            if (light == null) return;
+            light.transform.position = sourcePosition;
+            light.transform.rotation = Quaternion.LookRotation((targetPosition - sourcePosition).normalized, Vector3.up);
         }
 
         void ApplyLightingCalibration()

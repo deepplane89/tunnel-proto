@@ -90,12 +90,15 @@ namespace JetHorizon
                     gray = rocketBase = white = fallback = Std(0x000000, 0.98f, 1.0f, 0x33c2ff, 0.9f);
                     break;
                 default: // Runner
-                    nozzle = Std(0x0a0a0a, 0.95f, 0.88f);
-                    gray = Std(0x888899, 0.6f, 0.68f);
-                    rocketLight = Std(0x0044ff, 0.5f, 0.95f, 0x0033cc, 2.5f);
-                    rocketBase = Std(0x0e1014, 0.90f, 0.70f);
-                    white = Std(0xddeeff, 0.5f, 0.92f, 0x2255ff, 0.6f);
-                    fallback = Std(0x141820, 0.88f, 0.75f);
+                    // Source roughness is preserved as Unity smoothness. Metallic values
+                    // are calibrated down where URP lacks the browser's environment response,
+                    // preventing the dark hull from collapsing into a silhouette.
+                    nozzle = Std(0x0a0a0a, 0.65f, 0.88f);
+                    gray = Std(0x888899, 0.35f, 0.68f);
+                    rocketLight = Std(0x0044ff, 0.0f, 0.95f, 0x0033cc, 2.5f);
+                    rocketBase = Std(0x0e1014, 0.55f, 0.70f);
+                    white = Std(0xddeeff, 0.25f, 0.92f, 0x2255ff, 0.6f);
+                    fallback = Std(0x141820, 0.45f, 0.75f);
                     break;
             }
 
@@ -117,22 +120,23 @@ namespace JetHorizon
             }
 
             // Ship-local lights (spec/03 §2): key + fill + warm underlight pool
-            if (model.transform.Find("ShipKeyLight") == null)
+            var shipRoot = model.transform.parent;
+            if (shipRoot != null && shipRoot.Find("ShipKeyLight") == null)
             {
                 void L(string name, LightType type, Color c, float intensity, Vector3 pos, float range = 0f)
                 {
                     var go = new GameObject(name);
-                    go.transform.SetParent(model.transform.parent, false);
+                    go.transform.SetParent(shipRoot, false);
                     go.transform.localPosition = pos;
-                    if (type == LightType.Directional) go.transform.LookAt(model.transform.parent.position);
+                    if (type == LightType.Directional) go.transform.LookAt(shipRoot.position);
                     var l = go.AddComponent<Light>();
                     l.type = type; l.color = c; l.intensity = intensity;
                     if (range > 0f) l.range = range;
                     l.shadows = LightShadows.None;
                 }
-                L("ShipKeyLight", LightType.Directional, Color.white, 1.8f, new Vector3(2f, 4f, -3f));
-                L("ShipFillLight", LightType.Directional, TextureFactory.Hex(0x8899bb), 0.6f, new Vector3(-2f, 1f, 2f));
-                L("ShipUnderlight", LightType.Point, TextureFactory.Hex(0xff6620), 0.6f, new Vector3(0f, -1.2f, 0f), 6f);
+                L("ShipKeyLight", LightType.Directional, Color.white, 2.2f, new Vector3(2f, 4f, -3f));
+                L("ShipFillLight", LightType.Directional, TextureFactory.Hex(0x8899bb), 0.9f, new Vector3(-2f, 1f, 2f));
+                L("ShipUnderlight", LightType.Point, TextureFactory.Hex(0xff6620), 0.35f, new Vector3(0f, -1.2f, 0f), 6f);
             }
         }
     }

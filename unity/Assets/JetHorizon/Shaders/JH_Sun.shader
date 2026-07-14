@@ -9,7 +9,8 @@ Shader "JH/Sun"
         _WarpCol1 ("Warp Deep", Color) = (0.25, 0.04, 0.02, 1)
         _WarpCol2 ("Warp Mid",  Color) = (0.85, 0.15, 0.04, 1)
         _WarpCol3 ("Warp Hot",  Color) = (1.0, 0.45, 0.08, 1)
-        _Emission ("Emission Boost", Range(0,4)) = 1.25
+        _Mode ("Surface Mode", Range(0,4)) = 0
+        _Emission ("Emission Boost", Range(0,4)) = 1.0
     }
     SubShader
     {
@@ -27,6 +28,7 @@ Shader "JH/Sun"
                 half4 _SunColor;
                 half  _Warp;
                 half4 _WarpCol1, _WarpCol2, _WarpCol3;
+                half  _Mode;
                 half  _Emission;
             CBUFFER_END
 
@@ -81,28 +83,37 @@ Shader "JH/Sun"
                 float3 viewNormal = normalize(IN.normalVS);
                 float limb = saturate(viewNormal.z);
 
-                // View-normal coordinates produce a circular, camera-facing disc even when
-                // the camera banks. UVs are retained only as a stable noise seed.
-                float rd = sqrt(saturate(1.0 - limb * limb));
-                float yN = saturate(viewNormal.y * 0.5 + 0.5);
-                float2 surfaceUv = viewNormal.xy * 1.6 + 0.5;
+                // Source coordinates: intentionally compress X so the internal glow reads
+                // broad and solar rather than as a uniform neon ring.
+                float rd = saturate(length(float2(IN.posOS.x * 0.55, IN.posOS.y)) / 0.5);
+                float yN = saturate(IN.posOS.y + 0.5);
+                float2 surfaceUv = IN.uv;
 
                 // ── PLAIN branch: dark core → bright rim, FBM churn ──
                 float2 noiseUv = surfaceUv * 3.2 + float2(t * 0.015, t * 0.008);
                 float n = fbm2(noiseUv);
                 float churn = 0.94 + n * 0.12;
-                // Relative coefficients reproduce the source's orange .68/.24/.02 core
-                // and .90/.38/.04 rim while still respecting later vibe palettes.
-                half3 coreCol = _SunColor.rgb * half3(0.56, 0.42, 0.50) + half3(0.12, 0.00, 0.02);
-                half3 rimCol  = _SunColor.rgb * half3(0.78, 0.58, 0.72) + half3(0.12, 0.04, 0.03);
+                half3 coreCol = half3(0.68, 0.24, 0.02);
+                half3 rimCol  = half3(0.90, 0.38, 0.04);
                 half3 col = lerp(coreCol, rimCol, smoothstep(0.15, 0.85, rd));
-                col += (_SunColor.rgb * 0.12 + half3(0.06, 0.03, 0.01)) * smoothstep(0.45, 0.85, yN);
+                col += half3(0.18, 0.10, 0.02) * smoothstep(0.45, 0.85, yN);
                 col *= 1.0 - 0.08 * smoothstep(0.60, 0.48, yN);                    // bottom dim
-                half3 corona = saturate(_SunColor.rgb * 1.25 + half3(0.20, 0.10, 0.04));
+                half3 corona = half3(1.0, 0.55, 0.08);
                 float coronaBlend = smoothstep(0.82, 0.97, rd);
                 float coronaBias = 0.3 + 0.7 * max(smoothstep(0.4, 0.9, yN), smoothstep(0.58, 0.50, yN) * 0.85);
                 col = lerp(col, corona, coronaBlend * coronaBias);
                 col *= churn;
+
+                // Source L2 ultraviolet branch uses the same structure with its own palette.
+                half3 uvCore = _SunColor.rgb * 0.42;
+                half3 uvRim = _SunColor.rgb * 0.82;
+                half3 uvCol = lerp(uvCore, uvRim, smoothstep(0.15, 0.88, rd));
+                uvCol *= 0.92 + n * 0.16;
+                uvCol += _SunColor.rgb * 0.20 * smoothstep(0.45, 0.85, yN);
+                half3 uvCorona = saturate(_SunColor.rgb * 1.5 + half3(0.25, 0.12, 0.25));
+                uvCol = lerp(uvCol, uvCorona, coronaBlend * coronaBias);
+                float uvBlend = 1.0 - saturate(abs(_Mode - 1.0));
+                col = lerp(col, uvCol, uvBlend);
 
                 // ── WARP branch: Quilez double domain warp ──
                 float2 p = surfaceUv * 3.5;
@@ -117,7 +128,8 @@ Shader "JH/Sun"
                 warpCol = lerp(warpCol, _WarpCol2.rgb * 1.1, smoothstep(0.4, 0.8, abs(q1)) * 0.35);
                 warpCol *= pow(limb, 1.2) * 0.5 + 0.5;
 
-                col = lerp(col, warpCol, _Warp);
+                float warpBlend = saturate(max(_Warp, _Mode - 1.0));
+                col = lerp(col, warpCol, warpBlend);
                 col *= smoothstep(0.0, 0.045, limb);          // crisp black edge kill
                 return half4(col * _Emission, 1);
             }

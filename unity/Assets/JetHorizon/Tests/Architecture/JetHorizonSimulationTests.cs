@@ -704,9 +704,10 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(ship.ModelPosition.Y, Is.EqualTo(-0.590f));
             Assert.That(ship.ModelRotationRadians.Y, Is.EqualTo(3.142f));
             Assert.That(ship.ModelScale, Is.EqualTo(1f));
-            Assert.That(ship.Thrusters.MainLeft.X, Is.EqualTo(-0.480f));
-            Assert.That(ship.Thrusters.MainRight.X, Is.EqualTo(0.480f));
-            Assert.That(ship.Thrusters.MainLeft.Z, Is.EqualTo(5.100f));
+            Assert.That(ship.Thrusters.MainLeft.X, Is.EqualTo(-1.600000f));
+            Assert.That(ship.Thrusters.MainRight.X, Is.EqualTo(1.600000f));
+            Assert.That(ship.Thrusters.MainLeft.Y, Is.EqualTo(-0.766667f).Within(0.000001f));
+            Assert.That(ship.Thrusters.MainLeft.Z, Is.EqualTo(2.000000f));
             Assert.That(ship.Thrusters.MiniThrustersEnabled, Is.True);
         }
 

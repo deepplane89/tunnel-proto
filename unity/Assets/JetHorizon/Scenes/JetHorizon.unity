@@ -290,7 +290,7 @@ Light:
   serializedVersion: 12
   m_Type: 1
   m_Color: {r: 0.53333336, g: 0.6, b: 0.73333335, a: 1}
-  m_Intensity: 0.6
+  m_Intensity: 0.9
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -1872,7 +1872,7 @@ Material:
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
-    - _Metallic: 0.5
+    - _Metallic: 0.25
     - _OcclusionStrength: 1
     - _Parallax: 0.005
     - _QueueOffset: 0
@@ -2379,7 +2379,7 @@ Material:
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
-    - _Metallic: 0.6
+    - _Metallic: 0.35
     - _OcclusionStrength: 1
     - _Parallax: 0.005
     - _QueueOffset: 0
@@ -2539,6 +2539,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JetHorizon.ThrusterFX
   ExhaustMaterial: {fileID: 2100000, guid: 9adced01b31114c4daad43b3ef3f2f96, type: 2}
+  AdditiveMaterial: {fileID: 2100000, guid: 7d3d66b864a9246ae8670e042a8c8730, type: 2}
 --- !u!1 &1398999360
 GameObject:
   m_ObjectHideFlags: 0
@@ -2859,7 +2860,7 @@ Material:
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
-    - _Metallic: 0.88
+    - _Metallic: 0.45
     - _OcclusionStrength: 1
     - _Parallax: 0.005
     - _QueueOffset: 0
@@ -2979,7 +2980,7 @@ Material:
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
-    - _Metallic: 0.95
+    - _Metallic: 0.65
     - _OcclusionStrength: 1
     - _Parallax: 0.005
     - _QueueOffset: 0
@@ -3355,7 +3356,7 @@ Light:
   serializedVersion: 12
   m_Type: 2
   m_Color: {r: 1, g: 0.4, b: 0.1254902, a: 1}
-  m_Intensity: 0.6
+  m_Intensity: 0.35
   m_Range: 6
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -3707,7 +3708,7 @@ Light:
   serializedVersion: 12
   m_Type: 1
   m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_Intensity: 1.8
+  m_Intensity: 2.2
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208

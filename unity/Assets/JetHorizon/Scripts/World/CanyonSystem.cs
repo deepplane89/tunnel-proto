@@ -21,6 +21,7 @@ namespace JetHorizon
             public int Side;           // -1 left, +1 right
             public bool IsEntrance;
             public float BakedX;
+            public float InnerX;
         }
 
         const float EntranceSpawnZ = -500f;
@@ -72,6 +73,11 @@ namespace JetHorizon
             _cyanMat = new Material(shader) { name = "JH_CanyonCyan" };
             _cyanMat.SetColor("_BaseColor", TextureFactory.Hex(0x04d4f0));
             _cyanMat.SetFloat("_Smoothness", 0.6f);
+            _cyanMat.SetFloat("_Metallic", 0f);
+            _cyanMat.SetFloat("_ClearCoatMask", 0.65f);
+            _cyanMat.SetFloat("_ClearCoatSmoothness", 0.78f);
+            _cyanMat.SetFloat("_Cull", 0f);
+            _cyanMat.EnableKeyword("_CLEARCOAT");
             _cyanMat.EnableKeyword("_EMISSION");
             _cyanMat.SetColor("_EmissionColor", TextureFactory.Hex(0x6ef2ff) * 1.1f);
             _cyanMat.SetTexture("_EmissionMap", TextureFactory.CyanSlab());
@@ -80,6 +86,11 @@ namespace JetHorizon
             _darkMat = new Material(shader) { name = "JH_CanyonDark" };
             _darkMat.SetColor("_BaseColor", TextureFactory.Hex(0x080810));
             _darkMat.SetFloat("_Smoothness", 0.78f);
+            _darkMat.SetFloat("_Metallic", 0f);
+            _darkMat.SetFloat("_ClearCoatMask", 0.40f);
+            _darkMat.SetFloat("_ClearCoatSmoothness", 0.92f);
+            _darkMat.SetFloat("_Cull", 0f);
+            _darkMat.EnableKeyword("_CLEARCOAT");
             _darkMat.EnableKeyword("_EMISSION");
             _darkMat.SetColor("_EmissionColor", TextureFactory.Hex(0xff00cc) * 0.9f);
             _darkMat.SetTexture("_EmissionMap", TextureFactory.DarkSlab());
@@ -104,7 +115,8 @@ namespace JetHorizon
                 // Entrance slab: thick, long, flies in from −500; X frozen at its final resting Z
                 var ent = MakeSlab(side, isEntrance: true);
                 float entHalfX = HalfXAtZ(SafeZ);
-                ent.BakedX = CenterAtZInit(SafeZ) + entHalfX * side;
+                ent.InnerX = CenterAtZInit(SafeZ) + entHalfX * side;
+                ent.BakedX = ent.InnerX - _p.FootX * side;
                 ent.T.position = new Vector3(ent.BakedX, 0f, EntranceSpawnZ);
                 AssignMaterial(ent, SafeZ);
 
@@ -113,7 +125,8 @@ namespace JetHorizon
                 {
                     var slab = MakeSlab(side, isEntrance: false);
                     float halfX = HalfXAtZ(z);
-                    slab.BakedX = CenterAtZInit(z) + halfX * side;
+                    slab.InnerX = CenterAtZInit(z) + halfX * side;
+                    slab.BakedX = slab.InnerX - _p.FootX * side;
                     slab.T.position = new Vector3(slab.BakedX, 0f, z);
                     AssignMaterial(slab, z);
                     slab.T.gameObject.SetActive(false);          // frozen + invisible until reveal
@@ -305,7 +318,11 @@ namespace JetHorizon
             int rowsAhead = Mathf.Max(0, Mathf.RoundToInt((Tuning.ShipZ - z) / spacing));
             float center = PredictCenter(rowsAhead);
             float halfX = HalfXAtZ(z);
-            slab.BakedX = center + halfX * slab.Side;
+            slab.InnerX = center + halfX * slab.Side;
+            // The mesh's visible foot is authored at local X=FootX, not at its pivot.
+            // Compensate the pivot exactly as the production canyon does so HalfX means
+            // the visible corridor boundary rather than an extra-wide hidden offset.
+            slab.BakedX = slab.InnerX - _p.FootX * slab.Side;
 
             float nextCenter = PredictCenter(rowsAhead + 1);
             float yaw = slab.Side * Mathf.Atan2(nextCenter - center, spacing) * Mathf.Rad2Deg;
@@ -336,12 +353,12 @@ namespace JetHorizon
 
                 if (slab.Side > 0)
                 {
-                    rightBoundary = Mathf.Min(rightBoundary, slab.BakedX);
+                    rightBoundary = Mathf.Min(rightBoundary, slab.InnerX);
                     hasRight = true;
                 }
                 else
                 {
-                    leftBoundary = Mathf.Max(leftBoundary, slab.BakedX);
+                    leftBoundary = Mathf.Max(leftBoundary, slab.InnerX);
                     hasLeft = true;
                 }
             }

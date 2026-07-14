@@ -182,6 +182,20 @@ namespace JetHorizon
                 added++;
             }
 
+            // 6. Unity display compensation. The source points were tuned for a fixed browser
+            // device-pixel footprint; at a Retina Game view the upper sky reads much sparser.
+            // Keep every source star unchanged, then add a subtle deterministic upper layer so
+            // the sky remains populated above and around the hero sun without becoming a cloud.
+            added = 0; attempts = 0;
+            while (added < 240 && attempts++ < 240 * 10)
+            {
+                float x = rng.Range(-1f, 1f);
+                float y = rng.Range(0.18f, 1f);
+                if (!Valid(x, y)) continue;
+                Add(x, y, 0.55f, 1.45f);
+                added++;
+            }
+
             _skyMesh = BuildStarMesh(stars);
             var go = new GameObject("SkyStarsGPU");
             go.transform.SetParent(transform, false);

@@ -11,12 +11,14 @@ Shader "JH/SkyStars"
     }
     SubShader
     {
-        Tags { "RenderType"="Transparent" "Queue"="Background+10" "RenderPipeline"="UniversalPipeline" }
+        // Unity draws its skybox after opaque/background-queue meshes. Stars must be
+        // transparent-queue geometry so the skybox cannot paint over them.
+        Tags { "RenderType"="Transparent" "Queue"="Transparent-100" "RenderPipeline"="UniversalPipeline" }
         Pass
         {
             Blend One One
             ZWrite Off
-            ZTest Always
+            ZTest LEqual
             Cull Off
 
             HLSLPROGRAM
@@ -58,7 +60,12 @@ Shader "JH/SkyStars"
                 float glowMul = sourceSize > 2.5 ? 1.6 : 1.0;
                 float2 ndcOffset = IN.corner * coreSize * glowMul * 2.0 / _ScreenParams.xy;
 
-                OUT.positionHCS = float4(IN.positionOS.xy + ndcOffset, 0.999, 1.0);
+                float farDepth = 0.9999;
+                #if UNITY_REVERSED_Z
+                    farDepth = 0.0001;
+                #endif
+                // Far-depth placement lets opaque water, sun, ship and hazards occlude stars.
+                OUT.positionHCS = float4(IN.positionOS.xy + ndcOffset, farDepth, 1.0);
                 OUT.uv = IN.corner * 0.5 + 0.5;
                 OUT.alpha = twinkle;
                 OUT.size = sourceSize;

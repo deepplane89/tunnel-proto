@@ -33,8 +33,8 @@ Material:
     - _PanoBrightness: 0
     - _PanoOffsetY: -0.06
     m_Colors:
-    - _BotColor: {r: 0.05490196, g: 0.011764706, b: 0.1254902, a: 1}
+    - _BotColor: {r: 0.03137255, g: 0.0627451, b: 0.16470589, a: 1}
     - _PanoTint: {r: 0.56, g: 1, b: 1, a: 1}
-    - _TopColor: {r: 0.023529412, g: 0, b: 0.0627451, a: 1}
+    - _TopColor: {r: 0.011764706, g: 0.02745098, b: 0.05882353, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
