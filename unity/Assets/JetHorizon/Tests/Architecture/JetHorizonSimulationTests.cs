@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using JetHorizon.Application;
 
 namespace JetHorizon.Simulation.Tests
 {
@@ -233,6 +234,41 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(run.GetStage(0).Name, Is.EqualTo("A"));
         }
 
+        [Test]
+        public void ApplicationRouterPersistsAndPublishesACompletedRun()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false
+            }, 88u);
+            simulation.StartRun();
+            simulation.AwardScore(123f, ScoreSource.Bonus);
+            simulation.ForcePlayerDeath();
+
+            var store = new FakeProgressStore();
+            var audio = new FakeAudio();
+            var haptics = new FakeHaptics();
+            var analytics = new FakeAnalytics();
+            var leaderboard = new FakeLeaderboard();
+            var router = new RunEventRouter(new GameServices(
+                store,
+                audio,
+                haptics,
+                analytics,
+                new FakeClock(),
+                leaderboard));
+
+            router.Dispatch(simulation.Events);
+
+            Assert.That(store.Saved.CompletedRuns, Is.EqualTo(1));
+            Assert.That(store.Saved.HighScore, Is.EqualTo(simulation.Snapshot.Score));
+            Assert.That(leaderboard.LastScore, Is.EqualTo((long)System.Math.Floor(simulation.Snapshot.Score)));
+            Assert.That(audio.LastCue, Is.EqualTo(AudioCue.PlayerDied));
+            Assert.That(haptics.LastCue, Is.EqualTo(HapticCue.Impact));
+            Assert.That(analytics.Last.Name, Is.EqualTo("run_finished"));
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);
@@ -253,6 +289,42 @@ namespace JetHorizon.Simulation.Tests
             for (int i = 0; i < commands.Count; i++)
                 if (commands[i].Type == type) return true;
             return false;
+        }
+
+        sealed class FakeProgressStore : IRunProgressStore
+        {
+            public RunProgress Saved;
+            public bool TryLoad(out RunProgress progress) { progress = Saved; return Saved.SchemaVersion > 0; }
+            public void Save(RunProgress progress) => Saved = progress;
+        }
+
+        sealed class FakeAudio : IAudioOutput
+        {
+            public AudioCue LastCue;
+            public void Play(AudioCue cue) => LastCue = cue;
+        }
+
+        sealed class FakeHaptics : IHapticsOutput
+        {
+            public HapticCue LastCue;
+            public void Play(HapticCue cue) => LastCue = cue;
+        }
+
+        sealed class FakeAnalytics : IAnalyticsSink
+        {
+            public AnalyticsEvent Last;
+            public void Track(AnalyticsEvent analyticsEvent) => Last = analyticsEvent;
+        }
+
+        sealed class FakeClock : IClock
+        {
+            public long UtcUnixMilliseconds => 123456789L;
+        }
+
+        sealed class FakeLeaderboard : ILeaderboardService
+        {
+            public long LastScore;
+            public void SubmitScore(long score) => LastScore = score;
         }
     }
 }

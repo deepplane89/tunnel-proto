@@ -1,0 +1,16 @@
+{
+  "name": "JetHorizon.Application",
+  "rootNamespace": "JetHorizon.Application",
+  "references": [
+    "JetHorizon.Simulation.Core"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": true
+}

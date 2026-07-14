@@ -2,6 +2,8 @@
 
 This embedded package is the engine-neutral gameplay layer used by the live Unity project. Its Runtime assembly has `noEngineReferences` enabled and contains no `UnityEngine` types.
 
+The separate `JetHorizon.Application` assembly defines platform ports and routes simulation events to saves, audio, haptics, analytics, clocks, and leaderboards without allowing those services to affect deterministic gameplay.
+
 Current scope:
 
 - deterministic 60 Hz simulation;

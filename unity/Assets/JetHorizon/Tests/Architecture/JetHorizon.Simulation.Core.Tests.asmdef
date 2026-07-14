@@ -2,7 +2,8 @@
   "name": "JetHorizon.Simulation.Core.Tests",
   "rootNamespace": "JetHorizon.Simulation.Tests",
   "references": [
-    "JetHorizon.Simulation.Core"
+    "JetHorizon.Simulation.Core",
+    "JetHorizon.Application"
   ],
   "includePlatforms": [
     "Editor"

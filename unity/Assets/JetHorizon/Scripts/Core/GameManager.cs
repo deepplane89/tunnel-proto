@@ -1,5 +1,7 @@
 using UnityEngine;
 using JetHorizon.Simulation;
+using JetHorizon.Application;
+using JetHorizon.Platform;
 
 namespace JetHorizon
 {
@@ -41,6 +43,7 @@ namespace JetHorizon
         float _deathTimer;
         bool  _killedThisFrame;   // JS `return` after killPlayer aborts remaining checks
         JetHorizonSimulation _coreSimulation;
+        RunEventRouter _applicationEvents;
 
         public GamePhase Phase => State.Phase;
         public SimulationSnapshot CoreSnapshot => _coreSimulation?.Snapshot;
@@ -60,10 +63,11 @@ namespace JetHorizon
                 HazardSpawningEnabled = false,
                 CollisionEnabled = false
             }, 20260714u, runDefinition);
+            _applicationEvents = new RunEventRouter(UnityGameServicesFactory.CreateDefault());
             // Match the web build: 60 fps cap (sim is fixed 60 Hz; rendering above it
             // just shows duplicate sim states as judder on high-refresh displays).
             QualitySettings.vSyncCount = 0;
-            Application.targetFrameRate = 60;
+            UnityEngine.Application.targetFrameRate = 60;
         }
 
         void Start()
@@ -173,6 +177,7 @@ namespace JetHorizon
             world.HazardsClear = (Obstacles == null || Obstacles.ActiveHazardCount == 0)
                 && !world.AnyStructuredMechanicActive;
             _coreSimulation.Step(frame, world);
+            _applicationEvents.Dispatch(_coreSimulation.Events);
 
             var snapshot = _coreSimulation.Snapshot;
             SyncCoreSession(snapshot);
@@ -237,6 +242,7 @@ namespace JetHorizon
 
             Session.ResetForNewRun();
             _coreSimulation.StartRun();
+            _applicationEvents.Dispatch(_coreSimulation.Events);
             SyncCoreSession();
             ResetAllSystems();
 
@@ -300,6 +306,7 @@ namespace JetHorizon
             _killedThisFrame = true;
             _deathTimer = 0f;
             _coreSimulation?.ForcePlayerDeath();
+            if (_coreSimulation != null) _applicationEvents.Dispatch(_coreSimulation.Events);
             SyncCoreSession();
 
             State.TransitionTo(GamePhase.Dead);

@@ -7,8 +7,8 @@ Checkpoint 1 established the reversible package and adapters. Checkpoint 2 made 
 The new code is split into three boundaries:
 
 1. `Packages/com.jethorizon.core/Runtime` — pure deterministic C# with no Unity references.
-2. `Assets/JetHorizon/Scripts/Architecture/CoreSimulationHost.cs` — Unity input and fixed-tick adapter.
-3. `Assets/JetHorizon/Scripts/Architecture/CoreTransformPresenter.cs` — snapshot-to-Transform presentation adapter.
+2. `Packages/com.jethorizon.core/Application` — engine-free save/audio/haptics/analytics/clock/leaderboard ports and event routing.
+3. `Assets/JetHorizon/Scripts/Architecture` — Unity composition, input, platform services, and snapshot presentation.
 
 Project tests live in `Assets/JetHorizon/Tests/Architecture` so they are discoverable without modifying the existing package manifest.
 
@@ -21,6 +21,8 @@ Unity input + world facts -> simulation core -> snapshot + events + commands -> 
 ```
 
 The simulation core must never reference Unity, scenes, prefabs, rendering, audio, input devices, saves, analytics, or platform APIs. Unity code may reference the core.
+
+Platform effects are one-way: simulation events enter the application router, which invokes injected ports. No platform result is allowed to alter a replayed tick. `PlayerPrefsRunProgressStore` is the first live adapter; audio, haptics, analytics, and leaderboards are silent adapters until their real integrations are chosen.
 
 ## Implemented first slice
 
