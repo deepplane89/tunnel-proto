@@ -102,14 +102,14 @@ namespace JetHorizon.EditorTools
             var profile = ScriptableObject.CreateInstance<VolumeProfile>();
             AssetDatabase.CreateAsset(profile, $"{GenDir}/JH_PostProfile.asset");
             var tonemap = profile.Add<Tonemapping>(true); tonemap.mode.Override(TonemappingMode.ACES);
-            var exposure = profile.Add<ColorAdjustments>(true); exposure.postExposure.Override(0.14f);
+            var exposure = profile.Add<ColorAdjustments>(true); exposure.postExposure.Override(0.28f);
             var bloom = profile.Add<Bloom>(true);
             // tight halo like UnrealBloom(strength .35, radius .25) — high scatter reads as haze
-            bloom.intensity.Override(0.55f); bloom.threshold.Override(1.0f); bloom.scatter.Override(0.35f);
+            bloom.intensity.Override(0.58f); bloom.threshold.Override(0.85f); bloom.scatter.Override(0.30f);
             bloom.highQualityFiltering.Override(true);
             var vignette = profile.Add<Vignette>(true);
-            vignette.intensity.Override(0.5f); vignette.smoothness.Override(0.6f);
-            var ca = profile.Add<ChromaticAberration>(true); ca.intensity.Override(0.03f);
+            vignette.intensity.Override(0.28f); vignette.smoothness.Override(0.45f);
+            var ca = profile.Add<ChromaticAberration>(true); ca.intensity.Override(0.015f);
             // Volume components must be persisted as sub-assets or they become null refs
             // after the next domain reload.
             foreach (var comp in profile.components)

@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace JetHorizon
 {
@@ -17,10 +19,24 @@ namespace JetHorizon
 
         Vibe _current, _target;
         float _lerpT = 1f;
+        Volume _volume;
+        ColorAdjustments _colorAdjustments;
+        Bloom _bloom;
+        Vignette _vignette;
+        ChromaticAberration _chromaticAberration;
+        Light _keyLight, _rimLight, _fillLight, _sunRakeR, _sunRakeL;
+
+        // Three.js and URP do not map identical light/post values to identical pixels.
+        // These are Unity presentation calibrations; simulation and vibe data stay untouched.
+        const float FogDensity = 0.0065f;
+        const float PostExposure = 0.28f;
+        const float BloomScale = 1.65f;
+        const float VignetteIntensity = 0.28f;
 
         void OnEnable()
         {
             GameEvents.VibeChanged += OnVibeChanged;
+            CachePresentationRig();
             _current = _target = Vibes.Get(0);
             Apply(_current);
         }
@@ -73,8 +89,10 @@ namespace JetHorizon
         {
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Exponential;
-            RenderSettings.fogDensity = 0.008f;
+            RenderSettings.fogDensity = FogDensity;
             RenderSettings.fogColor = v.fogColor;
+            RenderSettings.ambientMode = AmbientMode.Flat;
+            RenderSettings.ambientLight = new Color(0.045f, 0.05f, 0.065f);
 
             if (SkyboxMaterial != null)
             {
@@ -100,12 +118,56 @@ namespace JetHorizon
                 HorizonSeam.material.SetColor("_Tint", new Color(
                     Mathf.Min(1f, v.sunColor.r + 0.15f), Mathf.Min(1f, v.sunColor.g + 0.05f), v.sunColor.b, 1f));
 
-            // Bloom strength per vibe is applied by the bootstrap-created Volume;
-            // adjust here if a Bloom override is present.
-            var volume = FindFirstObjectByType<UnityEngine.Rendering.Volume>();
-            if (volume != null && volume.profile != null &&
-                volume.profile.TryGet<UnityEngine.Rendering.Universal.Bloom>(out var bloom))
-                bloom.intensity.value = v.bloomStrength * 1.5f;   // URP intensity scale vs Unreal strength, tuned by eye
+            ApplyLightingCalibration();
+            if (_colorAdjustments != null) _colorAdjustments.postExposure.value = PostExposure;
+            if (_bloom != null)
+            {
+                _bloom.intensity.value = v.bloomStrength * BloomScale;
+                _bloom.threshold.value = 0.85f;
+                _bloom.scatter.value = 0.30f;
+                _bloom.highQualityFiltering.value = true;
+            }
+            if (_vignette != null)
+            {
+                _vignette.intensity.value = VignetteIntensity;
+                _vignette.smoothness.value = 0.45f;
+            }
+            if (_chromaticAberration != null) _chromaticAberration.intensity.value = 0.015f;
+        }
+
+        void CachePresentationRig()
+        {
+            _volume = FindFirstObjectByType<Volume>();
+            if (_volume != null && _volume.profile != null)
+            {
+                _volume.profile.TryGet(out _colorAdjustments);
+                _volume.profile.TryGet(out _bloom);
+                _volume.profile.TryGet(out _vignette);
+                _volume.profile.TryGet(out _chromaticAberration);
+            }
+
+            _keyLight = FindLight("KeyLight");
+            _rimLight = FindLight("RimLight");
+            _fillLight = FindLight("FillLight");
+            _sunRakeR = FindLight("SunRakeR");
+            _sunRakeL = FindLight("SunRakeL");
+        }
+
+        static Light FindLight(string objectName)
+        {
+            var go = GameObject.Find(objectName);
+            return go != null ? go.GetComponent<Light>() : null;
+        }
+
+        void ApplyLightingCalibration()
+        {
+            // Preserve the source rig's direction and color, while lifting URP's dark
+            // metallic midtones enough to keep the ship and hazards readable.
+            if (_keyLight != null) _keyLight.intensity = 3.0f;
+            if (_rimLight != null) _rimLight.intensity = 0.16f;
+            if (_fillLight != null) _fillLight.intensity = 0.38f;
+            if (_sunRakeR != null) _sunRakeR.intensity = 0.30f;
+            if (_sunRakeL != null) _sunRakeL.intensity = 0.16f;
         }
 
         /// <summary>Lighting rig per spec/03 §2 — called by bootstrap at scene build.</summary>
@@ -122,13 +184,13 @@ namespace JetHorizon
                 l.color = c; l.intensity = intensity;
                 l.shadows = LightShadows.None;
             }
-            Dir("KeyLight",  Color.white,                       2.56f, new Vector3(2f, 8.8f, 8f));
-            Dir("RimLight",  TextureFactory.Hex(0x00f0ff),      0.10f, new Vector3(-3f, 6f, -8f));
-            Dir("FillLight", TextureFactory.Hex(0xff44cc),      0.25f, new Vector3(0f, -2f, 6f));
-            Dir("SunRakeR",  TextureFactory.Hex(0xff9500),      0.22f, new Vector3(2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
-            Dir("SunRakeL",  TextureFactory.Hex(0xff9500),      0.10f, new Vector3(-2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.02f, 0.02f, 0.02f);
+            Dir("KeyLight",  Color.white,                       3.00f, new Vector3(2f, 8.8f, 8f));
+            Dir("RimLight",  TextureFactory.Hex(0x00f0ff),      0.16f, new Vector3(-3f, 6f, -8f));
+            Dir("FillLight", TextureFactory.Hex(0xff44cc),      0.38f, new Vector3(0f, -2f, 6f));
+            Dir("SunRakeR",  TextureFactory.Hex(0xff9500),      0.30f, new Vector3(2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
+            Dir("SunRakeL",  TextureFactory.Hex(0xff9500),      0.16f, new Vector3(-2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
+            RenderSettings.ambientMode = AmbientMode.Flat;
+            RenderSettings.ambientLight = new Color(0.045f, 0.05f, 0.065f);
         }
     }
 }
