@@ -108,6 +108,7 @@ namespace JetHorizon.Simulation
         public float ShipVelocityX { get; internal set; }
         public float ShipBankRadians { get; internal set; }
         public float ShipRollRadians { get; internal set; }
+        public float ShipTiltTimer { get; internal set; }
         public int HazardCount { get; internal set; }
 
         internal SimulationSnapshot(int maxHazards)

@@ -2,7 +2,7 @@
 
 ## Status
 
-Checkpoint 1 establishes a reversible vertical slice. It does not replace or alter the current `GameManager`, `RunSession`, scene, GLB setup, VFX, UI, or obstacle systems.
+Checkpoint 1 established the reversible package and adapters. Checkpoint 2 makes the core authoritative for live ship steering, glide, roll, banking, hover, and ship position through the existing `GameManager`.
 
 The new code is split into three boundaries:
 
@@ -35,7 +35,7 @@ The simulation core must never reference Unity, scenes, prefabs, rendering, audi
 
 ## Migration rule
 
-The existing Unity implementation remains authoritative until a feature has:
+The current Unity wave director, scoring, hazards, pickups, camera, VFX, and UI remain connected during migration. For each remaining feature:
 
 1. been represented in the core;
 2. received deterministic tests;
@@ -47,15 +47,15 @@ Only then should the corresponding legacy gameplay code be disabled. Presentatio
 
 ## Next checkpoint
 
-Create an isolated preview scene that uses the new host and presenter, then add:
+Move the live stage, speed, scoring, and hazard state behind engine-neutral APIs, then add:
 
 - a `ShipDefinition` with explicit thruster sockets;
 - a GPU-driven procedural starfield presenter;
 - one standard-pylon visual profile;
 - a recorded input/replay comparison against the current ship controller.
 
-The shipping `JetHorizon.unity` scene should remain untouched until that preview slice is accepted.
+The shipping scene now consumes the core through `GameManager`; the standalone host remains useful for isolated previews and deterministic tests.
 
 ## Revert
 
-This checkpoint contains only new files. Reverting its commit removes the package, adapters, tests, and this document without deleting or rewriting the pre-existing Unity port.
+The Unity port baseline is preserved separately. Each ownership migration is committed independently so the latest subsystem can be reverted without undoing accepted core work.

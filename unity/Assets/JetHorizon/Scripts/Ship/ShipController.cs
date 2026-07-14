@@ -1,4 +1,5 @@
 using UnityEngine;
+using JetHorizon.Simulation;
 
 namespace JetHorizon
 {
@@ -133,6 +134,51 @@ namespace JetHorizon
                     _yawSmooth * Mathf.Rad2Deg,
                     rollZ * Mathf.Rad2Deg);
             }
+        }
+
+        /// <summary>
+        /// Presentation adapter for the engine-neutral ship snapshot. The core owns
+        /// movement, roll, banking and hover; Unity supplies yaw/pitch visuals and the
+        /// existing launch lift while the remainder of the run flow is migrated.
+        /// </summary>
+        public void ApplyCorePresentation(SimulationSnapshot snapshot, float dt)
+        {
+            if (snapshot == null) return;
+            var s = S;
+
+            float yawTarget = -snapshot.ShipVelocityX / 14f * Tuning.YawMax;
+            _yawSmooth += (yawTarget - _yawSmooth) * Mathf.Min(1f, dt * Tuning.YawSmoothing);
+
+            float speedDelta = (s.Speed - _prevSpeed) / Mathf.Max(dt, 0.0001f);
+            _prevSpeed = s.Speed;
+            float targetPitch = speedDelta > 0.5f  ? -Tuning.PitchForwardMax * Mathf.Min(1f, speedDelta / 50f)
+                              : speedDelta < -0.5f ?  Tuning.PitchBackMax    * Mathf.Min(1f, -speedDelta / 50f)
+                              : 0f;
+            _pitchSmooth += (targetPitch - _pitchSmooth) * Mathf.Min(1f, dt * Tuning.PitchSmoothing);
+
+            if (s.IntroLiftActive)
+            {
+                s.IntroLiftT += dt;
+                float t = Mathf.Clamp01(s.IntroLiftT / Tuning.IntroLiftDur);
+                float ease = 1f - Mathf.Pow(1f - t, 3f);
+                s.ShipY = Mathf.Lerp(Tuning.ShipPreLaunchY, Tuning.ShipHoverY, ease);
+                _pitchSmooth = Tuning.IntroLiftPitch * Mathf.Sin(t * Mathf.PI * 0.5f) * (1f - t) * 2f;
+                if (t >= 1f) { s.IntroLiftActive = false; s.ShipY = Tuning.ShipHoverY; }
+            }
+            else
+            {
+                s.ShipY = snapshot.ShipY;
+            }
+
+            if (ShipRoot == null) return;
+            ShipRoot.position = new Vector3(snapshot.ShipX, s.ShipY, Tuning.ShipZ);
+            float rollZ = Mathf.Abs(snapshot.ShipRollRadians) > 0.001f
+                ? snapshot.ShipRollRadians
+                : snapshot.ShipBankRadians;
+            ShipRoot.localRotation = Quaternion.Euler(
+                (_pitchSmooth + Tuning.ShipRotXOffset) * Mathf.Rad2Deg,
+                _yawSmooth * Mathf.Rad2Deg,
+                rollZ * Mathf.Rad2Deg);
         }
 
         /// <summary>Roll-aware collision half-width — hitbox narrows 1.5 → 0.8 at knife-edge.</summary>

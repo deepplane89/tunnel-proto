@@ -90,6 +90,55 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(replayed.Z, Is.EqualTo(first.Z));
         }
 
+        [Test]
+        public void LiveMigrationModeAcceptsExternalSpeedWithoutOwningProgressionOrHazards()
+        {
+            var config = new SimulationConfig
+            {
+                ProgressionEnabled = false,
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false
+            };
+            var simulation = new JetHorizonSimulation(config, 12u);
+            simulation.StartRun();
+            simulation.SetSpeed(90f);
+
+            for (int i = 0; i < 120; i++)
+                simulation.Step(new InputFrame(false, true));
+
+            Assert.That(simulation.Snapshot.Speed, Is.EqualTo(90f));
+            Assert.That(simulation.Snapshot.ShipX, Is.GreaterThan(0f));
+            Assert.That(simulation.Snapshot.Distance, Is.Zero);
+            Assert.That(simulation.Snapshot.Score, Is.Zero);
+            Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+        }
+
+        [Test]
+        public void PausingFreezesTheSimulationUntilResumed()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false
+            }, 22u);
+            simulation.StartRun();
+            simulation.Step(new InputFrame(false, true));
+            var tickBeforePause = simulation.Snapshot.Tick;
+            var xBeforePause = simulation.Snapshot.ShipX;
+
+            simulation.SetPaused(true);
+            for (int i = 0; i < 30; i++) simulation.Step(new InputFrame(false, true));
+
+            Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Paused));
+            Assert.That(simulation.Snapshot.Tick, Is.EqualTo(tickBeforePause));
+            Assert.That(simulation.Snapshot.ShipX, Is.EqualTo(xBeforePause));
+
+            simulation.SetPaused(false);
+            simulation.Step(new InputFrame(false, true));
+            Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Playing));
+            Assert.That(simulation.Snapshot.Tick, Is.EqualTo(tickBeforePause + 1));
+            Assert.That(simulation.Snapshot.ShipX, Is.GreaterThan(xBeforePause));
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);

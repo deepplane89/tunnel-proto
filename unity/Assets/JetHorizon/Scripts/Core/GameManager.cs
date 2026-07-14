@@ -1,4 +1,5 @@
 using UnityEngine;
+using JetHorizon.Simulation;
 
 namespace JetHorizon
 {
@@ -39,13 +40,23 @@ namespace JetHorizon
         float _accumulator;
         float _deathTimer;
         bool  _killedThisFrame;   // JS `return` after killPlayer aborts remaining checks
+        JetHorizonSimulation _coreSimulation;
 
         public GamePhase Phase => State.Phase;
+        public SimulationSnapshot CoreSnapshot => _coreSimulation?.Snapshot;
 
         void Awake()
         {
             if (I != null && I != this) { Destroy(gameObject); return; }
             I = this;
+            _coreSimulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                // Migration checkpoint 1: the core owns live ship motion. Existing Unity
+                // systems temporarily retain stage progression, scoring, and hazards.
+                ProgressionEnabled = false,
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false
+            }, 20260714u);
             // Match the web build: 60 fps cap (sim is fixed 60 Hz; rendering above it
             // just shows duplicate sim states as judder on high-refresh displays).
             QualitySettings.vSyncCount = 0;
@@ -98,7 +109,7 @@ namespace JetHorizon
 
             float eff = s.EffectiveSpeed;
 
-            Ship.SimTick(dt);                                    // 3-11: input→velX→shipX, bank, roll, hover
+            TickCoreShip(dt);                                    // engine-neutral input→snapshot→Unity presentation
             Camera.SimTick(dt);                                  // 5: pivot follow (fixed part)
 
             if (!s.IntroActive)
@@ -140,6 +151,35 @@ namespace JetHorizon
             Pickups.SimTick(dt);                                 // 19: coins/powerups move + magnet + collect
         }
 
+        void TickCoreShip(float dt)
+        {
+            if (_coreSimulation == null || Ship == null)
+            {
+                Ship?.SimTick(dt);
+                return;
+            }
+
+            _coreSimulation.SetSpeed(Session.Speed);
+            var input = Ship.Input;
+            // Unity's gameplay camera faces -Z, making screen-left world +X. The adapter
+            // swaps left/right so the engine-neutral core keeps conventional coordinates.
+            var frame = input == null
+                ? default
+                : new InputFrame(input.SteerRight, input.SteerLeft, input.RollHeld ? input.RollDir : 0);
+            _coreSimulation.Step(frame);
+
+            var snapshot = _coreSimulation.Snapshot;
+            Session.ShipX = snapshot.ShipX;
+            Session.ShipY = snapshot.ShipY;
+            Session.ShipVelX = snapshot.ShipVelocityX;
+            Session.RollAngle = snapshot.ShipRollRadians;
+            Session.BankRoll = snapshot.ShipBankRadians;
+            Session.TiltTimer = snapshot.ShipTiltTimer;
+            Session.RollHeld = input != null && input.RollHeld;
+            Session.RollDir = input != null ? input.RollDir : 0;
+            Ship.ApplyCorePresentation(snapshot, dt);
+        }
+
         bool CanSpawnWaves()
         {
             var s = Session;
@@ -160,6 +200,8 @@ namespace JetHorizon
 
             Session.ResetForNewRun();
             ResetAllSystems();
+            _coreSimulation.StartRun();
+            _coreSimulation.SetSpeed(Session.Speed);
 
             if (!State.TransitionTo(GamePhase.Playing)) return;
 
@@ -181,8 +223,14 @@ namespace JetHorizon
 
         public void TogglePause()
         {
-            if (State.Phase == GamePhase.Playing) State.TransitionTo(GamePhase.Paused);
-            else if (State.Phase == GamePhase.Paused) State.TransitionTo(GamePhase.Playing);
+            if (State.Phase == GamePhase.Playing)
+            {
+                if (State.TransitionTo(GamePhase.Paused)) _coreSimulation?.SetPaused(true);
+            }
+            else if (State.Phase == GamePhase.Paused)
+            {
+                if (State.TransitionTo(GamePhase.Playing)) _coreSimulation?.SetPaused(false);
+            }
         }
 
         public void ReturnToTitle()
@@ -191,6 +239,7 @@ namespace JetHorizon
             {
                 Session.ResetForNewRun();
                 ResetAllSystems();
+                _coreSimulation.ResetToTitle();
                 Camera.ResetToTitle();
             }
         }
@@ -212,6 +261,7 @@ namespace JetHorizon
 
             _killedThisFrame = true;
             _deathTimer = 0f;
+            _coreSimulation?.ForcePlayerDeath();
 
             // Final score: playerScore × distance bonus
             float distBonus = Mathf.Max(1f, 1f + Mathf.Floor(s.Distance / 5000f) * 0.1f);

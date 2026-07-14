@@ -35,6 +35,7 @@ namespace JetHorizon.Simulation
         float _tiltTimer;
         float _bankVelocityX;
         float _bankRadians;
+        float _bobSteerBlend;
         float _distanceUntilSpawn;
         int _nextEntityId;
 
@@ -82,6 +83,27 @@ namespace JetHorizon.Simulation
             RefreshSnapshot();
         }
 
+        /// <summary>
+        /// Migration seam for the current Unity wave director. Speed ownership will move
+        /// into the core with the stage-director checkpoint; until then Unity supplies it.
+        /// </summary>
+        public void SetSpeed(float speed)
+        {
+            if (float.IsNaN(speed) || float.IsInfinity(speed))
+                throw new ArgumentOutOfRangeException(nameof(speed));
+            _speed = Math.Max(0f, speed);
+            RefreshSnapshot();
+        }
+
+        public void ForcePlayerDeath()
+        {
+            Events.Clear();
+            if (Phase == CoreGamePhase.Dead) return;
+            Phase = CoreGamePhase.Dead;
+            Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, 0, _score, _distance));
+            RefreshSnapshot();
+        }
+
         public void Step(InputFrame input)
         {
             Events.Clear();
@@ -98,17 +120,23 @@ namespace JetHorizon.Simulation
             UpdateShip(input, dt);
 
             float step = _speed * dt;
-            _distance += step;
-            _score += _config.ScoreRatePerSecond * Math.Max(1f, _speed / _config.BaseSpeed) * dt;
-
-            _distanceUntilSpawn -= step;
-            while (_distanceUntilSpawn <= 0f)
+            if (_config.ProgressionEnabled)
             {
-                SpawnStandardHazard();
-                _distanceUntilSpawn += _config.SpawnIntervalDistance;
+                _distance += step;
+                _score += _config.ScoreRatePerSecond * Math.Max(1f, _speed / _config.BaseSpeed) * dt;
             }
 
-            UpdateHazards(step);
+            if (_config.HazardSpawningEnabled)
+            {
+                _distanceUntilSpawn -= step;
+                while (_distanceUntilSpawn <= 0f)
+                {
+                    SpawnStandardHazard();
+                    _distanceUntilSpawn += _config.SpawnIntervalDistance;
+                }
+
+                UpdateHazards(step);
+            }
             RefreshSnapshot();
         }
 
@@ -128,6 +156,7 @@ namespace JetHorizon.Simulation
             _tiltTimer = 0f;
             _bankVelocityX = 0f;
             _bankRadians = 0f;
+            _bobSteerBlend = 1f;
             _distanceUntilSpawn = _config.InitialSpawnDistance;
             _nextEntityId = 1;
         }
@@ -192,8 +221,12 @@ namespace JetHorizon.Simulation
             float bankRate = _config.BankSmoothing * (crossingZero ? _config.BankZeroCrossMultiplier : 1f);
             _bankRadians += (bankTarget - _bankRadians) * Math.Min(1f, bankRate * dt);
 
+            float bobTarget = Math.Abs(_shipVelocityX) > 0.5f ? 0f : 1f;
+            float bobRate = bobTarget < _bobSteerBlend ? 4f : 2f;
+            _bobSteerBlend = MoveTowards(_bobSteerBlend, bobTarget, bobRate * dt);
             _shipY = _config.ShipHoverY
-                + (float)Math.Sin(_elapsed * _config.HoverFrequency * Math.PI * 2.0) * _config.HoverAmplitude;
+                + (float)Math.Sin(_elapsed * _config.HoverFrequency * Math.PI * 2.0)
+                * _config.HoverAmplitude * _bobSteerBlend;
         }
 
         void SpawnStandardHazard()
@@ -284,6 +317,7 @@ namespace JetHorizon.Simulation
             Snapshot.ShipVelocityX = _shipVelocityX;
             Snapshot.ShipBankRadians = _bankRadians;
             Snapshot.ShipRollRadians = _rollRadians;
+            Snapshot.ShipTiltTimer = _tiltTimer;
 
             int count = 0;
             for (int i = 0; i < _hazards.Length; i++)
