@@ -22,6 +22,7 @@ namespace JetHorizon.Simulation
         readonly uint _seed;
         readonly DeterministicRandom _random;
         readonly HazardState[] _hazards;
+        readonly StageDirector _stageDirector;
 
         long _tick;
         float _elapsed;
@@ -43,10 +44,11 @@ namespace JetHorizon.Simulation
         public CoreGamePhase Phase { get; private set; }
         public SimulationSnapshot Snapshot { get; }
         public SimulationEventBuffer Events { get; }
+        public StageCommandBuffer StageCommands { get; }
         public SimulationConfig Config => _config.Clone();
         public float FixedDeltaSeconds => _config.FixedDeltaSeconds;
 
-        public JetHorizonSimulation(SimulationConfig config, uint seed)
+        public JetHorizonSimulation(SimulationConfig config, uint seed, RunDefinition runDefinition = null)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             config.Validate();
@@ -54,25 +56,29 @@ namespace JetHorizon.Simulation
             _seed = seed;
             _random = new DeterministicRandom(seed);
             _hazards = new HazardState[_config.MaxHazards];
+            _stageDirector = runDefinition == null ? null : new StageDirector(runDefinition);
             Snapshot = new SimulationSnapshot(_config.MaxHazards);
-            Events = new SimulationEventBuffer(16);
+            Events = new SimulationEventBuffer(64);
+            StageCommands = new StageCommandBuffer(16);
             ResetToTitle();
         }
 
         public void ResetToTitle()
         {
             Phase = CoreGamePhase.Title;
-            ResetRunState();
-            _shipY = _config.ShipPreLaunchY;
             Events.Clear();
+            StageCommands.Clear();
+            ResetRunState(null);
+            _shipY = _config.ShipPreLaunchY;
             RefreshSnapshot();
         }
 
         public void StartRun()
         {
-            ResetRunState();
-            Phase = CoreGamePhase.Playing;
             Events.Clear();
+            StageCommands.Clear();
+            ResetRunState(Events);
+            Phase = CoreGamePhase.Playing;
             Events.Add(new SimulationEvent(SimulationEventType.RunStarted));
             RefreshSnapshot();
         }
@@ -85,14 +91,15 @@ namespace JetHorizon.Simulation
         }
 
         /// <summary>
-        /// Migration seam for the current Unity wave director. Speed ownership will move
-        /// into the core with the stage-director checkpoint; until then Unity supplies it.
+        /// Migration seam for specialized corridor presenters that still animate speed
+        /// during entry/exit. The stage director remains authoritative outside corridors.
         /// </summary>
         public void SetSpeed(float speed)
         {
             if (float.IsNaN(speed) || float.IsInfinity(speed))
                 throw new ArgumentOutOfRangeException(nameof(speed));
             _speed = Math.Max(0f, speed);
+            _stageDirector?.SetExternalSpeed(_speed);
             RefreshSnapshot();
         }
 
@@ -124,6 +131,7 @@ namespace JetHorizon.Simulation
         public void Step(InputFrame input, WorldFrame world)
         {
             Events.Clear();
+            StageCommands.Clear();
             if (Phase != CoreGamePhase.Playing)
             {
                 RefreshSnapshot();
@@ -155,10 +163,17 @@ namespace JetHorizon.Simulation
 
                 UpdateHazards(step);
             }
+
+            if (_stageDirector != null && Phase == CoreGamePhase.Playing)
+            {
+                _stageDirector.Tick(dt, world, _random, Events, StageCommands);
+                _speed = _stageDirector.Speed;
+                _effectiveSpeed = world.OverdriveActive ? _speed * 1.8f : _speed;
+            }
             RefreshSnapshot();
         }
 
-        void ResetRunState()
+        void ResetRunState(SimulationEventBuffer events)
         {
             _random.Reset(_seed);
             Array.Clear(_hazards, 0, _hazards.Length);
@@ -178,6 +193,12 @@ namespace JetHorizon.Simulation
             _bobSteerBlend = 1f;
             _distanceUntilSpawn = _config.InitialSpawnDistance;
             _nextEntityId = 1;
+            if (_stageDirector != null)
+            {
+                _stageDirector.Reset(events);
+                _speed = _stageDirector.Speed;
+                _effectiveSpeed = _speed;
+            }
         }
 
         void UpdateShip(InputFrame input, float dt)
@@ -339,6 +360,33 @@ namespace JetHorizon.Simulation
             Snapshot.ShipBankRadians = _bankRadians;
             Snapshot.ShipRollRadians = _rollRadians;
             Snapshot.ShipTiltTimer = _tiltTimer;
+            Snapshot.StageDirectorEnabled = _stageDirector != null;
+            if (_stageDirector != null)
+            {
+                Snapshot.StageIndex = _stageDirector.StageIndex;
+                Snapshot.StageName = _stageDirector.CurrentStage.Name;
+                Snapshot.StageElapsed = _stageDirector.StageElapsed;
+                Snapshot.SpeedFloor = _stageDirector.SpeedFloor;
+                Snapshot.RestBeat = _stageDirector.RestBeat;
+                Snapshot.PhysicsTier = _stageDirector.PhysicsTier;
+                Snapshot.VibeIndex = _stageDirector.VibeIndex;
+                Snapshot.SpawnPattern = _stageDirector.SpawnPattern;
+                Snapshot.Density = _stageDirector.Density;
+                Snapshot.StageRamp01 = _stageDirector.StageRamp01;
+            }
+            else
+            {
+                Snapshot.StageIndex = 0;
+                Snapshot.StageName = string.Empty;
+                Snapshot.StageElapsed = 0f;
+                Snapshot.SpeedFloor = 1f;
+                Snapshot.RestBeat = 0f;
+                Snapshot.PhysicsTier = 1;
+                Snapshot.VibeIndex = 0;
+                Snapshot.SpawnPattern = SpawnPattern.None;
+                Snapshot.Density = DensityCurve.Normal;
+                Snapshot.StageRamp01 = 0f;
+            }
 
             int count = 0;
             for (int i = 0; i < _hazards.Length; i++)

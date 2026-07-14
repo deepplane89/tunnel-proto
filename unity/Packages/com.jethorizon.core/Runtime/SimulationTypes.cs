@@ -32,11 +32,28 @@ namespace JetHorizon.Simulation
     {
         public bool ProgressionSuspended;
         public bool OverdriveActive;
+        public bool HazardsClear;
+        public bool CanyonActive;
+        public bool CanyonExiting;
+        public bool SineCorridorActive;
+        public bool ZipperActive;
+        public bool SlalomActive;
+        public bool AngledWallsActive;
+
+        public bool AnyCorridorActive => CanyonActive || SineCorridorActive;
+        public bool AnyStructuredMechanicActive => AnyCorridorActive || ZipperActive || SlalomActive || AngledWallsActive;
 
         public WorldFrame(bool progressionSuspended, bool overdriveActive)
         {
             ProgressionSuspended = progressionSuspended;
             OverdriveActive = overdriveActive;
+            HazardsClear = false;
+            CanyonActive = false;
+            CanyonExiting = false;
+            SineCorridorActive = false;
+            ZipperActive = false;
+            SlalomActive = false;
+            AngledWallsActive = false;
         }
     }
 
@@ -55,6 +72,10 @@ namespace JetHorizon.Simulation
         HazardSpawned,
         NearMiss,
         ScoreChanged,
+        StageChanged,
+        SpeedChanged,
+        VibeChanged,
+        KlaxonCountdown,
         PlayerDied
     }
 
@@ -136,6 +157,17 @@ namespace JetHorizon.Simulation
         public float ShipBankRadians { get; internal set; }
         public float ShipRollRadians { get; internal set; }
         public float ShipTiltTimer { get; internal set; }
+        public bool StageDirectorEnabled { get; internal set; }
+        public int StageIndex { get; internal set; }
+        public string StageName { get; internal set; }
+        public float StageElapsed { get; internal set; }
+        public float SpeedFloor { get; internal set; }
+        public float RestBeat { get; internal set; }
+        public int PhysicsTier { get; internal set; }
+        public int VibeIndex { get; internal set; }
+        public SpawnPattern SpawnPattern { get; internal set; }
+        public DensityCurve Density { get; internal set; }
+        public float StageRamp01 { get; internal set; }
         public int HazardCount { get; internal set; }
 
         internal SimulationSnapshot(int maxHazards)

@@ -2,7 +2,7 @@
 
 ## Status
 
-Checkpoint 1 established the reversible package and adapters. Checkpoint 2 made the core authoritative for live ship steering, glide, roll, banking, hover, and ship position. Checkpoint 3 moves elapsed time, distance, passive score, near-miss and pickup awards, overdrive distance, and the game-over multiplier into the same core.
+Checkpoint 1 established the reversible package and adapters. Checkpoint 2 made the core authoritative for live ship steering, glide, roll, banking, hover, and ship position. Checkpoint 3 moved progression and score into the core. Checkpoint 4 moves campaign content, stage timing, the speed ladder, spawn policy, quiet windows, structured-mechanic decisions, klaxons, and endless rotation behind the same boundary.
 
 The new code is split into three boundaries:
 
@@ -17,7 +17,7 @@ Project tests live in `Assets/JetHorizon/Tests/Architecture` so they are discove
 Dependencies point inward:
 
 ```text
-Unity input/timing -> simulation core -> snapshot + events -> Unity presentation
+Unity input + world facts -> simulation core -> snapshot + events + commands -> Unity presentation
 ```
 
 The simulation core must never reference Unity, scenes, prefabs, rendering, audio, input devices, saves, analytics, or platform APIs. Unity code may reference the core.
@@ -31,6 +31,9 @@ The simulation core must never reference Unity, scenes, prefabs, rendering, audi
 - deterministic standard-hazard spawning and movement;
 - score, distance, near miss, pickup awards, final multiplier, collision, and death;
 - explicit `WorldFrame` values for temporary engine-owned facts such as intro suspension and overdrive;
+- typed `RunDefinition`/`StageDefinition` content mapped from the existing JSON;
+- deterministic `StageDirector` with an allocation-free `StageCommandBuffer`;
+- live `WaveDirector` adapter for canyon, sine corridor, walls, slalom, and zipper presenters;
 - reused snapshot and event buffers;
 - start, pause, reset, and deterministic replay behavior.
 
@@ -48,7 +51,7 @@ Only then should the corresponding legacy gameplay code be disabled. Presentatio
 
 ## Next checkpoint
 
-Move the live stage, speed, scoring, and hazard state behind engine-neutral APIs, then add:
+Move rendered hazard identity, movement, collision shapes, and pickup spawn decisions behind engine-neutral APIs, then add:
 
 - a `ShipDefinition` with explicit thruster sockets;
 - a GPU-driven procedural starfield presenter;

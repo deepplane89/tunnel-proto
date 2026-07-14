@@ -185,6 +185,54 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Dead));
         }
 
+        [Test]
+        public void StageDirectorAdvancesAndEmitsEngineCommands()
+        {
+            float dt = 1f / 60f;
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("OPEN", StageKind.RandomCones, dt * 2f, 1.5f, 1, 0, density: DensityCurve.Ramp),
+                new StageDefinition("CANYON", StageKind.Corridor, 1f, 2f, 2, 1, CorridorFamily.PreT4A, darkSlabs: true),
+                new StageDefinition("REST", StageKind.Rest, 1f, 2f, 2, 1)
+            });
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false
+            }, 55u, run);
+            simulation.StartRun();
+            var world = new WorldFrame(false, false) { HazardsClear = true };
+
+            simulation.Step(default, world);
+            simulation.Step(default, world);
+
+            Assert.That(simulation.Snapshot.StageIndex, Is.EqualTo(1));
+            Assert.That(simulation.Snapshot.StageName, Is.EqualTo("CANYON"));
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.StageChanged), Is.True);
+
+            simulation.Step(default, world);
+            Assert.That(ContainsCommand(simulation.StageCommands, StageCommandType.WipeHazards), Is.True);
+            Assert.That(ContainsCommand(simulation.StageCommands, StageCommandType.LaunchCorridor), Is.True);
+            Assert.That(simulation.Snapshot.SpawnPattern, Is.EqualTo(SpawnPattern.None));
+
+            world.CanyonActive = true;
+            world.HazardsClear = false;
+            simulation.Step(default, world);
+            Assert.That(simulation.Snapshot.StageIndex, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void RunDefinitionCopiesItsStageArray()
+        {
+            var first = new StageDefinition("A", StageKind.RandomCones, 1f, 1f, 1, 0);
+            var stages = new[] { first };
+            var run = new RunDefinition(36f, stages);
+            stages[0] = new StageDefinition("B", StageKind.Rest, 1f, 1f, 1, 0);
+
+            Assert.That(run.GetStage(0), Is.SameAs(first));
+            Assert.That(run.GetStage(0).Name, Is.EqualTo("A"));
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);
@@ -197,6 +245,13 @@ namespace JetHorizon.Simulation.Tests
         {
             for (int i = 0; i < events.Count; i++)
                 if (events[i].Type == type) return true;
+            return false;
+        }
+
+        static bool ContainsCommand(StageCommandBuffer commands, StageCommandType type)
+        {
+            for (int i = 0; i < commands.Count; i++)
+                if (commands[i].Type == type) return true;
             return false;
         }
     }

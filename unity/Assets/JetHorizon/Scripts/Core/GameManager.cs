@@ -44,11 +44,14 @@ namespace JetHorizon
 
         public GamePhase Phase => State.Phase;
         public SimulationSnapshot CoreSnapshot => _coreSimulation?.Snapshot;
+        public SimulationEventBuffer CoreEvents => _coreSimulation?.Events;
+        public StageCommandBuffer CoreStageCommands => _coreSimulation?.StageCommands;
 
         void Awake()
         {
             if (I != null && I != this) { Destroy(gameObject); return; }
             I = this;
+            var runDefinition = SequenceAsset.Load().ToCoreDefinition();
             _coreSimulation = new JetHorizonSimulation(new SimulationConfig
             {
                 // The core owns live ship motion, score, and distance. Existing Unity
@@ -56,7 +59,7 @@ namespace JetHorizon
                 ProgressionEnabled = true,
                 HazardSpawningEnabled = false,
                 CollisionEnabled = false
-            }, 20260714u);
+            }, 20260714u, runDefinition);
             // Match the web build: 60 fps cap (sim is fixed 60 Hz; rendering above it
             // just shows duplicate sim states as judder on high-refresh displays).
             QualitySettings.vSyncCount = 0;
@@ -110,7 +113,8 @@ namespace JetHorizon
             Camera.SimTick(dt);                                  // 5: pivot follow (fixed part)
 
             if (s.InvincibleTimer > 0f) s.InvincibleTimer = Mathf.Max(0f, s.InvincibleTimer - dt);
-            if (s.RestBeat > 0f) s.RestBeat -= dt;
+            if (!(_coreSimulation?.Snapshot.StageDirectorEnabled ?? false) && s.RestBeat > 0f)
+                s.RestBeat -= dt;
             if (s.PostLaunchGrace > 0f) s.PostLaunchGrace -= dt;
 
             Waves.SimTick(dt);                                   // 16: DR sequencer
@@ -157,7 +161,18 @@ namespace JetHorizon
             var frame = input == null
                 ? default
                 : new InputFrame(input.SteerRight, input.SteerLeft, input.RollHeld ? input.RollDir : 0);
-            _coreSimulation.Step(frame, new WorldFrame(s.IntroActive, s.OverdriveActive));
+            var world = new WorldFrame(s.IntroActive, s.OverdriveActive)
+            {
+                CanyonActive = s.CanyonActive,
+                CanyonExiting = s.CanyonExiting,
+                SineCorridorActive = s.SineCorridorActive,
+                ZipperActive = s.ZipperActive,
+                SlalomActive = s.SlalomActive,
+                AngledWallsActive = s.AngledWallsActive
+            };
+            world.HazardsClear = (Obstacles == null || Obstacles.ActiveHazardCount == 0)
+                && !world.AnyStructuredMechanicActive;
+            _coreSimulation.Step(frame, world);
 
             var snapshot = _coreSimulation.Snapshot;
             SyncCoreSession(snapshot);
@@ -174,6 +189,12 @@ namespace JetHorizon
             Session.Distance = snapshot.Distance;
             Session.PlayerScore = snapshot.Score;
             Session.Speed = snapshot.Speed;
+            if (snapshot.StageDirectorEnabled)
+            {
+                Session.SpeedFloor = snapshot.SpeedFloor;
+                Session.RestBeat = snapshot.RestBeat;
+                Session.PhysTier = snapshot.PhysicsTier;
+            }
             Session.ShipX = snapshot.ShipX;
             Session.ShipY = snapshot.ShipY;
             Session.ShipVelX = snapshot.ShipVelocityX;
@@ -215,9 +236,9 @@ namespace JetHorizon
             if (State.Phase != GamePhase.Title && State.Phase != GamePhase.Dead) return;
 
             Session.ResetForNewRun();
-            ResetAllSystems();
             _coreSimulation.StartRun();
-            _coreSimulation.SetSpeed(Session.Speed);
+            SyncCoreSession();
+            ResetAllSystems();
 
             if (!State.TransitionTo(GamePhase.Playing)) return;
 
@@ -254,8 +275,9 @@ namespace JetHorizon
             if (State.TransitionTo(GamePhase.Title))
             {
                 Session.ResetForNewRun();
-                ResetAllSystems();
                 _coreSimulation.ResetToTitle();
+                SyncCoreSession();
+                ResetAllSystems();
                 Camera.ResetToTitle();
             }
         }

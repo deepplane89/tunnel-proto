@@ -1,11 +1,12 @@
 using UnityEngine;
+using JetHorizon.Simulation;
 
 namespace JetHorizon
 {
     /// <summary>
-    /// The DR sequencer (spec/02 §3-4): drives the 33-stage script, speed ladder,
-    /// deferred speed bumps, pre-canyon quiet windows, klaxon countdown, and the
-    /// endless rotation after the scripted run.
+    /// Unity adapter for the engine-neutral stage director. It realizes core commands
+    /// using the current pooled canyon, slalom, zipper, wall, and obstacle presenters.
+    /// The legacy sequencer remains below as a temporary fallback for content-load failure.
     /// </summary>
     public sealed class WaveDirector : MonoBehaviour, ISimSystem
     {
@@ -20,7 +21,9 @@ namespace JetHorizon
         public string ConeDensity { get; private set; } = "normal";
         public float StageRampT01 { get; private set; }   // for 'ramp' density cadence
         public int StageIndex { get; private set; }
-        public string StageName => _stages != null && StageIndex < _stages.Length ? _stages[StageIndex].name : "—";
+        public string StageName => CoreMode
+            ? GameManager.I.CoreSnapshot.StageName
+            : _stages != null && StageIndex < _stages.Length ? _stages[StageIndex].name : "—";
 
         const float PreCanyonQuietS = 4f;
         const float SpeedDeferDeadline = 8f;
@@ -42,9 +45,16 @@ namespace JetHorizon
         int _endlessIdx; float _endlessT; bool _endlessResting; int _waveCount; int _wavesSinceCorridor;
 
         RunSession S => GameManager.I.Session;
+        bool CoreMode => GameManager.I != null && (GameManager.I.CoreSnapshot?.StageDirectorEnabled ?? false);
 
         public void ResetSystem()
         {
+            if (CoreMode)
+            {
+                SyncFromCore();
+                GameEvents.RaiseVibeChanged(GameManager.I.CoreSnapshot.VibeIndex);
+                return;
+            }
             if (_stages == null) _stages = SequenceAsset.Load().stages;
             StageIndex = 0; _stageElapsed = 0f; _corridorLaunched = false; _klaxonFired = false;
             _structuredWallTimer = 0f;
@@ -61,6 +71,11 @@ namespace JetHorizon
 
         public void SimTick(float dt)
         {
+            if (CoreMode)
+            {
+                TickCoreDirectorAdapter();
+                return;
+            }
             if (_stages == null || _stages.Length == 0) return;
             var s = S;
             var stage = _stages[StageIndex];
@@ -136,6 +151,109 @@ namespace JetHorizon
                     _klaxonFired = true;
                     GameEvents.RaiseKlaxonCountdown();
                 }
+            }
+        }
+
+        void TickCoreDirectorAdapter()
+        {
+            SyncFromCore();
+
+            var events = GameManager.I.CoreEvents;
+            if (events != null)
+            {
+                for (int i = 0; i < events.Count; i++)
+                {
+                    var evt = events[i];
+                    switch (evt.Type)
+                    {
+                        case SimulationEventType.StageChanged:
+                            GameEvents.RaiseStageChanged(evt.EntityId);
+                            break;
+                        case SimulationEventType.SpeedChanged:
+                            GameEvents.RaiseSpeedChanged(evt.ValueA, evt.ValueB);
+                            break;
+                        case SimulationEventType.VibeChanged:
+                            GameEvents.RaiseVibeChanged(evt.EntityId);
+                            break;
+                        case SimulationEventType.KlaxonCountdown:
+                            GameEvents.RaiseKlaxonCountdown();
+                            break;
+                    }
+                }
+            }
+
+            var commands = GameManager.I.CoreStageCommands;
+            if (commands == null) return;
+            for (int i = 0; i < commands.Count; i++) Execute(commands[i]);
+        }
+
+        void SyncFromCore()
+        {
+            var snapshot = GameManager.I.CoreSnapshot;
+            StageIndex = snapshot.StageIndex;
+            ConeDensity = snapshot.Density == DensityCurve.Ramp ? "ramp" : "normal";
+            StageRampT01 = snapshot.StageRamp01;
+            SpawnMode = snapshot.SpawnPattern switch
+            {
+                SpawnPattern.Cones => SpawnMode.Cones,
+                SpawnPattern.FatCones => SpawnMode.FatCones,
+                SpawnPattern.Angled => SpawnMode.Angled,
+                SpawnPattern.Lethal => SpawnMode.Lethal,
+                SpawnPattern.EndlessMix => SpawnMode.EndlessMix,
+                _ => SpawnMode.None
+            };
+        }
+
+        void Execute(StageCommand command)
+        {
+            switch (command.Type)
+            {
+                case StageCommandType.WipeHazards:
+                    Obstacles.WipeAllHazards();
+                    break;
+                case StageCommandType.AbortTransientMechanics:
+                    Zipper.Abort();
+                    Slalom.Abort();
+                    AngledWalls.Abort();
+                    break;
+                case StageCommandType.AbortZipper:
+                    Zipper.Abort();
+                    break;
+                case StageCommandType.LaunchCorridor:
+                    LaunchCoreCorridor(command);
+                    break;
+                case StageCommandType.StartStructuredWalls:
+                    if (!S.AngledWallsActive) AngledWalls.StartStructuredBurst();
+                    break;
+                case StageCommandType.StartSlalom:
+                    if (!S.SlalomActive)
+                        Slalom.Begin(command.ValueA, Mathf.RoundToInt(command.ValueB));
+                    break;
+                case StageCommandType.StartZipper:
+                    if (!S.ZipperActive) Zipper.Begin(Mathf.RoundToInt(command.ValueA));
+                    break;
+            }
+        }
+
+        void LaunchCoreCorridor(StageCommand command)
+        {
+            switch (command.Family)
+            {
+                case CorridorFamily.PreT4A:
+                    Canyon.Activate(CanyonPresets.PreT4A(command.Flag), command.ValueA);
+                    break;
+                case CorridorFamily.PreT4B:
+                    Canyon.Activate(CanyonPresets.PreT4B(), command.ValueA);
+                    break;
+                case CorridorFamily.L3Knife:
+                    Canyon.Activate(CanyonPresets.L3Knife(), command.ValueA);
+                    break;
+                case CorridorFamily.L4Sine:
+                    SineCorridor.Begin(SineCorridorSystem.Kind.L4);
+                    break;
+                case CorridorFamily.L5Sine:
+                    SineCorridor.Begin(SineCorridorSystem.Kind.L5);
+                    break;
             }
         }
 

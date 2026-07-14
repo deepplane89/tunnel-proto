@@ -11,10 +11,12 @@ Current scope:
 - scoring, near misses, and death events;
 - live-run distance, passive score, pickup awards, and final score multiplier;
 - engine-supplied world facts represented as value-only `WorldFrame` input;
+- validated run/stage content with typed stage and corridor definitions;
+- stage timing, speed ladder, spawn policy, quiet windows, mechanic commands, and endless rotation;
 - allocation-free snapshot and event buffers;
 - replay-oriented editor tests.
 
-The shipping `GameManager` now feeds player/world input into the core and mirrors its snapshot into the legacy `RunSession` while the stage director and specialized obstacle families are migrated. Unity still owns rendering, audio, input devices, and platform services.
+The shipping `GameManager` feeds player/world input into the core and mirrors its snapshot into the legacy `RunSession`. `WaveDirector` is now an adapter that realizes core stage commands with the existing pooled obstacle systems. Unity still owns rendering, audio, input devices, and platform services.
 
 ## Revert boundary
 
