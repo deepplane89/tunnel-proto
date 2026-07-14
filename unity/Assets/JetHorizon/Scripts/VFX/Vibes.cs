@@ -18,10 +18,10 @@ namespace JetHorizon
 
         public static readonly Vibe[] All =
         {
-            new Vibe { name = "NEON DAWN",        skyTop = H(0x03070f), skyBot = H(0x08102a), gridColor = H(0x00eeff), sunColor = H(0xff9500), fogColor = H(0x05091a), thrusterColor = H(0x44aaff), nebulaTint = H(0x2244aa), bloomStrength = 0.35f, sunShader = 0 },
+            new Vibe { name = "NEON DAWN",        skyTop = H(0x03070f), skyBot = H(0x08102a), gridColor = H(0x00eeff), sunColor = H(0xff9500), fogColor = H(0x05091a), thrusterColor = H(0xaaddff), nebulaTint = H(0x00eeff), bloomStrength = 0.35f, sunShader = 0 },
             new Vibe { name = "ULTRAVIOLET",      skyTop = H(0x060010), skyBot = H(0x0e0320), gridColor = H(0xdd00ff), sunColor = H(0xcc44ff), fogColor = H(0x080018), thrusterColor = H(0xee00ff), nebulaTint = H(0x661199), bloomStrength = 0.38f, sunShader = 1 },
-            new Vibe { name = "ELECTRIC HORIZON", skyTop = H(0x001510), skyBot = H(0x00291e), gridColor = H(0x00ffcc), sunColor = H(0xff6600), fogColor = H(0x02120c), thrusterColor = H(0x00eeff), nebulaTint = H(0x003388), bloomStrength = 0.38f, sunShader = 0 },
-            new Vibe { name = "ICE STORM",        skyTop = H(0x000000), skyBot = H(0x000c18), gridColor = H(0x55ffff), sunColor = H(0xaaeeff), fogColor = H(0x00080f), thrusterColor = H(0x33aaee), nebulaTint = H(0x003388), bloomStrength = 0.30f, sunShader = 3 },
+            new Vibe { name = "ELECTRIC HORIZON", skyTop = H(0x000000), skyBot = H(0x050002), gridColor = H(0x00ffcc), sunColor = H(0xff6600), fogColor = H(0x020001), thrusterColor = H(0x00eeff), nebulaTint = H(0x00ffcc), bloomStrength = 0.38f, sunShader = 3 },
+            new Vibe { name = "ICE STORM",        skyTop = H(0x000000), skyBot = H(0x000c18), gridColor = H(0x55ffff), sunColor = H(0xaaeeff), fogColor = H(0x00080f), thrusterColor = H(0x88ddff), nebulaTint = H(0x55ffff), bloomStrength = 0.30f, sunShader = 4 },
             new Vibe { name = "VOID SINGULARITY", skyTop = H(0x000000), skyBot = H(0x060400), gridColor = H(0xffcc00), sunColor = H(0xffaa33), fogColor = H(0x030200), thrusterColor = H(0xff9a00), nebulaTint = H(0x110033), bloomStrength = 0.30f, sunShader = 4 },
             new Vibe { name = "CRIMSON VOID",     skyTop = H(0x000000), skyBot = H(0x0f0005), gridColor = H(0xff1050), sunColor = H(0xff4400), fogColor = H(0x080003), thrusterColor = H(0xff3300), nebulaTint = H(0x990022), bloomStrength = 0.42f, sunShader = 2 },
             new Vibe { name = "DEEP VIOLET",      skyTop = H(0x06000f), skyBot = H(0x0a001a), gridColor = H(0xaa44ff), sunColor = H(0xcc88ff), fogColor = H(0x050010), thrusterColor = H(0xee00ff), nebulaTint = H(0x661199), bloomStrength = 0.38f, sunShader = 1 },

@@ -125,19 +125,19 @@ namespace JetHorizon
             if (SunMaterial != null)
             {
                 SunMaterial.SetColor("_SunColor", v.sunColor);
-                bool warped = v.sunShader >= 2;
-                // Keep a visible amount of the source's Quilez plasma motion on the
-                // opening sun too; special sun modes still receive the full warp.
-                SunMaterial.SetFloat("_Warp", warped ? 1f : (v.sunShader == 1 ? 0.20f : 0.38f));
+                // Source progression: plain/UV do not use the explicit crimson warp;
+                // mode 2 does, while ice/gold contain their own dedicated warp branches.
+                SunMaterial.SetFloat("_Warp", v.sunShader == 2 ? 1f : 0f);
                 SunMaterial.SetFloat("_Mode", v.sunShader);
-                // warp palette derived from sun color per branch
-                SunMaterial.SetColor("_WarpCol1", v.sunColor * 0.35f);
-                SunMaterial.SetColor("_WarpCol2", v.sunColor);
+                // Exact crimson Quilez palette from the source shader. Ice and gold
+                // carry their own source palettes in JH_Sun and ignore these values.
+                SunMaterial.SetColor("_WarpCol1", new Color(0.25f, 0.04f, 0.02f));
+                SunMaterial.SetColor("_WarpCol2", new Color(0.85f, 0.15f, 0.04f));
                 Color hot = v.sunShader == 4 ? new Color(1f, 0.95f, 0.6f) :
                             v.sunShader == 3 ? Color.Lerp(v.sunColor, Color.white, 0.4f) :
                             new Color(1f, 0.45f, 0.08f);
                 SunMaterial.SetColor("_WarpCol3", hot);
-                SunMaterial.SetFloat("_Emission", 1.25f);
+                SunMaterial.SetFloat("_Emission", 1f);
             }
             if (WaterMaterial != null)
             {
@@ -207,7 +207,7 @@ namespace JetHorizon
                 var sunFilter = sunTransform != null ? sunTransform.GetComponent<MeshFilter>() : null;
                 if (sunFilter != null)
                 {
-                    _runtimeSunMesh = MeshFactory.Sphere(0.5f, 64, 32);
+                    _runtimeSunMesh = MeshFactory.Sphere(0.5f, 64, 64);
                     sunFilter.sharedMesh = _runtimeSunMesh;
                 }
                 var coronaTransform = SunGroup.Find("Corona");

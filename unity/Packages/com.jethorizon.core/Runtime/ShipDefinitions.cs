@@ -134,8 +134,8 @@ namespace JetHorizon.Simulation
             new ThrusterSocketDefinition(
                 new Float3(-1.600000f, -0.766667f, 2.000000f),
                 new Float3( 1.600000f, -0.766667f, 2.000000f),
-                new Float3(-0.500000f, -0.733333f, 2.000000f),
-                new Float3( 0.533333f, -0.733333f, 2.000000f)));
+                new Float3(-0.733333f, -0.666667f, 2.000000f),
+                new Float3( 0.733333f, -0.666667f, 2.000000f)));
 
         public static ShipDefinition Runner => RunnerDefinition;
     }

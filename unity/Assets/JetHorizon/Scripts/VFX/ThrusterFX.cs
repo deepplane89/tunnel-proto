@@ -23,6 +23,8 @@ namespace JetHorizon
         [Header("Fallback offsets (ship-root-local)")]
         public Vector3 NozzleL = new Vector3(-1.600000f, -0.766667f, 2.000000f);
         public Vector3 NozzleR = new Vector3( 1.600000f, -0.766667f, 2.000000f);
+        public Vector3 MiniNozzleL = new Vector3(-0.733333f, -0.666667f, 2.000000f);
+        public Vector3 MiniNozzleR = new Vector3( 0.733333f, -0.666667f, 2.000000f);
         [Tooltip("Anchor to the imported ship's calibrated socket rig")]
         public bool AutoAnchorToModel = true;
 
@@ -35,16 +37,18 @@ namespace JetHorizon
         static readonly Vector3 RollDownL = new Vector3(-1.833333f, -0.600000f, 2.200000f);
         static readonly Vector3 RollDownR = new Vector3( 1.333333f, -0.633333f, 2.000000f);
 
-        ParticleSystem _particlesL, _particlesR;
-        Transform _bloomL, _bloomR;
-        MeshRenderer _bloomLR, _bloomRR;
+        ParticleSystem _particlesL, _particlesR, _miniParticlesL, _miniParticlesR;
+        Transform _bloomL, _bloomR, _miniBloomL, _miniBloomR;
+        MeshRenderer _bloomLR, _bloomRR, _miniBloomLR, _miniBloomRR;
         MaterialPropertyBlock _bloomMpb;
         Transform _coneL, _coneR;
         Material _matL, _matR;
-        Transform _socketL, _socketR;
+        Transform _socketL, _socketR, _miniSocketL, _miniSocketR;
+        bool _miniThrustersEnabled;
         Light _thrusterLight;
         ThrusterEffectDefinition _effect;
-        Material _fallbackAdditive;
+        Material _runtimeParticleMaterial;
+        Material _runtimeBloomMaterial;
         Texture2D _fallbackTexture;
         Color _color = new Color(0.27f, 0.67f, 1f);
 
@@ -55,7 +59,8 @@ namespace JetHorizon
 
         void OnDestroy()
         {
-            if (_fallbackAdditive != null) Destroy(_fallbackAdditive);
+            if (_runtimeParticleMaterial != null) Destroy(_runtimeParticleMaterial);
+            if (_runtimeBloomMaterial != null) Destroy(_runtimeBloomMaterial);
             if (_fallbackTexture != null) Destroy(_fallbackTexture);
         }
 
@@ -64,6 +69,8 @@ namespace JetHorizon
             _color = Vibes.Get(idx).thrusterColor;
             ApplyParticleColor(_particlesL);
             ApplyParticleColor(_particlesR);
+            ApplyMiniParticleColor(_miniParticlesL);
+            ApplyMiniParticleColor(_miniParticlesR);
             if (_thrusterLight != null) _thrusterLight.color = Color.Lerp(_color, Color.white, 0.18f);
         }
 
@@ -94,8 +101,13 @@ namespace JetHorizon
             {
                 _socketL = rig.MainThrusterLeft;
                 _socketR = rig.MainThrusterRight;
+                _miniSocketL = rig.MiniThrusterLeft;
+                _miniSocketR = rig.MiniThrusterRight;
+                _miniThrustersEnabled = rig.MiniThrustersEnabled;
                 NozzleL = SocketLocal(_socketL, NozzleL);
                 NozzleR = SocketLocal(_socketR, NozzleR);
+                MiniNozzleL = SocketLocal(_miniSocketL, MiniNozzleL);
+                MiniNozzleR = SocketLocal(_miniSocketR, MiniNozzleR);
                 return;
             }
 
@@ -125,11 +137,19 @@ namespace JetHorizon
         // ── LIGHT ────────────────────────────────────────────────────────
         void BuildLight()
         {
-            Material additive = ResolveAdditiveMaterial();
-            _bloomL = MakeSprite("NozzleBloomL", NozzleL, out _bloomLR, additive);
-            _bloomR = MakeSprite("NozzleBloomR", NozzleR, out _bloomRR, additive);
-            _particlesL = MakeParticleStream("ThrusterParticlesL", NozzleL, additive);
-            _particlesR = MakeParticleStream("ThrusterParticlesR", NozzleR, additive);
+            ResolveLightMaterials(out var particleMaterial, out var bloomMaterial);
+            _bloomL = MakeSprite("NozzleBloomL", NozzleL, out _bloomLR, bloomMaterial);
+            _bloomR = MakeSprite("NozzleBloomR", NozzleR, out _bloomRR, bloomMaterial);
+            _particlesL = MakeParticleStream("ThrusterParticlesL", NozzleL, particleMaterial);
+            _particlesR = MakeParticleStream("ThrusterParticlesR", NozzleR, particleMaterial);
+
+            if (_miniThrustersEnabled)
+            {
+                _miniBloomL = MakeSprite("MiniNozzleBloomL", MiniNozzleL, out _miniBloomLR, bloomMaterial);
+                _miniBloomR = MakeSprite("MiniNozzleBloomR", MiniNozzleR, out _miniBloomRR, bloomMaterial);
+                _miniParticlesL = MakeMiniParticleStream("MiniThrusterParticlesL", MiniNozzleL, particleMaterial);
+                _miniParticlesR = MakeMiniParticleStream("MiniThrusterParticlesR", MiniNozzleR, particleMaterial);
+            }
 
             var lightGo = new GameObject("ThrusterCastLight");
             lightGo.transform.SetParent(transform, false);
@@ -137,21 +157,36 @@ namespace JetHorizon
             _thrusterLight = lightGo.AddComponent<Light>();
             _thrusterLight.type = LightType.Point;
             _thrusterLight.color = Color.Lerp(_color, Color.white, 0.18f);
-            _thrusterLight.range = 9f;
+            _thrusterLight.range = 5.5f;
             _thrusterLight.intensity = 0f;
             _thrusterLight.shadows = LightShadows.None;
             _thrusterLight.renderMode = LightRenderMode.ForcePixel;
         }
 
-        Material ResolveAdditiveMaterial()
+        void ResolveLightMaterials(out Material particleMaterial, out Material bloomMaterial)
         {
-            if (AdditiveMaterial != null) return AdditiveMaterial;
-            var shader = Shader.Find("JH/Additive");
-            if (shader == null) return ExhaustMaterial;
-            _fallbackTexture = TextureFactory.RadialSprite();
-            _fallbackAdditive = new Material(shader) { name = "RuntimeThrusterAdditive" };
-            _fallbackAdditive.SetTexture("_MainTex", _fallbackTexture);
-            return _fallbackAdditive;
+            var shader = Shader.Find("JH/ThrusterAdditive");
+            if (shader == null)
+            {
+                particleMaterial = bloomMaterial = AdditiveMaterial != null ? AdditiveMaterial : ExhaustMaterial;
+                return;
+            }
+
+            _runtimeParticleMaterial = new Material(shader) { name = "RuntimeLightThrusterPoints" };
+            _runtimeParticleMaterial.SetTexture("_MainTex", Texture2D.whiteTexture);
+            _runtimeParticleMaterial.SetColor("_Tint", Color.white);
+
+            Texture bloomTexture = AdditiveMaterial != null ? AdditiveMaterial.GetTexture("_MainTex") : null;
+            if (bloomTexture == null)
+            {
+                _fallbackTexture = TextureFactory.RadialSprite();
+                bloomTexture = _fallbackTexture;
+            }
+            _runtimeBloomMaterial = new Material(shader) { name = "RuntimeLightThrusterBloom" };
+            _runtimeBloomMaterial.SetTexture("_MainTex", bloomTexture);
+            _runtimeBloomMaterial.SetColor("_Tint", Color.white);
+            particleMaterial = _runtimeParticleMaterial;
+            bloomMaterial = _runtimeBloomMaterial;
         }
 
         Transform MakeSprite(string name, Vector3 localPos, out MeshRenderer mr, Material material)
@@ -180,9 +215,10 @@ namespace JetHorizon
             main.loop = true;
             main.playOnAwake = false;
             main.duration = 1f;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(0.22f, 0.42f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(4.2f, 7.0f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.10f, 0.16f);
+            // LIGHT preset: (lifeMin .05 + jitter .05) * lifeBase .20.
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.01f, 0.02f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(4.0f, 6.0f);
+            main.startSize = 0.06f;
             main.startRotation = new ParticleSystem.MinMaxCurve(-Mathf.PI, Mathf.PI);
             main.startColor = Color.white;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
@@ -191,20 +227,16 @@ namespace JetHorizon
             main.gravityModifier = 0f;
 
             var emission = ps.emission;
-            emission.rateOverTime = 820f;
+            // The source maintains a fully populated 160-point buffer.
+            emission.rateOverTime = 12000f;
 
             var shape = ps.shape;
             shape.enabled = true;
-            shape.shapeType = ParticleSystemShapeType.Cone;
-            shape.angle = 2.5f;
-            shape.radius = 0.07f;
-            shape.radiusThickness = 1f;
-            shape.length = 0.04f;
+            shape.shapeType = ParticleSystemShapeType.Rectangle;
+            shape.scale = new Vector3(0.07f, 0.07f, 0.001f);
 
             var size = ps.sizeOverLifetime;
-            size.enabled = true;
-            size.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
-                new Keyframe(0f, 1.55f), new Keyframe(0.12f, 1.18f), new Keyframe(0.62f, 0.62f), new Keyframe(1f, 0.08f)));
+            size.enabled = false;
 
             var renderer = ps.GetComponent<ParticleSystemRenderer>();
             renderer.sharedMaterial = material;
@@ -220,6 +252,24 @@ namespace JetHorizon
             return ps;
         }
 
+        ParticleSystem MakeMiniParticleStream(string name, Vector3 localPos, Material material)
+        {
+            var ps = MakeParticleStream(name, localPos, material);
+            var main = ps.main;
+            main.startLifetime = 0.01f;
+            main.startSpeed = new ParticleSystem.MinMaxCurve(1.3f, 1.7f);
+            main.startSize = 0.09f;
+            main.maxParticles = 50;
+
+            var emission = ps.emission;
+            emission.rateOverTime = 5000f;
+
+            var shape = ps.shape;
+            shape.scale = new Vector3(0.08f, 0.08f, 0.001f);
+            ApplyMiniParticleColor(ps);
+            return ps;
+        }
+
         void ApplyParticleColor(ParticleSystem ps)
         {
             if (ps == null) return;
@@ -229,16 +279,36 @@ namespace JetHorizon
             gradient.SetKeys(
                 new[]
                 {
-                    new GradientColorKey(new Color(1f, 0.94f, 0.88f), 0f),
-                    new GradientColorKey(Color.Lerp(_color, Color.white, 0.18f), 0.12f),
-                    new GradientColorKey(_color, 0.55f),
-                    new GradientColorKey(_color * 0.25f, 1f),
+                    new GradientColorKey(new Color(1f, 0.85f, 0.85f), 0f),
+                    new GradientColorKey(_color, 0.10f),
+                    new GradientColorKey(Color.black, 1f),
                 },
                 new[]
                 {
-                    new GradientAlphaKey(0.96f, 0f),
-                    new GradientAlphaKey(0.70f, 0.18f),
-                    new GradientAlphaKey(0.30f, 0.72f),
+                    new GradientAlphaKey(0.48f, 0f),
+                    new GradientAlphaKey(0.48f, 0.90f),
+                    new GradientAlphaKey(0f, 1f),
+                });
+            color.color = gradient;
+        }
+
+        void ApplyMiniParticleColor(ParticleSystem ps)
+        {
+            if (ps == null) return;
+            var color = ps.colorOverLifetime;
+            color.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(_color, 0f),
+                    new GradientColorKey(_color, 0.10f),
+                    new GradientColorKey(Color.black, 1f),
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0.48f, 0f),
+                    new GradientAlphaKey(0.48f, 0.90f),
                     new GradientAlphaKey(0f, 1f),
                 });
             color.color = gradient;
@@ -289,6 +359,19 @@ namespace JetHorizon
 
             SetStreamActive(_particlesL, on, speedFrac);
             SetStreamActive(_particlesR, on, speedFrac);
+            if (_miniThrustersEnabled)
+            {
+                Vector3 miniNozzleL = SocketLocal(_miniSocketL, MiniNozzleL);
+                Vector3 miniNozzleR = SocketLocal(_miniSocketR, MiniNozzleR);
+                PositionEmitter(_miniParticlesL, miniNozzleL);
+                PositionEmitter(_miniParticlesR, miniNozzleR);
+                _miniBloomL.localPosition = miniNozzleL;
+                _miniBloomR.localPosition = miniNozzleR;
+                SetStreamActive(_miniParticlesL, on, speedFrac, true);
+                SetStreamActive(_miniParticlesR, on, speedFrac, true);
+                _miniBloomL.gameObject.SetActive(on);
+                _miniBloomR.gameObject.SetActive(on);
+            }
             _bloomL.gameObject.SetActive(on);
             _bloomR.gameObject.SetActive(on);
             if (!on)
@@ -302,11 +385,16 @@ namespace JetHorizon
             {
                 _bloomL.rotation = cam.transform.rotation;
                 _bloomR.rotation = cam.transform.rotation;
+                if (_miniThrustersEnabled)
+                {
+                    _miniBloomL.rotation = cam.transform.rotation;
+                    _miniBloomR.rotation = cam.transform.rotation;
+                }
             }
 
             float pulseWave = 0.86f + 0.14f * Mathf.Sin(Time.time * 22f);
-            float bloomOpacity = Mathf.Lerp(0.68f, 0.92f, speedFrac) * pulseWave;
-            Color bloomCol = Color.Lerp(_color, Color.white, 0.20f);
+            float bloomOpacity = 0.43f * (0.85f + 0.15f * Mathf.Sin(Time.time * 8f));
+            Color bloomCol = _color;
             bloomCol.a = bloomOpacity;
             _bloomMpb.Clear();
             _bloomMpb.SetColor(TintId, bloomCol);
@@ -315,15 +403,30 @@ namespace JetHorizon
 
             // Source bloom is 0.6 at idle and grows with speed; these are ship-local
             // values, so the root's .30 scale reproduces its visible world footprint.
-            float bloomSize = Mathf.Lerp(0.90f, 1.58f, speedFrac) * pulseWave;
+            float sourceSpeedScale = Mathf.Clamp(s.EffectiveSpeed / Tuning.BaseSpeed, 0f, 2.6f);
+            float bloomSize = (0.6f + sourceSpeedScale * 0.7f) * 0.80f * 0.10f;
             _bloomL.localScale = Vector3.one * bloomSize;
             _bloomR.localScale = Vector3.one * bloomSize;
+
+            if (_miniThrustersEnabled)
+            {
+                float miniBloomOpacity = 0.15f + sourceSpeedScale * 0.15f;
+                Color miniBloomCol = _color;
+                miniBloomCol.a = miniBloomOpacity;
+                _bloomMpb.Clear();
+                _bloomMpb.SetColor(TintId, miniBloomCol);
+                _miniBloomLR.SetPropertyBlock(_bloomMpb);
+                _miniBloomRR.SetPropertyBlock(_bloomMpb);
+                float miniBloomSize = 0.25f + sourceSpeedScale * 0.25f;
+                _miniBloomL.localScale = Vector3.one * miniBloomSize;
+                _miniBloomR.localScale = Vector3.one * miniBloomSize;
+            }
 
             if (_thrusterLight != null)
             {
                 _thrusterLight.transform.localPosition = Vector3.Lerp(nozzleL, nozzleR, 0.5f) + new Vector3(0f, 0.08f, 0.12f);
                 _thrusterLight.color = Color.Lerp(_color, Color.white, 0.18f);
-                _thrusterLight.intensity = Mathf.Lerp(4.5f, 8.5f, speedFrac) * pulseWave;
+                _thrusterLight.intensity = Mathf.Lerp(1.2f, 2.2f, speedFrac) * pulseWave;
             }
         }
 
@@ -366,14 +469,15 @@ namespace JetHorizon
             }
         }
 
-        static void SetStreamActive(ParticleSystem ps, bool on, float speedFrac)
+        static void SetStreamActive(ParticleSystem ps, bool on, float speedFrac, bool mini = false)
         {
             var main = ps.main;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(
-                Mathf.Lerp(0.22f, 0.30f, speedFrac),
-                Mathf.Lerp(0.42f, 0.58f, speedFrac));
+            float sourceSpeedScale = Mathf.Clamp(speedFrac * 2.5f, 0f, 2.6f);
+            main.startSpeed = mini
+                ? new ParticleSystem.MinMaxCurve(0.8f + sourceSpeedScale * 0.5f, 1.2f + sourceSpeedScale * 0.5f)
+                : new ParticleSystem.MinMaxCurve(2.5f + sourceSpeedScale * 1.5f, 4.5f + sourceSpeedScale * 1.5f);
             var emission = ps.emission;
-            emission.rateOverTime = Mathf.Lerp(820f, 1180f, speedFrac);
+            emission.rateOverTime = mini ? 5000f : 12000f;
             if (on)
             {
                 if (!ps.isPlaying) ps.Play();

@@ -708,6 +708,9 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(ship.Thrusters.MainRight.X, Is.EqualTo(1.600000f));
             Assert.That(ship.Thrusters.MainLeft.Y, Is.EqualTo(-0.766667f).Within(0.000001f));
             Assert.That(ship.Thrusters.MainLeft.Z, Is.EqualTo(2.000000f));
+            Assert.That(ship.Thrusters.MiniLeft.X, Is.EqualTo(-0.733333f).Within(0.000001f));
+            Assert.That(ship.Thrusters.MiniRight.X, Is.EqualTo(0.733333f).Within(0.000001f));
+            Assert.That(ship.Thrusters.MiniLeft.Y, Is.EqualTo(-0.666667f).Within(0.000001f));
             Assert.That(ship.Thrusters.MiniThrustersEnabled, Is.True);
         }
 
