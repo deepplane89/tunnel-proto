@@ -28,6 +28,7 @@ namespace JetHorizon.Simulation
         float _distance;
         float _score;
         float _speed;
+        float _effectiveSpeed;
         float _shipX;
         float _shipY;
         float _shipVelocityX;
@@ -99,12 +100,28 @@ namespace JetHorizon.Simulation
         {
             Events.Clear();
             if (Phase == CoreGamePhase.Dead) return;
+            ApplyFinalScoreMultiplier();
             Phase = CoreGamePhase.Dead;
             Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, 0, _score, _distance));
             RefreshSnapshot();
         }
 
+        public void AwardScore(float amount, ScoreSource source, int entityId = 0)
+        {
+            if (float.IsNaN(amount) || float.IsInfinity(amount) || amount < 0f)
+                throw new ArgumentOutOfRangeException(nameof(amount));
+            if (amount == 0f || Phase == CoreGamePhase.Dead) return;
+            _score += amount;
+            Events.Add(new SimulationEvent(SimulationEventType.ScoreChanged, entityId, _score, (float)source));
+            RefreshSnapshot();
+        }
+
         public void Step(InputFrame input)
+        {
+            Step(input, default);
+        }
+
+        public void Step(InputFrame input, WorldFrame world)
         {
             Events.Clear();
             if (Phase != CoreGamePhase.Playing)
@@ -119,8 +136,9 @@ namespace JetHorizon.Simulation
 
             UpdateShip(input, dt);
 
-            float step = _speed * dt;
-            if (_config.ProgressionEnabled)
+            _effectiveSpeed = world.OverdriveActive ? _speed * 1.8f : _speed;
+            float step = _effectiveSpeed * dt;
+            if (_config.ProgressionEnabled && !world.ProgressionSuspended)
             {
                 _distance += step;
                 _score += _config.ScoreRatePerSecond * Math.Max(1f, _speed / _config.BaseSpeed) * dt;
@@ -149,6 +167,7 @@ namespace JetHorizon.Simulation
             _distance = 0f;
             _score = 0f;
             _speed = _config.BaseSpeed * _config.StartSpeedMultiplier;
+            _effectiveSpeed = _speed;
             _shipX = 0f;
             _shipY = _config.ShipHoverY;
             _shipVelocityX = 0f;
@@ -284,6 +303,7 @@ namespace JetHorizon.Simulation
                 {
                     hazard.Active = false;
                     _hazards[i] = hazard;
+                    ApplyFinalScoreMultiplier();
                     Phase = CoreGamePhase.Dead;
                     Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, hazard.Id, _score, _distance));
                     return;
@@ -295,7 +315,7 @@ namespace JetHorizon.Simulation
                     && dz < _config.NearMissDepth)
                 {
                     hazard.NearMissArmed = false;
-                    _score += _config.NearMissScore;
+                    AwardScore(_config.NearMissScore, ScoreSource.NearMiss, hazard.Id);
                     Events.Add(new SimulationEvent(SimulationEventType.NearMiss, hazard.Id, _score, 0f));
                 }
 
@@ -311,6 +331,7 @@ namespace JetHorizon.Simulation
             Snapshot.Distance = _distance;
             Snapshot.Score = _score;
             Snapshot.Speed = _speed;
+            Snapshot.EffectiveSpeed = _effectiveSpeed;
             Snapshot.ShipX = _shipX;
             Snapshot.ShipY = _shipY;
             Snapshot.ShipZ = _config.ShipZ;
@@ -342,6 +363,18 @@ namespace JetHorizon.Simulation
             float delta = target - current;
             if (Math.Abs(delta) <= maximumDelta) return target;
             return current + Math.Sign(delta) * maximumDelta;
+        }
+
+        void ApplyFinalScoreMultiplier()
+        {
+            float steps = (float)Math.Floor(_distance / _config.DistanceBonusStep);
+            float multiplier = Math.Max(1f, 1f + steps * _config.DistanceBonusPerStep);
+            _score = (float)Math.Floor(_score) * multiplier;
+            Events.Add(new SimulationEvent(
+                SimulationEventType.ScoreChanged,
+                0,
+                _score,
+                (float)ScoreSource.FinalMultiplier));
         }
     }
 }

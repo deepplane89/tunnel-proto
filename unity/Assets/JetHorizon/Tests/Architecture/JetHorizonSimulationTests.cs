@@ -139,6 +139,52 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(simulation.Snapshot.ShipX, Is.GreaterThan(xBeforePause));
         }
 
+        [Test]
+        public void WorldFrameSuspendsProgressAndAppliesOverdriveDistance()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false
+            }, 31u);
+            simulation.StartRun();
+
+            simulation.Step(default, new WorldFrame(true, false));
+            Assert.That(simulation.Snapshot.Elapsed, Is.GreaterThan(0f));
+            Assert.That(simulation.Snapshot.Distance, Is.Zero);
+            Assert.That(simulation.Snapshot.Score, Is.Zero);
+
+            simulation.Step(default, new WorldFrame(false, true));
+            float expectedDistance = simulation.Snapshot.Speed * 1.8f * simulation.FixedDeltaSeconds;
+            Assert.That(simulation.Snapshot.EffectiveSpeed, Is.EqualTo(simulation.Snapshot.Speed * 1.8f));
+            Assert.That(simulation.Snapshot.Distance, Is.EqualTo(expectedDistance).Within(0.0001f));
+            Assert.That(simulation.Snapshot.Score, Is.GreaterThan(0f));
+        }
+
+        [Test]
+        public void ExternalAwardsAndDeathMultiplierAreCoreOwned()
+        {
+            var config = new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false,
+                DistanceBonusStep = 1f,
+                DistanceBonusPerStep = 0.1f
+            };
+            var simulation = new JetHorizonSimulation(config, 44u);
+            simulation.StartRun();
+            simulation.SetSpeed(60f);
+            simulation.Step(default); // one metre, giving a 1.1x final multiplier
+            simulation.AwardScore(75f, ScoreSource.Pickup);
+            float beforeDeath = simulation.Snapshot.Score;
+
+            simulation.ForcePlayerDeath();
+
+            Assert.That(beforeDeath, Is.GreaterThan(75f));
+            Assert.That(simulation.Snapshot.Score, Is.EqualTo((float)System.Math.Floor(beforeDeath) * 1.1f).Within(0.0001f));
+            Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Dead));
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);

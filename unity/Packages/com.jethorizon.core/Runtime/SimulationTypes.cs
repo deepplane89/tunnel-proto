@@ -24,11 +24,37 @@ namespace JetHorizon.Simulation
         }
     }
 
+    /// <summary>
+    /// Engine-facing facts that affect a simulation tick but are still presented by the
+    /// host during migration. These are values, not callbacks or engine objects.
+    /// </summary>
+    public struct WorldFrame
+    {
+        public bool ProgressionSuspended;
+        public bool OverdriveActive;
+
+        public WorldFrame(bool progressionSuspended, bool overdriveActive)
+        {
+            ProgressionSuspended = progressionSuspended;
+            OverdriveActive = overdriveActive;
+        }
+    }
+
+    public enum ScoreSource
+    {
+        Passive,
+        NearMiss,
+        Pickup,
+        Bonus,
+        FinalMultiplier
+    }
+
     public enum SimulationEventType
     {
         RunStarted,
         HazardSpawned,
         NearMiss,
+        ScoreChanged,
         PlayerDied
     }
 
@@ -102,6 +128,7 @@ namespace JetHorizon.Simulation
         public float Distance { get; internal set; }
         public float Score { get; internal set; }
         public float Speed { get; internal set; }
+        public float EffectiveSpeed { get; internal set; }
         public float ShipX { get; internal set; }
         public float ShipY { get; internal set; }
         public float ShipZ { get; internal set; }

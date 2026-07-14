@@ -50,6 +50,8 @@ namespace JetHorizon.Simulation
         public float NearMissBand = 0.6f;
         public float NearMissDepth = 2f;
         public float NearMissScore = 25f;
+        public float DistanceBonusStep = 5000f;
+        public float DistanceBonusPerStep = 0.1f;
         public int MaxHazards = 64;
         public bool CollisionEnabled = true;
         public bool ProgressionEnabled = true;
@@ -72,6 +74,7 @@ namespace JetHorizon.Simulation
             if (MaxHazards <= 0) throw new InvalidOperationException("MaxHazards must be positive.");
             if (SpawnIntervalDistance <= 0f) throw new InvalidOperationException("SpawnIntervalDistance must be positive.");
             if (RollMaxRadians <= 0f) throw new InvalidOperationException("RollMaxRadians must be positive.");
+            if (DistanceBonusStep <= 0f) throw new InvalidOperationException("DistanceBonusStep must be positive.");
         }
     }
 }

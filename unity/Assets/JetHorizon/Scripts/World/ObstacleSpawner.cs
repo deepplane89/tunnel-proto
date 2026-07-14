@@ -292,8 +292,7 @@ namespace JetHorizon
                 if (c.NearMissArmed > 0f && dx > colDistX && dx < colDistX + Tuning.NearMissBand && dz < Tuning.NearMissZ)
                 {
                     c.NearMissArmed = 0f;
-                    s.PlayerScore += Tuning.NearMissScore;
-                    GameEvents.RaiseNearMiss();
+                    GameManager.I.ReportNearMiss();
                 }
             }
 

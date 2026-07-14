@@ -2,7 +2,7 @@
 
 ## Status
 
-Checkpoint 1 established the reversible package and adapters. Checkpoint 2 makes the core authoritative for live ship steering, glide, roll, banking, hover, and ship position through the existing `GameManager`.
+Checkpoint 1 established the reversible package and adapters. Checkpoint 2 made the core authoritative for live ship steering, glide, roll, banking, hover, and ship position. Checkpoint 3 moves elapsed time, distance, passive score, near-miss and pickup awards, overdrive distance, and the game-over multiplier into the same core.
 
 The new code is split into three boundaries:
 
@@ -29,7 +29,8 @@ The simulation core must never reference Unity, scenes, prefabs, rendering, audi
 - lateral acceleration, glide, counter-steer, banking, and knife-edge roll;
 - roll-aware ship collision width;
 - deterministic standard-hazard spawning and movement;
-- score, near miss, collision, and death;
+- score, distance, near miss, pickup awards, final multiplier, collision, and death;
+- explicit `WorldFrame` values for temporary engine-owned facts such as intro suspension and overdrive;
 - reused snapshot and event buffers;
 - start, pause, reset, and deterministic replay behavior.
 

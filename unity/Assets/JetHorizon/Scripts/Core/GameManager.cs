@@ -51,9 +51,9 @@ namespace JetHorizon
             I = this;
             _coreSimulation = new JetHorizonSimulation(new SimulationConfig
             {
-                // Migration checkpoint 1: the core owns live ship motion. Existing Unity
-                // systems temporarily retain stage progression, scoring, and hazards.
-                ProgressionEnabled = false,
+                // The core owns live ship motion, score, and distance. Existing Unity
+                // systems temporarily retain the stage director and rendered hazards.
+                ProgressionEnabled = true,
                 HazardSpawningEnabled = false,
                 CollisionEnabled = false
             }, 20260714u);
@@ -105,19 +105,9 @@ namespace JetHorizon
         {
             var s = Session;
             _killedThisFrame = false;
-            s.Elapsed += dt;
-
-            float eff = s.EffectiveSpeed;
-
             TickCoreShip(dt);                                    // engine-neutral input→snapshot→Unity presentation
+            float eff = s.EffectiveSpeed;
             Camera.SimTick(dt);                                  // 5: pivot follow (fixed part)
-
-            if (!s.IntroActive)
-                s.Distance += eff * dt;
-
-            // Score accumulation (playerScore per frame)
-            if (!s.IntroActive)
-                s.PlayerScore += Tuning.ScoreRatePerSec * Mathf.Max(1f, s.Speed / Tuning.BaseSpeed) * dt;
 
             if (s.InvincibleTimer > 0f) s.InvincibleTimer = Mathf.Max(0f, s.InvincibleTimer - dt);
             if (s.RestBeat > 0f) s.RestBeat -= dt;
@@ -160,24 +150,50 @@ namespace JetHorizon
             }
 
             _coreSimulation.SetSpeed(Session.Speed);
+            var s = Session;
             var input = Ship.Input;
             // Unity's gameplay camera faces -Z, making screen-left world +X. The adapter
             // swaps left/right so the engine-neutral core keeps conventional coordinates.
             var frame = input == null
                 ? default
                 : new InputFrame(input.SteerRight, input.SteerLeft, input.RollHeld ? input.RollDir : 0);
-            _coreSimulation.Step(frame);
+            _coreSimulation.Step(frame, new WorldFrame(s.IntroActive, s.OverdriveActive));
 
             var snapshot = _coreSimulation.Snapshot;
+            SyncCoreSession(snapshot);
+            Session.RollHeld = input != null && input.RollHeld;
+            Session.RollDir = input != null ? input.RollDir : 0;
+            Ship.ApplyCorePresentation(snapshot, dt);
+        }
+
+        void SyncCoreSession(SimulationSnapshot snapshot = null)
+        {
+            snapshot ??= _coreSimulation?.Snapshot;
+            if (snapshot == null) return;
+            Session.Elapsed = snapshot.Elapsed;
+            Session.Distance = snapshot.Distance;
+            Session.PlayerScore = snapshot.Score;
+            Session.Speed = snapshot.Speed;
             Session.ShipX = snapshot.ShipX;
             Session.ShipY = snapshot.ShipY;
             Session.ShipVelX = snapshot.ShipVelocityX;
             Session.RollAngle = snapshot.ShipRollRadians;
             Session.BankRoll = snapshot.ShipBankRadians;
             Session.TiltTimer = snapshot.ShipTiltTimer;
-            Session.RollHeld = input != null && input.RollHeld;
-            Session.RollDir = input != null ? input.RollDir : 0;
-            Ship.ApplyCorePresentation(snapshot, dt);
+        }
+
+        public void ReportNearMiss()
+        {
+            _coreSimulation?.AwardScore(Tuning.NearMissScore, ScoreSource.NearMiss);
+            SyncCoreSession();
+            GameEvents.RaiseNearMiss();
+        }
+
+        public void ReportCoinCollected()
+        {
+            _coreSimulation?.AwardScore(Tuning.CoinScore, ScoreSource.Pickup);
+            SyncCoreSession();
+            GameEvents.RaiseCoinCollected();
         }
 
         bool CanSpawnWaves()
@@ -262,10 +278,7 @@ namespace JetHorizon
             _killedThisFrame = true;
             _deathTimer = 0f;
             _coreSimulation?.ForcePlayerDeath();
-
-            // Final score: playerScore × distance bonus
-            float distBonus = Mathf.Max(1f, 1f + Mathf.Floor(s.Distance / 5000f) * 0.1f);
-            s.PlayerScore = Mathf.Floor(s.PlayerScore) * distBonus;
+            SyncCoreSession();
 
             State.TransitionTo(GamePhase.Dead);
             Camera.OnPlayerDied(new Vector3(s.ShipX, s.ShipY, Tuning.ShipZ));

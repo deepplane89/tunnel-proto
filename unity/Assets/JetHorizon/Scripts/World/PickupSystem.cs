@@ -132,8 +132,7 @@ namespace JetHorizon
                 if (dx < 1.6f && dz < 1.6f)
                 {
                     c.Active = false; c.T.gameObject.SetActive(false);
-                    s.PlayerScore += Tuning.CoinScore;
-                    GameEvents.RaiseCoinCollected();
+                    GameManager.I.ReportCoinCollected();
                 }
             }
         }
