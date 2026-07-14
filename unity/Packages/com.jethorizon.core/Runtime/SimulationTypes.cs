@@ -78,6 +78,7 @@ namespace JetHorizon.Simulation
         SpeedChanged,
         VibeChanged,
         KlaxonCountdown,
+        PickupCollected,
         PlayerDied
     }
 
@@ -197,12 +198,62 @@ namespace JetHorizon.Simulation
         }
     }
 
+    public enum PickupKind
+    {
+        Coin,
+        Powerup
+    }
+
+    public struct PickupSpawn
+    {
+        public PickupKind Kind;
+        public float X;
+        public float Y;
+        public float Z;
+        public float ScoreValue;
+        public float CollectHalfWidth;
+        public float CollectHalfDepth;
+
+        public static PickupSpawn Coin(float x, float y, float z, float scoreValue = 75f)
+        {
+            return new PickupSpawn
+            {
+                Kind = PickupKind.Coin,
+                X = x,
+                Y = y,
+                Z = z,
+                ScoreValue = scoreValue,
+                CollectHalfWidth = 1.6f,
+                CollectHalfDepth = 1.6f
+            };
+        }
+    }
+
+    public struct PickupSnapshot
+    {
+        public int Id { get; }
+        public PickupKind Kind { get; }
+        public float X { get; }
+        public float Y { get; }
+        public float Z { get; }
+
+        internal PickupSnapshot(int id, PickupKind kind, float x, float y, float z)
+        {
+            Id = id;
+            Kind = kind;
+            X = x;
+            Y = y;
+            Z = z;
+        }
+    }
+
     /// <summary>
     /// Reused read-only view of simulation state. Presenters read this; they never mutate gameplay state.
     /// </summary>
     public sealed class SimulationSnapshot
     {
         readonly HazardSnapshot[] _hazards;
+        readonly PickupSnapshot[] _pickups;
 
         public CoreGamePhase Phase { get; internal set; }
         public long Tick { get; internal set; }
@@ -230,10 +281,12 @@ namespace JetHorizon.Simulation
         public DensityCurve Density { get; internal set; }
         public float StageRamp01 { get; internal set; }
         public int HazardCount { get; internal set; }
+        public int PickupCount { get; internal set; }
 
-        internal SimulationSnapshot(int maxHazards)
+        internal SimulationSnapshot(int maxHazards, int maxPickups)
         {
             _hazards = new HazardSnapshot[maxHazards];
+            _pickups = new PickupSnapshot[maxPickups];
         }
 
         public HazardSnapshot GetHazard(int index)
@@ -243,5 +296,13 @@ namespace JetHorizon.Simulation
         }
 
         internal void SetHazard(int index, HazardSnapshot hazard) => _hazards[index] = hazard;
+
+        public PickupSnapshot GetPickup(int index)
+        {
+            if (index < 0 || index >= PickupCount) throw new ArgumentOutOfRangeException(nameof(index));
+            return _pickups[index];
+        }
+
+        internal void SetPickup(int index, PickupSnapshot pickup) => _pickups[index] = pickup;
     }
 }

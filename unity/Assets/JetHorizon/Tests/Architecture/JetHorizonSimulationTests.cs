@@ -308,6 +308,26 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
         }
 
+        [Test]
+        public void RegisteredCoinMovesCollectsAndAwardsScoreInCore()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false
+            }, 93u);
+            simulation.StartRun();
+            int id = simulation.RegisterPickup(PickupSpawn.Coin(0f, 1.2f, 3f, 75f));
+            Assert.That(id, Is.GreaterThan(0));
+            Assert.That(simulation.Snapshot.PickupCount, Is.EqualTo(1));
+
+            simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.PickupCount, Is.Zero);
+            Assert.That(simulation.Snapshot.Score, Is.GreaterThan(75f));
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.PickupCollected), Is.True);
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);

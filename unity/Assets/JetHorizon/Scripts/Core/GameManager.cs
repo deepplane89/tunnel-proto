@@ -63,7 +63,8 @@ namespace JetHorizon
                 HazardSpawningEnabled = false,
                 HazardSimulationEnabled = true,
                 CollisionEnabled = true,
-                MaxHazards = 600
+                MaxHazards = 600,
+                MaxPickups = 128
             }, 20260714u, runDefinition);
             _applicationEvents = new RunEventRouter(UnityGameServicesFactory.CreateDefault());
             // Match the web build: 60 fps cap (sim is fixed 60 Hz; rendering above it
@@ -235,6 +236,8 @@ namespace JetHorizon
         public int RegisterHazard(HazardSpawn spawn) => _coreSimulation?.RegisterHazard(spawn) ?? 0;
         public bool RemoveHazard(int id) => _coreSimulation != null && _coreSimulation.RemoveHazard(id);
         public void ClearRegisteredHazards() => _coreSimulation?.ClearHazards();
+        public int RegisterPickup(PickupSpawn spawn) => _coreSimulation?.RegisterPickup(spawn) ?? 0;
+        public void ClearRegisteredPickups() => _coreSimulation?.ClearPickups();
 
         void DispatchCorePresentationEvents()
         {
@@ -242,8 +245,15 @@ namespace JetHorizon
             if (events == null) return;
             for (int i = 0; i < events.Count; i++)
             {
-                if (events[i].Type == SimulationEventType.NearMiss)
-                    GameEvents.RaiseNearMiss();
+                switch (events[i].Type)
+                {
+                    case SimulationEventType.NearMiss:
+                        GameEvents.RaiseNearMiss();
+                        break;
+                    case SimulationEventType.PickupCollected:
+                        GameEvents.RaiseCoinCollected();
+                        break;
+                }
             }
         }
 

@@ -49,6 +49,11 @@ namespace JetHorizon.Application
                     _services.Analytics.Track(new AnalyticsEvent("near_miss", simulationEvent.ValueA));
                     break;
 
+                case SimulationEventType.PickupCollected:
+                    _services.Audio.Play(AudioCue.Pickup);
+                    _services.Haptics.Play(HapticCue.Light);
+                    break;
+
                 case SimulationEventType.PlayerDied:
                     _services.Audio.Play(AudioCue.PlayerDied);
                     _services.Haptics.Play(HapticCue.Impact);

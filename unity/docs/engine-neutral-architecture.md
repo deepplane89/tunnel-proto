@@ -39,6 +39,7 @@ Platform effects are one-way: simulation events enter the application router, wh
 - typed `HazardSpawn`/`HazardSnapshot` entities with stable registration IDs;
 - separate automatic-spawn and hazard-simulation switches for incremental presenter migration;
 - engine-neutral cone/AABB and octagonal-ring collision with explicit suppression input;
+- live pooled coins registered as `PickupSpawn` entities with core collection and score ownership;
 - reused snapshot and event buffers;
 - start, pause, reset, and deterministic replay behavior.
 
@@ -56,7 +57,7 @@ Only then should the corresponding legacy gameplay code be disabled. Presentatio
 
 ## Next checkpoint
 
-Move angled-wall/corridor collision and pickup identity/spawn decisions behind engine-neutral APIs. After that, add:
+Move angled-wall/corridor collision and wave/pickup spawn decisions behind engine-neutral APIs. After that, add:
 
 - a `ShipDefinition` with explicit thruster sockets;
 - a GPU-driven procedural starfield presenter;

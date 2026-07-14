@@ -53,10 +53,12 @@ namespace JetHorizon.Simulation
         public float DistanceBonusStep = 5000f;
         public float DistanceBonusPerStep = 0.1f;
         public int MaxHazards = 64;
+        public int MaxPickups = 128;
         public bool CollisionEnabled = true;
         public bool ProgressionEnabled = true;
         public bool HazardSpawningEnabled = true;
         public bool HazardSimulationEnabled = true;
+        public bool PickupSimulationEnabled = true;
 
         public float Acceleration => (AccelBase + Snap * AccelSnap) * AccelMultiplier;
         public float Deceleration => (10f + Snap * 26f) * DecelBasePercent;
@@ -73,6 +75,7 @@ namespace JetHorizon.Simulation
             if (FixedDeltaSeconds <= 0f) throw new InvalidOperationException("FixedDeltaSeconds must be positive.");
             if (LaneCount <= 0) throw new InvalidOperationException("LaneCount must be positive.");
             if (MaxHazards <= 0) throw new InvalidOperationException("MaxHazards must be positive.");
+            if (MaxPickups <= 0) throw new InvalidOperationException("MaxPickups must be positive.");
             if (SpawnIntervalDistance <= 0f) throw new InvalidOperationException("SpawnIntervalDistance must be positive.");
             if (RollMaxRadians <= 0f) throw new InvalidOperationException("RollMaxRadians must be positive.");
             if (DistanceBonusStep <= 0f) throw new InvalidOperationException("DistanceBonusStep must be positive.");

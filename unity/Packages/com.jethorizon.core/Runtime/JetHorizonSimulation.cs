@@ -24,10 +24,24 @@ namespace JetHorizon.Simulation
             public float RingTubeRadius;
         }
 
+        struct PickupState
+        {
+            public bool Active;
+            public int Id;
+            public PickupKind Kind;
+            public float X;
+            public float Y;
+            public float Z;
+            public float ScoreValue;
+            public float CollectHalfWidth;
+            public float CollectHalfDepth;
+        }
+
         readonly SimulationConfig _config;
         readonly uint _seed;
         readonly DeterministicRandom _random;
         readonly HazardState[] _hazards;
+        readonly PickupState[] _pickups;
         readonly StageDirector _stageDirector;
 
         long _tick;
@@ -62,8 +76,9 @@ namespace JetHorizon.Simulation
             _seed = seed;
             _random = new DeterministicRandom(seed);
             _hazards = new HazardState[_config.MaxHazards];
+            _pickups = new PickupState[_config.MaxPickups];
             _stageDirector = runDefinition == null ? null : new StageDirector(runDefinition);
-            Snapshot = new SimulationSnapshot(_config.MaxHazards);
+            Snapshot = new SimulationSnapshot(_config.MaxHazards, _config.MaxPickups);
             Events = new SimulationEventBuffer(64);
             StageCommands = new StageCommandBuffer(16);
             ResetToTitle();
@@ -157,6 +172,40 @@ namespace JetHorizon.Simulation
             RefreshSnapshot();
         }
 
+        public int RegisterPickup(PickupSpawn spawn)
+        {
+            if (Phase != CoreGamePhase.Playing) return 0;
+            ValidatePickup(spawn);
+            int slot = -1;
+            for (int i = 0; i < _pickups.Length; i++)
+            {
+                if (!_pickups[i].Active) { slot = i; break; }
+            }
+            if (slot < 0) return 0;
+
+            int id = _nextEntityId++;
+            _pickups[slot] = new PickupState
+            {
+                Active = true,
+                Id = id,
+                Kind = spawn.Kind,
+                X = spawn.X,
+                Y = spawn.Y,
+                Z = spawn.Z,
+                ScoreValue = spawn.ScoreValue,
+                CollectHalfWidth = spawn.CollectHalfWidth,
+                CollectHalfDepth = spawn.CollectHalfDepth
+            };
+            RefreshSnapshot();
+            return id;
+        }
+
+        public void ClearPickups()
+        {
+            Array.Clear(_pickups, 0, _pickups.Length);
+            RefreshSnapshot();
+        }
+
         public void Step(InputFrame input)
         {
             Step(input, default);
@@ -199,6 +248,9 @@ namespace JetHorizon.Simulation
             if (_config.HazardSimulationEnabled)
                 UpdateHazards(step, world.CollisionSuppressed);
 
+            if (_config.PickupSimulationEnabled && Phase == CoreGamePhase.Playing)
+                UpdatePickups(step);
+
             if (_stageDirector != null && Phase == CoreGamePhase.Playing)
             {
                 _stageDirector.Tick(dt, world, _random, Events, StageCommands);
@@ -212,6 +264,7 @@ namespace JetHorizon.Simulation
         {
             _random.Reset(_seed);
             Array.Clear(_hazards, 0, _hazards.Length);
+            Array.Clear(_pickups, 0, _pickups.Length);
             _tick = 0;
             _elapsed = 0f;
             _distance = 0f;
@@ -462,6 +515,20 @@ namespace JetHorizon.Simulation
                     hazard.VisualScale));
             }
             Snapshot.HazardCount = count;
+
+            int pickupCount = 0;
+            for (int i = 0; i < _pickups.Length; i++)
+            {
+                PickupState pickup = _pickups[i];
+                if (!pickup.Active) continue;
+                Snapshot.SetPickup(pickupCount++, new PickupSnapshot(
+                    pickup.Id,
+                    pickup.Kind,
+                    pickup.X,
+                    pickup.Y,
+                    pickup.Z));
+            }
+            Snapshot.PickupCount = pickupCount;
         }
 
         static float Clamp(float value, float minimum, float maximum)
@@ -511,6 +578,46 @@ namespace JetHorizon.Simulation
             if (spawn.VisualScale <= 0f) throw new ArgumentOutOfRangeException(nameof(spawn.VisualScale));
             if (spawn.Kind == HazardKind.Ring && (spawn.RingRadius <= 0f || spawn.RingTubeRadius <= 0f))
                 throw new ArgumentOutOfRangeException(nameof(spawn.RingRadius));
+        }
+
+        void UpdatePickups(float step)
+        {
+            for (int i = 0; i < _pickups.Length; i++)
+            {
+                PickupState pickup = _pickups[i];
+                if (!pickup.Active) continue;
+                pickup.Z += step;
+                if (pickup.Z > _config.DespawnZ)
+                {
+                    pickup.Active = false;
+                    _pickups[i] = pickup;
+                    continue;
+                }
+
+                if (Math.Abs(pickup.X - _shipX) < pickup.CollectHalfWidth
+                    && Math.Abs(pickup.Z - _config.ShipZ) < pickup.CollectHalfDepth)
+                {
+                    pickup.Active = false;
+                    _pickups[i] = pickup;
+                    AwardScore(pickup.ScoreValue, ScoreSource.Pickup, pickup.Id);
+                    Events.Add(new SimulationEvent(
+                        SimulationEventType.PickupCollected,
+                        pickup.Id,
+                        _score,
+                        pickup.ScoreValue));
+                    continue;
+                }
+                _pickups[i] = pickup;
+            }
+        }
+
+        static void ValidatePickup(PickupSpawn spawn)
+        {
+            if (float.IsNaN(spawn.X) || float.IsNaN(spawn.Y) || float.IsNaN(spawn.Z))
+                throw new ArgumentOutOfRangeException(nameof(spawn));
+            if (spawn.ScoreValue < 0f) throw new ArgumentOutOfRangeException(nameof(spawn.ScoreValue));
+            if (spawn.CollectHalfWidth <= 0f) throw new ArgumentOutOfRangeException(nameof(spawn.CollectHalfWidth));
+            if (spawn.CollectHalfDepth <= 0f) throw new ArgumentOutOfRangeException(nameof(spawn.CollectHalfDepth));
         }
 
         void ApplyFinalScoreMultiplier()

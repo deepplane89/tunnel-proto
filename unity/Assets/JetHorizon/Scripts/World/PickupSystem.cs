@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using JetHorizon.Simulation;
 
 namespace JetHorizon
 {
@@ -13,11 +14,12 @@ namespace JetHorizon
 
         sealed class Coin
         {
-            public Transform T; public bool Active; public float Phase; public float BaseY;
+            public Transform T; public bool Active; public float Phase; public float BaseY; public int CoreId;
         }
 
         const int PoolSize = 100;
         readonly List<Coin> _coins = new List<Coin>(PoolSize);
+        readonly Dictionary<int, PickupSnapshot> _corePickups = new Dictionary<int, PickupSnapshot>(PoolSize);
         Mesh _coinMesh;
 
         RunSession S => GameManager.I.Session;
@@ -46,7 +48,14 @@ namespace JetHorizon
         public void ResetSystem()
         {
             BuildPool();
-            foreach (var c in _coins) if (c.Active) { c.Active = false; c.T.gameObject.SetActive(false); }
+            GameManager.I?.ClearRegisteredPickups();
+            foreach (var c in _coins)
+            {
+                if (!c.Active) continue;
+                c.Active = false;
+                c.CoreId = 0;
+                c.T.gameObject.SetActive(false);
+            }
         }
 
         public void WipeBonusRings() { /* bonus fuel rings not ported yet — hook kept for parity */ }
@@ -100,7 +109,10 @@ namespace JetHorizon
             foreach (var c in _coins)
             {
                 if (c.Active) continue;
+                int coreId = GameManager.I.RegisterPickup(PickupSpawn.Coin(x, y, z, Tuning.CoinScore));
+                if (coreId == 0) return;
                 c.Active = true;
+                c.CoreId = coreId;
                 c.Phase = Random.value * Mathf.PI * 2f;
                 c.BaseY = y;
                 c.T.position = new Vector3(x, y, z);
@@ -112,28 +124,33 @@ namespace JetHorizon
         public void SimTick(float dt)
         {
             var s = S;
-            float eff = s.EffectiveSpeed;
+            var snapshot = GameManager.I.CoreSnapshot;
+            _corePickups.Clear();
+            if (snapshot != null)
+            {
+                for (int i = 0; i < snapshot.PickupCount; i++)
+                {
+                    var pickup = snapshot.GetPickup(i);
+                    _corePickups[pickup.Id] = pickup;
+                }
+            }
 
             foreach (var c in _coins)
             {
                 if (!c.Active) continue;
-                var p = c.T.position;
-                p.z += eff * dt;
+                if (!_corePickups.TryGetValue(c.CoreId, out var pickup) || pickup.Kind != PickupKind.Coin)
+                {
+                    c.Active = false;
+                    c.CoreId = 0;
+                    c.T.gameObject.SetActive(false);
+                    continue;
+                }
+                var p = new Vector3(pickup.X, pickup.Y, pickup.Z);
 
                 // bob + spin (spec/01 §4.5)
                 p.y = c.BaseY + Mathf.Sin(s.Elapsed * 2.2f + c.Phase) * 0.12f;
                 c.T.position = p;
                 c.T.rotation = Quaternion.Euler(0f, (s.Elapsed * 2.8f + c.Phase) * Mathf.Rad2Deg, 0f);
-
-                if (p.z > Tuning.DespawnZ) { c.Active = false; c.T.gameObject.SetActive(false); continue; }
-
-                float dx = Mathf.Abs(p.x - s.ShipX);
-                float dz = Mathf.Abs(p.z - Tuning.ShipZ);
-                if (dx < 1.6f && dz < 1.6f)
-                {
-                    c.Active = false; c.T.gameObject.SetActive(false);
-                    GameManager.I.ReportCoinCollected();
-                }
             }
         }
     }
