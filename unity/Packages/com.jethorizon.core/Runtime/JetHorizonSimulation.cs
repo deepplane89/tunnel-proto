@@ -261,7 +261,7 @@ namespace JetHorizon.Simulation
             _tick++;
             _elapsed += dt;
 
-            UpdateShip(input, dt);
+            UpdateShip(input, dt, world.ShipMovementSuppressed);
 
             if (ResolveCorridorCollision(world))
             {
@@ -367,23 +367,15 @@ namespace JetHorizon.Simulation
             }
         }
 
-        void UpdateShip(InputFrame input, float dt)
+        void UpdateShip(InputFrame input, float dt, bool movementSuppressed)
         {
-            int steer = input.SteerLeft == input.SteerRight ? 0 : input.SteerLeft ? -1 : 1;
-
-            if (input.RollDirection != 0)
+            // The web update uses `if left, else if right`: simultaneous input is
+            // intentionally left-biased rather than cancelling both directions.
+            int steer = movementSuppressed ? 0 : input.SteerLeft ? -1 : input.SteerRight ? 1 : 0;
+            if (movementSuppressed)
             {
-                _rollRadians = Clamp(
-                    _rollRadians + input.RollDirection * _config.RollSpeed * dt,
-                    -_config.RollMaxRadians,
-                    _config.RollMaxRadians);
-            }
-            else
-            {
-                _rollRadians = MoveTowards(
-                    _rollRadians,
-                    0f,
-                    _config.RollSpeed * _config.RollReturnMultiplier * dt);
+                _shipX = 0f;
+                _shipVelocityX = 0f;
             }
 
             if (Math.Abs(_rollRadians) > 0.1f)
@@ -423,16 +415,35 @@ namespace JetHorizon.Simulation
 
             float velocityNormal = maxVelocity > 0f ? Clamp(_bankVelocityX / maxVelocity, -1f, 1f) : 0f;
             float bankTarget = -velocityNormal * _config.BankMaxRadians;
-            bool crossingZero = Math.Sign(bankTarget) != Math.Sign(_bankRadians) && Math.Abs(_bankRadians) > 0.0001f;
+            bool crossingZero = (_bankRadians > 0.01f && bankTarget < -0.01f)
+                || (_bankRadians < -0.01f && bankTarget > 0.01f);
             float bankRate = _config.BankSmoothing * (crossingZero ? _config.BankZeroCrossMultiplier : 1f);
             _bankRadians += (bankTarget - _bankRadians) * Math.Min(1f, bankRate * dt);
 
             float bobTarget = Math.Abs(_shipVelocityX) > 0.5f ? 0f : 1f;
             float bobRate = bobTarget < _bobSteerBlend ? 4f : 2f;
-            _bobSteerBlend = MoveTowards(_bobSteerBlend, bobTarget, bobRate * dt);
+            _bobSteerBlend += (bobTarget - _bobSteerBlend) * Math.Min(1f, bobRate * dt);
             _shipY = _config.ShipHoverY
                 + (float)Math.Sin(_elapsed * _config.HoverFrequency * Math.PI * 2.0)
                 * _config.HoverAmplitude * _bobSteerBlend;
+
+            // The production loop updates knife-edge roll after lateral movement,
+            // banking, and hover. Tilt therefore affects steering on the following
+            // fixed tick, not retroactively on the tick that begins the roll.
+            if (input.RollDirection != 0)
+            {
+                _rollRadians = Clamp(
+                    _rollRadians + input.RollDirection * _config.RollSpeed * dt,
+                    -_config.RollMaxRadians,
+                    _config.RollMaxRadians);
+            }
+            else
+            {
+                _rollRadians = MoveTowards(
+                    _rollRadians,
+                    0f,
+                    _config.RollSpeed * _config.RollReturnMultiplier * dt);
+            }
         }
 
         void SpawnStandardHazard()

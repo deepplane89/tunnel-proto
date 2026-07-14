@@ -165,7 +165,8 @@ namespace JetHorizon
                 SlalomActive = s.SlalomActive,
                 AngledWallsActive = s.AngledWallsActive,
                 CollisionSuppressed = s.InvincibleTimer > 0f || s.IntroActive || s.IntroLiftActive,
-                SpawningSuppressed = s.IntroActive || s.IntroLiftActive || s.PostLaunchGrace > 0f
+                SpawningSuppressed = s.IntroActive || s.IntroLiftActive || s.PostLaunchGrace > 0f,
+                ShipMovementSuppressed = s.IntroActive || s.IntroLiftActive
             };
             if (Canyon != null && Canyon.TryGetCollisionBounds(out float leftBoundary, out float rightBoundary))
             {

@@ -49,6 +49,75 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void StockHandlingConstantsMatchProductionEquations()
+        {
+            var config = new SimulationConfig();
+
+            Assert.That(config.Acceleration, Is.EqualTo(38.4375f).Within(0.0001f));
+            Assert.That(config.Deceleration, Is.EqualTo(0.4925f).Within(0.0001f));
+            Assert.That(config.MaxLateralVelocity, Is.EqualTo(16.3125f).Within(0.0001f));
+            Assert.That(config.RollSpeed, Is.EqualTo((1.2f + 0.5625f * 2.3f) * (float)System.Math.PI).Within(0.0001f));
+        }
+
+        [Test]
+        public void SimultaneousSteeringKeepsProductionLeftBias()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false
+            }, 71u);
+            simulation.StartRun();
+
+            simulation.Step(new InputFrame(true, true));
+
+            Assert.That(simulation.Snapshot.ShipVelocityX, Is.LessThan(0f));
+        }
+
+        [Test]
+        public void IntroSuppressionPinsLateralPhysicsWithoutBlockingRollInput()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false
+            }, 72u);
+            simulation.StartRun();
+            for (int i = 0; i < 10; i++) simulation.Step(new InputFrame(false, true));
+            Assert.That(simulation.Snapshot.ShipX, Is.GreaterThan(0f));
+
+            simulation.Step(new InputFrame(false, true, 1), new WorldFrame(false, false)
+            {
+                ShipMovementSuppressed = true
+            });
+
+            Assert.That(simulation.Snapshot.ShipX, Is.Zero);
+            Assert.That(simulation.Snapshot.ShipVelocityX, Is.Zero);
+            Assert.That(simulation.Snapshot.ShipRollRadians, Is.GreaterThan(0f));
+        }
+
+        [Test]
+        public void RollBeginsAfterCurrentTickLateralIntegration()
+        {
+            var config = new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false,
+                TiltGraceSeconds = 0f
+            };
+            var rolling = new JetHorizonSimulation(config, 73u);
+            var upright = new JetHorizonSimulation(config, 73u);
+            rolling.StartRun();
+            upright.StartRun();
+
+            rolling.Step(new InputFrame(false, true, 1));
+            upright.Step(new InputFrame(false, true));
+
+            Assert.That(rolling.Snapshot.ShipVelocityX, Is.EqualTo(upright.Snapshot.ShipVelocityX));
+            Assert.That(rolling.Snapshot.ShipRollRadians, Is.GreaterThan(0f));
+        }
+
+        [Test]
         public void ForcedCenterHazardProducesAReproducibleDeathEvent()
         {
             var config = new SimulationConfig

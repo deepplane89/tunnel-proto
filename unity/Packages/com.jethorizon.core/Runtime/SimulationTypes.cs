@@ -41,6 +41,7 @@ namespace JetHorizon.Simulation
         public bool AngledWallsActive;
         public bool CollisionSuppressed;
         public bool SpawningSuppressed;
+        public bool ShipMovementSuppressed;
         public bool CorridorCollisionActive;
         public float CorridorLeftBoundary;
         public float CorridorRightBoundary;
@@ -61,6 +62,7 @@ namespace JetHorizon.Simulation
             AngledWallsActive = false;
             CollisionSuppressed = false;
             SpawningSuppressed = false;
+            ShipMovementSuppressed = false;
             CorridorCollisionActive = false;
             CorridorLeftBoundary = 0f;
             CorridorRightBoundary = 0f;

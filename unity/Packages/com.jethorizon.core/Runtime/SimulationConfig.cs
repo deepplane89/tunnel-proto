@@ -19,10 +19,11 @@ namespace JetHorizon.Simulation
         public float Snap = 0.5625f;
         public float AccelBase = 22f;
         public float AccelSnap = 52f;
-        public float AccelMultiplier = 0.75f;
+        public float HandlingDrift = 1f;
         public float MaxVelBase = 9f;
         public float MaxVelSnap = 13f;
         public float DecelBasePercent = 0.02f;
+        public float DecelFullPercent = 0.05f;
         public float CounterSteerBoost = 3f;
 
         public float TiltGraceSeconds = 2f;
@@ -70,8 +71,9 @@ namespace JetHorizon.Simulation
         public bool HazardSimulationEnabled = true;
         public bool PickupSimulationEnabled = true;
 
-        public float Acceleration => (AccelBase + Snap * AccelSnap) * AccelMultiplier;
-        public float Deceleration => (10f + Snap * 26f) * DecelBasePercent;
+        public float Acceleration => (AccelBase + Snap * AccelSnap) * (0.75f + (1f - HandlingDrift) * 0.25f);
+        public float Deceleration => (10f + Snap * 26f)
+            * (DecelBasePercent + (1f - HandlingDrift) * (DecelFullPercent - DecelBasePercent));
         public float MaxLateralVelocity => MaxVelBase + Snap * MaxVelSnap;
         public float RollSpeed => (float)((1.2f + Snap * 2.3f) * Math.PI);
 
@@ -89,6 +91,7 @@ namespace JetHorizon.Simulation
             if (SpawnIntervalDistance <= 0f) throw new InvalidOperationException("SpawnIntervalDistance must be positive.");
             if (RollMaxRadians <= 0f) throw new InvalidOperationException("RollMaxRadians must be positive.");
             if (DistanceBonusStep <= 0f) throw new InvalidOperationException("DistanceBonusStep must be positive.");
+            if (HandlingDrift < 0f || HandlingDrift > 1f) throw new InvalidOperationException("HandlingDrift must be between zero and one.");
         }
     }
 }
