@@ -16,13 +16,14 @@ does not copy every numeric value one-for-one because URP lights, ACES, bloom an
 produce the same pixels as Three.js. Current Unity calibration is owned by
 `EnvironmentController`, the generated post profile, and the three `JH_*` shaders:
 
-- ACES post exposure `+0.28 EV`, bloom threshold `0.85`, scatter `0.30`, high-quality filtering on.
-- URP vignette `0.28 / 0.45` (intensity/smoothness) and chromatic aberration `0.015`; the former
+- ACES post exposure `+0.52 EV`, bloom threshold `0.85`, scatter `0.30`, high-quality filtering on.
+- URP vignette `0.22 / 0.45` (intensity/smoothness) and chromatic aberration `0.015`; the former
   `0.5 / 0.6` URP vignette crushed too much of the playable frame.
-- Global ambient `(0.045, 0.05, 0.065)`, key `3.0`, cyan rim `0.16`, pink fill `0.38`, amber rakes
-  `0.30 / 0.16`, and exponential fog density `0.0065`. These are presentation-only adjustments.
-- `JH_SkyboxGradient` owns the deterministic direction-space star backdrop and star-built Milky Way.
-  The panorama is disabled (`_PanoBrightness = 0`); `StarfieldController` now owns warp streaks only.
+- Global ambient `(0.065, 0.075, 0.10)`, key `3.25`, cyan rim `0.22`, pink fill `0.50`, amber rakes
+  `0.34 / 0.20`, and exponential fog density `0.0058`. These are presentation-only adjustments.
+- `StarfieldController` + `JH/SkyStars` directly port the deterministic NDC source star layout,
+  per-star sizes/seeds, independent twinkle, authored clusters, Milky Way points and sun mask into
+  one batched mesh. The panorama is disabled (`_PanoBrightness = 0`).
 - The sun uses a runtime 64x32 hero sphere, view-normal radial shading, a generated crown/limb
   corona, and billboarded corona/seam layers. `JH_Sun` emission is `1.25` so the disc retains detail.
 - Standard cones are restrained obsidian facets. `ObstacleSpawner` enables the narrow neon band

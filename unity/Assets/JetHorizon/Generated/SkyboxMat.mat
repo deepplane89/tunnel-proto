@@ -30,16 +30,11 @@ Material:
     m_Ints: []
     m_Floats:
     - _HorizonLine: 0.38
-    - _MilkyWayStrength: 0.55
     - _PanoBrightness: 0
     - _PanoOffsetY: -0.06
-    - _StarBrightness: 3.7
-    - _StarDensity: 1
-    - _Twinkle: 0.18
     m_Colors:
     - _BotColor: {r: 0.05490196, g: 0.011764706, b: 0.1254902, a: 1}
     - _PanoTint: {r: 0.56, g: 1, b: 1, a: 1}
-    - _StarTint: {r: 0.4, g: 0.56, b: 0.78, a: 1}
     - _TopColor: {r: 0.023529412, g: 0, b: 0.0627451, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

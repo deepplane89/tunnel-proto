@@ -31,10 +31,10 @@ namespace JetHorizon
 
         // Three.js and URP do not map identical light/post values to identical pixels.
         // These are Unity presentation calibrations; simulation and vibe data stay untouched.
-        const float FogDensity = 0.0065f;
-        const float PostExposure = 0.28f;
+        const float FogDensity = 0.0058f;
+        const float PostExposure = 0.52f;
         const float BloomScale = 1.65f;
-        const float VignetteIntensity = 0.28f;
+        const float VignetteIntensity = 0.22f;
 
         void OnEnable()
         {
@@ -113,18 +113,13 @@ namespace JetHorizon
             RenderSettings.fogDensity = FogDensity;
             RenderSettings.fogColor = v.fogColor;
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.045f, 0.05f, 0.065f);
+            RenderSettings.ambientLight = new Color(0.065f, 0.075f, 0.10f);
 
             if (SkyboxMaterial != null)
             {
                 SkyboxMaterial.SetColor("_TopColor", v.skyTop);
                 SkyboxMaterial.SetColor("_BotColor", v.skyBot);
                 SkyboxMaterial.SetFloat("_PanoBrightness", 0f);
-                SkyboxMaterial.SetFloat("_StarBrightness", 3.7f);
-                SkyboxMaterial.SetFloat("_StarDensity", 1f);
-                SkyboxMaterial.SetFloat("_MilkyWayStrength", 0.55f);
-                SkyboxMaterial.SetFloat("_Twinkle", 0.18f);
-                SkyboxMaterial.SetColor("_StarTint", Color.Lerp(new Color(0.40f, 0.56f, 0.78f), v.nebulaTint, 0.12f));
             }
             if (SunMaterial != null)
             {
@@ -219,11 +214,11 @@ namespace JetHorizon
         {
             // Preserve the source rig's direction and color, while lifting URP's dark
             // metallic midtones enough to keep the ship and hazards readable.
-            if (_keyLight != null) _keyLight.intensity = 3.0f;
-            if (_rimLight != null) _rimLight.intensity = 0.16f;
-            if (_fillLight != null) _fillLight.intensity = 0.38f;
-            if (_sunRakeR != null) _sunRakeR.intensity = 0.30f;
-            if (_sunRakeL != null) _sunRakeL.intensity = 0.16f;
+            if (_keyLight != null) _keyLight.intensity = 3.25f;
+            if (_rimLight != null) _rimLight.intensity = 0.22f;
+            if (_fillLight != null) _fillLight.intensity = 0.50f;
+            if (_sunRakeR != null) _sunRakeR.intensity = 0.34f;
+            if (_sunRakeL != null) _sunRakeL.intensity = 0.20f;
         }
 
         /// <summary>Lighting rig per spec/03 §2 — called by bootstrap at scene build.</summary>
@@ -240,13 +235,13 @@ namespace JetHorizon
                 l.color = c; l.intensity = intensity;
                 l.shadows = LightShadows.None;
             }
-            Dir("KeyLight",  Color.white,                       3.00f, new Vector3(2f, 8.8f, 8f));
-            Dir("RimLight",  TextureFactory.Hex(0x00f0ff),      0.16f, new Vector3(-3f, 6f, -8f));
-            Dir("FillLight", TextureFactory.Hex(0xff44cc),      0.38f, new Vector3(0f, -2f, 6f));
-            Dir("SunRakeR",  TextureFactory.Hex(0xff9500),      0.30f, new Vector3(2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
-            Dir("SunRakeL",  TextureFactory.Hex(0xff9500),      0.16f, new Vector3(-2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
+            Dir("KeyLight",  Color.white,                       3.25f, new Vector3(2f, 8.8f, 8f));
+            Dir("RimLight",  TextureFactory.Hex(0x00f0ff),      0.22f, new Vector3(-3f, 6f, -8f));
+            Dir("FillLight", TextureFactory.Hex(0xff44cc),      0.50f, new Vector3(0f, -2f, 6f));
+            Dir("SunRakeR",  TextureFactory.Hex(0xff9500),      0.34f, new Vector3(2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
+            Dir("SunRakeL",  TextureFactory.Hex(0xff9500),      0.20f, new Vector3(-2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.045f, 0.05f, 0.065f);
+            RenderSettings.ambientLight = new Color(0.065f, 0.075f, 0.10f);
         }
     }
 }

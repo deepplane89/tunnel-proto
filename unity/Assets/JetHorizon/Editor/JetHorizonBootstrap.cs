@@ -62,9 +62,10 @@ namespace JetHorizon.EditorTools
             var addMat   = SaveMat(NewMat("JH/Additive", "AdditiveMat"));
             var radialTex = TextureFactory.RadialSprite(); radialTex.name = "RadialSprite";
             AssetDatabase.CreateAsset(radialTex, $"{GenDir}/RadialSprite.asset");
-            var starMat  = SaveMat(NewMat("JH/Additive", "StarMat", m => {
-                m.SetTexture("_MainTex", radialTex);
-                m.SetColor("_Tint", new Color(0.55f, 0.65f, 1f, 0.85f)); }));
+            var starMat  = SaveMat(NewMat("JH/SkyStars", "StarMat", m => {
+                m.SetColor("_StarColor", new Color(0.40f, 0.56f, 0.78f, 1f));
+                m.SetFloat("_Brightness", 3.70f); m.SetFloat("_TwinkleMin", 0.64f);
+                m.SetFloat("_TwinkleRange", 0.67f); m.SetFloat("_SizeMult", 1.30f); }));
             var streakMat = SaveMat(NewMat("JH/Additive", "StreakMat", m =>
                 m.SetColor("_Tint", new Color(0.51f, 0.45f, 0.63f, 0.5f))));
             var flashMat = SaveMat(NewMat("JH/Additive", "FlashMat", m => m.SetTexture("_MainTex", radialTex)));
@@ -103,13 +104,13 @@ namespace JetHorizon.EditorTools
             var profile = ScriptableObject.CreateInstance<VolumeProfile>();
             AssetDatabase.CreateAsset(profile, $"{GenDir}/JH_PostProfile.asset");
             var tonemap = profile.Add<Tonemapping>(true); tonemap.mode.Override(TonemappingMode.ACES);
-            var exposure = profile.Add<ColorAdjustments>(true); exposure.postExposure.Override(0.28f);
+            var exposure = profile.Add<ColorAdjustments>(true); exposure.postExposure.Override(0.52f);
             var bloom = profile.Add<Bloom>(true);
             // tight halo like UnrealBloom(strength .35, radius .25) — high scatter reads as haze
             bloom.intensity.Override(0.58f); bloom.threshold.Override(0.85f); bloom.scatter.Override(0.30f);
             bloom.highQualityFiltering.Override(true);
             var vignette = profile.Add<Vignette>(true);
-            vignette.intensity.Override(0.28f); vignette.smoothness.Override(0.45f);
+            vignette.intensity.Override(0.22f); vignette.smoothness.Override(0.45f);
             var ca = profile.Add<ChromaticAberration>(true); ca.intensity.Override(0.015f);
             // Volume components must be persisted as sub-assets or they become null refs
             // after the next domain reload.
