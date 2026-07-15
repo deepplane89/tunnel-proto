@@ -95,6 +95,10 @@ namespace JetHorizon.Simulation
         int _wavesSinceCoin;
         int _wavesSincePowerup;
         int _wavesSinceCargo;
+        int _heatLevel;
+        bool _extractionWindowOpen;
+        float _nextExtractionDistance;
+        float _extractionWindowEndDistance;
         int _nextPowerupType;
         float _shieldSeconds;
         int _shieldHits;
@@ -219,19 +223,54 @@ namespace JetHorizon.Simulation
         public bool TryExtract(out RunCargoManifest manifest)
         {
             Events.Clear();
-            if (Phase != CoreGamePhase.Playing || _distance < _config.FirstExtractionDistance)
+            if (Phase != CoreGamePhase.Playing || !_extractionWindowOpen)
             {
                 manifest = default;
                 RefreshSnapshot();
                 return false;
             }
 
-            manifest = _cargo.Snapshot();
+            manifest = _cargo.Snapshot(_heatLevel, HeatRewardMultiplier());
             FinalizeRun();
             Phase = CoreGamePhase.Extracted;
-            Events.Add(new SimulationEvent(SimulationEventType.RunExtracted, 0, manifest.TotalUnits, _distance));
+            Events.Add(new SimulationEvent(SimulationEventType.RunExtracted, 0, manifest.TotalWeight, manifest.CreditValue));
             RefreshSnapshot();
             return true;
+        }
+
+        float HeatRewardMultiplier() => 1f + _heatLevel * _config.HeatRewardPerLevel;
+        float HeatSpeedMultiplier() => 1f + _heatLevel * _config.HeatSpeedPerLevel;
+        float EncounterIntensity() => 1f + _heatLevel * _config.HeatEncounterIntensityPerLevel;
+        float OverdriveSpeedMultiplier() => 1f + (PowerupCatalog.OverdriveSpeedMultiplier - 1f) * _config.OverdrivePowerMultiplier;
+
+        void TickExtractionWindows()
+        {
+            if (!_extractionWindowOpen && _distance >= _nextExtractionDistance)
+            {
+                _extractionWindowOpen = true;
+                _extractionWindowEndDistance = _nextExtractionDistance + _config.ExtractionWindowLengthDistance;
+                Events.Add(new SimulationEvent(
+                    SimulationEventType.ExtractionWindowOpened,
+                    _heatLevel,
+                    _extractionWindowEndDistance,
+                    HeatRewardMultiplier()));
+            }
+
+            if (!_extractionWindowOpen || _distance <= _extractionWindowEndDistance) return;
+
+            _extractionWindowOpen = false;
+            _heatLevel = Math.Min(_config.MaximumHeat, _heatLevel + 1);
+            _nextExtractionDistance += _config.ExtractionIntervalDistance;
+            Events.Add(new SimulationEvent(
+                SimulationEventType.ExtractionWindowPassed,
+                _heatLevel,
+                _nextExtractionDistance,
+                HeatRewardMultiplier()));
+            Events.Add(new SimulationEvent(
+                SimulationEventType.HeatChanged,
+                _heatLevel,
+                HeatSpeedMultiplier(),
+                HeatRewardMultiplier()));
         }
 
         /// <summary>Marks the active run as ineligible without changing deterministic gameplay.</summary>
@@ -377,9 +416,10 @@ namespace JetHorizon.Simulation
                 world.AngledWallsActive = _structuredWallsActive;
             }
 
+            float heatSpeedMultiplier = HeatSpeedMultiplier();
             _effectiveSpeed = (world.OverdriveActive || OverdriveSpeedActive)
-                ? _speed * PowerupCatalog.OverdriveSpeedMultiplier
-                : _speed;
+                ? _speed * heatSpeedMultiplier * OverdriveSpeedMultiplier()
+                : _speed * heatSpeedMultiplier;
             TickLightningSpawner(dt, world);
             TickZipper(dt);
             TickSlalom(dt);
@@ -395,7 +435,8 @@ namespace JetHorizon.Simulation
             if (_config.ProgressionEnabled && !world.ProgressionSuspended)
             {
                 _distance += step;
-                _score += _config.ScoreRatePerSecond * Math.Max(1f, _speed / _config.BaseSpeed) * dt;
+                _score += _config.ScoreRatePerSecond * Math.Max(1f, _effectiveSpeed / _config.BaseSpeed) * HeatRewardMultiplier() * dt;
+                TickExtractionWindows();
             }
 
             if (_config.HazardSpawningEnabled)
@@ -442,26 +483,40 @@ namespace JetHorizon.Simulation
         {
             PowerupDefinition definition = PowerupCatalog.Get(type);
             if (definition.Type == PowerupType.None) return;
+            float power = PowerMultiplier(type);
+            float duration = definition.DurationSeconds * power;
 
             switch (type)
             {
                 case PowerupType.Shield:
-                    _shieldSeconds = Math.Max(_shieldSeconds, definition.DurationSeconds);
-                    _shieldHits = Math.Max(_shieldHits, definition.HitPoints);
+                    _shieldSeconds = Math.Max(_shieldSeconds, duration);
+                    _shieldHits = Math.Max(_shieldHits, Math.Max(1, (int)Math.Floor(definition.HitPoints * power + .35f)));
                     break;
                 case PowerupType.Laser:
-                    _laserSeconds = Math.Max(_laserSeconds, definition.DurationSeconds);
+                    _laserSeconds = Math.Max(_laserSeconds, duration);
                     _laserShotTimer = 0f;
                     break;
                 case PowerupType.Overdrive:
-                    _overdriveSeconds = Math.Max(_overdriveSeconds, definition.DurationSeconds);
+                    _overdriveSeconds = Math.Max(_overdriveSeconds, duration);
                     break;
                 case PowerupType.Magnet:
-                    _magnetSeconds = Math.Max(_magnetSeconds, definition.DurationSeconds);
+                    _magnetSeconds = Math.Max(_magnetSeconds, duration);
                     break;
             }
-            Events.Add(new SimulationEvent(SimulationEventType.PowerupActivated, 0, (float)type, definition.DurationSeconds));
+            Events.Add(new SimulationEvent(SimulationEventType.PowerupActivated, 0, (float)type, duration));
             RefreshSnapshot();
+        }
+
+        float PowerMultiplier(PowerupType type)
+        {
+            switch (type)
+            {
+                case PowerupType.Shield: return _config.ShieldPowerMultiplier;
+                case PowerupType.Laser: return _config.LaserPowerMultiplier;
+                case PowerupType.Magnet: return _config.MagnetPowerMultiplier;
+                case PowerupType.Overdrive: return _config.OverdrivePowerMultiplier;
+                default: return 1f;
+            }
         }
 
         /// <summary>Migration seam for a legacy Unity collision presenter.</summary>
@@ -542,6 +597,10 @@ namespace JetHorizon.Simulation
             _wavesSinceCoin = 99;
             _wavesSincePowerup = 0;
             _wavesSinceCargo = 0;
+            _heatLevel = 0;
+            _extractionWindowOpen = false;
+            _nextExtractionDistance = _config.FirstExtractionDistance;
+            _extractionWindowEndDistance = 0f;
             _nextPowerupType = 0;
             _shieldSeconds = 0f;
             _shieldHits = 0;
@@ -824,7 +883,7 @@ namespace JetHorizon.Simulation
             }
 
             _wavesSinceCargo++;
-            if (_wavesSinceCargo >= _config.CargoWaveInterval && _cargo.TotalUnits < _cargo.Capacity)
+            if (_wavesSinceCargo >= _config.CargoWaveInterval && _cargo.UsedWeight < _cargo.CapacityWeight)
             {
                 SpawnCargo(predictedX, blockedCount);
                 _wavesSinceCargo = 0;
@@ -845,8 +904,7 @@ namespace JetHorizon.Simulation
             int laneIndex = _laneScratch[_random.NextInt(0, freeCount)];
             float centerLane = (_config.LaneCount - 1) * .5f;
             float x = centerX + (laneIndex - centerLane) * _config.LaneWidth;
-            float rarity = _random.NextFloat();
-            RunCargoKind kind = rarity < .70f ? RunCargoKind.Salvage : rarity < .93f ? RunCargoKind.Alloy : RunCargoKind.Prism;
+            RunCargoKind kind = CargoCatalog.Select(_random.NextFloat(), _heatLevel);
             SpawnPickup(PickupSpawn.Cargo(kind, 1, x, 1.35f, _config.SpawnZ));
         }
 
@@ -1607,8 +1665,23 @@ namespace JetHorizon.Simulation
             Snapshot.CargoAlloy = _cargo.Alloy;
             Snapshot.CargoPrism = _cargo.Prism;
             Snapshot.CargoUnits = _cargo.TotalUnits;
-            Snapshot.CargoCapacity = _cargo.Capacity;
-            Snapshot.ExtractionAvailable = Phase == CoreGamePhase.Playing && _distance >= _config.FirstExtractionDistance;
+            Snapshot.CargoCapacity = _cargo.CapacityWeight;
+            Snapshot.CargoWeight = _cargo.UsedWeight;
+            Snapshot.CargoCapacityWeight = _cargo.CapacityWeight;
+            Snapshot.CargoBaseCreditValue = _cargo.BaseCreditValue;
+            Snapshot.CargoProjectedCreditValue = (int)Math.Round(_cargo.BaseCreditValue * HeatRewardMultiplier(), MidpointRounding.AwayFromZero);
+            Snapshot.HeatLevel = _heatLevel;
+            Snapshot.HeatRewardMultiplier = HeatRewardMultiplier();
+            Snapshot.HeatSpeedMultiplier = HeatSpeedMultiplier();
+            Snapshot.EncounterIntensity = EncounterIntensity();
+            Snapshot.ExtractionAvailable = Phase == CoreGamePhase.Playing && _extractionWindowOpen;
+            Snapshot.ExtractionWindowOpen = _extractionWindowOpen;
+            Snapshot.ExtractionWindowDistanceRemaining = _extractionWindowOpen
+                ? Math.Max(0f, _extractionWindowEndDistance - _distance)
+                : 0f;
+            Snapshot.NextExtractionDistance = _extractionWindowOpen
+                ? _extractionWindowEndDistance
+                : _nextExtractionDistance;
             Snapshot.HullHitsRemaining = _hullHitsRemaining;
             Snapshot.HullHitCapacity = _config.HullHitCapacity;
             Snapshot.StageDirectorEnabled = _stageDirector != null;
@@ -1782,7 +1855,7 @@ namespace JetHorizon.Simulation
         void TickLaserWeapon(float dt)
         {
             _laserShotTimer += dt;
-            float interval = 1f / PowerupCatalog.LaserFireRate;
+            float interval = 1f / (PowerupCatalog.LaserFireRate * (0.85f + _config.LaserPowerMultiplier * .15f));
             while (_laserShotTimer >= interval)
             {
                 _laserShotTimer -= interval;
@@ -1830,7 +1903,7 @@ namespace JetHorizon.Simulation
                 {
                     float dx = pickup.X - _shipX;
                     float dz = pickup.Z - _config.ShipZ;
-                    float radius = PowerupCatalog.Magnet.Radius;
+                    float radius = PowerupCatalog.Magnet.Radius * _config.MagnetPowerMultiplier;
                     if (dx * dx + dz * dz < radius * radius)
                     {
                         pickup.X -= dx * 5f * _config.FixedDeltaSeconds;
@@ -1861,11 +1934,20 @@ namespace JetHorizon.Simulation
                     {
                         if (_cargo.TryCollect(pickup.CargoKind, pickup.CargoUnits))
                         {
+                            CargoDefinition definition = CargoCatalog.Get(pickup.CargoKind);
                             Events.Add(new SimulationEvent(
                                 SimulationEventType.CargoCollected,
                                 pickup.Id,
-                                (float)pickup.CargoKind,
-                                pickup.CargoUnits));
+                                definition.Weight * pickup.CargoUnits,
+                                definition.CreditValue * pickup.CargoUnits));
+                        }
+                        else
+                        {
+                            Events.Add(new SimulationEvent(
+                                SimulationEventType.CargoRejectedForWeight,
+                                pickup.Id,
+                                _cargo.UsedWeight,
+                                _cargo.CapacityWeight));
                         }
                     }
                     else

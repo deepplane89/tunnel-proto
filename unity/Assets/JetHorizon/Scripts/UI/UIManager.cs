@@ -41,6 +41,8 @@ namespace JetHorizon
         Text _garageStatus;
         Button _extractButton;
         Text _extractLabel;
+        Text _cargoHud;
+        Text _heatHud;
         readonly Dictionary<PowerupType, PowerupHudRow> _powerupRows = new Dictionary<PowerupType, PowerupHudRow>();
 
         sealed class PowerupHudRow
@@ -69,6 +71,7 @@ namespace JetHorizon
             BuildGarageEntryButton();
             BuildGarageScreen();
             BuildExtractButton();
+            BuildMetaHud();
             BuildPowerupHud();
             Show(GamePhase.Title);
             RefreshGodModeButton();
@@ -207,17 +210,21 @@ namespace JetHorizon
             _garageScreen = root.GetComponent<CanvasGroup>();
 
             MakeLabel(root.transform, "GarageTitle", "JET HORIZON // GARAGE", 52, new Vector2(.5f, .88f), new Vector2(1000f, 80f), new Color(0f, .93f, 1f));
-            _garageSummary = MakeLabel(root.transform, "GarageSummary", string.Empty, 25, new Vector2(.5f, .61f), new Vector2(1050f, 360f), Color.white);
-            _garageStatus = MakeLabel(root.transform, "GarageStatus", string.Empty, 20, new Vector2(.5f, .36f), new Vector2(1000f, 64f), new Color(1f, .45f, .75f));
+            _garageSummary = MakeLabel(root.transform, "GarageSummary", string.Empty, 23, new Vector2(.5f, .69f), new Vector2(1100f, 250f), Color.white);
+            _garageStatus = MakeLabel(root.transform, "GarageStatus", string.Empty, 19, new Vector2(.5f, .565f), new Vector2(1000f, 54f), new Color(1f, .45f, .75f));
 
-            MakeButton(root.transform, "Fly", "LAUNCH", new Vector2(.72f, .16f), new Vector2(300f, 70f), () => GameManager.I?.StartRun());
-            MakeButton(root.transform, "Back", "TITLE", new Vector2(.28f, .16f), new Vector2(240f, 70f), () => GameManager.I?.ReturnToTitle());
-            MakeButton(root.transform, "Handling", "CHANGE HANDLING", new Vector2(.30f, .29f), new Vector2(330f, 58f), CycleHandling);
-            MakeButton(root.transform, "Thruster", "CHANGE THRUSTER", new Vector2(.70f, .29f), new Vector2(330f, 58f), CycleThruster);
-            MakeButton(root.transform, "Repair", "REPAIR DAMAGED", new Vector2(.30f, .22f), new Vector2(330f, 58f), RepairFirstDamaged);
-            MakeButton(root.transform, "Powerup", "BUY SHIELD CHARGE", new Vector2(.70f, .22f), new Vector2(330f, 58f), BuyShieldCharge);
-            MakeButton(root.transform, "BuyThruster", "BUY NEXT THRUSTER", new Vector2(.30f, .43f), new Vector2(330f, 58f), BuyNextThruster);
-            MakeButton(root.transform, "BuyAddOn", "BUY / EQUIP MOD", new Vector2(.70f, .43f), new Vector2(330f, 58f), BuyOrEquipNextAddOn);
+            MakeButton(root.transform, "UpgradeEngine", "UPGRADE ENGINE", new Vector2(.30f, .50f), new Vector2(350f, 54f), () => Upgrade(GarageUpgradeId.Engine));
+            MakeButton(root.transform, "UpgradeCargo", "UPGRADE CARGO", new Vector2(.70f, .50f), new Vector2(350f, 54f), () => Upgrade(GarageUpgradeId.CargoBay));
+            MakeButton(root.transform, "UpgradeStabilizers", "UPGRADE STABILIZERS", new Vector2(.30f, .425f), new Vector2(350f, 54f), () => Upgrade(GarageUpgradeId.Stabilizers));
+            MakeButton(root.transform, "UpgradeHull", "UPGRADE HULL", new Vector2(.70f, .425f), new Vector2(350f, 54f), () => Upgrade(GarageUpgradeId.Hull));
+            MakeButton(root.transform, "UpgradeLaser", "UPGRADE LASER", new Vector2(.30f, .35f), new Vector2(350f, 54f), () => Upgrade(GarageUpgradeId.Laser));
+            MakeButton(root.transform, "UpgradeShield", "UPGRADE SHIELD", new Vector2(.70f, .35f), new Vector2(350f, 54f), () => Upgrade(GarageUpgradeId.Shield));
+            MakeButton(root.transform, "Handling", "CHANGE HANDLING", new Vector2(.30f, .275f), new Vector2(350f, 54f), CycleHandling);
+            MakeButton(root.transform, "Thruster", "CHANGE THRUSTER", new Vector2(.70f, .275f), new Vector2(350f, 54f), CycleThruster);
+            MakeButton(root.transform, "Repair", "REPAIR DAMAGED", new Vector2(.30f, .20f), new Vector2(350f, 54f), RepairFirstDamaged);
+            MakeButton(root.transform, "BuyAddOn", "BUY / EQUIP MOD", new Vector2(.70f, .20f), new Vector2(350f, 54f), BuyOrEquipNextAddOn);
+            MakeButton(root.transform, "Fly", "LAUNCH", new Vector2(.70f, .10f), new Vector2(300f, 66f), () => GameManager.I?.StartRun());
+            MakeButton(root.transform, "Back", "TITLE", new Vector2(.30f, .10f), new Vector2(240f, 66f), () => GameManager.I?.ReturnToTitle());
         }
 
         void BuildExtractButton()
@@ -227,6 +234,15 @@ namespace JetHorizon
                 () => GameManager.I?.RequestExtraction());
             _extractLabel = _extractButton.GetComponentInChildren<Text>();
             _extractButton.gameObject.SetActive(false);
+        }
+
+        void BuildMetaHud()
+        {
+            if (HudScreen == null || _cargoHud != null) return;
+            _cargoHud = MakeLabel(HudScreen.transform, "CargoHud", "CARGO  0/0", 21,
+                new Vector2(.14f, .88f), new Vector2(360f, 54f), new Color(.35f, .95f, 1f));
+            _heatHud = MakeLabel(HudScreen.transform, "HeatHud", "HEAT  0", 21,
+                new Vector2(.86f, .88f), new Vector2(360f, 54f), new Color(1f, .42f, .74f));
         }
 
         Button MakeButton(Transform parent, string name, string text, Vector2 anchor, Vector2 size, UnityEngine.Events.UnityAction action)
@@ -277,9 +293,37 @@ namespace JetHorizon
                 $"EXTRACTIONS  {g.SuccessfulExtractions}     CREDITS  {g.Credits:N0}\n" +
                 $"SALVAGE  {g.Salvage}     ALLOY  {g.Alloy}     PRISM  {g.Prism}\n\n" +
                 $"THRUSTER  {g.SelectedThrusterId.ToUpperInvariant()}     HANDLING  {g.SelectedHandlingId.ToUpperInvariant()}\n" +
-                $"SPEED  {p.SpeedMultiplier:0.00}     CARGO  {p.CargoCapacity}     HULL HITS  {p.CollisionHitCapacity}\n" +
-                $"REPAIR BAYS  {g.RepairBayLevel}     MECHANIC BOTS  {g.MechanicBotLevel}";
+                $"ENGINE L{g.GetSubsystem(ShipSubsystem.PrimaryThruster).Tier}  SPEED {p.SpeedMultiplier:0.00}x     " +
+                $"STABILIZERS L{g.GetSubsystem(ShipSubsystem.Stabilizers).Tier}\n" +
+                $"CARGO L{g.GetSubsystem(ShipSubsystem.CargoBay).Tier}  {p.CargoCapacity} WEIGHT     " +
+                $"HULL L{g.GetSubsystem(ShipSubsystem.Hull).Tier}  {p.CollisionHitCapacity} HIT     " +
+                $"REPAIR BAYS {g.RepairBayLevel}";
             if (_garageStatus != null) _garageStatus.text = status;
+        }
+
+        void Upgrade(GarageUpgradeId id)
+        {
+            var garage = GameManager.I?.Garage;
+            if (garage == null) return;
+            if (garage.Current.RestorationChoicePending && (id == GarageUpgradeId.Shield || id == GarageUpgradeId.CargoBay))
+            {
+                RestorationBranch branch = id == GarageUpgradeId.Shield ? RestorationBranch.Shield : RestorationBranch.Cargo;
+                GarageCommandResult restored = garage.ChooseRestoration(branch);
+                RefreshGarage(restored.Succeeded ? "RESTORATION SELECTED: " + branch.ToString().ToUpperInvariant() : "RESTORATION CHOICE FAILED");
+                return;
+            }
+
+            GarageUpgradeDefinition definition = GarageProgressionCatalog.Get(id);
+            int level = GarageProgressionCatalog.GetCurrentLevel(garage.Current, id);
+            int cost = definition.NextCreditCost(level);
+            GarageCommandResult result = garage.PurchaseUpgrade(id);
+            int resultingLevel = result.Succeeded
+                ? GarageProgressionCatalog.GetCurrentLevel(result.State, id)
+                : level;
+            RefreshGarage(result.Succeeded
+                ? $"{definition.DisplayName} UPGRADED TO L{resultingLevel}"
+                : cost <= 0 ? definition.DisplayName + " MAXED"
+                : $"{definition.DisplayName} NEEDS {cost:N0} CREDITS OR IS LOCKED");
         }
 
         void CycleHandling()
@@ -475,7 +519,19 @@ namespace JetHorizon
                         bool available = snapshot != null && snapshot.ExtractionAvailable;
                         _extractButton.gameObject.SetActive(available);
                         if (available && _extractLabel != null)
-                            _extractLabel.text = $"EXTRACT  {snapshot.CargoUnits}/{snapshot.CargoCapacity}";
+                            _extractLabel.text = $"EXTRACT  {snapshot.CargoProjectedCreditValue:N0} CR  •  {snapshot.ExtractionWindowDistanceRemaining:0}m";
+                        if (snapshot != null)
+                        {
+                            if (_cargoHud != null)
+                                _cargoHud.text = $"CARGO  {snapshot.CargoWeight}/{snapshot.CargoCapacityWeight}  •  {snapshot.CargoProjectedCreditValue:N0} CR";
+                            if (_heatHud != null)
+                            {
+                                float distanceToWindow = Mathf.Max(0f, snapshot.NextExtractionDistance - snapshot.Distance);
+                                _heatHud.text = snapshot.ExtractionWindowOpen
+                                    ? $"HEAT {snapshot.HeatLevel}  •  EXTRACT NOW"
+                                    : $"HEAT {snapshot.HeatLevel}  •  GATE {distanceToWindow:0}m";
+                            }
+                        }
                     }
                     _hudTimer -= Time.deltaTime;
                     if (_hudTimer <= 0f)

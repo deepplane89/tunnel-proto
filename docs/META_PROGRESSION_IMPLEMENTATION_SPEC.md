@@ -1,10 +1,31 @@
 # Jet Horizon Meta Progression Implementation Specification
 
-**Status:** Implementation preparation
+**Status:** Foundation implemented; content and physical presentation remain in progress
 
 **Scope:** Cargo, extraction, Heat, ship performance, handling, upgrades, damage, repair, power-ups, garage, economy, persistence, presentation, analytics seams, and tests
 
 **Architecture requirement:** Engine-neutral rules remain authoritative. Unity presents and adapts. The application layer coordinates without owning formulas.
+
+## Current implementation checkpoint
+
+Implemented in the `codex/engine-neutral-core-v1` branch:
+
+- weighted Salvage, Alloy, and Prism cargo definitions with capacity rejection and Heat-dependent selection;
+- repeating extraction windows, explicit extract/pass behavior, and Heat-driven speed, reward, rarity, and encounter-intensity values;
+- persistent upgrade levels and increasing credit costs for engine, stabilizers, cargo bay, hull, shield, laser, magnet, and overdrive;
+- ship launch parameters derived from upgrade tier, subsystem integrity, and selected handling model;
+- the four-extraction wreck-restoration arc, including a shield-or-cargo priority choice without permanently locking the other branch;
+- temporary pooled cargo-pod renderers, cargo/Heat HUD readouts, extraction controls, and a functional temporary garage menu;
+- persistence migration and engine-neutral tests for cargo, extraction, Heat, restoration, and upgrades.
+
+Deliberately still replaceable or unimplemented:
+
+- final cargo models, ship-mounted cargo anchors, pickup rejection feedback, and authored extraction-beacon art;
+- the new obstacle encounter composer, hidden-opening route model, straight-line rejection, and final encounter library;
+- a physical evolving garage scene and final mobile UI;
+- deeper typed subsystem-damage results, visual repair work states, contracts, and retention layers.
+
+The existing cone, canyon, corridor, and lightning content therefore remains active for now. The core exposes `EncounterIntensity` as a clean escalation input, but the eventual encounter system—not the meta or orchestrator—will decide how that intensity selects and composes obstacle content.
 
 ## 1. Product north star
 

@@ -30,7 +30,10 @@ namespace JetHorizon
         sealed class CargoView
         {
             public Transform T;
-            public MeshRenderer Renderer;
+            public Transform Core;
+            public Transform LeftRail;
+            public Transform RightRail;
+            public MeshRenderer[] Renderers;
             public bool Active;
             public int CoreId;
             public RunCargoKind Kind;
@@ -64,19 +67,45 @@ namespace JetHorizon
             _cargoMaterials[RunCargoKind.Prism] = CreateHologram(TextureFactory.Hex(0xff4dff), false);
             var parent = new GameObject("CargoPool").transform;
             parent.SetParent(transform, false);
-            for (int i = 0; i < 18; i++)
+            for (int i = 0; i < 24; i++)
             {
-                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                Destroy(go.GetComponent<Collider>());
-                go.name = "cargo";
-                go.layer = 8;
-                go.transform.SetParent(parent, false);
-                go.transform.localScale = new Vector3(1.4f, 1.05f, 1.8f);
-                var renderer = go.GetComponent<MeshRenderer>();
-                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                go.SetActive(false);
-                _cargo.Add(new CargoView { T = go.transform, Renderer = renderer });
+                var root = new GameObject("cargo-pod");
+                root.layer = 8;
+                root.transform.SetParent(parent, false);
+
+                GameObject core = CargoPart(root.transform, "Core", PrimitiveType.Cube);
+                GameObject left = CargoPart(root.transform, "LeftRail", PrimitiveType.Cube);
+                GameObject right = CargoPart(root.transform, "RightRail", PrimitiveType.Cube);
+                left.transform.localPosition = new Vector3(-.9f, 0f, 0f);
+                right.transform.localPosition = new Vector3(.9f, 0f, 0f);
+                left.transform.localScale = right.transform.localScale = new Vector3(.18f, 1.15f, 2.1f);
+                var renderers = new[]
+                {
+                    core.GetComponent<MeshRenderer>(),
+                    left.GetComponent<MeshRenderer>(),
+                    right.GetComponent<MeshRenderer>()
+                };
+                root.SetActive(false);
+                _cargo.Add(new CargoView
+                {
+                    T = root.transform,
+                    Core = core.transform,
+                    LeftRail = left.transform,
+                    RightRail = right.transform,
+                    Renderers = renderers
+                });
             }
+        }
+
+        static GameObject CargoPart(Transform parent, string name, PrimitiveType primitive)
+        {
+            GameObject part = GameObject.CreatePrimitive(primitive);
+            Object.Destroy(part.GetComponent<Collider>());
+            part.name = name;
+            part.layer = 8;
+            part.transform.SetParent(parent, false);
+            part.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            return part;
         }
 
         void BuildPool()
@@ -375,11 +404,41 @@ namespace JetHorizon
                 view.Active = true;
                 view.CoreId = pickup.Id;
                 view.Kind = pickup.CargoKind;
-                view.Renderer.sharedMaterial = _cargoMaterials[pickup.CargoKind];
+                for (int i = 0; i < view.Renderers.Length; i++)
+                    view.Renderers[i].sharedMaterial = _cargoMaterials[pickup.CargoKind];
+                ConfigureCargoPod(view, pickup.CargoKind);
                 view.T.position = new Vector3(pickup.X, pickup.Y, pickup.Z);
                 view.T.gameObject.SetActive(true);
                 return;
             }
+        }
+
+        static void ConfigureCargoPod(CargoView view, RunCargoKind kind)
+        {
+            view.T.localScale = Vector3.one;
+            view.Core.localRotation = Quaternion.identity;
+            view.LeftRail.gameObject.SetActive(true);
+            view.RightRail.gameObject.SetActive(true);
+            if (kind == RunCargoKind.Salvage)
+            {
+                view.Core.localScale = new Vector3(1.35f, .95f, 1.65f);
+                view.LeftRail.localScale = view.RightRail.localScale = new Vector3(.16f, 1.05f, 1.9f);
+                view.T.localScale = Vector3.one * .82f;
+            }
+            else if (kind == RunCargoKind.Alloy)
+            {
+                view.Core.localScale = new Vector3(1.55f, .82f, 2.25f);
+                view.LeftRail.localScale = view.RightRail.localScale = new Vector3(.24f, 1.2f, 2.5f);
+                view.T.localScale = Vector3.one;
+            }
+            else
+            {
+                view.Core.localScale = Vector3.one * 1.6f;
+                view.Core.localRotation = Quaternion.Euler(35f, 45f, 35f);
+                view.LeftRail.localScale = view.RightRail.localScale = new Vector3(.14f, 1.7f, .14f);
+                view.T.localScale = Vector3.one * 1.12f;
+            }
+            view.T.name = "cargo-pod-" + CargoCatalog.Get(kind).Id;
         }
     }
 }

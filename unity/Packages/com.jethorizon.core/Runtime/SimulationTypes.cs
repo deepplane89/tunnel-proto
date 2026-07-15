@@ -91,6 +91,10 @@ namespace JetHorizon.Simulation
         KlaxonCountdown,
         PickupCollected,
         CargoCollected,
+        CargoRejectedForWeight,
+        ExtractionWindowOpened,
+        ExtractionWindowPassed,
+        HeatChanged,
         RunExtracted,
         PowerupCollected,
         PowerupActivated,
@@ -438,6 +442,8 @@ namespace JetHorizon.Simulation
         public PowerupType Powerup { get; }
         public RunCargoKind CargoKind { get; }
         public int CargoUnits { get; }
+        public int CargoWeight => CargoUnits * CargoCatalog.Get(CargoKind).Weight;
+        public int CargoCreditValue => CargoUnits * CargoCatalog.Get(CargoKind).CreditValue;
         public float X { get; }
         public float Y { get; }
         public float Z { get; }
@@ -542,7 +548,18 @@ namespace JetHorizon.Simulation
         public int CargoPrism { get; internal set; }
         public int CargoUnits { get; internal set; }
         public int CargoCapacity { get; internal set; }
+        public int CargoWeight { get; internal set; }
+        public int CargoCapacityWeight { get; internal set; }
+        public int CargoBaseCreditValue { get; internal set; }
+        public int CargoProjectedCreditValue { get; internal set; }
+        public int HeatLevel { get; internal set; }
+        public float HeatRewardMultiplier { get; internal set; }
+        public float HeatSpeedMultiplier { get; internal set; }
+        public float EncounterIntensity { get; internal set; }
         public bool ExtractionAvailable { get; internal set; }
+        public bool ExtractionWindowOpen { get; internal set; }
+        public float ExtractionWindowDistanceRemaining { get; internal set; }
+        public float NextExtractionDistance { get; internal set; }
         public int HullHitsRemaining { get; internal set; }
         public int HullHitCapacity { get; internal set; }
 

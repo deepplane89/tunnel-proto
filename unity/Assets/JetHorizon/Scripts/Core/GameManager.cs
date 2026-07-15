@@ -102,6 +102,10 @@ namespace JetHorizon
                 MaxCorridorSlices = 96,
                 CargoCapacity = launchProfile.CargoCapacity,
                 HullHitCapacity = launchProfile.CollisionHitCapacity,
+                FirstExtractionDistance = 650f,
+                ExtractionWindowLengthDistance = 220f,
+                ExtractionIntervalDistance = 520f,
+                MaximumHeat = 5,
                 PrismaticSineTunnelEnabled = true,
                 Snap = FeelProfile.Snap,
                 AccelBase = FeelProfile.AccelBase * launchProfile.AccelerationMultiplier,
@@ -111,11 +115,15 @@ namespace JetHorizon
                 MaxVelSnap = FeelProfile.MaxVelocitySnap * launchProfile.LateralSpeedMultiplier,
                 DecelBasePercent = FeelProfile.DecelerationBasePercent * launchProfile.SettleMultiplier,
                 DecelFullPercent = FeelProfile.DecelerationFullPercent * launchProfile.SettleMultiplier,
-                CounterSteerBoost = FeelProfile.CounterSteerBoost,
+                CounterSteerBoost = FeelProfile.CounterSteerBoost * launchProfile.CounterSteerMultiplier,
                 BankMaxRadians = FeelProfile.BankMaximumRadians * launchProfile.BankMultiplier,
-                BankSmoothing = FeelProfile.BankSmoothing,
-                BankReturnRate = FeelProfile.BankReturnRate,
-                BankZeroCrossMultiplier = FeelProfile.BankZeroCrossMultiplier
+                BankSmoothing = FeelProfile.BankSmoothing * launchProfile.BankRecoveryMultiplier,
+                BankReturnRate = FeelProfile.BankReturnRate * launchProfile.BankRecoveryMultiplier,
+                BankZeroCrossMultiplier = FeelProfile.BankZeroCrossMultiplier,
+                ShieldPowerMultiplier = launchProfile.ShieldPowerMultiplier,
+                LaserPowerMultiplier = launchProfile.LaserPowerMultiplier,
+                MagnetPowerMultiplier = launchProfile.MagnetPowerMultiplier,
+                OverdrivePowerMultiplier = launchProfile.OverdrivePowerMultiplier
             }, 20260714u, runDefinition);
         }
 
@@ -399,7 +407,13 @@ namespace JetHorizon
             if (State.Phase != GamePhase.Playing || _coreSimulation == null) return false;
             if (!_coreSimulation.TryExtract(out RunCargoManifest cargo)) return false;
 
-            GarageCommandResult settlement = Garage.Extract(new CargoManifest(cargo.Salvage, cargo.Alloy, cargo.Prism));
+            GarageCommandResult settlement = Garage.Extract(new CargoManifest(
+                cargo.Salvage,
+                cargo.Alloy,
+                cargo.Prism,
+                cargo.TotalWeight,
+                cargo.CreditValue,
+                cargo.HeatLevel));
             if (!settlement.Succeeded) return false;
             _garageRunResolved = true;
             _applicationEvents.Dispatch(_coreSimulation.Events, _coreSimulation.LatestRunResult);
@@ -509,7 +523,8 @@ namespace JetHorizon
                 _applicationEvents.Dispatch(_coreSimulation.Events, _coreSimulation.LatestRunResult);
             if (!_garageRunResolved && Garage != null)
             {
-                Garage.RecordDestroyedRun(.25f);
+                float severity = .18f + (_coreSimulation?.Snapshot.HeatLevel ?? 0) * .06f;
+                Garage.RecordDestroyedRun(Mathf.Clamp(severity, .18f, .48f));
                 _garageRunResolved = true;
             }
             SyncCoreSession();

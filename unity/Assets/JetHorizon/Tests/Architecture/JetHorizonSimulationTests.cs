@@ -788,11 +788,18 @@ namespace JetHorizon.Simulation.Tests
             var config = new SimulationConfig
             {
                 HazardSpawningEnabled = false,
-                CollisionEnabled = false
+                CollisionEnabled = false,
+                LightningGateIntervalSeconds = .25f
             };
             var first = new JetHorizonSimulation(config, 95u, run);
             var replay = new JetHorizonSimulation(config, 95u, run);
-            var world = new WorldFrame(false, false) { CanyonActive = true };
+            var world = new WorldFrame(false, false)
+            {
+                CanyonActive = true,
+                CorridorCollisionActive = true,
+                CorridorLeftBoundary = -28f,
+                CorridorRightBoundary = 28f
+            };
             first.StartRun();
             replay.StartRun();
 
@@ -802,14 +809,17 @@ namespace JetHorizon.Simulation.Tests
                 replay.Step(default, world);
             }
 
-            Assert.That(first.Snapshot.HazardCount, Is.EqualTo(1));
-            Assert.That(replay.Snapshot.HazardCount, Is.EqualTo(1));
-            var a = first.Snapshot.GetHazard(0);
-            var b = replay.Snapshot.GetHazard(0);
-            Assert.That(a.Kind, Is.EqualTo(HazardKind.Lightning));
-            Assert.That(a.Style, Is.EqualTo(HazardStyle.Lightning));
-            Assert.That(b.X, Is.EqualTo(a.X));
-            Assert.That(b.Z, Is.EqualTo(a.Z));
+            Assert.That(first.Snapshot.HazardCount, Is.GreaterThanOrEqualTo(6));
+            Assert.That(replay.Snapshot.HazardCount, Is.EqualTo(first.Snapshot.HazardCount));
+            for (int i = 0; i < first.Snapshot.HazardCount; i++)
+            {
+                var a = first.Snapshot.GetHazard(i);
+                var b = replay.Snapshot.GetHazard(i);
+                Assert.That(a.Kind, Is.EqualTo(HazardKind.Lightning));
+                Assert.That(a.Style, Is.EqualTo(HazardStyle.Lightning));
+                Assert.That(b.X, Is.EqualTo(a.X));
+                Assert.That(b.Z, Is.EqualTo(a.Z));
+            }
         }
 
         [Test]
@@ -1117,6 +1127,23 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void CargoRestorationChoiceDelaysButDoesNotPermanentlyLockShield()
+        {
+            GarageState state = GarageState.CreateNew();
+            for (int i = 0; i < 4; i++)
+                state = GarageDomainService.Extract(state, new CargoManifest(2, 0, 0)).State;
+
+            state = GarageDomainService.ChooseRestoration(state, RestorationBranch.Cargo).State;
+            state.Credits = 450;
+            GarageCommandResult result = GarageDomainService.PurchaseUpgrade(state, GarageUpgradeId.Shield);
+
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(result.State.GetSubsystem(ShipSubsystem.ShieldGenerator).Tier, Is.EqualTo(1));
+            Assert.That(result.State.GetSubsystem(ShipSubsystem.ShieldGenerator).Integrity, Is.EqualTo(1f));
+            Assert.That(result.State.Credits, Is.Zero);
+        }
+
+        [Test]
         public void HandlingSelectionIsPersistentContentAndChangesLaunchPhysics()
         {
             GarageState state = GarageState.CreateNew();
@@ -1153,7 +1180,7 @@ namespace JetHorizon.Simulation.Tests
                 HazardSpawningEnabled = false,
                 CollisionEnabled = false,
                 FirstExtractionDistance = .1f,
-                CargoCapacity = 4
+                CargoCapacity = 6
             }, 110u);
             simulation.StartRun(11001L);
             simulation.RegisterPickup(PickupSpawn.Cargo(RunCargoKind.Alloy, 2, 0f, 1.2f, 3.9f));
@@ -1165,6 +1192,86 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(manifest.Alloy, Is.EqualTo(2));
             Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Extracted));
             Assert.That(ContainsEvent(simulation.Events, SimulationEventType.RunExtracted), Is.True);
+        }
+
+        [Test]
+        public void CargoUsesWeightAndRejectsAnItemThatDoesNotFit()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false,
+                CargoCapacity = 5
+            }, 112u);
+            simulation.StartRun();
+            simulation.RegisterPickup(PickupSpawn.Cargo(RunCargoKind.Prism, 1, 0f, 1.2f, 3.9f));
+            simulation.Step(default);
+
+            Assert.That(CargoCatalog.Prism.Weight, Is.EqualTo(6));
+            Assert.That(simulation.Snapshot.CargoWeight, Is.Zero);
+            Assert.That(simulation.Snapshot.CargoCapacityWeight, Is.EqualTo(5));
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.CargoRejectedForWeight), Is.True);
+        }
+
+        [Test]
+        public void PassingExtractionWindowRaisesHeatAndSchedulesAnotherWindow()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                BaseSpeed = 6f,
+                StartSpeedMultiplier = 1f,
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false,
+                FirstExtractionDistance = .2f,
+                ExtractionWindowLengthDistance = .3f,
+                ExtractionIntervalDistance = .7f
+            }, 113u);
+            simulation.StartRun();
+            simulation.Step(default);
+            simulation.Step(default);
+            Assert.That(simulation.Snapshot.ExtractionWindowOpen, Is.True);
+
+            bool sawHeat = false;
+            for (int i = 0; i < 4; i++)
+            {
+                simulation.Step(default);
+                sawHeat |= ContainsEvent(simulation.Events, SimulationEventType.HeatChanged);
+            }
+
+            Assert.That(simulation.Snapshot.HeatLevel, Is.EqualTo(1));
+            Assert.That(simulation.Snapshot.ExtractionWindowOpen, Is.False);
+            Assert.That(simulation.Snapshot.HeatRewardMultiplier, Is.GreaterThan(1f));
+            Assert.That(simulation.Snapshot.NextExtractionDistance, Is.EqualTo(.9f).Within(.001f));
+            Assert.That(sawHeat, Is.True);
+        }
+
+        [Test]
+        public void UpgradeCostsStrictlyIncreaseAndEngineUpgradeChangesLaunchPerformance()
+        {
+            foreach (GarageUpgradeId id in System.Enum.GetValues(typeof(GarageUpgradeId)))
+            {
+                GarageUpgradeDefinition definition = GarageProgressionCatalog.Get(id);
+                int previous = 0;
+                for (int level = 1; level < definition.MaximumLevel; level++)
+                {
+                    int cost = definition.NextCreditCost(level);
+                    Assert.That(cost, Is.GreaterThan(previous), id.ToString());
+                    previous = cost;
+                }
+            }
+
+            GarageState state = GarageState.CreateNew();
+            state.SuccessfulExtractions = 4;
+            state.Credits = 10000;
+            state.GetSubsystem(ShipSubsystem.PrimaryThruster).Integrity = 1f;
+            ShipLaunchProfile before = GarageDomainService.CreateLaunchProfile(state);
+            GarageCommandResult upgraded = GarageDomainService.PurchaseUpgrade(state, GarageUpgradeId.Engine);
+            ShipLaunchProfile after = GarageDomainService.CreateLaunchProfile(upgraded.State);
+
+            Assert.That(upgraded.Succeeded, Is.True);
+            Assert.That(upgraded.State.Credits, Is.LessThan(state.Credits));
+            Assert.That(after.SpeedMultiplier, Is.GreaterThan(before.SpeedMultiplier));
+            Assert.That(after.AccelerationMultiplier, Is.GreaterThan(before.AccelerationMultiplier));
         }
 
         [Test]

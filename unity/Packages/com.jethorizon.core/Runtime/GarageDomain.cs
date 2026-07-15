@@ -15,13 +15,19 @@ namespace JetHorizon.Meta
         public int Alloy { get; }
         public int Prism { get; }
         public int TotalUnits => Salvage + Alloy + Prism;
+        public int TotalWeight { get; }
+        public int CreditValue { get; }
+        public int HeatLevel { get; }
 
-        public CargoManifest(int salvage, int alloy, int prism)
+        public CargoManifest(int salvage, int alloy, int prism, int totalWeight = 0, int creditValue = -1, int heatLevel = 0)
         {
             if (salvage < 0 || alloy < 0 || prism < 0) throw new ArgumentOutOfRangeException(nameof(salvage));
             Salvage = salvage;
             Alloy = alloy;
             Prism = prism;
+            TotalWeight = totalWeight > 0 ? totalWeight : salvage + alloy * 3 + prism * 6;
+            CreditValue = creditValue >= 0 ? creditValue : salvage * 35 + alloy * 125 + prism * 360;
+            HeatLevel = Math.Max(0, heatLevel);
         }
 
         public int Get(CargoKind kind) => kind == CargoKind.Salvage ? Salvage : kind == CargoKind.Alloy ? Alloy : Prism;
@@ -53,7 +59,7 @@ namespace JetHorizon.Meta
     [Serializable]
     public sealed class GarageState
     {
-        public int SchemaVersion = 1;
+        public int SchemaVersion = 2;
         public int Credits;
         public int Salvage;
         public int Alloy;
@@ -92,14 +98,16 @@ namespace JetHorizon.Meta
         public GarageState Copy()
         {
             var copy = (GarageState)MemberwiseClone();
-            copy.OwnedItemIds = new List<string>(OwnedItemIds);
-            copy.EquippedAddOnIds = new List<string>(EquippedAddOnIds);
-            copy.PowerupTiers = new List<int>(PowerupTiers);
-            copy.PowerupCharges = new List<int>(PowerupCharges);
-            copy.Subsystems = new List<SubsystemState>(Subsystems.Count);
-            for (int i = 0; i < Subsystems.Count; i++) copy.Subsystems.Add(Subsystems[i].Copy());
-            copy.RepairJobs = new List<RepairJobState>(RepairJobs.Count);
-            for (int i = 0; i < RepairJobs.Count; i++) copy.RepairJobs.Add(RepairJobs[i].Copy());
+            copy.OwnedItemIds = new List<string>(OwnedItemIds ?? new List<string>());
+            copy.EquippedAddOnIds = new List<string>(EquippedAddOnIds ?? new List<string>());
+            copy.PowerupTiers = new List<int>(PowerupTiers ?? new List<int>());
+            copy.PowerupCharges = new List<int>(PowerupCharges ?? new List<int>());
+            copy.Subsystems = new List<SubsystemState>(Subsystems?.Count ?? 0);
+            if (Subsystems != null)
+                for (int i = 0; i < Subsystems.Count; i++) if (Subsystems[i] != null) copy.Subsystems.Add(Subsystems[i].Copy());
+            copy.RepairJobs = new List<RepairJobState>(RepairJobs?.Count ?? 0);
+            if (RepairJobs != null)
+                for (int i = 0; i < RepairJobs.Count; i++) if (RepairJobs[i] != null) copy.RepairJobs.Add(RepairJobs[i].Copy());
             return copy;
         }
 
@@ -214,27 +222,41 @@ namespace JetHorizon.Meta
         public float AccelerationMultiplier { get; }
         public float LateralSpeedMultiplier { get; }
         public float SettleMultiplier { get; }
+        public float CounterSteerMultiplier { get; }
         public float BankMultiplier { get; }
+        public float BankRecoveryMultiplier { get; }
         public float HandlingDrift { get; }
         public float HorizonResponse { get; }
         public float PresentationJuice { get; }
         public int CollisionHitCapacity { get; }
         public int CargoCapacity { get; }
+        public float ShieldPowerMultiplier { get; }
+        public float LaserPowerMultiplier { get; }
+        public float MagnetPowerMultiplier { get; }
+        public float OverdrivePowerMultiplier { get; }
 
         public ShipLaunchProfile(float speedMultiplier, float accelerationMultiplier, float lateralSpeedMultiplier,
-            float settleMultiplier, float bankMultiplier, float handlingDrift, float horizonResponse,
-            float presentationJuice, int collisionHitCapacity, int cargoCapacity)
+            float settleMultiplier, float counterSteerMultiplier, float bankMultiplier, float bankRecoveryMultiplier,
+            float handlingDrift, float horizonResponse, float presentationJuice, int collisionHitCapacity,
+            int cargoCapacity, float shieldPowerMultiplier, float laserPowerMultiplier,
+            float magnetPowerMultiplier, float overdrivePowerMultiplier)
         {
             SpeedMultiplier = speedMultiplier;
             AccelerationMultiplier = accelerationMultiplier;
             LateralSpeedMultiplier = lateralSpeedMultiplier;
             SettleMultiplier = settleMultiplier;
+            CounterSteerMultiplier = counterSteerMultiplier;
             BankMultiplier = bankMultiplier;
+            BankRecoveryMultiplier = bankRecoveryMultiplier;
             HandlingDrift = handlingDrift;
             HorizonResponse = horizonResponse;
             PresentationJuice = presentationJuice;
             CollisionHitCapacity = collisionHitCapacity;
             CargoCapacity = cargoCapacity;
+            ShieldPowerMultiplier = shieldPowerMultiplier;
+            LaserPowerMultiplier = laserPowerMultiplier;
+            MagnetPowerMultiplier = magnetPowerMultiplier;
+            OverdrivePowerMultiplier = overdrivePowerMultiplier;
         }
     }
 
@@ -257,18 +279,88 @@ namespace JetHorizon.Meta
     /// <summary>All persistent garage rules live here; application code only loads, invokes, and saves.</summary>
     public static class GarageDomainService
     {
+        public static GarageState Normalize(GarageState source)
+        {
+            GarageState state = source?.Copy() ?? GarageState.CreateNew();
+            GarageState defaults = GarageState.CreateNew();
+            state.SchemaVersion = 2;
+            if (string.IsNullOrWhiteSpace(state.ShipId)) state.ShipId = "runner";
+            if (string.IsNullOrWhiteSpace(state.SelectedThrusterId)) state.SelectedThrusterId = "wreck";
+            if (string.IsNullOrWhiteSpace(state.SelectedHandlingId)) state.SelectedHandlingId = "default";
+            if (!state.OwnedItemIds.Contains("handling:default")) state.OwnedItemIds.Add("handling:default");
+            if (!state.OwnedItemIds.Contains("thruster:wreck")) state.OwnedItemIds.Add("thruster:wreck");
+            while (state.PowerupTiers.Count < GarageCatalog.PowerupIds.Length) state.PowerupTiers.Add(1);
+            while (state.PowerupCharges.Count < GarageCatalog.PowerupIds.Length) state.PowerupCharges.Add(0);
+            for (int i = 0; i < defaults.Subsystems.Count; i++)
+            {
+                ShipSubsystem required = defaults.Subsystems[i].Subsystem;
+                bool found = false;
+                for (int j = 0; j < state.Subsystems.Count; j++)
+                    if (state.Subsystems[j].Subsystem == required) { found = true; break; }
+                if (!found) state.Subsystems.Add(defaults.Subsystems[i].Copy());
+            }
+            for (int i = 0; i < state.Subsystems.Count; i++)
+            {
+                state.Subsystems[i].Tier = Math.Max(state.Subsystems[i].Subsystem == ShipSubsystem.ShieldGenerator ? 0 : 1, state.Subsystems[i].Tier);
+                state.Subsystems[i].Integrity = Math.Max(0f, Math.Min(1f, state.Subsystems[i].Integrity));
+            }
+            return state;
+        }
+
         public static GarageCommandResult Extract(GarageState source, CargoManifest manifest)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             var state = source.Copy();
             int capacity = CreateLaunchProfile(state).CargoCapacity;
-            if (manifest.TotalUnits > capacity) return Fail(source, GarageFailure.InvalidState);
+            if (manifest.TotalWeight > capacity) return Fail(source, GarageFailure.InvalidState);
             state.SuccessfulExtractions++;
             state.Salvage += manifest.Salvage;
             state.Alloy += manifest.Alloy;
             state.Prism += manifest.Prism;
-            state.Credits += manifest.Salvage * 25 + manifest.Alloy * 70 + manifest.Prism * 180;
+            state.Credits += manifest.CreditValue;
             ApplyRestorationMilestone(state);
+            return Success(state);
+        }
+
+        public static GarageCommandResult PurchaseUpgrade(GarageState source, GarageUpgradeId upgradeId)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            GarageUpgradeDefinition definition = GarageProgressionCatalog.Get(upgradeId);
+            if (source.SuccessfulExtractions < definition.UnlockExtractions)
+                return Fail(source, GarageFailure.Locked);
+
+            int currentLevel = GarageProgressionCatalog.GetCurrentLevel(source, upgradeId);
+            int cost = definition.NextCreditCost(currentLevel);
+            if (cost <= 0) return Fail(source, GarageFailure.InvalidState);
+            if (source.Credits < cost) return Fail(source, GarageFailure.InsufficientResources);
+
+            var state = source.Copy();
+            state.Credits -= cost;
+            switch (upgradeId)
+            {
+                case GarageUpgradeId.Engine: state.GetSubsystem(ShipSubsystem.PrimaryThruster).Tier++; break;
+                case GarageUpgradeId.Stabilizers: state.GetSubsystem(ShipSubsystem.Stabilizers).Tier++; break;
+                case GarageUpgradeId.CargoBay: state.GetSubsystem(ShipSubsystem.CargoBay).Tier++; break;
+                case GarageUpgradeId.Hull: state.GetSubsystem(ShipSubsystem.Hull).Tier++; break;
+                case GarageUpgradeId.Shield:
+                    SubsystemState shield = state.GetSubsystem(ShipSubsystem.ShieldGenerator);
+                    if (shield.Tier <= 0)
+                    {
+                        // Choosing cargo at the restoration milestone delays the shield;
+                        // it does not permanently remove that progression branch.
+                        shield.Tier = 1;
+                        shield.Integrity = 1f;
+                    }
+                    else
+                    {
+                        shield.Tier++;
+                    }
+                    break;
+                case GarageUpgradeId.Laser: state.PowerupTiers[GarageCatalog.PowerupIndex("laser")]++; break;
+                case GarageUpgradeId.Magnet: state.PowerupTiers[GarageCatalog.PowerupIndex("magnet")]++; break;
+                case GarageUpgradeId.Overdrive: state.PowerupTiers[GarageCatalog.PowerupIndex("overdrive")]++; break;
+                default: return Fail(source, GarageFailure.InvalidState);
+            }
             return Success(state);
         }
 
@@ -357,18 +449,14 @@ namespace JetHorizon.Meta
 
         public static GarageCommandResult UpgradePowerup(GarageState source, string powerupId)
         {
-            int index = GarageCatalog.PowerupIndex(powerupId);
-            int tier = source.PowerupTiers[index];
-            if (tier >= 5) return Fail(source, GarageFailure.InvalidState);
-            int creditCost = 500 * tier * tier;
-            int prismCost = Math.Max(0, tier - 2);
-            if (source.Credits < creditCost || source.Prism < prismCost)
-                return Fail(source, GarageFailure.InsufficientResources);
-            var state = source.Copy();
-            state.Credits -= creditCost;
-            state.Prism -= prismCost;
-            state.PowerupTiers[index]++;
-            return Success(state);
+            switch (powerupId)
+            {
+                case "shield": return PurchaseUpgrade(source, GarageUpgradeId.Shield);
+                case "laser": return PurchaseUpgrade(source, GarageUpgradeId.Laser);
+                case "magnet": return PurchaseUpgrade(source, GarageUpgradeId.Magnet);
+                case "overdrive": return PurchaseUpgrade(source, GarageUpgradeId.Overdrive);
+                default: GarageCatalog.PowerupIndex(powerupId); return Fail(source, GarageFailure.InvalidState);
+            }
         }
 
         public static GarageCommandResult UpgradeRepairBay(GarageState source)
@@ -460,19 +548,35 @@ namespace JetHorizon.Meta
         public static ShipLaunchProfile CreateLaunchProfile(GarageState state)
         {
             HandlingModelDefinition handling = GarageCatalog.GetHandling(state.SelectedHandlingId);
-            float thruster = state.GetSubsystem(ShipSubsystem.PrimaryThruster).Integrity;
-            float stabilizers = state.GetSubsystem(ShipSubsystem.Stabilizers).Integrity;
+            SubsystemState engine = state.GetSubsystem(ShipSubsystem.PrimaryThruster);
+            SubsystemState stabilizer = state.GetSubsystem(ShipSubsystem.Stabilizers);
             SubsystemState hull = state.GetSubsystem(ShipSubsystem.Hull);
             SubsystemState cargo = state.GetSubsystem(ShipSubsystem.CargoBay);
-            float speed = .62f + .38f * thruster;
-            float accel = (.65f + .35f * thruster) * (.75f + handling.Response * .5f);
-            float lateral = (.72f + .28f * stabilizers) * (.70f + handling.LateralSpeed * .6f);
-            float settle = (.60f + .40f * stabilizers) * (.75f + handling.Settle * .5f);
+            SubsystemState shield = state.GetSubsystem(ShipSubsystem.ShieldGenerator);
+            float speed = GarageProgressionCatalog.EngineSpeedForLevel(engine.Tier) * (.62f + .38f * engine.Integrity);
+            float accel = GarageProgressionCatalog.EngineAccelerationForLevel(engine.Tier)
+                * (.65f + .35f * engine.Integrity)
+                * (.75f + handling.Response * .5f);
+            float lateral = GarageProgressionCatalog.StabilizerLateralForLevel(stabilizer.Tier)
+                * (.72f + .28f * stabilizer.Integrity)
+                * (.70f + handling.LateralSpeed * .6f);
+            float settle = GarageProgressionCatalog.StabilizerSettleForLevel(stabilizer.Tier)
+                * (.60f + .40f * stabilizer.Integrity)
+                * (.75f + handling.Settle * .5f);
+            float counterSteer = GarageProgressionCatalog.StabilizerCounterForLevel(stabilizer.Tier)
+                * (.40f + .60f * stabilizer.Integrity);
             float bank = .6f + handling.Bank * .8f;
-            int hitCapacity = hull.Tier >= 2 && hull.Integrity >= .70f ? 2 : 1;
-            int cargoCapacity = 8 + cargo.Tier * 6 + (int)Math.Floor(cargo.Integrity * 6f);
-            return new ShipLaunchProfile(speed, accel, lateral, settle, bank, handling.Drift,
-                handling.Horizon, handling.Juice, hitCapacity, cargoCapacity);
+            float bankRecovery = .55f + .45f * stabilizer.Integrity;
+            int hitCapacity = hull.Tier >= 2 && hull.Integrity >= .70f ? (hull.Tier >= 5 ? 3 : 2) : 1;
+            int baseCargoCapacity = GarageProgressionCatalog.CargoCapacityForLevel(cargo.Tier);
+            int cargoCapacity = Math.Max(4, (int)Math.Round(baseCargoCapacity * (.70f + .30f * cargo.Integrity)));
+            float shieldPower = shield.Tier <= 0 ? 1f : GarageProgressionCatalog.PowerForLevel(shield.Tier);
+            float laserPower = GarageProgressionCatalog.PowerForLevel(state.PowerupTiers[GarageCatalog.PowerupIndex("laser")]);
+            float magnetPower = GarageProgressionCatalog.PowerForLevel(state.PowerupTiers[GarageCatalog.PowerupIndex("magnet")]);
+            float overdrivePower = GarageProgressionCatalog.PowerForLevel(state.PowerupTiers[GarageCatalog.PowerupIndex("overdrive")]);
+            return new ShipLaunchProfile(speed, accel, lateral, settle, counterSteer, bank, bankRecovery,
+                handling.Drift, handling.Horizon, handling.Juice, hitCapacity, cargoCapacity,
+                shieldPower, laserPower, magnetPower, overdrivePower);
         }
 
         static void ApplyRestorationMilestone(GarageState state)

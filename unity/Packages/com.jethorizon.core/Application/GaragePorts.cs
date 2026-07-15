@@ -37,9 +37,10 @@ namespace JetHorizon.Application
             _store = store ?? throw new System.ArgumentNullException(nameof(store));
             _clock = clock ?? throw new System.ArgumentNullException(nameof(clock));
             _repairAcceleration = repairAcceleration ?? throw new System.ArgumentNullException(nameof(repairAcceleration));
-            Current = _store.TryLoad(out GarageState loaded) && loaded != null
-                ? loaded.Copy()
-                : GarageState.CreateNew();
+            Current = GarageDomainService.Normalize(
+                _store.TryLoad(out GarageState loaded) && loaded != null
+                    ? loaded
+                    : GarageState.CreateNew());
             Commit(GarageDomainService.CompleteRepairs(Current, _clock.UtcUnixMilliseconds));
         }
 
@@ -47,6 +48,7 @@ namespace JetHorizon.Application
         public GarageCommandResult RecordDestroyedRun(float severity) => Commit(GarageDomainService.LoseRunCargoAndDamage(Current, severity));
         public GarageCommandResult ChooseRestoration(RestorationBranch branch) => Commit(GarageDomainService.ChooseRestoration(Current, branch));
         public GarageCommandResult Purchase(string itemId) => Commit(GarageDomainService.Purchase(Current, itemId));
+        public GarageCommandResult PurchaseUpgrade(GarageUpgradeId upgradeId) => Commit(GarageDomainService.PurchaseUpgrade(Current, upgradeId));
         public GarageCommandResult EquipThruster(string itemId) => Commit(GarageDomainService.EquipThruster(Current, itemId));
         public GarageCommandResult EquipHandling(string handlingId) => Commit(GarageDomainService.EquipHandling(Current, handlingId));
         public GarageCommandResult SetAddOnEquipped(string itemId, bool equipped) => Commit(GarageDomainService.SetAddOnEquipped(Current, itemId, equipped));

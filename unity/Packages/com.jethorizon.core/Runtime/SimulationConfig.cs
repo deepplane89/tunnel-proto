@@ -69,7 +69,17 @@ namespace JetHorizon.Simulation
         public int CargoCapacity = 18;
         public int HullHitCapacity = 1;
         public float FirstExtractionDistance = 650f;
+        public float ExtractionWindowLengthDistance = 220f;
+        public float ExtractionIntervalDistance = 520f;
+        public int MaximumHeat = 5;
+        public float HeatSpeedPerLevel = 0.06f;
+        public float HeatRewardPerLevel = 0.30f;
+        public float HeatEncounterIntensityPerLevel = 0.18f;
         public int CargoWaveInterval = 3;
+        public float ShieldPowerMultiplier = 1f;
+        public float LaserPowerMultiplier = 1f;
+        public float MagnetPowerMultiplier = 1f;
+        public float OverdrivePowerMultiplier = 1f;
         public bool PrismaticSineTunnelEnabled;
         public float PrismaticTunnelSpawnZ = -260f;
         public float PrismaticTunnelRowSpacing = 7f;
@@ -106,6 +116,14 @@ namespace JetHorizon.Simulation
             if (CargoCapacity <= 0) throw new InvalidOperationException("CargoCapacity must be positive.");
             if (HullHitCapacity <= 0) throw new InvalidOperationException("HullHitCapacity must be positive.");
             if (FirstExtractionDistance <= 0f) throw new InvalidOperationException("FirstExtractionDistance must be positive.");
+            if (ExtractionWindowLengthDistance <= 0f) throw new InvalidOperationException("ExtractionWindowLengthDistance must be positive.");
+            if (ExtractionIntervalDistance <= ExtractionWindowLengthDistance)
+                throw new InvalidOperationException("ExtractionIntervalDistance must exceed the extraction window length.");
+            if (MaximumHeat < 1) throw new InvalidOperationException("MaximumHeat must be positive.");
+            if (HeatSpeedPerLevel < 0f || HeatRewardPerLevel < 0f || HeatEncounterIntensityPerLevel < 0f)
+                throw new InvalidOperationException("Heat multipliers cannot be negative.");
+            if (ShieldPowerMultiplier <= 0f || LaserPowerMultiplier <= 0f || MagnetPowerMultiplier <= 0f || OverdrivePowerMultiplier <= 0f)
+                throw new InvalidOperationException("Power-up multipliers must be positive.");
             if (CargoWaveInterval <= 0) throw new InvalidOperationException("CargoWaveInterval must be positive.");
             if (SpawnIntervalDistance <= 0f) throw new InvalidOperationException("SpawnIntervalDistance must be positive.");
             if (PrismaticTunnelRowSpacing <= 0f) throw new InvalidOperationException("PrismaticTunnelRowSpacing must be positive.");
