@@ -1655,6 +1655,34 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void CrystallineCanyonAdmitsFullyDamagedStarterHandlingWithoutFlatteningItsWave()
+        {
+            // Mirrors the weakest legal garage state: tier-one engine and
+            // stabilizers at zero integrity with the default handling model.
+            var config = new SimulationConfig
+            {
+                StartSpeedMultiplier = 5f / 3f,
+                PersistentCruiseSpeedMultiplier = .70f,
+                MinimumOperationalSpeed = 50f,
+                Snap = .5625f,
+                AccelBase = 22f * .65f,
+                AccelSnap = 52f * .65f,
+                HandlingDrift = .30f,
+                MaxVelBase = 9f * .72f,
+                MaxVelSnap = 13f * .72f,
+                DecelBasePercent = .02f * .60f,
+                DecelFullPercent = .05f * .60f,
+                CounterSteerBoost = 3.15f * .40f
+            };
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(config);
+            EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence(capability.CruiseSpeed / 42f)[1];
+            EncounterValidationResult result = new EncounterCapabilityValidator().Validate(canyon, capability, 0);
+
+            Assert.That(result.IsAdmissible, Is.True);
+            Assert.That(result.FeasibilityMargin, Is.GreaterThan(4f));
+        }
+
+        [Test]
         public void MissingProofExtractionGateContinuesDeeperAndRaisesHeat()
         {
             var simulation = new JetHorizonSimulation(new SimulationConfig

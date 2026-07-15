@@ -414,9 +414,10 @@ namespace JetHorizon.Simulation
                 float edge = Math.Min(i / 7f, (count - 1 - i) / 7f);
                 float edgeBlend = Math.Max(0f, Math.Min(1f, edge));
                 center *= edgeBlend;
-                // A 14u playable half-opening is the narrowest validated width
-                // that retains the complete source wave for the starter ship.
-                float halfWidth = 24f + (14f - 24f) * edgeBlend
+                // Restore the authored L3 knife half-opening. Besides matching
+                // the source, 21.5u remains admissible for a fully damaged
+                // starter stabilizer without flattening the sine.
+                float halfWidth = 28f + (21.5f - 28f) * edgeBlend
                     + (float)Math.Sin(i * .31f + .4f) * 1.1f * edgeBlend;
                 CargoRouteTier cargo = i == 13 ? CargoRouteTier.Safe
                     : i == 28 ? CargoRouteTier.Risky
