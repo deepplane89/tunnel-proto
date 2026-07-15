@@ -149,8 +149,13 @@ namespace JetHorizon
             // The core input adapter mirrors lateral X for Unity's -Z gameplay
             // camera. Yaw is a presentation angle, so applying the browser sign
             // again makes the nose point out of the turn. Undo that mirror here.
-            float yawTarget = snapshot.ShipVelocityX / 14f * Tuning.YawMax;
-            _yawSmooth += (yawTarget - _yawSmooth) * Mathf.Min(1f, dt * Tuning.YawSmoothing);
+            var feel = GameManager.I != null ? GameManager.I.FeelProfile : null;
+            float maxVelocity = feel != null ? feel.MaximumLateralVelocity : Tuning.MaxVel;
+            float yawSign = feel != null ? feel.VisualYawSign : -1f;
+            float yawMax = feel != null ? feel.VisualYawRadians : Tuning.YawMax;
+            float yawResponse = feel != null ? feel.VisualYawResponse : Tuning.YawSmoothing;
+            float yawTarget = Mathf.Clamp(snapshot.ShipVelocityX / Mathf.Max(.01f, maxVelocity), -1f, 1f) * yawMax * yawSign;
+            _yawSmooth += (yawTarget - _yawSmooth) * (1f - Mathf.Exp(-yawResponse * dt));
 
             float speedDelta = (s.Speed - _prevSpeed) / Mathf.Max(dt, 0.0001f);
             _prevSpeed = s.Speed;
@@ -175,9 +180,10 @@ namespace JetHorizon
 
             if (ShipRoot == null) return;
             ShipRoot.position = new Vector3(snapshot.ShipX, s.ShipY, Tuning.ShipZ);
+            float bankScale = feel != null ? feel.VisualBankScale : 1f;
             float rollZ = Mathf.Abs(snapshot.ShipRollRadians) > 0.001f
                 ? snapshot.ShipRollRadians
-                : snapshot.ShipBankRadians;
+                : snapshot.ShipBankRadians * bankScale;
             ShipRoot.localRotation = Quaternion.Euler(
                 (_pitchSmooth + Tuning.ShipRotXOffset) * Mathf.Rad2Deg,
                 _yawSmooth * Mathf.Rad2Deg,

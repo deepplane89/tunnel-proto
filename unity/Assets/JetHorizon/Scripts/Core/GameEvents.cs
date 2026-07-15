@@ -26,6 +26,7 @@ namespace JetHorizon
         public static event Action<float> LaserFired;
         public static event Action CanyonRevealed;
         public static event Action KlaxonCountdown;                      // 1.5s before a speed bump
+        public static event Action LightningStruck;
 
         public static void RaisePhaseChanged(GamePhase from, GamePhase to) => PhaseChanged?.Invoke(from, to);
         public static void RaiseRunStarted()                => RunStarted?.Invoke();
@@ -43,6 +44,7 @@ namespace JetHorizon
         public static void RaiseLaserFired(float laneOffset) => LaserFired?.Invoke(laneOffset);
         public static void RaiseCanyonRevealed()            => CanyonRevealed?.Invoke();
         public static void RaiseKlaxonCountdown()           => KlaxonCountdown?.Invoke();
+        public static void RaiseLightningStruck()            => LightningStruck?.Invoke();
 
         /// <summary>Clear all listeners (domain reload safety / scene reload).</summary>
         public static void Reset()
@@ -51,7 +53,7 @@ namespace JetHorizon
             SpeedChanged = null; VibeChanged = null; NearMiss = null; CoinCollected = null;
             PowerupCollected = null; PowerupActivated = null; PowerupExpired = null;
             ShieldHit = null; ShieldBroken = null; LaserFired = null;
-            CanyonRevealed = null; KlaxonCountdown = null;
+            CanyonRevealed = null; KlaxonCountdown = null; LightningStruck = null;
         }
     }
 }

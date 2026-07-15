@@ -342,7 +342,7 @@ namespace JetHorizon
             if (GameManager.I == null) return;
             bool on = GameManager.I.Phase == GamePhase.Playing;
             var s = GameManager.I.Session;
-            float speedFrac = Mathf.Clamp01(s.EffectiveSpeed / (Tuning.BaseSpeed * 2.5f));
+            float speedFrac = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals.SpeedPresentation : Mathf.Clamp01(s.EffectiveSpeed / (Tuning.BaseSpeed * 2.5f));
 
             if (Preset == Style.Pylon)
             {

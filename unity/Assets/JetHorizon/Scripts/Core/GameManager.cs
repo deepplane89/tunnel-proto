@@ -56,11 +56,18 @@ namespace JetHorizon
         public SimulationEventBuffer CoreEvents => _coreSimulation?.Events;
         public StageCommandBuffer CoreStageCommands => _coreSimulation?.StageCommands;
         public RunCompletionOutcome? LastCompletion => _applicationEvents?.LastCompletion;
+        [Header("Feel")]
+        public JetHorizonFeelProfile FeelProfile;
 
         void Awake()
         {
             if (I != null && I != this) { Destroy(gameObject); return; }
             I = this;
+            if (FeelProfile == null)
+            {
+                FeelProfile = Resources.Load<JetHorizonFeelProfile>("JetHorizonFeel");
+                if (FeelProfile == null) FeelProfile = ScriptableObject.CreateInstance<JetHorizonFeelProfile>();
+            }
             var runDefinition = SequenceAsset.Load().ToCoreDefinition();
             _coreSimulation = new JetHorizonSimulation(new SimulationConfig
             {
@@ -73,7 +80,20 @@ namespace JetHorizon
                 InitialSpawnDistance = 5f,
                 SpawnIntervalDistance = 30f,
                 MaxHazards = 600,
-                MaxPickups = 128
+                MaxPickups = 128,
+                Snap = FeelProfile.Snap,
+                AccelBase = FeelProfile.AccelBase,
+                AccelSnap = FeelProfile.AccelSnap,
+                HandlingDrift = FeelProfile.HandlingDrift,
+                MaxVelBase = FeelProfile.MaxVelocityBase,
+                MaxVelSnap = FeelProfile.MaxVelocitySnap,
+                DecelBasePercent = FeelProfile.DecelerationBasePercent,
+                DecelFullPercent = FeelProfile.DecelerationFullPercent,
+                CounterSteerBoost = FeelProfile.CounterSteerBoost,
+                BankMaxRadians = FeelProfile.BankMaximumRadians,
+                BankSmoothing = FeelProfile.BankSmoothing,
+                BankReturnRate = FeelProfile.BankReturnRate,
+                BankZeroCrossMultiplier = FeelProfile.BankZeroCrossMultiplier
             }, 20260714u, runDefinition);
             _applicationEvents = new RunEventRouter(UnityGameServicesFactory.CreateDefault());
             // Match the web build: 60 fps cap (sim is fixed 60 Hz; rendering above it
@@ -89,6 +109,12 @@ namespace JetHorizon
             // the title is an honest preview of the gameplay camera and ship framing.
             Ship?.ResetSystem();
             Camera?.ResetSystem();
+            var feel = gameObject.GetComponent<ShipFeelPresenter>() ?? gameObject.AddComponent<ShipFeelPresenter>();
+            feel.Initialize(FeelProfile);
+            if (Ship != null && Ship.ShipRoot != null && Ship.ShipRoot.GetComponent<ShipOrganicMotion>() == null)
+                Ship.ShipRoot.gameObject.AddComponent<ShipOrganicMotion>();
+            if (gameObject.GetComponent<FeedbackDirector>() == null) gameObject.AddComponent<FeedbackDirector>();
+            if (gameObject.GetComponent<JetHorizonAudioSystem>() == null) gameObject.AddComponent<JetHorizonAudioSystem>();
             if (PowerupPresentation == null)
                 PowerupPresentation = gameObject.GetComponent<PowerupPresentationSystem>() ?? gameObject.AddComponent<PowerupPresentationSystem>();
             PowerupPresentation.ShipRoot = Ship != null ? Ship.ShipRoot : null;

@@ -42,7 +42,7 @@ namespace JetHorizon
             float rawDt = Mathf.Min(Time.deltaTime, Tuning.MaxRawDt);
 
             float roll = Mathf.Abs(s.BankRoll);
-            float speedFrac = Mathf.Clamp01(s.EffectiveSpeed / (Tuning.BaseSpeed * 2.5f));
+            float speedFrac = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals.SpeedPresentation : Mathf.Clamp01(s.EffectiveSpeed / (Tuning.BaseSpeed * 2.5f));
             float target = GameManager.I.Phase == GamePhase.Playing
                 ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.42f, 0.52f, roll)) * speedFrac
                 : 0f;

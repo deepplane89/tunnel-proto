@@ -19,6 +19,7 @@ namespace JetHorizon
         // Retry sweep
         bool _sweeping; float _sweepT;
         float _launchTime;
+        float _lookAheadX;
 
         RunSession S => GameManager.I.Session;
 
@@ -76,7 +77,11 @@ namespace JetHorizon
             }
 
             Vector3 p = transform.position;
-            p.x = s.ShipX;                                          // no lateral lag
+            var feel = GameManager.I.FeelProfile;
+            var signals = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals : default;
+            float lookAhead = feel != null ? signals.Lateral01 * feel.CameraLookAhead : 0f;
+            _lookAheadX = Mathf.Lerp(_lookAheadX, lookAhead, 1f - Mathf.Exp(-(feel != null ? feel.CameraFollowResponse : 18f) * dt));
+            p.x = Mathf.Lerp(p.x, s.ShipX + _lookAheadX, 1f - Mathf.Exp(-(feel != null ? feel.CameraFollowResponse : 18f) * dt));
             float shipAlt = s.ShipY - Tuning.ShipHoverY;
             float targetY = Tuning.CamBaseY + Tuning.CamPivotYOffset + shipAlt * Tuning.CamYFollow;
             p.y = Mathf.Lerp(p.y, targetY, Mathf.Min(1f, Tuning.CamYLerp * dt));
@@ -84,7 +89,8 @@ namespace JetHorizon
             transform.position = p;
 
             // Horizon tilts with steering bank only (NOT knife-edge roll)
-            _cameraRoll = Mathf.Abs(s.RollAngle) > 0.001f ? 0f : s.BankRoll * Tuning.CamRollAmt;
+            float targetRoll = Mathf.Abs(s.RollAngle) > 0.001f ? 0f : s.BankRoll * (feel != null ? feel.CameraRollScale : Tuning.CamRollAmt);
+            _cameraRoll = Mathf.Lerp(_cameraRoll, targetRoll, 1f - Mathf.Exp(-(feel != null ? feel.CameraRollResponse : 9f) * dt));
             AimAtLook();
         }
 
@@ -129,10 +135,14 @@ namespace JetHorizon
                 // FOV speed kick — spec/01 §3.2
                 float frac = Mathf.Clamp01((s.EffectiveSpeed - Tuning.BaseSpeed) / (Tuning.BaseSpeed * 1.5f));
                 float speedFrac = Mathf.Pow(frac, Tuning.FovKickExponent);
-                float targetFOV = Tuning.CamBaseFovDesktop + Tuning.FovSpeedBoost * speedFrac;
+                var feel = GameManager.I.FeelProfile;
+                float targetFOV = feel != null
+                    ? feel.BaseFov + feel.SpeedFovBoost * feel.FovBySpeed.Evaluate(speedFrac) + (s.OverdriveActive ? feel.OverdriveFovBoost : 0f)
+                    : Tuning.CamBaseFovDesktop + Tuning.FovSpeedBoost * speedFrac;
                 bool launch = s.Elapsed - _launchTime < 0.5f;
                 float rate = launch ? 12f : (Mathf.Abs(targetFOV - Cam.fieldOfView) > 0.5f ? 5f : 3f);
-                Cam.fieldOfView = Mathf.Lerp(Cam.fieldOfView, targetFOV, rate * rawDt);
+                if (feel != null) rate = feel.FovResponse;
+                Cam.fieldOfView = Mathf.Lerp(Cam.fieldOfView, targetFOV, 1f - Mathf.Exp(-rate * rawDt));
 
                 // Lightning shake — §3.5
                 if (_shakeTime > 0f)
@@ -141,6 +151,13 @@ namespace JetHorizon
                     float amp = Tuning.ShakeAmt * Mathf.Max(0f, _shakeTime / Tuning.ShakeDur);
                     _lastShakeOffset = new Vector3((Random.value - 0.5f) * amp, (Random.value - 0.5f) * amp * 0.4f, 0f);
                     Cam.transform.position += _lastShakeOffset;
+                }
+                if (ShipFeelPresenter.I != null && ShipFeelPresenter.I.CameraImpulse > 0f)
+                {
+                    float amp = ShipFeelPresenter.I.CameraImpulse;
+                    Vector3 impulseOffset = new Vector3((Random.value - .5f) * amp, (Random.value - .5f) * amp * .45f, 0f);
+                    _lastShakeOffset += impulseOffset;
+                    Cam.transform.position += impulseOffset;
                 }
             }
         }

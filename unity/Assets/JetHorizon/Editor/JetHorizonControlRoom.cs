@@ -17,7 +17,7 @@ namespace JetHorizon.EditorTools
     /// </summary>
     public sealed class JetHorizonControlRoom : EditorWindow
     {
-        static readonly string[] Tabs = { "Home", "Lighting", "Sun + Sky", "Ship + Thrusters", "Water", "Canyon", "Powerups", "Camera", "Performance" };
+        static readonly string[] Tabs = { "Home", "Feel", "Camera", "Audio", "Lighting", "Sun + Sky", "Ship + Thrusters", "Water", "Canyon", "Powerups", "Performance" };
         JetHorizonAuthoringProfile _profile;
         JetHorizonLookPreset _preset;
         Vector2 _scroll;
@@ -53,14 +53,16 @@ namespace JetHorizon.EditorTools
             switch (_tab)
             {
                 case 0: DrawHome(); break;
-                case 1: DrawLighting(); break;
-                case 2: DrawSunAndSky(); break;
-                case 3: DrawShipAndThrusters(); break;
-                case 4: DrawWater(); break;
-                case 5: DrawCanyon(); break;
-                case 6: DrawPowerups(); break;
-                case 7: DrawCamera(); break;
-                case 8: DrawPerformance(); break;
+                case 1: DrawFeel(); break;
+                case 2: DrawCamera(); break;
+                case 3: DrawAudio(); break;
+                case 4: DrawLighting(); break;
+                case 5: DrawSunAndSky(); break;
+                case 6: DrawShipAndThrusters(); break;
+                case 7: DrawWater(); break;
+                case 8: DrawCanyon(); break;
+                case 9: DrawPowerups(); break;
+                case 10: DrawPerformance(); break;
             }
             EditorGUILayout.EndScrollView();
         }
@@ -165,6 +167,38 @@ namespace JetHorizon.EditorTools
             if (!Mathf.Approximately(density, RenderSettings.fogDensity)) { Undo.RecordObject(RenderSettings.skybox, "Edit fog density"); RenderSettings.fogDensity = density; MarkSceneDirty(); }
 
             DrawPostProcessing();
+        }
+
+        void DrawFeel()
+        {
+            Title("Organic ship feel");
+            if (_profile.FeelProfile == null) _profile.FeelProfile = JetHorizonAuthoringProject.LoadOrCreateFeelProfile();
+            _profile.FeelProfile = (JetHorizonFeelProfile)EditorGUILayout.ObjectField("Feel profile", _profile.FeelProfile, typeof(JetHorizonFeelProfile), false);
+            EditorUtility.SetDirty(_profile);
+            DrawDefaultInspector(_profile.FeelProfile);
+            var manager = UnityEngine.Object.FindFirstObjectByType<GameManager>(FindObjectsInactive.Include);
+            if (manager != null && manager.FeelProfile != _profile.FeelProfile)
+            {
+                if (GUILayout.Button("Apply profile to loaded game scene"))
+                {
+                    Undo.RecordObject(manager, "Assign Jet Horizon feel profile"); manager.FeelProfile = _profile.FeelProfile;
+                    EditorUtility.SetDirty(manager); MarkSceneDirty();
+                }
+            }
+            EditorGUILayout.HelpBox("Handling fields feed the deterministic core on run creation. Ship, camera, spring-body, speed-perception and feedback fields affect Unity presentation only.", MessageType.Info);
+        }
+
+        void DrawAudio()
+        {
+            Title("Three.js SFX imported into Unity");
+            string[] guids = AssetDatabase.FindAssets("t:AudioClip", new[] { "Assets/JetHorizon/Resources/Audio" });
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                AudioClip clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+                EditorGUILayout.ObjectField(clip != null ? clip.name : System.IO.Path.GetFileNameWithoutExtension(path), clip, typeof(AudioClip), false);
+            }
+            EditorGUILayout.HelpBox("Short SFX are preloaded/decompressed by their importer. Engine layers are looped and dynamically pitch/volume-driven by the shared speed signal. MP3 source files are valid; Unity transcodes them for each build target.", MessageType.Info);
         }
 
         void DrawSunAndSky()

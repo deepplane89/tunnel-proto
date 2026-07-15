@@ -280,7 +280,7 @@ namespace JetHorizon
             var s = GameManager.I.Session;
             float rawDt = Mathf.Min(Time.deltaTime, Tuning.MaxRawDt);
             float step = s.EffectiveSpeed * rawDt;
-            float speedFrac = Mathf.Clamp01((s.EffectiveSpeed - Tuning.BaseSpeed) / (Tuning.BaseSpeed * 1.5f));
+            float speedFrac = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals.SpeedPresentation : Mathf.Clamp01((s.EffectiveSpeed - Tuning.BaseSpeed) / (Tuning.BaseSpeed * 1.5f));
             int active = Mathf.RoundToInt(Mathf.Lerp(40, StreakCount, speedFrac));
             float len = Mathf.Lerp(1.5f, 4f, speedFrac);
             for (int i = 0; i < _streaks.Length; i++)

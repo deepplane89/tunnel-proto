@@ -75,6 +75,7 @@ namespace JetHorizon.EditorTools
         public Material CanyonMaterial;
         public VolumeProfile PostProfile;
         public GameObject ShipModelAsset;
+        public JetHorizonFeelProfile FeelProfile;
         public JetHorizonCanyonAuthoring Canyon;
 
         [Header("Scene object names")]
@@ -159,6 +160,7 @@ namespace JetHorizon.EditorTools
             profile.CanyonMaterial = LoadMaterial("ConeMat");
             profile.PostProfile = AssetDatabase.LoadAssetAtPath<VolumeProfile>("Assets/JetHorizon/Generated/JH_PostProfile.asset");
             profile.ShipModelAsset = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/JetHorizon/Models/Ships/default_ship.glb");
+            profile.FeelProfile = LoadOrCreateFeelProfile();
             profile.Canyon = canyon;
             AssetDatabase.CreateAsset(profile, ProfilePath);
             AssetDatabase.SaveAssets();
@@ -167,6 +169,17 @@ namespace JetHorizon.EditorTools
 
         public static Material LoadMaterial(string fileName) =>
             AssetDatabase.LoadAssetAtPath<Material>($"Assets/JetHorizon/Generated/{fileName}.mat");
+
+        public static JetHorizonFeelProfile LoadOrCreateFeelProfile()
+        {
+            const string path = "Assets/JetHorizon/Resources/JetHorizonFeel.asset";
+            var feel = AssetDatabase.LoadAssetAtPath<JetHorizonFeelProfile>(path);
+            if (feel != null) return feel;
+            feel = ScriptableObject.CreateInstance<JetHorizonFeelProfile>();
+            AssetDatabase.CreateAsset(feel, path);
+            AssetDatabase.SaveAssets();
+            return feel;
+        }
 
         static void EnsureFolders()
         {

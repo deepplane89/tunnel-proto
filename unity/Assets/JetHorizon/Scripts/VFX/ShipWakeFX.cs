@@ -74,7 +74,7 @@ namespace JetHorizon
             var s = GameManager.I.Session;
             bool on = GameManager.I.Phase == GamePhase.Playing && !s.IntroLiftActive;
             float rawDt = Mathf.Min(Time.deltaTime, Tuning.MaxRawDt);
-            float speedFrac = Mathf.Clamp01(s.EffectiveSpeed / (Tuning.BaseSpeed * 2.5f));
+            float speedFrac = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals.SpeedPresentation : Mathf.Clamp01(s.EffectiveSpeed / (Tuning.BaseSpeed * 2.5f));
 
             // ── V-wake follows ship X, opacity with speed ──
             bool vOn = on;
