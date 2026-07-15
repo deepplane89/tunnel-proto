@@ -28,7 +28,6 @@ namespace JetHorizon
         GameObject _content;
         Material _meshMaterial;
         bool _terrainAuthoringPreview;
-        Renderer[] _worldRenderers;
 
         void Awake()
         {
@@ -91,7 +90,6 @@ namespace JetHorizon
             float startZ = currentCanyon ? snapshot.EncounterStartZ : snapshot.UpcomingEncounterStartZ;
             _content.transform.localPosition = new Vector3(0f, 0f, startZ);
             SetVisible(true);
-            GameManager.I?.Camera?.IncludePersistentWorld(_worldRenderers);
         }
 
         /// <summary>Editor preview seam; it does not alter scene gameplay wiring.</summary>
@@ -154,7 +152,6 @@ namespace JetHorizon
         {
             if (_content == null) return;
             _content.SetActive(true);
-            _worldRenderers = _content.GetComponentsInChildren<Renderer>(true);
             _content.SetActive(false);
         }
 
@@ -372,8 +369,8 @@ namespace JetHorizon
             CanyonCurvedWallBuilder.Build(
                 _route,
                 settings,
-                Mathf.Max(0f, thresholdDistance - settings.SlabLength),
-                Mathf.Min(_plan.Length, breakupDistance + settings.SlabLength * 2f),
+                0f,
+                _plan.Length,
                 _content.transform,
                 _meshMaterial,
                 _ownedAssets);

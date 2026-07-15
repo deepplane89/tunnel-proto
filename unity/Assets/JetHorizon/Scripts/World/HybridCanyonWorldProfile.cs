@@ -53,7 +53,15 @@ namespace JetHorizon
 
         [Header("Curved patch extrusion")]
         [Range(0f, 1f)] public float PathTension = .35f;
-        [Min(40f)] public float WallChunkLength = 80f;
+        [Min(40f)] public float WallChunkLength = 160f;
+        [Tooltip("How much of full canyon height remains at the submerged route ends.")]
+        [Range(0f, .25f)] public float SubmergedEndHeight = .04f;
+        [Tooltip("Wall height immediately before the banks begin converging.")]
+        [Range(.05f, .5f)] public float OpenWaterBankHeight = .18f;
+        [Tooltip("Extra height for broad slab formations rising from the open water before the canyon entrance.")]
+        [Range(0f, .4f)] public float OpenWaterFormationHeight = .18f;
+        [Tooltip("Moves low open-water banks away from the flight line before they converge into the canyon.")]
+        [Min(0f)] public float OpenWaterWallRetreat = 48f;
         [Min(0f)] public float TerrainLipEmbedDepth = 10f;
         [Min(0f)] public float BottomSkirtDepth = 8f;
         public AnimationCurve WallHeightByProgress = AnimationCurve.Linear(0f, 1f, 1f, 1f);

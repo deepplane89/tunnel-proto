@@ -73,6 +73,9 @@ namespace JetHorizon.EditorTools
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("SurfaceNoise"), new GUIContent("Rocky breakup"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("NoiseScale"), new GUIContent("Rock feature size"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("PathTension"), new GUIContent("Curve tightness"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("OpenWaterBankHeight"), new GUIContent("Approach bank height"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("OpenWaterFormationHeight"), new GUIContent("Water formation height"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("OpenWaterWallRetreat"), new GUIContent("Approach width"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("WallHeightByProgress"), new GUIContent("Wall height along route"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("BankDegreesByProgress"), new GUIContent("Canyon bank along route"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("EntryClearance"), new GUIContent("Arch opening height"));
@@ -95,7 +98,7 @@ namespace JetHorizon.EditorTools
             }
             else
             {
-                EditorGUILayout.HelpBox("Terrain backing is off. The preview contains only the faceted corridor and authored rock structures.", MessageType.None);
+                EditorGUILayout.HelpBox("Terrain backing is off. The preview contains the complete faceted landform: submerged open-water banks, convergence, enclosed canyon and breakup.", MessageType.None);
             }
 
             Step("4", "Validate and put it into the game");

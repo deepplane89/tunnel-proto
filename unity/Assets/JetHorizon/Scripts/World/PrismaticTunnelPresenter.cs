@@ -23,7 +23,6 @@ namespace JetHorizon
         MeshRenderer _renderer;
         Material _runtimeMaterial;
         EncounterPlan _plan;
-        Renderer[] _worldRenderers;
         static readonly int TimeValueId = Shader.PropertyToID("_TimeValue");
 
         public bool IsPresenting { get; private set; }
@@ -53,7 +52,6 @@ namespace JetHorizon
             }
             _renderer.sharedMaterial = _runtimeMaterial;
             _renderer.enabled = false;
-            _worldRenderers = new Renderer[] { _renderer };
         }
 
         public void ResetSystem()
@@ -86,7 +84,6 @@ namespace JetHorizon
             transform.localPosition = new Vector3(0f, 0f, startZ);
             if (_runtimeMaterial != null) _runtimeMaterial.SetFloat(TimeValueId, snapshot.Elapsed);
             SetVisible(true);
-            GameManager.I?.Camera?.IncludePersistentWorld(_worldRenderers);
         }
 
         void SetVisible(bool visible)

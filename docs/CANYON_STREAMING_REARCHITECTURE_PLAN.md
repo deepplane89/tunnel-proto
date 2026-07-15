@@ -1,287 +1,138 @@
-# Canyon Streaming and Authoring Rearchitecture Plan
+# Complete Canyon Environment Architecture
 
 ## Status
 
-Playable replacement slice implemented on 2026-07-15. The proof run now includes a
-core-owned crystalline canyon rendered by a seam-locked continuous Unity presenter.
-The legacy slab conveyor remains available as a rollback path until the new look is
-visually approved and all historical stage presets are migrated.
+Implemented on 2026-07-15 as the crystalline-canyon replacement path.
+
+The former approach treated the canyon as a stream of obstacle slabs. That was the
+wrong abstraction for the intended scene: even when every renderer was enabled, the
+rendered shell itself began at a hard boundary near the horizon. Moving that finite
+shell through a fixed-camera Z-scroll world made the boundary look like geometry was
+being spawned.
 
-Current implementation:
+The replacement builds one complete environment before the encounter begins:
+
+1. broad faceted formations rise from open water;
+2. their submerged foundations remain continuous while the visible banks converge;
+3. the banks become a full-height canyon entrance;
+4. one seam-locked shell follows the complete curved core route;
+5. the walls retreat and sink back beneath the water at the route exit.
 
-- `EncounterPlanCatalog` owns the deterministic canyon centerline, width, spacing,
-  cargo route, and capability validation;
-- `CorridorSliceSnapshot` projects the same samples to collision and presentation;
-- the core publishes the complete canyon route before its first visible frame;
-- `StableCanyonPresenter` builds one closed, shared-vertex construct and translates
-  that rigid mesh forward instead of generating visible sections during flight;
-- the stable shader reuses the original cyan diagonal-streak and dark magenta-crack
-  slab textures, with geometry-derived flat facets rather than replacement color bands;
-- `JH/StableCanyon` owns restrained brightness, emission, fog, and opaque distance dithering;
-- the route scales longitudinal spacing with equipped cruise capability;
-- press `C` during an Editor/development run to jump directly to the new canyon;
-- the older `CanyonSystem` materials were darkened independently for rollback comparisons.
+There is no canyon row pool, renderer reveal switch, recycle boundary, world-Z clip,
+or per-frame camera-bounds scan in this path.
+
+## Ownership
 
-Recycling now occurs only as passed rows disappear behind the gameplay camera; the
-leading route is already resident deep beyond the fog band. Still intentionally
-pending: baking Control Room path handles into the portable route catalog and migrating
-each legacy named canyon preset onto the replacement renderer.
+### Engine-neutral core
 
-## Goal
+The core owns gameplay truth:
 
-Keep the current crystalline slab language—large discrete blocks, flat-shaded jagged faces, alternating dark/cyan treatment, and sharp corridor turns—while replacing the fragile placement and reveal logic with a system that is:
+- the immutable route length;
+- center and half-width samples;
+- ordered environment phases (`OpenWater`, `Convergence`, `Threshold`, `Enclosed`,
+  and `Breakup`);
+- the exact range in which corridor collision is active;
+- traversal requirements, cargo routes, encounter timing and capability validation.
+
+Unity rendering settings never enter the core. A visual bank may exist outside the
+lethal threshold, but it cannot damage the ship.
+
+### Unity presentation
+
+Unity owns only how that complete route appears:
+
+- Hermite interpolation between core opening samples;
+- the original 5-by-6 faceted slab cross-section;
+- shared seam samples at every longitudinal boundary;
+- wall height and lateral retreat across environment phases;
+- opaque materials, lighting, shadows, fog and water reflection;
+- editor preview and mobile prefab baking.
+
+`HybridCanyonWorldPresenter` builds or instantiates the complete construct once and
+translates one root from the core's stable encounter origin. Chunks are draw-call and
+culling units only. They are never spawned, recycled, independently positioned, or
+used as gameplay collision.
+
+## Required Invariants
+
+These are architectural rules, not tuning preferences:
+
+1. Both wall shells cover distance `0` through `EncounterPlan.Length`.
+2. Neighboring chunks have identical end/start distances and share route samples.
+3. The near and far ends sink below the water; neither end is a tall raw wall edge.
+4. Renderer existence and collision activation are unrelated.
+5. The whole construct has one moving root and no independently scrolling wall pieces.
+6. No `MeshCollider` or `TerrainCollider` may compete with core-owned corridor collision.
+7. No shader may clip canyon geometry against a moving world-Z threshold.
+8. Camera clipping is fixed for the authored route and must not chase renderer bounds.
+9. Curves ahead must be real geometry capable of obscuring the horizon naturally.
+10. A mobile bake and the runtime fallback must be generated by the same builder.
+
+## Geometry
+
+`CanyonRouteSampler` adapts the immutable plan into Unity frames. Each frame contains
+center, forward, right, up and half-width. The environment phase distances also define
+a presentation envelope:
+
+- At the route ends, the wall is short enough to remain beneath the water.
+- Across open water, broad height pulses create separated visible formations even
+  though their foundations remain connected below the surface.
+- During convergence, height eases to full scale and lateral retreat eases to zero.
+- Threshold and enclosed phases use the complete wall profile.
+- Breakup reverses the envelope and returns the shell beneath the water.
+
+`CanyonCurvedWallBuilder` uses the source slab's foot/sweep/mid/crest profile on every
+cross-section. Longitudinal columns sample the route directly, so a turn bends the
+surface instead of yawing disconnected rectangular prefabs. Both sides are opaque,
+thick closed shells with near/far caps and bottom skirts.
+
+## Mobile Strategy
+
+This architecture is suitable for mobile because world completeness does not require
+one GameObject per old Three.js slab:
+
+- approximately six large chunks per side for the current proof route;
+- shared materials;
+- no renderer creation during flight;
+- no mesh rebuilding or recycling during flight;
+- no physics mesh colliders;
+- no per-frame scan of world renderer bounds;
+- one root transform update while the encounter is current or upcoming.
+
+Use `Jet Horizon > Canyon Builder (Simple) > BAKE & USE IN GAME` to persist the same
+generated chunks as a prefab. When no bake is assigned, the runtime fallback creates
+the identical complete shell in memory before showing it.
+
+## Validation
 
-- seamless at block boundaries;
-- safe to spawn farther from the camera;
-- smoothly revealed through fog instead of popping into existence;
-- easy to reshape without editing placement math in several systems;
-- deterministic across initial construction and recycling;
-- independent from collision and encounter timing;
-- reversible and compatible with the current presets during migration.
+The Canyon Builder must reject a preview or bake when:
 
-## Confirmed Problems in the Current System
+- either side does not begin at distance zero;
+- either side does not end at the complete plan length;
+- adjacent chunk ranges contain a gap;
+- the authored route fails core capability validation;
+- a live `TerrainCollider` remains in the result.
 
-### Spawn depth is not the visible start depth
+Runtime visual acceptance still requires:
 
-`CanyonSystem.BuildWalls()` calculates the pool size from `SpawnDepth`, but it always places the first regular slab at `SafeZ - SlabW`. Increasing `SpawnDepth` therefore creates more pooled slabs without moving the front of the corridor farther away.
+- no tall edge appearing at the horizon;
+- no chunk-by-chunk materialization;
+- no visible gap at turns or while banking;
+- curved walls ahead naturally obscuring the sun/horizon where appropriate;
+- open-water formations that rise into a clearly announced canyon entrance;
+- stable reflection and fog on target iOS hardware.
 
-The entrance slabs begin at `Z = -500`. Regular slabs are placed much closer to the camera, frozen, and disabled. When an entrance reaches `RevealZ = -210`, `Reveal()` activates every regular slab in the same frame. That one-shot activation is the principal source of visible popping.
+## Explicitly Rejected Approaches
 
-### Initial placement and recycling do not use one canonical calculation
+Do not reintroduce any of the following as a canyon-spawn fix:
 
-Initial slabs use `CenterAtZInit(z)`. Recycled slabs use `PredictCenter(rowsAhead)` plus a separately advanced sine phase. Changing pool size or spawn depth changes the relationship between those two calculations. This can produce a discontinuity when the initially built portion gives way to recycled rows.
+- increasing a slab pool or spawn depth;
+- revealing all regular rows behind an entrance trigger;
+- recycling passed rows to the front;
+- moving fade/dither planes farther away;
+- enabling renderers based on distance;
+- expanding the camera far clip every frame from renderer bounds;
+- prebuilding a threshold-only shell farther beyond the same hard boundary.
 
-### Independent random meshes cannot guarantee a shared seam
-
-Every slab calls `MeshFactory.CanyonSlab()` with an independent random seed. Its first and last columns therefore have unrelated displacement values. Adjacent slabs may have perfectly spaced pivots but still have different boundary silhouettes.
-
-Yawing entire rectangular slabs around a curved centerline makes this more visible: rigid blocks overlap on the inside of a turn and separate on the outside. Closing the slab shell prevents seeing through an individual mesh, but it does not make neighboring meshes share an edge.
-
-### Visibility, collision, movement, and encounter choreography are coupled
-
-The `_revealed` flag currently controls all of these concerns:
-
-- renderer activation;
-- regular slab movement;
-- sine-phase advancement;
-- the entry speed ramp;
-- availability of canyon collision bounds;
-- the reveal gameplay event.
-
-This makes a visual spawn-distance adjustment capable of changing gameplay timing and corridor continuity.
-
-### The source fade cannot be copied literally
-
-The Three.js implementation attempted to fade canyon emission by changing a shared material once per slab. Since many slabs shared that material, the last slab processed effectively chose the emission for all of them. Unity should use per-renderer data or a world-position shader calculation instead.
-
-## Recommended Architecture
-
-The replacement should be a hybrid path-and-block system. The path is an invisible guide. It must not turn the canyon into one smooth tube.
-
-### 1. `CanyonPathProfile`
-
-An immutable description of the corridor route. It owns only spatial intent:
-
-- center X by longitudinal distance;
-- half-width by longitudinal distance;
-- optional floor/ceiling height and roll;
-- lead-in and lead-out distances;
-- path control points or curves;
-- deterministic seed and path variant.
-
-The initial implementation can evaluate Hermite or Catmull-Rom control points without depending on Unity Splines at runtime. A Unity editor adapter can later expose scene handles. The engine-neutral evaluation API should return plain values such as `CanyonPathSample { centerX, halfWidth, tangentX, floorY, ceilingY }`.
-
-The path should be evaluated by a stable longitudinal coordinate or integer row ID, never by the current ordering of pooled GameObjects.
-
-### 2. `CanyonVisualProfile`
-
-Owns the existing visual language:
-
-- slab height, length, and thickness;
-- column and vertical-row counts;
-- foot/sweep/mid/crest silhouette;
-- displacement and quantization;
-- flat-shading/blockiness amount;
-- cyan/dark material pattern;
-- seam-lock strength;
-- reflection and shadow policy.
-
-This separation allows the same route to be tested with different rock treatments, or the same rock treatment to be reused on a new route.
-
-### 3. `CanyonRowDefinition`
-
-A deterministic, engine-neutral description produced from `(pathProfile, visualProfile, side, rowId)`.
-
-It contains:
-
-- near and far longitudinal coordinates;
-- near and far path samples;
-- left/right inner boundaries;
-- stable visual seed;
-- material/style index;
-- collision boundary samples.
-
-Initial construction and recycling must both call the same row-definition function. This is the main invariant that prevents a distant spawn or larger pool from changing the corridor.
-
-### 4. Seam-locked procedural blocks
-
-Keep every visible slab as a distinct faceted block, but generate boundary columns from shared global samples:
-
-- a boundary is identified by `(side, boundaryRowId, verticalIndex)`;
-- both neighboring slabs request the same deterministic boundary displacement;
-- interior columns use their own deterministic noise;
-- flat triangle normals and quantized interior displacement preserve the crystalline look;
-- path curvature moves the boundary columns in X while the surface remains blocky.
-
-This makes adjacent blocks watertight without smoothing the visible canyon. A `blockiness` parameter can blend between a continuously sampled centerline and deliberately stepped row poses.
-
-For stronger turns, bend the inner-face columns along the path samples instead of yawing one rigid rectangle. Outer caps can follow the same near/far boundary so the slab remains closed. This is the durable version of the Three.js L4 geometry-bake idea, but it should be deterministic and used consistently for every canyon mode.
-
-### 5. `CanyonStream`
-
-Owns pooling and row assignment only:
-
-- maintain a fixed ring buffer per side;
-- track `firstRowId` and `lastRowId`;
-- recycle a passed row as `lastRowId + 1`;
-- obtain its complete definition from the canonical row builder;
-- rebuild or select a cached mesh only when its row definition changes;
-- keep a configurable prewarm margin behind the visible region.
-
-No scanning for the minimum Z, rounding it, then inferring `rowsAhead` should be necessary. Pool size becomes a rendering/performance choice and cannot alter the route.
-
-### 6. `CanyonVisibility`
-
-Renderer visibility must be independent from stream existence and encounter activation.
-
-Recommended behavior:
-
-- create and upload the pool before the encounter becomes visible;
-- keep renderers active through the fade region;
-- compute visibility from world Z using a canyon shader;
-- reveal over a tunable band, initially proposed around `-450` to `-230`;
-- scale both base response and emission so emissive rock cannot punch through the fog early;
-- use opaque screen-space dithering/alpha clipping instead of transparent blending;
-- retain depth writing, stable sorting, shadows, and planar reflections;
-- optionally reduce or disable reflection contribution until visibility passes a threshold.
-
-The shader can calculate its own fade from world position and two global parameters. That avoids per-frame material mutation and guarantees both sides of the corridor use identical visibility math.
-
-### 7. Collision projection
-
-Collision should come from the same path/row definitions as rendering, not from whether a renderer is active.
-
-- query the two row samples surrounding ship Z;
-- interpolate the left and right inner boundaries;
-- enable collision only after the encounter's gameplay-safe threshold;
-- keep fade distance irrelevant to collision timing;
-- add a conservative safety margin based on ship bounds.
-
-The engine-neutral core should own the collision decision. Unity should supply or visualize the deterministic corridor samples.
-
-### 8. `CanyonEncounterProfile`
-
-Owns non-geometric choreography:
-
-- encounter duration or completion condition;
-- entry speed ramp;
-- collision-enable point;
-- lead-in and exit behavior;
-- powerup/spawn suppression rules;
-- reveal and completion events.
-
-The entrance block may remain as an art element, but it must no longer act as the renderer master switch. Prefer a path lead-in that begins wide/straight and narrows naturally. If retained, the entrance block should fade through the same visibility system as every other row.
-
-## Authoring Workflow
-
-The desired editing loop is:
-
-1. Select a `CanyonPathProfile` asset.
-2. Drag a small number of centerline/width handles in the Scene view, or edit curves in the Inspector.
-3. Preview left and right corridor boundaries as gizmo lines.
-4. Preview row divisions and flag excessive turn angle or width change.
-5. Regenerate only affected preview chunks.
-6. Save the profile without changing runtime code.
-
-Useful validation overlays:
-
-- centerline and left/right collision boundaries;
-- row IDs and recycle order;
-- seam error markers;
-- fade start/end planes;
-- spawn/prewarm boundary;
-- maximum curvature warning;
-- ship clearance at every sampled point.
-
-## Migration Plan
-
-### Phase 1: eliminate popping without changing geometry
-
-- Add the canyon-specific opaque dither/fog fade.
-- Prewarm the existing pool.
-- Stop enabling all regular slabs in `Reveal()`.
-- Decouple renderer visibility from `_revealed`.
-- Preserve current movement, presets, collision, and encounter timing.
-
-This is the lowest-risk visual improvement and can be tested/reverted independently.
-
-### Phase 2: deterministic row stream
-
-- Introduce stable row IDs.
-- Add one canonical row placement function.
-- Use it for both initial rows and recycled rows.
-- Remove minimum-Z scanning and `rowsAhead` inference.
-- Add edit-mode tests proving pool size and spawn depth do not change a row's definition.
-
-### Phase 3: seam-locked meshes
-
-- Add deterministic boundary sampling.
-- Update the mesh generator to share near/far boundary columns.
-- Bend inner-face columns along the path where necessary.
-- Preserve current flat normals, profile, materials, and dimensions.
-- Add a seam-distance test for neighboring rows.
-
-### Phase 4: editable path profiles
-
-- Split the current mixed preset into visual, path, streaming, and encounter profiles.
-- Add an adapter that reproduces current sine-based presets.
-- Add Scene-view gizmos and handles.
-- Migrate one canyon encounter at a time while retaining the old system behind a feature flag.
-
-### Phase 5: collision and performance hardening
-
-- Move collision sampling fully onto path definitions.
-- Verify water reflection behavior during fade.
-- Profile mesh creation, reflection rendering, and pool size on target hardware.
-- Cache compatible topology and update vertex buffers instead of creating unbounded procedural meshes.
-- Remove the legacy implementation only after every preset has a validated replacement.
-
-## Verification Requirements
-
-Automated checks:
-
-- the same row ID produces identical geometry and boundaries after recycling;
-- changing pool size or spawn depth does not change any row definition;
-- adjacent seam vertices match within a small epsilon;
-- collision boundaries match rendered inner faces;
-- pause/resume does not advance the stream;
-- exit does not recycle new rows;
-- activation/destruction releases owned meshes and materials.
-
-Visual checks:
-
-- no one-frame reveal pop;
-- no visible holes when banking or entering a turn;
-- distant emission remains hidden by fog;
-- fade remains stable in planar reflections;
-- current crystalline jaggedness and block silhouette are preserved;
-- corridor turns remain legible and provide adequate ship clearance;
-- old and new implementations can be switched for direct comparison.
-
-## Rollback Strategy
-
-Implement each phase as a separate commit. Keep the existing `CanyonSystem` available behind a temporary implementation selector until the new renderer, stream, and collision projection are visually validated. Do not rewrite the current presets in place; adapt or copy them so reverting does not destroy tuned values.
-
-## Recommended First Implementation Slice
-
-When visual testing is available, begin with Phase 1 only. It directly fixes the reported pop-in while leaving the corridor's shape and collision behavior untouched. Once the fade band is approved, proceed to stable row IDs and seam locking.
+Those changes preserve the finite streaming object that caused the visual problem.
+The correct fix is the complete environment described above.

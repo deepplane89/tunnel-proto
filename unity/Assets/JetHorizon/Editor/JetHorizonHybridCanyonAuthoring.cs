@@ -220,11 +220,22 @@ namespace JetHorizon.EditorTools
                 if (showDialog) EditorUtility.DisplayDialog("Canyon check", "The curved wall chunks were not generated. Refresh the editable canyon and try again.", "OK");
                 return false;
             }
+            EncounterPlan completeCanyon = EncounterPlanCatalog.CreateProofSequence(1f, definition)[1];
             for (int side = -1; side <= 1; side += 2)
             {
                 var sideMarkers = new List<CanyonWallChunkMarker>();
                 for (int i = 0; i < markers.Length; i++) if (markers[i].Side == side) sideMarkers.Add(markers[i]);
                 sideMarkers.Sort((a, b) => a.StartDistance.CompareTo(b.StartDistance));
+                if (sideMarkers.Count == 0
+                    || Mathf.Abs(sideMarkers[0].StartDistance) > .002f
+                    || Mathf.Abs(sideMarkers[sideMarkers.Count - 1].EndDistance - completeCanyon.Length) > .002f)
+                {
+                    if (showDialog) EditorUtility.DisplayDialog(
+                        "Canyon check",
+                        "The wall shell does not cover the complete route from open water through canyon breakup. Refresh the canyon before baking.",
+                        "OK");
+                    return false;
+                }
                 for (int i = 0; i < sideMarkers.Count - 1; i++)
                 {
                     float gap = Mathf.Abs(sideMarkers[i].EndDistance - sideMarkers[i + 1].StartDistance);
@@ -235,7 +246,7 @@ namespace JetHorizon.EditorTools
             }
 
             if (showDialog)
-                EditorUtility.DisplayDialog("Canyon check", "Passed: one ordered core route, opaque curved wall shells, continuous chunk ranges, and no competing Terrain collision.", "Great");
+                EditorUtility.DisplayDialog("Canyon check", "Passed: one ordered core route, a complete open-water-to-breakup landform, continuous opaque chunk ranges, and no competing Terrain collision.", "Great");
             return true;
         }
 

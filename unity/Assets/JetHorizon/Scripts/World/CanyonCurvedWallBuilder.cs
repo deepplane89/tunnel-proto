@@ -44,6 +44,9 @@ namespace JetHorizon
     {
         readonly EncounterPlan _plan;
         readonly HybridCanyonWorldSettings _settings;
+        readonly float _convergenceStart;
+        readonly float _thresholdStart;
+        readonly float _breakupStart;
 
         public float Length => _plan.Length;
 
@@ -51,6 +54,47 @@ namespace JetHorizon
         {
             _plan = plan ?? throw new ArgumentNullException(nameof(plan));
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _convergenceStart = FindFirstPhaseDistance(CanyonEnvironmentPhase.Convergence, _plan.Length * .12f);
+            _thresholdStart = FindFirstPhaseDistance(CanyonEnvironmentPhase.Threshold, _plan.Length * .25f);
+            _breakupStart = FindFirstPhaseDistance(CanyonEnvironmentPhase.Breakup, _plan.Length * .82f);
+        }
+
+        /// <summary>
+        /// Presentation-only envelope over the core-authored environment phases. The
+        /// complete shell always exists; its ends sink below the water instead of ending
+        /// in a tall vertical edge that can look like streamed geometry.
+        /// </summary>
+        public float EnclosureAtDistance(float distance)
+        {
+            float submerged = Mathf.Clamp01(_settings.SubmergedEndHeight);
+            float openBank = Mathf.Clamp(_settings.OpenWaterBankHeight, submerged, 1f);
+            if (distance <= _convergenceStart)
+            {
+                float t = Smooth(Mathf.InverseLerp(0f, Mathf.Max(1f, _convergenceStart), distance));
+                // Three broad crests read as separate formations above the water,
+                // while their common shell remains continuously joined below it.
+                float pulse = Mathf.Pow(Mathf.Sin(t * Mathf.PI * 3f), 4f)
+                    * Mathf.Max(0f, _settings.OpenWaterFormationHeight);
+                return Mathf.Clamp01(Mathf.Lerp(submerged, openBank, t) + pulse);
+            }
+            if (distance < _thresholdStart)
+            {
+                float t = Smooth(Mathf.InverseLerp(_convergenceStart, _thresholdStart, distance));
+                return Mathf.Lerp(openBank, 1f, t);
+            }
+            if (distance <= _breakupStart) return 1f;
+            float breakup = Smooth(Mathf.InverseLerp(_breakupStart, _plan.Length, distance));
+            return Mathf.Lerp(1f, submerged, breakup);
+        }
+
+        public float WallRetreatAtDistance(float distance)
+            => (1f - EnclosureAtDistance(distance)) * Mathf.Max(0f, _settings.OpenWaterWallRetreat);
+
+        float FindFirstPhaseDistance(CanyonEnvironmentPhase phase, float fallback)
+        {
+            for (int i = 0; i < _plan.OpeningCount; i++)
+                if (_plan.GetOpening(i).EnvironmentPhase == phase) return _plan.GetOpening(i).Distance;
+            return fallback;
         }
 
         public CanyonRouteFrame Sample(float distance)
@@ -223,9 +267,11 @@ namespace JetHorizon
                 float distance = Mathf.Min(chunkEnd, routeStart + globalColumn * patchLength / columnsPerPatch);
                 CanyonRouteFrame frame = route.Sample(distance);
                 Vector3 outward = frame.Right * side;
-                Vector3 foot = frame.Center + outward * (frame.HalfWidth + visualClearance);
+                float enclosure = route.EnclosureAtDistance(distance);
+                Vector3 foot = frame.Center + outward * (
+                    frame.HalfWidth + visualClearance + route.WallRetreatAtDistance(distance));
                 float wallHeightScale = Mathf.Max(.1f, CanyonRouteSampler.Evaluate(settings.WallHeightByProgress, frame.Progress, 1f));
-                float wallHeight = settings.SlabHeight * wallHeightScale;
+                float wallHeight = settings.SlabHeight * wallHeightScale * enclosure;
 
                 for (int row = 0; row <= rows; row++)
                 {

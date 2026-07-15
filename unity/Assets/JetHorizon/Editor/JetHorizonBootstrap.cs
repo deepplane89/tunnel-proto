@@ -130,7 +130,7 @@ namespace JetHorizon.EditorTools
             camGo.transform.SetParent(pivot.transform, false);
             var cam = camGo.AddComponent<UnityEngine.Camera>();
             cam.fieldOfView = Tuning.CamBaseFovDesktop;
-            cam.nearClipPlane = 0.1f; cam.farClipPlane = 700f;
+            cam.nearClipPlane = 0.1f; cam.farClipPlane = 1400f;
             cam.clearFlags = CameraClearFlags.Skybox;
             camGo.AddComponent<AudioListener>();
             var camData = camGo.AddComponent<UniversalAdditionalCameraData>();
