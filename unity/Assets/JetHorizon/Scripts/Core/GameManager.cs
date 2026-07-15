@@ -523,6 +523,27 @@ namespace JetHorizon
 
         public void ToggleGodMode() => SetGodMode(!GodMode);
 
+        /// <summary>Editor/development shortcut used by ShipInput's P key.</summary>
+        public void DebugJumpToPrismaticEncounter()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (State.Phase != GamePhase.Playing || _coreSimulation == null) return;
+            if (!_coreSimulation.DebugJumpToProofEncounter(EncounterKind.PrismaticSineCorridor)) return;
+
+            _accumulator = 0f;
+            SyncCoreSession();
+            Obstacles?.ResetSystem();
+            Pickups?.ResetSystem();
+            AngledWalls?.ResetSystem();
+            Lightning?.ResetSystem();
+            PrismaticTunnel?.ResetSystem();
+            Monuments?.ResetSystem();
+            ExtractionGate?.ResetSystem();
+            PowerupPresentation?.ResetSystem();
+            Debug.Log("[Jet Horizon] Prismatic corridor preview selected. This run is leaderboard-ineligible.");
+#endif
+        }
+
         void ApplyGarageAddOns()
         {
             if (Garage == null || Ship == null || Ship.ShipRoot == null) return;

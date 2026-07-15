@@ -1484,6 +1484,39 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void DebugJumpSelectsPrismaticEncounterAndStreamsItThroughTheCore()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                StartSpeedMultiplier = 1.5f,
+                PersistentCruiseSpeedMultiplier = .70f,
+                ProofEncounterMode = true,
+                CollisionEnabled = false,
+                HazardSpawningEnabled = true,
+                MaxHazards = 600,
+                MaxPickups = 128,
+                MaxCorridorSlices = 96
+            }, 20260717u);
+            simulation.StartRun(2026071701L);
+
+            Assert.That(simulation.DebugJumpToProofEncounter(EncounterKind.PrismaticSineCorridor), Is.True);
+            Assert.That(simulation.Snapshot.EncounterKind, Is.EqualTo(EncounterKind.PrismaticSineCorridor));
+            Assert.That(simulation.Snapshot.EncounterPlanId, Is.EqualTo("proof.prismatic-sine"));
+            Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+            Assert.That(simulation.Snapshot.PickupCount, Is.Zero);
+            Assert.That(simulation.Snapshot.CorridorSliceCount, Is.Zero);
+
+            simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.CorridorSliceCount, Is.GreaterThan(8));
+            Assert.That(simulation.Snapshot.SineCorridorActive, Is.True);
+
+            simulation.ForcePlayerDeath();
+            Assert.That(simulation.LatestRunResult.Ineligibility & LeaderboardIneligibility.DebugStart,
+                Is.EqualTo(LeaderboardIneligibility.DebugStart));
+        }
+
+        [Test]
         public void MissingProofExtractionGateContinuesDeeperAndRaisesHeat()
         {
             var simulation = new JetHorizonSimulation(new SimulationConfig

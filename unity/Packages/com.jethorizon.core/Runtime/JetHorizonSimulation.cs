@@ -308,6 +308,28 @@ namespace JetHorizon.Simulation
             _leaderboardIneligibility |= reason;
         }
 
+        /// <summary>
+        /// Development-only caller seam for previewing an authored proof encounter.
+        /// The encounter runtime remains authoritative for streaming and validation.
+        /// </summary>
+        public bool DebugJumpToProofEncounter(EncounterKind kind)
+        {
+            if (Phase != CoreGamePhase.Playing || _proofEncounters == null) return false;
+            if (!_proofEncounters.JumpTo(kind, _distance, _config.ShipZ)) return false;
+
+            Array.Clear(_hazards, 0, _hazards.Length);
+            Array.Clear(_pickups, 0, _pickups.Length);
+            Array.Clear(_corridorSlices, 0, _corridorSlices.Length);
+            _encounterCommands.Clear();
+            _shipX = 0f;
+            _shipVelocityX = 0f;
+            _bankVelocityX = 0f;
+            _bankRadians = 0f;
+            _leaderboardIneligibility |= LeaderboardIneligibility.DebugStart;
+            RefreshSnapshot();
+            return true;
+        }
+
         /// <summary>Records source-parity repair policy: distance survives, score resets, leaderboard is disabled.</summary>
         public void RegisterRepair()
         {

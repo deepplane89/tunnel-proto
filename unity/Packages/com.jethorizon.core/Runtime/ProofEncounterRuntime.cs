@@ -189,6 +189,36 @@ namespace JetHorizon.Simulation
             RefreshSnapshot(0f, 3.9f);
         }
 
+        /// <summary>
+        /// Development-preview seam. Selects an authored encounter without moving the
+        /// run clock; the normal command stream still owns everything that appears.
+        /// </summary>
+        public bool JumpTo(EncounterKind kind, float runDistance, float shipZ, float previewLeadDistance = 25f)
+        {
+            int targetIndex = -1;
+            for (int i = 0; i < _plans.Length; i++)
+            {
+                if (_plans[i].Kind != kind) continue;
+                targetIndex = i;
+                break;
+            }
+            if (targetIndex < 0) return false;
+
+            _planIndex = targetIndex;
+            _nextOpeningIndex = 0;
+            _planStartDistance = runDistance + Math.Max(0f, previewLeadDistance);
+            _gateActive = false;
+            _gateResolved = false;
+            _gateDistance = 0f;
+            _gateX = -16f;
+            _gateHalfWidth = 10f;
+            _validatedPlanIndex = -1;
+            _validatedHeat = -1;
+            _validatedPaceBeforeEncounter = -1f;
+            RefreshSnapshot(runDistance, shipZ);
+            return true;
+        }
+
         public ProofEncounterTickResult Tick(
             float runDistance,
             float shipX,

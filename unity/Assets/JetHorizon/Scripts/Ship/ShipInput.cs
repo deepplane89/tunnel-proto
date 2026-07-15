@@ -40,6 +40,9 @@ namespace JetHorizon
                 if (kb.downArrowKey.isPressed) { keyRoll = true; keyRollDir = +1; }
                 if (kb.spaceKey.wasPressedThisFrame) TapThisFrame = true;
                 if (kb.escapeKey.wasPressedThisFrame && GameManager.I != null) GameManager.I.TogglePause();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (kb.pKey.wasPressedThisFrame && GameManager.I != null) GameManager.I.DebugJumpToPrismaticEncounter();
+#endif
             }
             var mouse = Mouse.current;
             if (mouse != null && mouse.leftButton.wasPressedThisFrame) TapThisFrame = true;
@@ -51,6 +54,9 @@ namespace JetHorizon
             if (Input.GetKey(KeyCode.DownArrow)) { keyRoll = true; keyRollDir = +1; }
             if (Input.GetKeyDown(KeyCode.Space) || Input.GetMouseButtonDown(0)) TapThisFrame = true;
             if (Input.GetKeyDown(KeyCode.Escape) && GameManager.I != null) GameManager.I.TogglePause();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (Input.GetKeyDown(KeyCode.P) && GameManager.I != null) GameManager.I.DebugJumpToPrismaticEncounter();
+#endif
             HandleTouchLegacy();
 #endif
             if (keyRoll) { RollHeld = true; RollDir = keyRollDir; }
