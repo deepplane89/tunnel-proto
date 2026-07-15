@@ -37,6 +37,7 @@ namespace JetHorizon
         public LightningSystem Lightning;
         public PrismaticTunnelPresenter PrismaticTunnel;
         public StableCanyonPresenter StableCanyon;
+        public HybridCanyonWorldPresenter HybridCanyonWorld;
         public MonumentPresenter Monuments;
         public ExtractionGatePresenter ExtractionGate;
         public ObstacleSpawner Obstacles;
@@ -179,6 +180,14 @@ namespace JetHorizon
                 StableCanyon = presenterObject.AddComponent<StableCanyonPresenter>();
             }
             StableCanyon.ResetSystem();
+            if (HybridCanyonWorld == null)
+            {
+                var presenterObject = new GameObject("Hybrid Canyon World Presentation");
+                presenterObject.transform.SetParent(transform, false);
+                HybridCanyonWorld = presenterObject.AddComponent<HybridCanyonWorldPresenter>();
+                HybridCanyonWorld.CanyonMaterial = StableCanyon.CanyonMaterial;
+            }
+            HybridCanyonWorld.ResetSystem();
             if (Monuments == null)
             {
                 var presenterObject = new GameObject("Monument Presentation");
@@ -250,7 +259,11 @@ namespace JetHorizon
             Canyon.SimTick(dt);                                  // 16: canyon slabs + collision
             if (_killedThisFrame) return;
             PrismaticTunnel?.SimTick(dt);                        // snapshot-only continuous sine tunnel presentation
-            StableCanyon?.SimTick(dt);                           // snapshot-only seam-locked crystalline canyon
+            HybridCanyonWorld?.SimTick(dt);                      // complete Terrain + mesh construct; no streamed slabs
+            if (HybridCanyonWorld != null && HybridCanyonWorld.IsPresenting)
+                StableCanyon?.ResetSystem();                     // prevent two competing canyon projections
+            else
+                StableCanyon?.SimTick(dt);                       // fallback if hybrid presentation is unavailable
             Monuments?.SimTick(dt);                              // snapshot-only monumental structure presentation
             AngledWalls.SimTick(dt);                             // walls move + OBB collision
             if (_killedThisFrame) return;
@@ -549,6 +562,7 @@ namespace JetHorizon
             Lightning?.ResetSystem();
             PrismaticTunnel?.ResetSystem();
             StableCanyon?.ResetSystem();
+            HybridCanyonWorld?.ResetSystem();
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();
             PowerupPresentation?.ResetSystem();
@@ -571,6 +585,7 @@ namespace JetHorizon
             Lightning?.ResetSystem();
             PrismaticTunnel?.ResetSystem();
             StableCanyon?.ResetSystem();
+            HybridCanyonWorld?.ResetSystem();
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();
             PowerupPresentation?.ResetSystem();
@@ -600,6 +615,7 @@ namespace JetHorizon
             Obstacles.ResetSystem(); Pickups.ResetSystem();
             PrismaticTunnel?.ResetSystem();
             StableCanyon?.ResetSystem();
+            HybridCanyonWorld?.ResetSystem();
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();
             PowerupPresentation?.ResetSystem();

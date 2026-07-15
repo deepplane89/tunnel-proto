@@ -349,6 +349,33 @@ namespace JetHorizon.EditorTools
                 if (GUILayout.Button("Bake Prefab…")) JetHorizonCanyonBaker.BakePrefab(_profile.Canyon);
             }
             EditorGUILayout.HelpBox("The spline controls continuity and width. The generated slab skin retains angular displacement. Baking combines many slabs into one renderer per chunk, reducing runtime construction and draw overhead.", MessageType.Info);
+
+            EditorGUILayout.Space(12f);
+            Title("Hybrid Terrain world");
+            _profile.HybridCanyonWorld = (HybridCanyonWorldProfile)EditorGUILayout.ObjectField(
+                "World profile", _profile.HybridCanyonWorld, typeof(HybridCanyonWorldProfile), false);
+            if (_profile.HybridCanyonWorld == null)
+                _profile.HybridCanyonWorld = JetHorizonAuthoringProject.LoadOrCreateHybridCanyonProfile(_profile.CanyonMaterial);
+            EditorUtility.SetDirty(_profile);
+
+            if (_profile.HybridCanyonWorld != null)
+            {
+                var worldEditor = new SerializedObject(_profile.HybridCanyonWorld);
+                worldEditor.Update();
+                EditorGUILayout.PropertyField(worldEditor.FindProperty("CanyonMaterial"));
+                EditorGUILayout.PropertyField(worldEditor.FindProperty("Settings"), true);
+                worldEditor.ApplyModifiedProperties();
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("Preview Terrain + Arches", GUILayout.Height(28f)))
+                        JetHorizonHybridCanyonAuthoring.BuildPreview(_profile.HybridCanyonWorld);
+                    if (GUILayout.Button("Clear Hybrid Preview", GUILayout.Height(28f)))
+                        JetHorizonHybridCanyonAuthoring.ClearPreview();
+                }
+            }
+            EditorGUILayout.HelpBox(
+                "Gameplay builds this entire construct once when the crystalline canyon begins. Terrain makes the broad banks and seabed; opaque mesh arches and monoliths provide overhangs. Terrain collision is intentionally disabled—the engine-neutral corridor remains authoritative and mathematically traversable.",
+                MessageType.Info);
         }
 
         void DrawPowerups()

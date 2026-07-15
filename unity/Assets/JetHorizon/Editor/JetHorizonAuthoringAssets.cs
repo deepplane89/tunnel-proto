@@ -77,6 +77,7 @@ namespace JetHorizon.EditorTools
         public GameObject ShipModelAsset;
         public JetHorizonFeelProfile FeelProfile;
         public JetHorizonCanyonAuthoring Canyon;
+        public HybridCanyonWorldProfile HybridCanyonWorld;
 
         [Header("Scene object names")]
         public string ShipRootName = "ShipRoot";
@@ -138,11 +139,17 @@ namespace JetHorizon.EditorTools
         public const string AuthoringDirectory = "Assets/JetHorizon/Generated/Authoring";
         public const string ProfilePath = AuthoringDirectory + "/JetHorizonAuthoringProfile.asset";
         public const string CanyonPath = AuthoringDirectory + "/DefaultCanyonPath.asset";
+        public const string HybridCanyonPath = "Assets/JetHorizon/Resources/HybridCanyonWorld.asset";
+        public const string HybridCanyonMaterialPath = "Assets/JetHorizon/Generated/HybridCanyon/HybridCanyonSurface.mat";
 
         public static JetHorizonAuthoringProfile LoadOrCreate()
         {
             var profile = AssetDatabase.LoadAssetAtPath<JetHorizonAuthoringProfile>(ProfilePath);
-            if (profile != null) return profile;
+            if (profile != null)
+            {
+                EnsureHybridCanyonProfile(profile);
+                return profile;
+            }
 
             EnsureFolders();
             var canyon = ScriptableObject.CreateInstance<JetHorizonCanyonAuthoring>();
@@ -162,6 +169,7 @@ namespace JetHorizon.EditorTools
             profile.ShipModelAsset = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/JetHorizon/Models/Ships/default_ship.glb");
             profile.FeelProfile = LoadOrCreateFeelProfile();
             profile.Canyon = canyon;
+            profile.HybridCanyonWorld = LoadOrCreateHybridCanyonProfile(profile.CanyonMaterial);
             AssetDatabase.CreateAsset(profile, ProfilePath);
             AssetDatabase.SaveAssets();
             return profile;
@@ -179,6 +187,81 @@ namespace JetHorizon.EditorTools
             AssetDatabase.CreateAsset(feel, path);
             AssetDatabase.SaveAssets();
             return feel;
+        }
+
+        public static HybridCanyonWorldProfile LoadOrCreateHybridCanyonProfile(Material canyonMaterial)
+        {
+            var world = AssetDatabase.LoadAssetAtPath<HybridCanyonWorldProfile>(HybridCanyonPath);
+            if (world != null)
+            {
+                if (world.CanyonMaterial == null)
+                {
+                    world.CanyonMaterial = LoadOrCreateHybridCanyonMaterial();
+                    EditorUtility.SetDirty(world);
+                    AssetDatabase.SaveAssets();
+                }
+                return world;
+            }
+
+            if (!AssetDatabase.IsValidFolder("Assets/JetHorizon/Resources"))
+                AssetDatabase.CreateFolder("Assets/JetHorizon", "Resources");
+            world = ScriptableObject.CreateInstance<HybridCanyonWorldProfile>();
+            world.CanyonMaterial = LoadOrCreateHybridCanyonMaterial();
+            AssetDatabase.CreateAsset(world, HybridCanyonPath);
+            AssetDatabase.SaveAssets();
+            return world;
+        }
+
+        static Material LoadOrCreateHybridCanyonMaterial()
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(HybridCanyonMaterialPath);
+            if (existing != null) return existing;
+            EnsureAssetFolder("Assets/JetHorizon/Generated/HybridCanyon");
+            Shader shader = Shader.Find("JH/StableCanyon");
+            if (shader == null) return LoadMaterial("ConeMat");
+
+            Texture2D cyan = TextureFactory.CyanSlab();
+            cyan.name = "HybridCanyonCyanSurface";
+            cyan.wrapMode = TextureWrapMode.Repeat;
+            Texture2D dark = TextureFactory.DarkSlab();
+            dark.name = "HybridCanyonDarkSurface";
+            dark.wrapMode = TextureWrapMode.Repeat;
+            AssetDatabase.CreateAsset(cyan, "Assets/JetHorizon/Generated/HybridCanyon/HybridCanyonCyanSurface.asset");
+            AssetDatabase.CreateAsset(dark, "Assets/JetHorizon/Generated/HybridCanyon/HybridCanyonDarkSurface.asset");
+
+            var material = new Material(shader) { name = "HybridCanyonSurface" };
+            material.SetTexture("_CyanSurface", cyan);
+            material.SetTexture("_DarkSurface", dark);
+            material.SetColor("_CyanBody", new Color(.055f, .27f, .32f, 1f));
+            material.SetColor("_DarkBody", new Color(.10f, .055f, .15f, 1f));
+            material.SetFloat("_Brightness", .66f);
+            material.SetFloat("_Emission", .20f);
+            material.SetFloat("_FadeStart", -430f);
+            material.SetFloat("_FadeEnd", -330f);
+            AssetDatabase.CreateAsset(material, HybridCanyonMaterialPath);
+            AssetDatabase.SaveAssets();
+            return material;
+        }
+
+        static void EnsureAssetFolder(string path)
+        {
+            if (AssetDatabase.IsValidFolder(path)) return;
+            string[] parts = path.Split('/');
+            string current = parts[0];
+            for (int i = 1; i < parts.Length; i++)
+            {
+                string next = current + "/" + parts[i];
+                if (!AssetDatabase.IsValidFolder(next)) AssetDatabase.CreateFolder(current, parts[i]);
+                current = next;
+            }
+        }
+
+        static void EnsureHybridCanyonProfile(JetHorizonAuthoringProfile profile)
+        {
+            if (profile.HybridCanyonWorld != null) return;
+            profile.HybridCanyonWorld = LoadOrCreateHybridCanyonProfile(profile.CanyonMaterial);
+            EditorUtility.SetDirty(profile);
+            AssetDatabase.SaveAssets();
         }
 
         static void EnsureFolders()
