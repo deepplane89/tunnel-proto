@@ -16,7 +16,7 @@ namespace JetHorizon
         public Material BoltMaterial;
 
         const float WarningDiscRadius = 3.5f;
-        const float WarningSeconds = 0.65f;
+        const float WarningSeconds = 0.3f;
         const float StrikeSeconds = 0.5f;
         const float LingerSeconds = 4f;
         const float BoltVisibleSeconds = StrikeSeconds + LingerSeconds;
@@ -208,7 +208,7 @@ namespace JetHorizon
             {
                 strike.Bolt.transform.position = new Vector3(x, 0.08f, z);
                 strike.Bolt.SetActive(true);
-                var reusedPoints = BuildJaggedPath();
+                var reusedPoints = BuildJaggedPath(strike.CoreId * 397 ^ 17);
                 strike.Core.SetPositions(reusedPoints);
                 strike.Glow.SetPositions(reusedPoints);
                 strike.Core.enabled = strike.Glow.enabled = true;
@@ -222,7 +222,7 @@ namespace JetHorizon
             root.transform.position = new Vector3(x, 0.08f, z);
             strike.Bolt = root;
 
-            var points = BuildJaggedPath();
+            var points = BuildJaggedPath(strike.CoreId * 397 ^ 17);
             // Three.js tuned TubeGeometry uses radii 0.45 core / 0.25 glow.
             // LineRenderer consumes diameter, and its glow must surround the core.
             strike.Glow = MakeLine(root.transform, "Glow", (TunedCoreRadius + TunedGlowRadius) * 2f, points, 0);
@@ -255,19 +255,40 @@ namespace JetHorizon
             strike.FlashLight.renderMode = LightRenderMode.ForcePixel;
         }
 
-        Vector3[] BuildJaggedPath()
+        Vector3[] BuildJaggedPath(int seed)
         {
-            var points = new Vector3[SegmentCount + 1];
-            points[0] = Vector3.zero;
-            float x = 0f, z = 0f;
-            for (int i = 1; i < SegmentCount; i++)
+            // Exact Three.js midpoint-subdivision construction. SegmentCount is
+            // converted to a power-of-two subdivision depth, producing the same
+            // nine control points as the tuned source value of ten segments.
+            int iterations = Mathf.Max(1, Mathf.RoundToInt(Mathf.Log(Mathf.Max(4, SegmentCount), 2f)));
+            var x = new float[1 << (iterations + 1)];
+            var y = new float[x.Length];
+            x[0] = 0f; y[0] = SkyHeight;
+            x[1] = 0f; y[1] = .5f;
+            int count = 2;
+            var random = new System.Random(seed);
+            for (int depth = 0; depth < iterations; depth++)
             {
-                float edgeT = Mathf.Sin(i / (float)SegmentCount * Mathf.PI);
-                x = Mathf.Lerp(x, Random.Range(-Jaggedness, Jaggedness), 0.72f);
-                z = Mathf.Lerp(z, Random.Range(-Jaggedness * 0.42f, Jaggedness * 0.42f), 0.72f);
-                points[i] = new Vector3(x * edgeT, SkyHeight * i / SegmentCount, z * edgeT);
+                for (int i = count - 1; i > 0; i--)
+                {
+                    x[i * 2] = x[i];
+                    y[i * 2] = y[i];
+                }
+                float jaggedScale = Jaggedness * (1f - depth * .2f);
+                for (int i = 0; i < count - 1; i++)
+                {
+                    int left = i * 2;
+                    int right = (i + 1) * 2;
+                    x[left + 1] = (x[left] + x[right]) * .5f
+                        + ((float)random.NextDouble() - .5f) * jaggedScale;
+                    y[left + 1] = (y[left] + y[right]) * .5f;
+                }
+                count = count * 2 - 1;
             }
-            points[SegmentCount] = new Vector3(0f, SkyHeight, 0f);
+
+            var points = new Vector3[count];
+            for (int i = 0; i < count; i++)
+                points[i] = new Vector3(x[i], y[i], 0f);
             return points;
         }
 
@@ -298,7 +319,7 @@ namespace JetHorizon
             int frame = Mathf.FloorToInt(age * rate);
             if (frame == strike.CrackleFrame || strike.Core == null || strike.Glow == null) return;
             strike.CrackleFrame = frame;
-            var points = BuildJaggedPath();
+            var points = BuildJaggedPath(strike.CoreId * 397 ^ frame);
             strike.Core.SetPositions(points);
             strike.Glow.SetPositions(points);
         }

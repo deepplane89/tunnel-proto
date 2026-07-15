@@ -88,7 +88,7 @@ namespace JetHorizon.Simulation
         public float PrismaticTunnelRowSpacing = 7f;
         public float PrismaticTunnelCollisionDepth = 5f;
         public float LightningCollisionHalfWidth = 1.25f;
-        public float LightningWarningSeconds = 0.65f;
+        public float LightningWarningSeconds = 0.3f;
         public bool CollisionEnabled = true;
         public bool ProgressionEnabled = true;
         public bool HazardSpawningEnabled = true;

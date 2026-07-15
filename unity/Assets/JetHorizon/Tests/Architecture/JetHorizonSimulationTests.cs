@@ -1470,6 +1470,32 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void LightningSequencerPortsSourceSalvoAndPinchChoreography()
+        {
+            var random = new DeterministicRandom(20260715u);
+            var runtime = new LightningSequenceRuntime();
+            var requests = new LightningStrikeRequestBuffer(16);
+
+            runtime.Begin(LightningSequenceKind.Salvo, 0f, random);
+            runtime.Tick(0f, 0f, requests);
+            Assert.That(requests.Count, Is.EqualTo(3));
+            Assert.That(requests[0].TargetX, Is.EqualTo(-7.2f).Within(.001f));
+            Assert.That(requests[1].TargetX, Is.EqualTo(0f).Within(.001f));
+            Assert.That(requests[2].TargetX, Is.EqualTo(7.2f).Within(.001f));
+
+            runtime.Reset();
+            runtime.Begin(LightningSequenceKind.Pinch, 2f, random);
+            runtime.Tick(0f, 99f, requests);
+            Assert.That(requests.Count, Is.EqualTo(2));
+            Assert.That(requests[0].TargetX, Is.EqualTo(-6f).Within(.001f));
+            Assert.That(requests[1].TargetX, Is.EqualTo(10f).Within(.001f));
+            runtime.Tick(.3f, -99f, requests);
+            Assert.That(requests.Count, Is.EqualTo(2));
+            Assert.That(requests[0].TargetX, Is.EqualTo(-4f).Within(.001f));
+            Assert.That(requests[1].TargetX, Is.EqualTo(8f).Within(.001f));
+        }
+
+        [Test]
         public void ProofRuntimeStreamsComposedEncountersAndExtractsThroughSpatialGate()
         {
             var simulation = new JetHorizonSimulation(new SimulationConfig
@@ -1616,6 +1642,16 @@ namespace JetHorizon.Simulation.Tests
                 Assert.That(first.GetOpening(i).HalfWidth, Is.EqualTo(second.GetOpening(i).HalfWidth));
                 Assert.That(first.GetOpening(i).Distance, Is.EqualTo(second.GetOpening(i).Distance));
             }
+
+            float leftExtreme = 0f;
+            float rightExtreme = 0f;
+            for (int i = 0; i < first.OpeningCount; i++)
+            {
+                leftExtreme = System.Math.Min(leftExtreme, first.GetOpening(i).CenterX);
+                rightExtreme = System.Math.Max(rightExtreme, first.GetOpening(i).CenterX);
+            }
+            Assert.That(leftExtreme, Is.LessThan(-25f), "The source canyon sine must retain its left sweep.");
+            Assert.That(rightExtreme, Is.GreaterThan(25f), "The source canyon sine must retain its right sweep.");
         }
 
         [Test]

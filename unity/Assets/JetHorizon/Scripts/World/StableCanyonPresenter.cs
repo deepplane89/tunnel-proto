@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using JetHorizon.Simulation;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -5,34 +6,32 @@ using UnityEngine.Rendering;
 namespace JetHorizon
 {
     /// <summary>
-    /// Seam-locked Unity projection of core-owned canyon slices. The core owns the
-    /// route and collision opening; this component owns only the faceted wall skin.
+    /// Seam-locked Unity projection of the core-owned canyon route. The route is
+    /// constructed once, but each span retains the source slab's 5x6 crystalline
+    /// triangle grid, snap quantization, crest breakup, and closed wall volume.
     /// </summary>
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public sealed class StableCanyonPresenter : MonoBehaviour, ISimSystem
     {
         const int MaximumSlices = 96;
-        const int VerticalSegments = 7;
-        const int VerticalStride = VerticalSegments + 1;
-        const int SurfaceCount = 4; // inner + outer shell for both canyon sides
+        const int LongitudinalSegmentsPerSlice = 5;
+        const int VerticalSegments = 6;
 
         public Material CanyonMaterial;
-        public float WallHeight = 62f;
-        public float WallThickness = 8f;
-        public float Displacement = 2.6f;
+        public float WallHeight = 55f;
+        public float WallThickness = 60f;
+        public float Displacement = 4f;
+        [Range(.1f, 2f)] public float Snap = .7f;
         [Range(0f, 1f)] public float Brightness = 0.72f;
         [Range(0f, 2f)] public float Emission = 0.28f;
         public float FadeStartZ = -305f;
         public float FadeEndZ = -235f;
 
         readonly CorridorSliceSnapshot[] _sorted = new CorridorSliceSnapshot[MaximumSlices];
-        readonly Vector3[] _vertices = new Vector3[MaximumSlices * VerticalStride * SurfaceCount];
-        readonly Vector2[] _uv = new Vector2[MaximumSlices * VerticalStride * SurfaceCount];
-        readonly Color[] _colors = new Color[MaximumSlices * VerticalStride * SurfaceCount];
-        readonly int[] _triangles = new int[
-            (MaximumSlices - 1) * VerticalSegments * 6 * SurfaceCount
-            + (MaximumSlices - 1) * 6 * 4
-            + VerticalSegments * 6 * 4];
+        readonly List<Vector3> _vertices = new List<Vector3>(42000);
+        readonly List<Vector2> _uv = new List<Vector2>(42000);
+        readonly List<Color> _colors = new List<Color>(42000);
+        readonly List<int> _triangles = new List<int>(42000);
 
         Mesh _mesh;
         MeshRenderer _renderer;
@@ -56,7 +55,6 @@ namespace JetHorizon
         {
             if (_mesh != null) return;
             _mesh = new Mesh { name = "JH_StableCrystallineCanyon", indexFormat = IndexFormat.UInt32 };
-            _mesh.MarkDynamic();
             var filter = GetComponent<MeshFilter>() ?? gameObject.AddComponent<MeshFilter>();
             _renderer = GetComponent<MeshRenderer>() ?? gameObject.AddComponent<MeshRenderer>();
             filter.sharedMesh = _mesh;
@@ -119,9 +117,9 @@ namespace JetHorizon
                 _builtFirstId = _sorted[0].Id;
                 _builtLastId = _sorted[count - 1].Id;
             }
-            // Every core slice advances by the same deterministic distance. Keep
-            // the already-built canyon rigid and translate the complete construct
-            // rather than regenerating its surface every simulation tick.
+
+            // Every core sample advances by the same distance, so the complete
+            // canyon can move rigidly after its one-time construction.
             transform.localPosition = new Vector3(0f, 0f, originZ);
             if (_runtimeMaterial != null)
             {
@@ -163,130 +161,163 @@ namespace JetHorizon
 
         void RebuildMesh(int sliceCount, float originZ)
         {
-            int surfaceVertexCount = sliceCount * VerticalStride;
+            _vertices.Clear();
+            _uv.Clear();
+            _colors.Clear();
+            _triangles.Clear();
+
+            int intervalCount = sliceCount - 1;
+            int columnCount = intervalCount * LongitudinalSegmentsPerSlice + 1;
+            var inner = new Vector3[2, columnCount, VerticalSegments + 1];
+            var outer = new Vector3[2, columnCount, VerticalSegments + 1];
+
+            for (int column = 0; column < columnCount; column++)
+            {
+                int interval = Mathf.Min(intervalCount - 1, column / LongitudinalSegmentsPerSlice);
+                int localColumn = column - interval * LongitudinalSegmentsPerSlice;
+                float t = localColumn / (float)LongitudinalSegmentsPerSlice;
+                CorridorSliceSnapshot a = _sorted[interval];
+                CorridorSliceSnapshot b = _sorted[interval + 1];
+                float center = Mathf.Lerp(a.CenterX, b.CenterX, t);
+                float halfWidth = Mathf.Lerp(a.HalfWidth, b.HalfWidth, t);
+                float z = Mathf.Lerp(a.Z, b.Z, t) - originZ;
+
+                for (int sideIndex = 0; sideIndex < 2; sideIndex++)
+                {
+                    int side = sideIndex == 0 ? -1 : 1;
+                    for (int vertical = 0; vertical <= VerticalSegments; vertical++)
+                    {
+                        float v = vertical / (float)VerticalSegments;
+                        float profile = WallProfile(v);
+                        float jitter = SignedHash(column, vertical, sideIndex) * Displacement;
+                        if (v > .8f)
+                            jitter += SignedHash(column + 173, vertical + 41, sideIndex) * Displacement
+                                * ((v - .8f) / .2f);
+                        float snappedProfile = Mathf.Round((profile + jitter) * Snap) / Snap;
+                        float y = v * WallHeight;
+                        if (v > .85f)
+                            y += SignedHash(column + 307, vertical + 89, sideIndex) * WallHeight * .09f;
+                        y = Mathf.Round(y * 1.5f) / 1.5f;
+
+                        inner[sideIndex, column, vertical] = new Vector3(
+                            center + side * (halfWidth + snappedProfile), y, z);
+                        outer[sideIndex, column, vertical] = new Vector3(
+                            center + side * (halfWidth + WallThickness), y, z);
+                    }
+                }
+            }
+
             for (int sideIndex = 0; sideIndex < 2; sideIndex++)
             {
-                int side = sideIndex == 0 ? -1 : 1;
-                for (int shell = 0; shell < 2; shell++)
+                for (int interval = 0; interval < intervalCount; interval++)
                 {
-                    int surfaceOffset = (sideIndex * 2 + shell) * surfaceVertexCount;
-                    for (int sliceIndex = 0; sliceIndex < sliceCount; sliceIndex++)
+                    for (int local = 0; local < LongitudinalSegmentsPerSlice; local++)
                     {
-                        CorridorSliceSnapshot slice = _sorted[sliceIndex];
-                        for (int vertical = 0; vertical <= VerticalSegments; vertical++)
+                        int c0 = interval * LongitudinalSegmentsPerSlice + local;
+                        int c1 = c0 + 1;
+                        float u0 = interval + local / (float)LongitudinalSegmentsPerSlice;
+                        float u1 = interval + (local + 1) / (float)LongitudinalSegmentsPerSlice;
+
+                        for (int vertical = 0; vertical < VerticalSegments; vertical++)
                         {
-                            float v = vertical / (float)VerticalSegments;
-                            float profile = WallProfile(v);
-                            float jitter = SignedHash(slice.RowIndex, vertical) * Displacement * Mathf.Sin(v * Mathf.PI);
-                            int vertex = surfaceOffset + sliceIndex * VerticalStride + vertical;
-                            _vertices[vertex] = new Vector3(
-                                slice.CenterX + side * (slice.HalfWidth + profile + jitter + shell * WallThickness),
-                                v * WallHeight,
-                                slice.Z - originZ);
-                            // One complete copy of the original slab texture spans
-                            // each deterministic row; the shader alternates the
-                            // original cyan streak and dark magenta-crack surfaces.
-                            _uv[vertex] = new Vector2(slice.RowIndex, v);
-                            float heightShade = Mathf.Lerp(.58f, 1f, .25f + v * .75f);
-                            _colors[vertex] = Color.white * heightShade * (shell == 0 ? 1f : .72f);
-                            _colors[vertex].a = 1f;
+                            float v0 = vertical / (float)VerticalSegments;
+                            float v1 = (vertical + 1) / (float)VerticalSegments;
+                            AddQuad(
+                                inner[sideIndex, c0, vertical], inner[sideIndex, c0, vertical + 1],
+                                inner[sideIndex, c1, vertical], inner[sideIndex, c1, vertical + 1],
+                                new Vector2(u0, v0), new Vector2(u0, v1),
+                                new Vector2(u1, v0), new Vector2(u1, v1), 1f);
+                            AddQuad(
+                                outer[sideIndex, c1, vertical], outer[sideIndex, c1, vertical + 1],
+                                outer[sideIndex, c0, vertical], outer[sideIndex, c0, vertical + 1],
+                                new Vector2(u1, v0), new Vector2(u1, v1),
+                                new Vector2(u0, v0), new Vector2(u0, v1), .70f);
                         }
+
+                        AddQuad(
+                            inner[sideIndex, c0, 0], outer[sideIndex, c0, 0],
+                            inner[sideIndex, c1, 0], outer[sideIndex, c1, 0],
+                            new Vector2(u0, 0f), new Vector2(u0, 1f),
+                            new Vector2(u1, 0f), new Vector2(u1, 1f), .78f);
+                        AddQuad(
+                            inner[sideIndex, c1, VerticalSegments], outer[sideIndex, c1, VerticalSegments],
+                            inner[sideIndex, c0, VerticalSegments], outer[sideIndex, c0, VerticalSegments],
+                            new Vector2(u1, 0f), new Vector2(u1, 1f),
+                            new Vector2(u0, 0f), new Vector2(u0, 1f), .82f);
                     }
                 }
-            }
 
-            int triangleCount = 0;
-            for (int surface = 0; surface < SurfaceCount; surface++)
-            {
-                int offset = surface * surfaceVertexCount;
-                for (int slice = 0; slice < sliceCount - 1; slice++)
-                {
-                    int row = offset + slice * VerticalStride;
-                    int next = row + VerticalStride;
-                    for (int vertical = 0; vertical < VerticalSegments; vertical++)
-                    {
-                        _triangles[triangleCount++] = row + vertical;
-                        _triangles[triangleCount++] = next + vertical;
-                        _triangles[triangleCount++] = row + vertical + 1;
-                        _triangles[triangleCount++] = row + vertical + 1;
-                        _triangles[triangleCount++] = next + vertical;
-                        _triangles[triangleCount++] = next + vertical + 1;
-                    }
-                }
-            }
-
-            // Close every shell along its waterline and crest. These strips keep
-            // the canyon solid at grazing camera angles instead of exposing the
-            // infinitely thin edge of the inner wall.
-            for (int sideIndex = 0; sideIndex < 2; sideIndex++)
-            {
-                int inner = sideIndex * 2 * surfaceVertexCount;
-                int outer = inner + surfaceVertexCount;
-                for (int slice = 0; slice < sliceCount - 1; slice++)
-                {
-                    int innerRow = inner + slice * VerticalStride;
-                    int innerNext = innerRow + VerticalStride;
-                    int outerRow = outer + slice * VerticalStride;
-                    int outerNext = outerRow + VerticalStride;
-                    AddQuad(ref triangleCount, innerRow, outerRow, innerNext, outerNext);
-                    AddQuad(ref triangleCount,
-                        innerRow + VerticalSegments,
-                        innerNext + VerticalSegments,
-                        outerRow + VerticalSegments,
-                        outerNext + VerticalSegments);
-                }
-
-                // Close both streamed ends so looking along a bend cannot reveal
-                // the sky through the wall volume.
                 for (int end = 0; end < 2; end++)
                 {
-                    int slice = end == 0 ? 0 : sliceCount - 1;
-                    int innerRow = inner + slice * VerticalStride;
-                    int outerRow = outer + slice * VerticalStride;
+                    int column = end == 0 ? 0 : columnCount - 1;
+                    float u = end == 0 ? 0f : intervalCount;
                     for (int vertical = 0; vertical < VerticalSegments; vertical++)
-                        AddQuad(ref triangleCount,
-                            innerRow + vertical,
-                            innerRow + vertical + 1,
-                            outerRow + vertical,
-                            outerRow + vertical + 1);
+                    {
+                        float v0 = vertical / (float)VerticalSegments;
+                        float v1 = (vertical + 1) / (float)VerticalSegments;
+                        AddQuad(
+                            inner[sideIndex, column, vertical], outer[sideIndex, column, vertical],
+                            inner[sideIndex, column, vertical + 1], outer[sideIndex, column, vertical + 1],
+                            new Vector2(u, v0), new Vector2(u + 1f, v0),
+                            new Vector2(u, v1), new Vector2(u + 1f, v1), .80f);
+                    }
                 }
             }
 
-            int vertexCount = surfaceVertexCount * SurfaceCount;
             _mesh.Clear(false);
-            _mesh.SetVertices(_vertices, 0, vertexCount);
-            _mesh.SetUVs(0, _uv, 0, vertexCount);
-            _mesh.SetColors(_colors, 0, vertexCount);
-            _mesh.SetTriangles(_triangles, 0, triangleCount, 0, false);
+            _mesh.SetVertices(_vertices);
+            _mesh.SetUVs(0, _uv);
+            _mesh.SetColors(_colors);
+            _mesh.SetTriangles(_triangles, 0, false);
             float depth = Mathf.Max(1f, _sorted[sliceCount - 1].Z - originZ);
             _mesh.bounds = new Bounds(
                 new Vector3(0f, WallHeight * .5f, depth * .5f),
-                new Vector3(440f, WallHeight + 20f, depth + 30f));
+                new Vector3(520f, WallHeight + 30f, depth + 40f));
         }
 
-        void AddQuad(ref int triangleCount, int a, int b, int c, int d)
+        void AddQuad(
+            Vector3 a, Vector3 b, Vector3 c, Vector3 d,
+            Vector2 uvA, Vector2 uvB, Vector2 uvC, Vector2 uvD,
+            float shade)
         {
-            _triangles[triangleCount++] = a;
-            _triangles[triangleCount++] = b;
-            _triangles[triangleCount++] = c;
-            _triangles[triangleCount++] = c;
-            _triangles[triangleCount++] = b;
-            _triangles[triangleCount++] = d;
+            AddTriangle(a, b, c, uvA, uvB, uvC, shade);
+            AddTriangle(c, b, d, uvC, uvB, uvD, shade);
         }
 
+        void AddTriangle(
+            Vector3 a, Vector3 b, Vector3 c,
+            Vector2 uvA, Vector2 uvB, Vector2 uvC,
+            float shade)
+        {
+            int first = _vertices.Count;
+            _vertices.Add(a); _vertices.Add(b); _vertices.Add(c);
+            _uv.Add(uvA); _uv.Add(uvB); _uv.Add(uvC);
+            Color tint = new Color(shade, shade, shade, 1f);
+            _colors.Add(tint); _colors.Add(tint); _colors.Add(tint);
+            _triangles.Add(first); _triangles.Add(first + 1); _triangles.Add(first + 2);
+        }
+
+        // Exact knife-arches profile from the Three.js L3/L4 recreation preset.
         static float WallProfile(float v)
         {
-            if (v < .16f) return Mathf.Lerp(6f, 1.5f, v / .16f);
-            if (v < .48f) return Mathf.Lerp(1.5f, 11f, (v - .16f) / .32f);
-            if (v < .84f) return Mathf.Lerp(11f, 19f, (v - .48f) / .36f);
-            return Mathf.Lerp(19f, 23f, (v - .84f) / .16f);
+            const float foot = 26f;
+            const float sweep = 20f;
+            const float mid = 0f;
+            const float crest = 0f;
+            if (v < .15f) return Mathf.Lerp(foot, sweep, v / .15f);
+            if (v < .45f) return Mathf.Lerp(sweep, mid, (v - .15f) / .30f);
+            if (v < .85f) return Mathf.Lerp(mid, crest, (v - .45f) / .40f);
+            return crest;
         }
 
-        static float SignedHash(int row, int vertical)
+        static float SignedHash(int column, int vertical, int side)
         {
             unchecked
             {
-                uint value = (uint)(row * 73856093) ^ (uint)(vertical * 19349663) ^ 0x9e3779b9u;
+                uint value = (uint)(column * 73856093)
+                    ^ (uint)(vertical * 19349663)
+                    ^ (uint)(side * 83492791)
+                    ^ 0x9e3779b9u;
                 value ^= value >> 16;
                 value *= 0x7feb352du;
                 value ^= value >> 15;

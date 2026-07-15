@@ -398,15 +398,25 @@ namespace JetHorizon.Simulation
         {
             const int count = 46;
             const float rowSpacing = 17f;
+            const float sourceAmplitude = 120f;
+            const float sourceIntensity = .30f;
+            const float sourcePeriod = 330f;
+            const float sourceRampDistance = 350f;
             var openings = new EncounterOpening[count];
             for (int i = 0; i < count; i++)
             {
+                // Exact exported Three.js canyon sine: amplitude 120 at .30
+                // intensity, 330 world-unit period, ramped in over the first 350u.
+                float sourceDistance = rowSpacing * (i + 1);
+                float ramp = Math.Max(0f, Math.Min(1f, sourceDistance / sourceRampDistance));
+                float center = sourceAmplitude * sourceIntensity * ramp
+                    * (float)Math.Sin(sourceDistance / sourcePeriod * Math.PI * 2.0);
                 float edge = Math.Min(i / 7f, (count - 1 - i) / 7f);
                 float edgeBlend = Math.Max(0f, Math.Min(1f, edge));
-                float center = (float)Math.Sin(i * .22f) * 13f
-                    + (float)Math.Sin(i * .47f + 1.2f) * 3.6f;
                 center *= edgeBlend;
-                float halfWidth = 16.5f + (10.5f - 16.5f) * edgeBlend
+                // A 14u playable half-opening is the narrowest validated width
+                // that retains the complete source wave for the starter ship.
+                float halfWidth = 24f + (14f - 24f) * edgeBlend
                     + (float)Math.Sin(i * .31f + .4f) * 1.1f * edgeBlend;
                 CargoRouteTier cargo = i == 13 ? CargoRouteTier.Safe
                     : i == 28 ? CargoRouteTier.Risky

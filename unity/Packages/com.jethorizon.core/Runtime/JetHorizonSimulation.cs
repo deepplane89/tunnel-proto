@@ -73,6 +73,8 @@ namespace JetHorizon.Simulation
         readonly ShipCapabilityProfile _shipCapability;
         readonly ProofEncounterRuntime _proofEncounters;
         readonly EncounterCommandBuffer _encounterCommands;
+        readonly LightningSequenceRuntime _lightningSequences;
+        readonly LightningStrikeRequestBuffer _lightningStrikeRequests;
         readonly int[] _laneScratch;
         readonly int[] _blockedLaneScratch;
 
@@ -172,6 +174,8 @@ namespace JetHorizon.Simulation
                     _shipCapability)
                 : null;
             _encounterCommands = new EncounterCommandBuffer(64);
+            _lightningSequences = new LightningSequenceRuntime();
+            _lightningStrikeRequests = new LightningStrikeRequestBuffer(16);
             _structuredWallField = StructuredWallFieldCatalog.Production;
             _laneScratch = new int[_config.LaneCount];
             _blockedLaneScratch = new int[_config.LaneCount];
@@ -493,6 +497,7 @@ namespace JetHorizon.Simulation
             _speed = _paceState.CruiseSpeedBeforePowerup;
             _effectiveSpeed = _paceState.EffectiveSpeed;
             TickLightningSpawner(dt, world);
+            TickLightningSequences(dt);
             TickZipper(dt);
             TickSlalom(dt);
             TickSineCorridor(dt);
@@ -612,44 +617,41 @@ namespace JetHorizon.Simulation
 
         void SpawnPlannedLightningCluster(EncounterCommand command)
         {
-            // Restore the original readable strike language: a few individually
-            // threatening bolts framing a tempting cargo route, not a wall of
-            // columns. The deterministic opening remains protected so the cargo
-            // line is always traversable by the validated ship capability.
-            float clearance = command.HalfWidth
-                + _config.LightningCollisionHalfWidth
-                + _config.CorridorShipHalfWidth
-                + 1.45f;
-            float left = Clamp(command.X - clearance, -40f, 40f);
-            float right = Clamp(command.X + clearance, -40f, 40f);
-            float outer = (command.RowIndex & 1) == 0 ? -38f : 38f;
-            TrySpawnPlannedLightning(command, left);
-            TrySpawnPlannedLightning(command, right);
-            if (Math.Abs(outer - left) > 4f && Math.Abs(outer - right) > 4f)
-                TrySpawnPlannedLightning(command, outer);
+            // The proof storm now runs the exact five pattern families authored
+            // in Three.js instead of manufacturing a disconnected three-bolt wall.
+            LightningSequenceKind sequence = (LightningSequenceKind)(command.RowIndex % 5);
+            _lightningSequences.Begin(sequence, _shipX, _random);
             Events.Add(new SimulationEvent(
                 SimulationEventType.LightningStrikeTelegraphed,
-                command.RowIndex,
+                (int)sequence,
                 command.X,
-                command.HalfWidth * 2f));
+                command.RowIndex));
         }
 
-        void TrySpawnPlannedLightning(EncounterCommand command, float x)
+        void TickLightningSequences(float dt)
         {
-            HazardSpawn lightning = HazardSpawn.Lightning(
-                x,
-                command.Z,
-                _config.LightningWarningSeconds,
-                4.8f,
-                _config.LightningCollisionHalfWidth,
-                4f);
-            if (!EncounterGeometryValidator.PreservesOpening(
-                lightning,
-                command.X,
-                command.HalfWidth,
-                _config.CorridorShipHalfWidth,
-                .65f)) return;
-            SpawnEncounterHazard(command, lightning);
+            _lightningSequences.Tick(dt, _shipX, _lightningStrikeRequests);
+            if (_lightningStrikeRequests.Count == 0) return;
+
+            float spawnZ = _config.ShipZ - 83f;
+            float travelTime = 83f / Math.Max(1f, _effectiveSpeed);
+            for (int i = 0; i < _lightningStrikeRequests.Count; i++)
+            {
+                LightningStrikeRequest request = _lightningStrikeRequests[i];
+                float targetX = request.TargetX + _shipVelocityX * travelTime * .6f;
+                SpawnHazard(HazardSpawn.Lightning(
+                    Clamp(targetX, -40f, 40f),
+                    spawnZ,
+                    _config.LightningWarningSeconds,
+                    4.8f,
+                    _config.LightningCollisionHalfWidth,
+                    4f));
+                Events.Add(new SimulationEvent(
+                    SimulationEventType.LightningStrikeTelegraphed,
+                    (int)request.Sequence,
+                    targetX,
+                    spawnZ));
+            }
         }
 
         void SpawnProofCorridorSlice(EncounterCommand command, CorridorFamily family)
@@ -893,6 +895,8 @@ namespace JetHorizon.Simulation
             _cargo.Reset();
             _lightningFamily = CorridorFamily.None;
             _lightningTimer = 0f;
+            _lightningSequences.Reset();
+            _lightningStrikeRequests.Clear();
             _zipperActive = false;
             _zipperRowsLeft = 0;
             _zipperRowsTotal = 0;
