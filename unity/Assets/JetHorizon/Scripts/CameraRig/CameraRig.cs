@@ -9,6 +9,7 @@ namespace JetHorizon
     public sealed class CameraRig : MonoBehaviour, ISimSystem
     {
         public UnityEngine.Camera Cam;      // child of this pivot at local (0,0,0)
+        [Min(1000f)] public float GameplayFarClip = 5000f;
 
         float _cameraRoll;
         float _cameraRollHold;
@@ -34,6 +35,10 @@ namespace JetHorizon
             transform.position = BasePivot(0f);
             if (Cam != null)
             {
+                // Runtime authority: the open editor scene may retain an older serialized
+                // far plane after source assets change. Keep the complete canyon inside
+                // the camera volume so no wall triangle crosses the far plane mid-run.
+                Cam.farClipPlane = Mathf.Max(5000f, GameplayFarClip);
                 Cam.transform.localPosition = Vector3.zero;
                 Cam.fieldOfView = Tuning.CamBaseFovDesktop;
                 AimAtLook();

@@ -10,6 +10,8 @@ Shader "JH/StableCanyon"
         _Emission ("Emission", Range(0, 2)) = 0.28
         _FadeStart ("Fade Start", Float) = -305
         _FadeEnd ("Fade End", Float) = -235
+        _HorizonBlendStart ("Opaque Horizon Blend Start", Float) = 900
+        _HorizonBlendEnd ("Opaque Horizon Blend End", Float) = 1600
     }
     SubShader
     {
@@ -50,6 +52,8 @@ Shader "JH/StableCanyon"
                 float _Emission;
                 float _FadeStart;
                 float _FadeEnd;
+                float _HorizonBlendStart;
+                float _HorizonBlendEnd;
             CBUFFER_END
 
             TEXTURE2D(_CyanSurface);
@@ -98,6 +102,11 @@ Shader "JH/StableCanyon"
                 half emissiveDetail = saturate((max(surface.r, max(surface.g, surface.b)) - 0.06) * 1.6);
                 crystal += surface * _Emission * lerp(0.25, 1.0, emissiveDetail);
                 crystal = MixFog(crystal, input.fogFactor);
+                float cameraDistance = distance(input.positionWS, _WorldSpaceCameraPos.xyz);
+                float horizonBlend = smoothstep(_HorizonBlendStart, _HorizonBlendEnd, cameraDistance);
+                // Remain opaque and keep writing depth: distant bends still block the
+                // sky, but their finite end becomes indistinguishable from atmosphere.
+                crystal = lerp(crystal, unity_FogColor.rgb, horizonBlend);
                 return half4(crystal, 1.0);
             }
             ENDHLSL
