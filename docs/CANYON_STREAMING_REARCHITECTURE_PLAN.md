@@ -2,7 +2,25 @@
 
 ## Status
 
-Design only. This document deliberately makes no runtime changes while visual testing is unavailable.
+Playable replacement slice implemented on 2026-07-15. The proof run now includes a
+core-owned crystalline canyon rendered by a seam-locked continuous Unity presenter.
+The legacy slab conveyor remains available as a rollback path until the new look is
+visually approved and all historical stage presets are migrated.
+
+Current implementation:
+
+- `EncounterPlanCatalog` owns the deterministic canyon centerline, width, spacing,
+  cargo route, and capability validation;
+- `CorridorSliceSnapshot` projects the same samples to collision and presentation;
+- `StableCanyonPresenter` builds one shared-vertex wall surface per side, so adjacent
+  rows cannot separate or expose holes;
+- `JH/StableCanyon` owns restrained color, emission, fog, and opaque distance dithering;
+- the route scales longitudinal spacing with equipped cruise capability;
+- press `C` during an Editor/development run to jump directly to the new canyon;
+- the older `CanyonSystem` materials were darkened independently for rollback comparisons.
+
+Still intentionally pending: baking Control Room path handles into the portable route
+catalog and migrating each legacy named canyon preset onto the replacement renderer.
 
 ## Goal
 

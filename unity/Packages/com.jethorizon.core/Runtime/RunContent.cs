@@ -23,7 +23,8 @@ namespace JetHorizon.Simulation
         PreT4B,
         L3Knife,
         L4Sine,
-        L5Sine
+        L5Sine,
+        CrystallineCanyon
     }
 
     public enum SpawnPattern

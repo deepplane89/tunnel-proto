@@ -66,19 +66,31 @@ namespace JetHorizon
         {
             EnsureBuilt();
             SimulationSnapshot snapshot = GameManager.I != null ? GameManager.I.CoreSnapshot : null;
-            if (snapshot == null || snapshot.CorridorSliceCount < 2)
+            int count = CopyPrismaticSlices(snapshot);
+            if (count < 2)
             {
                 _renderer.enabled = false;
                 return;
             }
 
-            int count = Mathf.Min(snapshot.CorridorSliceCount, MaximumSlices);
-            for (int i = 0; i < count; i++) _sorted[i] = snapshot.GetCorridorSlice(i);
             SortByZ(count);
             RebuildMesh(count);
             if (_runtimeMaterial != null)
                 _runtimeMaterial.SetFloat(TimeValueId, snapshot.Elapsed);
             _renderer.enabled = true;
+        }
+
+        int CopyPrismaticSlices(SimulationSnapshot snapshot)
+        {
+            if (snapshot == null) return 0;
+            int count = 0;
+            for (int i = 0; i < snapshot.CorridorSliceCount && count < MaximumSlices; i++)
+            {
+                CorridorSliceSnapshot slice = snapshot.GetCorridorSlice(i);
+                if (slice.Family == CorridorFamily.CrystallineCanyon) continue;
+                _sorted[count++] = slice;
+            }
+            return count;
         }
 
         void SortByZ(int count)

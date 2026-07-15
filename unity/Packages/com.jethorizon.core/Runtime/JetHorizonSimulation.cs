@@ -573,11 +573,14 @@ namespace JetHorizon.Simulation
                     case EncounterCommandType.MonumentBarrierRow:
                         SpawnMonumentBarrier(command);
                         break;
+                    case EncounterCommandType.CanyonSlice:
+                        SpawnProofCorridorSlice(command, CorridorFamily.CrystallineCanyon);
+                        break;
                     case EncounterCommandType.LightningGateRow:
                         SpawnPlannedLightningGate(command);
                         break;
                     case EncounterCommandType.PrismaticSlice:
-                        SpawnProofCorridorSlice(command);
+                        SpawnProofCorridorSlice(command, CorridorFamily.L4Sine);
                         break;
                     case EncounterCommandType.Cargo:
                         SpawnPickup(PickupSpawn.Cargo(command.CargoKind, 1, command.X, 1.35f, command.Z));
@@ -641,7 +644,7 @@ namespace JetHorizon.Simulation
                 command.HalfWidth * 2f));
         }
 
-        void SpawnProofCorridorSlice(EncounterCommand command)
+        void SpawnProofCorridorSlice(EncounterCommand command, CorridorFamily family)
         {
             for (int i = 0; i < _corridorSlices.Length; i++)
             {
@@ -650,7 +653,7 @@ namespace JetHorizon.Simulation
                 {
                     Active = true,
                     Id = _nextEntityId++,
-                    Family = CorridorFamily.L4Sine,
+                    Family = family,
                     RowIndex = command.RowIndex,
                     CenterX = command.X,
                     HalfWidth = command.HalfWidth,

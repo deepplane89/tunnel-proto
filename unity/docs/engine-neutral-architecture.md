@@ -76,7 +76,8 @@ Only then should the corresponding legacy gameplay code be disabled. Presentatio
 | Random waves and pickups | Core | pooled meshes, tint, bob, and spin |
 | Angled walls | Core random/structured scheduling, identity, source-order geometry, movement, and collision | pooled wall meshes and tint |
 | Lightning | Core timing, target, movement, and collision | warning disc, bolt mesh, shake |
-| Canyon slabs | Core collision decision from value bounds | slab path, mesh recycling, entry/exit visuals |
+| Crystalline canyon | deterministic centerline, widths, spacing, capability validation, collision samples | seam-locked faceted walls, palette, fog/dither fade, reflections |
+| Legacy canyon slabs | Core collision decision from value bounds | rollback-only slab path, mesh recycling, entry/exit visuals |
 | Zipper, slalom, and sine corridors | Core scheduling, row geometry, random choices, entities, rewards | cone/coin pooling and corridor tint |
 | Runner ship and thruster tuning | Engine-neutral content | GLB loading, socket transforms, exhaust drawing |
 | Structured-wall field | Core 3-second gate, 20-row lifecycle, 6x2x2 transforms, and entities | pooled wall presentation |

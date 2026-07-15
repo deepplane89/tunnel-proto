@@ -5,6 +5,7 @@ namespace JetHorizon.Simulation
     public enum EncounterCommandType
     {
         MonumentBarrierRow,
+        CanyonSlice,
         LightningGateRow,
         PrismaticSlice,
         Cargo,
@@ -155,8 +156,8 @@ namespace JetHorizon.Simulation
 
         public ProofEncounterRuntime(EncounterPlan[] plans, ShipCapabilityProfile capability)
         {
-            if (plans == null || plans.Length != 3)
-                throw new ArgumentException("The proof run requires exactly three composed encounters.", nameof(plans));
+            if (plans == null || plans.Length < 3)
+                throw new ArgumentException("The proof run requires at least three composed encounters.", nameof(plans));
             _plans = new EncounterPlan[plans.Length];
             _validationMargins = new float[plans.Length];
             _capability = capability;
@@ -351,9 +352,11 @@ namespace JetHorizon.Simulation
             {
                 EncounterCommandType rowType = plan.Kind == EncounterKind.MonumentalBroadWeave
                     ? EncounterCommandType.MonumentBarrierRow
-                    : plan.Kind == EncounterKind.LightningMovingGate
-                        ? EncounterCommandType.LightningGateRow
-                        : EncounterCommandType.PrismaticSlice;
+                    : plan.Kind == EncounterKind.CrystallineCanyon
+                        ? EncounterCommandType.CanyonSlice
+                        : plan.Kind == EncounterKind.LightningMovingGate
+                            ? EncounterCommandType.LightningGateRow
+                            : EncounterCommandType.PrismaticSlice;
                 commands.Add(new EncounterCommand(rowType, plan.Kind, rowIndex, opening.CenterX, opening.HalfWidth, z));
             }
 

@@ -71,8 +71,8 @@ namespace JetHorizon
             if (_cyanMat != null) return;
             var shader = Shader.Find("Universal Render Pipeline/Lit");
             _cyanMat = new Material(shader) { name = "JH_CanyonCyan" };
-            _cyanMat.SetColor("_BaseColor", TextureFactory.Hex(0x04d4f0));
-            _cyanMat.SetFloat("_Smoothness", 0.6f);
+            _cyanMat.SetColor("_BaseColor", TextureFactory.Hex(0x07303a));
+            _cyanMat.SetFloat("_Smoothness", 0.48f);
             _cyanMat.SetFloat("_Metallic", 0f);
             _cyanMat.SetFloat("_ClearCoatMask", 0.65f);
             _cyanMat.SetFloat("_ClearCoatSmoothness", 0.78f);
@@ -82,22 +82,22 @@ namespace JetHorizon
             // Keep the source neon edge language, but let the sun and ship remain
             // the exposure anchors. The prior 1.1 multiplier made whole facets read
             // self-lit instead of catching light from the scene.
-            _cyanMat.SetColor("_EmissionColor", TextureFactory.Hex(0x6ef2ff) * 0.72f);
+            _cyanMat.SetColor("_EmissionColor", TextureFactory.Hex(0x2bb3c2) * 0.16f);
             _cyanMat.SetTexture("_EmissionMap", TextureFactory.CyanSlab());
             _cyanMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
 
             _darkMat = new Material(shader) { name = "JH_CanyonDark" };
             // Preserve the near-black crystal language without letting untextured
             // facets collapse to invisible black under the gameplay camera.
-            _darkMat.SetColor("_BaseColor", TextureFactory.Hex(0x141425));
-            _darkMat.SetFloat("_Smoothness", 0.78f);
+            _darkMat.SetColor("_BaseColor", TextureFactory.Hex(0x090912));
+            _darkMat.SetFloat("_Smoothness", 0.58f);
             _darkMat.SetFloat("_Metallic", 0f);
             _darkMat.SetFloat("_ClearCoatMask", 0.40f);
             _darkMat.SetFloat("_ClearCoatSmoothness", 0.92f);
             _darkMat.SetFloat("_Cull", 0f);
             _darkMat.EnableKeyword("_CLEARCOAT");
             _darkMat.EnableKeyword("_EMISSION");
-            _darkMat.SetColor("_EmissionColor", TextureFactory.Hex(0xff00cc) * 0.68f);
+            _darkMat.SetColor("_EmissionColor", TextureFactory.Hex(0x9b176f) * 0.13f);
             _darkMat.SetTexture("_EmissionMap", TextureFactory.DarkSlab());
             _darkMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
         }

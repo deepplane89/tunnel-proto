@@ -1392,9 +1392,9 @@ namespace JetHorizon.Simulation.Tests
             EncounterPlan[] fast = EncounterPlanCatalog.CreateProofSequence(2f);
 
             Assert.That(fast[0].Length, Is.EqualTo(baseline[0].Length * 2f).Within(.001f));
-            Assert.That(fast[2].GetOpening(20).Distance,
-                Is.EqualTo(baseline[2].GetOpening(20).Distance * 2f).Within(.001f));
-            Assert.That(fast[2].ApproachModifier, Is.EqualTo(1f));
+            Assert.That(fast[3].GetOpening(20).Distance,
+                Is.EqualTo(baseline[3].GetOpening(20).Distance * 2f).Within(.001f));
+            Assert.That(fast[3].ApproachModifier, Is.EqualTo(1f));
         }
 
         [Test]
@@ -1460,7 +1460,7 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
-        public void ProofRuntimeStreamsThreeComposedEncountersAndExtractsThroughSpatialGate()
+        public void ProofRuntimeStreamsComposedEncountersAndExtractsThroughSpatialGate()
         {
             var simulation = new JetHorizonSimulation(new SimulationConfig
             {
@@ -1476,6 +1476,7 @@ namespace JetHorizon.Simulation.Tests
             simulation.StartRun(2026071501L);
 
             bool sawMonuments = false;
+            bool sawCanyon = false;
             bool sawLightning = false;
             bool sawPrismatic = false;
             bool sawCargo = false;
@@ -1492,6 +1493,9 @@ namespace JetHorizon.Simulation.Tests
                 SimulationSnapshot snapshot = simulation.Snapshot;
 
                 sawMonuments |= snapshot.EncounterKind == EncounterKind.MonumentalBroadWeave;
+                sawCanyon |= snapshot.EncounterKind == EncounterKind.CrystallineCanyon
+                    && snapshot.ActiveCorridorFamily == CorridorFamily.CrystallineCanyon
+                    && snapshot.CorridorSliceCount > 1;
                 sawLightning |= snapshot.EncounterKind == EncounterKind.LightningMovingGate;
                 sawPrismatic |= snapshot.EncounterKind == EncounterKind.PrismaticSineCorridor
                     && snapshot.CorridorSliceCount > 1;
@@ -1518,6 +1522,7 @@ namespace JetHorizon.Simulation.Tests
             }
 
             Assert.That(sawMonuments, Is.True);
+            Assert.That(sawCanyon, Is.True);
             Assert.That(sawLightning, Is.True);
             Assert.That(sawPrismatic, Is.True);
             Assert.That(sawCargo, Is.True);
@@ -1561,6 +1566,41 @@ namespace JetHorizon.Simulation.Tests
             simulation.ForcePlayerDeath();
             Assert.That(simulation.LatestRunResult.Ineligibility & LeaderboardIneligibility.DebugStart,
                 Is.EqualTo(LeaderboardIneligibility.DebugStart));
+        }
+
+        [Test]
+        public void DebugJumpSelectsStableCanyonAndUsesOneDeterministicRouteForCollisionAndPresentation()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                StartSpeedMultiplier = 5f / 3f,
+                PersistentCruiseSpeedMultiplier = .826f,
+                MinimumOperationalSpeed = 50f,
+                ProofEncounterMode = true,
+                CollisionEnabled = false,
+                HazardSpawningEnabled = true,
+                MaxHazards = 600,
+                MaxPickups = 128,
+                MaxCorridorSlices = 96
+            }, 20260721u);
+            simulation.StartRun(2026072101L);
+
+            Assert.That(simulation.DebugJumpToProofEncounter(EncounterKind.CrystallineCanyon), Is.True);
+            simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.EncounterPlanId, Is.EqualTo("proof.crystalline-canyon"));
+            Assert.That(simulation.Snapshot.ActiveCorridorFamily, Is.EqualTo(CorridorFamily.CrystallineCanyon));
+            Assert.That(simulation.Snapshot.CorridorSliceCount, Is.GreaterThan(8));
+
+            EncounterPlan first = EncounterPlanCatalog.CreateProofSequence()[1];
+            EncounterPlan second = EncounterPlanCatalog.CreateProofSequence()[1];
+            Assert.That(first.OpeningCount, Is.EqualTo(second.OpeningCount));
+            for (int i = 0; i < first.OpeningCount; i++)
+            {
+                Assert.That(first.GetOpening(i).CenterX, Is.EqualTo(second.GetOpening(i).CenterX));
+                Assert.That(first.GetOpening(i).HalfWidth, Is.EqualTo(second.GetOpening(i).HalfWidth));
+                Assert.That(first.GetOpening(i).Distance, Is.EqualTo(second.GetOpening(i).Distance));
+            }
         }
 
         [Test]

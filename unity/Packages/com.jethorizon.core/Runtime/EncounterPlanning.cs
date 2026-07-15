@@ -6,6 +6,7 @@ namespace JetHorizon.Simulation
     public enum EncounterKind
     {
         MonumentalBroadWeave,
+        CrystallineCanyon,
         LightningMovingGate,
         PrismaticSineCorridor
     }
@@ -340,7 +341,13 @@ namespace JetHorizon.Simulation
         {
             if (float.IsNaN(spacingScale) || float.IsInfinity(spacingScale) || spacingScale <= 0f)
                 throw new ArgumentOutOfRangeException(nameof(spacingScale));
-            return new[] { BroadWeave(spacingScale), LightningGate(spacingScale), PrismaticCorridor(spacingScale) };
+            return new[]
+            {
+                BroadWeave(spacingScale),
+                CrystallineCanyon(spacingScale),
+                LightningGate(spacingScale),
+                PrismaticCorridor(spacingScale)
+            };
         }
 
         static EncounterPlan BroadWeave(float scale)
@@ -385,6 +392,39 @@ namespace JetHorizon.Simulation
                     new EncounterOpening(Scale(630f, scale), 14f, 11f, CargoRouteTier.Deep),
                     new EncounterOpening(Scale(720f, scale), -4f, 13f)
                 });
+        }
+
+        static EncounterPlan CrystallineCanyon(float scale)
+        {
+            const int count = 46;
+            const float rowSpacing = 17f;
+            var openings = new EncounterOpening[count];
+            for (int i = 0; i < count; i++)
+            {
+                float edge = Math.Min(i / 7f, (count - 1 - i) / 7f);
+                float edgeBlend = Math.Max(0f, Math.Min(1f, edge));
+                float center = (float)Math.Sin(i * .22f) * 13f
+                    + (float)Math.Sin(i * .47f + 1.2f) * 3.6f;
+                center *= edgeBlend;
+                float halfWidth = 16.5f + (10.5f - 16.5f) * edgeBlend
+                    + (float)Math.Sin(i * .31f + .4f) * 1.1f * edgeBlend;
+                CargoRouteTier cargo = i == 13 ? CargoRouteTier.Safe
+                    : i == 28 ? CargoRouteTier.Risky
+                    : i == 39 ? CargoRouteTier.Deep
+                    : CargoRouteTier.None;
+                openings[i] = new EncounterOpening(
+                    Scale(rowSpacing * (i + 1), scale),
+                    center,
+                    halfWidth,
+                    cargo);
+            }
+            return new EncounterPlan(
+                "proof.crystalline-canyon",
+                EncounterKind.CrystallineCanyon,
+                Scale(rowSpacing * (count + 1), scale),
+                1f,
+                ProofContract,
+                openings);
         }
 
         static EncounterPlan PrismaticCorridor(float scale)

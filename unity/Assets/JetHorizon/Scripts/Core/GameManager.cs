@@ -36,6 +36,7 @@ namespace JetHorizon
         public AngledWallSystem AngledWalls;
         public LightningSystem Lightning;
         public PrismaticTunnelPresenter PrismaticTunnel;
+        public StableCanyonPresenter StableCanyon;
         public MonumentPresenter Monuments;
         public ExtractionGatePresenter ExtractionGate;
         public ObstacleSpawner Obstacles;
@@ -171,6 +172,13 @@ namespace JetHorizon
                 PrismaticTunnel = presenterObject.AddComponent<PrismaticTunnelPresenter>();
             }
             PrismaticTunnel.ResetSystem();
+            if (StableCanyon == null)
+            {
+                var presenterObject = new GameObject("Stable Canyon Presentation");
+                presenterObject.transform.SetParent(transform, false);
+                StableCanyon = presenterObject.AddComponent<StableCanyonPresenter>();
+            }
+            StableCanyon.ResetSystem();
             if (Monuments == null)
             {
                 var presenterObject = new GameObject("Monument Presentation");
@@ -242,6 +250,7 @@ namespace JetHorizon
             Canyon.SimTick(dt);                                  // 16: canyon slabs + collision
             if (_killedThisFrame) return;
             PrismaticTunnel?.SimTick(dt);                        // snapshot-only continuous sine tunnel presentation
+            StableCanyon?.SimTick(dt);                           // snapshot-only seam-locked crystalline canyon
             Monuments?.SimTick(dt);                              // snapshot-only monumental structure presentation
             AngledWalls.SimTick(dt);                             // walls move + OBB collision
             if (_killedThisFrame) return;
@@ -539,10 +548,33 @@ namespace JetHorizon
             AngledWalls?.ResetSystem();
             Lightning?.ResetSystem();
             PrismaticTunnel?.ResetSystem();
+            StableCanyon?.ResetSystem();
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();
             PowerupPresentation?.ResetSystem();
             Debug.Log("[Jet Horizon] Prismatic corridor preview selected. This run is leaderboard-ineligible.");
+#endif
+        }
+
+        /// <summary>Editor/development shortcut used by ShipInput's C key.</summary>
+        public void DebugJumpToCrystallineCanyon()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (State.Phase != GamePhase.Playing || _coreSimulation == null) return;
+            if (!_coreSimulation.DebugJumpToProofEncounter(EncounterKind.CrystallineCanyon)) return;
+
+            _accumulator = 0f;
+            SyncCoreSession();
+            Obstacles?.ResetSystem();
+            Pickups?.ResetSystem();
+            AngledWalls?.ResetSystem();
+            Lightning?.ResetSystem();
+            PrismaticTunnel?.ResetSystem();
+            StableCanyon?.ResetSystem();
+            Monuments?.ResetSystem();
+            ExtractionGate?.ResetSystem();
+            PowerupPresentation?.ResetSystem();
+            Debug.Log("[Jet Horizon] Stable crystalline canyon preview selected. This run is leaderboard-ineligible.");
 #endif
         }
 
@@ -567,6 +599,7 @@ namespace JetHorizon
             Slalom.ResetSystem(); AngledWalls.ResetSystem(); Lightning.ResetSystem();
             Obstacles.ResetSystem(); Pickups.ResetSystem();
             PrismaticTunnel?.ResetSystem();
+            StableCanyon?.ResetSystem();
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();
             PowerupPresentation?.ResetSystem();

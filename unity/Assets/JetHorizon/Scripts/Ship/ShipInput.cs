@@ -42,6 +42,7 @@ namespace JetHorizon
                 if (kb.escapeKey.wasPressedThisFrame && GameManager.I != null) GameManager.I.TogglePause();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if (kb.pKey.wasPressedThisFrame && GameManager.I != null) GameManager.I.DebugJumpToPrismaticEncounter();
+                if (kb.cKey.wasPressedThisFrame && GameManager.I != null) GameManager.I.DebugJumpToCrystallineCanyon();
 #endif
             }
             var mouse = Mouse.current;
@@ -56,6 +57,7 @@ namespace JetHorizon
             if (Input.GetKeyDown(KeyCode.Escape) && GameManager.I != null) GameManager.I.TogglePause();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (Input.GetKeyDown(KeyCode.P) && GameManager.I != null) GameManager.I.DebugJumpToPrismaticEncounter();
+            if (Input.GetKeyDown(KeyCode.C) && GameManager.I != null) GameManager.I.DebugJumpToCrystallineCanyon();
 #endif
             HandleTouchLegacy();
 #endif
