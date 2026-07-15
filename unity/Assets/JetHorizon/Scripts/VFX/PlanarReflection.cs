@@ -18,7 +18,6 @@ namespace JetHorizon
         public int TextureSize = 512;
         public int ReflectLayer = 8;
         public float PlaneY = 0f;
-        [Min(100f)] public float MaxReflectionDistance = 1600f;
 
         UnityEngine.Camera _reflCam;
         RenderTexture _rt;
@@ -74,10 +73,7 @@ namespace JetHorizon
             _reflCam.fieldOfView = main.fieldOfView;
             _reflCam.aspect = main.aspect;
             _reflCam.nearClipPlane = main.nearClipPlane;
-            // The gameplay camera sees the complete prebuilt canyon so its far plane
-            // never reveals wall geometry. The reflection only needs the fog-visible
-            // range; capping it avoids doubling the full-depth mobile render cost.
-            _reflCam.farClipPlane = Mathf.Min(main.farClipPlane, MaxReflectionDistance);
+            _reflCam.farClipPlane = main.farClipPlane;
 
             // reflection matrix about plane y = PlaneY
             Vector4 plane = new Vector4(0f, 1f, 0f, -PlaneY);

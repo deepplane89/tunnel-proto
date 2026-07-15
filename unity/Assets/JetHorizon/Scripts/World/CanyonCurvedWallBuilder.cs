@@ -160,9 +160,7 @@ namespace JetHorizon
             endDistance = Mathf.Clamp(endDistance, startDistance + patchLength, route.Length);
             int patchCount = Mathf.Max(1, Mathf.CeilToInt((endDistance - startDistance) / patchLength));
             patchLength = (endDistance - startDistance) / patchCount;
-            int patchesPerChunk = settings.ContinuousWallRenderer
-                ? patchCount
-                : Mathf.Max(1, Mathf.RoundToInt(Mathf.Max(patchLength, settings.WallChunkLength) / patchLength));
+            int patchesPerChunk = Mathf.Max(1, Mathf.RoundToInt(Mathf.Max(patchLength, settings.WallChunkLength) / patchLength));
 
             var root = new GameObject("Spline-Extruded Faceted Canyon Walls");
             root.layer = 8;
@@ -179,10 +177,7 @@ namespace JetHorizon
                         firstPatch == 0, firstPatch + count == patchCount);
                     ownedAssets?.Add(mesh);
 
-                    string objectName = settings.ContinuousWallRenderer
-                        ? $"Continuous Canyon Wall {(side < 0 ? "Left" : "Right")}"
-                        : $"Curved Wall Chunk {(side < 0 ? "L" : "R")} {firstPatch / patchesPerChunk:00}";
-                    var chunk = new GameObject(objectName);
+                    var chunk = new GameObject($"Curved Wall Chunk {(side < 0 ? "L" : "R")} {firstPatch / patchesPerChunk:00}");
                     chunk.layer = 8;
                     chunk.transform.SetParent(root.transform, false);
                     chunk.AddComponent<MeshFilter>().sharedMesh = mesh;

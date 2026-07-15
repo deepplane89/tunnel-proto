@@ -53,8 +53,6 @@ namespace JetHorizon
 
         [Header("Curved patch extrusion")]
         [Range(0f, 1f)] public float PathTension = .35f;
-        [Tooltip("Build each complete canyon side as one renderer so Unity cannot reveal 80m groups through renderer-level frustum culling.")]
-        public bool ContinuousWallRenderer = true;
         [Min(40f)] public float WallChunkLength = 80f;
         [Min(0f)] public float TerrainLipEmbedDepth = 10f;
         [Min(0f)] public float BottomSkirtDepth = 8f;

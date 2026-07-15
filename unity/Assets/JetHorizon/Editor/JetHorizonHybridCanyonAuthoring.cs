@@ -215,10 +215,9 @@ namespace JetHorizon.EditorTools
             }
 
             CanyonWallChunkMarker[] markers = preview.GetComponentsInChildren<CanyonWallChunkMarker>(true);
-            int minimumWallRenderers = profile.Settings != null && profile.Settings.ContinuousWallRenderer ? 2 : 4;
-            if (markers.Length < minimumWallRenderers)
+            if (markers.Length < 4)
             {
-                if (showDialog) EditorUtility.DisplayDialog("Canyon check", "The continuous canyon walls were not generated. Refresh the editable canyon and try again.", "OK");
+                if (showDialog) EditorUtility.DisplayDialog("Canyon check", "The curved wall chunks were not generated. Refresh the editable canyon and try again.", "OK");
                 return false;
             }
             for (int side = -1; side <= 1; side += 2)
@@ -236,7 +235,7 @@ namespace JetHorizon.EditorTools
             }
 
             if (showDialog)
-                EditorUtility.DisplayDialog("Canyon check", "Passed: one ordered core route, opaque continuous wall renderers, uninterrupted geometry ranges, and no competing Terrain collision.", "Great");
+                EditorUtility.DisplayDialog("Canyon check", "Passed: one ordered core route, opaque curved wall shells, continuous chunk ranges, and no competing Terrain collision.", "Great");
             return true;
         }
 

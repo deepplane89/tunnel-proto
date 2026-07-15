@@ -48,8 +48,6 @@ MonoBehaviour:
     SlabMidX: 17
     SlabCrestX: 20
     SlabBaseY: -4
-    ContinuousWallRenderer: 1
-    WallChunkLength: 80
     CastMeshShadows: 1
     ReceiveMeshShadows: 1
   CanyonMaterial: {fileID: 2100000, guid: f2de2221311d04ff8b7137280d3441b9, type: 2}

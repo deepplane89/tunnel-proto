@@ -73,7 +73,6 @@ namespace JetHorizon.EditorTools
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("SurfaceNoise"), new GUIContent("Rocky breakup"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("NoiseScale"), new GUIContent("Rock feature size"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("PathTension"), new GUIContent("Curve tightness"));
-            EditorGUILayout.PropertyField(settings.FindPropertyRelative("ContinuousWallRenderer"), new GUIContent("One renderer per canyon side"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("WallHeightByProgress"), new GUIContent("Wall height along route"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("BankDegreesByProgress"), new GUIContent("Canyon bank along route"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("EntryClearance"), new GUIContent("Arch opening height"));
