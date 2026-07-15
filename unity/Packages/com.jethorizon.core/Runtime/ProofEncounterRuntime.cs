@@ -327,6 +327,12 @@ namespace JetHorizon.Simulation
                 : StructureTelegraphSeconds;
             float lead = Math.Max(plan.Contract.MinimumTelegraphSeconds, telegraphSeconds)
                 * Math.Max(1f, paceBeforeEncounter);
+            // The canyon is one authored construct, not a sequence of pieces that
+            // materialize ahead of the ship. Publish its complete deterministic
+            // route on the first encounter tick; Unity can keep the distant portion
+            // hidden in opaque fog while building one stable mesh up front.
+            if (plan.Kind == EncounterKind.CrystallineCanyon)
+                lead = float.MaxValue;
 
             while (_nextOpeningIndex < plan.OpeningCount)
             {

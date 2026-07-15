@@ -37,11 +37,18 @@ namespace JetHorizon
         Mesh _mesh;
         MeshRenderer _renderer;
         Material _runtimeMaterial;
+        Texture2D _cyanSurface;
+        Texture2D _darkSurface;
+        int _builtSliceCount;
+        int _builtFirstId;
+        int _builtLastId;
 
         static readonly int BrightnessId = Shader.PropertyToID("_Brightness");
         static readonly int EmissionId = Shader.PropertyToID("_Emission");
         static readonly int FadeStartId = Shader.PropertyToID("_FadeStart");
         static readonly int FadeEndId = Shader.PropertyToID("_FadeEnd");
+        static readonly int CyanSurfaceId = Shader.PropertyToID("_CyanSurface");
+        static readonly int DarkSurfaceId = Shader.PropertyToID("_DarkSurface");
 
         void Awake() => EnsureBuilt();
 
@@ -64,6 +71,17 @@ namespace JetHorizon
                 if (shader != null) _runtimeMaterial = new Material(shader) { name = "JH_StableCanyon_Runtime" };
             }
             _renderer.sharedMaterial = _runtimeMaterial;
+            if (_runtimeMaterial != null)
+            {
+                _cyanSurface = TextureFactory.CyanSlab();
+                _darkSurface = TextureFactory.DarkSlab();
+                _cyanSurface.wrapMode = TextureWrapMode.Repeat;
+                _darkSurface.wrapMode = TextureWrapMode.Repeat;
+                if (_runtimeMaterial.HasProperty(CyanSurfaceId))
+                    _runtimeMaterial.SetTexture(CyanSurfaceId, _cyanSurface);
+                if (_runtimeMaterial.HasProperty(DarkSurfaceId))
+                    _runtimeMaterial.SetTexture(DarkSurfaceId, _darkSurface);
+            }
             _renderer.enabled = false;
         }
 
@@ -72,6 +90,10 @@ namespace JetHorizon
             EnsureBuilt();
             _mesh.Clear(false);
             _renderer.enabled = false;
+            _builtSliceCount = 0;
+            _builtFirstId = 0;
+            _builtLastId = 0;
+            transform.localPosition = Vector3.zero;
         }
 
         public void SimTick(float dt)
@@ -86,7 +108,21 @@ namespace JetHorizon
             }
 
             SortByZ(count);
-            RebuildMesh(count);
+            float originZ = _sorted[0].Z;
+            bool topologyChanged = count != _builtSliceCount
+                || _sorted[0].Id != _builtFirstId
+                || _sorted[count - 1].Id != _builtLastId;
+            if (topologyChanged)
+            {
+                RebuildMesh(count, originZ);
+                _builtSliceCount = count;
+                _builtFirstId = _sorted[0].Id;
+                _builtLastId = _sorted[count - 1].Id;
+            }
+            // Every core slice advances by the same deterministic distance. Keep
+            // the already-built canyon rigid and translate the complete construct
+            // rather than regenerating its surface every simulation tick.
+            transform.localPosition = new Vector3(0f, 0f, originZ);
             if (_runtimeMaterial != null)
             {
                 _runtimeMaterial.SetFloat(BrightnessId, Brightness);
@@ -125,7 +161,7 @@ namespace JetHorizon
             }
         }
 
-        void RebuildMesh(int sliceCount)
+        void RebuildMesh(int sliceCount, float originZ)
         {
             int surfaceVertexCount = sliceCount * VerticalStride;
             for (int sideIndex = 0; sideIndex < 2; sideIndex++)
@@ -137,7 +173,6 @@ namespace JetHorizon
                     for (int sliceIndex = 0; sliceIndex < sliceCount; sliceIndex++)
                     {
                         CorridorSliceSnapshot slice = _sorted[sliceIndex];
-                        Color palette = Palette(slice.RowIndex);
                         for (int vertical = 0; vertical <= VerticalSegments; vertical++)
                         {
                             float v = vertical / (float)VerticalSegments;
@@ -147,10 +182,13 @@ namespace JetHorizon
                             _vertices[vertex] = new Vector3(
                                 slice.CenterX + side * (slice.HalfWidth + profile + jitter + shell * WallThickness),
                                 v * WallHeight,
-                                slice.Z);
-                            _uv[vertex] = new Vector2(v, slice.RowIndex * .33f);
+                                slice.Z - originZ);
+                            // One complete copy of the original slab texture spans
+                            // each deterministic row; the shader alternates the
+                            // original cyan streak and dark magenta-crack surfaces.
+                            _uv[vertex] = new Vector2(slice.RowIndex, v);
                             float heightShade = Mathf.Lerp(.58f, 1f, .25f + v * .75f);
-                            _colors[vertex] = palette * heightShade * (shell == 0 ? 1f : .62f);
+                            _colors[vertex] = Color.white * heightShade * (shell == 0 ? 1f : .72f);
                             _colors[vertex].a = 1f;
                         }
                     }
@@ -220,7 +258,10 @@ namespace JetHorizon
             _mesh.SetUVs(0, _uv, 0, vertexCount);
             _mesh.SetColors(_colors, 0, vertexCount);
             _mesh.SetTriangles(_triangles, 0, triangleCount, 0, false);
-            _mesh.bounds = new Bounds(Vector3.zero, new Vector3(440f, 150f, 760f));
+            float depth = Mathf.Max(1f, _sorted[sliceCount - 1].Z - originZ);
+            _mesh.bounds = new Bounds(
+                new Vector3(0f, WallHeight * .5f, depth * .5f),
+                new Vector3(440f, WallHeight + 20f, depth + 30f));
         }
 
         void AddQuad(ref int triangleCount, int a, int b, int c, int d)
@@ -253,20 +294,12 @@ namespace JetHorizon
             }
         }
 
-        static Color Palette(int row)
-        {
-            switch (Mathf.Abs(row / 3) % 3)
-            {
-                case 0: return new Color(.05f, .58f, .72f, 1f);
-                case 1: return new Color(.38f, .10f, .62f, 1f);
-                default: return new Color(.08f, .24f, .58f, 1f);
-            }
-        }
-
         void OnDestroy()
         {
             if (_mesh != null) Destroy(_mesh);
             if (_runtimeMaterial != null) Destroy(_runtimeMaterial);
+            if (_cyanSurface != null) Destroy(_cyanSurface);
+            if (_darkSurface != null) Destroy(_darkSurface);
         }
     }
 }

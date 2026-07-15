@@ -1600,9 +1600,14 @@ namespace JetHorizon.Simulation.Tests
 
             Assert.That(simulation.Snapshot.EncounterPlanId, Is.EqualTo("proof.crystalline-canyon"));
             Assert.That(simulation.Snapshot.ActiveCorridorFamily, Is.EqualTo(CorridorFamily.CrystallineCanyon));
-            Assert.That(simulation.Snapshot.CorridorSliceCount, Is.GreaterThan(8));
-
             EncounterPlan first = EncounterPlanCatalog.CreateProofSequence()[1];
+            Assert.That(simulation.Snapshot.CorridorSliceCount, Is.EqualTo(first.OpeningCount),
+                "The complete canyon must exist before any part enters the visible fade band.");
+            float farthestZ = float.MaxValue;
+            for (int i = 0; i < simulation.Snapshot.CorridorSliceCount; i++)
+                farthestZ = System.Math.Min(farthestZ, simulation.Snapshot.GetCorridorSlice(i).Z);
+            Assert.That(farthestZ, Is.LessThan(-700f));
+
             EncounterPlan second = EncounterPlanCatalog.CreateProofSequence()[1];
             Assert.That(first.OpeningCount, Is.EqualTo(second.OpeningCount));
             for (int i = 0; i < first.OpeningCount; i++)

@@ -12,15 +12,20 @@ Current implementation:
 - `EncounterPlanCatalog` owns the deterministic canyon centerline, width, spacing,
   cargo route, and capability validation;
 - `CorridorSliceSnapshot` projects the same samples to collision and presentation;
-- `StableCanyonPresenter` builds one shared-vertex wall surface per side, so adjacent
-  rows cannot separate or expose holes;
-- `JH/StableCanyon` owns restrained color, emission, fog, and opaque distance dithering;
+- the core publishes the complete canyon route before its first visible frame;
+- `StableCanyonPresenter` builds one closed, shared-vertex construct and translates
+  that rigid mesh forward instead of generating visible sections during flight;
+- the stable shader reuses the original cyan diagonal-streak and dark magenta-crack
+  slab textures, with geometry-derived flat facets rather than replacement color bands;
+- `JH/StableCanyon` owns restrained brightness, emission, fog, and opaque distance dithering;
 - the route scales longitudinal spacing with equipped cruise capability;
 - press `C` during an Editor/development run to jump directly to the new canyon;
 - the older `CanyonSystem` materials were darkened independently for rollback comparisons.
 
-Still intentionally pending: baking Control Room path handles into the portable route
-catalog and migrating each legacy named canyon preset onto the replacement renderer.
+Recycling now occurs only as passed rows disappear behind the gameplay camera; the
+leading route is already resident deep beyond the fog band. Still intentionally
+pending: baking Control Room path handles into the portable route catalog and migrating
+each legacy named canyon preset onto the replacement renderer.
 
 ## Goal
 
