@@ -5,6 +5,10 @@ namespace JetHorizon.Meta
 {
     public enum CargoKind { Salvage, Alloy, Prism }
     public enum ShipSubsystem { PrimaryThruster, Stabilizers, Hull, ShieldGenerator, CargoBay }
+    [Flags]
+    public enum StarterRepairAward { None = 0, PrimaryThruster = 1, Stabilizers = 2 }
+    public enum StarterUpgradeBranch { None, Shield, Cargo }
+    // Schema-v2 names retained only so existing JSON saves can migrate cleanly.
     public enum RestorationBranch { None, Shield, Cargo }
     public enum GarageItemKind { Thruster, AddOn, Powerup, HandlingModel, Facility }
     public enum RepairJobStatus { Queued, Active, Complete }
@@ -59,7 +63,7 @@ namespace JetHorizon.Meta
     [Serializable]
     public sealed class GarageState
     {
-        public int SchemaVersion = 2;
+        public int SchemaVersion = 3;
         public int Credits;
         public int Salvage;
         public int Alloy;
@@ -70,6 +74,11 @@ namespace JetHorizon.Meta
         public int RepairBayLevel = 1;
         public int MechanicBotLevel;
         public long NextRepairJobId = 1;
+        public StarterRepairAward PendingStarterRepairs;
+        public bool StarterHullUpgradePending;
+        public StarterUpgradeBranch StarterUpgradeBranch;
+        public bool StarterUpgradeChoicePending;
+        // Schema-v2 migration fields. New domain code must not use these.
         public RestorationBranch RestorationBranch;
         public bool RestorationChoicePending;
         public string ShipId = "runner";
@@ -283,7 +292,18 @@ namespace JetHorizon.Meta
         {
             GarageState state = source?.Copy() ?? GarageState.CreateNew();
             GarageState defaults = GarageState.CreateNew();
-            state.SchemaVersion = 2;
+            int incomingSchema = state.SchemaVersion;
+            if (incomingSchema < 3)
+            {
+                if (state.RestorationChoicePending) state.StarterUpgradeChoicePending = true;
+                if (state.RestorationBranch == RestorationBranch.Shield)
+                    state.StarterUpgradeBranch = StarterUpgradeBranch.Shield;
+                else if (state.RestorationBranch == RestorationBranch.Cargo)
+                    state.StarterUpgradeBranch = StarterUpgradeBranch.Cargo;
+                state.RestorationChoicePending = false;
+                state.RestorationBranch = RestorationBranch.None;
+            }
+            state.SchemaVersion = 3;
             if (string.IsNullOrWhiteSpace(state.ShipId)) state.ShipId = "runner";
             if (string.IsNullOrWhiteSpace(state.SelectedThrusterId)) state.SelectedThrusterId = "wreck";
             if (string.IsNullOrWhiteSpace(state.SelectedHandlingId)) state.SelectedHandlingId = "default";
@@ -318,7 +338,46 @@ namespace JetHorizon.Meta
             state.Alloy += manifest.Alloy;
             state.Prism += manifest.Prism;
             state.Credits += manifest.CreditValue;
-            ApplyRestorationMilestone(state);
+            GrantStarterGarageWork(state);
+            return Success(state);
+        }
+
+        /// <summary>
+        /// Applies a free, one-time repair earned during starter onboarding. This restores
+        /// integrity only; it cannot raise a subsystem tier or spend upgrade currency.
+        /// </summary>
+        public static GarageCommandResult CompleteStarterRepair(GarageState source, StarterRepairAward repair)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (!IsSingleStarterRepair(repair) || (source.PendingStarterRepairs & repair) == 0)
+                return Fail(source, GarageFailure.Locked);
+
+            var state = source.Copy();
+            if (repair == StarterRepairAward.PrimaryThruster)
+            {
+                state.GetSubsystem(ShipSubsystem.PrimaryThruster).Integrity = 1f;
+                Unlock(state, "thruster:light");
+                state.SelectedThrusterId = "light";
+            }
+            else
+            {
+                state.GetSubsystem(ShipSubsystem.Stabilizers).Integrity = 1f;
+                Unlock(state, "addon:fins-01");
+            }
+            state.PendingStarterRepairs &= ~repair;
+            return Success(state);
+        }
+
+        /// <summary>A one-time capability installation. Unlike repair, this raises hull tier.</summary>
+        public static GarageCommandResult InstallStarterHullUpgrade(GarageState source)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (!source.StarterHullUpgradePending) return Fail(source, GarageFailure.Locked);
+            var state = source.Copy();
+            SubsystemState hull = state.GetSubsystem(ShipSubsystem.Hull);
+            hull.Tier = Math.Max(2, hull.Tier);
+            hull.Integrity = 1f;
+            state.StarterHullUpgradePending = false;
             return Success(state);
         }
 
@@ -327,6 +386,9 @@ namespace JetHorizon.Meta
             if (source == null) throw new ArgumentNullException(nameof(source));
             GarageUpgradeDefinition definition = GarageProgressionCatalog.Get(upgradeId);
             if (source.SuccessfulExtractions < definition.UnlockExtractions)
+                return Fail(source, GarageFailure.Locked);
+            if (source.StarterUpgradeChoicePending
+                && (upgradeId == GarageUpgradeId.Shield || upgradeId == GarageUpgradeId.CargoBay))
                 return Fail(source, GarageFailure.Locked);
 
             int currentLevel = GarageProgressionCatalog.GetCurrentLevel(source, upgradeId);
@@ -376,16 +438,25 @@ namespace JetHorizon.Meta
             return Success(state);
         }
 
-        public static GarageCommandResult ChooseRestoration(GarageState source, RestorationBranch branch)
+        /// <summary>
+        /// Installs one of two starter capability awards. This is an upgrade choice,
+        /// not a repair: shield gains tier 1 or cargo bay gains tier 2.
+        /// </summary>
+        public static GarageCommandResult ChooseStarterUpgrade(GarageState source, StarterUpgradeBranch branch)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
-            if (!source.RestorationChoicePending || branch == RestorationBranch.None) return Fail(source, GarageFailure.InvalidState);
+            if (!source.StarterUpgradeChoicePending || branch == StarterUpgradeBranch.None)
+                return Fail(source, GarageFailure.InvalidState);
             var state = source.Copy();
-            state.RestorationBranch = branch;
-            state.RestorationChoicePending = false;
-            ShipSubsystem selected = branch == RestorationBranch.Shield ? ShipSubsystem.ShieldGenerator : ShipSubsystem.CargoBay;
+            state.StarterUpgradeBranch = branch;
+            state.StarterUpgradeChoicePending = false;
+            ShipSubsystem selected = branch == StarterUpgradeBranch.Shield
+                ? ShipSubsystem.ShieldGenerator
+                : ShipSubsystem.CargoBay;
             SubsystemState subsystem = state.GetSubsystem(selected);
-            subsystem.Tier = Math.Max(1, subsystem.Tier);
+            subsystem.Tier = branch == StarterUpgradeBranch.Shield
+                ? Math.Max(1, subsystem.Tier)
+                : Math.Max(2, subsystem.Tier);
             subsystem.Integrity = 1f;
             return Success(state);
         }
@@ -492,6 +563,7 @@ namespace JetHorizon.Meta
         public static GarageCommandResult QueueRepair(GarageState source, ShipSubsystem subsystem, long nowUnixMilliseconds)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
+            if (StarterRepairIsLocked(source, subsystem)) return Fail(source, GarageFailure.Locked);
             if (source.GetSubsystem(subsystem).Integrity >= .999f) return Fail(source, GarageFailure.InvalidState);
             var state = source.Copy();
             int active = 0;
@@ -579,28 +651,37 @@ namespace JetHorizon.Meta
                 shieldPower, laserPower, magnetPower, overdrivePower);
         }
 
-        static void ApplyRestorationMilestone(GarageState state)
+        static void GrantStarterGarageWork(GarageState state)
         {
             switch (state.SuccessfulExtractions)
             {
                 case 1:
-                    state.GetSubsystem(ShipSubsystem.PrimaryThruster).Integrity = 1f;
-                    Unlock(state, "thruster:light");
-                    state.SelectedThrusterId = "light";
+                    state.PendingStarterRepairs |= StarterRepairAward.PrimaryThruster;
                     break;
                 case 2:
-                    state.GetSubsystem(ShipSubsystem.Stabilizers).Integrity = 1f;
-                    Unlock(state, "addon:fins-01");
+                    state.PendingStarterRepairs |= StarterRepairAward.Stabilizers;
                     break;
                 case 3:
-                    SubsystemState hull = state.GetSubsystem(ShipSubsystem.Hull);
-                    hull.Tier = 2;
-                    hull.Integrity = 1f;
+                    state.StarterHullUpgradePending = true;
                     break;
                 case 4:
-                    state.RestorationChoicePending = true;
+                    state.StarterUpgradeChoicePending = true;
                     break;
             }
+        }
+
+        static bool IsSingleStarterRepair(StarterRepairAward repair) =>
+            repair == StarterRepairAward.PrimaryThruster || repair == StarterRepairAward.Stabilizers;
+
+        static bool StarterRepairIsLocked(GarageState state, ShipSubsystem subsystem)
+        {
+            if (subsystem == ShipSubsystem.PrimaryThruster)
+                return state.SuccessfulExtractions < 1
+                    || (state.PendingStarterRepairs & StarterRepairAward.PrimaryThruster) != 0;
+            if (subsystem == ShipSubsystem.Stabilizers)
+                return state.SuccessfulExtractions < 2
+                    || (state.PendingStarterRepairs & StarterRepairAward.Stabilizers) != 0;
+            return false;
         }
 
         static long RepairDurationMilliseconds(GarageState state, SubsystemState target)

@@ -6,6 +6,8 @@
 
 **Architecture requirement:** Engine-neutral rules remain authoritative. Unity presents and adapts. The application layer coordinates without owning formulas.
 
+The gameplay/obstacle ownership and capability contract is defined in [`ENCOUNTER_CAPABILITY_COORDINATION.md`](ENCOUNTER_CAPABILITY_COORDINATION.md).
+
 ## Current implementation checkpoint
 
 Implemented in the `codex/engine-neutral-core-v1` branch:
@@ -14,7 +16,7 @@ Implemented in the `codex/engine-neutral-core-v1` branch:
 - repeating extraction windows, explicit extract/pass behavior, and Heat-driven speed, reward, rarity, and encounter-intensity values;
 - persistent upgrade levels and increasing credit costs for engine, stabilizers, cargo bay, hull, shield, laser, magnet, and overdrive;
 - ship launch parameters derived from upgrade tier, subsystem integrity, and selected handling model;
-- the four-extraction wreck-restoration arc, including a shield-or-cargo priority choice without permanently locking the other branch;
+- explicit starter repair awards and starter capability installations across the first four extractions, including a shield-or-cargo priority choice without permanently locking the other branch;
 - temporary pooled cargo-pod renderers, cargo/Heat HUD readouts, extraction controls, and a functional temporary garage menu;
 - persistence migration and engine-neutral tests for cargo, extraction, Heat, restoration, and upgrades.
 
@@ -142,21 +144,34 @@ There must be no artificial input lag, random steering error, dropped input, or 
 
 ### First four successful extractions
 
-1. **Primary thruster restored**
-   - Large forward-speed and acceleration improvement.
+1. **Primary thruster repair earned**
+   - Extraction makes a free starter repair available; it does not silently change the ship.
+   - The player explicitly completes the repair in the garage, restoring integrity to the existing Tier-1 ceiling.
+   - Restored integrity produces a large forward-speed and acceleration improvement without raising capability tier.
    - LIGHT thruster equipped.
-   - Garage ignition presentation makes the restoration memorable.
-2. **Stabilizers restored**
-   - Strong improvement to lateral acceleration, settling, countersteering, and bank recovery.
+   - Garage ignition presentation makes the repair memorable.
+2. **Stabilizer repair earned**
+   - The player explicitly restores stabilizer integrity to its existing Tier-1 ceiling.
+   - Restored integrity improves lateral acceleration, settling, countersteering, and bank recovery without raising capability tier.
    - Stabilizer I becomes physically visible on the GLB.
-3. **Hull reinforced**
+3. **Starter hull upgrade earned**
+   - This is explicitly presented and recorded as a capability installation, not a repair.
+   - Hull tier increases from 1 to 2.
    - The ship survives one glancing collision.
    - Hull lighting/material presentation becomes cleaner.
-4. **Restoration branch unlocked**
-   - Choose shield generation or cargo-bay restoration first.
+4. **Starter capability branch unlocked**
+   - Choose a Tier-1 shield generator or Tier-2 cargo bay first.
    - The unchosen branch remains available later; this is a sequencing choice, not permanent account damage.
 
 After the fourth extraction, the system opens into normal level-based progression.
+
+### Repair, restoration, and upgrade invariants
+
+- Repair changes subsystem integrity only. It never raises tier or maximum capability.
+- Starter restoration is a one-time, explicit repair of damaged Tier-1 wreck systems.
+- Upgrade installation raises subsystem tier and maximum capability. It is always labeled and commanded as an upgrade.
+- Banking cargo or earning credits never silently changes the next run's launch profile.
+- The application orchestrator may invoke these commands but may not merge them or calculate their effects.
 
 ## 6. Cargo system
 
@@ -563,11 +578,11 @@ The player should leave the garage knowing what changed and what the next goal i
 ### 13.4 Progressive disclosure
 
 - Launch 1 exposes only cargo/extraction.
-- Extraction 1 exposes engine restoration.
+- Extraction 1 exposes the explicit primary-thruster starter repair.
 - First death exposes repair.
-- Extraction 2 exposes stabilizer/handling progression.
-- Extraction 3 exposes hull progression.
-- Extraction 4 exposes restoration branching.
+- Extraction 2 exposes the explicit stabilizer starter repair and handling progression.
+- Extraction 3 exposes the starter hull capability installation.
+- Extraction 4 exposes the shield-versus-cargo starter upgrade branch.
 - Later milestones expose power-up levels, add-ons, facilities, sectors, and contracts.
 
 ## 14. Economy
@@ -800,7 +815,8 @@ HeatChanged
 RunExtracted
 RunDestroyed
 UpgradePurchased
-RestorationMilestoneCompleted
+StarterRepairCompleted
+StarterUpgradeInstalled
 SubsystemDamaged
 RepairStarted
 RepairCompleted
@@ -836,6 +852,7 @@ The existing foundation should be evolved rather than discarded.
 10. Replace the current runtime-built garage debug screen with an authored garage presenter that consumes the same commands/state.
 11. Preserve the thin `GarageOrchestrator`; move no formulas into it.
 12. Retain current deterministic prismatic/lightning implementations and feed them the new performance/reachability envelope.
+13. Keep `CompleteStarterRepair`, `QueueRepair`, and `PurchaseUpgrade` as separate domain commands with non-overlapping invariants.
 
 ## 20. Testing requirements
 

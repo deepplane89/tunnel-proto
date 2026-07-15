@@ -221,8 +221,9 @@ namespace JetHorizon
             MakeButton(root.transform, "UpgradeShield", "UPGRADE SHIELD", new Vector2(.70f, .35f), new Vector2(350f, 54f), () => Upgrade(GarageUpgradeId.Shield));
             MakeButton(root.transform, "Handling", "CHANGE HANDLING", new Vector2(.30f, .275f), new Vector2(350f, 54f), CycleHandling);
             MakeButton(root.transform, "Thruster", "CHANGE THRUSTER", new Vector2(.70f, .275f), new Vector2(350f, 54f), CycleThruster);
-            MakeButton(root.transform, "Repair", "REPAIR DAMAGED", new Vector2(.30f, .20f), new Vector2(350f, 54f), RepairFirstDamaged);
-            MakeButton(root.transform, "BuyAddOn", "BUY / EQUIP MOD", new Vector2(.70f, .20f), new Vector2(350f, 54f), BuyOrEquipNextAddOn);
+            MakeButton(root.transform, "Repair", "REPAIR DAMAGED", new Vector2(.20f, .20f), new Vector2(290f, 54f), RepairFirstDamaged);
+            MakeButton(root.transform, "StarterWork", "STARTER WORK", new Vector2(.50f, .20f), new Vector2(290f, 54f), CompletePendingStarterWork);
+            MakeButton(root.transform, "BuyAddOn", "BUY / EQUIP MOD", new Vector2(.80f, .20f), new Vector2(290f, 54f), BuyOrEquipNextAddOn);
             MakeButton(root.transform, "Fly", "LAUNCH", new Vector2(.70f, .10f), new Vector2(300f, 66f), () => GameManager.I?.StartRun());
             MakeButton(root.transform, "Back", "TITLE", new Vector2(.30f, .10f), new Vector2(240f, 66f), () => GameManager.I?.ReturnToTitle());
         }
@@ -297,19 +298,37 @@ namespace JetHorizon
                 $"STABILIZERS L{g.GetSubsystem(ShipSubsystem.Stabilizers).Tier}\n" +
                 $"CARGO L{g.GetSubsystem(ShipSubsystem.CargoBay).Tier}  {p.CargoCapacity} WEIGHT     " +
                 $"HULL L{g.GetSubsystem(ShipSubsystem.Hull).Tier}  {p.CollisionHitCapacity} HIT     " +
-                $"REPAIR BAYS {g.RepairBayLevel}";
+                $"REPAIR BAYS {g.RepairBayLevel}\n" +
+                PendingStarterWorkLabel(g);
             if (_garageStatus != null) _garageStatus.text = status;
+        }
+
+        static string PendingStarterWorkLabel(GarageState state)
+        {
+            if ((state.PendingStarterRepairs & StarterRepairAward.PrimaryThruster) != 0)
+                return "STARTER REPAIR READY: PRIMARY THRUSTER";
+            if ((state.PendingStarterRepairs & StarterRepairAward.Stabilizers) != 0)
+                return "STARTER REPAIR READY: STABILIZERS";
+            if (state.StarterHullUpgradePending)
+                return "STARTER UPGRADE READY: HULL REINFORCEMENT";
+            if (state.StarterUpgradeChoicePending)
+                return "STARTER UPGRADE READY: CHOOSE SHIELD OR CARGO";
+            return "NO STARTER WORK PENDING";
         }
 
         void Upgrade(GarageUpgradeId id)
         {
             var garage = GameManager.I?.Garage;
             if (garage == null) return;
-            if (garage.Current.RestorationChoicePending && (id == GarageUpgradeId.Shield || id == GarageUpgradeId.CargoBay))
+            if (garage.Current.StarterUpgradeChoicePending && (id == GarageUpgradeId.Shield || id == GarageUpgradeId.CargoBay))
             {
-                RestorationBranch branch = id == GarageUpgradeId.Shield ? RestorationBranch.Shield : RestorationBranch.Cargo;
-                GarageCommandResult restored = garage.ChooseRestoration(branch);
-                RefreshGarage(restored.Succeeded ? "RESTORATION SELECTED: " + branch.ToString().ToUpperInvariant() : "RESTORATION CHOICE FAILED");
+                StarterUpgradeBranch branch = id == GarageUpgradeId.Shield
+                    ? StarterUpgradeBranch.Shield
+                    : StarterUpgradeBranch.Cargo;
+                GarageCommandResult installed = garage.ChooseStarterUpgrade(branch);
+                RefreshGarage(installed.Succeeded
+                    ? "STARTER UPGRADE INSTALLED: " + branch.ToString().ToUpperInvariant()
+                    : "STARTER UPGRADE CHOICE FAILED");
                 return;
             }
 
@@ -324,6 +343,37 @@ namespace JetHorizon
                 ? $"{definition.DisplayName} UPGRADED TO L{resultingLevel}"
                 : cost <= 0 ? definition.DisplayName + " MAXED"
                 : $"{definition.DisplayName} NEEDS {cost:N0} CREDITS OR IS LOCKED");
+        }
+
+        void CompletePendingStarterWork()
+        {
+            var garage = GameManager.I?.Garage;
+            if (garage == null) return;
+            GarageState state = garage.Current;
+            if ((state.PendingStarterRepairs & StarterRepairAward.PrimaryThruster) != 0)
+            {
+                GarageCommandResult result = garage.CompleteStarterRepair(StarterRepairAward.PrimaryThruster);
+                RefreshGarage(result.Succeeded ? "STARTER REPAIR COMPLETE: PRIMARY THRUSTER" : "PRIMARY THRUSTER REPAIR FAILED");
+                return;
+            }
+            if ((state.PendingStarterRepairs & StarterRepairAward.Stabilizers) != 0)
+            {
+                GarageCommandResult result = garage.CompleteStarterRepair(StarterRepairAward.Stabilizers);
+                RefreshGarage(result.Succeeded ? "STARTER REPAIR COMPLETE: STABILIZERS" : "STABILIZER REPAIR FAILED");
+                return;
+            }
+            if (state.StarterHullUpgradePending)
+            {
+                GarageCommandResult result = garage.InstallStarterHullUpgrade();
+                RefreshGarage(result.Succeeded ? "STARTER UPGRADE INSTALLED: HULL REINFORCEMENT" : "HULL INSTALL FAILED");
+                return;
+            }
+            if (state.StarterUpgradeChoicePending)
+            {
+                RefreshGarage("CHOOSE UPGRADE CARGO OR UPGRADE SHIELD");
+                return;
+            }
+            RefreshGarage("NO STARTER WORK PENDING");
         }
 
         void CycleHandling()
@@ -360,14 +410,20 @@ namespace JetHorizon
         void RepairFirstDamaged()
         {
             GarageState state = GameManager.I.Garage.Current;
+            bool starterRepairLocked = false;
             foreach (SubsystemState subsystem in state.Subsystems)
             {
                 if (subsystem.Integrity >= .999f) continue;
                 GarageCommandResult result = GameManager.I.Garage.QueueRepair(subsystem.Subsystem);
+                if (!result.Succeeded && result.Failure == GarageFailure.Locked)
+                {
+                    starterRepairLocked = true;
+                    continue;
+                }
                 RefreshGarage(result.Succeeded ? "REPAIR STARTED: " + subsystem.Subsystem : "REPAIR NEEDS SALVAGE OR A FREE BAY");
                 return;
             }
-            RefreshGarage("ALL SYSTEMS NOMINAL");
+            RefreshGarage(starterRepairLocked ? "STARTER REPAIR NOT YET EARNED" : "ALL SYSTEMS NOMINAL");
         }
 
         void BuyShieldCharge()

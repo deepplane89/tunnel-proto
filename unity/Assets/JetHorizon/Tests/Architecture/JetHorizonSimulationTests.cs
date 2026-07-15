@@ -1110,30 +1110,47 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
-        public void StarterRestorationMilestonesBuildTheWreckIntoARealShip()
+        public void StarterGarageAwardsRequireExplicitRepairOrUpgradeCommands()
         {
             GarageState state = GarageState.CreateNew();
             Assert.That(GarageDomainService.CreateLaunchProfile(state).SpeedMultiplier, Is.LessThan(1f));
+            float damagedThrusterIntegrity = state.GetSubsystem(ShipSubsystem.PrimaryThruster).Integrity;
 
             state = GarageDomainService.Extract(state, new CargoManifest(2, 0, 0)).State;
+            Assert.That(state.PendingStarterRepairs.HasFlag(StarterRepairAward.PrimaryThruster), Is.True);
+            Assert.That(state.GetSubsystem(ShipSubsystem.PrimaryThruster).Integrity, Is.EqualTo(damagedThrusterIntegrity));
+            Assert.That(state.GetSubsystem(ShipSubsystem.PrimaryThruster).Tier, Is.EqualTo(1));
+            state = GarageDomainService.CompleteStarterRepair(state, StarterRepairAward.PrimaryThruster).State;
             Assert.That(state.SelectedThrusterId, Is.EqualTo("light"));
             Assert.That(state.GetSubsystem(ShipSubsystem.PrimaryThruster).Integrity, Is.EqualTo(1f));
+            Assert.That(state.GetSubsystem(ShipSubsystem.PrimaryThruster).Tier, Is.EqualTo(1));
+
             state = GarageDomainService.Extract(state, new CargoManifest(2, 0, 0)).State;
+            Assert.That(state.PendingStarterRepairs.HasFlag(StarterRepairAward.Stabilizers), Is.True);
+            state = GarageDomainService.CompleteStarterRepair(state, StarterRepairAward.Stabilizers).State;
             Assert.That(state.GetSubsystem(ShipSubsystem.Stabilizers).Integrity, Is.EqualTo(1f));
+
             state = GarageDomainService.Extract(state, new CargoManifest(2, 0, 0)).State;
+            Assert.That(state.StarterHullUpgradePending, Is.True);
+            Assert.That(state.GetSubsystem(ShipSubsystem.Hull).Tier, Is.EqualTo(1));
+            state = GarageDomainService.InstallStarterHullUpgrade(state).State;
             Assert.That(state.GetSubsystem(ShipSubsystem.Hull).Tier, Is.EqualTo(2));
+
             state = GarageDomainService.Extract(state, new CargoManifest(2, 0, 0)).State;
-            Assert.That(state.RestorationChoicePending, Is.True);
+            Assert.That(state.StarterUpgradeChoicePending, Is.True);
+            state = GarageDomainService.ChooseStarterUpgrade(state, StarterUpgradeBranch.Cargo).State;
+            Assert.That(state.StarterUpgradeBranch, Is.EqualTo(StarterUpgradeBranch.Cargo));
+            Assert.That(state.GetSubsystem(ShipSubsystem.CargoBay).Tier, Is.EqualTo(2));
         }
 
         [Test]
-        public void CargoRestorationChoiceDelaysButDoesNotPermanentlyLockShield()
+        public void CargoStarterUpgradeDelaysButDoesNotPermanentlyLockShield()
         {
             GarageState state = GarageState.CreateNew();
             for (int i = 0; i < 4; i++)
                 state = GarageDomainService.Extract(state, new CargoManifest(2, 0, 0)).State;
 
-            state = GarageDomainService.ChooseRestoration(state, RestorationBranch.Cargo).State;
+            state = GarageDomainService.ChooseStarterUpgrade(state, StarterUpgradeBranch.Cargo).State;
             state.Credits = 450;
             GarageCommandResult result = GarageDomainService.PurchaseUpgrade(state, GarageUpgradeId.Shield);
 
@@ -1141,6 +1158,47 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(result.State.GetSubsystem(ShipSubsystem.ShieldGenerator).Tier, Is.EqualTo(1));
             Assert.That(result.State.GetSubsystem(ShipSubsystem.ShieldGenerator).Integrity, Is.EqualTo(1f));
             Assert.That(result.State.Credits, Is.Zero);
+        }
+
+        [Test]
+        public void RepairRestoresIntegrityWithoutRaisingTierWhileUpgradeRaisesTier()
+        {
+            GarageState state = GarageState.CreateNew();
+            state.SuccessfulExtractions = 6;
+            state.Salvage = 100;
+            SubsystemState engine = state.GetSubsystem(ShipSubsystem.PrimaryThruster);
+            engine.Tier = 3;
+            engine.Integrity = .35f;
+
+            GarageCommandResult queued = GarageDomainService.QueueRepair(state, ShipSubsystem.PrimaryThruster, 1_000L);
+            GarageCommandResult repaired = GarageDomainService.CompleteRepairs(queued.State, long.MaxValue);
+
+            Assert.That(queued.Succeeded, Is.True);
+            Assert.That(repaired.State.GetSubsystem(ShipSubsystem.PrimaryThruster).Tier, Is.EqualTo(3));
+            Assert.That(repaired.State.GetSubsystem(ShipSubsystem.PrimaryThruster).Integrity, Is.EqualTo(1f));
+
+            repaired.State.Credits = 10_000;
+            GarageCommandResult upgraded = GarageDomainService.PurchaseUpgrade(repaired.State, GarageUpgradeId.Engine);
+            Assert.That(upgraded.Succeeded, Is.True);
+            Assert.That(upgraded.State.GetSubsystem(ShipSubsystem.PrimaryThruster).Tier, Is.EqualTo(4));
+            Assert.That(upgraded.State.GetSubsystem(ShipSubsystem.PrimaryThruster).Integrity, Is.EqualTo(1f));
+        }
+
+        [Test]
+        public void SchemaTwoRestorationChoiceMigratesToStarterUpgradeChoice()
+        {
+            GarageState legacy = GarageState.CreateNew();
+            legacy.SchemaVersion = 2;
+            legacy.RestorationBranch = RestorationBranch.Cargo;
+            legacy.RestorationChoicePending = true;
+
+            GarageState migrated = GarageDomainService.Normalize(legacy);
+
+            Assert.That(migrated.SchemaVersion, Is.EqualTo(3));
+            Assert.That(migrated.StarterUpgradeBranch, Is.EqualTo(StarterUpgradeBranch.Cargo));
+            Assert.That(migrated.StarterUpgradeChoicePending, Is.True);
+            Assert.That(migrated.RestorationBranch, Is.EqualTo(RestorationBranch.None));
+            Assert.That(migrated.RestorationChoicePending, Is.False);
         }
 
         [Test]

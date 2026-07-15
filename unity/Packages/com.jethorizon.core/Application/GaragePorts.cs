@@ -46,7 +46,9 @@ namespace JetHorizon.Application
 
         public GarageCommandResult Extract(CargoManifest manifest) => Commit(GarageDomainService.Extract(Current, manifest));
         public GarageCommandResult RecordDestroyedRun(float severity) => Commit(GarageDomainService.LoseRunCargoAndDamage(Current, severity));
-        public GarageCommandResult ChooseRestoration(RestorationBranch branch) => Commit(GarageDomainService.ChooseRestoration(Current, branch));
+        public GarageCommandResult CompleteStarterRepair(StarterRepairAward repair) => Commit(GarageDomainService.CompleteStarterRepair(Current, repair));
+        public GarageCommandResult InstallStarterHullUpgrade() => Commit(GarageDomainService.InstallStarterHullUpgrade(Current));
+        public GarageCommandResult ChooseStarterUpgrade(StarterUpgradeBranch branch) => Commit(GarageDomainService.ChooseStarterUpgrade(Current, branch));
         public GarageCommandResult Purchase(string itemId) => Commit(GarageDomainService.Purchase(Current, itemId));
         public GarageCommandResult PurchaseUpgrade(GarageUpgradeId upgradeId) => Commit(GarageDomainService.PurchaseUpgrade(Current, upgradeId));
         public GarageCommandResult EquipThruster(string itemId) => Commit(GarageDomainService.EquipThruster(Current, itemId));
