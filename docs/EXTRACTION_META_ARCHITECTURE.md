@@ -1,5 +1,8 @@
 # Extraction, Garage, and Encounter Architecture
 
+**Status:** Description of the first implemented extraction/meta vertical slice.
+**Next implementation source:** [`META_PROGRESSION_IMPLEMENTATION_SPEC.md`](META_PROGRESSION_IMPLEMENTATION_SPEC.md) supersedes the unit-based cargo, single extraction threshold, and restoration-only performance assumptions when the next phases are built.
+
 ## Non-negotiable boundaries
 
 - `JetHorizon.Simulation.Core` owns deterministic run rules: movement, corridor samples, collision, lightning gate layouts, run cargo, extraction eligibility, and finalized run results.
