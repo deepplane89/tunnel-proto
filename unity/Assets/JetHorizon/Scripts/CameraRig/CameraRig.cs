@@ -9,6 +9,10 @@ namespace JetHorizon
     public sealed class CameraRig : MonoBehaviour, ISimSystem
     {
         public UnityEngine.Camera Cam;      // child of this pivot at local (0,0,0)
+        [Min(100f)] public float GameplayFarClip = 700f;
+        [Min(0f)] public float WorldGeometryDepthMargin = 120f;
+
+        public float RequiredWorldFarClip { get; private set; }
 
         float _cameraRoll;
         float _cameraRollHold;
@@ -34,10 +38,47 @@ namespace JetHorizon
             transform.position = BasePivot(0f);
             if (Cam != null)
             {
+                RequiredWorldFarClip = Mathf.Max(Cam.nearClipPlane + 1f, GameplayFarClip);
+                Cam.farClipPlane = RequiredWorldFarClip;
                 Cam.transform.localPosition = Vector3.zero;
                 Cam.fieldOfView = Tuning.CamBaseFovDesktop;
                 AimAtLook();
             }
+        }
+
+        /// <summary>
+        /// Expands the gameplay camera once to contain complete persistent world
+        /// geometry. The value never contracts during a run, so a moving far plane
+        /// cannot sweep across a canyon or tunnel and masquerade as spawning.
+        /// </summary>
+        public void EnsureWorldGeometryVisible(Renderer[] renderers)
+        {
+            if (Cam == null || renderers == null || renderers.Length == 0) return;
+            float farthestDepth = 0f;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null) continue;
+                Bounds bounds = renderer.bounds;
+                Vector3 minimum = bounds.min;
+                Vector3 maximum = bounds.max;
+                for (int corner = 0; corner < 8; corner++)
+                {
+                    Vector3 point = new Vector3(
+                        (corner & 1) == 0 ? minimum.x : maximum.x,
+                        (corner & 2) == 0 ? minimum.y : maximum.y,
+                        (corner & 4) == 0 ? minimum.z : maximum.z);
+                    float depth = Cam.WorldToViewportPoint(point).z;
+                    if (depth > farthestDepth) farthestDepth = depth;
+                }
+            }
+
+            if (farthestDepth > 0f)
+                RequiredWorldFarClip = Mathf.Max(
+                    RequiredWorldFarClip,
+                    farthestDepth + Mathf.Max(0f, WorldGeometryDepthMargin));
+            if (Cam.farClipPlane < RequiredWorldFarClip)
+                Cam.farClipPlane = RequiredWorldFarClip;
         }
 
         public void OnRunStart(bool skipIntro)

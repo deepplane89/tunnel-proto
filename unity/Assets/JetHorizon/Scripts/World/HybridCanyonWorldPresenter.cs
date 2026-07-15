@@ -28,10 +28,14 @@ namespace JetHorizon
         GameObject _content;
         Material _meshMaterial;
         bool _terrainAuthoringPreview;
+        Renderer[] _worldRenderers;
 
         void Awake()
         {
             if (Profile == null) Profile = Resources.Load<HybridCanyonWorldProfile>("HybridCanyonWorld");
+            // Construct the complete landform before the first simulation frame. Its
+            // root moves with the encounter, but its renderer set never streams.
+            EnsureBuilt();
         }
 
         void OnDrawGizmosSelected()
@@ -89,6 +93,7 @@ namespace JetHorizon
             float startZ = currentCanyon ? snapshot.EncounterStartZ : snapshot.UpcomingEncounterStartZ;
             _content.transform.localPosition = new Vector3(0f, 0f, startZ);
             SetVisible(true);
+            GameManager.I?.Camera?.EnsureWorldGeometryVisible(_worldRenderers);
         }
 
         /// <summary>Editor preview seam; it does not alter scene gameplay wiring.</summary>
@@ -139,11 +144,19 @@ namespace JetHorizon
                     Terrain bakedTerrain = baked.GetComponentInChildren<Terrain>(true);
                     if (bakedTerrain != null) bakedTerrain.gameObject.SetActive(false);
                 }
-                _content.SetActive(false);
+                FinalizeWorldBuild();
                 return;
             }
             if (settings.BuildTerrainBacking) BuildTerrain(settings);
             BuildHeroMeshes(settings);
+            FinalizeWorldBuild();
+        }
+
+        void FinalizeWorldBuild()
+        {
+            if (_content == null) return;
+            _content.SetActive(true);
+            _worldRenderers = _content.GetComponentsInChildren<Renderer>(true);
             _content.SetActive(false);
         }
 
