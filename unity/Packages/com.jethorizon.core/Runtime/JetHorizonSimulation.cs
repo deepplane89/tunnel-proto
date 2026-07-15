@@ -323,7 +323,8 @@ namespace JetHorizon.Simulation
         public bool DebugJumpToProofEncounter(EncounterKind kind)
         {
             if (Phase != CoreGamePhase.Playing || _proofEncounters == null) return false;
-            if (!_proofEncounters.JumpTo(kind, _distance, _config.ShipZ)) return false;
+            float previewLeadDistance = kind == EncounterKind.CrystallineCanyon ? 520f : 25f;
+            if (!_proofEncounters.JumpTo(kind, _distance, _config.ShipZ, previewLeadDistance)) return false;
 
             Array.Clear(_hazards, 0, _hazards.Length);
             Array.Clear(_pickups, 0, _pickups.Length);

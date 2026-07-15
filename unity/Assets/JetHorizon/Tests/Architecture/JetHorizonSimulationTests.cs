@@ -1655,7 +1655,11 @@ namespace JetHorizon.Simulation.Tests
             }, 20260721u);
             simulation.StartRun(2026072101L);
 
+            const float previewLead = 520f;
             Assert.That(simulation.DebugJumpToProofEncounter(EncounterKind.CrystallineCanyon), Is.True);
+            Assert.That(simulation.Snapshot.EncounterStartZ,
+                Is.EqualTo(3.9f - previewLead).Within(.001f),
+                "The canyon preview must preserve a distant approach instead of teleporting the world to the ship.");
             simulation.Step(default);
 
             Assert.That(simulation.Snapshot.EncounterPlanId, Is.EqualTo("proof.crystalline-canyon"));

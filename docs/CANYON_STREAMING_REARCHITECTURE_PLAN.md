@@ -107,6 +107,10 @@ Use `Jet Horizon > Canyon Builder (Simple) > BAKE & USE IN GAME` to persist the 
 generated chunks as a prefab. When no bake is assigned, the runtime fallback creates
 the identical complete shell in memory before showing it.
 
+The Editor `C` preview keeps the canyon origin 520 units ahead. It must never teleport
+the route to the default 25-unit debug lead, because that skips the geographic approach
+and makes the first formations read like close-range spawns.
+
 ## Validation
 
 The Canyon Builder must reject a preview or bake when:
