@@ -433,7 +433,10 @@ namespace JetHorizon.Simulation
                     ProofContract,
                     pathOverride.CreateOpenings(scale));
             }
-            const int count = 46;
+            // Keep several camera-depths of curved canyon physically present ahead
+            // of the ship. This is one finite authored construct, not recycled rows:
+            // bends can therefore occlude the horizon before the player reaches them.
+            const int count = 90;
             const float rowSpacing = 17f;
             const float sourceAmplitude = 120f;
             const float sourceIntensity = .30f;
@@ -456,21 +459,22 @@ namespace JetHorizon.Simulation
                 // starter stabilizer without flattening the sine.
                 float halfWidth = 28f + (21.5f - 28f) * edgeBlend
                     + (float)Math.Sin(i * .31f + .4f) * 1.1f * edgeBlend;
-                CargoRouteTier cargo = i == 13 ? CargoRouteTier.Safe
-                    : i == 28 ? CargoRouteTier.Risky
-                    : i == 39 ? CargoRouteTier.Deep
+                CargoRouteTier cargo = i == 13 || i == 51 ? CargoRouteTier.Safe
+                    : i == 28 || i == 67 ? CargoRouteTier.Risky
+                    : i == 39 || i == 79 ? CargoRouteTier.Deep
                     : CargoRouteTier.None;
+                int breakupStart = count - 8;
                 CanyonEnvironmentPhase phase = i < 6
                     ? CanyonEnvironmentPhase.OpenWater
                     : i < 11
                         ? CanyonEnvironmentPhase.Convergence
                         : i == 11
                             ? CanyonEnvironmentPhase.Threshold
-                            : i < 38
+                            : i < breakupStart
                                 ? CanyonEnvironmentPhase.Enclosed
                                 : CanyonEnvironmentPhase.Breakup;
-                bool boundaryActive = i >= 11 && i < 38;
-                TraversalRequirement traversal = i == 20 || i == 32
+                bool boundaryActive = i >= 11 && i < breakupStart;
+                TraversalRequirement traversal = i == 20 || i == 60
                     ? TraversalRequirement.KnifeEdge
                     : TraversalRequirement.None;
                 openings[i] = new EncounterOpening(
@@ -485,7 +489,7 @@ namespace JetHorizon.Simulation
             return new EncounterPlan(
                 "proof.crystalline-canyon",
                 EncounterKind.CrystallineCanyon,
-                Scale(rowSpacing * (count + 1), scale),
+                    Scale(rowSpacing * (count + 1), scale),
                 1f,
                 ProofContract,
                 openings);

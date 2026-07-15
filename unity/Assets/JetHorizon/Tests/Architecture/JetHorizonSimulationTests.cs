@@ -1673,7 +1673,8 @@ namespace JetHorizon.Simulation.Tests
             float farthestZ = float.MaxValue;
             for (int i = 0; i < simulation.Snapshot.CorridorSliceCount; i++)
                 farthestZ = System.Math.Min(farthestZ, simulation.Snapshot.GetCorridorSlice(i).Z);
-            Assert.That(farthestZ, Is.LessThan(-700f));
+            Assert.That(farthestZ, Is.LessThan(-1400f),
+                "The prebuilt route must continue beyond the camera depth so future bends occlude the horizon.");
 
             EncounterPlan second = EncounterPlanCatalog.CreateProofSequence()[1];
             Assert.That(first.OpeningCount, Is.EqualTo(second.OpeningCount));
