@@ -11,10 +11,13 @@
 - `EncounterGeometryValidator` applies the validated opening to final wall, cone,
   and lightning collision volumes, preventing presentation-ready combinations
   from closing a route that was valid at the plan level.
-- `ProofEncounterRuntime` streams three deliberate plans: monumental broad weave,
-  a shifting lightning-opening sequence, and a continuous prismatic sine corridor.
-- Cargo is authored as optional safe, risky, or deep route lines. Heat controls the
-  grade of cargo offered without changing route legality.
+- `ProofEncounterRuntime` streams four deliberate plans: monumental broad weave,
+  crystalline canyon, a sparse lightning/cargo weave, and a continuous prismatic
+  sine corridor.
+- Cargo is authored as optional safe, risky, or deep route lines. In the lightning
+  encounter it is also the positive incentive that defeats passive edge camping;
+  the lightning itself remains sparse and readable. Heat controls the cargo grade
+  without changing route legality.
 - The laser pickup is explicitly placed before two dense destroyable formations.
 - The extraction gate crossing and extract-versus-continue result are core-owned.
   Unity's gate, monument, lightning, cargo, and tunnel components are presenters.

@@ -24,8 +24,11 @@ namespace JetHorizon
         [Tooltip("Unity camera faces -Z, so the source yaw needs this explicit presentation sign.")]
         public float VisualYawSign = -1f;
         public float VisualYawRadians = 0.055f;
+        [Range(0f, 1f)] public float VisualYawWeight = 0.40f;
         public float VisualYawResponse = 10f;
         public float VisualBankScale = 1f;
+        public float TurnLiftHeight = 0.08f;
+        public float TurnLiftResponse = 6f;
         public float ModelLateralLag = 0.08f;
         public float ModelSwayDistance = 0.10f;
         public float ModelSwayYawDegrees = 2.8f;
@@ -38,8 +41,11 @@ namespace JetHorizon
         [Header("Layered camera")]
         public float CameraFollowResponse = 18f;
         public float CameraLookAhead = 0.65f;
-        public float CameraRollScale = 0.18f;
         public float CameraRollResponse = 9f;
+        [Range(0f, 0.95f)] public float CameraRollActivation = 0.52f;
+        public float CameraRollHoldSeconds = 0.22f;
+        public float CameraRollPower = 1.6f;
+        public float CameraRollMaximumDegrees = 2.5f;
         public float CameraHeightResponse = 6f;
         public float BaseFov = 78f;
         public float SpeedFovBoost = 24f;

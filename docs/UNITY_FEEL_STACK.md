@@ -17,7 +17,9 @@ The default retains the Three.js equations and limits while applying a modest Un
 - slightly stronger neutral deceleration;
 - stronger counter-steer authority;
 - slower bank recovery and softer zero-crossing;
-- explicit corrected Unity visual-yaw sign.
+- explicit corrected Unity visual-yaw sign with reduced turn weight;
+- bank-dependent presentation lift so turns read from the wings rather than nose yaw;
+- a horizon-roll dead zone and short hold threshold, keeping small corrections level.
 
 The result remains deterministic at 60 Hz. Unity Rigidbody contacts are not an authority for ship motion.
 

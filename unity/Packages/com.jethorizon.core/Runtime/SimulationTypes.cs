@@ -105,7 +105,7 @@ namespace JetHorizon.Simulation
         LaserFired,
         HazardDestroyed,
         PrismaticBoundaryHit,
-        LightningGateStarted,
+        LightningStrikeTelegraphed,
         PlayerDied
     }
 

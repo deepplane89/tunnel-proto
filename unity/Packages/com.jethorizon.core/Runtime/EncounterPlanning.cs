@@ -7,7 +7,7 @@ namespace JetHorizon.Simulation
     {
         MonumentalBroadWeave,
         CrystallineCanyon,
-        LightningMovingGate,
+        LightningCargoStorm,
         PrismaticSineCorridor
     }
 
@@ -345,7 +345,7 @@ namespace JetHorizon.Simulation
             {
                 BroadWeave(spacingScale),
                 CrystallineCanyon(spacingScale),
-                LightningGate(spacingScale),
+                LightningStorm(spacingScale),
                 PrismaticCorridor(spacingScale)
             };
         }
@@ -373,22 +373,22 @@ namespace JetHorizon.Simulation
                 });
         }
 
-        static EncounterPlan LightningGate(float scale)
+        static EncounterPlan LightningStorm(float scale)
         {
             return new EncounterPlan(
-                "proof.lightning-gate",
-                EncounterKind.LightningMovingGate,
+                "proof.lightning-cargo-storm",
+                EncounterKind.LightningCargoStorm,
                 Scale(720f, scale),
                 1f,
                 ProofContract,
                 new[]
                 {
-                    new EncounterOpening(Scale( 90f, scale),-10f, 11f),
+                    new EncounterOpening(Scale( 90f, scale),-10f, 11f, CargoRouteTier.Safe),
                     new EncounterOpening(Scale(180f, scale),  0f, 11f, CargoRouteTier.Safe),
-                    new EncounterOpening(Scale(270f, scale), 12f, 11f),
-                    new EncounterOpening(Scale(360f, scale), -4f, 11f, CargoRouteTier.Risky),
-                    new EncounterOpening(Scale(450f, scale),-14f, 11f),
-                    new EncounterOpening(Scale(540f, scale),  2f, 11f),
+                    new EncounterOpening(Scale(270f, scale), 12f, 11f, CargoRouteTier.Risky),
+                    new EncounterOpening(Scale(360f, scale), -4f, 11f, CargoRouteTier.Safe),
+                    new EncounterOpening(Scale(450f, scale),-14f, 11f, CargoRouteTier.Risky),
+                    new EncounterOpening(Scale(540f, scale),  2f, 11f, CargoRouteTier.Safe),
                     new EncounterOpening(Scale(630f, scale), 14f, 11f, CargoRouteTier.Deep),
                     new EncounterOpening(Scale(720f, scale), -4f, 13f)
                 });

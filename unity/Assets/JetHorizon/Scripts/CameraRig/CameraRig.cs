@@ -11,6 +11,7 @@ namespace JetHorizon
         public UnityEngine.Camera Cam;      // child of this pivot at local (0,0,0)
 
         float _cameraRoll;
+        float _cameraRollHold;
         float _shakeTime;
         Vector3 _lastShakeOffset;
 
@@ -28,7 +29,7 @@ namespace JetHorizon
 
         public void ResetSystem()
         {
-            _deathOrbit = false; _sweeping = false; _shakeTime = 0f; _cameraRoll = 0f;
+            _deathOrbit = false; _sweeping = false; _shakeTime = 0f; _cameraRoll = 0f; _cameraRollHold = 0f;
             _lastShakeOffset = Vector3.zero;
             transform.position = BasePivot(0f);
             if (Cam != null)
@@ -88,8 +89,28 @@ namespace JetHorizon
             p.z = Tuning.CamPivotZ;
             transform.position = p;
 
-            // Horizon tilts with steering bank only (NOT knife-edge roll)
-            float targetRoll = Mathf.Abs(s.RollAngle) > 0.001f ? 0f : s.BankRoll * (feel != null ? feel.CameraRollScale : Tuning.CamRollAmt);
+            // Keep the horizon stable for ordinary corrections. It only leans after
+            // the ship has sustained a strong lateral move, and never follows the
+            // explicit knife-edge roll. This preserves speed/readability while still
+            // giving committed strafes a small cinematic response.
+            float lateral = Mathf.Abs(signals.Lateral01);
+            float activation = feel != null && feel.CameraRollActivation > 0f
+                ? feel.CameraRollActivation
+                : 0.52f;
+            float holdSeconds = feel != null && feel.CameraRollHoldSeconds > 0f
+                ? feel.CameraRollHoldSeconds
+                : 0.22f;
+            if (lateral > activation) _cameraRollHold = Mathf.Min(holdSeconds, _cameraRollHold + dt);
+            else _cameraRollHold = Mathf.Max(0f, _cameraRollHold - dt * 2.5f);
+            float strength = Mathf.InverseLerp(activation, 1f, lateral);
+            float power = feel != null && feel.CameraRollPower > 0f ? feel.CameraRollPower : 1.6f;
+            strength = Mathf.Pow(strength, power) * Mathf.SmoothStep(0f, 1f, _cameraRollHold / holdSeconds);
+            float maximumDegrees = feel != null && feel.CameraRollMaximumDegrees > 0f
+                ? feel.CameraRollMaximumDegrees
+                : 2.5f;
+            float targetRoll = Mathf.Abs(s.RollAngle) > 0.001f
+                ? 0f
+                : Mathf.Sign(s.BankRoll) * maximumDegrees * Mathf.Deg2Rad * strength;
             _cameraRoll = Mathf.Lerp(_cameraRoll, targetRoll, 1f - Mathf.Exp(-(feel != null ? feel.CameraRollResponse : 9f) * dt));
             AimAtLook();
         }

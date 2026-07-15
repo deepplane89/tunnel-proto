@@ -772,7 +772,7 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
-        public void LightningDirectorUsesDeterministicCorridorTargeting()
+        public void LegacyLightningUsesDeterministicPredictedStrikeTargeting()
         {
             var run = new RunDefinition(36f, new[]
             {
@@ -788,8 +788,7 @@ namespace JetHorizon.Simulation.Tests
             var config = new SimulationConfig
             {
                 HazardSpawningEnabled = false,
-                CollisionEnabled = false,
-                LightningGateIntervalSeconds = .25f
+                CollisionEnabled = false
             };
             var first = new JetHorizonSimulation(config, 95u, run);
             var replay = new JetHorizonSimulation(config, 95u, run);
@@ -809,7 +808,7 @@ namespace JetHorizon.Simulation.Tests
                 replay.Step(default, world);
             }
 
-            Assert.That(first.Snapshot.HazardCount, Is.GreaterThanOrEqualTo(6));
+            Assert.That(first.Snapshot.HazardCount, Is.EqualTo(1));
             Assert.That(replay.Snapshot.HazardCount, Is.EqualTo(first.Snapshot.HazardCount));
             for (int i = 0; i < first.Snapshot.HazardCount; i++)
             {
@@ -1066,22 +1065,8 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(ContainsEvent(simulation.Events, SimulationEventType.PrismaticBoundaryHit), Is.True);
         }
 
-        [TestCase(LightningGatePatternKind.SweepRight)]
-        [TestCase(LightningGatePatternKind.SweepLeft)]
-        [TestCase(LightningGatePatternKind.CrossCut)]
-        [TestCase(LightningGatePatternKind.Reversal)]
-        public void LightningGatePatternsDefeatBothEdgesAndNeutralWhileRemainingReachable(LightningGatePatternKind pattern)
-        {
-            const float corridorHalfWidth = 28f;
-            const float safeHalfWidth = 6f;
-            Assert.That(LightningGatePattern.DefeatsConstantPosition(pattern, -1f, safeHalfWidth / corridorHalfWidth), Is.True);
-            Assert.That(LightningGatePattern.DefeatsConstantPosition(pattern, 0f, safeHalfWidth / corridorHalfWidth), Is.True);
-            Assert.That(LightningGatePattern.DefeatsConstantPosition(pattern, 1f, safeHalfWidth / corridorHalfWidth), Is.True);
-            Assert.That(LightningGatePattern.IsReachable(pattern, corridorHalfWidth, safeHalfWidth, 14f), Is.True);
-        }
-
         [Test]
-        public void CanyonLightningSpawnsAWholeTelegraphedGateNotAPlayerAimedStrike()
+        public void CanyonLightningRestoresOneReadablePredictedStrikeInsteadOfAColumnWall()
         {
             var run = new RunDefinition(36f, new[]
             {
@@ -1091,22 +1076,26 @@ namespace JetHorizon.Simulation.Tests
             {
                 CollisionEnabled = false,
                 HazardSpawningEnabled = false,
-                LightningGateIntervalSeconds = 1f / 60f,
-                LightningGateColumns = 9
+                LightningWarningSeconds = .65f
             }, 1091u, run);
             simulation.StartRun();
-            simulation.Step(default, new WorldFrame(false, false)
+            bool sawTelegraph = false;
+            var world = new WorldFrame(false, false)
             {
                 CanyonActive = true,
                 CorridorCollisionActive = true,
                 CorridorLeftBoundary = -28f,
                 CorridorRightBoundary = 28f
-            });
+            };
+            for (int i = 0; i < 20; i++)
+            {
+                simulation.Step(default, world);
+                sawTelegraph |= ContainsEvent(simulation.Events, SimulationEventType.LightningStrikeTelegraphed);
+            }
 
-            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.LightningGateStarted), Is.True);
-            Assert.That(simulation.Snapshot.HazardCount, Is.GreaterThanOrEqualTo(6));
-            for (int i = 0; i < simulation.Snapshot.HazardCount; i++)
-                Assert.That(simulation.Snapshot.GetHazard(i).Kind, Is.EqualTo(HazardKind.Lightning));
+            Assert.That(sawTelegraph, Is.True);
+            Assert.That(simulation.Snapshot.HazardCount, Is.EqualTo(1));
+            Assert.That(simulation.Snapshot.GetHazard(0).Kind, Is.EqualTo(HazardKind.Lightning));
         }
 
         [Test]
@@ -1423,6 +1412,27 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void ProofLightningUsesAContinuousCargoWeaveAsItsMovementIncentive()
+        {
+            EncounterPlan lightning = EncounterPlanCatalog.CreateProofSequence()[2];
+            int cargoCount = 0;
+            bool visitsLeft = false;
+            bool visitsRight = false;
+            for (int i = 0; i < lightning.OpeningCount; i++)
+            {
+                EncounterOpening opening = lightning.GetOpening(i);
+                if (opening.CargoTier == CargoRouteTier.None) continue;
+                cargoCount++;
+                visitsLeft |= opening.CenterX < -8f;
+                visitsRight |= opening.CenterX > 8f;
+            }
+
+            Assert.That(cargoCount, Is.GreaterThanOrEqualTo(7));
+            Assert.That(visitsLeft, Is.True);
+            Assert.That(visitsRight, Is.True);
+        }
+
+        [Test]
         public void CapabilityValidatorRejectsAnImpossibleRapidReversal()
         {
             var plan = new EncounterPlan(
@@ -1496,7 +1506,7 @@ namespace JetHorizon.Simulation.Tests
                 sawCanyon |= snapshot.EncounterKind == EncounterKind.CrystallineCanyon
                     && snapshot.ActiveCorridorFamily == CorridorFamily.CrystallineCanyon
                     && snapshot.CorridorSliceCount > 1;
-                sawLightning |= snapshot.EncounterKind == EncounterKind.LightningMovingGate;
+                sawLightning |= snapshot.EncounterKind == EncounterKind.LightningCargoStorm;
                 sawPrismatic |= snapshot.EncounterKind == EncounterKind.PrismaticSineCorridor
                     && snapshot.CorridorSliceCount > 1;
                 sawGate |= snapshot.ExtractionGateVisible;

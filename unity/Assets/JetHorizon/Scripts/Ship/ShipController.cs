@@ -17,6 +17,7 @@ namespace JetHorizon
         float _bankVelX;
         float _yawSmooth;
         float _pitchSmooth;
+        float _turnLift;
         float _prevSpeed;
         float _bobBlend = 1f, _bobSteerBlend = 1f;
 
@@ -24,7 +25,7 @@ namespace JetHorizon
 
         public void ResetSystem()
         {
-            _bankVelX = 0f; _yawSmooth = 0f; _pitchSmooth = 0f;
+            _bankVelX = 0f; _yawSmooth = 0f; _pitchSmooth = 0f; _turnLift = 0f;
             _prevSpeed = Tuning.BaseSpeed; _bobBlend = 1f; _bobSteerBlend = 1f;
             if (ShipRoot != null)
             {
@@ -153,8 +154,10 @@ namespace JetHorizon
             float maxVelocity = feel != null ? feel.MaximumLateralVelocity : Tuning.MaxVel;
             float yawSign = feel != null ? feel.VisualYawSign : -1f;
             float yawMax = feel != null ? feel.VisualYawRadians : Tuning.YawMax;
+            float yawWeight = feel != null && feel.VisualYawWeight > 0f ? feel.VisualYawWeight : 0.40f;
             float yawResponse = feel != null ? feel.VisualYawResponse : Tuning.YawSmoothing;
-            float yawTarget = Mathf.Clamp(snapshot.ShipVelocityX / Mathf.Max(.01f, maxVelocity), -1f, 1f) * yawMax * yawSign;
+            float yawTarget = Mathf.Clamp(snapshot.ShipVelocityX / Mathf.Max(.01f, maxVelocity), -1f, 1f)
+                * yawMax * yawWeight * yawSign;
             _yawSmooth += (yawTarget - _yawSmooth) * (1f - Mathf.Exp(-yawResponse * dt));
 
             float speedDelta = (s.Speed - _prevSpeed) / Mathf.Max(dt, 0.0001f);
@@ -179,11 +182,19 @@ namespace JetHorizon
             }
 
             if (ShipRoot == null) return;
-            ShipRoot.position = new Vector3(snapshot.ShipX, s.ShipY, Tuning.ShipZ);
             float bankScale = feel != null ? feel.VisualBankScale : 1f;
             float rollZ = Mathf.Abs(snapshot.ShipRollRadians) > 0.001f
                 ? snapshot.ShipRollRadians
                 : snapshot.ShipBankRadians * bankScale;
+            float bankFraction = Mathf.Abs(snapshot.ShipBankRadians) / Mathf.Max(.01f,
+                feel != null ? feel.BankMaximumRadians : Tuning.SteerBankRadMax);
+            float liftHeight = feel != null && feel.TurnLiftHeight > 0f ? feel.TurnLiftHeight : 0.08f;
+            float liftResponse = feel != null && feel.TurnLiftResponse > 0f ? feel.TurnLiftResponse : 6f;
+            float liftTarget = Mathf.Abs(snapshot.ShipRollRadians) > 0.001f
+                ? 0f
+                : Mathf.Pow(Mathf.Clamp01(bankFraction), 1.5f) * liftHeight;
+            _turnLift = Mathf.Lerp(_turnLift, liftTarget, 1f - Mathf.Exp(-liftResponse * dt));
+            ShipRoot.position = new Vector3(snapshot.ShipX, s.ShipY + _turnLift, Tuning.ShipZ);
             ShipRoot.localRotation = Quaternion.Euler(
                 (_pitchSmooth + Tuning.ShipRotXOffset) * Mathf.Rad2Deg,
                 _yawSmooth * Mathf.Rad2Deg,

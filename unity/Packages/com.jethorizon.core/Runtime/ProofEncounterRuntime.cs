@@ -6,7 +6,7 @@ namespace JetHorizon.Simulation
     {
         MonumentBarrierRow,
         CanyonSlice,
-        LightningGateRow,
+        LightningStrikeCluster,
         PrismaticSlice,
         Cargo,
         Powerup,
@@ -322,7 +322,7 @@ namespace JetHorizon.Simulation
             EncounterCommandBuffer commands)
         {
             EncounterPlan plan = CurrentPlan;
-            float telegraphSeconds = plan.Kind == EncounterKind.LightningMovingGate
+            float telegraphSeconds = plan.Kind == EncounterKind.LightningCargoStorm
                 ? LightningTelegraphSeconds
                 : StructureTelegraphSeconds;
             float lead = Math.Max(plan.Contract.MinimumTelegraphSeconds, telegraphSeconds)
@@ -354,8 +354,8 @@ namespace JetHorizon.Simulation
                     ? EncounterCommandType.MonumentBarrierRow
                     : plan.Kind == EncounterKind.CrystallineCanyon
                         ? EncounterCommandType.CanyonSlice
-                        : plan.Kind == EncounterKind.LightningMovingGate
-                            ? EncounterCommandType.LightningGateRow
+                        : plan.Kind == EncounterKind.LightningCargoStorm
+                            ? EncounterCommandType.LightningStrikeCluster
                             : EncounterCommandType.PrismaticSlice;
                 commands.Add(new EncounterCommand(rowType, plan.Kind, rowIndex, opening.CenterX, opening.HalfWidth, z));
             }

@@ -115,9 +115,6 @@ namespace JetHorizon.Simulation
         float _magnetSeconds;
         CorridorFamily _lightningFamily;
         float _lightningTimer;
-        LightningGatePatternKind _lightningPattern;
-        int _lightningPatternStep;
-        int _lightningGateIndex;
         bool _zipperActive;
         int _zipperRowsLeft;
         int _zipperRowsTotal;
@@ -576,8 +573,8 @@ namespace JetHorizon.Simulation
                     case EncounterCommandType.CanyonSlice:
                         SpawnProofCorridorSlice(command, CorridorFamily.CrystallineCanyon);
                         break;
-                    case EncounterCommandType.LightningGateRow:
-                        SpawnPlannedLightningGate(command);
+                    case EncounterCommandType.LightningStrikeCluster:
+                        SpawnPlannedLightningCluster(command);
                         break;
                     case EncounterCommandType.PrismaticSlice:
                         SpawnProofCorridorSlice(command, CorridorFamily.L4Sine);
@@ -613,35 +610,46 @@ namespace JetHorizon.Simulation
                 HazardStyle.MonumentWall, (variant + 1) % 3));
         }
 
-        void SpawnPlannedLightningGate(EncounterCommand command)
+        void SpawnPlannedLightningCluster(EncounterCommand command)
         {
-            const float left = -42f;
-            const float right = 42f;
-            const int columns = 13;
-            float spacing = (right - left) / (columns - 1);
-            for (int column = 0; column < columns; column++)
-            {
-                float x = left + spacing * column;
-                HazardSpawn lightning = HazardSpawn.Lightning(
-                    x,
-                    command.Z,
-                    _config.LightningGateWarningSeconds,
-                    4.8f,
-                    _config.LightningGateCollisionHalfWidth,
-                    4f);
-                if (!EncounterGeometryValidator.PreservesOpening(
-                    lightning,
-                    command.X,
-                    command.HalfWidth,
-                    _config.CorridorShipHalfWidth,
-                    .65f)) continue;
-                SpawnEncounterHazard(command, lightning);
-            }
+            // Restore the original readable strike language: a few individually
+            // threatening bolts framing a tempting cargo route, not a wall of
+            // columns. The deterministic opening remains protected so the cargo
+            // line is always traversable by the validated ship capability.
+            float clearance = command.HalfWidth
+                + _config.LightningCollisionHalfWidth
+                + _config.CorridorShipHalfWidth
+                + 1.45f;
+            float left = Clamp(command.X - clearance, -40f, 40f);
+            float right = Clamp(command.X + clearance, -40f, 40f);
+            float outer = (command.RowIndex & 1) == 0 ? -38f : 38f;
+            TrySpawnPlannedLightning(command, left);
+            TrySpawnPlannedLightning(command, right);
+            if (Math.Abs(outer - left) > 4f && Math.Abs(outer - right) > 4f)
+                TrySpawnPlannedLightning(command, outer);
             Events.Add(new SimulationEvent(
-                SimulationEventType.LightningGateStarted,
+                SimulationEventType.LightningStrikeTelegraphed,
                 command.RowIndex,
                 command.X,
                 command.HalfWidth * 2f));
+        }
+
+        void TrySpawnPlannedLightning(EncounterCommand command, float x)
+        {
+            HazardSpawn lightning = HazardSpawn.Lightning(
+                x,
+                command.Z,
+                _config.LightningWarningSeconds,
+                4.8f,
+                _config.LightningCollisionHalfWidth,
+                4f);
+            if (!EncounterGeometryValidator.PreservesOpening(
+                lightning,
+                command.X,
+                command.HalfWidth,
+                _config.CorridorShipHalfWidth,
+                .65f)) return;
+            SpawnEncounterHazard(command, lightning);
         }
 
         void SpawnProofCorridorSlice(EncounterCommand command, CorridorFamily family)
@@ -885,9 +893,6 @@ namespace JetHorizon.Simulation
             _cargo.Reset();
             _lightningFamily = CorridorFamily.None;
             _lightningTimer = 0f;
-            _lightningPattern = LightningGatePatternKind.SweepRight;
-            _lightningPatternStep = 0;
-            _lightningGateIndex = 0;
             _zipperActive = false;
             _zipperRowsLeft = 0;
             _zipperRowsTotal = 0;
@@ -1336,80 +1341,36 @@ namespace JetHorizon.Simulation
             {
                 _lightningFamily = family;
                 _lightningTimer = 0f;
-                _lightningPatternStep = 0;
-                _lightningGateIndex = 0;
-                _lightningPattern = (LightningGatePatternKind)_random.NextInt(0, 4);
             }
 
+            float frequency = family == CorridorFamily.PreT4A ? 0.3f : 2f;
             _lightningTimer += dt;
-            while (_lightningTimer >= _config.LightningGateIntervalSeconds)
+            while (_lightningTimer >= frequency)
             {
-                _lightningTimer -= _config.LightningGateIntervalSeconds;
-                SpawnLightningGate(world);
+                _lightningTimer -= frequency;
+                SpawnPredictedLightningStrike();
             }
         }
 
-        void SpawnLightningGate(WorldFrame world)
+        void SpawnPredictedLightningStrike()
         {
-            float center;
-            float halfWidth;
-            if (!TryGetLightningCorridorBounds(world, out center, out halfWidth)) return;
-
-            float usableHalfWidth = Math.Max(_config.LightningGateSafeWidth, halfWidth - 1.5f);
-            float normalized = LightningGatePattern.SafeCenterNormalized(_lightningPattern, _lightningPatternStep);
-            float safeCenter = center + normalized * Math.Max(0f, usableHalfWidth - _config.LightningGateSafeWidth * 0.5f);
-            float safeHalf = _config.LightningGateSafeWidth * 0.5f;
-            float left = center - usableHalfWidth;
-            float right = center + usableHalfWidth;
-            int columns = Math.Max(3, _config.LightningGateColumns);
-            float spacing = (right - left) / (columns - 1);
             float spawnZ = _config.ShipZ - 83f;
-            for (int i = 0; i < columns; i++)
-            {
-                float x = left + spacing * i;
-                if (Math.Abs(x - safeCenter) <= safeHalf) continue;
-                SpawnHazard(HazardSpawn.Lightning(
-                    x,
-                    spawnZ,
-                    _config.LightningGateWarningSeconds,
-                    4.8f,
-                    _config.LightningGateCollisionHalfWidth,
-                    4f));
-            }
-
+            float travelTime = 83f / Math.Max(1f, _effectiveSpeed);
+            float targetX = _shipX
+                + (_random.NextFloat() - 0.5f) * 3f
+                + _shipVelocityX * travelTime * 0.6f;
+            SpawnHazard(HazardSpawn.Lightning(
+                targetX,
+                spawnZ,
+                _config.LightningWarningSeconds,
+                4.8f,
+                _config.LightningCollisionHalfWidth,
+                4f));
             Events.Add(new SimulationEvent(
-                SimulationEventType.LightningGateStarted,
-                _lightningGateIndex++,
-                safeCenter,
-                _config.LightningGateSafeWidth));
-            _lightningPatternStep++;
-            if (_lightningPatternStep >= LightningGatePattern.StepCount(_lightningPattern))
-            {
-                _lightningPatternStep = 0;
-                _lightningPattern = (LightningGatePatternKind)(((int)_lightningPattern + 1 + _random.NextInt(0, 3)) % 4);
-            }
-        }
-
-        bool TryGetLightningCorridorBounds(WorldFrame world, out float center, out float halfWidth)
-        {
-            if (world.CorridorCollisionActive)
-            {
-                center = (world.CorridorLeftBoundary + world.CorridorRightBoundary) * 0.5f;
-                halfWidth = Math.Abs(world.CorridorRightBoundary - world.CorridorLeftBoundary) * 0.5f;
-                return halfWidth > 1f;
-            }
-
-            int best = FindNearestCorridorSlice(_config.ShipZ - 83f);
-            if (best >= 0)
-            {
-                center = _corridorSlices[best].CenterX;
-                halfWidth = _corridorSlices[best].HalfWidth;
-                return true;
-            }
-
-            center = 0f;
-            halfWidth = 0f;
-            return false;
+                SimulationEventType.LightningStrikeTelegraphed,
+                0,
+                targetX,
+                0f));
         }
 
         void ApplyStageCommandsToCore()

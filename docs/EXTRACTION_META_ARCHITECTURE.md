@@ -5,7 +5,7 @@
 
 ## Non-negotiable boundaries
 
-- `JetHorizon.Simulation.Core` owns deterministic run rules: movement, corridor samples, collision, lightning gate layouts, run cargo, extraction eligibility, and finalized run results.
+- `JetHorizon.Simulation.Core` owns deterministic run rules: movement, corridor samples, collision, lightning strike layouts, cargo-lure routes, extraction eligibility, and finalized run results.
 - `JetHorizon.Meta` (inside the same engine-neutral assembly) owns persistent garage rules: inventory, unlocks, ship damage, repair costs/timers, restoration milestones, handling models, thrusters, add-ons, power-up stock, and facilities.
 - `JetHorizon.Application` owns use-case coordination and ports. `GarageOrchestrator` may load, invoke one domain operation, save, and call a platform commerce port. It must not contain costs, unlock thresholds, physics values, or repair formulas.
 - Unity owns rendering, input adaptation, UI, persistence adapters, audio/haptics, GLB node visibility, and composition. It may not decide whether a collision is legal, where a lightning opening is, what cargo survives, or what an upgrade costs.
@@ -38,9 +38,13 @@ The garage stores a stable handling ID. The engine-neutral catalog owns the sour
 
 L4/L5 use the existing `SineCorridorDefinition` center and half-width math. The core publishes moving cross-section samples and resolves collision against those same samples. Unity sorts them by depth and stitches adjacent arches into one continuous, double-sided, water-reflectable membrane. Animated spectrum flow, longitudinal rails, and energized ribs are shader detail on the single surface, not separate gameplay objects.
 
-## Lightning gate composer
+## Lightning storm composer
 
-Lightning no longer predicts or aims at the live player. Each encounter selects a deterministic safe-opening sequence and fills the rest of the corridor with telegraphed strike columns. The patterns explicitly defeat constant-left, constant-right, and neutral flight while limiting opening movement to reachable increments. Presentation reads hazard snapshots and never changes a strike location.
+The proof encounter uses sparse deterministic strike clusters around a protected,
+capability-validated cargo weave. Frequent salvage/alloy/prism pickups make committed
+cross-field strafes desirable without turning lightning into an artificial wall.
+Legacy canyon storms retain the older individually predicted strike behavior. Unity
+only presents hazard and cargo snapshots; it never changes their locations.
 
 ## Required regression tests
 
@@ -48,8 +52,9 @@ Lightning no longer predicts or aims at the live player. Each encounter selects 
 - Core and application assemblies reference no Unity engine assemblies.
 - Continuous corridor snapshots replace cone rows when the feature is enabled.
 - Corridor visuals and collision consume the same core sample.
-- Every lightning pattern defeats left edge, right edge, and neutral camping.
-- Every lightning opening transition is reachable under the configured handling envelope.
+- The lightning cargo weave defeats left edge, right edge, and neutral collection policies.
+- Every cargo-route transition is reachable under the configured handling envelope.
+- Planned lightning remains sparse and never intrudes into the validated cargo route.
 - Cargo remains run-local until explicit extraction.
 - Death does not bank cargo.
 - Extraction settlement and run completion are idempotent.

@@ -87,11 +87,8 @@ namespace JetHorizon.Simulation
         public float PrismaticTunnelSpawnZ = -260f;
         public float PrismaticTunnelRowSpacing = 7f;
         public float PrismaticTunnelCollisionDepth = 5f;
-        public float LightningGateIntervalSeconds = 1.35f;
-        public int LightningGateColumns = 9;
-        public float LightningGateSafeWidth = 12f;
-        public float LightningGateCollisionHalfWidth = 1.25f;
-        public float LightningGateWarningSeconds = 0.65f;
+        public float LightningCollisionHalfWidth = 1.25f;
+        public float LightningWarningSeconds = 0.65f;
         public bool CollisionEnabled = true;
         public bool ProgressionEnabled = true;
         public bool HazardSpawningEnabled = true;
@@ -134,9 +131,8 @@ namespace JetHorizon.Simulation
             if (CargoWaveInterval <= 0) throw new InvalidOperationException("CargoWaveInterval must be positive.");
             if (SpawnIntervalDistance <= 0f) throw new InvalidOperationException("SpawnIntervalDistance must be positive.");
             if (PrismaticTunnelRowSpacing <= 0f) throw new InvalidOperationException("PrismaticTunnelRowSpacing must be positive.");
-            if (LightningGateIntervalSeconds <= 0f) throw new InvalidOperationException("LightningGateIntervalSeconds must be positive.");
-            if (LightningGateColumns < 3) throw new InvalidOperationException("LightningGateColumns must be at least three.");
-            if (LightningGateSafeWidth <= 0f) throw new InvalidOperationException("LightningGateSafeWidth must be positive.");
+            if (LightningCollisionHalfWidth <= 0f) throw new InvalidOperationException("LightningCollisionHalfWidth must be positive.");
+            if (LightningWarningSeconds <= 0f) throw new InvalidOperationException("LightningWarningSeconds must be positive.");
             if (RollMaxRadians <= 0f) throw new InvalidOperationException("RollMaxRadians must be positive.");
             if (DistanceBonusStep <= 0f) throw new InvalidOperationException("DistanceBonusStep must be positive.");
             if (HandlingDrift < 0f || HandlingDrift > 1f) throw new InvalidOperationException("HandlingDrift must be between zero and one.");
