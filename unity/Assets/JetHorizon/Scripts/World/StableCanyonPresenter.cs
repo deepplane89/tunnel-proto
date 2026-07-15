@@ -14,20 +14,25 @@ namespace JetHorizon
         const int MaximumSlices = 96;
         const int VerticalSegments = 7;
         const int VerticalStride = VerticalSegments + 1;
+        const int SurfaceCount = 4; // inner + outer shell for both canyon sides
 
         public Material CanyonMaterial;
         public float WallHeight = 62f;
+        public float WallThickness = 8f;
         public float Displacement = 2.6f;
-        [Range(0f, 1f)] public float Brightness = 0.34f;
-        [Range(0f, 2f)] public float Emission = 0.20f;
-        public float FadeStartZ = -290f;
-        public float FadeEndZ = -155f;
+        [Range(0f, 1f)] public float Brightness = 0.72f;
+        [Range(0f, 2f)] public float Emission = 0.28f;
+        public float FadeStartZ = -305f;
+        public float FadeEndZ = -235f;
 
         readonly CorridorSliceSnapshot[] _sorted = new CorridorSliceSnapshot[MaximumSlices];
-        readonly Vector3[] _vertices = new Vector3[MaximumSlices * VerticalStride * 2];
-        readonly Vector2[] _uv = new Vector2[MaximumSlices * VerticalStride * 2];
-        readonly Color[] _colors = new Color[MaximumSlices * VerticalStride * 2];
-        readonly int[] _triangles = new int[(MaximumSlices - 1) * VerticalSegments * 6 * 2];
+        readonly Vector3[] _vertices = new Vector3[MaximumSlices * VerticalStride * SurfaceCount];
+        readonly Vector2[] _uv = new Vector2[MaximumSlices * VerticalStride * SurfaceCount];
+        readonly Color[] _colors = new Color[MaximumSlices * VerticalStride * SurfaceCount];
+        readonly int[] _triangles = new int[
+            (MaximumSlices - 1) * VerticalSegments * 6 * SurfaceCount
+            + (MaximumSlices - 1) * 6 * 4
+            + VerticalSegments * 6 * 4];
 
         Mesh _mesh;
         MeshRenderer _renderer;
@@ -122,35 +127,40 @@ namespace JetHorizon
 
         void RebuildMesh(int sliceCount)
         {
-            int sideVertexCount = sliceCount * VerticalStride;
+            int surfaceVertexCount = sliceCount * VerticalStride;
             for (int sideIndex = 0; sideIndex < 2; sideIndex++)
             {
                 int side = sideIndex == 0 ? -1 : 1;
-                int sideOffset = sideIndex * sideVertexCount;
-                for (int sliceIndex = 0; sliceIndex < sliceCount; sliceIndex++)
+                for (int shell = 0; shell < 2; shell++)
                 {
-                    CorridorSliceSnapshot slice = _sorted[sliceIndex];
-                    Color palette = Palette(slice.RowIndex);
-                    for (int vertical = 0; vertical <= VerticalSegments; vertical++)
+                    int surfaceOffset = (sideIndex * 2 + shell) * surfaceVertexCount;
+                    for (int sliceIndex = 0; sliceIndex < sliceCount; sliceIndex++)
                     {
-                        float v = vertical / (float)VerticalSegments;
-                        float profile = WallProfile(v);
-                        float jitter = SignedHash(slice.RowIndex, vertical) * Displacement * Mathf.Sin(v * Mathf.PI);
-                        int vertex = sideOffset + sliceIndex * VerticalStride + vertical;
-                        _vertices[vertex] = new Vector3(
-                            slice.CenterX + side * (slice.HalfWidth + profile + jitter),
-                            v * WallHeight,
-                            slice.Z);
-                        _uv[vertex] = new Vector2(v, slice.RowIndex * .33f);
-                        _colors[vertex] = Color.Lerp(palette * .32f, palette, .25f + v * .75f);
+                        CorridorSliceSnapshot slice = _sorted[sliceIndex];
+                        Color palette = Palette(slice.RowIndex);
+                        for (int vertical = 0; vertical <= VerticalSegments; vertical++)
+                        {
+                            float v = vertical / (float)VerticalSegments;
+                            float profile = WallProfile(v);
+                            float jitter = SignedHash(slice.RowIndex, vertical) * Displacement * Mathf.Sin(v * Mathf.PI);
+                            int vertex = surfaceOffset + sliceIndex * VerticalStride + vertical;
+                            _vertices[vertex] = new Vector3(
+                                slice.CenterX + side * (slice.HalfWidth + profile + jitter + shell * WallThickness),
+                                v * WallHeight,
+                                slice.Z);
+                            _uv[vertex] = new Vector2(v, slice.RowIndex * .33f);
+                            float heightShade = Mathf.Lerp(.58f, 1f, .25f + v * .75f);
+                            _colors[vertex] = palette * heightShade * (shell == 0 ? 1f : .62f);
+                            _colors[vertex].a = 1f;
+                        }
                     }
                 }
             }
 
             int triangleCount = 0;
-            for (int sideIndex = 0; sideIndex < 2; sideIndex++)
+            for (int surface = 0; surface < SurfaceCount; surface++)
             {
-                int offset = sideIndex * sideVertexCount;
+                int offset = surface * surfaceVertexCount;
                 for (int slice = 0; slice < sliceCount - 1; slice++)
                 {
                     int row = offset + slice * VerticalStride;
@@ -167,13 +177,60 @@ namespace JetHorizon
                 }
             }
 
-            int vertexCount = sideVertexCount * 2;
+            // Close every shell along its waterline and crest. These strips keep
+            // the canyon solid at grazing camera angles instead of exposing the
+            // infinitely thin edge of the inner wall.
+            for (int sideIndex = 0; sideIndex < 2; sideIndex++)
+            {
+                int inner = sideIndex * 2 * surfaceVertexCount;
+                int outer = inner + surfaceVertexCount;
+                for (int slice = 0; slice < sliceCount - 1; slice++)
+                {
+                    int innerRow = inner + slice * VerticalStride;
+                    int innerNext = innerRow + VerticalStride;
+                    int outerRow = outer + slice * VerticalStride;
+                    int outerNext = outerRow + VerticalStride;
+                    AddQuad(ref triangleCount, innerRow, outerRow, innerNext, outerNext);
+                    AddQuad(ref triangleCount,
+                        innerRow + VerticalSegments,
+                        innerNext + VerticalSegments,
+                        outerRow + VerticalSegments,
+                        outerNext + VerticalSegments);
+                }
+
+                // Close both streamed ends so looking along a bend cannot reveal
+                // the sky through the wall volume.
+                for (int end = 0; end < 2; end++)
+                {
+                    int slice = end == 0 ? 0 : sliceCount - 1;
+                    int innerRow = inner + slice * VerticalStride;
+                    int outerRow = outer + slice * VerticalStride;
+                    for (int vertical = 0; vertical < VerticalSegments; vertical++)
+                        AddQuad(ref triangleCount,
+                            innerRow + vertical,
+                            innerRow + vertical + 1,
+                            outerRow + vertical,
+                            outerRow + vertical + 1);
+                }
+            }
+
+            int vertexCount = surfaceVertexCount * SurfaceCount;
             _mesh.Clear(false);
             _mesh.SetVertices(_vertices, 0, vertexCount);
             _mesh.SetUVs(0, _uv, 0, vertexCount);
             _mesh.SetColors(_colors, 0, vertexCount);
             _mesh.SetTriangles(_triangles, 0, triangleCount, 0, false);
             _mesh.bounds = new Bounds(Vector3.zero, new Vector3(440f, 150f, 760f));
+        }
+
+        void AddQuad(ref int triangleCount, int a, int b, int c, int d)
+        {
+            _triangles[triangleCount++] = a;
+            _triangles[triangleCount++] = b;
+            _triangles[triangleCount++] = c;
+            _triangles[triangleCount++] = c;
+            _triangles[triangleCount++] = b;
+            _triangles[triangleCount++] = d;
         }
 
         static float WallProfile(float v)

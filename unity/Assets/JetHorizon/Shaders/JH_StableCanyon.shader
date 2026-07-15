@@ -2,11 +2,11 @@ Shader "JH/StableCanyon"
 {
     Properties
     {
-        _DarkColor ("Dark Color", Color) = (0.006, 0.009, 0.018, 1)
-        _Brightness ("Brightness", Range(0, 1)) = 0.34
-        _Emission ("Emission", Range(0, 2)) = 0.20
-        _FadeStart ("Fade Start", Float) = -290
-        _FadeEnd ("Fade End", Float) = -155
+        _DarkColor ("Dark Color", Color) = (0.015, 0.025, 0.045, 1)
+        _Brightness ("Brightness", Range(0, 1)) = 0.72
+        _Emission ("Emission", Range(0, 2)) = 0.28
+        _FadeStart ("Fade Start", Float) = -305
+        _FadeEnd ("Fade End", Float) = -235
     }
     SubShader
     {
@@ -72,7 +72,7 @@ Shader "JH/StableCanyon"
 
                 float facet = 0.72 + 0.28 * sin(input.uv.x * 19.0 + input.uv.y * 7.0);
                 float seam = pow(1.0 - abs(frac(input.uv.y) * 2.0 - 1.0), 10.0);
-                half3 crystal = lerp(_DarkColor.rgb, input.color.rgb, 0.58) * (_Brightness * facet);
+                half3 crystal = lerp(_DarkColor.rgb, input.color.rgb, 0.78) * (_Brightness * facet);
                 crystal += input.color.rgb * seam * _Emission;
                 crystal = MixFog(crystal, input.fogFactor);
                 return half4(crystal, 1.0);
