@@ -36,6 +36,8 @@ namespace JetHorizon
         public AngledWallSystem AngledWalls;
         public LightningSystem Lightning;
         public PrismaticTunnelPresenter PrismaticTunnel;
+        public MonumentPresenter Monuments;
+        public ExtractionGatePresenter ExtractionGate;
         public ObstacleSpawner Obstacles;
         public PickupSystem Pickups;
         public PowerupPresentationSystem PowerupPresentation;
@@ -86,7 +88,7 @@ namespace JetHorizon
         void BuildCoreSimulation()
         {
             ShipLaunchProfile launchProfile = GarageDomainService.CreateLaunchProfile(Garage.Current);
-            var runDefinition = _sequenceAsset.ToCoreDefinition(launchProfile.SpeedMultiplier);
+            var runDefinition = _sequenceAsset.ToCoreDefinition();
             _coreSimulation = new JetHorizonSimulation(new SimulationConfig
             {
                 // The core owns live ship, progression, stages, random wave decisions,
@@ -107,6 +109,8 @@ namespace JetHorizon
                 ExtractionIntervalDistance = 520f,
                 MaximumHeat = 5,
                 PrismaticSineTunnelEnabled = true,
+                ProofEncounterMode = true,
+                PersistentCruiseSpeedMultiplier = launchProfile.SpeedMultiplier,
                 Snap = FeelProfile.Snap,
                 AccelBase = FeelProfile.AccelBase * launchProfile.AccelerationMultiplier,
                 AccelSnap = FeelProfile.AccelSnap * launchProfile.AccelerationMultiplier,
@@ -136,8 +140,14 @@ namespace JetHorizon
             Camera?.ResetSystem();
             var feel = gameObject.GetComponent<ShipFeelPresenter>() ?? gameObject.AddComponent<ShipFeelPresenter>();
             feel.Initialize(FeelProfile);
-            if (Ship != null && Ship.ShipRoot != null && Ship.ShipRoot.GetComponent<ShipOrganicMotion>() == null)
-                Ship.ShipRoot.gameObject.AddComponent<ShipOrganicMotion>();
+            if (Ship != null && Ship.ShipRoot != null)
+            {
+                var organicMotion = Ship.ShipRoot.GetComponent<ShipOrganicMotion>()
+                    ?? Ship.ShipRoot.gameObject.AddComponent<ShipOrganicMotion>();
+                // The deterministic core already owns handling and bank. Keep this
+                // optional presentation layer installed, but pause it while feel is retuned.
+                organicMotion.enabled = false;
+            }
             if (gameObject.GetComponent<FeedbackDirector>() == null) gameObject.AddComponent<FeedbackDirector>();
             if (gameObject.GetComponent<JetHorizonAudioSystem>() == null) gameObject.AddComponent<JetHorizonAudioSystem>();
             if (PowerupPresentation == null)
@@ -159,6 +169,22 @@ namespace JetHorizon
                 PrismaticTunnel = presenterObject.AddComponent<PrismaticTunnelPresenter>();
             }
             PrismaticTunnel.ResetSystem();
+            if (Monuments == null)
+            {
+                var presenterObject = new GameObject("Monument Presentation");
+                presenterObject.transform.SetParent(transform, false);
+                Monuments = presenterObject.AddComponent<MonumentPresenter>();
+                Monuments.MonumentMaterial = AngledWalls != null ? AngledWalls.WallMaterial : null;
+            }
+            Monuments.ResetSystem();
+            if (ExtractionGate == null)
+            {
+                var presenterObject = new GameObject("Extraction Gate Presentation");
+                presenterObject.transform.SetParent(transform, false);
+                ExtractionGate = presenterObject.AddComponent<ExtractionGatePresenter>();
+                ExtractionGate.GateMaterial = AngledWalls != null ? AngledWalls.WallMaterial : null;
+            }
+            ExtractionGate.ResetSystem();
             State.TransitionTo(GamePhase.Title);
         }
 
@@ -206,7 +232,7 @@ namespace JetHorizon
             Camera.SimTick(dt);                                  // 5: pivot follow (fixed part)
 
             if (s.InvincibleTimer > 0f) s.InvincibleTimer = Mathf.Max(0f, s.InvincibleTimer - dt);
-            if (!(_coreSimulation?.Snapshot.StageDirectorEnabled ?? false) && s.RestBeat > 0f)
+            if (!(_coreSimulation?.Snapshot.CoreWorldDirectorEnabled ?? false) && s.RestBeat > 0f)
                 s.RestBeat -= dt;
             if (s.PostLaunchGrace > 0f) s.PostLaunchGrace -= dt;
 
@@ -214,6 +240,7 @@ namespace JetHorizon
             Canyon.SimTick(dt);                                  // 16: canyon slabs + collision
             if (_killedThisFrame) return;
             PrismaticTunnel?.SimTick(dt);                        // snapshot-only continuous sine tunnel presentation
+            Monuments?.SimTick(dt);                              // snapshot-only monumental structure presentation
             AngledWalls.SimTick(dt);                             // walls move + OBB collision
             if (_killedThisFrame) return;
             Lightning.SimTick(dt);
@@ -223,6 +250,7 @@ namespace JetHorizon
             if (_killedThisFrame) return;
             Pickups.SimTick(dt);                                 // 19: coins/powerups move + magnet + collect
             PowerupPresentation?.SimTick(dt);                    // 20: snapshot/event-driven hero VFX
+            ExtractionGate?.SimTick(dt);                         // snapshot-only spatial extraction presentation
         }
 
         void TickCoreShip(float dt)
@@ -233,7 +261,8 @@ namespace JetHorizon
                 return;
             }
 
-            _coreSimulation.SetSpeed(Session.Speed);
+            if (!(_coreSimulation.Snapshot?.CoreWorldDirectorEnabled ?? false))
+                _coreSimulation.SetSpeed(Session.Speed);
             var s = Session;
             var input = Ship.Input;
             // Unity's gameplay camera faces -Z, making screen-left world +X. The adapter
@@ -274,6 +303,13 @@ namespace JetHorizon
                 FinishPlayerDeath(coreAlreadyDead: true);
                 return;
             }
+            if (snapshot.Phase == CoreGamePhase.Extracted
+                && _coreSimulation.TryConsumeAutomaticExtraction(out RunCargoManifest cargo))
+            {
+                _killedThisFrame = true;
+                CompleteExtraction(cargo);
+                return;
+            }
             _applicationEvents.Dispatch(_coreSimulation.Events);
         }
 
@@ -285,6 +321,7 @@ namespace JetHorizon
             Session.Distance = snapshot.Distance;
             Session.Score = snapshot.Score;
             Session.Speed = snapshot.Speed;
+            Session.CoreEffectiveSpeed = snapshot.EffectiveSpeed;
             if (snapshot.StageDirectorEnabled)
             {
                 Session.SpeedFloor = snapshot.SpeedFloor;
@@ -415,6 +452,11 @@ namespace JetHorizon
             if (State.Phase != GamePhase.Playing || _coreSimulation == null) return false;
             if (!_coreSimulation.TryExtract(out RunCargoManifest cargo)) return false;
 
+            return CompleteExtraction(cargo);
+        }
+
+        bool CompleteExtraction(RunCargoManifest cargo)
+        {
             GarageCommandResult settlement = Garage.Extract(new CargoManifest(
                 cargo.Salvage,
                 cargo.Alloy,
@@ -502,6 +544,8 @@ namespace JetHorizon
             Slalom.ResetSystem(); AngledWalls.ResetSystem(); Lightning.ResetSystem();
             Obstacles.ResetSystem(); Pickups.ResetSystem();
             PrismaticTunnel?.ResetSystem();
+            Monuments?.ResetSystem();
+            ExtractionGate?.ResetSystem();
             PowerupPresentation?.ResetSystem();
         }
 

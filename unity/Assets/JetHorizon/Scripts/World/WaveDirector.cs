@@ -45,7 +45,7 @@ namespace JetHorizon
         int _endlessIdx; float _endlessT; bool _endlessResting; int _waveCount; int _wavesSinceCorridor;
 
         RunSession S => GameManager.I.Session;
-        bool CoreMode => GameManager.I != null && (GameManager.I.CoreSnapshot?.StageDirectorEnabled ?? false);
+        bool CoreMode => GameManager.I != null && (GameManager.I.CoreSnapshot?.CoreWorldDirectorEnabled ?? false);
 
         public void ResetSystem()
         {

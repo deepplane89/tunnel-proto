@@ -12,6 +12,7 @@ namespace JetHorizon.Simulation
 
         public float BaseSpeed = 36f;
         public float StartSpeedMultiplier = 1.5f;
+        public float PersistentCruiseSpeedMultiplier = 1f;
         public float ShipZ = 3.9f;
         public float ShipHoverY = 1.21f;
         public float ShipPreLaunchY = 0.38f;
@@ -81,6 +82,7 @@ namespace JetHorizon.Simulation
         public float MagnetPowerMultiplier = 1f;
         public float OverdrivePowerMultiplier = 1f;
         public bool PrismaticSineTunnelEnabled;
+        public bool ProofEncounterMode;
         public float PrismaticTunnelSpawnZ = -260f;
         public float PrismaticTunnelRowSpacing = 7f;
         public float PrismaticTunnelCollisionDepth = 5f;
@@ -109,6 +111,8 @@ namespace JetHorizon.Simulation
         public void Validate()
         {
             if (FixedDeltaSeconds <= 0f) throw new InvalidOperationException("FixedDeltaSeconds must be positive.");
+            if (BaseSpeed <= 0f || StartSpeedMultiplier <= 0f || PersistentCruiseSpeedMultiplier <= 0f)
+                throw new InvalidOperationException("Run pace inputs must be positive.");
             if (LaneCount <= 0) throw new InvalidOperationException("LaneCount must be positive.");
             if (MaxHazards <= 0) throw new InvalidOperationException("MaxHazards must be positive.");
             if (MaxPickups <= 0) throw new InvalidOperationException("MaxPickups must be positive.");

@@ -136,7 +136,8 @@ namespace JetHorizon
                 for (int i = 0; i < snapshot.HazardCount; i++)
                 {
                     var hazard = snapshot.GetHazard(i);
-                    if (hazard.Kind == HazardKind.Wall) _coreWalls[hazard.Id] = hazard;
+                    if (hazard.Kind == HazardKind.Wall && hazard.Style != HazardStyle.MonumentWall)
+                        _coreWalls[hazard.Id] = hazard;
                 }
                 EnsureCorePresenters(snapshot);
             }
@@ -221,7 +222,7 @@ namespace JetHorizon
             for (int i = 0; i < snapshot.HazardCount; i++)
             {
                 var hazard = snapshot.GetHazard(i);
-                if (hazard.Kind != HazardKind.Wall) continue;
+                if (hazard.Kind != HazardKind.Wall || hazard.Style == HazardStyle.MonumentWall) continue;
                 bool found = false;
                 foreach (var wall in _pool)
                 {

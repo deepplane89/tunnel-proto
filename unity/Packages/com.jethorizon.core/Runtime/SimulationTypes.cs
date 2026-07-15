@@ -166,6 +166,7 @@ namespace JetHorizon.Simulation
         LethalRing,
         AngledWall,
         StructuredWall,
+        MonumentWall,
         Lightning,
         CorridorCone,
         L4CorridorCone,
@@ -510,6 +511,10 @@ namespace JetHorizon.Simulation
         public float Score { get; internal set; }
         public float Speed { get; internal set; }
         public float EffectiveSpeed { get; internal set; }
+        public float PacePersistentCruiseSpeed { get; internal set; }
+        public float PaceHeatModifier { get; internal set; }
+        public float PaceEncounterModifier { get; internal set; }
+        public float PacePowerupModifier { get; internal set; }
         public float ShipX { get; internal set; }
         public float ShipY { get; internal set; }
         public float ShipZ { get; internal set; }
@@ -518,6 +523,18 @@ namespace JetHorizon.Simulation
         public float ShipRollRadians { get; internal set; }
         public float ShipTiltTimer { get; internal set; }
         public bool StageDirectorEnabled { get; internal set; }
+        public bool CoreWorldDirectorEnabled { get; internal set; }
+        public bool ProofEncounterMode { get; internal set; }
+        public string EncounterPlanId { get; internal set; }
+        public EncounterKind EncounterKind { get; internal set; }
+        public int EncounterPlanIndex { get; internal set; }
+        public int EncounterCycle { get; internal set; }
+        public float EncounterProgress01 { get; internal set; }
+        public float EncounterValidationMargin { get; internal set; }
+        public bool ExtractionGateVisible { get; internal set; }
+        public float ExtractionGateX { get; internal set; }
+        public float ExtractionGateHalfWidth { get; internal set; }
+        public float ExtractionGateZ { get; internal set; }
         public bool SineCorridorActive { get; internal set; }
         public bool ZipperActive { get; internal set; }
         public bool SlalomActive { get; internal set; }

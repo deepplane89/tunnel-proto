@@ -1,6 +1,28 @@
 # Encounter Capability Coordination
 
-**Status:** Architecture contract for the next implementation slice
+**Status:** Proof-slice architecture implemented; visual and difficulty tuning pending
+
+## Implemented proof checkpoint (2026-07-15)
+
+- `RunPaceModel` is the sole composition formula for permanent capability, Heat,
+  encounter approach, and temporary power-up pace.
+- `ShipCapabilityProfile`, encounter contracts, deterministic reachability, and
+  neutral/constant-left/constant-right rejection live in the engine-neutral core.
+- `ProofEncounterRuntime` streams three deliberate plans: monumental broad weave,
+  a shifting lightning-opening sequence, and a continuous prismatic sine corridor.
+- Cargo is authored as optional safe, risky, or deep route lines. Heat controls the
+  grade of cargo offered without changing route legality.
+- The laser pickup is explicitly placed before two dense destroyable formations.
+- The extraction gate crossing and extract-versus-continue result are core-owned.
+  Unity's gate, monument, lightning, cargo, and tunnel components are presenters.
+- The extra `ShipOrganicMotion` spring layer remains installed but disabled while
+  deterministic handling feel is evaluated.
+- First extraction still grants pending free primary-thruster repair work; it does
+  not silently grant a purchased engine tier.
+
+The checkpoint is intentionally reversible and coexists with the legacy stage
+content for later comparison. The proof build selects the new runtime explicitly
+through `SimulationConfig.ProofEncounterMode`.
 
 ## Purpose
 

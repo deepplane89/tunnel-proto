@@ -1333,6 +1333,162 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void UnifiedPaceModelComposesEachAuthorityExactlyOnce()
+        {
+            RunPaceState pace = RunPaceModel.Resolve(new RunPaceInput(
+                36f,
+                .72f,
+                1.12f,
+                .92f,
+                1.8f));
+
+            Assert.That(pace.PersistentCruiseSpeed, Is.EqualTo(25.92f).Within(.0001f));
+            Assert.That(pace.DepthHeatModifier, Is.EqualTo(1.12f));
+            Assert.That(pace.EncounterApproachModifier, Is.EqualTo(.92f));
+            Assert.That(pace.TemporaryPowerupModifier, Is.EqualTo(1.8f));
+            Assert.That(pace.EffectiveSpeed,
+                Is.EqualTo(36f * .72f * 1.12f * .92f * 1.8f).Within(.0001f));
+        }
+
+        [Test]
+        public void ProofEncountersAreReachableAndRejectAllThreeTrivialPolicies()
+        {
+            var config = new SimulationConfig
+            {
+                StartSpeedMultiplier = 1.5f,
+                PersistentCruiseSpeedMultiplier = .70f
+            };
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(config);
+            var validator = new EncounterCapabilityValidator();
+
+            foreach (EncounterPlan plan in EncounterPlanCatalog.CreateProofSequence())
+            {
+                EncounterValidationResult result = validator.Validate(
+                    plan,
+                    capability.AtCruiseSpeed(capability.CruiseSpeed * plan.ApproachModifier),
+                    0);
+                Assert.That(result.Reachable, Is.True, plan.Id);
+                Assert.That(result.RejectsNeutral, Is.True, plan.Id);
+                Assert.That(result.RejectsConstantLeft, Is.True, plan.Id);
+                Assert.That(result.RejectsConstantRight, Is.True, plan.Id);
+                Assert.That(result.FeasibilityMargin, Is.GreaterThan(0f), plan.Id);
+            }
+        }
+
+        [Test]
+        public void CapabilityValidatorRejectsAnImpossibleRapidReversal()
+        {
+            var plan = new EncounterPlan(
+                "test.impossible-reversal",
+                EncounterKind.MonumentalBroadWeave,
+                160f,
+                1f,
+                new EncounterCapabilityContract(20f, 100f, .55f, .65f, 0, 5),
+                new[]
+                {
+                    new EncounterOpening(100f, -10f, 4f),
+                    new EncounterOpening(106f,  10f, 4f),
+                    new EncounterOpening(160f,   0f, 4f)
+                });
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
+            {
+                StartSpeedMultiplier = 1.5f,
+                PersistentCruiseSpeedMultiplier = .70f
+            });
+
+            EncounterValidationResult result = new EncounterCapabilityValidator().Validate(plan, capability, 0);
+
+            Assert.That(result.Reachable, Is.False);
+            Assert.That(result.IsAdmissible, Is.False);
+        }
+
+        [Test]
+        public void ProofRuntimeStreamsThreeComposedEncountersAndExtractsThroughSpatialGate()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                StartSpeedMultiplier = 1.5f,
+                PersistentCruiseSpeedMultiplier = .70f,
+                ProofEncounterMode = true,
+                CollisionEnabled = false,
+                HazardSpawningEnabled = true,
+                MaxHazards = 600,
+                MaxPickups = 128,
+                MaxCorridorSlices = 96
+            }, 20260715u);
+            simulation.StartRun(2026071501L);
+
+            bool sawMonuments = false;
+            bool sawLightning = false;
+            bool sawPrismatic = false;
+            bool sawCargo = false;
+            bool sawLaser = false;
+            bool sawGate = false;
+            for (int tick = 0; tick < 9000 && simulation.Phase == CoreGamePhase.Playing; tick++)
+            {
+                SimulationSnapshot before = simulation.Snapshot;
+                bool right = before.ExtractionGateVisible && before.ShipX < before.ExtractionGateX;
+                bool left = before.ExtractionGateVisible && before.ShipX > before.ExtractionGateX;
+                simulation.Step(new InputFrame(left, right));
+                SimulationSnapshot snapshot = simulation.Snapshot;
+
+                sawMonuments |= snapshot.EncounterKind == EncounterKind.MonumentalBroadWeave;
+                sawLightning |= snapshot.EncounterKind == EncounterKind.LightningMovingGate;
+                sawPrismatic |= snapshot.EncounterKind == EncounterKind.PrismaticSineCorridor
+                    && snapshot.CorridorSliceCount > 1;
+                sawGate |= snapshot.ExtractionGateVisible;
+                for (int i = 0; i < snapshot.PickupCount; i++)
+                {
+                    PickupSnapshot pickup = snapshot.GetPickup(i);
+                    sawCargo |= pickup.Kind == PickupKind.Cargo;
+                    sawLaser |= pickup.Kind == PickupKind.Powerup && pickup.Powerup == PowerupType.Laser;
+                }
+            }
+
+            Assert.That(sawMonuments, Is.True);
+            Assert.That(sawLightning, Is.True);
+            Assert.That(sawPrismatic, Is.True);
+            Assert.That(sawCargo, Is.True);
+            Assert.That(sawLaser, Is.True);
+            Assert.That(sawGate, Is.True);
+            Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Extracted));
+            Assert.That(simulation.TryConsumeAutomaticExtraction(out RunCargoManifest manifest), Is.True);
+            Assert.That(manifest.HeatLevel, Is.Zero);
+        }
+
+        [Test]
+        public void MissingProofExtractionGateContinuesDeeperAndRaisesHeat()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                StartSpeedMultiplier = 1.5f,
+                PersistentCruiseSpeedMultiplier = .70f,
+                ProofEncounterMode = true,
+                CollisionEnabled = false,
+                HazardSpawningEnabled = true,
+                MaxHazards = 600,
+                MaxPickups = 128,
+                MaxCorridorSlices = 96
+            }, 20260716u);
+            simulation.StartRun(2026071601L);
+
+            bool sawGate = false;
+            for (int tick = 0; tick < 6000 && simulation.Snapshot.HeatLevel == 0; tick++)
+            {
+                sawGate |= simulation.Snapshot.ExtractionGateVisible;
+                simulation.Step(default);
+            }
+
+            Assert.That(sawGate, Is.True);
+            Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Playing));
+            Assert.That(simulation.Snapshot.HeatLevel, Is.EqualTo(1));
+            Assert.That(simulation.Snapshot.EncounterCycle, Is.EqualTo(1));
+            simulation.Step(default);
+            Assert.That(simulation.Snapshot.PaceHeatModifier, Is.EqualTo(1.06f).Within(.0001f));
+            Assert.That(simulation.TryConsumeAutomaticExtraction(out _), Is.False);
+        }
+
+        [Test]
         public void RestoredHullSurvivesOneCollisionThenFailsTheNext()
         {
             var simulation = new JetHorizonSimulation(new SimulationConfig

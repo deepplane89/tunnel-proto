@@ -70,6 +70,9 @@ namespace JetHorizon.Simulation
         readonly RunCargoLedger _cargo;
         readonly CorridorSliceState[] _corridorSlices;
         readonly StageDirector _stageDirector;
+        readonly ShipCapabilityProfile _shipCapability;
+        readonly ProofEncounterRuntime _proofEncounters;
+        readonly EncounterCommandBuffer _encounterCommands;
         readonly int[] _laneScratch;
         readonly int[] _blockedLaneScratch;
 
@@ -82,6 +85,9 @@ namespace JetHorizon.Simulation
         double _score;
         float _speed;
         float _effectiveSpeed;
+        RunPaceState _paceState;
+        bool _hasExternalSpeed;
+        float _externalSpeed;
         float _shipX;
         float _shipY;
         float _shipVelocityX;
@@ -139,6 +145,8 @@ namespace JetHorizon.Simulation
         float _structuredWallSpawnZ;
         int _repairCount;
         LeaderboardIneligibility _leaderboardIneligibility;
+        bool _automaticExtractionPending;
+        RunCargoManifest _automaticExtractionManifest;
 
         public CoreGamePhase Phase { get; private set; }
         public SimulationSnapshot Snapshot { get; }
@@ -159,7 +167,12 @@ namespace JetHorizon.Simulation
             _pickups = new PickupState[_config.MaxPickups];
             _cargo = new RunCargoLedger(_config.CargoCapacity);
             _corridorSlices = new CorridorSliceState[_config.MaxCorridorSlices];
-            _stageDirector = runDefinition == null ? null : new StageDirector(runDefinition);
+            _stageDirector = _config.ProofEncounterMode || runDefinition == null ? null : new StageDirector(runDefinition);
+            _shipCapability = ShipCapabilityProfile.FromConfig(_config);
+            _proofEncounters = _config.ProofEncounterMode
+                ? new ProofEncounterRuntime(EncounterPlanCatalog.CreateProofSequence(), _shipCapability)
+                : null;
+            _encounterCommands = new EncounterCommandBuffer(64);
             _structuredWallField = StructuredWallFieldCatalog.Production;
             _laneScratch = new int[_config.LaneCount];
             _blockedLaneScratch = new int[_config.LaneCount];
@@ -205,7 +218,9 @@ namespace JetHorizon.Simulation
         {
             if (float.IsNaN(speed) || float.IsInfinity(speed))
                 throw new ArgumentOutOfRangeException(nameof(speed));
-            _speed = Math.Max(0f, speed);
+            _externalSpeed = Math.Max(0f, speed);
+            _hasExternalSpeed = true;
+            _speed = _externalSpeed;
             _stageDirector?.SetExternalSpeed(_speed);
             RefreshSnapshot();
         }
@@ -235,6 +250,19 @@ namespace JetHorizon.Simulation
             Phase = CoreGamePhase.Extracted;
             Events.Add(new SimulationEvent(SimulationEventType.RunExtracted, 0, manifest.TotalWeight, manifest.CreditValue));
             RefreshSnapshot();
+            return true;
+        }
+
+        /// <summary>Consumes the manifest produced by crossing the core-owned world-space extraction gate.</summary>
+        public bool TryConsumeAutomaticExtraction(out RunCargoManifest manifest)
+        {
+            if (!_automaticExtractionPending)
+            {
+                manifest = default;
+                return false;
+            }
+            manifest = _automaticExtractionManifest;
+            _automaticExtractionPending = false;
             return true;
         }
 
@@ -401,6 +429,7 @@ namespace JetHorizon.Simulation
                 return;
             }
 
+            float encounterApproachModifier = 1f;
             if (_stageDirector != null)
             {
                 world.SineCorridorActive = _sineCorridorActive;
@@ -408,18 +437,40 @@ namespace JetHorizon.Simulation
                 world.SlalomActive = _slalomActive;
                 world.AngledWallsActive = _structuredWallsActive;
                 _stageDirector.Tick(dt, world, _random, Events, StageCommands);
-                _speed = _stageDirector.Speed;
+                encounterApproachModifier = _stageDirector.Speed
+                    / Math.Max(0.001f, _config.BaseSpeed * _config.StartSpeedMultiplier);
                 ApplyStageCommandsToCore();
                 world.SineCorridorActive = _sineCorridorActive;
                 world.ZipperActive = _zipperActive;
                 world.SlalomActive = _slalomActive;
                 world.AngledWallsActive = _structuredWallsActive;
             }
+            else if (_proofEncounters != null)
+            {
+                encounterApproachModifier = _proofEncounters.CurrentApproachModifier;
+            }
 
-            float heatSpeedMultiplier = HeatSpeedMultiplier();
-            _effectiveSpeed = (world.OverdriveActive || OverdriveSpeedActive)
-                ? _speed * heatSpeedMultiplier * OverdriveSpeedMultiplier()
-                : _speed * heatSpeedMultiplier;
+            float temporaryModifier = world.OverdriveActive || OverdriveSpeedActive
+                ? OverdriveSpeedMultiplier()
+                : 1f;
+            if (_hasExternalSpeed && _stageDirector == null && _proofEncounters == null)
+            {
+                _paceState = RunPaceModel.Resolve(new RunPaceInput(
+                    Math.Max(0.001f, _externalSpeed), 1f, HeatSpeedMultiplier(), 1f, temporaryModifier));
+            }
+            else
+            {
+                _paceState = RunPaceModel.Resolve(new RunPaceInput(
+                    _config.BaseSpeed * _config.StartSpeedMultiplier,
+                    _config.PersistentCruiseSpeedMultiplier,
+                    HeatSpeedMultiplier(),
+                    encounterApproachModifier,
+                    temporaryModifier));
+            }
+            _speed = _paceState.PersistentCruiseSpeed
+                * _paceState.DepthHeatModifier
+                * _paceState.EncounterApproachModifier;
+            _effectiveSpeed = _paceState.EffectiveSpeed;
             TickLightningSpawner(dt, world);
             TickZipper(dt);
             TickSlalom(dt);
@@ -436,10 +487,44 @@ namespace JetHorizon.Simulation
             {
                 _distance += step;
                 _score += _config.ScoreRatePerSecond * Math.Max(1f, _effectiveSpeed / _config.BaseSpeed) * HeatRewardMultiplier() * dt;
-                TickExtractionWindows();
+                if (_proofEncounters != null)
+                {
+                    ProofEncounterTickResult encounterResult = _proofEncounters.Tick(
+                        _distance,
+                        _shipX,
+                        _heatLevel,
+                        _paceState.PersistentCruiseSpeed * _paceState.DepthHeatModifier,
+                        _config.ShipZ,
+                        _encounterCommands);
+                    ApplyProofEncounterCommands();
+                    if (encounterResult == ProofEncounterTickResult.ContinuedDeeper)
+                    {
+                        _heatLevel = Math.Min(_config.MaximumHeat, _heatLevel + 1);
+                        Events.Add(new SimulationEvent(
+                            SimulationEventType.ExtractionWindowPassed,
+                            _heatLevel,
+                            _proofEncounters.Snapshot.ExtractionGateDistance,
+                            HeatRewardMultiplier()));
+                        Events.Add(new SimulationEvent(
+                            SimulationEventType.HeatChanged,
+                            _heatLevel,
+                            HeatSpeedMultiplier(),
+                            HeatRewardMultiplier()));
+                    }
+                    else if (encounterResult == ProofEncounterTickResult.Extracted)
+                    {
+                        CompleteAutomaticExtraction();
+                        RefreshSnapshot();
+                        return;
+                    }
+                }
+                else
+                {
+                    TickExtractionWindows();
+                }
             }
 
-            if (_config.HazardSpawningEnabled)
+            if (_config.HazardSpawningEnabled && _proofEncounters == null)
                 TickWorldSpawner(step, world);
 
             if (_laserSeconds > 0f)
@@ -452,6 +537,128 @@ namespace JetHorizon.Simulation
                 UpdatePickups(step);
 
             RefreshSnapshot();
+        }
+
+        void ApplyProofEncounterCommands()
+        {
+            for (int i = 0; i < _encounterCommands.Count; i++)
+            {
+                EncounterCommand command = _encounterCommands[i];
+                switch (command.Type)
+                {
+                    case EncounterCommandType.MonumentBarrierRow:
+                        SpawnMonumentBarrier(command);
+                        break;
+                    case EncounterCommandType.LightningGateRow:
+                        SpawnPlannedLightningGate(command);
+                        break;
+                    case EncounterCommandType.PrismaticSlice:
+                        SpawnProofCorridorSlice(command);
+                        break;
+                    case EncounterCommandType.Cargo:
+                        SpawnPickup(PickupSpawn.Cargo(command.CargoKind, 1, command.X, 1.35f, command.Z));
+                        break;
+                    case EncounterCommandType.Powerup:
+                        SpawnPickup(PickupSpawn.PowerupPickup(command.Powerup, command.X, 1.4f, command.Z));
+                        break;
+                    case EncounterCommandType.LaserFormation:
+                        SpawnLaserFormation(command);
+                        break;
+                }
+            }
+        }
+
+        void SpawnMonumentBarrier(EncounterCommand command)
+        {
+            const float wallWidth = 44f;
+            const float wallHeight = 19f;
+            const float wallDepth = 6f;
+            float offset = command.HalfWidth + wallWidth * 0.5f;
+            int variant = Math.Abs(command.RowIndex) % 3;
+            float lean = ((command.RowIndex & 1) == 0 ? 1f : -1f) * 0.08f;
+            SpawnHazard(HazardSpawn.Wall(
+                command.X - offset, wallHeight * 0.5f, command.Z,
+                wallWidth, wallHeight, wallDepth, 0f, lean, 0f,
+                HazardStyle.MonumentWall, variant));
+            SpawnHazard(HazardSpawn.Wall(
+                command.X + offset, wallHeight * 0.5f, command.Z,
+                wallWidth, wallHeight, wallDepth, 0f, -lean, 0f,
+                HazardStyle.MonumentWall, (variant + 1) % 3));
+        }
+
+        void SpawnPlannedLightningGate(EncounterCommand command)
+        {
+            const float left = -42f;
+            const float right = 42f;
+            const int columns = 13;
+            float spacing = (right - left) / (columns - 1);
+            for (int column = 0; column < columns; column++)
+            {
+                float x = left + spacing * column;
+                if (Math.Abs(x - command.X) <= command.HalfWidth) continue;
+                SpawnHazard(HazardSpawn.Lightning(
+                    x,
+                    command.Z,
+                    _config.LightningGateWarningSeconds,
+                    4.8f,
+                    _config.LightningGateCollisionHalfWidth,
+                    4f));
+            }
+            Events.Add(new SimulationEvent(
+                SimulationEventType.LightningGateStarted,
+                command.RowIndex,
+                command.X,
+                command.HalfWidth * 2f));
+        }
+
+        void SpawnProofCorridorSlice(EncounterCommand command)
+        {
+            for (int i = 0; i < _corridorSlices.Length; i++)
+            {
+                if (_corridorSlices[i].Active) continue;
+                _corridorSlices[i] = new CorridorSliceState
+                {
+                    Active = true,
+                    Id = _nextEntityId++,
+                    Family = CorridorFamily.L4Sine,
+                    RowIndex = command.RowIndex,
+                    CenterX = command.X,
+                    HalfWidth = command.HalfWidth,
+                    Z = command.Z
+                };
+                return;
+            }
+        }
+
+        void SpawnLaserFormation(EncounterCommand command)
+        {
+            float[] offsets = { -8.4f, -4.2f, 0f, 4.2f, 8.4f };
+            for (int i = 0; i < offsets.Length; i++)
+            {
+                HazardSpawn cone = HazardSpawn.Cone(
+                    command.X + offsets[i],
+                    command.Z + Math.Abs(i - 2) * 2.5f,
+                    2.35f,
+                    1.25f,
+                    HazardStyle.FatCone,
+                    (command.RowIndex + i) % 3);
+                cone.Y = -2f;
+                cone.CollisionHalfDepth = _config.CollisionHalfDepth + 0.8f;
+                SpawnHazard(cone);
+            }
+        }
+
+        void CompleteAutomaticExtraction()
+        {
+            _automaticExtractionManifest = _cargo.Snapshot(_heatLevel, HeatRewardMultiplier());
+            _automaticExtractionPending = true;
+            FinalizeRun();
+            Phase = CoreGamePhase.Extracted;
+            Events.Add(new SimulationEvent(
+                SimulationEventType.RunExtracted,
+                0,
+                _automaticExtractionManifest.TotalWeight,
+                _automaticExtractionManifest.CreditValue));
         }
 
         bool ResolveCorridorCollision(WorldFrame world)
@@ -581,9 +788,19 @@ namespace JetHorizon.Simulation
             _score = 0d;
             _repairCount = 0;
             _leaderboardIneligibility = LeaderboardIneligibility.None;
+            _automaticExtractionPending = false;
+            _automaticExtractionManifest = default;
             LatestRunResult = null;
-            _speed = _config.BaseSpeed * _config.StartSpeedMultiplier;
-            _effectiveSpeed = _speed;
+            _paceState = RunPaceModel.Resolve(new RunPaceInput(
+                _config.BaseSpeed * _config.StartSpeedMultiplier,
+                _config.PersistentCruiseSpeedMultiplier,
+                1f,
+                1f,
+                1f));
+            _speed = _paceState.PersistentCruiseSpeed;
+            _effectiveSpeed = _paceState.EffectiveSpeed;
+            _hasExternalSpeed = false;
+            _externalSpeed = 0f;
             _shipX = 0f;
             _shipY = _config.ShipHoverY;
             _shipVelocityX = 0f;
@@ -639,6 +856,8 @@ namespace JetHorizon.Simulation
             _structuredWallsScheduling = false;
             _structuredWallRowsDone = 0;
             _structuredWallSpawnZ = 0f;
+            _proofEncounters?.Reset();
+            _encounterCommands.Clear();
             if (_stageDirector != null)
             {
                 _stageDirector.Reset(events);
@@ -1648,6 +1867,10 @@ namespace JetHorizon.Simulation
             Snapshot.Score = (float)_score;
             Snapshot.Speed = _speed;
             Snapshot.EffectiveSpeed = _effectiveSpeed;
+            Snapshot.PacePersistentCruiseSpeed = _paceState.PersistentCruiseSpeed;
+            Snapshot.PaceHeatModifier = _paceState.DepthHeatModifier;
+            Snapshot.PaceEncounterModifier = _paceState.EncounterApproachModifier;
+            Snapshot.PacePowerupModifier = _paceState.TemporaryPowerupModifier;
             Snapshot.ShipX = _shipX;
             Snapshot.ShipY = _shipY;
             Snapshot.ShipZ = _config.ShipZ;
@@ -1674,23 +1897,50 @@ namespace JetHorizon.Simulation
             Snapshot.HeatRewardMultiplier = HeatRewardMultiplier();
             Snapshot.HeatSpeedMultiplier = HeatSpeedMultiplier();
             Snapshot.EncounterIntensity = EncounterIntensity();
-            Snapshot.ExtractionAvailable = Phase == CoreGamePhase.Playing && _extractionWindowOpen;
-            Snapshot.ExtractionWindowOpen = _extractionWindowOpen;
-            Snapshot.ExtractionWindowDistanceRemaining = _extractionWindowOpen
+            EncounterRuntimeSnapshot encounter = _proofEncounters != null
+                ? _proofEncounters.Snapshot
+                : default;
+            Snapshot.ExtractionAvailable = _proofEncounters == null
+                && Phase == CoreGamePhase.Playing
+                && _extractionWindowOpen;
+            Snapshot.ExtractionWindowOpen = _proofEncounters == null && _extractionWindowOpen;
+            Snapshot.ExtractionWindowDistanceRemaining = _proofEncounters == null && _extractionWindowOpen
                 ? Math.Max(0f, _extractionWindowEndDistance - _distance)
                 : 0f;
-            Snapshot.NextExtractionDistance = _extractionWindowOpen
-                ? _extractionWindowEndDistance
-                : _nextExtractionDistance;
+            Snapshot.NextExtractionDistance = _proofEncounters != null
+                ? encounter.ExtractionGateDistance
+                : _extractionWindowOpen
+                    ? _extractionWindowEndDistance
+                    : _nextExtractionDistance;
             Snapshot.HullHitsRemaining = _hullHitsRemaining;
             Snapshot.HullHitCapacity = _config.HullHitCapacity;
             Snapshot.StageDirectorEnabled = _stageDirector != null;
-            Snapshot.SineCorridorActive = _sineCorridorActive;
+            Snapshot.CoreWorldDirectorEnabled = _stageDirector != null || _proofEncounters != null;
+            Snapshot.ProofEncounterMode = _proofEncounters != null;
+            Snapshot.EncounterPlanId = encounter.PlanId ?? string.Empty;
+            Snapshot.EncounterKind = encounter.Kind;
+            Snapshot.EncounterPlanIndex = encounter.PlanIndex;
+            Snapshot.EncounterCycle = encounter.Cycle;
+            Snapshot.EncounterProgress01 = encounter.Progress01;
+            Snapshot.EncounterValidationMargin = encounter.ValidationMargin;
+            Snapshot.ExtractionGateVisible = encounter.ExtractionGateVisible;
+            Snapshot.ExtractionGateX = encounter.ExtractionGateX;
+            Snapshot.ExtractionGateHalfWidth = encounter.ExtractionGateHalfWidth;
+            Snapshot.ExtractionGateZ = encounter.ExtractionGateZ;
+            bool proofPrismatic = _proofEncounters != null
+                && encounter.Kind == EncounterKind.PrismaticSineCorridor
+                && CountCorridorSlices() > 0;
+            Snapshot.SineCorridorActive = _sineCorridorActive || proofPrismatic;
             Snapshot.ZipperActive = _zipperActive;
             Snapshot.SlalomActive = _slalomActive;
             Snapshot.AngledWallsActive = _structuredWallsActive;
-            Snapshot.CorridorGapCenter = _sineCorridorActive ? _sineGapCenter : _slalomGapCenter;
-            Snapshot.ActiveCorridorFamily = _sineCorridor != null ? _sineCorridor.Family : CorridorFamily.None;
+            int nearestCorridorSlice = FindNearestCorridorSlice(_config.ShipZ);
+            Snapshot.CorridorGapCenter = nearestCorridorSlice >= 0
+                ? _corridorSlices[nearestCorridorSlice].CenterX
+                : _sineCorridorActive ? _sineGapCenter : _slalomGapCenter;
+            Snapshot.ActiveCorridorFamily = nearestCorridorSlice >= 0
+                ? _corridorSlices[nearestCorridorSlice].Family
+                : _sineCorridor != null ? _sineCorridor.Family : CorridorFamily.None;
             if (_stageDirector != null)
             {
                 Snapshot.StageIndex = _stageDirector.StageIndex;

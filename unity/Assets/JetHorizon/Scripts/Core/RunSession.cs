@@ -10,6 +10,7 @@ namespace JetHorizon
     {
         // ── Speed / progress ───────────────────────────────
         public float Speed;              // u/s (world scroll)
+        public float CoreEffectiveSpeed; // full unified pace, including temporary effects
         public float SpeedFloor;         // _drSpeedFloor ratchet (multiplier)
         public float Distance;
         public float Elapsed;
@@ -52,7 +53,9 @@ namespace JetHorizon
         public bool AngledWallsActive;
 
         /// <summary>Effective world scroll speed this tick.</summary>
-        public float EffectiveSpeed => OverdriveActive ? Speed * 1.8f : Speed;
+        public float EffectiveSpeed => CoreEffectiveSpeed > 0f
+            ? CoreEffectiveSpeed
+            : OverdriveActive ? Speed * 1.8f : Speed;
 
         public bool AnyCorridorActive => CanyonActive || SineCorridorActive;
 
@@ -60,6 +63,7 @@ namespace JetHorizon
         public void ResetForNewRun()
         {
             Speed = Tuning.BaseSpeed;
+            CoreEffectiveSpeed = Tuning.BaseSpeed;
             SpeedFloor = 1f;
             Distance = 0f; Elapsed = 0f; Score = 0f;
             PhysTier = 1;
@@ -86,6 +90,7 @@ namespace JetHorizon
         public void ResetForRepair()
         {
             Score = 0f;
+            CoreEffectiveSpeed = Speed;
             ShipX = 0f; ShipVelX = 0f; RollAngle = 0f; RollDir = 0; RollHeld = false;
             TiltTimer = 0f; BankRoll = 0f;
             ShipY = Tuning.ShipHoverY;
