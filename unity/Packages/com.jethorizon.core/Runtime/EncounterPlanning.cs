@@ -362,14 +362,16 @@ namespace JetHorizon.Simulation
         static readonly EncounterCapabilityContract ProofContract =
             new EncounterCapabilityContract(24f, 130f, 0.55f, 0.65f, 0, 5);
 
-        public static EncounterPlan[] CreateProofSequence(float spacingScale = 1f)
+        public static EncounterPlan[] CreateProofSequence(
+            float spacingScale = 1f,
+            CanyonPathDefinition canyonPathOverride = null)
         {
             if (float.IsNaN(spacingScale) || float.IsInfinity(spacingScale) || spacingScale <= 0f)
                 throw new ArgumentOutOfRangeException(nameof(spacingScale));
             return new[]
             {
                 BroadWeave(spacingScale),
-                CrystallineCanyon(spacingScale),
+                CrystallineCanyon(spacingScale, canyonPathOverride),
                 LightningStorm(spacingScale),
                 PrismaticCorridor(spacingScale)
             };
@@ -419,8 +421,18 @@ namespace JetHorizon.Simulation
                 });
         }
 
-        static EncounterPlan CrystallineCanyon(float scale)
+        static EncounterPlan CrystallineCanyon(float scale, CanyonPathDefinition pathOverride)
         {
+            if (pathOverride != null)
+            {
+                return new EncounterPlan(
+                    "proof.crystalline-canyon",
+                    EncounterKind.CrystallineCanyon,
+                    Scale(pathOverride.Length, scale),
+                    1f,
+                    ProofContract,
+                    pathOverride.CreateOpenings(scale));
+            }
             const int count = 46;
             const float rowSpacing = 17f;
             const float sourceAmplitude = 120f;

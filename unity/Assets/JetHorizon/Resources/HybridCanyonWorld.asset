@@ -25,7 +25,7 @@ MonoBehaviour:
     NoiseScale: 38
     HeightmapPixelError: 8
     BasemapDistance: 260
-    MeshChunkLength: 110
+    MeshChunkLength: 90
     MeshCrossSegments: 56
     MeshSegmentsPerChunk: 18
     Seed: 41073

@@ -84,6 +84,7 @@ namespace JetHorizon.Simulation
         public float OverdrivePowerMultiplier = 1f;
         public bool PrismaticSineTunnelEnabled;
         public bool ProofEncounterMode;
+        public CanyonPathDefinition CanyonPathOverride;
         public float PrismaticTunnelSpawnZ = -260f;
         public float PrismaticTunnelRowSpacing = 7f;
         public float PrismaticTunnelCollisionDepth = 5f;

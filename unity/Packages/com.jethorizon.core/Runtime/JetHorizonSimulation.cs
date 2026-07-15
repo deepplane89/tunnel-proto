@@ -173,7 +173,9 @@ namespace JetHorizon.Simulation
             _shipCapability = ShipCapabilityProfile.FromConfig(_config);
             _proofEncounters = _config.ProofEncounterMode
                 ? new ProofEncounterRuntime(
-                    EncounterPlanCatalog.CreateProofSequence(_shipCapability.CruiseSpeed / 42f),
+                    EncounterPlanCatalog.CreateProofSequence(
+                        _shipCapability.CruiseSpeed / 42f,
+                        _config.CanyonPathOverride),
                     _shipCapability)
                 : null;
             _encounterCommands = new EncounterCommandBuffer(64);

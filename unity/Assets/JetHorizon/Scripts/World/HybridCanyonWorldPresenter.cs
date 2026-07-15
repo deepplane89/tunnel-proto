@@ -24,6 +24,7 @@ namespace JetHorizon
 
         readonly List<UnityEngine.Object> _ownedAssets = new List<UnityEngine.Object>();
         EncounterPlan _plan;
+        CanyonRouteSampler _route;
         GameObject _content;
         Material _meshMaterial;
         bool _terrainAuthoringPreview;
@@ -31,6 +32,23 @@ namespace JetHorizon
         void Awake()
         {
             if (Profile == null) Profile = Resources.Load<HybridCanyonWorldProfile>("HybridCanyonWorld");
+        }
+
+        void OnDrawGizmosSelected()
+        {
+            if (_route == null || Profile == null || Profile.Settings == null || !Profile.Settings.ShowSafeRouteGizmo) return;
+            Transform origin = _content != null ? _content.transform : transform;
+            Gizmos.color = new Color(.05f, 1f, 1f, .9f);
+            CanyonRouteFrame previous = _route.Sample(0f);
+            for (float distance = 8f; distance <= _route.Length; distance += 8f)
+            {
+                CanyonRouteFrame current = _route.Sample(distance);
+                Gizmos.DrawLine(origin.TransformPoint(previous.Center), origin.TransformPoint(current.Center));
+                Gizmos.DrawLine(
+                    origin.TransformPoint(current.Center - current.Right * current.HalfWidth),
+                    origin.TransformPoint(current.Center + current.Right * current.HalfWidth));
+                previous = current;
+            }
         }
 
         void OnDestroy() => ReleaseWorld(!UnityEngine.Application.isPlaying);
@@ -96,12 +114,13 @@ namespace JetHorizon
         void EnsureBuilt()
         {
             if (_content != null) return;
-            _plan = FindCanyonPlan();
+            _plan = FindCanyonPlan(Profile);
             if (_plan == null) return;
 
             HybridCanyonWorldSettings settings = Profile != null && Profile.Settings != null
                 ? Profile.Settings
                 : new HybridCanyonWorldSettings();
+            _route = new CanyonRouteSampler(_plan, settings);
             Material requested = Profile != null && Profile.CanyonMaterial != null
                 ? Profile.CanyonMaterial
                 : CanyonMaterial;
@@ -121,9 +140,15 @@ namespace JetHorizon
             _content.SetActive(false);
         }
 
-        static EncounterPlan FindCanyonPlan()
+        static EncounterPlan FindCanyonPlan(HybridCanyonWorldProfile profile)
         {
-            EncounterPlan[] plans = EncounterPlanCatalog.CreateProofSequence();
+            EncounterPlan livePlan = GameManager.I != null
+                ? GameManager.I.GetProofEncounterPlan(EncounterKind.CrystallineCanyon)
+                : null;
+            if (livePlan != null) return livePlan;
+            EncounterPlan[] plans = EncounterPlanCatalog.CreateProofSequence(
+                1f,
+                profile != null ? profile.BuildCorePathDefinition() : null);
             for (int i = 0; i < plans.Length; i++)
                 if (plans[i].Kind == EncounterKind.CrystallineCanyon) return plans[i];
             return null;
@@ -153,7 +178,9 @@ namespace JetHorizon
                 float z01 = z / (float)(resolution - 1);
                 float localZ = originZ + depth * z01;
                 float distance = -localZ;
-                SampleRoute(_plan, distance, out float center, out float halfWidth);
+                CanyonRouteFrame routeFrame = _route.Sample(distance);
+                float center = routeFrame.Center.x;
+                float halfWidth = routeFrame.HalfWidth;
 
                 for (int x = 0; x < resolution; x++)
                 {
@@ -161,7 +188,11 @@ namespace JetHorizon
                     float localX = Mathf.Lerp(-halfTerrain, halfTerrain, x01);
                     float outside = Mathf.Abs(localX - center) - halfWidth;
                     float enclosure = EnclosureAtDistance(localZ * -1f, convergenceStart, threshold, breakupStart, routeEnd);
-                    float bank = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(outside / settings.BankRiseWidth)) * enclosure;
+                    float shoulder = Mathf.Max(.1f, CanyonRouteSampler.Evaluate(
+                        settings.TerrainShoulderByProgress,
+                        Mathf.Clamp01(distance / Mathf.Max(1f, routeLength)),
+                        1f));
+                    float bank = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(outside / (settings.BankRiseWidth * shoulder))) * enclosure;
                     float noise = FractalNoise(localX, localZ, settings) * settings.SurfaceNoise * bank;
                     float worldHeight = settings.TerrainBaseY + bank * settings.BankHeight + noise;
                     heights[z, x] = Mathf.Clamp01((worldHeight - settings.TerrainBaseY) / settings.TerrainHeight);
@@ -305,7 +336,14 @@ namespace JetHorizon
             BuildWaterOutcrops(settings, thresholdDistance, breakupDistance);
             BuildArch("Monumental Canyon Threshold", thresholdDistance, settings.EntryClearance, settings, 0);
             BuildArch("Natural Canyon Bridge", Mathf.Lerp(thresholdDistance, breakupDistance, .52f), settings.EntryClearance - 3f, settings, 101);
-            BuildFaithfulSlabCorridor(settings, thresholdDistance, breakupDistance);
+            CanyonCurvedWallBuilder.Build(
+                _route,
+                settings,
+                Mathf.Max(0f, thresholdDistance - settings.SlabLength),
+                Mathf.Min(_plan.Length, breakupDistance + settings.SlabLength * 2f),
+                _content.transform,
+                _meshMaterial,
+                _ownedAssets);
             BuildTraversalGates(settings);
 
             int count = Mathf.Max(0, settings.SideMonolithCount);
@@ -313,7 +351,9 @@ namespace JetHorizon
             {
                 float t = (i + 1f) / (count + 1f);
                 float distance = Mathf.Lerp(95f, length - 75f, t);
-                SampleRoute(_plan, distance, out float center, out float halfWidth);
+                CanyonRouteFrame frame = _route.Sample(distance);
+                float center = frame.Center.x;
+                float halfWidth = frame.HalfWidth;
                 int side = (i & 1) == 0 ? -1 : 1;
                 float height = 29f + (i % 3) * 9f;
                 Vector3 size = new Vector3(10f + (i % 2) * 4f, height, 15f + (i % 3) * 5f);
@@ -332,7 +372,9 @@ namespace JetHorizon
             for (int i = 0; i < 10; i++)
             {
                 float distance = Mathf.Lerp(32f, thresholdDistance - 24f, i / 9f);
-                SampleRoute(_plan, distance, out float center, out float halfWidth);
+                CanyonRouteFrame frame = _route.Sample(distance);
+                float center = frame.Center.x;
+                float halfWidth = frame.HalfWidth;
                 int side = (i & 1) == 0 ? -1 : 1;
                 float convergence = i / 9f;
                 float lateral = Mathf.Lerp(74f, halfWidth + 8f, convergence);
@@ -343,7 +385,9 @@ namespace JetHorizon
             for (int i = 0; i < 8; i++)
             {
                 float distance = Mathf.Lerp(breakupDistance + 12f, _plan.Length - 12f, i / 7f);
-                SampleRoute(_plan, distance, out float center, out float halfWidth);
+                CanyonRouteFrame frame = _route.Sample(distance);
+                float center = frame.Center.x;
+                float halfWidth = frame.HalfWidth;
                 int side = (i & 1) == 0 ? 1 : -1;
                 float breakup = i / 7f;
                 float lateral = Mathf.Lerp(halfWidth + 7f, 82f, breakup);
@@ -603,8 +647,9 @@ namespace JetHorizon
                 var root = new GameObject($"Knife-Edge Rock Gate {i:00}");
                 root.layer = 8;
                 root.transform.SetParent(_content.transform, false);
-                root.transform.localPosition = new Vector3(opening.CenterX, 0f, -opening.Distance);
-                root.transform.localRotation = Quaternion.Euler(0f, RouteYaw(_plan, opening.Distance), 0f);
+                CanyonRouteFrame frame = _route.Sample(opening.Distance);
+                root.transform.localPosition = frame.Center;
+                root.transform.localRotation = Quaternion.LookRotation(frame.Forward, frame.Up);
 
                 const float gapHalfWidth = 1.15f;
                 float span = opening.HalfWidth + 6f;
@@ -633,7 +678,8 @@ namespace JetHorizon
             go.layer = 8;
             go.transform.SetParent(_content.transform, false);
             go.transform.localPosition = new Vector3(innerX, baseY, -distance);
-            go.transform.localRotation = Quaternion.Euler(0f, RouteYaw(_plan, distance), 0f);
+            CanyonRouteFrame frame = _route.Sample(distance);
+            go.transform.localRotation = Quaternion.LookRotation(frame.Forward, frame.Up);
             go.transform.localScale = new Vector3(side, 1f, 1f);
             Mesh mesh = MeshFactory.CanyonSlab(
                 height,
@@ -658,13 +704,14 @@ namespace JetHorizon
 
         void BuildArch(string name, float distance, float clearance, HybridCanyonWorldSettings settings, int seedOffset)
         {
-            SampleRoute(_plan, distance, out float center, out float halfWidth);
-            float tangentYaw = RouteYaw(_plan, distance);
+            CanyonRouteFrame frame = _route.Sample(distance);
+            float center = frame.Center.x;
+            float halfWidth = frame.HalfWidth;
             var root = new GameObject(name);
             root.layer = 8;
             root.transform.SetParent(_content.transform, false);
             root.transform.localPosition = new Vector3(center, 0f, -distance);
-            root.transform.localRotation = Quaternion.Euler(0f, tangentYaw, 0f);
+            root.transform.localRotation = Quaternion.LookRotation(frame.Forward, frame.Up);
 
             float pillarWidth = settings.ArchPillarWidth;
             float pillarHeight = clearance + settings.ArchCrownThickness + 16f;
@@ -895,6 +942,7 @@ namespace JetHorizon
             _ownedAssets.Clear();
             _meshMaterial = null;
             _plan = null;
+            _route = null;
             _terrainAuthoringPreview = false;
         }
     }

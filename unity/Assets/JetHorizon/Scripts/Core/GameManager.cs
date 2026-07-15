@@ -91,7 +91,8 @@ namespace JetHorizon
         {
             ShipLaunchProfile launchProfile = GarageDomainService.CreateLaunchProfile(Garage.Current);
             var runDefinition = _sequenceAsset.ToCoreDefinition();
-            _coreSimulation = new JetHorizonSimulation(new SimulationConfig
+            HybridCanyonWorldProfile canyonProfile = Resources.Load<HybridCanyonWorldProfile>("HybridCanyonWorld");
+            var config = new SimulationConfig
             {
                 // The core owns live ship, progression, stages, random wave decisions,
                 // registered hazards, and coin-pattern decisions. Unity presents snapshots.
@@ -114,6 +115,7 @@ namespace JetHorizon
                 MaximumHeat = 5,
                 PrismaticSineTunnelEnabled = true,
                 ProofEncounterMode = true,
+                CanyonPathOverride = canyonProfile != null ? canyonProfile.BuildCorePathDefinition() : null,
                 PersistentCruiseSpeedMultiplier = launchProfile.SpeedMultiplier,
                 Snap = FeelProfile.Snap,
                 AccelBase = FeelProfile.AccelBase * launchProfile.AccelerationMultiplier,
@@ -132,7 +134,34 @@ namespace JetHorizon
                 LaserPowerMultiplier = launchProfile.LaserPowerMultiplier,
                 MagnetPowerMultiplier = launchProfile.MagnetPowerMultiplier,
                 OverdrivePowerMultiplier = launchProfile.OverdrivePowerMultiplier
-            }, 20260714u, runDefinition);
+            };
+            if (config.CanyonPathOverride != null)
+            {
+                ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(config);
+                EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence(
+                    capability.CruiseSpeed / 42f,
+                    config.CanyonPathOverride)[1];
+                EncounterValidationResult validation = new EncounterCapabilityValidator().Validate(canyon, capability, 0);
+                if (!validation.IsAdmissible)
+                {
+                    Debug.LogError("[JetHorizon] The edited canyon route is not admissible for this ship. Gameplay is using the validated default route until the Canyon Builder check passes.", canyonProfile);
+                    config.CanyonPathOverride = null;
+                }
+            }
+            _coreSimulation = new JetHorizonSimulation(config, 20260714u, runDefinition);
+        }
+
+        public EncounterPlan GetProofEncounterPlan(EncounterKind kind)
+        {
+            if (_coreSimulation == null) return null;
+            SimulationConfig config = _coreSimulation.Config;
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(config);
+            EncounterPlan[] plans = EncounterPlanCatalog.CreateProofSequence(
+                capability.CruiseSpeed / 42f,
+                config.CanyonPathOverride);
+            for (int i = 0; i < plans.Length; i++)
+                if (plans[i].Kind == kind) return plans[i];
+            return null;
         }
 
         void Start()

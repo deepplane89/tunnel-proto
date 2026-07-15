@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using JetHorizon.Simulation;
 using UnityEngine;
 
 namespace JetHorizon
@@ -19,7 +21,7 @@ namespace JetHorizon
         [Min(5f)] public float NoiseScale = 38f;
         [Range(1f, 30f)] public float HeightmapPixelError = 8f;
         [Min(50f)] public float BasemapDistance = 260f;
-        [Min(40f)] public float MeshChunkLength = 110f;
+        [Range(50f, 100f)] public float MeshChunkLength = 90f;
         [Range(12, 96)] public int MeshCrossSegments = 56;
         [Range(4, 40)] public int MeshSegmentsPerChunk = 18;
         public int Seed = 41073;
@@ -45,20 +47,96 @@ namespace JetHorizon
         public float SlabCrestX = 20f;
         public float SlabBaseY = -4f;
 
+        [Header("Curved patch extrusion")]
+        [Range(0f, 1f)] public float PathTension = .35f;
+        [Min(40f)] public float WallChunkLength = 80f;
+        [Min(0f)] public float TerrainLipEmbedDepth = 10f;
+        [Min(0f)] public float BottomSkirtDepth = 8f;
+        public AnimationCurve WallHeightByProgress = AnimationCurve.Linear(0f, 1f, 1f, 1f);
+        public AnimationCurve BankDegreesByProgress = AnimationCurve.Linear(0f, 0f, 1f, 0f);
+        public AnimationCurve TerrainShoulderByProgress = AnimationCurve.Linear(0f, 1f, 1f, 1f);
+        public bool ShowSafeRouteGizmo = true;
+
         public bool CastMeshShadows = true;
         public bool ReceiveMeshShadows = true;
     }
 
+    [Serializable]
+    public sealed class CanyonPathAuthoringPoint
+    {
+        [Min(0f)] public float Distance;
+        public float CenterX;
+        [Min(2f)] public float HalfWidth = 21.5f;
+        public CargoRouteTier CargoTier;
+        public CanyonEnvironmentPhase EnvironmentPhase;
+        public bool CorridorBoundaryActive = true;
+        public TraversalRequirement TraversalRequirement;
+
+        public CanyonPathAuthoringPoint() { }
+
+        public CanyonPathAuthoringPoint(EncounterOpening opening)
+        {
+            Distance = opening.Distance;
+            CenterX = opening.CenterX;
+            HalfWidth = opening.HalfWidth;
+            CargoTier = opening.CargoTier;
+            EnvironmentPhase = opening.EnvironmentPhase;
+            CorridorBoundaryActive = opening.CorridorBoundaryActive;
+            TraversalRequirement = opening.TraversalRequirement;
+        }
+
+        public CanyonPathKnot ToCore() => new CanyonPathKnot(
+            Distance,
+            CenterX,
+            HalfWidth,
+            CargoTier,
+            EnvironmentPhase,
+            CorridorBoundaryActive,
+            TraversalRequirement);
+    }
+
     /// <summary>
-    /// Unity-facing authoring profile. Gameplay never reads this asset: it only controls
-    /// how the core-owned crystalline route is projected into Terrain and hero meshes.
+    /// Unity-facing authoring profile. The editable knots are converted once into an
+    /// immutable engine-neutral definition; rendering-only terrain and wall settings
+    /// never enter the simulation core.
     /// </summary>
     [CreateAssetMenu(fileName = "HybridCanyonWorld", menuName = "Jet Horizon/Hybrid Canyon World")]
     public sealed class HybridCanyonWorldProfile : ScriptableObject
     {
         public HybridCanyonWorldSettings Settings = new HybridCanyonWorldSettings();
+        [Header("Engine-neutral canyon path")]
+        public bool UseAuthoredPath;
+        [Min(1f)] public float AuthoredPathLength = 799f;
+        public List<CanyonPathAuthoringPoint> PathPoints = new List<CanyonPathAuthoringPoint>();
         public Material CanyonMaterial;
         [Tooltip("Editor-baked mobile runtime world. When absent, gameplay creates the same optimized chunks in memory as a safe fallback.")]
         public GameObject BakedWorldPrefab;
+
+        public CanyonPathDefinition BuildCorePathDefinition()
+        {
+            if (!UseAuthoredPath || PathPoints == null || PathPoints.Count < 4) return null;
+            try
+            {
+                var knots = new CanyonPathKnot[PathPoints.Count];
+                for (int i = 0; i < knots.Length; i++) knots[i] = PathPoints[i].ToCore();
+                return new CanyonPathDefinition(AuthoredPathLength, knots);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"[JetHorizon] Authored canyon path is invalid; using the validated default route. {exception.Message}", this);
+                return null;
+            }
+        }
+
+        public void CaptureDefaultCorePath()
+        {
+            EncounterPlan plan = EncounterPlanCatalog.CreateProofSequence()[1];
+            PathPoints = PathPoints ?? new List<CanyonPathAuthoringPoint>();
+            PathPoints.Clear();
+            for (int i = 0; i < plan.OpeningCount; i++)
+                PathPoints.Add(new CanyonPathAuthoringPoint(plan.GetOpening(i)));
+            AuthoredPathLength = plan.Length;
+            UseAuthoredPath = true;
+        }
     }
 }

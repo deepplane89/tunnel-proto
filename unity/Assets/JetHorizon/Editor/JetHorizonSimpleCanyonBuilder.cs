@@ -46,11 +46,33 @@ namespace JetHorizon.EditorTools
             serialized.Update();
             SerializedProperty settings = serialized.FindProperty("Settings");
 
-            Step("1", "Choose the broad look");
+            Step("1", "Create the editable flight path");
+            EditorGUILayout.HelpBox(
+                "The cyan line is the safe route used by gameplay, collision, terrain and walls. Drag its points in the Scene view; drag the square width handles to widen or narrow the canyon.",
+                MessageType.None);
+            if (GUILayout.Button("CREATE PATH FROM VALIDATED GAME ROUTE", GUILayout.Height(34f)))
+            {
+                Undo.RecordObject(_profile, "Create canyon path from game core");
+                _profile.CaptureDefaultCorePath();
+                EditorUtility.SetDirty(_profile);
+                AssetDatabase.SaveAssets();
+                serialized.Update();
+            }
+            EditorGUILayout.PropertyField(serialized.FindProperty("UseAuthoredPath"), new GUIContent("Use my edited path"));
+            if (_profile.UseAuthoredPath)
+            {
+                EditorGUILayout.PropertyField(serialized.FindProperty("AuthoredPathLength"), new GUIContent("Route length"));
+                EditorGUILayout.PropertyField(serialized.FindProperty("PathPoints"), new GUIContent("Route points"), true);
+            }
+
+            Step("2", "Choose the broad look");
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("BankHeight"), new GUIContent("Wall height"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("BankRiseWidth"), new GUIContent("Wall slope width", "Smaller values make steeper banks."));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("SurfaceNoise"), new GUIContent("Rocky breakup"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("NoiseScale"), new GUIContent("Rock feature size"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("PathTension"), new GUIContent("Curve tightness"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("WallHeightByProgress"), new GUIContent("Wall height along route"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("BankDegreesByProgress"), new GUIContent("Canyon bank along route"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("EntryClearance"), new GUIContent("Arch opening height"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("SideMonolithCount"), new GUIContent("Large rock landmarks"));
             serialized.ApplyModifiedProperties();
@@ -59,15 +81,17 @@ namespace JetHorizon.EditorTools
             if (GUILayout.Button("CREATE / REFRESH EDITABLE CANYON", GUILayout.Height(42f)))
             {
                 JetHorizonHybridCanyonAuthoring.BuildPreview(_profile);
-                JetHorizonHybridCanyonAuthoring.SelectEditableTerrain();
             }
-            EditorGUILayout.HelpBox("This selects the Terrain automatically. You can stop here and accept the generated shape.", MessageType.None);
+            EditorGUILayout.HelpBox("This selects the route handles automatically. Cyan spheres move the route; square handles change its width.", MessageType.None);
 
-            Step("2", "Optional hand sculpting");
+            Step("3", "Optional hand sculpting");
             EditorGUILayout.LabelField("In the Inspector, click Paint Terrain, choose Raise or Lower Terrain, then brush directly in the Scene view.", EditorStyles.wordWrappedLabel);
+            if (GUILayout.Button("Select Route Handles")) JetHorizonHybridCanyonAuthoring.SelectRouteHandles();
             if (GUILayout.Button("Select My Editable Terrain")) JetHorizonHybridCanyonAuthoring.SelectEditableTerrain();
 
-            Step("3", "Put it into the game");
+            Step("4", "Validate and put it into the game");
+            if (GUILayout.Button("CHECK CANYON FOR GAPS", GUILayout.Height(30f)))
+                JetHorizonHybridCanyonAuthoring.ValidatePreview(_profile, true);
             GUI.backgroundColor = new Color(.35f, 1f, .65f);
             if (GUILayout.Button("BAKE & USE IN GAME", GUILayout.Height(46f)))
                 JetHorizonHybridCanyonAuthoring.BakePreviewForMobile(_profile);

@@ -1387,6 +1387,40 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void AuthoredCanyonDefinitionFeedsTheSameScaledCoreEncounter()
+        {
+            var definition = new CanyonPathDefinition(100f, new[]
+            {
+                new CanyonPathKnot(10f, 0f, 24f, environmentPhase: CanyonEnvironmentPhase.OpenWater, corridorBoundaryActive: false),
+                new CanyonPathKnot(40f, -8f, 20f, CargoRouteTier.Safe, CanyonEnvironmentPhase.Threshold),
+                new CanyonPathKnot(70f, 11f, 17f, CargoRouteTier.Risky, CanyonEnvironmentPhase.Enclosed, true, TraversalRequirement.KnifeEdge),
+                new CanyonPathKnot(100f, 0f, 28f, environmentPhase: CanyonEnvironmentPhase.Breakup, corridorBoundaryActive: false)
+            });
+
+            EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence(2f, definition)[1];
+
+            Assert.That(canyon.Length, Is.EqualTo(200f));
+            Assert.That(canyon.OpeningCount, Is.EqualTo(4));
+            Assert.That(canyon.GetOpening(2).Distance, Is.EqualTo(140f));
+            Assert.That(canyon.GetOpening(2).CenterX, Is.EqualTo(11f));
+            Assert.That(canyon.GetOpening(2).CargoTier, Is.EqualTo(CargoRouteTier.Risky));
+            Assert.That(canyon.GetOpening(2).TraversalRequirement, Is.EqualTo(TraversalRequirement.KnifeEdge));
+            Assert.That(canyon.GetOpening(3).CorridorBoundaryActive, Is.False);
+        }
+
+        [Test]
+        public void AuthoredCanyonDefinitionRejectsOutOfOrderKnots()
+        {
+            Assert.Throws<System.ArgumentException>(() => new CanyonPathDefinition(100f, new[]
+            {
+                new CanyonPathKnot(10f, 0f, 24f),
+                new CanyonPathKnot(40f, 0f, 24f),
+                new CanyonPathKnot(30f, 0f, 24f),
+                new CanyonPathKnot(100f, 0f, 24f)
+            }));
+        }
+
+        [Test]
         public void ProofEncountersAreReachableAndRejectAllThreeTrivialPolicies()
         {
             var config = new SimulationConfig

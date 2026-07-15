@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
+using JetHorizon.Simulation;
 
 namespace JetHorizon.EditorTools
 {
@@ -47,6 +48,8 @@ namespace JetHorizon.EditorTools
                 EditorUtility.DisplayDialog("Hybrid canyon", "The editable Terrain preview could not be found. Click Create Editable Canyon and try again.", "OK");
                 return false;
             }
+
+            if (!ValidatePreview(profile, false)) return false;
 
             const string directory = "Assets/JetHorizon/Generated/HybridCanyon";
             EnsureFolder(directory);
@@ -163,6 +166,75 @@ namespace JetHorizon.EditorTools
             return true;
         }
 
+        public static bool ValidatePreview(HybridCanyonWorldProfile profile, bool showDialog)
+        {
+            if (profile == null)
+            {
+                if (showDialog) EditorUtility.DisplayDialog("Canyon check", "No canyon setup is assigned.", "OK");
+                return false;
+            }
+            CanyonPathDefinition definition = profile.BuildCorePathDefinition();
+            if (profile.UseAuthoredPath && definition == null)
+            {
+                if (showDialog) EditorUtility.DisplayDialog("Canyon check", "The edited route is invalid. Route points must be ordered from nearest to farthest and remain inside Route Length.", "OK");
+                return false;
+            }
+            if (definition != null)
+            {
+                var config = new SimulationConfig
+                {
+                    StartSpeedMultiplier = 5f / 3f,
+                    MinimumOperationalSpeed = 50f
+                };
+                ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(config);
+                EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence(
+                    capability.CruiseSpeed / 42f,
+                    definition)[1];
+                EncounterValidationResult validation = new EncounterCapabilityValidator().Validate(canyon, capability, 0);
+                if (!validation.IsAdmissible)
+                {
+                    if (showDialog) EditorUtility.DisplayDialog(
+                        "Canyon check",
+                        "The edited route is not safely flyable with the baseline ship, or it can be beaten by simply holding straight/left/right. Widen sharp reversals or adjust route points before baking.",
+                        "OK");
+                    return false;
+                }
+            }
+
+            GameObject preview = GameObject.Find(PreviewName);
+            if (preview == null) preview = BuildPreview(profile);
+            if (preview == null) return false;
+            if (preview.GetComponentInChildren<TerrainCollider>(true) is TerrainCollider terrainCollider && terrainCollider.enabled)
+            {
+                if (showDialog) EditorUtility.DisplayDialog("Canyon check", "A TerrainCollider is enabled. The preview was not accepted because collision must stay owned by the game core.", "OK");
+                return false;
+            }
+
+            CanyonWallChunkMarker[] markers = preview.GetComponentsInChildren<CanyonWallChunkMarker>(true);
+            if (markers.Length < 4)
+            {
+                if (showDialog) EditorUtility.DisplayDialog("Canyon check", "The curved wall chunks were not generated. Refresh the editable canyon and try again.", "OK");
+                return false;
+            }
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var sideMarkers = new List<CanyonWallChunkMarker>();
+                for (int i = 0; i < markers.Length; i++) if (markers[i].Side == side) sideMarkers.Add(markers[i]);
+                sideMarkers.Sort((a, b) => a.StartDistance.CompareTo(b.StartDistance));
+                for (int i = 0; i < sideMarkers.Count - 1; i++)
+                {
+                    float gap = Mathf.Abs(sideMarkers[i].EndDistance - sideMarkers[i + 1].StartDistance);
+                    if (gap <= .002f) continue;
+                    if (showDialog) EditorUtility.DisplayDialog("Canyon check", $"A {gap:0.000} unit wall gap was found between chunks. The canyon was not accepted.", "OK");
+                    return false;
+                }
+            }
+
+            if (showDialog)
+                EditorUtility.DisplayDialog("Canyon check", "Passed: one ordered core route, opaque curved wall shells, continuous chunk ranges, and no competing Terrain collision.", "Great");
+            return true;
+        }
+
         public static bool QuickBuildForMobile(HybridCanyonWorldProfile profile)
         {
             if (BuildPreview(profile) == null) return false;
@@ -179,6 +251,18 @@ namespace JetHorizon.EditorTools
                 return;
             }
             Selection.activeGameObject = terrain.gameObject;
+            SceneView.lastActiveSceneView?.FrameSelected();
+        }
+
+        public static void SelectRouteHandles()
+        {
+            GameObject preview = GameObject.Find(PreviewName);
+            if (preview == null)
+            {
+                EditorUtility.DisplayDialog("Hybrid canyon", "Create the editable canyon first.", "OK");
+                return;
+            }
+            Selection.activeGameObject = preview;
             SceneView.lastActiveSceneView?.FrameSelected();
         }
 
