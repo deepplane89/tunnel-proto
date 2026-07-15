@@ -141,7 +141,11 @@ namespace JetHorizon
             if (gameObject.GetComponent<FeedbackDirector>() == null) gameObject.AddComponent<FeedbackDirector>();
             if (gameObject.GetComponent<JetHorizonAudioSystem>() == null) gameObject.AddComponent<JetHorizonAudioSystem>();
             if (PowerupPresentation == null)
-                PowerupPresentation = gameObject.GetComponent<PowerupPresentationSystem>() ?? gameObject.AddComponent<PowerupPresentationSystem>();
+            {
+                var presenterObject = new GameObject("Power-up Presentation");
+                presenterObject.transform.SetParent(transform, false);
+                PowerupPresentation = presenterObject.AddComponent<PowerupPresentationSystem>();
+            }
             PowerupPresentation.ShipRoot = Ship != null ? Ship.ShipRoot : null;
             PowerupPresentation.ResetSystem();
             if (ShipSkins == null)
@@ -149,7 +153,11 @@ namespace JetHorizon
             ShipSkins.Initialize(Ship != null ? Ship.ShipRoot : null);
             ApplyGarageAddOns();
             if (PrismaticTunnel == null)
-                PrismaticTunnel = gameObject.GetComponent<PrismaticTunnelPresenter>() ?? gameObject.AddComponent<PrismaticTunnelPresenter>();
+            {
+                var presenterObject = new GameObject("Prismatic Tunnel Presentation");
+                presenterObject.transform.SetParent(transform, false);
+                PrismaticTunnel = presenterObject.AddComponent<PrismaticTunnelPresenter>();
+            }
             PrismaticTunnel.ResetSystem();
             State.TransitionTo(GamePhase.Title);
         }

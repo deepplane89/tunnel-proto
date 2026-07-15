@@ -8,6 +8,7 @@ namespace JetHorizon
     /// Stitches core-owned corridor samples into one continuous vaulted membrane.
     /// It contains no path, collision, spawning, or progression rules.
     /// </summary>
+    [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public sealed class PrismaticTunnelPresenter : MonoBehaviour, ISimSystem
     {
         const int ArcSegments = 20;
@@ -35,8 +36,10 @@ namespace JetHorizon
             if (_mesh != null) return;
             _mesh = new Mesh { name = "JH_ContinuousPrismaticTunnel", indexFormat = IndexFormat.UInt32 };
             _mesh.MarkDynamic();
-            var filter = gameObject.GetComponent<MeshFilter>() ?? gameObject.AddComponent<MeshFilter>();
-            _renderer = gameObject.GetComponent<MeshRenderer>() ?? gameObject.AddComponent<MeshRenderer>();
+            var filter = GetComponent<MeshFilter>();
+            if (filter == null) filter = gameObject.AddComponent<MeshFilter>();
+            _renderer = GetComponent<MeshRenderer>();
+            if (_renderer == null) _renderer = gameObject.AddComponent<MeshRenderer>();
             filter.sharedMesh = _mesh;
             _renderer.shadowCastingMode = ShadowCastingMode.Off;
             _renderer.receiveShadows = false;

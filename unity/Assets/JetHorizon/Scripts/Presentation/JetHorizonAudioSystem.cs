@@ -104,7 +104,14 @@ namespace JetHorizon
 
         AudioSource Source(string name, bool loop)
         {
-            var source = gameObject.AddComponent<AudioSource>(); source.name = name; source.loop = loop;
+            // Component.name proxies GameObject.name, so naming an AudioSource attached
+            // to this object used to rename the GameManager itself to "Engine Edge".
+            // Dedicated children also keep audio implementation details off the
+            // composition root.
+            var sourceObject = new GameObject(name);
+            sourceObject.transform.SetParent(transform, false);
+            var source = sourceObject.AddComponent<AudioSource>();
+            source.loop = loop;
             source.playOnAwake = false; source.spatialBlend = 0f; source.dopplerLevel = 0f; return source;
         }
 
@@ -113,7 +120,7 @@ namespace JetHorizon
             AudioClip clip = Clip(name); if (clip == null) return;
             var source = delay > 0f ? Source("Scheduled " + name, false) : _oneShot;
             source.pitch = pitch; source.panStereo = pan; source.volume = delay > 0f ? volume : 1f;
-            if (delay > 0f) { source.clip = clip; source.PlayDelayed(delay); Destroy(source, delay + clip.length + .2f); }
+            if (delay > 0f) { source.clip = clip; source.PlayDelayed(delay); Destroy(source.gameObject, delay + clip.length + .2f); }
             else source.PlayOneShot(clip, volume);
         }
 

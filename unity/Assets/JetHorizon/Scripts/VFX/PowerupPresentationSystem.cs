@@ -29,7 +29,7 @@ namespace JetHorizon
         Material _magnetMaterialA, _magnetMaterialB;
         Light _magnetLight;
         readonly List<LaserBolt> _bolts = new List<LaserBolt>(24);
-        readonly MaterialPropertyBlock _shipBlock = new MaterialPropertyBlock();
+        MaterialPropertyBlock _shipBlock;
         Renderer[] _shipRenderers;
         float _shieldBuild;
         float _shieldBreak;
@@ -38,6 +38,13 @@ namespace JetHorizon
         bool _built;
 
         RunSession S => GameManager.I != null ? GameManager.I.Session : null;
+
+        void Awake()
+        {
+            // MaterialPropertyBlock allocates a native Unity object. Creating it in a
+            // MonoBehaviour field initializer runs during serialization and is forbidden.
+            _shipBlock = new MaterialPropertyBlock();
+        }
 
         void OnEnable()
         {
