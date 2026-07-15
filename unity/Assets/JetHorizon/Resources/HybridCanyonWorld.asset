@@ -1,0 +1,46 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3c40c733aba4ff3af5697ce4d3e2c74, type: 3}
+  m_Name: HybridCanyonWorld
+  m_EditorClassIdentifier: Assembly-CSharp:JetHorizon:HybridCanyonWorldProfile
+  Settings:
+    HeightmapResolution: 257
+    TerrainWidth: 440
+    ApproachLength: 150
+    RearLength: 100
+    TerrainBaseY: -22
+    TerrainHeight: 82
+    BankHeight: 61
+    BankRiseWidth: 34
+    SurfaceNoise: 8
+    NoiseScale: 38
+    HeightmapPixelError: 8
+    BasemapDistance: 260
+    MeshChunkLength: 110
+    MeshCrossSegments: 56
+    MeshSegmentsPerChunk: 18
+    Seed: 41073
+    ArchDepth: 18
+    ArchPillarWidth: 13
+    EntryClearance: 24
+    ArchCrownThickness: 12
+    SideMonolithCount: 6
+    WallFacetLength: 10
+    WallVerticalSegments: 7
+    WallBaseY: -4
+    WallHeight: 58
+    WallFacetDepth: 3.5
+    WallFacetSnap: 1.5
+    CastMeshShadows: 1
+    ReceiveMeshShadows: 1
+  CanyonMaterial: {fileID: 2100000, guid: f2de2221311d04ff8b7137280d3441b9, type: 2}
+  BakedWorldPrefab: {fileID: 0}

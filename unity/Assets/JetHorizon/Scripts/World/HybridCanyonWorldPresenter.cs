@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using JetHorizon.Simulation;
 using UnityEngine;
@@ -6,50 +5,6 @@ using UnityEngine.Rendering;
 
 namespace JetHorizon
 {
-    [Serializable]
-    public sealed class HybridCanyonWorldSettings
-    {
-        [Header("Terrain world mass")]
-        [Range(65, 513)] public int HeightmapResolution = 257;
-        [Min(160f)] public float TerrainWidth = 440f;
-        [Min(100f)] public float ApproachLength = 150f;
-        [Min(40f)] public float RearLength = 100f;
-        public float TerrainBaseY = -22f;
-        [Min(20f)] public float TerrainHeight = 82f;
-        [Min(5f)] public float BankHeight = 61f;
-        [Min(2f)] public float BankRiseWidth = 34f;
-        [Range(0f, 20f)] public float SurfaceNoise = 8f;
-        [Min(5f)] public float NoiseScale = 38f;
-        [Range(1f, 30f)] public float HeightmapPixelError = 8f;
-        [Min(50f)] public float BasemapDistance = 260f;
-        [Min(40f)] public float MeshChunkLength = 110f;
-        [Range(12, 96)] public int MeshCrossSegments = 56;
-        [Range(4, 40)] public int MeshSegmentsPerChunk = 18;
-        public int Seed = 41073;
-
-        [Header("Authored mesh landmarks")]
-        [Min(8f)] public float ArchDepth = 18f;
-        [Min(3f)] public float ArchPillarWidth = 13f;
-        [Min(10f)] public float EntryClearance = 24f;
-        [Min(2f)] public float ArchCrownThickness = 12f;
-        [Range(0, 10)] public int SideMonolithCount = 6;
-        public bool CastMeshShadows = true;
-        public bool ReceiveMeshShadows = true;
-    }
-
-    /// <summary>
-    /// Unity-facing authoring profile. Gameplay never reads this asset: it only controls
-    /// how the core-owned crystalline route is projected into Terrain and hero meshes.
-    /// </summary>
-    [CreateAssetMenu(fileName = "HybridCanyonWorld", menuName = "Jet Horizon/Hybrid Canyon World")]
-    public sealed class HybridCanyonWorldProfile : ScriptableObject
-    {
-        public HybridCanyonWorldSettings Settings = new HybridCanyonWorldSettings();
-        public Material CanyonMaterial;
-        [Tooltip("Editor-baked mobile runtime world. When absent, gameplay creates the same optimized chunks in memory as a safe fallback.")]
-        public GameObject BakedWorldPrefab;
-    }
-
     /// <summary>
     /// Builds the complete crystalline canyon once, then scrolls the entire construct
     /// against a core-owned route sample. Terrain supplies the broad world mass; opaque
@@ -89,21 +44,16 @@ namespace JetHorizon
         public void SimTick(float dt)
         {
             SimulationSnapshot snapshot = GameManager.I != null ? GameManager.I.CoreSnapshot : null;
-            if (!TryFindAnchor(snapshot, out CorridorSliceSnapshot anchor))
+            if (snapshot == null || !snapshot.ProofEncounterMode)
             {
-                if (snapshot != null && snapshot.UpcomingEncounterKind == EncounterKind.CrystallineCanyon)
-                {
-                    EnsureBuilt();
-                    if (_content != null)
-                    {
-                        // The entire landform is already present during the preceding
-                        // encounter and approaches from beyond the horizon. Nothing is
-                        // enabled while inside the camera's visible spawn band.
-                        _content.transform.localPosition = new Vector3(0f, 0f, snapshot.UpcomingEncounterStartZ);
-                        SetVisible(true);
-                        return;
-                    }
-                }
+                SetVisible(false);
+                return;
+            }
+
+            bool currentCanyon = snapshot.EncounterKind == EncounterKind.CrystallineCanyon;
+            bool upcomingCanyon = snapshot.UpcomingEncounterKind == EncounterKind.CrystallineCanyon;
+            if (!currentCanyon && !upcomingCanyon)
+            {
                 SetVisible(false);
                 return;
             }
@@ -115,9 +65,11 @@ namespace JetHorizon
                 return;
             }
 
-            int openingIndex = Mathf.Clamp(anchor.RowIndex, 0, _plan.OpeningCount - 1);
-            float authoredZ = -_plan.GetOpening(openingIndex).Distance;
-            _content.transform.localPosition = new Vector3(0f, 0f, anchor.Z - authoredZ);
+            // Drive the complete landform from the plan's stable world origin. The old
+            // row-derived anchor changed whenever the nearest streamed row changed,
+            // making a stationary canyon visibly jump even though its route was valid.
+            float startZ = currentCanyon ? snapshot.EncounterStartZ : snapshot.UpcomingEncounterStartZ;
+            _content.transform.localPosition = new Vector3(0f, 0f, startZ);
             SetVisible(true);
         }
 
@@ -139,23 +91,6 @@ namespace JetHorizon
         {
             IsPresenting = visible;
             if (_content != null && _content.activeSelf != visible) _content.SetActive(visible);
-        }
-
-        static bool TryFindAnchor(SimulationSnapshot snapshot, out CorridorSliceSnapshot anchor)
-        {
-            anchor = default;
-            if (snapshot == null) return false;
-            bool found = false;
-            int bestRow = int.MaxValue;
-            for (int i = 0; i < snapshot.CorridorSliceCount; i++)
-            {
-                CorridorSliceSnapshot slice = snapshot.GetCorridorSlice(i);
-                if (slice.Family != CorridorFamily.CrystallineCanyon || slice.RowIndex >= bestRow) continue;
-                anchor = slice;
-                bestRow = slice.RowIndex;
-                found = true;
-            }
-            return found;
         }
 
         void EnsureBuilt()
@@ -370,7 +305,7 @@ namespace JetHorizon
             BuildWaterOutcrops(settings, thresholdDistance, breakupDistance);
             BuildArch("Monumental Canyon Threshold", thresholdDistance, settings.EntryClearance, settings, 0);
             BuildArch("Natural Canyon Bridge", Mathf.Lerp(thresholdDistance, breakupDistance, .52f), settings.EntryClearance - 3f, settings, 101);
-            BuildEnclosedSlabFaces(settings, thresholdIndex, breakupIndex);
+            BuildContinuousFacetedWalls(settings, thresholdDistance, breakupDistance);
             BuildTraversalGates(settings);
 
             int count = Mathf.Max(0, settings.SideMonolithCount);
@@ -417,25 +352,142 @@ namespace JetHorizon
             }
         }
 
-        void BuildEnclosedSlabFaces(HybridCanyonWorldSettings settings, int thresholdIndex, int breakupIndex)
+        void BuildContinuousFacetedWalls(
+            HybridCanyonWorldSettings settings,
+            float thresholdDistance,
+            float breakupDistance)
         {
-            int first = Mathf.Max(0, thresholdIndex + 2);
-            int end = breakupIndex > 0 ? breakupIndex : _plan.OpeningCount;
-            for (int i = first; i < end; i += 3)
+            float start = Mathf.Max(0f, thresholdDistance - settings.WallFacetLength);
+            float end = Mathf.Min(_plan.Length, breakupDistance + settings.WallFacetLength * 2f);
+            int longitudinalSegments = Mathf.Max(2,
+                Mathf.CeilToInt((end - start) / Mathf.Max(4f, settings.WallFacetLength)));
+            int verticalSegments = Mathf.Max(3, settings.WallVerticalSegments);
+
+            var root = new GameObject("Continuous Faceted Canyon Walls");
+            root.layer = 8;
+            root.transform.SetParent(_content.transform, false);
+
+            for (int side = -1; side <= 1; side += 2)
             {
-                EncounterOpening opening = _plan.GetOpening(i);
-                for (int side = -1; side <= 1; side += 2)
+                int columns = longitudinalSegments + 1;
+                int rows = verticalSegments + 1;
+                var vertices = new Vector3[columns * rows];
+                var uv = new Vector2[vertices.Length];
+                var colors = new Color[vertices.Length];
+                var triangles = new int[longitudinalSegments * verticalSegments * 6];
+
+                for (int longitudinal = 0; longitudinal < columns; longitudinal++)
                 {
-                    CreateSlabFormation($"Connected Wall Facet {i:00} {(side < 0 ? "L" : "R")}",
-                        opening.Distance,
-                        opening.CenterX + side * opening.HalfWidth,
-                        side,
-                        42f + (i % 4) * 5f,
-                        20f,
-                        settings.Seed + 2200 + i * 17 + (side > 0 ? 1 : 0),
-                        settings,
-                        -1.5f);
+                    float along01 = longitudinal / (float)longitudinalSegments;
+                    float distance = Mathf.Lerp(start, end, along01);
+                    SampleRoute(_plan, distance, out float center, out float halfWidth);
+                    Vector3 outward = RouteOutwardNormal(_plan, distance) * side;
+                    Vector3 smoothWall = new Vector3(center, 0f, -distance) + outward * halfWidth;
+
+                    for (int vertical = 0; vertical < rows; vertical++)
+                    {
+                        float height01 = vertical / (float)verticalSegments;
+                        int index = longitudinal * rows + vertical;
+                        float addedVolume = WallProfileVolume(height01)
+                            + SignedHash(settings.Seed, longitudinal, vertical, side) * settings.WallFacetDepth;
+                        addedVolume = Mathf.Max(0f, addedVolume);
+                        addedVolume = Mathf.Round(addedVolume * settings.WallFacetSnap)
+                            / Mathf.Max(.25f, settings.WallFacetSnap);
+
+                        // The route boundary remains a smooth, coherent surface. Only
+                        // the face grid moves outward into the terrain mass, so the
+                        // original slab's angular planes survive without wedge-shaped
+                        // blocks protruding into the flight corridor.
+                        vertices[index] = smoothWall
+                            + outward * addedVolume
+                            + Vector3.up * (settings.WallBaseY + settings.WallHeight * height01);
+                        uv[index] = new Vector2(longitudinal, height01);
+                        colors[index] = Color.white;
+                    }
                 }
+
+                int triangle = 0;
+                for (int longitudinal = 0; longitudinal < longitudinalSegments; longitudinal++)
+                {
+                    for (int vertical = 0; vertical < verticalSegments; vertical++)
+                    {
+                        int a = longitudinal * rows + vertical;
+                        int b = a + rows;
+                        if (side < 0)
+                        {
+                            triangles[triangle++] = a;
+                            triangles[triangle++] = b;
+                            triangles[triangle++] = a + 1;
+                            triangles[triangle++] = a + 1;
+                            triangles[triangle++] = b;
+                            triangles[triangle++] = b + 1;
+                        }
+                        else
+                        {
+                            triangles[triangle++] = a;
+                            triangles[triangle++] = a + 1;
+                            triangles[triangle++] = b;
+                            triangles[triangle++] = a + 1;
+                            triangles[triangle++] = b + 1;
+                            triangles[triangle++] = b;
+                        }
+                    }
+                }
+
+                var mesh = new Mesh
+                {
+                    name = side < 0 ? "JH_ContinuousFacetedWall_Left" : "JH_ContinuousFacetedWall_Right",
+                    indexFormat = IndexFormat.UInt32
+                };
+                mesh.vertices = vertices;
+                mesh.uv = uv;
+                mesh.colors = colors;
+                mesh.triangles = triangles;
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+                _ownedAssets.Add(mesh);
+
+                var wall = new GameObject(side < 0 ? "Left Continuous Faceted Wall" : "Right Continuous Faceted Wall");
+                wall.layer = 8;
+                wall.transform.SetParent(root.transform, false);
+                wall.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var renderer = wall.AddComponent<MeshRenderer>();
+                renderer.sharedMaterial = _meshMaterial;
+                renderer.shadowCastingMode = settings.CastMeshShadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
+                renderer.receiveShadows = settings.ReceiveMeshShadows;
+            }
+        }
+
+        static float WallProfileVolume(float height01)
+        {
+            // Reinterprets the Three.js slab's foot/sweep/mid/crest profile as
+            // shallow outward volume on a continuous wall, not as its silhouette.
+            if (height01 < .15f) return Mathf.Lerp(1.5f, 5.5f, height01 / .15f);
+            if (height01 < .45f) return Mathf.Lerp(5.5f, .75f, (height01 - .15f) / .30f);
+            if (height01 < .85f) return Mathf.Lerp(.75f, 4.5f, (height01 - .45f) / .40f);
+            return 4.5f;
+        }
+
+        static Vector3 RouteOutwardNormal(EncounterPlan plan, float distance)
+        {
+            SampleRoute(plan, distance - 2f, out float before, out _);
+            SampleRoute(plan, distance + 2f, out float after, out _);
+            Vector3 tangent = new Vector3(after - before, 0f, -4f).normalized;
+            Vector3 right = Vector3.Cross(tangent, Vector3.up).normalized;
+            return right.sqrMagnitude > .5f ? right : Vector3.right;
+        }
+
+        static float SignedHash(int seed, int longitudinal, int vertical, int side)
+        {
+            unchecked
+            {
+                uint value = (uint)seed;
+                value ^= (uint)(longitudinal * 374761393);
+                value ^= (uint)(vertical * 668265263);
+                value ^= side < 0 ? 0x9E3779B9u : 0x85EBCA6Bu;
+                value = (value ^ (value >> 13)) * 1274126177u;
+                value ^= value >> 16;
+                return value / (float)uint.MaxValue * 2f - 1f;
             }
         }
 

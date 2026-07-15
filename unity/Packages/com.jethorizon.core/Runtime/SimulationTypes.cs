@@ -541,6 +541,7 @@ namespace JetHorizon.Simulation
         public int EncounterCycle { get; internal set; }
         public float EncounterProgress01 { get; internal set; }
         public float EncounterValidationMargin { get; internal set; }
+        public float EncounterStartZ { get; internal set; }
         public EncounterKind UpcomingEncounterKind { get; internal set; }
         public float UpcomingEncounterStartZ { get; internal set; }
         public bool ExtractionGateVisible { get; internal set; }

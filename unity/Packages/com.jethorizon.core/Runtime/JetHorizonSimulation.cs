@@ -1967,6 +1967,7 @@ namespace JetHorizon.Simulation
             Snapshot.EncounterCycle = encounter.Cycle;
             Snapshot.EncounterProgress01 = encounter.Progress01;
             Snapshot.EncounterValidationMargin = encounter.ValidationMargin;
+            Snapshot.EncounterStartZ = encounter.StartZ;
             Snapshot.UpcomingEncounterKind = encounter.UpcomingKind;
             Snapshot.UpcomingEncounterStartZ = encounter.UpcomingStartZ;
             Snapshot.ExtractionGateVisible = encounter.ExtractionGateVisible;

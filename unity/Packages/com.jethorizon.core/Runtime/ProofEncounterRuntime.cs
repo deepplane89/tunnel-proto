@@ -93,6 +93,7 @@ namespace JetHorizon.Simulation
         public int Cycle { get; }
         public float Progress01 { get; }
         public float ValidationMargin { get; }
+        public float StartZ { get; }
         public bool ExtractionGateVisible { get; }
         public float ExtractionGateX { get; }
         public float ExtractionGateHalfWidth { get; }
@@ -108,6 +109,7 @@ namespace JetHorizon.Simulation
             int cycle,
             float progress01,
             float validationMargin,
+            float startZ,
             bool extractionGateVisible,
             float extractionGateX,
             float extractionGateHalfWidth,
@@ -122,6 +124,7 @@ namespace JetHorizon.Simulation
             Cycle = cycle;
             Progress01 = progress01;
             ValidationMargin = validationMargin;
+            StartZ = startZ;
             ExtractionGateVisible = extractionGateVisible;
             ExtractionGateX = extractionGateX;
             ExtractionGateHalfWidth = extractionGateHalfWidth;
@@ -440,6 +443,7 @@ namespace JetHorizon.Simulation
         {
             EncounterPlan plan = CurrentPlan;
             float progress = Math.Max(0f, Math.Min(1f, (runDistance - _planStartDistance) / plan.Length));
+            float startZ = shipZ - (_planStartDistance - runDistance);
             float gateZ = _gateActive ? shipZ - (_gateDistance - runDistance) : 0f;
             bool hasUpcoming = !_gateActive && _planIndex + 1 < _plans.Length;
             EncounterKind upcomingKind = hasUpcoming ? _plans[_planIndex + 1].Kind : default;
@@ -452,6 +456,7 @@ namespace JetHorizon.Simulation
                 _cycle,
                 progress,
                 _validationMargins[_planIndex],
+                startZ,
                 _gateActive && gateZ >= -240f && gateZ <= 30f,
                 _gateX,
                 _gateHalfWidth,

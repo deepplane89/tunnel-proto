@@ -1629,6 +1629,13 @@ namespace JetHorizon.Simulation.Tests
             EncounterPlan first = EncounterPlanCatalog.CreateProofSequence()[1];
             Assert.That(simulation.Snapshot.CorridorSliceCount, Is.EqualTo(first.OpeningCount),
                 "The complete canyon must exist before any part enters the visible fade band.");
+            float originBefore = simulation.Snapshot.EncounterStartZ;
+            float distanceBefore = simulation.Snapshot.Distance;
+            for (int tick = 0; tick < 30; tick++) simulation.Step(default);
+            Assert.That(
+                simulation.Snapshot.EncounterStartZ - originBefore,
+                Is.EqualTo(simulation.Snapshot.Distance - distanceBefore).Within(.001f),
+                "The canyon world origin must advance continuously with run distance and never re-anchor to a streamed row.");
             float farthestZ = float.MaxValue;
             for (int i = 0; i < simulation.Snapshot.CorridorSliceCount; i++)
                 farthestZ = System.Math.Min(farthestZ, simulation.Snapshot.GetCorridorSlice(i).Z);
