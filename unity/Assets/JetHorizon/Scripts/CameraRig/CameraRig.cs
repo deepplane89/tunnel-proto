@@ -133,24 +133,42 @@ namespace JetHorizon
             if (phase == GamePhase.Playing && !_sweeping)
             {
                 // FOV speed kick — spec/01 §3.2
-                float frac = Mathf.Clamp01((s.EffectiveSpeed - Tuning.BaseSpeed) / (Tuning.BaseSpeed * 1.5f));
-                float speedFrac = Mathf.Pow(frac, Tuning.FovKickExponent);
+                float speedFrac = ShipFeelPresenter.I != null
+                    ? ShipFeelPresenter.I.Signals.SpeedPresentation
+                    : Mathf.Clamp01((s.EffectiveSpeed - Tuning.BaseSpeed) / (Tuning.BaseSpeed * 1.5f));
                 var feel = GameManager.I.FeelProfile;
+                float fovCurve = feel != null && feel.FovBySpeed != null
+                    ? feel.FovBySpeed.Evaluate(speedFrac)
+                    : speedFrac;
                 float targetFOV = feel != null
-                    ? feel.BaseFov + feel.SpeedFovBoost * feel.FovBySpeed.Evaluate(speedFrac) + (s.OverdriveActive ? feel.OverdriveFovBoost : 0f)
-                    : Tuning.CamBaseFovDesktop + Tuning.FovSpeedBoost * speedFrac;
+                    ? feel.BaseFov + feel.SpeedFovBoost * fovCurve + (s.OverdriveActive ? feel.OverdriveFovBoost : 0f)
+                    : Tuning.CamBaseFovDesktop + Tuning.FovSpeedBoost * Mathf.Pow(speedFrac, Tuning.FovKickExponent);
                 bool launch = s.Elapsed - _launchTime < 0.5f;
                 float rate = launch ? 12f : (Mathf.Abs(targetFOV - Cam.fieldOfView) > 0.5f ? 5f : 3f);
                 if (feel != null) rate = feel.FovResponse;
                 Cam.fieldOfView = Mathf.Lerp(Cam.fieldOfView, targetFOV, 1f - Mathf.Exp(-rate * rawDt));
+
+                // Constant, tiny engine vibration keeps starter cruise alive without
+                // competing with authored lightning and collision impulses.
+                float vibration = feel != null && feel.CameraSpeedVibration > 0f
+                    ? feel.CameraSpeedVibration
+                    : 0.018f;
+                float vibrationAmount = vibration * speedFrac;
+                Vector3 speedOffset = new Vector3(
+                    Mathf.Sin(Time.unscaledTime * 37f) * vibrationAmount,
+                    Mathf.Sin(Time.unscaledTime * 53f + 1.7f) * vibrationAmount * 0.55f,
+                    0f);
+                _lastShakeOffset += speedOffset;
+                Cam.transform.position += speedOffset;
 
                 // Lightning shake — §3.5
                 if (_shakeTime > 0f)
                 {
                     _shakeTime -= rawDt;
                     float amp = Tuning.ShakeAmt * Mathf.Max(0f, _shakeTime / Tuning.ShakeDur);
-                    _lastShakeOffset = new Vector3((Random.value - 0.5f) * amp, (Random.value - 0.5f) * amp * 0.4f, 0f);
-                    Cam.transform.position += _lastShakeOffset;
+                    Vector3 lightningOffset = new Vector3((Random.value - 0.5f) * amp, (Random.value - 0.5f) * amp * 0.4f, 0f);
+                    _lastShakeOffset += lightningOffset;
+                    Cam.transform.position += lightningOffset;
                 }
                 if (ShipFeelPresenter.I != null && ShipFeelPresenter.I.CameraImpulse > 0f)
                 {

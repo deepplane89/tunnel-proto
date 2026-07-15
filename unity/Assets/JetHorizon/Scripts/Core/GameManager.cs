@@ -97,6 +97,8 @@ namespace JetHorizon
                 HazardSpawningEnabled = true,
                 HazardSimulationEnabled = true,
                 CollisionEnabled = true,
+                StartSpeedMultiplier = 5f / 3f,
+                MinimumOperationalSpeed = 50f,
                 InitialSpawnDistance = 5f,
                 SpawnIntervalDistance = 30f,
                 MaxHazards = 600,

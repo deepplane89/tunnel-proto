@@ -1351,6 +1351,53 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void OperationalFloorAppliesAfterEncounterPaceAndBeforeTemporaryPowerups()
+        {
+            RunPaceState pace = RunPaceModel.Resolve(new RunPaceInput(
+                60f,
+                .826f,
+                1f,
+                .92f,
+                1.8f,
+                50f));
+
+            Assert.That(pace.PersistentCruiseSpeed, Is.EqualTo(49.56f).Within(.001f));
+            Assert.That(pace.CruiseSpeedBeforePowerup, Is.EqualTo(50f).Within(.001f));
+            Assert.That(pace.EffectiveSpeed, Is.EqualTo(90f).Within(.001f));
+        }
+
+        [Test]
+        public void StarterWreckRepairedBaselineAndMaximumEngineKeepAVisibleSpeedCurve()
+        {
+            GarageState wreck = GarageState.CreateNew();
+            ShipLaunchProfile damaged = GarageDomainService.CreateLaunchProfile(wreck);
+
+            GarageState repaired = wreck.Copy();
+            repaired.GetSubsystem(ShipSubsystem.PrimaryThruster).Integrity = 1f;
+            ShipLaunchProfile baseline = GarageDomainService.CreateLaunchProfile(repaired);
+
+            GarageState maximum = repaired.Copy();
+            maximum.GetSubsystem(ShipSubsystem.PrimaryThruster).Tier = GarageProgressionCatalog.Engine.MaximumLevel;
+            ShipLaunchProfile upgraded = GarageDomainService.CreateLaunchProfile(maximum);
+
+            Assert.That(60f * damaged.SpeedMultiplier, Is.EqualTo(49.56f).Within(.01f));
+            Assert.That(60f * baseline.SpeedMultiplier, Is.EqualTo(60f).Within(.01f));
+            Assert.That(60f * upgraded.SpeedMultiplier, Is.EqualTo(97.2f).Within(.01f));
+        }
+
+        [Test]
+        public void EquippedSpeedScalesEncounterSpacingWithoutSlowingPrismaticCruise()
+        {
+            EncounterPlan[] baseline = EncounterPlanCatalog.CreateProofSequence();
+            EncounterPlan[] fast = EncounterPlanCatalog.CreateProofSequence(2f);
+
+            Assert.That(fast[0].Length, Is.EqualTo(baseline[0].Length * 2f).Within(.001f));
+            Assert.That(fast[2].GetOpening(20).Distance,
+                Is.EqualTo(baseline[2].GetOpening(20).Distance * 2f).Within(.001f));
+            Assert.That(fast[2].ApproachModifier, Is.EqualTo(1f));
+        }
+
+        [Test]
         public void ProofEncountersAreReachableAndRejectAllThreeTrivialPolicies()
         {
             var config = new SimulationConfig

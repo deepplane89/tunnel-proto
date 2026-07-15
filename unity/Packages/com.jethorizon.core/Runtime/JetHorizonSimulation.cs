@@ -170,7 +170,9 @@ namespace JetHorizon.Simulation
             _stageDirector = _config.ProofEncounterMode || runDefinition == null ? null : new StageDirector(runDefinition);
             _shipCapability = ShipCapabilityProfile.FromConfig(_config);
             _proofEncounters = _config.ProofEncounterMode
-                ? new ProofEncounterRuntime(EncounterPlanCatalog.CreateProofSequence(), _shipCapability)
+                ? new ProofEncounterRuntime(
+                    EncounterPlanCatalog.CreateProofSequence(_shipCapability.CruiseSpeed / 42f),
+                    _shipCapability)
                 : null;
             _encounterCommands = new EncounterCommandBuffer(64);
             _structuredWallField = StructuredWallFieldCatalog.Production;
@@ -478,7 +480,8 @@ namespace JetHorizon.Simulation
             if (_hasExternalSpeed && _stageDirector == null && _proofEncounters == null)
             {
                 _paceState = RunPaceModel.Resolve(new RunPaceInput(
-                    Math.Max(0.001f, _externalSpeed), 1f, HeatSpeedMultiplier(), 1f, temporaryModifier));
+                    Math.Max(0.001f, _externalSpeed), 1f, HeatSpeedMultiplier(), 1f, temporaryModifier,
+                    _config.MinimumOperationalSpeed));
             }
             else
             {
@@ -487,11 +490,10 @@ namespace JetHorizon.Simulation
                     _config.PersistentCruiseSpeedMultiplier,
                     HeatSpeedMultiplier(),
                     encounterApproachModifier,
-                    temporaryModifier));
+                    temporaryModifier,
+                    _config.MinimumOperationalSpeed));
             }
-            _speed = _paceState.PersistentCruiseSpeed
-                * _paceState.DepthHeatModifier
-                * _paceState.EncounterApproachModifier;
+            _speed = _paceState.CruiseSpeedBeforePowerup;
             _effectiveSpeed = _paceState.EffectiveSpeed;
             TickLightningSpawner(dt, world);
             TickZipper(dt);
@@ -846,8 +848,9 @@ namespace JetHorizon.Simulation
                 _config.PersistentCruiseSpeedMultiplier,
                 1f,
                 1f,
-                1f));
-            _speed = _paceState.PersistentCruiseSpeed;
+                1f,
+                _config.MinimumOperationalSpeed));
+            _speed = _paceState.CruiseSpeedBeforePowerup;
             _effectiveSpeed = _paceState.EffectiveSpeed;
             _hasExternalSpeed = false;
             _externalSpeed = 0f;

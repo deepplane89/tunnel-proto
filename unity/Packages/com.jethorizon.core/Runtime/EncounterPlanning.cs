@@ -336,56 +336,58 @@ namespace JetHorizon.Simulation
         static readonly EncounterCapabilityContract ProofContract =
             new EncounterCapabilityContract(24f, 130f, 0.55f, 0.65f, 0, 5);
 
-        public static EncounterPlan[] CreateProofSequence()
+        public static EncounterPlan[] CreateProofSequence(float spacingScale = 1f)
         {
-            return new[] { BroadWeave(), LightningGate(), PrismaticCorridor() };
+            if (float.IsNaN(spacingScale) || float.IsInfinity(spacingScale) || spacingScale <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(spacingScale));
+            return new[] { BroadWeave(spacingScale), LightningGate(spacingScale), PrismaticCorridor(spacingScale) };
         }
 
-        static EncounterPlan BroadWeave()
+        static EncounterPlan BroadWeave(float scale)
         {
             return new EncounterPlan(
                 "proof.monumental-weave",
                 EncounterKind.MonumentalBroadWeave,
-                720f,
+                Scale(720f, scale),
                 0.92f,
                 ProofContract,
                 new[]
                 {
-                    new EncounterOpening(70f,   0f, 13f),
-                    new EncounterOpening(145f,-10f, 11f, CargoRouteTier.Safe),
-                    new EncounterOpening(220f, 13f, 10f),
-                    new EncounterOpening(295f,-15f, 10f, CargoRouteTier.Risky),
-                    new EncounterOpening(370f,  7f, 11f, powerup: PowerupType.Laser),
-                    new EncounterOpening(445f, 17f,  9f, denseLaserFormation: true),
-                    new EncounterOpening(520f,-11f,  9f, denseLaserFormation: true),
-                    new EncounterOpening(595f, 14f, 10f),
-                    new EncounterOpening(665f, -7f, 11f, CargoRouteTier.Deep),
-                    new EncounterOpening(720f,  0f, 13f)
+                    new EncounterOpening(Scale(45f, scale),   0f, 13f),
+                    new EncounterOpening(Scale(145f, scale),-10f, 11f, CargoRouteTier.Safe),
+                    new EncounterOpening(Scale(220f, scale), 13f, 10f),
+                    new EncounterOpening(Scale(295f, scale),-15f, 10f, CargoRouteTier.Risky),
+                    new EncounterOpening(Scale(370f, scale),  7f, 11f, powerup: PowerupType.Laser),
+                    new EncounterOpening(Scale(445f, scale), 17f,  9f, denseLaserFormation: true),
+                    new EncounterOpening(Scale(520f, scale),-11f,  9f, denseLaserFormation: true),
+                    new EncounterOpening(Scale(595f, scale), 14f, 10f),
+                    new EncounterOpening(Scale(665f, scale), -7f, 11f, CargoRouteTier.Deep),
+                    new EncounterOpening(Scale(720f, scale),  0f, 13f)
                 });
         }
 
-        static EncounterPlan LightningGate()
+        static EncounterPlan LightningGate(float scale)
         {
             return new EncounterPlan(
                 "proof.lightning-gate",
                 EncounterKind.LightningMovingGate,
-                720f,
+                Scale(720f, scale),
                 1f,
                 ProofContract,
                 new[]
                 {
-                    new EncounterOpening( 90f,-10f, 11f),
-                    new EncounterOpening(180f,  0f, 11f, CargoRouteTier.Safe),
-                    new EncounterOpening(270f, 12f, 11f),
-                    new EncounterOpening(360f, -4f, 11f, CargoRouteTier.Risky),
-                    new EncounterOpening(450f,-14f, 11f),
-                    new EncounterOpening(540f,  2f, 11f),
-                    new EncounterOpening(630f, 14f, 11f, CargoRouteTier.Deep),
-                    new EncounterOpening(720f, -4f, 13f)
+                    new EncounterOpening(Scale( 90f, scale),-10f, 11f),
+                    new EncounterOpening(Scale(180f, scale),  0f, 11f, CargoRouteTier.Safe),
+                    new EncounterOpening(Scale(270f, scale), 12f, 11f),
+                    new EncounterOpening(Scale(360f, scale), -4f, 11f, CargoRouteTier.Risky),
+                    new EncounterOpening(Scale(450f, scale),-14f, 11f),
+                    new EncounterOpening(Scale(540f, scale),  2f, 11f),
+                    new EncounterOpening(Scale(630f, scale), 14f, 11f, CargoRouteTier.Deep),
+                    new EncounterOpening(Scale(720f, scale), -4f, 13f)
                 });
         }
 
-        static EncounterPlan PrismaticCorridor()
+        static EncounterPlan PrismaticCorridor(float scale)
         {
             const int count = 55;
             var openings = new EncounterOpening[count];
@@ -398,15 +400,17 @@ namespace JetHorizon.Simulation
                     : i == 31 ? CargoRouteTier.Risky
                     : i == 45 ? CargoRouteTier.Deep
                     : CargoRouteTier.None;
-                openings[i] = new EncounterOpening(14f * (i + 1), center, halfWidth, cargo);
+                openings[i] = new EncounterOpening(Scale(14f * (i + 1), scale), center, halfWidth, cargo);
             }
             return new EncounterPlan(
                 "proof.prismatic-sine",
                 EncounterKind.PrismaticSineCorridor,
-                770f,
-                0.96f,
+                Scale(770f, scale),
+                1f,
                 ProofContract,
                 openings);
         }
+
+        static float Scale(float distance, float scale) => distance * scale;
     }
 }

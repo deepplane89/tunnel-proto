@@ -272,7 +272,7 @@ namespace JetHorizon
         }
 
         static Vector3 RandomStreakPos() => new Vector3(
-            Random.Range(-520f, 520f), Random.Range(2f, 450f), Random.Range(-VolZ, 0f));
+            Random.Range(-180f, 180f), Random.Range(2f, 110f), Random.Range(-260f, 15f));
 
         void Update()
         {

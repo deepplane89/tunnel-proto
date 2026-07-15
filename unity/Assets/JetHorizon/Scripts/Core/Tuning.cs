@@ -54,7 +54,7 @@ namespace JetHorizon
         // ── Hover / intro ──────────────────────────────────────
         public const float BobAmplitude     = 0.03f;
         public const float BobFrequency     = 0.60f;
-        public const float IntroLiftDur     = 2.0f;
+        public const float IntroLiftDur     = 0.8f;
         public const float IntroLiftPitch   = -0.18f;
         public const float PostLaunchGrace  = 2.0f;
 

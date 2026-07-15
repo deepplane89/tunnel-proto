@@ -48,6 +48,10 @@ namespace JetHorizon
         public AnimationCurve FovBySpeed = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
 
         [Header("Shared speed perception")]
+        [Range(0f, 1f)] public float StarterSpeedPresentation = 0.35f;
+        public float SpeedPresentationStart = 50f;
+        public float SpeedPresentationFull = 100f;
+        public float CameraSpeedVibration = 0.018f;
         public AnimationCurve IntensityBySpeed = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
         public float ThrusterMinimum = 0.45f;
         public float ThrusterMaximum = 1.35f;

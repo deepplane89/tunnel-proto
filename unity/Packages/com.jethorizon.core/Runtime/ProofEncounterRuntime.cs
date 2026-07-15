@@ -122,16 +122,19 @@ namespace JetHorizon.Simulation
     /// </summary>
     public sealed class ProofEncounterRuntime
     {
-        const float LaunchDistance = 120f;
-        const float RecoveryDistance = 55f;
-        const float GateApproachDistance = 90f;
-        const float StructureLeadDistance = 220f;
-        const float LightningLeadDistance = 82f;
+        const float LaunchSeconds = 0.25f;
+        const float RecoverySeconds = 0.95f;
+        const float GateApproachSeconds = 1.5f;
+        const float StructureTelegraphSeconds = 4.2f;
+        const float LightningTelegraphSeconds = 1.65f;
 
         readonly EncounterPlan[] _plans;
         readonly ShipCapabilityProfile _capability;
         readonly float[] _validationMargins;
         readonly EncounterCapabilityValidator _validator;
+        readonly float _launchDistance;
+        readonly float _recoveryDistance;
+        readonly float _gateApproachDistance;
 
         int _planIndex;
         int _nextOpeningIndex;
@@ -158,6 +161,9 @@ namespace JetHorizon.Simulation
             _validationMargins = new float[plans.Length];
             _capability = capability;
             _validator = new EncounterCapabilityValidator();
+            _launchDistance = capability.CruiseSpeed * LaunchSeconds;
+            _recoveryDistance = capability.CruiseSpeed * RecoverySeconds;
+            _gateApproachDistance = capability.CruiseSpeed * GateApproachSeconds;
             for (int i = 0; i < plans.Length; i++)
             {
                 _plans[i] = plans[i] ?? throw new ArgumentException("Encounter plans cannot contain null entries.", nameof(plans));
@@ -177,7 +183,7 @@ namespace JetHorizon.Simulation
             _planIndex = 0;
             _nextOpeningIndex = 0;
             _cycle = 0;
-            _planStartDistance = LaunchDistance;
+            _planStartDistance = _launchDistance;
             _gateActive = false;
             _gateResolved = false;
             _gateDistance = 0f;
@@ -245,7 +251,7 @@ namespace JetHorizon.Simulation
                     _cycle++;
                     _planIndex = 0;
                     _nextOpeningIndex = 0;
-                    _planStartDistance = _gateDistance + RecoveryDistance;
+                    _planStartDistance = _gateDistance + _recoveryDistance;
                     _gateActive = false;
                     _gateResolved = false;
                     RefreshSnapshot(runDistance, shipZ);
@@ -260,13 +266,13 @@ namespace JetHorizon.Simulation
             {
                 advanced = false;
                 EnsureCurrentPlanIsAdmissible(heat, paceBeforeEncounter);
-                StreamOpenings(runDistance, heat, shipZ, commands);
+                StreamOpenings(runDistance, heat, paceBeforeEncounter, shipZ, commands);
                 float planEnd = _planStartDistance + CurrentPlan.Length;
                 if (runDistance < planEnd) continue;
 
                 if (_planIndex + 1 < _plans.Length)
                 {
-                    _planStartDistance = planEnd + RecoveryDistance;
+                    _planStartDistance = planEnd + _recoveryDistance;
                     _planIndex++;
                     _nextOpeningIndex = 0;
                     advanced = true;
@@ -275,7 +281,7 @@ namespace JetHorizon.Simulation
                 {
                     _gateActive = true;
                     _gateResolved = false;
-                    _gateDistance = planEnd + GateApproachDistance;
+                    _gateDistance = planEnd + _gateApproachDistance;
                     _gateX = (_cycle & 1) == 0 ? -16f : 16f;
                     _gateHalfWidth = 10f;
                 }
@@ -307,12 +313,19 @@ namespace JetHorizon.Simulation
             _validatedPaceBeforeEncounter = paceBeforeEncounter;
         }
 
-        void StreamOpenings(float runDistance, int heat, float shipZ, EncounterCommandBuffer commands)
+        void StreamOpenings(
+            float runDistance,
+            int heat,
+            float paceBeforeEncounter,
+            float shipZ,
+            EncounterCommandBuffer commands)
         {
             EncounterPlan plan = CurrentPlan;
-            float lead = plan.Kind == EncounterKind.LightningMovingGate
-                ? LightningLeadDistance
-                : StructureLeadDistance;
+            float telegraphSeconds = plan.Kind == EncounterKind.LightningMovingGate
+                ? LightningTelegraphSeconds
+                : StructureTelegraphSeconds;
+            float lead = Math.Max(plan.Contract.MinimumTelegraphSeconds, telegraphSeconds)
+                * Math.Max(1f, paceBeforeEncounter);
 
             while (_nextOpeningIndex < plan.OpeningCount)
             {
@@ -413,14 +426,14 @@ namespace JetHorizon.Simulation
         {
             float distance = _planStartDistance - SumPriorPlanLengths(_planIndex);
             for (int i = 0; i < _plans.Length; i++)
-                distance += _plans[i].Length + (i + 1 < _plans.Length ? RecoveryDistance : 0f);
-            return distance + GateApproachDistance;
+                distance += _plans[i].Length + (i + 1 < _plans.Length ? _recoveryDistance : 0f);
+            return distance + _gateApproachDistance;
         }
 
         float SumPriorPlanLengths(int exclusiveEnd)
         {
             float total = 0f;
-            for (int i = 0; i < exclusiveEnd; i++) total += _plans[i].Length + RecoveryDistance;
+            for (int i = 0; i < exclusiveEnd; i++) total += _plans[i].Length + _recoveryDistance;
             return total;
         }
     }

@@ -22,13 +22,21 @@ namespace JetHorizon
             if (GameManager.I == null || Profile == null) return;
             RunSession session = GameManager.I.Session;
             float dt = Mathf.Min(Time.unscaledDeltaTime, Tuning.MaxRawDt);
-            float rawSpeed = Mathf.InverseLerp(Tuning.BaseSpeed, Tuning.BaseSpeed * 2.5f, session.EffectiveSpeed);
+            float startSpeed = Profile.SpeedPresentationStart > 0f ? Profile.SpeedPresentationStart : 50f;
+            float fullSpeed = Profile.SpeedPresentationFull > startSpeed ? Profile.SpeedPresentationFull : 100f;
+            float starterPresentation = Profile.StarterSpeedPresentation > 0f
+                ? Mathf.Clamp01(Profile.StarterSpeedPresentation)
+                : 0.35f;
+            float rawSpeed = Mathf.InverseLerp(startSpeed, fullSpeed, session.EffectiveSpeed);
             float rawLateral = Mathf.Clamp(session.ShipVelX / Mathf.Max(.01f, Profile.MaximumLateralVelocity), -1f, 1f);
             float rawBank = Mathf.Clamp(session.BankRoll / Mathf.Max(.01f, Profile.BankMaximumRadians), -1f, 1f);
             _speed = Exp(_speed, rawSpeed, 7f, dt);
             _steer = Exp(_steer, rawLateral, 12f, dt);
             _bank = Exp(_bank, rawBank, 10f, dt);
-            float presentation = Profile.IntensityBySpeed.Evaluate(_speed);
+            float presentationCurve = Profile.IntensityBySpeed != null
+                ? Profile.IntensityBySpeed.Evaluate(_speed)
+                : _speed;
+            float presentation = Mathf.Lerp(starterPresentation, 1f, presentationCurve);
             float overdrive = session.OverdriveActive ? 1f : 0f;
             Signals = new ShipFeelSignals(_speed, presentation, _steer, rawLateral, _bank, overdrive, rawLateral - rawBank);
             CameraImpulse = Mathf.MoveTowards(CameraImpulse, 0f, Profile.ImpulseRecovery * dt);

@@ -625,7 +625,9 @@ namespace JetHorizon.Meta
             SubsystemState hull = state.GetSubsystem(ShipSubsystem.Hull);
             SubsystemState cargo = state.GetSubsystem(ShipSubsystem.CargoBay);
             SubsystemState shield = state.GetSubsystem(ShipSubsystem.ShieldGenerator);
-            float speed = GarageProgressionCatalog.EngineSpeedForLevel(engine.Tier) * (.62f + .38f * engine.Integrity);
+            // A wreck must still be exciting to fly. Damage owns the gap from roughly
+            // 50 to 60 u/s; upgrades own the much larger climb toward 100 u/s.
+            float speed = GarageProgressionCatalog.EngineSpeedForLevel(engine.Tier) * (.70f + .30f * engine.Integrity);
             float accel = GarageProgressionCatalog.EngineAccelerationForLevel(engine.Tier)
                 * (.65f + .35f * engine.Integrity)
                 * (.75f + handling.Response * .5f);

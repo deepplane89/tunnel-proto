@@ -43,7 +43,9 @@ namespace JetHorizon.Simulation
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             return new ShipCapabilityProfile(
-                config.BaseSpeed * config.StartSpeedMultiplier * config.PersistentCruiseSpeedMultiplier,
+                Math.Max(
+                    config.MinimumOperationalSpeed,
+                    config.BaseSpeed * config.StartSpeedMultiplier * config.PersistentCruiseSpeedMultiplier),
                 config.BaseSpeed * config.PersistentCruiseSpeedMultiplier,
                 config.Acceleration,
                 config.MaxLateralVelocity,
@@ -69,19 +71,24 @@ namespace JetHorizon.Simulation
         public float DepthHeatModifier { get; }
         public float EncounterApproachModifier { get; }
         public float TemporaryPowerupModifier { get; }
+        public float MinimumOperationalSpeed { get; }
 
         public RunPaceInput(
             float baseCruiseSpeed,
             float persistentCapabilityModifier,
             float depthHeatModifier,
             float encounterApproachModifier,
-            float temporaryPowerupModifier)
+            float temporaryPowerupModifier,
+            float minimumOperationalSpeed = 0f)
         {
             BaseCruiseSpeed = Positive(baseCruiseSpeed, nameof(baseCruiseSpeed));
             PersistentCapabilityModifier = Positive(persistentCapabilityModifier, nameof(persistentCapabilityModifier));
             DepthHeatModifier = Positive(depthHeatModifier, nameof(depthHeatModifier));
             EncounterApproachModifier = Positive(encounterApproachModifier, nameof(encounterApproachModifier));
             TemporaryPowerupModifier = Positive(temporaryPowerupModifier, nameof(temporaryPowerupModifier));
+            if (float.IsNaN(minimumOperationalSpeed) || float.IsInfinity(minimumOperationalSpeed) || minimumOperationalSpeed < 0f)
+                throw new ArgumentOutOfRangeException(nameof(minimumOperationalSpeed));
+            MinimumOperationalSpeed = minimumOperationalSpeed;
         }
 
         static float Positive(float value, string name)
@@ -98,6 +105,7 @@ namespace JetHorizon.Simulation
         public float DepthHeatModifier { get; }
         public float EncounterApproachModifier { get; }
         public float TemporaryPowerupModifier { get; }
+        public float CruiseSpeedBeforePowerup { get; }
         public float EffectiveSpeed { get; }
 
         internal RunPaceState(RunPaceInput input)
@@ -106,10 +114,12 @@ namespace JetHorizon.Simulation
             DepthHeatModifier = input.DepthHeatModifier;
             EncounterApproachModifier = input.EncounterApproachModifier;
             TemporaryPowerupModifier = input.TemporaryPowerupModifier;
-            EffectiveSpeed = PersistentCruiseSpeed
+            CruiseSpeedBeforePowerup = Math.Max(
+                input.MinimumOperationalSpeed,
+                PersistentCruiseSpeed
                 * DepthHeatModifier
-                * EncounterApproachModifier
-                * TemporaryPowerupModifier;
+                * EncounterApproachModifier);
+            EffectiveSpeed = CruiseSpeedBeforePowerup * TemporaryPowerupModifier;
         }
     }
 

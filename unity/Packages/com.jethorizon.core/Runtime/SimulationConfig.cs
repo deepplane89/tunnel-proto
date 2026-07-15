@@ -13,6 +13,7 @@ namespace JetHorizon.Simulation
         public float BaseSpeed = 36f;
         public float StartSpeedMultiplier = 1.5f;
         public float PersistentCruiseSpeedMultiplier = 1f;
+        public float MinimumOperationalSpeed;
         public float ShipZ = 3.9f;
         public float ShipHoverY = 1.21f;
         public float ShipPreLaunchY = 0.38f;
@@ -113,6 +114,8 @@ namespace JetHorizon.Simulation
             if (FixedDeltaSeconds <= 0f) throw new InvalidOperationException("FixedDeltaSeconds must be positive.");
             if (BaseSpeed <= 0f || StartSpeedMultiplier <= 0f || PersistentCruiseSpeedMultiplier <= 0f)
                 throw new InvalidOperationException("Run pace inputs must be positive.");
+            if (MinimumOperationalSpeed < 0f || float.IsNaN(MinimumOperationalSpeed) || float.IsInfinity(MinimumOperationalSpeed))
+                throw new InvalidOperationException("MinimumOperationalSpeed cannot be negative or non-finite.");
             if (LaneCount <= 0) throw new InvalidOperationException("LaneCount must be positive.");
             if (MaxHazards <= 0) throw new InvalidOperationException("MaxHazards must be positive.");
             if (MaxPickups <= 0) throw new InvalidOperationException("MaxPickups must be positive.");
