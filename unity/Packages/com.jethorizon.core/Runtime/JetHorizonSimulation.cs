@@ -178,10 +178,7 @@ namespace JetHorizon.Simulation
                         _config.CanyonPathOverride),
                     _shipCapability)
                 : null;
-            // The crystalline canyon publishes its complete prebuilt route on one
-            // tick so Unity never streams geometry into view. Leave headroom for
-            // route slices plus their sparse cargo commands.
-            _encounterCommands = new EncounterCommandBuffer(128);
+            _encounterCommands = new EncounterCommandBuffer(64);
             _lightningSequences = new LightningSequenceRuntime();
             _lightningStrikeRequests = new LightningStrikeRequestBuffer(16);
             _structuredWallField = StructuredWallFieldCatalog.Production;
