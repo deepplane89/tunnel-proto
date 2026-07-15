@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using JetHorizon.Application;
+using JetHorizon.Meta;
 
 namespace JetHorizon.Simulation.Tests
 {
@@ -1007,6 +1008,185 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(destroyed, Is.True);
         }
 
+        [Test]
+        public void PrismaticCorridorPublishesContinuousSlicesInsteadOfConeRows()
+        {
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("L5", StageKind.Corridor, 90f, 2f, 3, 4, CorridorFamily.L5Sine)
+            });
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false,
+                PrismaticSineTunnelEnabled = true
+            }, 108u, run);
+            simulation.StartRun();
+
+            for (int i = 0; i < 80 && simulation.Snapshot.CorridorSliceCount < 4; i++) simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.CorridorSliceCount, Is.GreaterThanOrEqualTo(4));
+            Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+            Assert.That(simulation.Snapshot.ActiveCorridorFamily, Is.EqualTo(CorridorFamily.L5Sine));
+            for (int i = 1; i < simulation.Snapshot.CorridorSliceCount; i++)
+                Assert.That(simulation.Snapshot.GetCorridorSlice(i).RowIndex,
+                    Is.GreaterThan(simulation.Snapshot.GetCorridorSlice(i - 1).RowIndex));
+        }
+
+        [Test]
+        public void PrismaticCollisionUsesTheSameCoreSamplePublishedToTheRenderer()
+        {
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("L5", StageKind.Corridor, 90f, 2f, 3, 4, CorridorFamily.L5Sine)
+            });
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                PrismaticSineTunnelEnabled = true,
+                PrismaticTunnelSpawnZ = 3.9f,
+                PrismaticTunnelRowSpacing = .1f,
+                CorridorShipHalfWidth = 100f
+            }, 109u, run);
+            simulation.StartRun();
+            simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.CorridorSliceCount, Is.GreaterThan(0));
+            Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Dead));
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.PrismaticBoundaryHit), Is.True);
+        }
+
+        [TestCase(LightningGatePatternKind.SweepRight)]
+        [TestCase(LightningGatePatternKind.SweepLeft)]
+        [TestCase(LightningGatePatternKind.CrossCut)]
+        [TestCase(LightningGatePatternKind.Reversal)]
+        public void LightningGatePatternsDefeatBothEdgesAndNeutralWhileRemainingReachable(LightningGatePatternKind pattern)
+        {
+            const float corridorHalfWidth = 28f;
+            const float safeHalfWidth = 6f;
+            Assert.That(LightningGatePattern.DefeatsConstantPosition(pattern, -1f, safeHalfWidth / corridorHalfWidth), Is.True);
+            Assert.That(LightningGatePattern.DefeatsConstantPosition(pattern, 0f, safeHalfWidth / corridorHalfWidth), Is.True);
+            Assert.That(LightningGatePattern.DefeatsConstantPosition(pattern, 1f, safeHalfWidth / corridorHalfWidth), Is.True);
+            Assert.That(LightningGatePattern.IsReachable(pattern, corridorHalfWidth, safeHalfWidth, 14f), Is.True);
+        }
+
+        [Test]
+        public void CanyonLightningSpawnsAWholeTelegraphedGateNotAPlayerAimedStrike()
+        {
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("STORM", StageKind.Corridor, 20f, 2f, 2, 1, CorridorFamily.PreT4A)
+            });
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false,
+                LightningGateIntervalSeconds = 1f / 60f,
+                LightningGateColumns = 9
+            }, 1091u, run);
+            simulation.StartRun();
+            simulation.Step(default, new WorldFrame(false, false)
+            {
+                CanyonActive = true,
+                CorridorCollisionActive = true,
+                CorridorLeftBoundary = -28f,
+                CorridorRightBoundary = 28f
+            });
+
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.LightningGateStarted), Is.True);
+            Assert.That(simulation.Snapshot.HazardCount, Is.GreaterThanOrEqualTo(6));
+            for (int i = 0; i < simulation.Snapshot.HazardCount; i++)
+                Assert.That(simulation.Snapshot.GetHazard(i).Kind, Is.EqualTo(HazardKind.Lightning));
+        }
+
+        [Test]
+        public void StarterRestorationMilestonesBuildTheWreckIntoARealShip()
+        {
+            GarageState state = GarageState.CreateNew();
+            Assert.That(GarageDomainService.CreateLaunchProfile(state).SpeedMultiplier, Is.LessThan(1f));
+
+            state = GarageDomainService.Extract(state, new CargoManifest(2, 0, 0)).State;
+            Assert.That(state.SelectedThrusterId, Is.EqualTo("light"));
+            Assert.That(state.GetSubsystem(ShipSubsystem.PrimaryThruster).Integrity, Is.EqualTo(1f));
+            state = GarageDomainService.Extract(state, new CargoManifest(2, 0, 0)).State;
+            Assert.That(state.GetSubsystem(ShipSubsystem.Stabilizers).Integrity, Is.EqualTo(1f));
+            state = GarageDomainService.Extract(state, new CargoManifest(2, 0, 0)).State;
+            Assert.That(state.GetSubsystem(ShipSubsystem.Hull).Tier, Is.EqualTo(2));
+            state = GarageDomainService.Extract(state, new CargoManifest(2, 0, 0)).State;
+            Assert.That(state.RestorationChoicePending, Is.True);
+        }
+
+        [Test]
+        public void HandlingSelectionIsPersistentContentAndChangesLaunchPhysics()
+        {
+            GarageState state = GarageState.CreateNew();
+            for (int i = 0; i < 8; i++) state = GarageDomainService.Extract(state, new CargoManifest(0, 0, 0)).State;
+            ShipLaunchProfile before = GarageDomainService.CreateLaunchProfile(state);
+            GarageCommandResult equipped = GarageDomainService.EquipHandling(state, "wipeout");
+            ShipLaunchProfile after = GarageDomainService.CreateLaunchProfile(equipped.State);
+
+            Assert.That(equipped.Succeeded, Is.True);
+            Assert.That(equipped.State.SelectedHandlingId, Is.EqualTo("wipeout"));
+            Assert.That(after.LateralSpeedMultiplier, Is.GreaterThan(before.LateralSpeedMultiplier));
+            Assert.That(GarageCatalog.GetHandling("wipeout").Drift, Is.EqualTo(.55f));
+        }
+
+        [Test]
+        public void GarageOrchestratorOnlyCoordinatesDomainClockAndPersistence()
+        {
+            var store = new FakeGarageStore();
+            var orchestrator = new GarageOrchestrator(store, new FakeClock(), new FakeRepairAcceleration());
+            GarageCommandResult extraction = orchestrator.Extract(new CargoManifest(2, 1, 0));
+
+            Assert.That(extraction.Succeeded, Is.True);
+            Assert.That(store.SaveCount, Is.GreaterThanOrEqualTo(2));
+            Assert.That(orchestrator.Current.SuccessfulExtractions, Is.EqualTo(1));
+            Assert.That(typeof(GarageDomainService).Assembly.GetReferencedAssemblies(),
+                Has.None.Matches<System.Reflection.AssemblyName>(name => name.Name.StartsWith("UnityEngine")));
+        }
+
+        [Test]
+        public void CargoIsRunLocalUntilAnExplicitCoreExtraction()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false,
+                FirstExtractionDistance = .1f,
+                CargoCapacity = 4
+            }, 110u);
+            simulation.StartRun(11001L);
+            simulation.RegisterPickup(PickupSpawn.Cargo(RunCargoKind.Alloy, 2, 0f, 1.2f, 3.9f));
+            simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.CargoAlloy, Is.EqualTo(2));
+            Assert.That(simulation.Snapshot.ExtractionAvailable, Is.True);
+            Assert.That(simulation.TryExtract(out RunCargoManifest manifest), Is.True);
+            Assert.That(manifest.Alloy, Is.EqualTo(2));
+            Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Extracted));
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.RunExtracted), Is.True);
+        }
+
+        [Test]
+        public void RestoredHullSurvivesOneCollisionThenFailsTheNext()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                HullHitCapacity = 2
+            }, 111u);
+            simulation.StartRun();
+            simulation.RegisterHazard(HazardSpawn.Cone(0f, 3.9f, collisionHalfWidth: 1f));
+            simulation.Step(default);
+            Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Playing));
+            Assert.That(simulation.Snapshot.HullHitsRemaining, Is.EqualTo(1));
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.HullDamaged), Is.True);
+
+            simulation.RegisterHazard(HazardSpawn.Cone(0f, 3.9f, collisionHalfWidth: 1f));
+            simulation.Step(default);
+            Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Dead));
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);
@@ -1068,6 +1248,19 @@ namespace JetHorizon.Simulation.Tests
                 LastScore = submission.Score;
                 SubmissionCount++;
             }
+        }
+
+        sealed class FakeGarageStore : IGarageProgressStore
+        {
+            public GarageState State;
+            public int SaveCount;
+            public bool TryLoad(out GarageState state) { state = State; return State != null; }
+            public void Save(GarageState state) { State = state.Copy(); SaveCount++; }
+        }
+
+        sealed class FakeRepairAcceleration : IRepairAccelerationPort
+        {
+            public bool TryConsumeRepairAcceleration(long repairJobId) => true;
         }
     }
 }

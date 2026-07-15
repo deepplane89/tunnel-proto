@@ -40,8 +40,9 @@ namespace JetHorizon
         }
 
         /// <summary>Maps Unity JSON DTOs into validated engine-neutral campaign content.</summary>
-        public RunDefinition ToCoreDefinition()
+        public RunDefinition ToCoreDefinition(float baseSpeedMultiplier = 1f)
         {
+            if (baseSpeedMultiplier <= 0f) throw new ArgumentOutOfRangeException(nameof(baseSpeedMultiplier));
             if (stages == null || stages.Length == 0)
                 throw new InvalidOperationException("The run sequence contains no stages.");
 
@@ -78,7 +79,7 @@ namespace JetHorizon
                     stage.density == "ramp" ? DensityCurve.Ramp : DensityCurve.Normal,
                     stage.darkSlabs);
             }
-            return new RunDefinition(baseSpeed > 0f ? baseSpeed : Tuning.BaseSpeed, definitions);
+            return new RunDefinition((baseSpeed > 0f ? baseSpeed : Tuning.BaseSpeed) * baseSpeedMultiplier, definitions);
         }
 
         static CorridorFamily ParseFamily(string value, int stageIndex)

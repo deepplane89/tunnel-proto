@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using JetHorizon.Simulation;
+using JetHorizon.Meta;
 using System.Collections.Generic;
 
 namespace JetHorizon
@@ -35,6 +36,11 @@ namespace JetHorizon
         Text _godModeLabel;
         Button _skinButton;
         Text _skinLabel;
+        CanvasGroup _garageScreen;
+        Text _garageSummary;
+        Text _garageStatus;
+        Button _extractButton;
+        Text _extractLabel;
         readonly Dictionary<PowerupType, PowerupHudRow> _powerupRows = new Dictionary<PowerupType, PowerupHudRow>();
 
         sealed class PowerupHudRow
@@ -60,6 +66,9 @@ namespace JetHorizon
             EnsureEventSystem();
             BuildGodModeButton();
             BuildSkinButton();
+            BuildGarageEntryButton();
+            BuildGarageScreen();
+            BuildExtractButton();
             BuildPowerupHud();
             Show(GamePhase.Title);
             RefreshGodModeButton();
@@ -80,6 +89,8 @@ namespace JetHorizon
             Set(HudScreen, phase == GamePhase.Playing || phase == GamePhase.Tutorial);
             Set(PauseScreen, phase == GamePhase.Paused);
             Set(GameOverScreen, false);   // game-over waits for the 2.8 s explosion beat
+            Set(_garageScreen, phase == GamePhase.Garage);
+            if (phase == GamePhase.Garage) RefreshGarage();
         }
 
         static void Set(CanvasGroup g, bool on)
@@ -172,6 +183,188 @@ namespace JetHorizon
             _skinLabel.color = new Color(0f, 0.93f, 1f);
             _skinLabel.raycastTarget = false;
             RefreshSkinButton();
+        }
+
+        void BuildGarageEntryButton()
+        {
+            if (TitleScreen == null) return;
+            MakeButton(TitleScreen.transform, "GarageButton", "GARAGE", new Vector2(.5f, .085f), new Vector2(300f, 58f),
+                () => GameManager.I?.OpenGarage());
+            if (GameOverScreen != null)
+                MakeButton(GameOverScreen.transform, "GarageButton", "GARAGE / REPAIR", new Vector2(.5f, .17f), new Vector2(330f, 58f),
+                    () => GameManager.I?.OpenGarage());
+        }
+
+        void BuildGarageScreen()
+        {
+            if (_garageScreen != null) return;
+            var root = new GameObject("GarageScreen", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));
+            root.transform.SetParent(transform, false);
+            var rt = (RectTransform)root.transform;
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+            root.GetComponent<Image>().color = new Color(.01f, .015f, .035f, .96f);
+            _garageScreen = root.GetComponent<CanvasGroup>();
+
+            MakeLabel(root.transform, "GarageTitle", "JET HORIZON // GARAGE", 52, new Vector2(.5f, .88f), new Vector2(1000f, 80f), new Color(0f, .93f, 1f));
+            _garageSummary = MakeLabel(root.transform, "GarageSummary", string.Empty, 25, new Vector2(.5f, .61f), new Vector2(1050f, 360f), Color.white);
+            _garageStatus = MakeLabel(root.transform, "GarageStatus", string.Empty, 20, new Vector2(.5f, .36f), new Vector2(1000f, 64f), new Color(1f, .45f, .75f));
+
+            MakeButton(root.transform, "Fly", "LAUNCH", new Vector2(.72f, .16f), new Vector2(300f, 70f), () => GameManager.I?.StartRun());
+            MakeButton(root.transform, "Back", "TITLE", new Vector2(.28f, .16f), new Vector2(240f, 70f), () => GameManager.I?.ReturnToTitle());
+            MakeButton(root.transform, "Handling", "CHANGE HANDLING", new Vector2(.30f, .29f), new Vector2(330f, 58f), CycleHandling);
+            MakeButton(root.transform, "Thruster", "CHANGE THRUSTER", new Vector2(.70f, .29f), new Vector2(330f, 58f), CycleThruster);
+            MakeButton(root.transform, "Repair", "REPAIR DAMAGED", new Vector2(.30f, .22f), new Vector2(330f, 58f), RepairFirstDamaged);
+            MakeButton(root.transform, "Powerup", "BUY SHIELD CHARGE", new Vector2(.70f, .22f), new Vector2(330f, 58f), BuyShieldCharge);
+            MakeButton(root.transform, "BuyThruster", "BUY NEXT THRUSTER", new Vector2(.30f, .43f), new Vector2(330f, 58f), BuyNextThruster);
+            MakeButton(root.transform, "BuyAddOn", "BUY / EQUIP MOD", new Vector2(.70f, .43f), new Vector2(330f, 58f), BuyOrEquipNextAddOn);
+        }
+
+        void BuildExtractButton()
+        {
+            if (HudScreen == null || _extractButton != null) return;
+            _extractButton = MakeButton(HudScreen.transform, "ExtractButton", "EXTRACT", new Vector2(.5f, .88f), new Vector2(330f, 64f),
+                () => GameManager.I?.RequestExtraction());
+            _extractLabel = _extractButton.GetComponentInChildren<Text>();
+            _extractButton.gameObject.SetActive(false);
+        }
+
+        Button MakeButton(Transform parent, string name, string text, Vector2 anchor, Vector2 size, UnityEngine.Events.UnityAction action)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.sizeDelta = size;
+            var image = go.GetComponent<Image>();
+            image.color = new Color(.025f, .04f, .07f, .94f);
+            var button = go.GetComponent<Button>();
+            button.targetGraphic = image;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+            button.onClick.AddListener(action);
+            var label = MakeLabel(go.transform, "Label", text, 22, new Vector2(.5f, .5f), size, Color.white);
+            var labelRt = (RectTransform)label.transform;
+            labelRt.anchorMin = Vector2.zero; labelRt.anchorMax = Vector2.one;
+            labelRt.offsetMin = labelRt.offsetMax = Vector2.zero;
+            label.raycastTarget = false;
+            return button;
+        }
+
+        Text MakeLabel(Transform parent, string name, string text, int size, Vector2 anchor, Vector2 dimensions, Color color)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Text));
+            go.transform.SetParent(parent, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.sizeDelta = dimensions;
+            var label = go.GetComponent<Text>();
+            label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            label.fontSize = size;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = color;
+            label.text = text;
+            return label;
+        }
+
+        void RefreshGarage(string status = "")
+        {
+            var garage = GameManager.I?.Garage;
+            if (garage == null || _garageSummary == null) return;
+            garage.RefreshRepairs();
+            GarageState g = garage.Current;
+            ShipLaunchProfile p = GarageDomainService.CreateLaunchProfile(g);
+            _garageSummary.text =
+                $"EXTRACTIONS  {g.SuccessfulExtractions}     CREDITS  {g.Credits:N0}\n" +
+                $"SALVAGE  {g.Salvage}     ALLOY  {g.Alloy}     PRISM  {g.Prism}\n\n" +
+                $"THRUSTER  {g.SelectedThrusterId.ToUpperInvariant()}     HANDLING  {g.SelectedHandlingId.ToUpperInvariant()}\n" +
+                $"SPEED  {p.SpeedMultiplier:0.00}     CARGO  {p.CargoCapacity}     HULL HITS  {p.CollisionHitCapacity}\n" +
+                $"REPAIR BAYS  {g.RepairBayLevel}     MECHANIC BOTS  {g.MechanicBotLevel}";
+            if (_garageStatus != null) _garageStatus.text = status;
+        }
+
+        void CycleHandling()
+        {
+            string[] ids = { "default", "glide", "wipeout", "rail", "jet" };
+            GarageState state = GameManager.I.Garage.Current;
+            int current = System.Array.IndexOf(ids, state.SelectedHandlingId);
+            for (int offset = 1; offset <= ids.Length; offset++)
+            {
+                string id = ids[(current + offset + ids.Length) % ids.Length];
+                GarageCommandResult result = GameManager.I.Garage.EquipHandling(id);
+                if (!result.Succeeded) continue;
+                RefreshGarage("HANDLING EQUIPPED: " + id.ToUpperInvariant());
+                return;
+            }
+            RefreshGarage("NO ADDITIONAL HANDLING MODEL UNLOCKED");
+        }
+
+        void CycleThruster()
+        {
+            string[] ids = { "wreck", "light", "blink", "short", "pylon", "fat-ion", "flourish", "plasma", "distort" };
+            GarageState state = GameManager.I.Garage.Current;
+            int current = System.Array.IndexOf(ids, state.SelectedThrusterId);
+            for (int offset = 1; offset <= ids.Length; offset++)
+            {
+                string id = ids[(current + offset + ids.Length) % ids.Length];
+                if (!state.Owns("thruster:" + id)) continue;
+                GarageCommandResult result = GameManager.I.Garage.EquipThruster("thruster:" + id);
+                if (result.Succeeded) { RefreshGarage("THRUSTER EQUIPPED: " + id.ToUpperInvariant()); return; }
+            }
+            RefreshGarage("NO ADDITIONAL THRUSTER OWNED");
+        }
+
+        void RepairFirstDamaged()
+        {
+            GarageState state = GameManager.I.Garage.Current;
+            foreach (SubsystemState subsystem in state.Subsystems)
+            {
+                if (subsystem.Integrity >= .999f) continue;
+                GarageCommandResult result = GameManager.I.Garage.QueueRepair(subsystem.Subsystem);
+                RefreshGarage(result.Succeeded ? "REPAIR STARTED: " + subsystem.Subsystem : "REPAIR NEEDS SALVAGE OR A FREE BAY");
+                return;
+            }
+            RefreshGarage("ALL SYSTEMS NOMINAL");
+        }
+
+        void BuyShieldCharge()
+        {
+            GarageCommandResult result = GameManager.I.Garage.BuyPowerupCharge("shield");
+            RefreshGarage(result.Succeeded ? "SHIELD CHARGE ADDED" : "NOT ENOUGH CREDITS");
+        }
+
+        void BuyNextThruster()
+        {
+            string[] ids = { "thruster:blink", "thruster:short", "thruster:pylon", "thruster:fat-ion", "thruster:flourish", "thruster:plasma", "thruster:distort" };
+            foreach (string id in ids)
+            {
+                if (GameManager.I.Garage.Current.Owns(id)) continue;
+                GarageCommandResult result = GameManager.I.Garage.Purchase(id);
+                RefreshGarage(result.Succeeded ? "PURCHASED " + id.Substring(9).ToUpperInvariant() : "NEXT THRUSTER IS LOCKED OR TOO EXPENSIVE");
+                return;
+            }
+            RefreshGarage("ALL THRUSTERS OWNED");
+        }
+
+        void BuyOrEquipNextAddOn()
+        {
+            string[] ids = { "addon:fins-01", "addon:fins-02", "addon:turrets-001", "addon:turrets-002", "addon:rings-001", "addon:turrets-003" };
+            foreach (string id in ids)
+            {
+                GarageState current = GameManager.I.Garage.Current;
+                if (!current.Owns(id))
+                {
+                    GarageCommandResult bought = GameManager.I.Garage.Purchase(id);
+                    RefreshGarage(bought.Succeeded ? "MOD PURCHASED: " + id.Substring(6).ToUpperInvariant() : "NEXT MOD IS LOCKED OR TOO EXPENSIVE");
+                    return;
+                }
+                if (!current.EquippedAddOnIds.Contains(id))
+                {
+                    GarageCommandResult equipped = GameManager.I.Garage.SetAddOnEquipped(id, true);
+                    RefreshGarage(equipped.Succeeded ? "MOD EQUIPPED: " + id.Substring(6).ToUpperInvariant() : "MOD COULD NOT BE EQUIPPED");
+                    return;
+                }
+            }
+            RefreshGarage("ALL OWNED MODS EQUIPPED");
         }
 
         void RefreshSkinButton()
@@ -276,6 +469,14 @@ namespace JetHorizon
 
                 case GamePhase.Playing:
                     UpdatePowerupHud(s);
+                    if (_extractButton != null)
+                    {
+                        SimulationSnapshot snapshot = gm.CoreSnapshot;
+                        bool available = snapshot != null && snapshot.ExtractionAvailable;
+                        _extractButton.gameObject.SetActive(available);
+                        if (available && _extractLabel != null)
+                            _extractLabel.text = $"EXTRACT  {snapshot.CargoUnits}/{snapshot.CargoCapacity}";
+                    }
                     _hudTimer -= Time.deltaTime;
                     if (_hudTimer <= 0f)
                     {
@@ -290,6 +491,10 @@ namespace JetHorizon
                         bool klaxonOn = _klaxonTimer > 0f && Mathf.FloorToInt(_klaxonTimer * 4f) % 2 == 0;
                         KlaxonText.enabled = klaxonOn;
                     }
+                    break;
+
+                case GamePhase.Garage:
+                    if (_extractButton != null) _extractButton.gameObject.SetActive(false);
                     break;
 
                 case GamePhase.Dead:

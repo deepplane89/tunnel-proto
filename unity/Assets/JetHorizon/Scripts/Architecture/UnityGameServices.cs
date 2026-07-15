@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Collections.Generic;
 using JetHorizon.Application;
+using JetHorizon.Meta;
 using UnityEngine;
 
 namespace JetHorizon.Platform
@@ -19,6 +20,46 @@ namespace JetHorizon.Platform
                 new UnityClock(),
                 new PlayerPrefsLeaderboardOutbox());
         }
+
+        public static GarageOrchestrator CreateGarage()
+        {
+            return new GarageOrchestrator(
+                new PlayerPrefsGarageProgressStore(),
+                new UnityClock(),
+                new DisabledRepairAcceleration());
+        }
+    }
+
+    sealed class PlayerPrefsGarageProgressStore : IGarageProgressStore
+    {
+        const string Key = "jh.garage.v1";
+
+        public bool TryLoad(out GarageState state)
+        {
+            string json = PlayerPrefs.GetString(Key, string.Empty);
+            if (string.IsNullOrWhiteSpace(json)) { state = null; return false; }
+            try
+            {
+                state = JsonUtility.FromJson<GarageState>(json);
+                return state != null && state.SchemaVersion > 0;
+            }
+            catch
+            {
+                state = null;
+                return false;
+            }
+        }
+
+        public void Save(GarageState state)
+        {
+            PlayerPrefs.SetString(Key, JsonUtility.ToJson(state));
+            PlayerPrefs.Save();
+        }
+    }
+
+    sealed class DisabledRepairAcceleration : IRepairAccelerationPort
+    {
+        public bool TryConsumeRepairAcceleration(long repairJobId) => false;
     }
 
     sealed class PlayerPrefsRunProgressStore : IRunProgressStore

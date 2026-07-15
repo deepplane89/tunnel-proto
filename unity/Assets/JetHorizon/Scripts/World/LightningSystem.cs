@@ -16,7 +16,7 @@ namespace JetHorizon
         public Material BoltMaterial;
 
         const float WarningDiscRadius = 3.5f;
-        const float WarningSeconds = 0.3f;
+        const float WarningSeconds = 0.65f;
         const float StrikeSeconds = 0.5f;
         const float LingerSeconds = 4f;
         const float BoltVisibleSeconds = StrikeSeconds + LingerSeconds;
@@ -41,6 +41,7 @@ namespace JetHorizon
         }
 
         readonly List<Strike> _strikes = new List<Strike>(20);
+        readonly Stack<Strike> _pool = new Stack<Strike>(40);
         readonly Dictionary<int, HazardSnapshot> _coreStrikes = new Dictionary<int, HazardSnapshot>(32);
         MaterialPropertyBlock _mpb;
         Material _lineMaterial;
@@ -49,11 +50,21 @@ namespace JetHorizon
 
         void Awake() => _mpb = new MaterialPropertyBlock();
 
+        void Start()
+        {
+            for (int i = 0; i < 36; i++)
+            {
+                Strike strike = CreatePresenterShell();
+                ReleasePresenter(strike);
+            }
+        }
+
         public void ResetSystem() => ClearAll();
 
         void OnDestroy()
         {
             ClearAll();
+            while (_pool.Count > 0) DestroyPresenter(_pool.Pop());
             if (_lineMaterial != null) Destroy(_lineMaterial);
         }
 
@@ -84,7 +95,7 @@ namespace JetHorizon
 
         void ClearAll()
         {
-            foreach (var strike in _strikes) DestroyPresenter(strike);
+            foreach (var strike in _strikes) ReleasePresenter(strike);
             _strikes.Clear();
         }
 
@@ -107,7 +118,7 @@ namespace JetHorizon
                 var strike = _strikes[i];
                 if (!_coreStrikes.TryGetValue(strike.CoreId, out var hazard))
                 {
-                    DestroyPresenter(strike);
+                    ReleasePresenter(strike);
                     _strikes.RemoveAt(i);
                     continue;
                 }
@@ -132,9 +143,7 @@ namespace JetHorizon
                     strike.Struck = true;
                     if (strike.Warn != null)
                     {
-                        Destroy(strike.Warn);
-                        strike.Warn = null;
-                        strike.WarnRenderer = null;
+                        strike.Warn.SetActive(false);
                     }
                     BuildBolt(strike, hazard.X, hazard.Z);
                     if (Camera != null) Camera.Shake();
@@ -160,34 +169,54 @@ namespace JetHorizon
 
         void SpawnPresenter(HazardSnapshot hazard)
         {
+            var strike = _pool.Count > 0 ? _pool.Pop() : CreatePresenterShell();
+            strike.CoreId = hazard.Id;
+            strike.Struck = false;
+            strike.CrackleFrame = -1;
+            strike.Warn.transform.position = new Vector3(hazard.X, 0.055f, hazard.Z);
+            strike.Warn.SetActive(true);
+            if (strike.Bolt != null) strike.Bolt.SetActive(false);
+            SetTint(strike.WarnRenderer, new Color(0.27f, 0.63f, 1f, 0.35f));
+            if (hazard.CollisionActive)
+            {
+                strike.Struck = true;
+                strike.Warn.SetActive(false);
+                BuildBolt(strike, hazard.X, hazard.Z);
+            }
+            _strikes.Add(strike);
+        }
+
+        Strike CreatePresenterShell()
+        {
             var warn = GameObject.CreatePrimitive(PrimitiveType.Quad);
             Destroy(warn.GetComponent<Collider>());
             warn.name = "LightningWarning";
             warn.transform.SetParent(transform, false);
-            warn.transform.position = new Vector3(hazard.X, 0.055f, hazard.Z);
             warn.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
             warn.transform.localScale = Vector3.one * (WarningDiscRadius * 2f);
             var renderer = warn.GetComponent<MeshRenderer>();
             renderer.sharedMaterial = BoltMaterial;
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             renderer.receiveShadows = false;
-            SetTint(renderer, new Color(0.27f, 0.63f, 1f, 0.35f));
-
-            var strike = new Strike { CoreId = hazard.Id, Warn = warn, WarnRenderer = renderer };
-            if (hazard.CollisionActive)
-            {
-                strike.Struck = true;
-                Destroy(warn);
-                strike.Warn = null;
-                strike.WarnRenderer = null;
-                BuildBolt(strike, hazard.X, hazard.Z);
-            }
-            _strikes.Add(strike);
+            return new Strike { Warn = warn, WarnRenderer = renderer };
         }
 
         void BuildBolt(Strike strike, float x, float z)
         {
             EnsureLineMaterial();
+            if (strike.Bolt != null)
+            {
+                strike.Bolt.transform.position = new Vector3(x, 0.08f, z);
+                strike.Bolt.SetActive(true);
+                var reusedPoints = BuildJaggedPath();
+                strike.Core.SetPositions(reusedPoints);
+                strike.Glow.SetPositions(reusedPoints);
+                strike.Core.enabled = strike.Glow.enabled = true;
+                strike.GroundFlash.enabled = true;
+                strike.GroundFlash.transform.localScale = Vector3.one * 11f;
+                strike.FlashLight.intensity = 14f;
+                return;
+            }
             var root = new GameObject("LightningStrike");
             root.transform.SetParent(transform, false);
             root.transform.position = new Vector3(x, 0.08f, z);
@@ -323,6 +352,17 @@ namespace JetHorizon
         {
             if (strike.Warn != null) Destroy(strike.Warn);
             if (strike.Bolt != null) Destroy(strike.Bolt);
+        }
+
+        void ReleasePresenter(Strike strike)
+        {
+            if (strike == null) return;
+            strike.CoreId = 0;
+            strike.Struck = false;
+            strike.CrackleFrame = -1;
+            if (strike.Warn != null) strike.Warn.SetActive(false);
+            if (strike.Bolt != null) strike.Bolt.SetActive(false);
+            _pool.Push(strike);
         }
     }
 }

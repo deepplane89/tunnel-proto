@@ -7,7 +7,8 @@ namespace JetHorizon.Simulation
         Title,
         Playing,
         Paused,
-        Dead
+        Dead,
+        Extracted
     }
 
     public struct InputFrame
@@ -89,13 +90,18 @@ namespace JetHorizon.Simulation
         VibeChanged,
         KlaxonCountdown,
         PickupCollected,
+        CargoCollected,
+        RunExtracted,
         PowerupCollected,
         PowerupActivated,
         PowerupExpired,
         ShieldHit,
         ShieldBroken,
+        HullDamaged,
         LaserFired,
         HazardDestroyed,
+        PrismaticBoundaryHit,
+        LightningGateStarted,
         PlayerDied
     }
 
@@ -351,7 +357,8 @@ namespace JetHorizon.Simulation
     public enum PickupKind
     {
         Coin,
-        Powerup
+        Powerup,
+        Cargo
     }
 
     /// <summary>Portable gameplay identity for the four production power-ups.</summary>
@@ -368,6 +375,8 @@ namespace JetHorizon.Simulation
     {
         public PickupKind Kind;
         public PowerupType Powerup;
+        public RunCargoKind CargoKind;
+        public int CargoUnits;
         public float X;
         public float Y;
         public float Z;
@@ -404,6 +413,22 @@ namespace JetHorizon.Simulation
                 CollectHalfDepth = 2.5f
             };
         }
+
+        public static PickupSpawn Cargo(RunCargoKind kind, int units, float x, float y, float z)
+        {
+            if (units <= 0) throw new ArgumentOutOfRangeException(nameof(units));
+            return new PickupSpawn
+            {
+                Kind = PickupKind.Cargo,
+                CargoKind = kind,
+                CargoUnits = units,
+                X = x,
+                Y = y,
+                Z = z,
+                CollectHalfWidth = 2.1f,
+                CollectHalfDepth = 2.1f
+            };
+        }
     }
 
     public struct PickupSnapshot
@@ -411,17 +436,52 @@ namespace JetHorizon.Simulation
         public int Id { get; }
         public PickupKind Kind { get; }
         public PowerupType Powerup { get; }
+        public RunCargoKind CargoKind { get; }
+        public int CargoUnits { get; }
         public float X { get; }
         public float Y { get; }
         public float Z { get; }
 
-        internal PickupSnapshot(int id, PickupKind kind, PowerupType powerup, float x, float y, float z)
+        internal PickupSnapshot(int id, PickupKind kind, PowerupType powerup, RunCargoKind cargoKind, int cargoUnits, float x, float y, float z)
         {
             Id = id;
             Kind = kind;
             Powerup = powerup;
+            CargoKind = cargoKind;
+            CargoUnits = cargoUnits;
             X = x;
             Y = y;
+            Z = z;
+        }
+    }
+
+    /// <summary>
+    /// A moving cross-section of an active sine corridor. Unity connects these
+    /// authoritative samples into a continuous force-field mesh; gameplay uses the
+    /// same samples for boundary collision.
+    /// </summary>
+    public readonly struct CorridorSliceSnapshot
+    {
+        public int Id { get; }
+        public CorridorFamily Family { get; }
+        public int RowIndex { get; }
+        public float CenterX { get; }
+        public float HalfWidth { get; }
+        public float Z { get; }
+
+        internal CorridorSliceSnapshot(
+            int id,
+            CorridorFamily family,
+            int rowIndex,
+            float centerX,
+            float halfWidth,
+            float z)
+        {
+            Id = id;
+            Family = family;
+            RowIndex = rowIndex;
+            CenterX = centerX;
+            HalfWidth = halfWidth;
             Z = z;
         }
     }
@@ -433,6 +493,7 @@ namespace JetHorizon.Simulation
     {
         readonly HazardSnapshot[] _hazards;
         readonly PickupSnapshot[] _pickups;
+        readonly CorridorSliceSnapshot[] _corridorSlices;
 
         public CoreGamePhase Phase { get; internal set; }
         public long Tick { get; internal set; }
@@ -456,6 +517,8 @@ namespace JetHorizon.Simulation
         public bool SlalomActive { get; internal set; }
         public bool AngledWallsActive { get; internal set; }
         public float CorridorGapCenter { get; internal set; }
+        public CorridorFamily ActiveCorridorFamily { get; internal set; }
+        public int CorridorSliceCount { get; internal set; }
         public int StageIndex { get; internal set; }
         public string StageName { get; internal set; }
         public float StageElapsed { get; internal set; }
@@ -474,11 +537,20 @@ namespace JetHorizon.Simulation
         public float OverdriveSeconds { get; internal set; }
         public float OverdriveSpeedSeconds { get; internal set; }
         public float MagnetSeconds { get; internal set; }
+        public int CargoSalvage { get; internal set; }
+        public int CargoAlloy { get; internal set; }
+        public int CargoPrism { get; internal set; }
+        public int CargoUnits { get; internal set; }
+        public int CargoCapacity { get; internal set; }
+        public bool ExtractionAvailable { get; internal set; }
+        public int HullHitsRemaining { get; internal set; }
+        public int HullHitCapacity { get; internal set; }
 
-        internal SimulationSnapshot(int maxHazards, int maxPickups)
+        internal SimulationSnapshot(int maxHazards, int maxPickups, int maxCorridorSlices)
         {
             _hazards = new HazardSnapshot[maxHazards];
             _pickups = new PickupSnapshot[maxPickups];
+            _corridorSlices = new CorridorSliceSnapshot[maxCorridorSlices];
         }
 
         public HazardSnapshot GetHazard(int index)
@@ -496,5 +568,13 @@ namespace JetHorizon.Simulation
         }
 
         internal void SetPickup(int index, PickupSnapshot pickup) => _pickups[index] = pickup;
+
+        public CorridorSliceSnapshot GetCorridorSlice(int index)
+        {
+            if (index < 0 || index >= CorridorSliceCount) throw new ArgumentOutOfRangeException(nameof(index));
+            return _corridorSlices[index];
+        }
+
+        internal void SetCorridorSlice(int index, CorridorSliceSnapshot slice) => _corridorSlices[index] = slice;
     }
 }

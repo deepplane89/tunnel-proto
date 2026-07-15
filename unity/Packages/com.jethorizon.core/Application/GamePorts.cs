@@ -31,7 +31,8 @@ namespace JetHorizon.Application
         SpeedWarning,
         NearMiss,
         Pickup,
-        PlayerDied
+        PlayerDied,
+        RunExtracted
     }
 
     public interface IAudioOutput

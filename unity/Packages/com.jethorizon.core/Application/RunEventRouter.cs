@@ -64,6 +64,12 @@ namespace JetHorizon.Application
                     _services.Haptics.Play(HapticCue.Impact);
                     if (completedRun != null) LastCompletion = _completion.Complete(completedRun);
                     break;
+
+                case SimulationEventType.RunExtracted:
+                    _services.Audio.Play(AudioCue.RunExtracted);
+                    _services.Haptics.Play(HapticCue.Light);
+                    if (completedRun != null) LastCompletion = _completion.Complete(completedRun);
+                    break;
             }
         }
     }

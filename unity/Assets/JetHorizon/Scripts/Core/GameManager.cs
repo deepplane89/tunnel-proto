@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using JetHorizon.Simulation;
 using JetHorizon.Application;
+using JetHorizon.Meta;
 using JetHorizon.Platform;
 
 namespace JetHorizon
@@ -34,6 +35,7 @@ namespace JetHorizon
         public SlalomSystem Slalom;
         public AngledWallSystem AngledWalls;
         public LightningSystem Lightning;
+        public PrismaticTunnelPresenter PrismaticTunnel;
         public ObstacleSpawner Obstacles;
         public PickupSystem Pickups;
         public PowerupPresentationSystem PowerupPresentation;
@@ -45,8 +47,10 @@ namespace JetHorizon
         float _accumulator;
         float _deathTimer;
         bool  _killedThisFrame;   // JS `return` after killPlayer aborts remaining checks
+        bool _garageRunResolved;
         JetHorizonSimulation _coreSimulation;
         RunEventRouter _applicationEvents;
+        SequenceAsset _sequenceAsset;
         static long _lastIssuedRunId;
 
         public GamePhase Phase => State.Phase;
@@ -56,6 +60,7 @@ namespace JetHorizon
         public SimulationEventBuffer CoreEvents => _coreSimulation?.Events;
         public StageCommandBuffer CoreStageCommands => _coreSimulation?.StageCommands;
         public RunCompletionOutcome? LastCompletion => _applicationEvents?.LastCompletion;
+        public GarageOrchestrator Garage { get; private set; }
         [Header("Feel")]
         public JetHorizonFeelProfile FeelProfile;
 
@@ -68,7 +73,20 @@ namespace JetHorizon
                 FeelProfile = Resources.Load<JetHorizonFeelProfile>("JetHorizonFeel");
                 if (FeelProfile == null) FeelProfile = ScriptableObject.CreateInstance<JetHorizonFeelProfile>();
             }
-            var runDefinition = SequenceAsset.Load().ToCoreDefinition();
+            Garage = UnityGameServicesFactory.CreateGarage();
+            _sequenceAsset = SequenceAsset.Load();
+            BuildCoreSimulation();
+            _applicationEvents = new RunEventRouter(UnityGameServicesFactory.CreateDefault());
+            // Match the web build: 60 fps cap (sim is fixed 60 Hz; rendering above it
+            // just shows duplicate sim states as judder on high-refresh displays).
+            QualitySettings.vSyncCount = 0;
+            UnityEngine.Application.targetFrameRate = 60;
+        }
+
+        void BuildCoreSimulation()
+        {
+            ShipLaunchProfile launchProfile = GarageDomainService.CreateLaunchProfile(Garage.Current);
+            var runDefinition = _sequenceAsset.ToCoreDefinition(launchProfile.SpeedMultiplier);
             _coreSimulation = new JetHorizonSimulation(new SimulationConfig
             {
                 // The core owns live ship, progression, stages, random wave decisions,
@@ -81,25 +99,24 @@ namespace JetHorizon
                 SpawnIntervalDistance = 30f,
                 MaxHazards = 600,
                 MaxPickups = 128,
+                MaxCorridorSlices = 96,
+                CargoCapacity = launchProfile.CargoCapacity,
+                HullHitCapacity = launchProfile.CollisionHitCapacity,
+                PrismaticSineTunnelEnabled = true,
                 Snap = FeelProfile.Snap,
-                AccelBase = FeelProfile.AccelBase,
-                AccelSnap = FeelProfile.AccelSnap,
-                HandlingDrift = FeelProfile.HandlingDrift,
-                MaxVelBase = FeelProfile.MaxVelocityBase,
-                MaxVelSnap = FeelProfile.MaxVelocitySnap,
-                DecelBasePercent = FeelProfile.DecelerationBasePercent,
-                DecelFullPercent = FeelProfile.DecelerationFullPercent,
+                AccelBase = FeelProfile.AccelBase * launchProfile.AccelerationMultiplier,
+                AccelSnap = FeelProfile.AccelSnap * launchProfile.AccelerationMultiplier,
+                HandlingDrift = launchProfile.HandlingDrift,
+                MaxVelBase = FeelProfile.MaxVelocityBase * launchProfile.LateralSpeedMultiplier,
+                MaxVelSnap = FeelProfile.MaxVelocitySnap * launchProfile.LateralSpeedMultiplier,
+                DecelBasePercent = FeelProfile.DecelerationBasePercent * launchProfile.SettleMultiplier,
+                DecelFullPercent = FeelProfile.DecelerationFullPercent * launchProfile.SettleMultiplier,
                 CounterSteerBoost = FeelProfile.CounterSteerBoost,
-                BankMaxRadians = FeelProfile.BankMaximumRadians,
+                BankMaxRadians = FeelProfile.BankMaximumRadians * launchProfile.BankMultiplier,
                 BankSmoothing = FeelProfile.BankSmoothing,
                 BankReturnRate = FeelProfile.BankReturnRate,
                 BankZeroCrossMultiplier = FeelProfile.BankZeroCrossMultiplier
             }, 20260714u, runDefinition);
-            _applicationEvents = new RunEventRouter(UnityGameServicesFactory.CreateDefault());
-            // Match the web build: 60 fps cap (sim is fixed 60 Hz; rendering above it
-            // just shows duplicate sim states as judder on high-refresh displays).
-            QualitySettings.vSyncCount = 0;
-            UnityEngine.Application.targetFrameRate = 60;
         }
 
         void Start()
@@ -122,6 +139,10 @@ namespace JetHorizon
             if (ShipSkins == null)
                 ShipSkins = gameObject.GetComponent<ShipSkinController>() ?? gameObject.AddComponent<ShipSkinController>();
             ShipSkins.Initialize(Ship != null ? Ship.ShipRoot : null);
+            ApplyGarageAddOns();
+            if (PrismaticTunnel == null)
+                PrismaticTunnel = gameObject.GetComponent<PrismaticTunnelPresenter>() ?? gameObject.AddComponent<PrismaticTunnelPresenter>();
+            PrismaticTunnel.ResetSystem();
             State.TransitionTo(GamePhase.Title);
         }
 
@@ -176,6 +197,7 @@ namespace JetHorizon
             Waves.SimTick(dt);                                   // 16: DR sequencer
             Canyon.SimTick(dt);                                  // 16: canyon slabs + collision
             if (_killedThisFrame) return;
+            PrismaticTunnel?.SimTick(dt);                        // snapshot-only continuous sine tunnel presentation
             AngledWalls.SimTick(dt);                             // walls move + OBB collision
             if (_killedThisFrame) return;
             Lightning.SimTick(dt);
@@ -333,11 +355,14 @@ namespace JetHorizon
         // ── Flow control ───────────────────────────────────────────────────
         public void StartRun(bool skipIntro = false)
         {
-            if (State.Phase != GamePhase.Title && State.Phase != GamePhase.Dead) return;
+            if (State.Phase != GamePhase.Title && State.Phase != GamePhase.Dead && State.Phase != GamePhase.Garage) return;
 
             Session.ResetForNewRun();
             _accumulator = 0f;
+            BuildCoreSimulation();
             _coreSimulation.StartRun(IssueRunId());
+            ApplyGarageAddOns();
+            _garageRunResolved = false;
             if (GodMode)
                 _coreSimulation.MarkLeaderboardIneligible(LeaderboardIneligibility.GodMode);
             _applicationEvents.Dispatch(_coreSimulation.Events);
@@ -360,6 +385,31 @@ namespace JetHorizon
             _deathTimer = 0f;
             StartRun(skipIntro: true);
             Camera.PlayRetrySweep();
+        }
+
+        public void OpenGarage()
+        {
+            if (State.Phase != GamePhase.Title && State.Phase != GamePhase.Dead) return;
+            Garage?.RefreshRepairs();
+            State.TransitionTo(GamePhase.Garage);
+        }
+
+        public bool RequestExtraction()
+        {
+            if (State.Phase != GamePhase.Playing || _coreSimulation == null) return false;
+            if (!_coreSimulation.TryExtract(out RunCargoManifest cargo)) return false;
+
+            GarageCommandResult settlement = Garage.Extract(new CargoManifest(cargo.Salvage, cargo.Alloy, cargo.Prism));
+            if (!settlement.Succeeded) return false;
+            _garageRunResolved = true;
+            _applicationEvents.Dispatch(_coreSimulation.Events, _coreSimulation.LatestRunResult);
+            SyncCoreSession();
+            _accumulator = 0f;
+            State.TransitionTo(GamePhase.Garage);
+            ResetAllSystems();
+            Camera.ResetToTitle();
+            GameEvents.RaiseRunExtracted(cargo.TotalUnits);
+            return true;
         }
 
         public void TogglePause()
@@ -409,12 +459,27 @@ namespace JetHorizon
 
         public void ToggleGodMode() => SetGodMode(!GodMode);
 
+        void ApplyGarageAddOns()
+        {
+            if (Garage == null || Ship == null || Ship.ShipRoot == null) return;
+            string[] nodeNames = { "Fins_01", "Fins_02", "Rings_001", "Turrets_001", "Turrets_002", "Turrets_003" };
+            string[] itemIds = { "addon:fins-01", "addon:fins-02", "addon:rings-001", "addon:turrets-001", "addon:turrets-002", "addon:turrets-003" };
+            Transform[] nodes = Ship.ShipRoot.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < nodeNames.Length; i++)
+            {
+                bool visible = Garage.Current.EquippedAddOnIds.Contains(itemIds[i]);
+                for (int n = 0; n < nodes.Length; n++)
+                    if (nodes[n].name == nodeNames[i]) nodes[n].gameObject.SetActive(visible);
+            }
+        }
+
         void ResetAllSystems()
         {
             Ship.ResetSystem(); Camera.ResetSystem(); Waves.ResetSystem();
             Canyon.ResetSystem(); SineCorridor.ResetSystem(); Zipper.ResetSystem();
             Slalom.ResetSystem(); AngledWalls.ResetSystem(); Lightning.ResetSystem();
             Obstacles.ResetSystem(); Pickups.ResetSystem();
+            PrismaticTunnel?.ResetSystem();
             PowerupPresentation?.ResetSystem();
         }
 
@@ -442,6 +507,11 @@ namespace JetHorizon
             if (!coreAlreadyDead) _coreSimulation?.ForcePlayerDeath();
             if (_coreSimulation != null)
                 _applicationEvents.Dispatch(_coreSimulation.Events, _coreSimulation.LatestRunResult);
+            if (!_garageRunResolved && Garage != null)
+            {
+                Garage.RecordDestroyedRun(.25f);
+                _garageRunResolved = true;
+            }
             SyncCoreSession();
 
             State.TransitionTo(GamePhase.Dead);

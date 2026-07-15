@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace JetHorizon
 {
-    public enum GamePhase { Boot, Title, Tutorial, Playing, Paused, Dead }
+    public enum GamePhase { Boot, Title, Tutorial, Playing, Paused, Dead, Garage }
 
     /// <summary>
     /// Rock-solid phase machine. Every transition is validated and every state's
@@ -20,13 +20,18 @@ namespace JetHorizon
             (GamePhase.Boot,     GamePhase.Title),
             (GamePhase.Title,    GamePhase.Playing),
             (GamePhase.Title,    GamePhase.Tutorial),
+            (GamePhase.Title,    GamePhase.Garage),
+            (GamePhase.Garage,   GamePhase.Title),
+            (GamePhase.Garage,   GamePhase.Playing),
             (GamePhase.Tutorial, GamePhase.Playing),
             (GamePhase.Tutorial, GamePhase.Title),
             (GamePhase.Playing,  GamePhase.Paused),
             (GamePhase.Paused,   GamePhase.Playing),
             (GamePhase.Paused,   GamePhase.Title),
             (GamePhase.Playing,  GamePhase.Dead),
+            (GamePhase.Playing,  GamePhase.Garage),
             (GamePhase.Dead,     GamePhase.Playing),   // retry / repair
+            (GamePhase.Dead,     GamePhase.Garage),
             (GamePhase.Dead,     GamePhase.Title),
         };
 

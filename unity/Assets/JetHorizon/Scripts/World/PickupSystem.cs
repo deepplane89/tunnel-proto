@@ -27,14 +27,25 @@ namespace JetHorizon
             public Vector3 LastPosition;
         }
 
+        sealed class CargoView
+        {
+            public Transform T;
+            public MeshRenderer Renderer;
+            public bool Active;
+            public int CoreId;
+            public RunCargoKind Kind;
+        }
+
         const int PoolSize = 100;
         readonly List<Coin> _coins = new List<Coin>(PoolSize);
         readonly List<PowerupView> _powerups = new List<PowerupView>(10);
+        readonly List<CargoView> _cargo = new List<CargoView>(18);
         readonly Dictionary<int, PickupSnapshot> _corePickups = new Dictionary<int, PickupSnapshot>(PoolSize);
         Mesh _coinMesh;
         Mesh _octahedronMesh, _torusMesh, _sphereMesh;
         Material _powerupCubeMaterial;
         readonly Dictionary<PowerupType, Material> _powerupIconMaterials = new Dictionary<PowerupType, Material>();
+        readonly Dictionary<RunCargoKind, Material> _cargoMaterials = new Dictionary<RunCargoKind, Material>();
 
         RunSession S => GameManager.I.Session;
 
@@ -42,6 +53,30 @@ namespace JetHorizon
         {
             BuildPool();
             BuildPowerupPool();
+            BuildCargoPool();
+        }
+
+        void BuildCargoPool()
+        {
+            if (_cargo.Count > 0) return;
+            _cargoMaterials[RunCargoKind.Salvage] = CreateHologram(TextureFactory.Hex(0x47f5ff), false);
+            _cargoMaterials[RunCargoKind.Alloy] = CreateHologram(TextureFactory.Hex(0xffa43b), false);
+            _cargoMaterials[RunCargoKind.Prism] = CreateHologram(TextureFactory.Hex(0xff4dff), false);
+            var parent = new GameObject("CargoPool").transform;
+            parent.SetParent(transform, false);
+            for (int i = 0; i < 18; i++)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Destroy(go.GetComponent<Collider>());
+                go.name = "cargo";
+                go.layer = 8;
+                go.transform.SetParent(parent, false);
+                go.transform.localScale = new Vector3(1.4f, 1.05f, 1.8f);
+                var renderer = go.GetComponent<MeshRenderer>();
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                go.SetActive(false);
+                _cargo.Add(new CargoView { T = go.transform, Renderer = renderer });
+            }
         }
 
         void BuildPool()
@@ -136,6 +171,7 @@ namespace JetHorizon
         {
             BuildPool();
             BuildPowerupPool();
+            BuildCargoPool();
             GameManager.I?.ClearRegisteredPickups();
             foreach (var c in _coins)
             {
@@ -150,6 +186,12 @@ namespace JetHorizon
                 powerup.CoreId = 0;
                 powerup.Type = PowerupType.None;
                 powerup.T.gameObject.SetActive(false);
+            }
+            foreach (var cargo in _cargo)
+            {
+                cargo.Active = false;
+                cargo.CoreId = 0;
+                cargo.T.gameObject.SetActive(false);
             }
         }
 
@@ -237,6 +279,20 @@ namespace JetHorizon
                     0f);
                 powerup.Icon.localRotation = Quaternion.Euler(0f, s.Elapsed * 1.4f * Mathf.Rad2Deg, 0f);
             }
+
+            foreach (var cargo in _cargo)
+            {
+                if (!cargo.Active) continue;
+                if (!_corePickups.TryGetValue(cargo.CoreId, out var pickup) || pickup.Kind != PickupKind.Cargo)
+                {
+                    cargo.Active = false;
+                    cargo.CoreId = 0;
+                    cargo.T.gameObject.SetActive(false);
+                    continue;
+                }
+                cargo.T.position = new Vector3(pickup.X, pickup.Y + Mathf.Sin(s.Elapsed * 2.6f + cargo.CoreId) * .16f, pickup.Z);
+                cargo.T.rotation = Quaternion.Euler(12f, (s.Elapsed * 1.8f + cargo.CoreId) * Mathf.Rad2Deg, 28f);
+            }
         }
 
         void EnsureCorePresenters(SimulationSnapshot snapshot)
@@ -261,6 +317,13 @@ namespace JetHorizon
                         if (powerup.Active && powerup.CoreId == pickup.Id) { found = true; break; }
                     }
                     if (!found) AcquireCorePowerup(pickup);
+                }
+                else if (pickup.Kind == PickupKind.Cargo)
+                {
+                    bool found = false;
+                    foreach (var cargo in _cargo)
+                        if (cargo.Active && cargo.CoreId == pickup.Id) { found = true; break; }
+                    if (!found) AcquireCoreCargo(pickup);
                 }
             }
         }
@@ -299,6 +362,21 @@ namespace JetHorizon
                         ? _sphereMesh
                         : _octahedronMesh;
                 view.Icon.GetComponent<MeshRenderer>().sharedMaterial = _powerupIconMaterials[pickup.Powerup];
+                view.T.gameObject.SetActive(true);
+                return;
+            }
+        }
+
+        void AcquireCoreCargo(PickupSnapshot pickup)
+        {
+            foreach (var view in _cargo)
+            {
+                if (view.Active) continue;
+                view.Active = true;
+                view.CoreId = pickup.Id;
+                view.Kind = pickup.CargoKind;
+                view.Renderer.sharedMaterial = _cargoMaterials[pickup.CargoKind];
+                view.T.position = new Vector3(pickup.X, pickup.Y, pickup.Z);
                 view.T.gameObject.SetActive(true);
                 return;
             }

@@ -41,6 +41,8 @@ namespace JetHorizon.Simulation
             public int Id;
             public PickupKind Kind;
             public PowerupType Powerup;
+            public RunCargoKind CargoKind;
+            public int CargoUnits;
             public float X;
             public float Y;
             public float Z;
@@ -49,11 +51,24 @@ namespace JetHorizon.Simulation
             public float CollectHalfDepth;
         }
 
+        struct CorridorSliceState
+        {
+            public bool Active;
+            public int Id;
+            public CorridorFamily Family;
+            public int RowIndex;
+            public float CenterX;
+            public float HalfWidth;
+            public float Z;
+        }
+
         readonly SimulationConfig _config;
         readonly uint _seed;
         readonly DeterministicRandom _random;
         readonly HazardState[] _hazards;
         readonly PickupState[] _pickups;
+        readonly RunCargoLedger _cargo;
+        readonly CorridorSliceState[] _corridorSlices;
         readonly StageDirector _stageDirector;
         readonly int[] _laneScratch;
         readonly int[] _blockedLaneScratch;
@@ -79,15 +94,20 @@ namespace JetHorizon.Simulation
         int _nextEntityId;
         int _wavesSinceCoin;
         int _wavesSincePowerup;
+        int _wavesSinceCargo;
         int _nextPowerupType;
         float _shieldSeconds;
         int _shieldHits;
+        int _hullHitsRemaining;
         float _laserSeconds;
         float _laserShotTimer;
         float _overdriveSeconds;
         float _magnetSeconds;
         CorridorFamily _lightningFamily;
         float _lightningTimer;
+        LightningGatePatternKind _lightningPattern;
+        int _lightningPatternStep;
+        int _lightningGateIndex;
         bool _zipperActive;
         int _zipperRowsLeft;
         int _zipperRowsTotal;
@@ -133,11 +153,13 @@ namespace JetHorizon.Simulation
             _random = new DeterministicRandom(seed);
             _hazards = new HazardState[_config.MaxHazards];
             _pickups = new PickupState[_config.MaxPickups];
+            _cargo = new RunCargoLedger(_config.CargoCapacity);
+            _corridorSlices = new CorridorSliceState[_config.MaxCorridorSlices];
             _stageDirector = runDefinition == null ? null : new StageDirector(runDefinition);
             _structuredWallField = StructuredWallFieldCatalog.Production;
             _laneScratch = new int[_config.LaneCount];
             _blockedLaneScratch = new int[_config.LaneCount];
-            Snapshot = new SimulationSnapshot(_config.MaxHazards, _config.MaxPickups);
+            Snapshot = new SimulationSnapshot(_config.MaxHazards, _config.MaxPickups, _config.MaxCorridorSlices);
             Events = new SimulationEventBuffer(64);
             StageCommands = new StageCommandBuffer(16);
             ResetToTitle();
@@ -192,6 +214,24 @@ namespace JetHorizon.Simulation
             Phase = CoreGamePhase.Dead;
             Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, 0, (float)_score, _distance));
             RefreshSnapshot();
+        }
+
+        public bool TryExtract(out RunCargoManifest manifest)
+        {
+            Events.Clear();
+            if (Phase != CoreGamePhase.Playing || _distance < _config.FirstExtractionDistance)
+            {
+                manifest = default;
+                RefreshSnapshot();
+                return false;
+            }
+
+            manifest = _cargo.Snapshot();
+            FinalizeRun();
+            Phase = CoreGamePhase.Extracted;
+            Events.Add(new SimulationEvent(SimulationEventType.RunExtracted, 0, manifest.TotalUnits, _distance));
+            RefreshSnapshot();
+            return true;
         }
 
         /// <summary>Marks the active run as ineligible without changing deterministic gameplay.</summary>
@@ -275,6 +315,8 @@ namespace JetHorizon.Simulation
                 Id = id,
                 Kind = spawn.Kind,
                 Powerup = spawn.Powerup,
+                CargoKind = spawn.CargoKind,
+                CargoUnits = spawn.CargoUnits,
                 X = spawn.X,
                 Y = spawn.Y,
                 Z = spawn.Z,
@@ -342,6 +384,11 @@ namespace JetHorizon.Simulation
             TickZipper(dt);
             TickSlalom(dt);
             TickSineCorridor(dt);
+            if (ResolvePrismaticCorridorCollision(world))
+            {
+                RefreshSnapshot();
+                return;
+            }
             TickStructuredWalls(dt);
 
             float step = _effectiveSpeed * dt;
@@ -381,6 +428,7 @@ namespace JetHorizon.Simulation
 
             if (_overdriveSeconds > 0f) return false;
             if (ConsumeShieldHit(0)) return false;
+            if (ConsumeHullHit(0)) return false;
 
             FinalizeRun();
             Phase = CoreGamePhase.Dead;
@@ -420,7 +468,7 @@ namespace JetHorizon.Simulation
         public bool TryAbsorbExternalHit(int hazardId = 0)
         {
             if (_overdriveSeconds > 0f) return true;
-            bool absorbed = ConsumeShieldHit(hazardId);
+            bool absorbed = ConsumeShieldHit(hazardId) || ConsumeHullHit(hazardId);
             if (absorbed) RefreshSnapshot();
             return absorbed;
         }
@@ -456,11 +504,20 @@ namespace JetHorizon.Simulation
             return true;
         }
 
+        bool ConsumeHullHit(int hazardId)
+        {
+            if (_hullHitsRemaining <= 1) return false;
+            _hullHitsRemaining--;
+            Events.Add(new SimulationEvent(SimulationEventType.HullDamaged, hazardId, _hullHitsRemaining, _config.HullHitCapacity));
+            return true;
+        }
+
         void ResetRunState(SimulationEventBuffer events)
         {
             _random.Reset(_seed);
             Array.Clear(_hazards, 0, _hazards.Length);
             Array.Clear(_pickups, 0, _pickups.Length);
+            Array.Clear(_corridorSlices, 0, _corridorSlices.Length);
             _tick = 0;
             _eligibleRunTick = 0;
             _runId = 0L;
@@ -484,15 +541,21 @@ namespace JetHorizon.Simulation
             _nextEntityId = 1;
             _wavesSinceCoin = 99;
             _wavesSincePowerup = 0;
+            _wavesSinceCargo = 0;
             _nextPowerupType = 0;
             _shieldSeconds = 0f;
             _shieldHits = 0;
+            _hullHitsRemaining = _config.HullHitCapacity;
             _laserSeconds = 0f;
             _laserShotTimer = 0f;
             _overdriveSeconds = 0f;
             _magnetSeconds = 0f;
+            _cargo.Reset();
             _lightningFamily = CorridorFamily.None;
             _lightningTimer = 0f;
+            _lightningPattern = LightningGatePatternKind.SweepRight;
+            _lightningPatternStep = 0;
+            _lightningGateIndex = 0;
             _zipperActive = false;
             _zipperRowsLeft = 0;
             _zipperRowsTotal = 0;
@@ -759,6 +822,32 @@ namespace JetHorizon.Simulation
                 SpawnPowerup(predictedX, blockedCount);
                 _wavesSincePowerup = 0;
             }
+
+            _wavesSinceCargo++;
+            if (_wavesSinceCargo >= _config.CargoWaveInterval && _cargo.TotalUnits < _cargo.Capacity)
+            {
+                SpawnCargo(predictedX, blockedCount);
+                _wavesSinceCargo = 0;
+            }
+        }
+
+        void SpawnCargo(float centerX, int blockedCount)
+        {
+            int freeCount = 0;
+            for (int lane = 0; lane < _config.LaneCount; lane++)
+            {
+                bool blocked = false;
+                for (int i = 0; i < blockedCount; i++)
+                    if (_blockedLaneScratch[i] == lane) { blocked = true; break; }
+                if (!blocked) _laneScratch[freeCount++] = lane;
+            }
+            if (freeCount == 0) return;
+            int laneIndex = _laneScratch[_random.NextInt(0, freeCount)];
+            float centerLane = (_config.LaneCount - 1) * .5f;
+            float x = centerX + (laneIndex - centerLane) * _config.LaneWidth;
+            float rarity = _random.NextFloat();
+            RunCargoKind kind = rarity < .70f ? RunCargoKind.Salvage : rarity < .93f ? RunCargoKind.Alloy : RunCargoKind.Prism;
+            SpawnPickup(PickupSpawn.Cargo(kind, 1, x, 1.35f, _config.SpawnZ));
         }
 
         int CountActivePowerups()
@@ -914,19 +1003,80 @@ namespace JetHorizon.Simulation
             {
                 _lightningFamily = family;
                 _lightningTimer = 0f;
+                _lightningPatternStep = 0;
+                _lightningGateIndex = 0;
+                _lightningPattern = (LightningGatePatternKind)_random.NextInt(0, 4);
             }
 
-            float frequency = family == CorridorFamily.PreT4A ? 0.3f : 2f;
             _lightningTimer += dt;
-            while (_lightningTimer >= frequency)
+            while (_lightningTimer >= _config.LightningGateIntervalSeconds)
             {
-                _lightningTimer -= frequency;
-                float travelTime = 83f / Math.Max(1f, _speed);
-                float targetX = _shipX
-                    + (_random.NextFloat() - 0.5f) * 3f
-                    + _shipVelocityX * travelTime * 0.6f;
-                SpawnHazard(HazardSpawn.Lightning(targetX, _config.ShipZ - 83f));
+                _lightningTimer -= _config.LightningGateIntervalSeconds;
+                SpawnLightningGate(world);
             }
+        }
+
+        void SpawnLightningGate(WorldFrame world)
+        {
+            float center;
+            float halfWidth;
+            if (!TryGetLightningCorridorBounds(world, out center, out halfWidth)) return;
+
+            float usableHalfWidth = Math.Max(_config.LightningGateSafeWidth, halfWidth - 1.5f);
+            float normalized = LightningGatePattern.SafeCenterNormalized(_lightningPattern, _lightningPatternStep);
+            float safeCenter = center + normalized * Math.Max(0f, usableHalfWidth - _config.LightningGateSafeWidth * 0.5f);
+            float safeHalf = _config.LightningGateSafeWidth * 0.5f;
+            float left = center - usableHalfWidth;
+            float right = center + usableHalfWidth;
+            int columns = Math.Max(3, _config.LightningGateColumns);
+            float spacing = (right - left) / (columns - 1);
+            float spawnZ = _config.ShipZ - 83f;
+            for (int i = 0; i < columns; i++)
+            {
+                float x = left + spacing * i;
+                if (Math.Abs(x - safeCenter) <= safeHalf) continue;
+                SpawnHazard(HazardSpawn.Lightning(
+                    x,
+                    spawnZ,
+                    _config.LightningGateWarningSeconds,
+                    4.8f,
+                    _config.LightningGateCollisionHalfWidth,
+                    4f));
+            }
+
+            Events.Add(new SimulationEvent(
+                SimulationEventType.LightningGateStarted,
+                _lightningGateIndex++,
+                safeCenter,
+                _config.LightningGateSafeWidth));
+            _lightningPatternStep++;
+            if (_lightningPatternStep >= LightningGatePattern.StepCount(_lightningPattern))
+            {
+                _lightningPatternStep = 0;
+                _lightningPattern = (LightningGatePatternKind)(((int)_lightningPattern + 1 + _random.NextInt(0, 3)) % 4);
+            }
+        }
+
+        bool TryGetLightningCorridorBounds(WorldFrame world, out float center, out float halfWidth)
+        {
+            if (world.CorridorCollisionActive)
+            {
+                center = (world.CorridorLeftBoundary + world.CorridorRightBoundary) * 0.5f;
+                halfWidth = Math.Abs(world.CorridorRightBoundary - world.CorridorLeftBoundary) * 0.5f;
+                return halfWidth > 1f;
+            }
+
+            int best = FindNearestCorridorSlice(_config.ShipZ - 83f);
+            if (best >= 0)
+            {
+                center = _corridorSlices[best].CenterX;
+                halfWidth = _corridorSlices[best].HalfWidth;
+                return true;
+            }
+
+            center = 0f;
+            halfWidth = 0f;
+            return false;
         }
 
         void ApplyStageCommandsToCore()
@@ -973,7 +1123,7 @@ namespace JetHorizon.Simulation
         {
             _sineCorridor = SineCorridorCatalog.For(family);
             _sineRowsDone = 0;
-            _sineSpawnZ = -7f;
+            _sineSpawnZ = -_config.PrismaticTunnelRowSpacing;
             _sinePhase = 0f;
             _sineAnchor = _shipX;
             _sineDelaySeconds = _sineCorridor.StartDelaySeconds;
@@ -987,10 +1137,12 @@ namespace JetHorizon.Simulation
             _sineCorridor = null;
             _sineRowsDone = 0;
             _sineDelaySeconds = 0f;
+            Array.Clear(_corridorSlices, 0, _corridorSlices.Length);
         }
 
         void TickSineCorridor(float dt)
         {
+            TickCorridorSlices(dt);
             if (!_sineCorridorActive || _sineCorridor == null) return;
             if (_sineDelaySeconds > 0f)
             {
@@ -1001,11 +1153,14 @@ namespace JetHorizon.Simulation
             _sineSpawnZ += _effectiveSpeed * dt;
             while (_sineSpawnZ >= 0f && _sineRowsDone < _sineCorridor.TotalRows)
             {
-                _sineSpawnZ = -7f + (_random.NextFloat() - 0.5f) * 2f;
+                _sineSpawnZ = -_config.PrismaticTunnelRowSpacing;
                 SpawnSineCorridorRow();
                 _sineRowsDone++;
             }
-            if (_sineRowsDone >= _sineCorridor.TotalRows) _sineCorridorActive = false;
+            if (_sineRowsDone >= _sineCorridor.TotalRows && !_config.PrismaticSineTunnelEnabled)
+                _sineCorridorActive = false;
+            else if (_sineRowsDone >= _sineCorridor.TotalRows && CountCorridorSlices() == 0)
+                _sineCorridorActive = false;
         }
 
         void SpawnSineCorridorRow()
@@ -1014,12 +1169,100 @@ namespace JetHorizon.Simulation
             float center = _sineCorridor.CenterAtRow(_sineRowsDone, _sineAnchor, ref _sinePhase);
             _sineGapCenter = center;
 
+            if (_config.PrismaticSineTunnelEnabled)
+            {
+                SpawnCorridorSlice(center, halfWidth, _sineRowsDone);
+                return;
+            }
+
             SpawnSineCorridorCone(center - halfWidth, true);
             SpawnSineCorridorCone(center - halfWidth - _config.LaneWidth, true);
             SpawnSineCorridorCone(center + halfWidth, true);
             SpawnSineCorridorCone(center + halfWidth + _config.LaneWidth, true);
             if (_sineCorridor.ShouldSpawnCenterCone(_sineRowsDone))
                 SpawnSineCorridorCone(center, false);
+        }
+
+        void SpawnCorridorSlice(float center, float halfWidth, int rowIndex)
+        {
+            for (int i = 0; i < _corridorSlices.Length; i++)
+            {
+                if (_corridorSlices[i].Active) continue;
+                _corridorSlices[i] = new CorridorSliceState
+                {
+                    Active = true,
+                    Id = _nextEntityId++,
+                    Family = _sineCorridor.Family,
+                    RowIndex = rowIndex,
+                    CenterX = center,
+                    HalfWidth = halfWidth,
+                    Z = _config.PrismaticTunnelSpawnZ
+                };
+                return;
+            }
+        }
+
+        void TickCorridorSlices(float dt)
+        {
+            float step = _effectiveSpeed * dt;
+            for (int i = 0; i < _corridorSlices.Length; i++)
+            {
+                CorridorSliceState slice = _corridorSlices[i];
+                if (!slice.Active) continue;
+                slice.Z += step;
+                if (slice.Z > _config.DespawnZ + _config.PrismaticTunnelRowSpacing)
+                    slice.Active = false;
+                _corridorSlices[i] = slice;
+            }
+        }
+
+        int CountCorridorSlices()
+        {
+            int count = 0;
+            for (int i = 0; i < _corridorSlices.Length; i++)
+                if (_corridorSlices[i].Active) count++;
+            return count;
+        }
+
+        int FindNearestCorridorSlice(float z)
+        {
+            int best = -1;
+            float bestDistance = float.MaxValue;
+            for (int i = 0; i < _corridorSlices.Length; i++)
+            {
+                if (!_corridorSlices[i].Active) continue;
+                float distance = Math.Abs(_corridorSlices[i].Z - z);
+                if (distance >= bestDistance) continue;
+                best = i;
+                bestDistance = distance;
+            }
+            return best;
+        }
+
+        bool ResolvePrismaticCorridorCollision(WorldFrame world)
+        {
+            if (!_config.PrismaticSineTunnelEnabled
+                || !_config.CollisionEnabled
+                || world.CollisionSuppressed)
+                return false;
+
+            int index = FindNearestCorridorSlice(_config.ShipZ);
+            if (index < 0 || Math.Abs(_corridorSlices[index].Z - _config.ShipZ) > _config.PrismaticTunnelCollisionDepth)
+                return false;
+
+            CorridorSliceState slice = _corridorSlices[index];
+            _sineGapCenter = slice.CenterX;
+            float allowed = Math.Max(0f, slice.HalfWidth - _config.CorridorShipHalfWidth + _config.CorridorCollisionGrace);
+            if (Math.Abs(_shipX - slice.CenterX) < allowed) return false;
+            if (_overdriveSeconds > 0f) return false;
+            if (ConsumeShieldHit(slice.Id)) return false;
+            if (ConsumeHullHit(slice.Id)) return false;
+
+            Events.Add(new SimulationEvent(SimulationEventType.PrismaticBoundaryHit, slice.Id, slice.CenterX, slice.HalfWidth));
+            FinalizeRun();
+            Phase = CoreGamePhase.Dead;
+            Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, slice.Id, (float)_score, _distance));
+            return true;
         }
 
         void SpawnSineCorridorCone(float x, bool jitter)
@@ -1314,6 +1557,7 @@ namespace JetHorizon.Simulation
                     hazard.Active = false;
                     _hazards[i] = hazard;
                     if (ConsumeShieldHit(hazard.Id)) continue;
+                    if (ConsumeHullHit(hazard.Id)) continue;
                     FinalizeRun();
                     Phase = CoreGamePhase.Dead;
                     Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, hazard.Id, (float)_score, _distance));
@@ -1359,12 +1603,21 @@ namespace JetHorizon.Simulation
             Snapshot.OverdriveSeconds = _overdriveSeconds;
             Snapshot.OverdriveSpeedSeconds = Math.Max(0f, _overdriveSeconds - PowerupCatalog.Overdrive.GraceSeconds);
             Snapshot.MagnetSeconds = _magnetSeconds;
+            Snapshot.CargoSalvage = _cargo.Salvage;
+            Snapshot.CargoAlloy = _cargo.Alloy;
+            Snapshot.CargoPrism = _cargo.Prism;
+            Snapshot.CargoUnits = _cargo.TotalUnits;
+            Snapshot.CargoCapacity = _cargo.Capacity;
+            Snapshot.ExtractionAvailable = Phase == CoreGamePhase.Playing && _distance >= _config.FirstExtractionDistance;
+            Snapshot.HullHitsRemaining = _hullHitsRemaining;
+            Snapshot.HullHitCapacity = _config.HullHitCapacity;
             Snapshot.StageDirectorEnabled = _stageDirector != null;
             Snapshot.SineCorridorActive = _sineCorridorActive;
             Snapshot.ZipperActive = _zipperActive;
             Snapshot.SlalomActive = _slalomActive;
             Snapshot.AngledWallsActive = _structuredWallsActive;
             Snapshot.CorridorGapCenter = _sineCorridorActive ? _sineGapCenter : _slalomGapCenter;
+            Snapshot.ActiveCorridorFamily = _sineCorridor != null ? _sineCorridor.Family : CorridorFamily.None;
             if (_stageDirector != null)
             {
                 Snapshot.StageIndex = _stageDirector.StageIndex;
@@ -1426,11 +1679,28 @@ namespace JetHorizon.Simulation
                     pickup.Id,
                     pickup.Kind,
                     pickup.Powerup,
+                    pickup.CargoKind,
+                    pickup.CargoUnits,
                     pickup.X,
                     pickup.Y,
                     pickup.Z));
             }
             Snapshot.PickupCount = pickupCount;
+
+            int sliceCount = 0;
+            for (int i = 0; i < _corridorSlices.Length; i++)
+            {
+                CorridorSliceState slice = _corridorSlices[i];
+                if (!slice.Active) continue;
+                Snapshot.SetCorridorSlice(sliceCount++, new CorridorSliceSnapshot(
+                    slice.Id,
+                    slice.Family,
+                    slice.RowIndex,
+                    slice.CenterX,
+                    slice.HalfWidth,
+                    slice.Z));
+            }
+            Snapshot.CorridorSliceCount = sliceCount;
         }
 
         static float Clamp(float value, float minimum, float maximum)
@@ -1587,6 +1857,17 @@ namespace JetHorizon.Simulation
                             (float)pickup.Powerup));
                         ActivatePowerup(pickup.Powerup);
                     }
+                    else if (pickup.Kind == PickupKind.Cargo)
+                    {
+                        if (_cargo.TryCollect(pickup.CargoKind, pickup.CargoUnits))
+                        {
+                            Events.Add(new SimulationEvent(
+                                SimulationEventType.CargoCollected,
+                                pickup.Id,
+                                (float)pickup.CargoKind,
+                                pickup.CargoUnits));
+                        }
+                    }
                     else
                     {
                         AwardScore(pickup.ScoreValue, ScoreSource.Pickup, pickup.Id);
@@ -1611,6 +1892,8 @@ namespace JetHorizon.Simulation
             if (spawn.CollectHalfDepth <= 0f) throw new ArgumentOutOfRangeException(nameof(spawn.CollectHalfDepth));
             if (spawn.Kind == PickupKind.Powerup && spawn.Powerup == PowerupType.None)
                 throw new ArgumentOutOfRangeException(nameof(spawn.Powerup));
+            if (spawn.Kind == PickupKind.Cargo && spawn.CargoUnits <= 0)
+                throw new ArgumentOutOfRangeException(nameof(spawn.CargoUnits));
         }
 
         RunResult FinalizeRun()
