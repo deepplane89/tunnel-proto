@@ -3,24 +3,20 @@ using UnityEngine;
 
 namespace JetHorizon
 {
-    /// <summary>Unity audio projection of the source SFX with speed/steering-driven engine layers.</summary>
+    /// <summary>Unity audio projection of the source SFX.</summary>
     public sealed class JetHorizonAudioSystem : MonoBehaviour
     {
-        AudioSource _oneShot, _engineBody, _engineEdge;
+        AudioSource _oneShot;
         float _lastSteer, _steerHold, _whooshCooldown;
 
         void Awake()
         {
             _oneShot = Source("SFX", false);
-            _engineBody = Source("Engine Body", true);
-            _engineEdge = Source("Engine Edge", true);
-            _engineBody.clip = Clip("engine-roar");
-            _engineEdge.clip = Clip("engine-roar-layer");
         }
 
         void OnEnable()
         {
-            GameEvents.RunStarted += RunStarted; GameEvents.PlayerDied += Died;
+            GameEvents.PlayerDied += Died;
             GameEvents.NearMiss += NearMiss; GameEvents.CoinCollected += Coin;
             GameEvents.KlaxonCountdown += Klaxon;
             GameEvents.LightningStruck += Lightning; GameEvents.ShieldHit += Shield; GameEvents.ShieldBroken += ShieldBroken;
@@ -30,7 +26,7 @@ namespace JetHorizon
 
         void OnDisable()
         {
-            GameEvents.RunStarted -= RunStarted; GameEvents.PlayerDied -= Died;
+            GameEvents.PlayerDied -= Died;
             GameEvents.NearMiss -= NearMiss; GameEvents.CoinCollected -= Coin;
             GameEvents.KlaxonCountdown -= Klaxon; GameEvents.LightningStruck -= Lightning;
             GameEvents.ShieldHit -= Shield; GameEvents.ShieldBroken -= ShieldBroken;
@@ -43,13 +39,6 @@ namespace JetHorizon
             float dt = Mathf.Min(Time.unscaledDeltaTime, Tuning.MaxRawDt);
             _whooshCooldown = Mathf.Max(0f, _whooshCooldown - dt);
             ShipFeelSignals signals = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals : default;
-            bool playing = GameManager.I.Phase == GamePhase.Playing;
-            float speed = signals.SpeedPresentation;
-            _engineBody.volume = playing ? Mathf.Lerp(.10f, .25f, speed) : 0f;
-            _engineBody.pitch = Mathf.Lerp(.82f, 1.18f, speed);
-            _engineEdge.volume = playing ? Mathf.Lerp(.02f, .18f, speed) : 0f;
-            _engineEdge.pitch = Mathf.Lerp(.92f, 1.35f, speed);
-
             float steer = signals.Steering01;
             if (Mathf.Abs(steer) > .18f)
             {
@@ -69,13 +58,6 @@ namespace JetHorizon
             _lastSteer = steer;
         }
 
-        void RunStarted()
-        {
-            Play("engine-start", .32f);
-            if (_engineBody.clip != null && !_engineBody.isPlaying) _engineBody.Play();
-            if (_engineEdge.clip != null && !_engineEdge.isPlaying) _engineEdge.Play();
-        }
-
         void NearMiss() => Play("nearmiss", .24f, Random.Range(.92f, 1.08f));
         void Coin() => Play("droplet", .22f, Random.Range(.96f, 1.06f));
         void Lightning() => Play("lightning-impact", .55f, Random.Range(.96f, 1.04f));
@@ -86,7 +68,6 @@ namespace JetHorizon
         void Died()
         {
             Play("crash", .25f); Play("crash-layer", .25f, 1f, 0f, .015f);
-            _engineBody.Stop(); _engineEdge.Stop();
         }
 
         void Klaxon()
