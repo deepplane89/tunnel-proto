@@ -9,9 +9,10 @@ namespace JetHorizon
     public sealed class CameraRig : MonoBehaviour, ISimSystem
     {
         public UnityEngine.Camera Cam;      // child of this pivot at local (0,0,0)
-        // The proof route is roughly 950 units long. A fixed authored clip volume
-        // contains the complete environment; it never chases encounter renderers.
-        [Min(100f)] public float GameplayFarClip = 1400f;
+        // The canyon is announced while the preceding ~860-unit encounter is still
+        // active. This fixed volume contains that approach plus the complete ~950-unit
+        // canyon; it never chases renderers or sweeps a clip plane through the route.
+        [Min(100f)] public float GameplayFarClip = 2200f;
         float _cameraRoll;
         float _cameraRollHold;
         float _shakeTime;
@@ -37,6 +38,9 @@ namespace JetHorizon
             if (Cam != null)
             {
                 Cam.farClipPlane = Mathf.Max(Cam.nearClipPlane + 1f, GameplayFarClip);
+                // Runtime canyon meshes have no baked occlusion data. Keep Unity from
+                // applying a stale scene-occlusion decision as the Z-scroll root moves.
+                Cam.useOcclusionCulling = false;
                 Cam.transform.localPosition = Vector3.zero;
                 Cam.fieldOfView = Tuning.CamBaseFovDesktop;
                 AimAtLook();

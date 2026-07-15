@@ -8,8 +8,6 @@ Shader "JH/StableCanyon"
         _DarkBody ("Dark Body", Color) = (0.10, 0.06, 0.16, 1)
         _Brightness ("Brightness", Range(0, 1)) = 0.72
         _Emission ("Emission", Range(0, 2)) = 0.28
-        _FadeStart ("Fade Start", Float) = -305
-        _FadeEnd ("Fade End", Float) = -235
     }
     SubShader
     {
@@ -24,7 +22,6 @@ Shader "JH/StableCanyon"
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma multi_compile_fog
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
             struct Attributes
@@ -40,7 +37,6 @@ Shader "JH/StableCanyon"
                 float3 positionWS : TEXCOORD0;
                 float2 uv : TEXCOORD1;
                 float4 color : COLOR;
-                float fogFactor : TEXCOORD2;
             };
 
             CBUFFER_START(UnityPerMaterial)
@@ -48,8 +44,6 @@ Shader "JH/StableCanyon"
                 half4 _DarkBody;
                 float _Brightness;
                 float _Emission;
-                float _FadeStart;
-                float _FadeEnd;
             CBUFFER_END
 
             TEXTURE2D(_CyanSurface);
@@ -65,13 +59,7 @@ Shader "JH/StableCanyon"
                 output.positionWS = position.positionWS;
                 output.uv = input.uv;
                 output.color = input.color;
-                output.fogFactor = ComputeFogFactor(position.positionCS.z);
                 return output;
-            }
-
-            float Dither(float2 pixel)
-            {
-                return frac(52.9829189 * frac(dot(floor(pixel), float2(0.06711056, 0.00583715))));
             }
 
             half4 frag(Varyings input) : SV_Target
@@ -97,7 +85,9 @@ Shader "JH/StableCanyon"
                 half3 crystal = lerp(body, surface, 0.72) * (_Brightness * facet) * input.color.rgb;
                 half emissiveDetail = saturate((max(surface.r, max(surface.g, surface.b)) - 0.06) * 1.6);
                 crystal += surface * _Emission * lerp(0.25, 1.0, emissiveDetail);
-                crystal = MixFog(crystal, input.fogFactor);
+                // Global exponential fog is intentionally excluded here. In the
+                // fixed-camera Z-scroll presentation it becomes a stationary reveal
+                // curtain that makes already-built canyon facets appear to spawn.
                 return half4(crystal, 1.0);
             }
             ENDHLSL

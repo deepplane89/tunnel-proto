@@ -28,6 +28,10 @@ namespace JetHorizon
         GameObject _content;
         Material _meshMaterial;
         bool _terrainAuthoringPreview;
+        int _rendererCount;
+        float _builtMinZ;
+        float _builtMaxZ;
+        bool _reportedPresentation;
 
         void Awake()
         {
@@ -56,6 +60,7 @@ namespace JetHorizon
         public void ResetSystem()
         {
             IsPresenting = false;
+            _reportedPresentation = false;
             EnsureBuilt();
             if (_content != null) _content.SetActive(false);
         }
@@ -90,6 +95,7 @@ namespace JetHorizon
             float startZ = currentCanyon ? snapshot.EncounterStartZ : snapshot.UpcomingEncounterStartZ;
             _content.transform.localPosition = new Vector3(0f, 0f, startZ);
             SetVisible(true);
+            ReportPresentationOnce(startZ);
         }
 
         /// <summary>Editor preview seam; it does not alter scene gameplay wiring.</summary>
@@ -152,7 +158,33 @@ namespace JetHorizon
         {
             if (_content == null) return;
             _content.SetActive(true);
+            Renderer[] renderers = _content.GetComponentsInChildren<Renderer>(true);
+            _rendererCount = renderers.Length;
+            _builtMinZ = float.PositiveInfinity;
+            _builtMaxZ = float.NegativeInfinity;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] == null) continue;
+                _builtMinZ = Mathf.Min(_builtMinZ, renderers[i].bounds.min.z);
+                _builtMaxZ = Mathf.Max(_builtMaxZ, renderers[i].bounds.max.z);
+            }
             _content.SetActive(false);
+        }
+
+        void ReportPresentationOnce(float startZ)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (_reportedPresentation) return;
+            _reportedPresentation = true;
+            float farClip = GameManager.I != null && GameManager.I.Camera != null && GameManager.I.Camera.Cam != null
+                ? GameManager.I.Camera.Cam.farClipPlane
+                : -1f;
+            Debug.Log(
+                $"[JH CANYON PRESENTATION] completeWorld=true renderers={_rendererCount} "
+                + $"localZ=[{_builtMinZ:0.0},{_builtMaxZ:0.0}] rootZ={startZ:0.0} "
+                + $"cameraFar={farClip:0.0} globalFog={RenderSettings.fog} canyonFog=false "
+                + "sliceFallback=false legacyPoolActive=false");
+#endif
         }
 
         static Transform FindDescendantByName(Transform root, string targetName)
@@ -798,8 +830,6 @@ namespace JetHorizon
             if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", TextureFactory.Hex(0x174f5c));
             if (material.HasProperty("_Brightness")) material.SetFloat("_Brightness", .62f);
             if (material.HasProperty("_Emission")) material.SetFloat("_Emission", .18f);
-            if (material.HasProperty("_FadeStart")) material.SetFloat("_FadeStart", -1600f);
-            if (material.HasProperty("_FadeEnd")) material.SetFloat("_FadeEnd", -1400f);
             return material;
         }
 
