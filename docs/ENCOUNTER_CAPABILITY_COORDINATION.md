@@ -8,6 +8,9 @@
   encounter approach, and temporary power-up pace.
 - `ShipCapabilityProfile`, encounter contracts, deterministic reachability, and
   neutral/constant-left/constant-right rejection live in the engine-neutral core.
+- `EncounterGeometryValidator` applies the validated opening to final wall, cone,
+  and lightning collision volumes, preventing presentation-ready combinations
+  from closing a route that was valid at the plan level.
 - `ProofEncounterRuntime` streams three deliberate plans: monumental broad weave,
   a shifting lightning-opening sequence, and a continuous prismatic sine corridor.
 - Cargo is authored as optional safe, risky, or deep route lines. Heat controls the

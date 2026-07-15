@@ -22,8 +22,8 @@ namespace JetHorizon
         Material _runtimeMaterial;
         Mesh _outerMesh;
         Mesh _innerMesh;
-        readonly MaterialPropertyBlock _outerProperties = new MaterialPropertyBlock();
-        readonly MaterialPropertyBlock _innerProperties = new MaterialPropertyBlock();
+        MaterialPropertyBlock _outerProperties;
+        MaterialPropertyBlock _innerProperties;
 
         static readonly int TintId = Shader.PropertyToID("_Tint");
         static readonly int FadeId = Shader.PropertyToID("_Fade");
@@ -31,11 +31,18 @@ namespace JetHorizon
         static readonly int GlowStrengthId = Shader.PropertyToID("_GlowStrength");
         static readonly int EdgeStrengthId = Shader.PropertyToID("_EdgeStrength");
 
-        void Awake() => EnsureBuilt();
+        void Awake()
+        {
+            _outerProperties = new MaterialPropertyBlock();
+            _innerProperties = new MaterialPropertyBlock();
+            EnsureBuilt();
+        }
 
         void EnsureBuilt()
         {
             if (_root != null) return;
+            _outerProperties ??= new MaterialPropertyBlock();
+            _innerProperties ??= new MaterialPropertyBlock();
             Material material = GateMaterial;
             if (material == null)
             {

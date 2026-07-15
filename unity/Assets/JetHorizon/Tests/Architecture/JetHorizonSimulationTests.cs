@@ -1403,6 +1403,16 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void FinalEncounterGeometryCannotIntrudeIntoValidatedOpening()
+        {
+            HazardSpawn blocked = HazardSpawn.Cone(0f, -100f, 2.35f, 1.25f, HazardStyle.FatCone);
+            HazardSpawn outside = HazardSpawn.Cone(18f, -100f, 2.35f, 1.25f, HazardStyle.FatCone);
+
+            Assert.That(EncounterGeometryValidator.PreservesOpening(blocked, 0f, 9f, .3f, .65f), Is.False);
+            Assert.That(EncounterGeometryValidator.PreservesOpening(outside, 0f, 9f, .3f, .65f), Is.True);
+        }
+
+        [Test]
         public void ProofRuntimeStreamsThreeComposedEncountersAndExtractsThroughSpatialGate()
         {
             var simulation = new JetHorizonSimulation(new SimulationConfig
@@ -1424,6 +1434,8 @@ namespace JetHorizon.Simulation.Tests
             bool sawCargo = false;
             bool sawLaser = false;
             bool sawGate = false;
+            bool sawDenseFormation = false;
+            bool sawMonumentConeStack = false;
             for (int tick = 0; tick < 9000 && simulation.Phase == CoreGamePhase.Playing; tick++)
             {
                 SimulationSnapshot before = simulation.Snapshot;
@@ -1437,6 +1449,19 @@ namespace JetHorizon.Simulation.Tests
                 sawPrismatic |= snapshot.EncounterKind == EncounterKind.PrismaticSineCorridor
                     && snapshot.CorridorSliceCount > 1;
                 sawGate |= snapshot.ExtractionGateVisible;
+                for (int i = 0; i < snapshot.HazardCount; i++)
+                {
+                    HazardSnapshot hazard = snapshot.GetHazard(i);
+                    if (hazard.Style != HazardStyle.FatCone) continue;
+                    sawDenseFormation = true;
+                    for (int j = 0; j < snapshot.HazardCount; j++)
+                    {
+                        HazardSnapshot wall = snapshot.GetHazard(j);
+                        if (wall.Style == HazardStyle.MonumentWall
+                            && System.Math.Abs(wall.Z - hazard.Z) < 8f)
+                            sawMonumentConeStack = true;
+                    }
+                }
                 for (int i = 0; i < snapshot.PickupCount; i++)
                 {
                     PickupSnapshot pickup = snapshot.GetPickup(i);
@@ -1451,6 +1476,8 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(sawCargo, Is.True);
             Assert.That(sawLaser, Is.True);
             Assert.That(sawGate, Is.True);
+            Assert.That(sawDenseFormation, Is.True);
+            Assert.That(sawMonumentConeStack, Is.False);
             Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Extracted));
             Assert.That(simulation.TryConsumeAutomaticExtraction(out RunCargoManifest manifest), Is.True);
             Assert.That(manifest.HeatLevel, Is.Zero);

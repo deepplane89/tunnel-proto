@@ -576,11 +576,11 @@ namespace JetHorizon.Simulation
             float offset = command.HalfWidth + wallWidth * 0.5f;
             int variant = Math.Abs(command.RowIndex) % 3;
             float lean = ((command.RowIndex & 1) == 0 ? 1f : -1f) * 0.08f;
-            SpawnHazard(HazardSpawn.Wall(
+            SpawnEncounterHazard(command, HazardSpawn.Wall(
                 command.X - offset, wallHeight * 0.5f, command.Z,
                 wallWidth, wallHeight, wallDepth, 0f, lean, 0f,
                 HazardStyle.MonumentWall, variant));
-            SpawnHazard(HazardSpawn.Wall(
+            SpawnEncounterHazard(command, HazardSpawn.Wall(
                 command.X + offset, wallHeight * 0.5f, command.Z,
                 wallWidth, wallHeight, wallDepth, 0f, -lean, 0f,
                 HazardStyle.MonumentWall, (variant + 1) % 3));
@@ -595,14 +595,20 @@ namespace JetHorizon.Simulation
             for (int column = 0; column < columns; column++)
             {
                 float x = left + spacing * column;
-                if (Math.Abs(x - command.X) <= command.HalfWidth) continue;
-                SpawnHazard(HazardSpawn.Lightning(
+                HazardSpawn lightning = HazardSpawn.Lightning(
                     x,
                     command.Z,
                     _config.LightningGateWarningSeconds,
                     4.8f,
                     _config.LightningGateCollisionHalfWidth,
-                    4f));
+                    4f);
+                if (!EncounterGeometryValidator.PreservesOpening(
+                    lightning,
+                    command.X,
+                    command.HalfWidth,
+                    _config.CorridorShipHalfWidth,
+                    .65f)) continue;
+                SpawnEncounterHazard(command, lightning);
             }
             Events.Add(new SimulationEvent(
                 SimulationEventType.LightningGateStarted,
@@ -632,20 +638,42 @@ namespace JetHorizon.Simulation
 
         void SpawnLaserFormation(EncounterCommand command)
         {
-            float[] offsets = { -8.4f, -4.2f, 0f, 4.2f, 8.4f };
-            for (int i = 0; i < offsets.Length; i++)
+            const float left = -42f;
+            const float right = 42f;
+            const float spacing = 4.2f;
+            int index = 0;
+            for (float x = left; x <= right + .01f; x += spacing, index++)
             {
                 HazardSpawn cone = HazardSpawn.Cone(
-                    command.X + offsets[i],
-                    command.Z + Math.Abs(i - 2) * 2.5f,
+                    x,
+                    command.Z + (index % 3) * 2.5f,
                     2.35f,
                     1.25f,
                     HazardStyle.FatCone,
-                    (command.RowIndex + i) % 3);
+                    (command.RowIndex + index) % 3);
                 cone.Y = -2f;
                 cone.CollisionHalfDepth = _config.CollisionHalfDepth + 0.8f;
-                SpawnHazard(cone);
+                if (!EncounterGeometryValidator.PreservesOpening(
+                    cone,
+                    command.X,
+                    command.HalfWidth,
+                    _config.CorridorShipHalfWidth,
+                    .65f)) continue;
+                SpawnEncounterHazard(command, cone);
             }
+        }
+
+        void SpawnEncounterHazard(EncounterCommand command, HazardSpawn hazard)
+        {
+            if (!EncounterGeometryValidator.PreservesOpening(
+                hazard,
+                command.X,
+                command.HalfWidth,
+                _config.CorridorShipHalfWidth,
+                .65f))
+                throw new InvalidOperationException(
+                    "Encounter hazard intrudes into its validated opening: " + command.EncounterKind);
+            SpawnHazard(hazard);
         }
 
         void CompleteAutomaticExtraction()

@@ -304,12 +304,15 @@ namespace JetHorizon.Simulation
             int heat,
             EncounterCommandBuffer commands)
         {
-            EncounterCommandType rowType = plan.Kind == EncounterKind.MonumentalBroadWeave
-                ? EncounterCommandType.MonumentBarrierRow
-                : plan.Kind == EncounterKind.LightningMovingGate
-                    ? EncounterCommandType.LightningGateRow
-                    : EncounterCommandType.PrismaticSlice;
-            commands.Add(new EncounterCommand(rowType, plan.Kind, rowIndex, opening.CenterX, opening.HalfWidth, z));
+            if (!opening.DenseLaserFormation)
+            {
+                EncounterCommandType rowType = plan.Kind == EncounterKind.MonumentalBroadWeave
+                    ? EncounterCommandType.MonumentBarrierRow
+                    : plan.Kind == EncounterKind.LightningMovingGate
+                        ? EncounterCommandType.LightningGateRow
+                        : EncounterCommandType.PrismaticSlice;
+                commands.Add(new EncounterCommand(rowType, plan.Kind, rowIndex, opening.CenterX, opening.HalfWidth, z));
+            }
 
             if (opening.CargoTier != CargoRouteTier.None)
             {

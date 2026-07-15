@@ -301,6 +301,36 @@ namespace JetHorizon.Simulation
         }
     }
 
+    /// <summary>
+    /// Enforces the authored opening against final collision geometry. A plan is not
+    /// considered safe if a derived wall, cone, or lightning volume intrudes into
+    /// the same ship-center corridor used by capability validation.
+    /// </summary>
+    public static class EncounterGeometryValidator
+    {
+        public static bool PreservesOpening(
+            HazardSpawn hazard,
+            float openingCenter,
+            float openingHalfWidth,
+            float shipHalfWidth,
+            float safetyMargin)
+        {
+            if (openingHalfWidth <= shipHalfWidth + safetyMargin) return false;
+            float protectedHalfWidth = openingHalfWidth - shipHalfWidth - safetyMargin;
+            float hazardHalfWidth = ProjectedHalfWidth(hazard) + shipHalfWidth;
+            float separation = Math.Abs(hazard.X - openingCenter);
+            return separation >= protectedHalfWidth + hazardHalfWidth;
+        }
+
+        static float ProjectedHalfWidth(HazardSpawn hazard)
+        {
+            if (hazard.Kind != HazardKind.Wall) return Math.Max(0f, hazard.CollisionHalfWidth);
+            float cosine = Math.Abs((float)Math.Cos(hazard.RotationYRadians));
+            float sine = Math.Abs((float)Math.Sin(hazard.RotationYRadians));
+            return cosine * hazard.CollisionHalfWidth + sine * hazard.CollisionHalfDepth;
+        }
+    }
+
     public static class EncounterPlanCatalog
     {
         static readonly EncounterCapabilityContract ProofContract =

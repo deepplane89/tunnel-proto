@@ -20,6 +20,9 @@ namespace JetHorizon
             public float Age;
         }
 
+        const int LaserBoltPoolSize = 12;
+        const float LaserBoltLifetime = .8f;
+
         public Transform ShipRoot;
 
         GameObject _shield;
@@ -29,6 +32,9 @@ namespace JetHorizon
         Material _magnetMaterialA, _magnetMaterialB;
         Light _magnetLight;
         readonly List<LaserBolt> _bolts = new List<LaserBolt>(24);
+        Transform _laserPoolRoot;
+        Material _laserGlowMaterial;
+        Material _laserCoreMaterial;
         MaterialPropertyBlock _shipBlock;
         Renderer[] _shipRenderers;
         float _shieldBuild;
@@ -71,6 +77,7 @@ namespace JetHorizon
             _shipRenderers = ShipRoot.Find("ShipModel")?.GetComponentsInChildren<Renderer>(true) ?? new Renderer[0];
             BuildShield();
             BuildMagnet();
+            BuildLaserPool();
         }
 
         void BuildShield()
@@ -167,17 +174,44 @@ namespace JetHorizon
         void OnLaserFired(float laneOffset)
         {
             EnsureBuilt();
-            if (ShipRoot == null) return;
-            var root = new GameObject("LaserBolt");
-            root.layer = 8;
-            root.transform.position = ShipRoot.position + new Vector3(laneOffset, 0.45f, -2.5f);
-            var bolt = new LaserBolt { Root = root };
-            bolt.Glow = MakeLaserLine(root, "Glow", 0.12f, new Color(1f, 0.13f, 0f, 0.35f));
-            bolt.Core = MakeLaserLine(root, "Core", 0.04f, Color.white);
-            _bolts.Add(bolt);
+            if (ShipRoot == null || _bolts.Count == 0) return;
+            LaserBolt bolt = AcquireLaserBolt();
+            bolt.Age = 0f;
+            bolt.Root.transform.position = ShipRoot.position + new Vector3(laneOffset, 0.45f, -2.5f);
+            bolt.Root.SetActive(true);
         }
 
-        LineRenderer MakeLaserLine(GameObject root, string name, float width, Color color)
+        void BuildLaserPool()
+        {
+            _laserPoolRoot = new GameObject("Laser Bolt Pool").transform;
+            _laserPoolRoot.SetParent(transform, false);
+            _laserGlowMaterial = CreateAdditive(new Color(1f, 0.13f, 0f, 0.35f), "JH_LaserGlowShared");
+            _laserCoreMaterial = CreateAdditive(Color.white, "JH_LaserCoreShared");
+            for (int i = 0; i < LaserBoltPoolSize; i++)
+            {
+                var root = new GameObject($"Bolt {i + 1:00}");
+                root.layer = 8;
+                root.transform.SetParent(_laserPoolRoot, false);
+                var bolt = new LaserBolt { Root = root };
+                bolt.Glow = MakeLaserLine(root, "Glow", .12f, new Color(1f, .13f, 0f, .35f), _laserGlowMaterial);
+                bolt.Core = MakeLaserLine(root, "Core", .04f, Color.white, _laserCoreMaterial);
+                root.SetActive(false);
+                _bolts.Add(bolt);
+            }
+        }
+
+        LaserBolt AcquireLaserBolt()
+        {
+            LaserBolt oldest = _bolts[0];
+            for (int i = 0; i < _bolts.Count; i++)
+            {
+                if (!_bolts[i].Root.activeSelf) return _bolts[i];
+                if (_bolts[i].Age > oldest.Age) oldest = _bolts[i];
+            }
+            return oldest;
+        }
+
+        LineRenderer MakeLaserLine(GameObject root, string name, float width, Color color, Material material)
         {
             var lineObject = new GameObject(name);
             lineObject.layer = 8;
@@ -188,7 +222,7 @@ namespace JetHorizon
             line.SetPosition(0, new Vector3(0f, 0f, -1f));
             line.SetPosition(1, new Vector3(0f, 0f, 1f));
             line.startWidth = line.endWidth = width;
-            line.sharedMaterial = CreateAdditive(color, $"JH_Laser{name}");
+            line.sharedMaterial = material;
             line.startColor = line.endColor = color;
             line.numCapVertices = 2;
             line.shadowCastingMode = ShadowCastingMode.Off;
@@ -304,13 +338,11 @@ namespace JetHorizon
             for (int i = _bolts.Count - 1; i >= 0; i--)
             {
                 var bolt = _bolts[i];
+                if (!bolt.Root.activeSelf) continue;
                 bolt.Age += dt;
                 bolt.Root.transform.position += Vector3.back * 150f * dt;
-                if (bolt.Age < 1.35f && bolt.Root.transform.position.z > -205f) continue;
-                if (bolt.Glow != null) Destroy(bolt.Glow.sharedMaterial);
-                if (bolt.Core != null) Destroy(bolt.Core.sharedMaterial);
-                Destroy(bolt.Root);
-                _bolts.RemoveAt(i);
+                if (bolt.Age < LaserBoltLifetime && bolt.Root.transform.position.z > -205f) continue;
+                bolt.Root.SetActive(false);
             }
         }
 
@@ -327,11 +359,15 @@ namespace JetHorizon
             foreach (var renderer in _shipRenderers ?? new Renderer[0]) renderer.SetPropertyBlock(null);
             foreach (var bolt in _bolts)
             {
-                if (bolt.Glow != null) Destroy(bolt.Glow.sharedMaterial);
-                if (bolt.Core != null) Destroy(bolt.Core.sharedMaterial);
-                Destroy(bolt.Root);
+                bolt.Age = 0f;
+                if (bolt.Root != null) bolt.Root.SetActive(false);
             }
-            _bolts.Clear();
+        }
+
+        void OnDestroy()
+        {
+            if (_laserGlowMaterial != null) Destroy(_laserGlowMaterial);
+            if (_laserCoreMaterial != null) Destroy(_laserCoreMaterial);
         }
     }
 }
