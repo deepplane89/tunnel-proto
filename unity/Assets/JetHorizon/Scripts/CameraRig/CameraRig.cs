@@ -8,11 +8,9 @@ namespace JetHorizon
     /// </summary>
     public sealed class CameraRig : MonoBehaviour, ISimSystem
     {
+        public const float CompleteWorldFarClip = 2600f;
+
         public UnityEngine.Camera Cam;      // child of this pivot at local (0,0,0)
-        // The canyon is announced while the preceding ~860-unit encounter is still
-        // active. This fixed volume contains that approach plus the complete ~950-unit
-        // canyon; it never chases renderers or sweeps a clip plane through the route.
-        [Min(100f)] public float GameplayFarClip = 2200f;
         float _cameraRoll;
         float _cameraRollHold;
         float _shakeTime;
@@ -37,7 +35,10 @@ namespace JetHorizon
             transform.position = BasePivot(0f);
             if (Cam != null)
             {
-                Cam.farClipPlane = Mathf.Max(Cam.nearClipPlane + 1f, GameplayFarClip);
+                // This must not be serialized as a scene/profile tuning value. Older
+                // scenes retained 700 and silently overrode the code default, clipping
+                // the already-built canyon as its Z-scroll root advanced.
+                Cam.farClipPlane = CompleteWorldFarClip;
                 // Runtime canyon meshes have no baked occlusion data. Keep Unity from
                 // applying a stale scene-occlusion decision as the Z-scroll root moves.
                 Cam.useOcclusionCulling = false;
