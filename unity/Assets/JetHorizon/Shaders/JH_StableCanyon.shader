@@ -76,8 +76,10 @@ Shader "JH/StableCanyon"
 
             half4 frag(Varyings input) : SV_Target
             {
-                float fade = smoothstep(_FadeStart, _FadeEnd, input.positionWS.z);
-                clip(fade - Dither(input.positionCS.xy));
+                // The canyon is a persistent landform, not a streamed obstacle row.
+                // Distance dithering made its far chunks visibly materialize as the
+                // player advanced. Let camera fog and real geometry provide depth;
+                // keep every authored canyon section fully opaque once it is visible.
 
                 float2 surfaceUv = float2(frac(input.uv.x), input.uv.y);
                 half3 cyanSurface = SAMPLE_TEXTURE2D(_CyanSurface, sampler_CyanSurface, surfaceUv).rgb;

@@ -8,7 +8,9 @@ namespace JetHorizon
     [Serializable]
     public sealed class HybridCanyonWorldSettings
     {
-        [Header("Terrain world mass")]
+        [Header("Optional Terrain world mass")]
+        [Tooltip("Adds broad Unity Terrain behind the faceted corridor. Keep this off while judging the corridor itself.")]
+        public bool BuildTerrainBacking;
         [Range(65, 513)] public int HeightmapResolution = 257;
         [Min(160f)] public float TerrainWidth = 440f;
         [Min(100f)] public float ApproachLength = 150f;

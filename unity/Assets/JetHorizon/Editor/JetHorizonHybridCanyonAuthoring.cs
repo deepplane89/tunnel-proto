@@ -42,10 +42,9 @@ namespace JetHorizon.EditorTools
             GameObject preview = GameObject.Find(PreviewName);
             if (preview == null) preview = BuildPreview(profile);
             var presenter = preview != null ? preview.GetComponent<HybridCanyonWorldPresenter>() : null;
-            Terrain sourceTerrain = presenter != null ? presenter.GeneratedTerrain : null;
-            if (presenter == null || presenter.WorldContent == null || sourceTerrain == null)
+            if (presenter == null || presenter.WorldContent == null)
             {
-                EditorUtility.DisplayDialog("Hybrid canyon", "The editable Terrain preview could not be found. Click Create Editable Canyon and try again.", "OK");
+                EditorUtility.DisplayDialog("Hybrid canyon", "The editable canyon preview could not be found. Click Create / Refresh Editable Canyon and try again.", "OK");
                 return false;
             }
 
@@ -57,23 +56,28 @@ namespace JetHorizon.EditorTools
             baked.name = "Jet Horizon Hybrid Canyon (Baked)";
             baked.SetActive(true);
             Terrain clonedTerrain = baked.GetComponentInChildren<Terrain>(true);
-            if (clonedTerrain == null)
+            bool bakedTerrain = clonedTerrain != null;
+            if (profile.Settings != null && profile.Settings.BuildTerrainBacking && clonedTerrain == null)
             {
                 Object.DestroyImmediate(baked);
+                EditorUtility.DisplayDialog("Hybrid canyon", "Terrain backing is enabled, but the Terrain preview was missing. Refresh the editable canyon and try again.", "OK");
                 return false;
             }
 
             var transientMeshes = new List<Object>();
-            HybridCanyonWorldPresenter.BuildTerrainMeshChunks(
-                clonedTerrain.terrainData,
-                clonedTerrain.transform.localPosition,
-                baked.transform,
-                profile.CanyonMaterial,
-                profile.Settings ?? new HybridCanyonWorldSettings(),
-                transientMeshes);
-            Object.DestroyImmediate(clonedTerrain.gameObject);
+            if (clonedTerrain != null)
+            {
+                HybridCanyonWorldPresenter.BuildTerrainMeshChunks(
+                    clonedTerrain.terrainData,
+                    clonedTerrain.transform.localPosition,
+                    baked.transform,
+                    profile.CanyonMaterial,
+                    profile.Settings ?? new HybridCanyonWorldSettings(),
+                    transientMeshes);
+                Object.DestroyImmediate(clonedTerrain.gameObject);
+            }
 
-            if (!ValidateContinuousTerrainChunks(baked, profile.Settings, out string continuityError))
+            if (bakedTerrain && !ValidateContinuousTerrainChunks(baked, profile.Settings, out string continuityError))
             {
                 Object.DestroyImmediate(baked);
                 for (int i = 0; i < transientMeshes.Count; i++)

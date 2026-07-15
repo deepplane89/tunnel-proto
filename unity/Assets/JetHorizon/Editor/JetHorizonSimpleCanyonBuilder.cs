@@ -30,7 +30,7 @@ namespace JetHorizon.EditorTools
             GUILayout.Space(10f);
             EditorGUILayout.LabelField("JET HORIZON CANYON BUILDER", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "This creates a real Unity Terrain for editing, then converts it into optimized opaque chunks used by the mobile game. The safe flight path and collisions stay owned by the game core.",
+                "This builds the opaque curved canyon corridor around one validated route. Unity Terrain is an optional backing layer and is currently disabled so you can judge the corridor by itself.",
                 MessageType.Info);
 
             _profile = (HybridCanyonWorldProfile)EditorGUILayout.ObjectField("Canyon setup", _profile, typeof(HybridCanyonWorldProfile), false);
@@ -66,6 +66,7 @@ namespace JetHorizon.EditorTools
             }
 
             Step("2", "Choose the broad look");
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("BuildTerrainBacking"), new GUIContent("Add Terrain backing"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("BankHeight"), new GUIContent("Wall height"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("BankRiseWidth"), new GUIContent("Wall slope width", "Smaller values make steeper banks."));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("SurfaceNoise"), new GUIContent("Rocky breakup"));
@@ -85,9 +86,16 @@ namespace JetHorizon.EditorTools
             EditorGUILayout.HelpBox("This selects the route handles automatically. Cyan spheres move the route; square handles change its width.", MessageType.None);
 
             Step("3", "Optional hand sculpting");
-            EditorGUILayout.LabelField("In the Inspector, click Paint Terrain, choose Raise or Lower Terrain, then brush directly in the Scene view.", EditorStyles.wordWrappedLabel);
             if (GUILayout.Button("Select Route Handles")) JetHorizonHybridCanyonAuthoring.SelectRouteHandles();
-            if (GUILayout.Button("Select My Editable Terrain")) JetHorizonHybridCanyonAuthoring.SelectEditableTerrain();
+            if (_profile.Settings != null && _profile.Settings.BuildTerrainBacking)
+            {
+                EditorGUILayout.LabelField("In the Inspector, click Paint Terrain, choose Raise or Lower Terrain, then brush directly in the Scene view.", EditorStyles.wordWrappedLabel);
+                if (GUILayout.Button("Select My Editable Terrain")) JetHorizonHybridCanyonAuthoring.SelectEditableTerrain();
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("Terrain backing is off. The preview contains only the faceted corridor and authored rock structures.", MessageType.None);
+            }
 
             Step("4", "Validate and put it into the game");
             if (GUILayout.Button("CHECK CANYON FOR GAPS", GUILayout.Height(30f)))

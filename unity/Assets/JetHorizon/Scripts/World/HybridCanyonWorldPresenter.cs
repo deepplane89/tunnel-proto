@@ -7,8 +7,8 @@ namespace JetHorizon
 {
     /// <summary>
     /// Builds the complete crystalline canyon once, then scrolls the entire construct
-    /// against a core-owned route sample. Terrain supplies the broad world mass; opaque
-    /// jagged meshes supply arches, bridges, and silhouettes Terrain cannot represent.
+    /// against a core-owned route sample. Opaque curved shells supply the complete
+    /// corridor; optional Terrain can later add broad world mass behind those shells.
     /// No TerrainCollider is active: the engine-neutral corridor remains the only lethal
     /// boundary, so presentation can never create an unvalidated or invisible collision.
     /// </summary>
@@ -132,12 +132,31 @@ namespace JetHorizon
             {
                 GameObject baked = Instantiate(Profile.BakedWorldPrefab, _content.transform);
                 baked.name = Profile.BakedWorldPrefab.name;
+                if (!settings.BuildTerrainBacking)
+                {
+                    Transform terrainChunks = FindDescendantByName(baked.transform, "Baked Terrain Mesh Chunks");
+                    if (terrainChunks != null) terrainChunks.gameObject.SetActive(false);
+                    Terrain bakedTerrain = baked.GetComponentInChildren<Terrain>(true);
+                    if (bakedTerrain != null) bakedTerrain.gameObject.SetActive(false);
+                }
                 _content.SetActive(false);
                 return;
             }
-            BuildTerrain(settings);
+            if (settings.BuildTerrainBacking) BuildTerrain(settings);
             BuildHeroMeshes(settings);
             _content.SetActive(false);
+        }
+
+        static Transform FindDescendantByName(Transform root, string targetName)
+        {
+            if (root == null) return null;
+            if (root.name == targetName) return root;
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform found = FindDescendantByName(root.GetChild(i), targetName);
+                if (found != null) return found;
+            }
+            return null;
         }
 
         static EncounterPlan FindCanyonPlan(HybridCanyonWorldProfile profile)

@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: HybridCanyonWorld
   m_EditorClassIdentifier: Assembly-CSharp:JetHorizon:HybridCanyonWorldProfile
   Settings:
+    BuildTerrainBacking: 0
     HeightmapResolution: 257
     TerrainWidth: 440
     ApproachLength: 150
