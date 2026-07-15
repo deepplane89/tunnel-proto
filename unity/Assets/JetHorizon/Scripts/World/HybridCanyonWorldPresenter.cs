@@ -305,7 +305,7 @@ namespace JetHorizon
             BuildWaterOutcrops(settings, thresholdDistance, breakupDistance);
             BuildArch("Monumental Canyon Threshold", thresholdDistance, settings.EntryClearance, settings, 0);
             BuildArch("Natural Canyon Bridge", Mathf.Lerp(thresholdDistance, breakupDistance, .52f), settings.EntryClearance - 3f, settings, 101);
-            BuildContinuousFacetedWalls(settings, thresholdDistance, breakupDistance);
+            BuildFaithfulSlabCorridor(settings, thresholdDistance, breakupDistance);
             BuildTraversalGates(settings);
 
             int count = Mathf.Max(0, settings.SideMonolithCount);
@@ -352,120 +352,220 @@ namespace JetHorizon
             }
         }
 
-        void BuildContinuousFacetedWalls(
+        void BuildFaithfulSlabCorridor(
             HybridCanyonWorldSettings settings,
             float thresholdDistance,
             float breakupDistance)
         {
-            float start = Mathf.Max(0f, thresholdDistance - settings.WallFacetLength);
-            float end = Mathf.Min(_plan.Length, breakupDistance + settings.WallFacetLength * 2f);
-            int longitudinalSegments = Mathf.Max(2,
-                Mathf.CeilToInt((end - start) / Mathf.Max(4f, settings.WallFacetLength)));
-            int verticalSegments = Mathf.Max(3, settings.WallVerticalSegments);
+            float slabLength = Mathf.Max(4f, settings.SlabLength);
+            float start = Mathf.Max(0f, thresholdDistance - slabLength);
+            float end = Mathf.Min(_plan.Length, breakupDistance + slabLength * 2f);
+            int slabCount = Mathf.Max(1, Mathf.CeilToInt((end - start) / slabLength));
 
-            var root = new GameObject("Continuous Faceted Canyon Walls");
+            var root = new GameObject("Faithful Source-Slab Canyon Corridor");
             root.layer = 8;
             root.transform.SetParent(_content.transform, false);
 
-            for (int side = -1; side <= 1; side += 2)
+            for (int slabIndex = 0; slabIndex < slabCount; slabIndex++)
             {
-                int columns = longitudinalSegments + 1;
-                int rows = verticalSegments + 1;
-                var vertices = new Vector3[columns * rows];
-                var uv = new Vector2[vertices.Length];
-                var colors = new Color[vertices.Length];
-                var triangles = new int[longitudinalSegments * verticalSegments * 6];
-
-                for (int longitudinal = 0; longitudinal < columns; longitudinal++)
+                float nearDistance = start + slabIndex * slabLength;
+                float farDistance = Mathf.Min(end, nearDistance + slabLength);
+                for (int side = -1; side <= 1; side += 2)
                 {
-                    float along01 = longitudinal / (float)longitudinalSegments;
-                    float distance = Mathf.Lerp(start, end, along01);
-                    SampleRoute(_plan, distance, out float center, out float halfWidth);
-                    Vector3 outward = RouteOutwardNormal(_plan, distance) * side;
-                    Vector3 smoothWall = new Vector3(center, 0f, -distance) + outward * halfWidth;
+                    Vector3 nearFoot = SlabFootPoint(_plan, nearDistance, side, settings);
+                    Vector3 farFoot = SlabFootPoint(_plan, farDistance, side, settings);
+                    Vector3 towardCamera = nearFoot - farFoot;
+                    towardCamera.y = 0f;
+                    if (towardCamera.sqrMagnitude < .001f) towardCamera = Vector3.forward;
+                    Quaternion rotation = Quaternion.LookRotation(towardCamera.normalized, Vector3.up);
+                    Vector3 position = (nearFoot + farFoot) * .5f;
 
-                    for (int vertical = 0; vertical < rows; vertical++)
-                    {
-                        float height01 = vertical / (float)verticalSegments;
-                        int index = longitudinal * rows + vertical;
-                        float addedVolume = WallProfileVolume(height01)
-                            + SignedHash(settings.Seed, longitudinal, vertical, side) * settings.WallFacetDepth;
-                        addedVolume = Mathf.Max(0f, addedVolume);
-                        addedVolume = Mathf.Round(addedVolume * settings.WallFacetSnap)
-                            / Mathf.Max(.25f, settings.WallFacetSnap);
+                    var slab = new GameObject($"Slab {slabIndex + 1:00} {(side < 0 ? "Left" : "Right")}");
+                    slab.layer = 8;
+                    slab.transform.SetParent(root.transform, false);
+                    slab.transform.localPosition = position;
+                    slab.transform.localRotation = rotation;
 
-                        // The route boundary remains a smooth, coherent surface. Only
-                        // the face grid moves outward into the terrain mass, so the
-                        // original slab's angular planes survive without wedge-shaped
-                        // blocks protruding into the flight corridor.
-                        vertices[index] = smoothWall
-                            + outward * addedVolume
-                            + Vector3.up * (settings.WallBaseY + settings.WallHeight * height01);
-                        uv[index] = new Vector2(longitudinal, height01);
-                        colors[index] = Color.white;
-                    }
+                    Mesh mesh = CreateFaithfulSlabMesh(
+                        nearDistance,
+                        farDistance,
+                        side,
+                        slabIndex,
+                        slabIndex == 0,
+                        slabIndex == slabCount - 1,
+                        position,
+                        rotation,
+                        settings);
+                    _ownedAssets.Add(mesh);
+                    slab.AddComponent<MeshFilter>().sharedMesh = mesh;
+                    var renderer = slab.AddComponent<MeshRenderer>();
+                    renderer.sharedMaterial = _meshMaterial;
+                    renderer.shadowCastingMode = settings.CastMeshShadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
+                    renderer.receiveShadows = settings.ReceiveMeshShadows;
                 }
-
-                int triangle = 0;
-                for (int longitudinal = 0; longitudinal < longitudinalSegments; longitudinal++)
-                {
-                    for (int vertical = 0; vertical < verticalSegments; vertical++)
-                    {
-                        int a = longitudinal * rows + vertical;
-                        int b = a + rows;
-                        if (side < 0)
-                        {
-                            triangles[triangle++] = a;
-                            triangles[triangle++] = b;
-                            triangles[triangle++] = a + 1;
-                            triangles[triangle++] = a + 1;
-                            triangles[triangle++] = b;
-                            triangles[triangle++] = b + 1;
-                        }
-                        else
-                        {
-                            triangles[triangle++] = a;
-                            triangles[triangle++] = a + 1;
-                            triangles[triangle++] = b;
-                            triangles[triangle++] = a + 1;
-                            triangles[triangle++] = b + 1;
-                            triangles[triangle++] = b;
-                        }
-                    }
-                }
-
-                var mesh = new Mesh
-                {
-                    name = side < 0 ? "JH_ContinuousFacetedWall_Left" : "JH_ContinuousFacetedWall_Right",
-                    indexFormat = IndexFormat.UInt32
-                };
-                mesh.vertices = vertices;
-                mesh.uv = uv;
-                mesh.colors = colors;
-                mesh.triangles = triangles;
-                mesh.RecalculateNormals();
-                mesh.RecalculateBounds();
-                _ownedAssets.Add(mesh);
-
-                var wall = new GameObject(side < 0 ? "Left Continuous Faceted Wall" : "Right Continuous Faceted Wall");
-                wall.layer = 8;
-                wall.transform.SetParent(root.transform, false);
-                wall.AddComponent<MeshFilter>().sharedMesh = mesh;
-                var renderer = wall.AddComponent<MeshRenderer>();
-                renderer.sharedMaterial = _meshMaterial;
-                renderer.shadowCastingMode = settings.CastMeshShadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
-                renderer.receiveShadows = settings.ReceiveMeshShadows;
             }
         }
 
-        static float WallProfileVolume(float height01)
+        Mesh CreateFaithfulSlabMesh(
+            float nearDistance,
+            float farDistance,
+            int side,
+            int slabIndex,
+            bool capNear,
+            bool capFar,
+            Vector3 pivot,
+            Quaternion rotation,
+            HybridCanyonWorldSettings settings)
         {
-            // Reinterprets the Three.js slab's foot/sweep/mid/crest profile as
-            // shallow outward volume on a continuous wall, not as its silhouette.
-            if (height01 < .15f) return Mathf.Lerp(1.5f, 5.5f, height01 / .15f);
-            if (height01 < .45f) return Mathf.Lerp(5.5f, .75f, (height01 - .15f) / .30f);
-            if (height01 < .85f) return Mathf.Lerp(.75f, 4.5f, (height01 - .45f) / .40f);
-            return 4.5f;
+            int columns = Mathf.Max(2, settings.SlabColumns);
+            int rows = Mathf.Max(2, settings.SlabRows);
+            var inner = new Vector3[columns + 1, rows + 1];
+            var outer = new Vector3[columns + 1, rows + 1];
+            Quaternion inverseRotation = Quaternion.Inverse(rotation);
+
+            for (int column = 0; column <= columns; column++)
+            {
+                float u = column / (float)columns;
+                float distance = Mathf.Lerp(nearDistance, farDistance, u);
+                Vector3 outward = RouteOutwardNormal(_plan, distance) * side;
+                Vector3 foot = SlabFootPoint(_plan, distance, side, settings);
+                int globalColumn = slabIndex * columns + column;
+
+                for (int row = 0; row <= rows; row++)
+                {
+                    float v = row / (float)rows;
+                    float profile = SourceSlabProfile(v, settings);
+                    float jitter = SignedHash(settings.Seed, globalColumn, row, side) * settings.SlabDisplacement;
+                    float faceX = profile + jitter;
+                    if (settings.SlabSnap > .01f)
+                        faceX = Mathf.Round(faceX * settings.SlabSnap) / settings.SlabSnap;
+
+                    float y = v * settings.SlabHeight;
+                    if (v > .85f)
+                    {
+                        float crestNoise = Hash01(settings.Seed + 307, globalColumn, row, side);
+                        y += (crestNoise - .4f) * settings.SlabHeight * .18f;
+                    }
+                    y = Mathf.Round(y * 1.5f) / 1.5f;
+
+                    Vector3 innerWorld = foot
+                        + outward * (faceX - settings.SlabFootX)
+                        + Vector3.up * (settings.SlabBaseY + y);
+                    Vector3 outerWorld = foot
+                        + outward * (settings.SlabThickness - settings.SlabFootX)
+                        + Vector3.up * (settings.SlabBaseY + v * settings.SlabHeight);
+                    inner[column, row] = inverseRotation * (innerWorld - pivot);
+                    outer[column, row] = inverseRotation * (outerWorld - pivot);
+                }
+            }
+
+            var vertices = new List<Vector3>(columns * rows * 36);
+            var uv = new List<Vector2>(columns * rows * 36);
+            var colors = new List<Color>(columns * rows * 36);
+            var triangles = new List<int>(columns * rows * 36);
+
+            void AddTriangle(Vector3 a, Vector3 b, Vector3 c, Vector2 uvA, Vector2 uvB, Vector2 uvC, float shade)
+            {
+                int first = vertices.Count;
+                vertices.Add(a); vertices.Add(b); vertices.Add(c);
+                uv.Add(uvA); uv.Add(uvB); uv.Add(uvC);
+                Color color = new Color(shade, shade, shade, 1f);
+                colors.Add(color); colors.Add(color); colors.Add(color);
+                triangles.Add(first); triangles.Add(first + 1); triangles.Add(first + 2);
+            }
+
+            void AddQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d,
+                Vector2 uvA, Vector2 uvB, Vector2 uvC, Vector2 uvD, float shade)
+            {
+                AddTriangle(a, b, c, uvA, uvB, uvC, shade);
+                AddTriangle(c, b, d, uvC, uvB, uvD, shade);
+            }
+
+            for (int column = 0; column < columns; column++)
+            {
+                float u0 = slabIndex + column / (float)columns;
+                float u1 = slabIndex + (column + 1f) / columns;
+                for (int row = 0; row < rows; row++)
+                {
+                    float v0 = row / (float)rows;
+                    float v1 = (row + 1f) / rows;
+                    AddQuad(
+                        inner[column, row], inner[column, row + 1],
+                        inner[column + 1, row], inner[column + 1, row + 1],
+                        new Vector2(u0, v0), new Vector2(u0, v1),
+                        new Vector2(u1, v0), new Vector2(u1, v1), 1f);
+                    AddQuad(
+                        outer[column + 1, row], outer[column + 1, row + 1],
+                        outer[column, row], outer[column, row + 1],
+                        new Vector2(u1, v0), new Vector2(u1, v1),
+                        new Vector2(u0, v0), new Vector2(u0, v1), .70f);
+                }
+
+                AddQuad(
+                    inner[column, 0], outer[column, 0],
+                    inner[column + 1, 0], outer[column + 1, 0],
+                    new Vector2(u0, 0f), new Vector2(u0, 1f),
+                    new Vector2(u1, 0f), new Vector2(u1, 1f), .78f);
+                AddQuad(
+                    inner[column + 1, rows], outer[column + 1, rows],
+                    inner[column, rows], outer[column, rows],
+                    new Vector2(u1, 0f), new Vector2(u1, 1f),
+                    new Vector2(u0, 0f), new Vector2(u0, 1f), .82f);
+            }
+
+            if (capNear || capFar)
+            {
+                for (int row = 0; row < rows; row++)
+                {
+                    float v0 = row / (float)rows;
+                    float v1 = (row + 1f) / rows;
+                    if (capNear)
+                        AddQuad(
+                            inner[0, row], inner[0, row + 1], outer[0, row], outer[0, row + 1],
+                            new Vector2(slabIndex, v0), new Vector2(slabIndex, v1),
+                            new Vector2(slabIndex + 1f, v0), new Vector2(slabIndex + 1f, v1), .80f);
+                    if (capFar)
+                        AddQuad(
+                            outer[columns, row], outer[columns, row + 1], inner[columns, row], inner[columns, row + 1],
+                            new Vector2(slabIndex + 1f, v0), new Vector2(slabIndex + 1f, v1),
+                            new Vector2(slabIndex, v0), new Vector2(slabIndex, v1), .80f);
+                }
+            }
+
+            var mesh = new Mesh
+            {
+                name = $"JH_FaithfulCanyonSlab_{slabIndex:00}_{(side < 0 ? "L" : "R")}",
+                indexFormat = IndexFormat.UInt32
+            };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uv);
+            mesh.SetColors(colors);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        static float SourceSlabProfile(float v, HybridCanyonWorldSettings settings)
+        {
+            if (v < .15f) return Mathf.Lerp(settings.SlabFootX, settings.SlabSweepX, v / .15f);
+            if (v < .45f) return Mathf.Lerp(settings.SlabSweepX, settings.SlabMidX, (v - .15f) / .30f);
+            if (v < .85f) return Mathf.Lerp(settings.SlabMidX, settings.SlabCrestX, (v - .45f) / .40f);
+            return settings.SlabCrestX;
+        }
+
+        static Vector3 SlabFootPoint(
+            EncounterPlan plan,
+            float distance,
+            int side,
+            HybridCanyonWorldSettings settings)
+        {
+            SampleRoute(plan, distance, out float center, out float halfWidth);
+            Vector3 outward = RouteOutwardNormal(plan, distance) * side;
+            // Faithful source placement: the slab's local foot is exactly on the
+            // authored half-gap. The 9→4→17→20 cross-section then creates the same
+            // low inward sweep and outward crest seen in the Three.js slab.
+            return new Vector3(center, 0f, -distance) + outward * halfWidth;
         }
 
         static Vector3 RouteOutwardNormal(EncounterPlan plan, float distance)
@@ -490,6 +590,9 @@ namespace JetHorizon
                 return value / (float)uint.MaxValue * 2f - 1f;
             }
         }
+
+        static float Hash01(int seed, int longitudinal, int vertical, int side)
+            => SignedHash(seed, longitudinal, vertical, side) * .5f + .5f;
 
         void BuildTraversalGates(HybridCanyonWorldSettings settings)
         {

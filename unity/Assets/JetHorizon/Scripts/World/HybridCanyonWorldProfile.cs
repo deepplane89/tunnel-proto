@@ -31,13 +31,19 @@ namespace JetHorizon
         [Min(2f)] public float ArchCrownThickness = 12f;
         [Range(0, 10)] public int SideMonolithCount = 6;
 
-        [Header("Continuous canyon face")]
-        [Min(4f)] public float WallFacetLength = 10f;
-        [Range(3, 14)] public int WallVerticalSegments = 7;
-        public float WallBaseY = -4f;
-        [Min(20f)] public float WallHeight = 58f;
-        [Range(0f, 10f)] public float WallFacetDepth = 3.5f;
-        [Min(.25f)] public float WallFacetSnap = 1.5f;
+        [Header("Faithful Three.js canyon slab")]
+        [Min(4f)] public float SlabLength = 20f;
+        [Min(20f)] public float SlabHeight = 55f;
+        [Min(10f)] public float SlabThickness = 60f;
+        [Range(2, 12)] public int SlabColumns = 5;
+        [Range(2, 12)] public int SlabRows = 6;
+        [Range(0f, 10f)] public float SlabDisplacement = 4f;
+        [Min(.1f)] public float SlabSnap = .7f;
+        public float SlabFootX = 9f;
+        public float SlabSweepX = 4f;
+        public float SlabMidX = 17f;
+        public float SlabCrestX = 20f;
+        public float SlabBaseY = -4f;
 
         public bool CastMeshShadows = true;
         public bool ReceiveMeshShadows = true;

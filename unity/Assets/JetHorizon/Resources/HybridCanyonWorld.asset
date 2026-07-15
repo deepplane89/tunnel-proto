@@ -34,12 +34,18 @@ MonoBehaviour:
     EntryClearance: 24
     ArchCrownThickness: 12
     SideMonolithCount: 6
-    WallFacetLength: 10
-    WallVerticalSegments: 7
-    WallBaseY: -4
-    WallHeight: 58
-    WallFacetDepth: 3.5
-    WallFacetSnap: 1.5
+    SlabLength: 20
+    SlabHeight: 55
+    SlabThickness: 60
+    SlabColumns: 5
+    SlabRows: 6
+    SlabDisplacement: 4
+    SlabSnap: 0.7
+    SlabFootX: 9
+    SlabSweepX: 4
+    SlabMidX: 17
+    SlabCrestX: 20
+    SlabBaseY: -4
     CastMeshShadows: 1
     ReceiveMeshShadows: 1
   CanyonMaterial: {fileID: 2100000, guid: f2de2221311d04ff8b7137280d3441b9, type: 2}
