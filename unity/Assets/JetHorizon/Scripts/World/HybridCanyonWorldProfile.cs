@@ -29,6 +29,8 @@ namespace JetHorizon
         public int Seed = 41073;
 
         [Header("Authored mesh landmarks")]
+        [Tooltip("Adds outcrops, threshold arch, bridge, knife-edge gates and monoliths. Keep this off while judging the continuous corridor shell.")]
+        public bool BuildAuthoredStructures;
         [Min(8f)] public float ArchDepth = 18f;
         [Min(3f)] public float ArchPillarWidth = 13f;
         [Min(10f)] public float EntryClearance = 24f;

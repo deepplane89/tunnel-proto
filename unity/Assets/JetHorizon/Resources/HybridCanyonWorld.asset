@@ -30,6 +30,7 @@ MonoBehaviour:
     MeshCrossSegments: 56
     MeshSegmentsPerChunk: 18
     Seed: 41073
+    BuildAuthoredStructures: 0
     ArchDepth: 18
     ArchPillarWidth: 13
     EntryClearance: 24

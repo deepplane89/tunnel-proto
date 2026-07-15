@@ -618,7 +618,7 @@ namespace JetHorizon
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();
             PowerupPresentation?.ResetSystem();
-            Debug.Log("[Jet Horizon] Stable crystalline canyon preview selected. This run is leaderboard-ineligible.");
+            Debug.Log("[Jet Horizon] Curved crystalline canyon preview selected. C only jumps to the encounter; presentation comes from the active canyon profile.");
 #endif
         }
 

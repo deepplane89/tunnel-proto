@@ -352,9 +352,12 @@ namespace JetHorizon
             float thresholdDistance = thresholdIndex >= 0 ? _plan.GetOpening(thresholdIndex).Distance : length * .25f;
             float breakupDistance = breakupIndex >= 0 ? _plan.GetOpening(breakupIndex).Distance : length * .82f;
 
-            BuildWaterOutcrops(settings, thresholdDistance, breakupDistance);
-            BuildArch("Monumental Canyon Threshold", thresholdDistance, settings.EntryClearance, settings, 0);
-            BuildArch("Natural Canyon Bridge", Mathf.Lerp(thresholdDistance, breakupDistance, .52f), settings.EntryClearance - 3f, settings, 101);
+            if (settings.BuildAuthoredStructures)
+            {
+                BuildWaterOutcrops(settings, thresholdDistance, breakupDistance);
+                BuildArch("Monumental Canyon Threshold", thresholdDistance, settings.EntryClearance, settings, 0);
+                BuildArch("Natural Canyon Bridge", Mathf.Lerp(thresholdDistance, breakupDistance, .52f), settings.EntryClearance - 3f, settings, 101);
+            }
             CanyonCurvedWallBuilder.Build(
                 _route,
                 settings,
@@ -363,6 +366,8 @@ namespace JetHorizon
                 _content.transform,
                 _meshMaterial,
                 _ownedAssets);
+            if (!settings.BuildAuthoredStructures) return;
+
             BuildTraversalGates(settings);
 
             int count = Mathf.Max(0, settings.SideMonolithCount);

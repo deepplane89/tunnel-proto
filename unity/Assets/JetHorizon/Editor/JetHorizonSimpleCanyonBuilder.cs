@@ -67,6 +67,7 @@ namespace JetHorizon.EditorTools
 
             Step("2", "Choose the broad look");
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("BuildTerrainBacking"), new GUIContent("Add Terrain backing"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("BuildAuthoredStructures"), new GUIContent("Add arches and rock structures"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("BankHeight"), new GUIContent("Wall height"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("BankRiseWidth"), new GUIContent("Wall slope width", "Smaller values make steeper banks."));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("SurfaceNoise"), new GUIContent("Rocky breakup"));
