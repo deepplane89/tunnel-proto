@@ -60,6 +60,9 @@ namespace JetHorizon.Simulation
             public float CenterX;
             public float HalfWidth;
             public float Z;
+            public CanyonEnvironmentPhase EnvironmentPhase;
+            public bool CorridorBoundaryActive;
+            public TraversalRequirement TraversalRequirement;
         }
 
         readonly SimulationConfig _config;
@@ -667,7 +670,10 @@ namespace JetHorizon.Simulation
                     RowIndex = command.RowIndex,
                     CenterX = command.X,
                     HalfWidth = command.HalfWidth,
-                    Z = command.Z
+                    Z = command.Z,
+                    EnvironmentPhase = command.EnvironmentPhase,
+                    CorridorBoundaryActive = command.CorridorBoundaryActive,
+                    TraversalRequirement = command.TraversalRequirement
                 };
                 return;
             }
@@ -1550,6 +1556,23 @@ namespace JetHorizon.Simulation
 
             CorridorSliceState slice = _corridorSlices[index];
             _sineGapCenter = slice.CenterX;
+            if (slice.TraversalRequirement == TraversalRequirement.KnifeEdge
+                && Math.Abs(_rollRadians) < 0.95f)
+            {
+                _corridorSlices[index].TraversalRequirement = TraversalRequirement.None;
+                if (_overdriveSeconds > 0f) return false;
+                if (ConsumeShieldHit(slice.Id) || ConsumeHullHit(slice.Id))
+                {
+                    Events.Add(new SimulationEvent(SimulationEventType.TraversalGateHit, slice.Id, _rollRadians, slice.Z));
+                    return false;
+                }
+                Events.Add(new SimulationEvent(SimulationEventType.TraversalGateHit, slice.Id, _rollRadians, slice.Z));
+                FinalizeRun();
+                Phase = CoreGamePhase.Dead;
+                Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, slice.Id, (float)_score, _distance));
+                return true;
+            }
+            if (!slice.CorridorBoundaryActive) return false;
             float allowed = Math.Max(0f, slice.HalfWidth - _config.CorridorShipHalfWidth + _config.CorridorCollisionGrace);
             if (Math.Abs(_shipX - slice.CenterX) < allowed) return false;
             if (_overdriveSeconds > 0f) return false;
@@ -1944,6 +1967,8 @@ namespace JetHorizon.Simulation
             Snapshot.EncounterCycle = encounter.Cycle;
             Snapshot.EncounterProgress01 = encounter.Progress01;
             Snapshot.EncounterValidationMargin = encounter.ValidationMargin;
+            Snapshot.UpcomingEncounterKind = encounter.UpcomingKind;
+            Snapshot.UpcomingEncounterStartZ = encounter.UpcomingStartZ;
             Snapshot.ExtractionGateVisible = encounter.ExtractionGateVisible;
             Snapshot.ExtractionGateX = encounter.ExtractionGateX;
             Snapshot.ExtractionGateHalfWidth = encounter.ExtractionGateHalfWidth;
@@ -2042,7 +2067,10 @@ namespace JetHorizon.Simulation
                     slice.RowIndex,
                     slice.CenterX,
                     slice.HalfWidth,
-                    slice.Z));
+                    slice.Z,
+                    slice.EnvironmentPhase,
+                    slice.CorridorBoundaryActive,
+                    slice.TraversalRequirement));
             }
             Snapshot.CorridorSliceCount = sliceCount;
         }

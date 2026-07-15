@@ -236,8 +236,10 @@ namespace JetHorizon.EditorTools
             material.SetColor("_DarkBody", new Color(.10f, .055f, .15f, 1f));
             material.SetFloat("_Brightness", .66f);
             material.SetFloat("_Emission", .20f);
-            material.SetFloat("_FadeStart", -430f);
-            material.SetFloat("_FadeEnd", -330f);
+            // The complete landform is prewarmed beyond the horizon. It must remain
+            // opaque there so real bends and walls—not a spawn fade—occlude the sun.
+            material.SetFloat("_FadeStart", -1600f);
+            material.SetFloat("_FadeEnd", -1400f);
             AssetDatabase.CreateAsset(material, HybridCanyonMaterialPath);
             AssetDatabase.SaveAssets();
             return material;

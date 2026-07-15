@@ -105,6 +105,7 @@ namespace JetHorizon.Simulation
         LaserFired,
         HazardDestroyed,
         PrismaticBoundaryHit,
+        TraversalGateHit,
         LightningStrikeTelegraphed,
         PlayerDied
     }
@@ -475,6 +476,9 @@ namespace JetHorizon.Simulation
         public float CenterX { get; }
         public float HalfWidth { get; }
         public float Z { get; }
+        public CanyonEnvironmentPhase EnvironmentPhase { get; }
+        public bool CorridorBoundaryActive { get; }
+        public TraversalRequirement TraversalRequirement { get; }
 
         internal CorridorSliceSnapshot(
             int id,
@@ -482,7 +486,10 @@ namespace JetHorizon.Simulation
             int rowIndex,
             float centerX,
             float halfWidth,
-            float z)
+            float z,
+            CanyonEnvironmentPhase environmentPhase,
+            bool corridorBoundaryActive,
+            TraversalRequirement traversalRequirement)
         {
             Id = id;
             Family = family;
@@ -490,6 +497,9 @@ namespace JetHorizon.Simulation
             CenterX = centerX;
             HalfWidth = halfWidth;
             Z = z;
+            EnvironmentPhase = environmentPhase;
+            CorridorBoundaryActive = corridorBoundaryActive;
+            TraversalRequirement = traversalRequirement;
         }
     }
 
@@ -531,6 +541,8 @@ namespace JetHorizon.Simulation
         public int EncounterCycle { get; internal set; }
         public float EncounterProgress01 { get; internal set; }
         public float EncounterValidationMargin { get; internal set; }
+        public EncounterKind UpcomingEncounterKind { get; internal set; }
+        public float UpcomingEncounterStartZ { get; internal set; }
         public bool ExtractionGateVisible { get; internal set; }
         public float ExtractionGateX { get; internal set; }
         public float ExtractionGateHalfWidth { get; internal set; }

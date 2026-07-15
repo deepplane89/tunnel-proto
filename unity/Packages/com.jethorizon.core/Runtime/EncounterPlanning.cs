@@ -19,6 +19,22 @@ namespace JetHorizon.Simulation
         Deep
     }
 
+    public enum CanyonEnvironmentPhase
+    {
+        None,
+        OpenWater,
+        Convergence,
+        Threshold,
+        Enclosed,
+        Breakup
+    }
+
+    public enum TraversalRequirement
+    {
+        None,
+        KnifeEdge
+    }
+
     public readonly struct EncounterOpening
     {
         public float Distance { get; }
@@ -27,6 +43,9 @@ namespace JetHorizon.Simulation
         public CargoRouteTier CargoTier { get; }
         public PowerupType Powerup { get; }
         public bool DenseLaserFormation { get; }
+        public CanyonEnvironmentPhase EnvironmentPhase { get; }
+        public bool CorridorBoundaryActive { get; }
+        public TraversalRequirement TraversalRequirement { get; }
 
         public EncounterOpening(
             float distance,
@@ -34,7 +53,10 @@ namespace JetHorizon.Simulation
             float halfWidth,
             CargoRouteTier cargoTier = CargoRouteTier.None,
             PowerupType powerup = PowerupType.None,
-            bool denseLaserFormation = false)
+            bool denseLaserFormation = false,
+            CanyonEnvironmentPhase environmentPhase = CanyonEnvironmentPhase.None,
+            bool corridorBoundaryActive = true,
+            TraversalRequirement traversalRequirement = TraversalRequirement.None)
         {
             if (distance < 0f) throw new ArgumentOutOfRangeException(nameof(distance));
             if (halfWidth <= 0f) throw new ArgumentOutOfRangeException(nameof(halfWidth));
@@ -44,6 +66,9 @@ namespace JetHorizon.Simulation
             CargoTier = cargoTier;
             Powerup = powerup;
             DenseLaserFormation = denseLaserFormation;
+            EnvironmentPhase = environmentPhase;
+            CorridorBoundaryActive = corridorBoundaryActive;
+            TraversalRequirement = traversalRequirement;
         }
     }
 
@@ -423,11 +448,27 @@ namespace JetHorizon.Simulation
                     : i == 28 ? CargoRouteTier.Risky
                     : i == 39 ? CargoRouteTier.Deep
                     : CargoRouteTier.None;
+                CanyonEnvironmentPhase phase = i < 6
+                    ? CanyonEnvironmentPhase.OpenWater
+                    : i < 11
+                        ? CanyonEnvironmentPhase.Convergence
+                        : i == 11
+                            ? CanyonEnvironmentPhase.Threshold
+                            : i < 38
+                                ? CanyonEnvironmentPhase.Enclosed
+                                : CanyonEnvironmentPhase.Breakup;
+                bool boundaryActive = i >= 11 && i < 38;
+                TraversalRequirement traversal = i == 20 || i == 32
+                    ? TraversalRequirement.KnifeEdge
+                    : TraversalRequirement.None;
                 openings[i] = new EncounterOpening(
                     Scale(rowSpacing * (i + 1), scale),
                     center,
                     halfWidth,
-                    cargo);
+                    cargo,
+                    environmentPhase: phase,
+                    corridorBoundaryActive: boundaryActive,
+                    traversalRequirement: traversal);
             }
             return new EncounterPlan(
                 "proof.crystalline-canyon",

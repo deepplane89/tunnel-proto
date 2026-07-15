@@ -91,6 +91,19 @@ namespace JetHorizon
             SimulationSnapshot snapshot = GameManager.I != null ? GameManager.I.CoreSnapshot : null;
             if (!TryFindAnchor(snapshot, out CorridorSliceSnapshot anchor))
             {
+                if (snapshot != null && snapshot.UpcomingEncounterKind == EncounterKind.CrystallineCanyon)
+                {
+                    EnsureBuilt();
+                    if (_content != null)
+                    {
+                        // The entire landform is already present during the preceding
+                        // encounter and approaches from beyond the horizon. Nothing is
+                        // enabled while inside the camera's visible spawn band.
+                        _content.transform.localPosition = new Vector3(0f, 0f, snapshot.UpcomingEncounterStartZ);
+                        SetVisible(true);
+                        return;
+                    }
+                }
                 SetVisible(false);
                 return;
             }
@@ -199,6 +212,7 @@ namespace JetHorizon
 
             var heights = new float[resolution, resolution];
             float halfTerrain = settings.TerrainWidth * .5f;
+            FindPhaseDistances(_plan, out float convergenceStart, out float threshold, out float breakupStart, out float routeEnd);
             for (int z = 0; z < resolution; z++)
             {
                 float z01 = z / (float)(resolution - 1);
@@ -211,7 +225,8 @@ namespace JetHorizon
                     float x01 = x / (float)(resolution - 1);
                     float localX = Mathf.Lerp(-halfTerrain, halfTerrain, x01);
                     float outside = Mathf.Abs(localX - center) - halfWidth;
-                    float bank = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(outside / settings.BankRiseWidth));
+                    float enclosure = EnclosureAtDistance(localZ * -1f, convergenceStart, threshold, breakupStart, routeEnd);
+                    float bank = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(outside / settings.BankRiseWidth)) * enclosure;
                     float noise = FractalNoise(localX, localZ, settings) * settings.SurfaceNoise * bank;
                     float worldHeight = settings.TerrainBaseY + bank * settings.BankHeight + noise;
                     heights[z, x] = Mathf.Clamp01((worldHeight - settings.TerrainBaseY) / settings.TerrainHeight);
@@ -347,9 +362,16 @@ namespace JetHorizon
         void BuildHeroMeshes(HybridCanyonWorldSettings settings)
         {
             float length = _plan.Length;
-            BuildArch("Entry Arch", Mathf.Min(45f, length * .08f), settings.EntryClearance, settings, 0);
-            BuildArch("Canyon Bridge", length * .53f, settings.EntryClearance - 3f, settings, 101);
-            BuildArch("Exit Arch", Mathf.Max(60f, length - 48f), settings.EntryClearance + 2f, settings, 211);
+            int thresholdIndex = FindFirstPhase(_plan, CanyonEnvironmentPhase.Threshold);
+            int breakupIndex = FindFirstPhase(_plan, CanyonEnvironmentPhase.Breakup);
+            float thresholdDistance = thresholdIndex >= 0 ? _plan.GetOpening(thresholdIndex).Distance : length * .25f;
+            float breakupDistance = breakupIndex >= 0 ? _plan.GetOpening(breakupIndex).Distance : length * .82f;
+
+            BuildWaterOutcrops(settings, thresholdDistance, breakupDistance);
+            BuildArch("Monumental Canyon Threshold", thresholdDistance, settings.EntryClearance, settings, 0);
+            BuildArch("Natural Canyon Bridge", Mathf.Lerp(thresholdDistance, breakupDistance, .52f), settings.EntryClearance - 3f, settings, 101);
+            BuildEnclosedSlabFaces(settings, thresholdIndex, breakupIndex);
+            BuildTraversalGates(settings);
 
             int count = Mathf.Max(0, settings.SideMonolithCount);
             for (int i = 0; i < count; i++)
@@ -367,6 +389,116 @@ namespace JetHorizon
                 CreateHeroBlock($"Monolith {i + 1:00}", position, size, settings.Seed + 700 + i * 31, settings,
                     Quaternion.Euler(0f, side * (8f + i * 3f), side * (3f + i)));
             }
+        }
+
+        void BuildWaterOutcrops(HybridCanyonWorldSettings settings, float thresholdDistance, float breakupDistance)
+        {
+            int seed = settings.Seed + 1200;
+            for (int i = 0; i < 10; i++)
+            {
+                float distance = Mathf.Lerp(32f, thresholdDistance - 24f, i / 9f);
+                SampleRoute(_plan, distance, out float center, out float halfWidth);
+                int side = (i & 1) == 0 ? -1 : 1;
+                float convergence = i / 9f;
+                float lateral = Mathf.Lerp(74f, halfWidth + 8f, convergence);
+                CreateSlabFormation($"Approach Outcrop {i + 1:00}", distance, center + side * lateral, side,
+                    18f + (i % 4) * 8f, 14f + (i % 3) * 6f, seed + i * 29, settings);
+            }
+
+            for (int i = 0; i < 8; i++)
+            {
+                float distance = Mathf.Lerp(breakupDistance + 12f, _plan.Length - 12f, i / 7f);
+                SampleRoute(_plan, distance, out float center, out float halfWidth);
+                int side = (i & 1) == 0 ? 1 : -1;
+                float breakup = i / 7f;
+                float lateral = Mathf.Lerp(halfWidth + 7f, 82f, breakup);
+                CreateSlabFormation($"Exit Outcrop {i + 1:00}", distance, center + side * lateral, side,
+                    22f + (i % 3) * 9f, 16f + (i % 4) * 5f, seed + 500 + i * 31, settings);
+            }
+        }
+
+        void BuildEnclosedSlabFaces(HybridCanyonWorldSettings settings, int thresholdIndex, int breakupIndex)
+        {
+            int first = Mathf.Max(0, thresholdIndex + 2);
+            int end = breakupIndex > 0 ? breakupIndex : _plan.OpeningCount;
+            for (int i = first; i < end; i += 3)
+            {
+                EncounterOpening opening = _plan.GetOpening(i);
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    CreateSlabFormation($"Connected Wall Facet {i:00} {(side < 0 ? "L" : "R")}",
+                        opening.Distance,
+                        opening.CenterX + side * opening.HalfWidth,
+                        side,
+                        42f + (i % 4) * 5f,
+                        20f,
+                        settings.Seed + 2200 + i * 17 + (side > 0 ? 1 : 0),
+                        settings,
+                        -1.5f);
+                }
+            }
+        }
+
+        void BuildTraversalGates(HybridCanyonWorldSettings settings)
+        {
+            for (int i = 0; i < _plan.OpeningCount; i++)
+            {
+                EncounterOpening opening = _plan.GetOpening(i);
+                if (opening.TraversalRequirement != TraversalRequirement.KnifeEdge) continue;
+                var root = new GameObject($"Knife-Edge Rock Gate {i:00}");
+                root.layer = 8;
+                root.transform.SetParent(_content.transform, false);
+                root.transform.localPosition = new Vector3(opening.CenterX, 0f, -opening.Distance);
+                root.transform.localRotation = Quaternion.Euler(0f, RouteYaw(_plan, opening.Distance), 0f);
+
+                const float gapHalfWidth = 1.15f;
+                float span = opening.HalfWidth + 6f;
+                float sideWidth = Mathf.Max(4f, span - gapHalfWidth);
+                CreateHeroBlock("Left Rock Fin", new Vector3(-(gapHalfWidth + sideWidth * .5f), 5.5f, 0f),
+                    new Vector3(sideWidth, 11f, 7f), settings.Seed + 3100 + i * 7, settings,
+                    Quaternion.Euler(0f, 0f, -4f), root.transform);
+                CreateHeroBlock("Right Rock Fin", new Vector3(gapHalfWidth + sideWidth * .5f, 5.5f, 0f),
+                    new Vector3(sideWidth, 11f, 7f), settings.Seed + 3101 + i * 7, settings,
+                    Quaternion.Euler(0f, 0f, 4f), root.transform);
+            }
+        }
+
+        void CreateSlabFormation(
+            string name,
+            float distance,
+            float innerX,
+            int side,
+            float height,
+            float depth,
+            int seed,
+            HybridCanyonWorldSettings settings,
+            float baseY = -4f)
+        {
+            var go = new GameObject(name);
+            go.layer = 8;
+            go.transform.SetParent(_content.transform, false);
+            go.transform.localPosition = new Vector3(innerX, baseY, -distance);
+            go.transform.localRotation = Quaternion.Euler(0f, RouteYaw(_plan, distance), 0f);
+            go.transform.localScale = new Vector3(side, 1f, 1f);
+            Mesh mesh = MeshFactory.CanyonSlab(
+                height,
+                depth,
+                18f + height * .35f,
+                5,
+                6,
+                4f,
+                .7f,
+                6f,
+                3f,
+                11f,
+                15f,
+                seed);
+            _ownedAssets.Add(mesh);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = _meshMaterial;
+            renderer.shadowCastingMode = settings.CastMeshShadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
+            renderer.receiveShadows = settings.ReceiveMeshShadows;
         }
 
         void BuildArch(string name, float distance, float clearance, HybridCanyonWorldSettings settings, int seedOffset)
@@ -432,7 +564,45 @@ namespace JetHorizon
             if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", TextureFactory.Hex(0x174f5c));
             if (material.HasProperty("_Brightness")) material.SetFloat("_Brightness", .62f);
             if (material.HasProperty("_Emission")) material.SetFloat("_Emission", .18f);
+            if (material.HasProperty("_FadeStart")) material.SetFloat("_FadeStart", -1600f);
+            if (material.HasProperty("_FadeEnd")) material.SetFloat("_FadeEnd", -1400f);
             return material;
+        }
+
+        static int FindFirstPhase(EncounterPlan plan, CanyonEnvironmentPhase phase)
+        {
+            for (int i = 0; i < plan.OpeningCount; i++)
+                if (plan.GetOpening(i).EnvironmentPhase == phase) return i;
+            return -1;
+        }
+
+        static void FindPhaseDistances(
+            EncounterPlan plan,
+            out float convergenceStart,
+            out float threshold,
+            out float breakupStart,
+            out float routeEnd)
+        {
+            int convergence = FindFirstPhase(plan, CanyonEnvironmentPhase.Convergence);
+            int thresholdIndex = FindFirstPhase(plan, CanyonEnvironmentPhase.Threshold);
+            int breakup = FindFirstPhase(plan, CanyonEnvironmentPhase.Breakup);
+            convergenceStart = convergence >= 0 ? plan.GetOpening(convergence).Distance : plan.Length * .12f;
+            threshold = thresholdIndex >= 0 ? plan.GetOpening(thresholdIndex).Distance : plan.Length * .25f;
+            breakupStart = breakup >= 0 ? plan.GetOpening(breakup).Distance : plan.Length * .82f;
+            routeEnd = plan.Length;
+        }
+
+        static float EnclosureAtDistance(
+            float distance,
+            float convergenceStart,
+            float threshold,
+            float breakupStart,
+            float routeEnd)
+        {
+            if (distance <= convergenceStart) return 0f;
+            if (distance < threshold) return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(convergenceStart, threshold, distance));
+            if (distance <= breakupStart) return 1f;
+            return 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(breakupStart, routeEnd, distance));
         }
 
         Texture2D ResolveSurfaceTexture(Material material)

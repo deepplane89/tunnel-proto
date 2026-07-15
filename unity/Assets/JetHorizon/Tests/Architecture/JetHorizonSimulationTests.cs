@@ -1734,6 +1734,64 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Dead));
         }
 
+        [Test]
+        public void CrystallineCanyonOwnsACompleteEnvironmentalPhaseSequence()
+        {
+            EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence()[1];
+            var expected = new[]
+            {
+                CanyonEnvironmentPhase.OpenWater,
+                CanyonEnvironmentPhase.Convergence,
+                CanyonEnvironmentPhase.Threshold,
+                CanyonEnvironmentPhase.Enclosed,
+                CanyonEnvironmentPhase.Breakup
+            };
+            int expectedIndex = 0;
+            int knifeEdgeGates = 0;
+            for (int i = 0; i < canyon.OpeningCount; i++)
+            {
+                EncounterOpening opening = canyon.GetOpening(i);
+                if (opening.EnvironmentPhase == expected[expectedIndex]) { }
+                else if (expectedIndex + 1 < expected.Length && opening.EnvironmentPhase == expected[expectedIndex + 1]) expectedIndex++;
+                else Assert.Fail($"Unexpected canyon phase transition at opening {i}: {opening.EnvironmentPhase}");
+
+                bool shouldHaveWallCollision = opening.EnvironmentPhase == CanyonEnvironmentPhase.Threshold
+                    || opening.EnvironmentPhase == CanyonEnvironmentPhase.Enclosed;
+                Assert.That(opening.CorridorBoundaryActive, Is.EqualTo(shouldHaveWallCollision));
+                if (opening.TraversalRequirement == TraversalRequirement.KnifeEdge)
+                {
+                    knifeEdgeGates++;
+                    Assert.That(opening.EnvironmentPhase, Is.EqualTo(CanyonEnvironmentPhase.Enclosed));
+                }
+            }
+            Assert.That(expectedIndex, Is.EqualTo(expected.Length - 1));
+            Assert.That(knifeEdgeGates, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void CanyonIsAnnouncedBeyondTheHorizonBeforeItsEncounterBegins()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                StartSpeedMultiplier = 5f / 3f,
+                PersistentCruiseSpeedMultiplier = .826f,
+                MinimumOperationalSpeed = 50f,
+                ProofEncounterMode = true,
+                CollisionEnabled = false,
+                HazardSpawningEnabled = true,
+                MaxHazards = 600,
+                MaxPickups = 128,
+                MaxCorridorSlices = 96
+            }, 20260722u);
+            simulation.StartRun(2026072201L);
+            simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.EncounterKind, Is.EqualTo(EncounterKind.MonumentalBroadWeave));
+            Assert.That(simulation.Snapshot.UpcomingEncounterKind, Is.EqualTo(EncounterKind.CrystallineCanyon));
+            Assert.That(simulation.Snapshot.UpcomingEncounterStartZ, Is.LessThan(-650f),
+                "The complete canyon must approach as distant geography rather than activate inside the visible spawn band.");
+        }
+
         static InputFrame InputForTick(int tick)
         {
             if (tick < 180) return new InputFrame(false, true);

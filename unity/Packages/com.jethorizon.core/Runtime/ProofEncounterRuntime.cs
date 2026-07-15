@@ -23,6 +23,9 @@ namespace JetHorizon.Simulation
         public float Z { get; }
         public RunCargoKind CargoKind { get; }
         public PowerupType Powerup { get; }
+        public CanyonEnvironmentPhase EnvironmentPhase { get; }
+        public bool CorridorBoundaryActive { get; }
+        public TraversalRequirement TraversalRequirement { get; }
 
         public EncounterCommand(
             EncounterCommandType type,
@@ -32,7 +35,10 @@ namespace JetHorizon.Simulation
             float halfWidth,
             float z,
             RunCargoKind cargoKind = RunCargoKind.Salvage,
-            PowerupType powerup = PowerupType.None)
+            PowerupType powerup = PowerupType.None,
+            CanyonEnvironmentPhase environmentPhase = CanyonEnvironmentPhase.None,
+            bool corridorBoundaryActive = true,
+            TraversalRequirement traversalRequirement = TraversalRequirement.None)
         {
             Type = type;
             EncounterKind = encounterKind;
@@ -42,6 +48,9 @@ namespace JetHorizon.Simulation
             Z = z;
             CargoKind = cargoKind;
             Powerup = powerup;
+            EnvironmentPhase = environmentPhase;
+            CorridorBoundaryActive = corridorBoundaryActive;
+            TraversalRequirement = traversalRequirement;
         }
     }
 
@@ -89,6 +98,8 @@ namespace JetHorizon.Simulation
         public float ExtractionGateHalfWidth { get; }
         public float ExtractionGateZ { get; }
         public float ExtractionGateDistance { get; }
+        public EncounterKind UpcomingKind { get; }
+        public float UpcomingStartZ { get; }
 
         internal EncounterRuntimeSnapshot(
             string planId,
@@ -101,7 +112,9 @@ namespace JetHorizon.Simulation
             float extractionGateX,
             float extractionGateHalfWidth,
             float extractionGateZ,
-            float extractionGateDistance)
+            float extractionGateDistance,
+            EncounterKind upcomingKind,
+            float upcomingStartZ)
         {
             PlanId = planId ?? string.Empty;
             Kind = kind;
@@ -114,6 +127,8 @@ namespace JetHorizon.Simulation
             ExtractionGateHalfWidth = extractionGateHalfWidth;
             ExtractionGateZ = extractionGateZ;
             ExtractionGateDistance = extractionGateDistance;
+            UpcomingKind = upcomingKind;
+            UpcomingStartZ = upcomingStartZ;
         }
     }
 
@@ -363,7 +378,16 @@ namespace JetHorizon.Simulation
                         : plan.Kind == EncounterKind.LightningCargoStorm
                             ? EncounterCommandType.LightningStrikeCluster
                             : EncounterCommandType.PrismaticSlice;
-                commands.Add(new EncounterCommand(rowType, plan.Kind, rowIndex, opening.CenterX, opening.HalfWidth, z));
+                commands.Add(new EncounterCommand(
+                    rowType,
+                    plan.Kind,
+                    rowIndex,
+                    opening.CenterX,
+                    opening.HalfWidth,
+                    z,
+                    environmentPhase: opening.EnvironmentPhase,
+                    corridorBoundaryActive: opening.CorridorBoundaryActive,
+                    traversalRequirement: opening.TraversalRequirement));
             }
 
             if (opening.CargoTier != CargoRouteTier.None)
@@ -417,6 +441,10 @@ namespace JetHorizon.Simulation
             EncounterPlan plan = CurrentPlan;
             float progress = Math.Max(0f, Math.Min(1f, (runDistance - _planStartDistance) / plan.Length));
             float gateZ = _gateActive ? shipZ - (_gateDistance - runDistance) : 0f;
+            bool hasUpcoming = !_gateActive && _planIndex + 1 < _plans.Length;
+            EncounterKind upcomingKind = hasUpcoming ? _plans[_planIndex + 1].Kind : default;
+            float upcomingStart = hasUpcoming ? _planStartDistance + plan.Length + _recoveryDistance : 0f;
+            float upcomingStartZ = hasUpcoming ? shipZ - (upcomingStart - runDistance) : 0f;
             Snapshot = new EncounterRuntimeSnapshot(
                 plan.Id,
                 plan.Kind,
@@ -428,7 +456,9 @@ namespace JetHorizon.Simulation
                 _gateX,
                 _gateHalfWidth,
                 gateZ,
-                _gateActive ? _gateDistance : NextGateDistance());
+                _gateActive ? _gateDistance : NextGateDistance(),
+                upcomingKind,
+                upcomingStartZ);
         }
 
         float NextGateDistance()
