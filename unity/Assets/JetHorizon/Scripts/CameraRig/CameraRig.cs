@@ -40,7 +40,7 @@ namespace JetHorizon
 
         public void OnRunStart(bool skipIntro)
         {
-            _launchTime = Time.time;
+            _launchTime = S.Elapsed;
             if (Cam != null) Cam.fieldOfView = Tuning.CamBaseFovDesktop + 15f;  // launch snap-in
         }
 
@@ -130,7 +130,7 @@ namespace JetHorizon
                 float frac = Mathf.Clamp01((s.EffectiveSpeed - Tuning.BaseSpeed) / (Tuning.BaseSpeed * 1.5f));
                 float speedFrac = Mathf.Pow(frac, Tuning.FovKickExponent);
                 float targetFOV = Tuning.CamBaseFovDesktop + Tuning.FovSpeedBoost * speedFrac;
-                bool launch = Time.time - _launchTime < 0.5f;
+                bool launch = s.Elapsed - _launchTime < 0.5f;
                 float rate = launch ? 12f : (Mathf.Abs(targetFOV - Cam.fieldOfView) > 0.5f ? 5f : 3f);
                 Cam.fieldOfView = Mathf.Lerp(Cam.fieldOfView, targetFOV, rate * rawDt);
 

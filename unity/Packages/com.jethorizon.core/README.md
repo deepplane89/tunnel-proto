@@ -15,6 +15,8 @@ Current scope:
 - registered pickup identities with core-owned movement, collection, score awards, and events;
 - scoring, near misses, and death events;
 - live-run distance, passive score, pickup awards, and final score multiplier;
+- explicit total-simulation and score-eligible run ticks;
+- immutable, idempotent run finalization with leaderboard eligibility flags;
 - engine-supplied world facts represented as value-only `WorldFrame` input;
 - validated run/stage content with typed stage and corridor definitions;
 - stage timing, speed ladder, spawn policy, quiet windows, mechanic commands, and endless rotation;
@@ -22,7 +24,7 @@ Current scope:
 - allocation-free snapshot and event buffers;
 - direct formula and deterministic replay tests.
 
-The shipping `GameManager` feeds player/world input into the core and mirrors its snapshot into the legacy `RunSession`. `WaveDirector` realizes the remaining canyon presentation commands, while pooled Unity systems project core hazard and pickup snapshots onto render objects. Unity still owns rendering, audio, input devices, platform services, and canyon slab presentation/lifecycle. Sine corridors and structured-wall fields are core gameplay; their old Unity schedulers are legacy fallback code, not live authorities.
+The shipping `GameManager` feeds player/world input into the core and mirrors its snapshot into the legacy `RunSession`. `RunCompletionService` is the idempotent boundary for records, persistence, analytics, and leaderboard publication; Unity currently supplies a durable local leaderboard outbox that can be drained when the player-profile/network adapter is connected. `WaveDirector` realizes the remaining canyon presentation commands, while pooled Unity systems project core hazard and pickup snapshots onto render objects. Unity still owns rendering, audio, input devices, platform services, and canyon slab presentation/lifecycle. Sine corridors and structured-wall fields are core gameplay; their old Unity schedulers are legacy fallback code, not live authorities.
 
 ## Revert boundary
 

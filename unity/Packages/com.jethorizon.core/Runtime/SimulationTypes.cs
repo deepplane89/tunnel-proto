@@ -436,7 +436,9 @@ namespace JetHorizon.Simulation
 
         public CoreGamePhase Phase { get; internal set; }
         public long Tick { get; internal set; }
+        public long EligibleRunTick { get; internal set; }
         public float Elapsed { get; internal set; }
+        public float EligibleRunElapsed { get; internal set; }
         public float Distance { get; internal set; }
         public float Score { get; internal set; }
         public float Speed { get; internal set; }

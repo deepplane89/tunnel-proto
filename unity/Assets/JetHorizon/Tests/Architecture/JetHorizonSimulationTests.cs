@@ -339,8 +339,10 @@ namespace JetHorizon.Simulation.Tests
             simulation.ForcePlayerDeath();
 
             Assert.That(beforeDeath, Is.GreaterThan(75f));
-            Assert.That(simulation.Snapshot.Score, Is.EqualTo((float)System.Math.Floor(beforeDeath) * 1.1f).Within(0.0001f));
+            long expectedFinal = (long)System.Math.Floor(System.Math.Floor(beforeDeath) * 1.1d);
+            Assert.That(simulation.Snapshot.Score, Is.EqualTo(expectedFinal).Within(0.0001f));
             Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Dead));
+            Assert.That(simulation.LatestRunResult.FinalScore, Is.EqualTo(expectedFinal));
         }
 
         [Test]
@@ -416,7 +418,7 @@ namespace JetHorizon.Simulation.Tests
                 new FakeClock(),
                 leaderboard));
 
-            router.Dispatch(simulation.Events);
+            router.Dispatch(simulation.Events, simulation.LatestRunResult);
 
             Assert.That(store.Saved.CompletedRuns, Is.EqualTo(1));
             Assert.That(store.Saved.HighScore, Is.EqualTo(simulation.Snapshot.Score));
@@ -424,6 +426,163 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(audio.LastCue, Is.EqualTo(AudioCue.PlayerDied));
             Assert.That(haptics.LastCue, Is.EqualTo(HapticCue.Impact));
             Assert.That(analytics.Last.Name, Is.EqualTo("run_finished"));
+        }
+
+        [Test]
+        public void SuspendedProgressionKeepsSimulationAliveButFreezesRunAndStageClocks()
+        {
+            float dt = 1f / 60f;
+            var run = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("OPEN", StageKind.RandomCones, 10f, 1.5f, 1, 0)
+            });
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false
+            }, 89u, run);
+            simulation.StartRun(8901L);
+
+            simulation.Step(default, new WorldFrame(true, false));
+
+            Assert.That(simulation.Snapshot.Tick, Is.EqualTo(1));
+            Assert.That(simulation.Snapshot.Elapsed, Is.EqualTo(dt).Within(0.0001f));
+            Assert.That(simulation.Snapshot.EligibleRunTick, Is.Zero);
+            Assert.That(simulation.Snapshot.EligibleRunElapsed, Is.Zero);
+            Assert.That(simulation.Snapshot.StageElapsed, Is.Zero);
+            Assert.That(simulation.Snapshot.Distance, Is.Zero);
+            Assert.That(simulation.Snapshot.Score, Is.Zero);
+
+            simulation.Step(default, new WorldFrame(false, false));
+
+            Assert.That(simulation.Snapshot.Tick, Is.EqualTo(2));
+            Assert.That(simulation.Snapshot.EligibleRunTick, Is.EqualTo(1));
+            Assert.That(simulation.Snapshot.EligibleRunElapsed, Is.EqualTo(dt).Within(0.0001f));
+            Assert.That(simulation.Snapshot.StageElapsed, Is.EqualTo(dt).Within(0.0001f));
+            Assert.That(simulation.Snapshot.Distance, Is.GreaterThan(0f));
+            Assert.That(simulation.Snapshot.Score, Is.GreaterThan(0f));
+        }
+
+        [Test]
+        public void OverdriveAcceleratesTimedStagesButNotRestStages()
+        {
+            float dt = 1f / 60f;
+            var timedRun = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("TIMED", StageKind.RandomCones, 10f, 1.5f, 1, 0)
+            });
+            var timed = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false
+            }, 891u, timedRun);
+            timed.StartRun(89101L);
+            timed.Step(default, new WorldFrame(false, true));
+            Assert.That(timed.Snapshot.StageElapsed, Is.EqualTo(dt * 1.8f).Within(0.0001f));
+
+            var restRun = new RunDefinition(36f, new[]
+            {
+                new StageDefinition("REST", StageKind.Rest, 10f, 1.5f, 1, 0)
+            });
+            var rest = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false
+            }, 892u, restRun);
+            rest.StartRun(89201L);
+            rest.Step(default, new WorldFrame(false, true));
+            Assert.That(rest.Snapshot.StageElapsed, Is.EqualTo(dt).Within(0.0001f));
+        }
+
+        [Test]
+        public void RunFinalizationIsImmutableAndIdempotent()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false
+            }, 90u);
+            simulation.StartRun(9001L);
+            simulation.AwardScore(123.75f, ScoreSource.Bonus);
+            simulation.ForcePlayerDeath();
+
+            RunResult first = simulation.LatestRunResult;
+            float firstScore = simulation.Snapshot.Score;
+            simulation.ForcePlayerDeath();
+
+            Assert.That(simulation.LatestRunResult, Is.SameAs(first));
+            Assert.That(simulation.Snapshot.Score, Is.EqualTo(firstScore));
+            Assert.That(first.RunId, Is.EqualTo(9001L));
+            Assert.That(first.RawScore, Is.EqualTo(123L));
+            Assert.That(first.FinalScore, Is.EqualTo(123L));
+        }
+
+        [Test]
+        public void CompletionServiceIgnoresDuplicateRunAndPublishesOnce()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false
+            }, 91u);
+            simulation.StartRun(9101L);
+            simulation.AwardScore(500f, ScoreSource.Bonus);
+            simulation.ForcePlayerDeath();
+
+            var store = new FakeProgressStore();
+            var leaderboard = new FakeLeaderboard();
+            var router = new RunEventRouter(new GameServices(
+                store,
+                new FakeAudio(),
+                new FakeHaptics(),
+                new FakeAnalytics(),
+                new FakeClock(),
+                leaderboard));
+
+            router.Dispatch(simulation.Events, simulation.LatestRunResult);
+            router.Dispatch(simulation.Events, simulation.LatestRunResult);
+
+            Assert.That(store.Saved.CompletedRuns, Is.EqualTo(1));
+            Assert.That(store.Saved.LastCompletedRunId, Is.EqualTo(9101L));
+            Assert.That(leaderboard.SubmissionCount, Is.EqualTo(1));
+            Assert.That(router.LastCompletion.Value.IsDuplicate, Is.True);
+        }
+
+        [Test]
+        public void RepairRuleResetsScorePreservesDistanceAndDisablesLeaderboard()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                CollisionEnabled = false,
+                HazardSpawningEnabled = false
+            }, 92u);
+            simulation.StartRun(9201L);
+            simulation.Step(default);
+            float distanceBeforeRepair = simulation.Snapshot.Distance;
+            simulation.AwardScore(250f, ScoreSource.Bonus);
+            simulation.RegisterRepair();
+
+            Assert.That(simulation.Snapshot.Score, Is.Zero);
+            Assert.That(simulation.Snapshot.Distance, Is.EqualTo(distanceBeforeRepair));
+
+            simulation.AwardScore(100f, ScoreSource.Bonus);
+            simulation.ForcePlayerDeath();
+            Assert.That(simulation.LatestRunResult.RepairCount, Is.EqualTo(1));
+            Assert.That(simulation.LatestRunResult.IsLeaderboardEligible, Is.False);
+
+            var store = new FakeProgressStore();
+            var leaderboard = new FakeLeaderboard();
+            var router = new RunEventRouter(new GameServices(
+                store,
+                new FakeAudio(),
+                new FakeHaptics(),
+                new FakeAnalytics(),
+                new FakeClock(),
+                leaderboard));
+            router.Dispatch(simulation.Events, simulation.LatestRunResult);
+
+            Assert.That(store.Saved.CompletedRuns, Is.EqualTo(1));
+            Assert.That(leaderboard.SubmissionCount, Is.Zero);
         }
 
         [Test]
@@ -600,11 +759,15 @@ namespace JetHorizon.Simulation.Tests
             for (int i = 0; i < 17; i++) simulation.Step(default);
             Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Playing));
 
-            simulation.Step(default);
-            simulation.Step(default);
+            bool sawDeathEvent = false;
+            for (int i = 0; i < 2 && simulation.Snapshot.Phase == CoreGamePhase.Playing; i++)
+            {
+                simulation.Step(default);
+                sawDeathEvent |= ContainsEvent(simulation.Events, SimulationEventType.PlayerDied);
+            }
 
             Assert.That(simulation.Snapshot.Phase, Is.EqualTo(CoreGamePhase.Dead));
-            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.PlayerDied), Is.True);
+            Assert.That(sawDeathEvent, Is.True);
         }
 
         [Test]
@@ -891,7 +1054,7 @@ namespace JetHorizon.Simulation.Tests
             public void Track(AnalyticsEvent analyticsEvent) => Last = analyticsEvent;
         }
 
-        sealed class FakeClock : IClock
+        sealed class FakeClock : IUtcClock
         {
             public long UtcUnixMilliseconds => 123456789L;
         }
@@ -899,7 +1062,12 @@ namespace JetHorizon.Simulation.Tests
         sealed class FakeLeaderboard : ILeaderboardService
         {
             public long LastScore;
-            public void SubmitScore(long score) => LastScore = score;
+            public int SubmissionCount;
+            public void SubmitScore(LeaderboardSubmission submission)
+            {
+                LastScore = submission.Score;
+                SubmissionCount++;
+            }
         }
     }
 }

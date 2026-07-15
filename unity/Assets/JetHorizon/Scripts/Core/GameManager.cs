@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using JetHorizon.Simulation;
 using JetHorizon.Application;
@@ -46,6 +47,7 @@ namespace JetHorizon
         bool  _killedThisFrame;   // JS `return` after killPlayer aborts remaining checks
         JetHorizonSimulation _coreSimulation;
         RunEventRouter _applicationEvents;
+        static long _lastIssuedRunId;
 
         public GamePhase Phase => State.Phase;
         /// <summary>Viewer toggle: gameplay continues, but every lethal collision is suppressed.</summary>
@@ -53,6 +55,7 @@ namespace JetHorizon
         public SimulationSnapshot CoreSnapshot => _coreSimulation?.Snapshot;
         public SimulationEventBuffer CoreEvents => _coreSimulation?.Events;
         public StageCommandBuffer CoreStageCommands => _coreSimulation?.StageCommands;
+        public RunCompletionOutcome? LastCompletion => _applicationEvents?.LastCompletion;
 
         void Awake()
         {
@@ -100,7 +103,9 @@ namespace JetHorizon
 
         void Update()
         {
-            float rawDt = Mathf.Min(Time.deltaTime, Tuning.MaxRawDt);
+            // The simulation has its own explicit pause phase. Unscaled host time keeps
+            // Unity timeScale changes from silently altering deterministic gameplay.
+            float rawDt = Mathf.Min(Time.unscaledDeltaTime, Tuning.MaxRawDt);
             State.Tick(rawDt);
 
             switch (State.Phase)
@@ -172,7 +177,7 @@ namespace JetHorizon
             var frame = input == null
                 ? default
                 : new InputFrame(input.SteerRight, input.SteerLeft, input.RollHeld ? input.RollDir : 0);
-            var world = new WorldFrame(s.IntroActive, s.OverdriveActive)
+            var world = new WorldFrame(s.IntroActive || s.IntroLiftActive, s.OverdriveActive)
             {
                 CanyonActive = s.CanyonActive,
                 CanyonExiting = s.CanyonExiting,
@@ -214,7 +219,7 @@ namespace JetHorizon
             if (snapshot == null) return;
             Session.Elapsed = snapshot.Elapsed;
             Session.Distance = snapshot.Distance;
-            Session.PlayerScore = snapshot.Score;
+            Session.Score = snapshot.Score;
             Session.Speed = snapshot.Speed;
             if (snapshot.StageDirectorEnabled)
             {
@@ -305,7 +310,10 @@ namespace JetHorizon
             if (State.Phase != GamePhase.Title && State.Phase != GamePhase.Dead) return;
 
             Session.ResetForNewRun();
-            _coreSimulation.StartRun();
+            _accumulator = 0f;
+            _coreSimulation.StartRun(IssueRunId());
+            if (GodMode)
+                _coreSimulation.MarkLeaderboardIneligible(LeaderboardIneligibility.GodMode);
             _applicationEvents.Dispatch(_coreSimulation.Events);
             SyncCoreSession();
             ResetAllSystems();
@@ -332,11 +340,19 @@ namespace JetHorizon
         {
             if (State.Phase == GamePhase.Playing)
             {
-                if (State.TransitionTo(GamePhase.Paused)) _coreSimulation?.SetPaused(true);
+                if (State.TransitionTo(GamePhase.Paused))
+                {
+                    _accumulator = 0f;
+                    _coreSimulation?.SetPaused(true);
+                }
             }
             else if (State.Phase == GamePhase.Paused)
             {
-                if (State.TransitionTo(GamePhase.Playing)) _coreSimulation?.SetPaused(false);
+                if (State.TransitionTo(GamePhase.Playing))
+                {
+                    _accumulator = 0f;
+                    _coreSimulation?.SetPaused(false);
+                }
             }
         }
 
@@ -344,6 +360,7 @@ namespace JetHorizon
         {
             if (State.TransitionTo(GamePhase.Title))
             {
+                _accumulator = 0f;
                 Session.ResetForNewRun();
                 _coreSimulation.ResetToTitle();
                 SyncCoreSession();
@@ -357,7 +374,11 @@ namespace JetHorizon
         {
             GodMode = enabled;
             if (enabled)
+            {
                 Session.InvincibleTimer = Mathf.Max(Session.InvincibleTimer, Tuning.FixedDt * 2f);
+                if (State.Phase == GamePhase.Playing)
+                    _coreSimulation?.MarkLeaderboardIneligible(LeaderboardIneligibility.GodMode);
+            }
         }
 
         public void ToggleGodMode() => SetGodMode(!GodMode);
@@ -393,7 +414,8 @@ namespace JetHorizon
             _killedThisFrame = true;
             _deathTimer = 0f;
             if (!coreAlreadyDead) _coreSimulation?.ForcePlayerDeath();
-            if (_coreSimulation != null) _applicationEvents.Dispatch(_coreSimulation.Events);
+            if (_coreSimulation != null)
+                _applicationEvents.Dispatch(_coreSimulation.Events, _coreSimulation.LatestRunResult);
             SyncCoreSession();
 
             State.TransitionTo(GamePhase.Dead);
@@ -403,5 +425,13 @@ namespace JetHorizon
 
         /// <summary>Seconds since death — UI shows game-over after Tuning.GameOverDelay.</summary>
         public float DeathTimer => _deathTimer;
+
+        static long IssueRunId()
+        {
+            long candidate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            if (candidate <= _lastIssuedRunId) candidate = _lastIssuedRunId + 1L;
+            _lastIssuedRunId = candidate;
+            return candidate;
+        }
     }
 }

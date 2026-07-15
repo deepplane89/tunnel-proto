@@ -226,7 +226,7 @@ namespace JetHorizon
             }
             else
             {
-                _shieldLight.intensity = 1.2f + Mathf.Sin(Time.time * 9f) * 0.4f;
+                _shieldLight.intensity = 1.2f + Mathf.Sin(S.Elapsed * 9f) * 0.4f;
             }
 
             if (_shieldHitAge >= 0f)

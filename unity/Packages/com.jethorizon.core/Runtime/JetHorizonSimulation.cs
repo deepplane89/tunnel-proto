@@ -59,9 +59,12 @@ namespace JetHorizon.Simulation
         readonly int[] _blockedLaneScratch;
 
         long _tick;
+        long _eligibleRunTick;
+        long _fallbackRunId;
+        long _runId;
         float _elapsed;
         float _distance;
-        float _score;
+        double _score;
         float _speed;
         float _effectiveSpeed;
         float _shipX;
@@ -110,6 +113,8 @@ namespace JetHorizon.Simulation
         bool _structuredWallsScheduling;
         int _structuredWallRowsDone;
         float _structuredWallSpawnZ;
+        int _repairCount;
+        LeaderboardIneligibility _leaderboardIneligibility;
 
         public CoreGamePhase Phase { get; private set; }
         public SimulationSnapshot Snapshot { get; }
@@ -117,6 +122,7 @@ namespace JetHorizon.Simulation
         public StageCommandBuffer StageCommands { get; }
         public SimulationConfig Config => _config.Clone();
         public float FixedDeltaSeconds => _config.FixedDeltaSeconds;
+        public RunResult LatestRunResult { get; private set; }
 
         public JetHorizonSimulation(SimulationConfig config, uint seed, RunDefinition runDefinition = null)
         {
@@ -147,11 +153,12 @@ namespace JetHorizon.Simulation
             RefreshSnapshot();
         }
 
-        public void StartRun()
+        public void StartRun(long runId = 0L)
         {
             Events.Clear();
             StageCommands.Clear();
             ResetRunState(Events);
+            _runId = runId > 0L ? runId : ++_fallbackRunId;
             Phase = CoreGamePhase.Playing;
             Events.Add(new SimulationEvent(SimulationEventType.RunStarted));
             RefreshSnapshot();
@@ -181,9 +188,27 @@ namespace JetHorizon.Simulation
         {
             Events.Clear();
             if (Phase == CoreGamePhase.Dead) return;
-            ApplyFinalScoreMultiplier();
+            FinalizeRun();
             Phase = CoreGamePhase.Dead;
-            Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, 0, _score, _distance));
+            Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, 0, (float)_score, _distance));
+            RefreshSnapshot();
+        }
+
+        /// <summary>Marks the active run as ineligible without changing deterministic gameplay.</summary>
+        public void MarkLeaderboardIneligible(LeaderboardIneligibility reason)
+        {
+            if (reason == LeaderboardIneligibility.None || Phase == CoreGamePhase.Dead) return;
+            _leaderboardIneligibility |= reason;
+        }
+
+        /// <summary>Records source-parity repair policy: distance survives, score resets, leaderboard is disabled.</summary>
+        public void RegisterRepair()
+        {
+            if (Phase != CoreGamePhase.Playing) return;
+            _repairCount++;
+            _leaderboardIneligibility |= LeaderboardIneligibility.RepairUsed;
+            _score = 0d;
+            Events.Add(new SimulationEvent(SimulationEventType.ScoreChanged, 0, 0f, (float)ScoreSource.Bonus));
             RefreshSnapshot();
         }
 
@@ -193,7 +218,7 @@ namespace JetHorizon.Simulation
                 throw new ArgumentOutOfRangeException(nameof(amount));
             if (amount == 0f || Phase == CoreGamePhase.Dead) return;
             _score += amount;
-            Events.Add(new SimulationEvent(SimulationEventType.ScoreChanged, entityId, _score, (float)source));
+            Events.Add(new SimulationEvent(SimulationEventType.ScoreChanged, entityId, (float)_score, (float)source));
             RefreshSnapshot();
         }
 
@@ -283,7 +308,8 @@ namespace JetHorizon.Simulation
 
             float dt = _config.FixedDeltaSeconds;
             _tick++;
-            _elapsed += dt;
+            _elapsed = (float)(_tick * (double)dt);
+            if (!world.ProgressionSuspended) _eligibleRunTick++;
             TickPowerups(dt);
 
             UpdateShip(input, dt, world.ShipMovementSuppressed);
@@ -356,9 +382,9 @@ namespace JetHorizon.Simulation
             if (_overdriveSeconds > 0f) return false;
             if (ConsumeShieldHit(0)) return false;
 
-            ApplyFinalScoreMultiplier();
+            FinalizeRun();
             Phase = CoreGamePhase.Dead;
-            Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, 0, _score, _distance));
+            Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, 0, (float)_score, _distance));
             return true;
         }
 
@@ -436,9 +462,14 @@ namespace JetHorizon.Simulation
             Array.Clear(_hazards, 0, _hazards.Length);
             Array.Clear(_pickups, 0, _pickups.Length);
             _tick = 0;
+            _eligibleRunTick = 0;
+            _runId = 0L;
             _elapsed = 0f;
             _distance = 0f;
-            _score = 0f;
+            _score = 0d;
+            _repairCount = 0;
+            _leaderboardIneligibility = LeaderboardIneligibility.None;
+            LatestRunResult = null;
             _speed = _config.BaseSpeed * _config.StartSpeedMultiplier;
             _effectiveSpeed = _speed;
             _shipX = 0f;
@@ -1283,9 +1314,9 @@ namespace JetHorizon.Simulation
                     hazard.Active = false;
                     _hazards[i] = hazard;
                     if (ConsumeShieldHit(hazard.Id)) continue;
-                    ApplyFinalScoreMultiplier();
+                    FinalizeRun();
                     Phase = CoreGamePhase.Dead;
-                    Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, hazard.Id, _score, _distance));
+                    Events.Add(new SimulationEvent(SimulationEventType.PlayerDied, hazard.Id, (float)_score, _distance));
                     return;
                 }
 
@@ -1297,7 +1328,7 @@ namespace JetHorizon.Simulation
                 {
                     hazard.NearMissArmed = false;
                     AwardScore(_config.NearMissScore, ScoreSource.NearMiss, hazard.Id);
-                    Events.Add(new SimulationEvent(SimulationEventType.NearMiss, hazard.Id, _score, 0f));
+                    Events.Add(new SimulationEvent(SimulationEventType.NearMiss, hazard.Id, (float)_score, 0f));
                 }
 
                 _hazards[i] = hazard;
@@ -1308,9 +1339,11 @@ namespace JetHorizon.Simulation
         {
             Snapshot.Phase = Phase;
             Snapshot.Tick = _tick;
+            Snapshot.EligibleRunTick = _eligibleRunTick;
             Snapshot.Elapsed = _elapsed;
+            Snapshot.EligibleRunElapsed = (float)(_eligibleRunTick * (double)_config.FixedDeltaSeconds);
             Snapshot.Distance = _distance;
-            Snapshot.Score = _score;
+            Snapshot.Score = (float)_score;
             Snapshot.Speed = _speed;
             Snapshot.EffectiveSpeed = _effectiveSpeed;
             Snapshot.ShipX = _shipX;
@@ -1560,7 +1593,7 @@ namespace JetHorizon.Simulation
                         Events.Add(new SimulationEvent(
                             SimulationEventType.PickupCollected,
                             pickup.Id,
-                            _score,
+                            (float)_score,
                             pickup.ScoreValue));
                     }
                     continue;
@@ -1580,16 +1613,33 @@ namespace JetHorizon.Simulation
                 throw new ArgumentOutOfRangeException(nameof(spawn.Powerup));
         }
 
-        void ApplyFinalScoreMultiplier()
+        RunResult FinalizeRun()
         {
+            if (LatestRunResult != null) return LatestRunResult;
+            if (_runId <= 0L) _runId = ++_fallbackRunId;
+
+            long rawScore = Math.Max(0L, (long)Math.Floor(_score));
             float steps = (float)Math.Floor(_distance / _config.DistanceBonusStep);
             float multiplier = Math.Max(1f, 1f + steps * _config.DistanceBonusPerStep);
-            _score = (float)Math.Floor(_score) * multiplier;
+            long finalScore = Math.Max(0L, (long)Math.Floor(rawScore * (double)multiplier));
+            _score = finalScore;
+            LatestRunResult = new RunResult(
+                _runId,
+                rawScore,
+                finalScore,
+                _distance,
+                multiplier,
+                _tick,
+                _eligibleRunTick,
+                _config.FixedDeltaSeconds,
+                _repairCount,
+                _leaderboardIneligibility);
             Events.Add(new SimulationEvent(
                 SimulationEventType.ScoreChanged,
                 0,
-                _score,
+                (float)finalScore,
                 (float)ScoreSource.FinalMultiplier));
+            return LatestRunResult;
         }
     }
 }

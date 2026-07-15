@@ -58,6 +58,7 @@ namespace JetHorizon.Architecture
 
         public void SetPaused(bool paused)
         {
+            _accumulator = 0f;
             Simulation.SetPaused(paused);
             SnapshotProduced?.Invoke(Simulation.Snapshot);
         }

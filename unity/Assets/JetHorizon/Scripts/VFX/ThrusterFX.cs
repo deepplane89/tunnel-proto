@@ -394,8 +394,8 @@ namespace JetHorizon
                 }
             }
 
-            float pulseWave = 0.86f + 0.14f * Mathf.Sin(Time.time * 22f);
-            float bloomOpacity = 0.43f * (0.85f + 0.15f * Mathf.Sin(Time.time * 8f));
+            float pulseWave = 0.86f + 0.14f * Mathf.Sin(s.Elapsed * 22f);
+            float bloomOpacity = 0.43f * (0.85f + 0.15f * Mathf.Sin(s.Elapsed * 8f));
             Color bloomCol = _color;
             bloomCol.a = bloomOpacity;
             _bloomMpb.Clear();
@@ -438,7 +438,8 @@ namespace JetHorizon
             _coneL.gameObject.SetActive(on);
             _coneR.gameObject.SetActive(on);
             if (!on) return;
-            float len = _effect.ConeLength * (0.7f + 0.5f * speedFrac) * (1f + Mathf.Sin(Time.time * 31f) * 0.04f);
+            float time = GameManager.I != null ? GameManager.I.Session.Elapsed : 0f;
+            float len = _effect.ConeLength * (0.7f + 0.5f * speedFrac) * (1f + Mathf.Sin(time * 31f) * 0.04f);
             var sc = new Vector3(_effect.ConeRadius * 2f, len, _effect.ConeRadius * 2f);
             _coneL.localScale = sc;
             _coneR.localScale = sc;

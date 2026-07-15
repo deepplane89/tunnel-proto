@@ -13,8 +13,7 @@ namespace JetHorizon
         public float SpeedFloor;         // _drSpeedFloor ratchet (multiplier)
         public float Distance;
         public float Elapsed;
-        public float Score;              // internal (levels)
-        public float PlayerScore;        // HUD score
+        public float Score;              // canonical core score shown on HUD and finalized on death
         public int   PhysTier = 1;
 
         // ── Ship ───────────────────────────────────────────
@@ -62,7 +61,7 @@ namespace JetHorizon
         {
             Speed = Tuning.BaseSpeed;
             SpeedFloor = 1f;
-            Distance = 0f; Elapsed = 0f; Score = 0f; PlayerScore = 0f;
+            Distance = 0f; Elapsed = 0f; Score = 0f;
             PhysTier = 1;
 
             ShipX = 0f; ShipVelX = 0f;
@@ -86,7 +85,7 @@ namespace JetHorizon
         /// <summary>Repair ("Save Me"): same run continues; score resets, distance kept.</summary>
         public void ResetForRepair()
         {
-            Score = 0f; PlayerScore = 0f;
+            Score = 0f;
             ShipX = 0f; ShipVelX = 0f; RollAngle = 0f; RollDir = 0; RollHeld = false;
             TiltTimer = 0f; BankRoll = 0f;
             ShipY = Tuning.ShipHoverY;

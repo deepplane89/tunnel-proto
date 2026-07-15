@@ -280,7 +280,7 @@ namespace JetHorizon
                     if (_hudTimer <= 0f)
                     {
                         _hudTimer = 0.4f;   // HUD readout cadence matches JS
-                        if (ScoreText != null) ScoreText.text = Mathf.FloorToInt(s.PlayerScore).ToString("N0");
+                        if (ScoreText != null) ScoreText.text = Mathf.FloorToInt(s.Score).ToString("N0");
                         if (SpeedText != null) SpeedText.text = (s.EffectiveSpeed / Tuning.BaseSpeed).ToString("0.0") + "x";
                         if (StageText != null && gm.Waves != null) StageText.text = gm.Waves.StageName;
                     }
@@ -297,7 +297,15 @@ namespace JetHorizon
                     {
                         _gameOverShown = true;
                         if (FinalScoreText != null)
-                            FinalScoreText.text = $"SCORE {Mathf.FloorToInt(s.PlayerScore):N0}\nDIST {Mathf.FloorToInt(s.Distance):N0}m";
+                        {
+                            string record = string.Empty;
+                            var completion = gm.LastCompletion;
+                            if (completion.HasValue)
+                                record = completion.Value.IsNewBest
+                                    ? $"\nNEW BEST {completion.Value.HighScore:N0}"
+                                    : $"\nBEST {completion.Value.HighScore:N0}";
+                            FinalScoreText.text = $"SCORE {Mathf.FloorToInt(s.Score):N0}\nDIST {Mathf.FloorToInt(s.Distance):N0}m{record}";
+                        }
                         Set(GameOverScreen, true);
                     }
                     // tap cooldown 700 ms after overlay

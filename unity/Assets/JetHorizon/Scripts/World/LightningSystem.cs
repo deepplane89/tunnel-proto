@@ -115,7 +115,7 @@ namespace JetHorizon
                 if (strike.Warn != null)
                 {
                     strike.Warn.transform.position = new Vector3(hazard.X, 0.055f, hazard.Z);
-                    float warningPulse = 0.24f + 0.18f * (0.5f + 0.5f * Mathf.Sin(Time.time * 28f));
+                    float warningPulse = 0.24f + 0.18f * (0.5f + 0.5f * Mathf.Sin(S.Elapsed * 28f));
                     SetTint(strike.WarnRenderer, new Color(0.27f, 0.63f, 1f, warningPulse));
                 }
                 if (strike.Bolt != null)

@@ -5,10 +5,11 @@ namespace JetHorizon.Application
     public struct RunProgress
     {
         public int SchemaVersion;
-        public float HighScore;
+        public long HighScore;
         public float LongestDistance;
         public int CompletedRuns;
         public string SelectedShipId;
+        public long LastCompletedRunId;
 
         public static RunProgress Empty => new RunProgress
         {
@@ -77,14 +78,31 @@ namespace JetHorizon.Application
         void Track(AnalyticsEvent analyticsEvent);
     }
 
-    public interface IClock
+    public interface IUtcClock
     {
         long UtcUnixMilliseconds { get; }
     }
 
+    [Obsolete("Use IUtcClock. This clock is for UTC metadata, never gameplay progression.")]
+    public interface IClock : IUtcClock { }
+
+    public struct LeaderboardSubmission
+    {
+        public long RunId { get; }
+        public long Score { get; }
+
+        public LeaderboardSubmission(long runId, long score)
+        {
+            if (runId <= 0) throw new ArgumentOutOfRangeException(nameof(runId));
+            if (score < 0) throw new ArgumentOutOfRangeException(nameof(score));
+            RunId = runId;
+            Score = score;
+        }
+    }
+
     public interface ILeaderboardService
     {
-        void SubmitScore(long score);
+        void SubmitScore(LeaderboardSubmission submission);
     }
 
     /// <summary>
@@ -97,7 +115,7 @@ namespace JetHorizon.Application
         public IAudioOutput Audio { get; }
         public IHapticsOutput Haptics { get; }
         public IAnalyticsSink Analytics { get; }
-        public IClock Clock { get; }
+        public IUtcClock Clock { get; }
         public ILeaderboardService Leaderboard { get; }
 
         public GameServices(
@@ -105,7 +123,7 @@ namespace JetHorizon.Application
             IAudioOutput audio,
             IHapticsOutput haptics,
             IAnalyticsSink analytics,
-            IClock clock,
+            IUtcClock clock,
             ILeaderboardService leaderboard)
         {
             Progress = progress ?? throw new ArgumentNullException(nameof(progress));

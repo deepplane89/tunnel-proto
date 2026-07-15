@@ -1,4 +1,6 @@
 using System;
+using System.Globalization;
+using System.Collections.Generic;
 using JetHorizon.Application;
 using UnityEngine;
 
@@ -15,7 +17,7 @@ namespace JetHorizon.Platform
                 new SilentHapticsOutput(),
                 new SilentAnalyticsSink(),
                 new UnityClock(),
-                new SilentLeaderboardService());
+                new PlayerPrefsLeaderboardOutbox());
         }
     }
 
@@ -23,9 +25,11 @@ namespace JetHorizon.Platform
     {
         const string SchemaKey = "jh.progress.schema";
         const string HighScoreKey = "jh.progress.highScore";
+        const string HighScoreV2Key = "jh.progress.highScore.v2";
         const string DistanceKey = "jh.progress.longestDistance";
         const string RunsKey = "jh.progress.completedRuns";
         const string ShipKey = "jh.progress.selectedShip";
+        const string LastRunKey = "jh.progress.lastCompletedRunId";
 
         public bool TryLoad(out RunProgress progress)
         {
@@ -35,13 +39,23 @@ namespace JetHorizon.Platform
                 return false;
             }
 
+            long highScore = 0L;
+            if (!long.TryParse(PlayerPrefs.GetString(HighScoreV2Key, "0"), NumberStyles.Integer, CultureInfo.InvariantCulture, out highScore))
+                highScore = 0L;
+            if (!PlayerPrefs.HasKey(HighScoreV2Key))
+                highScore = Math.Max(0L, (long)Math.Floor(PlayerPrefs.GetFloat(HighScoreKey, 0f)));
+
+            long lastRunId = 0L;
+            long.TryParse(PlayerPrefs.GetString(LastRunKey, "0"), NumberStyles.Integer, CultureInfo.InvariantCulture, out lastRunId);
+
             progress = new RunProgress
             {
                 SchemaVersion = PlayerPrefs.GetInt(SchemaKey, 1),
-                HighScore = PlayerPrefs.GetFloat(HighScoreKey, 0f),
+                HighScore = highScore,
                 LongestDistance = PlayerPrefs.GetFloat(DistanceKey, 0f),
                 CompletedRuns = PlayerPrefs.GetInt(RunsKey, 0),
-                SelectedShipId = PlayerPrefs.GetString(ShipKey, "default")
+                SelectedShipId = PlayerPrefs.GetString(ShipKey, "default"),
+                LastCompletedRunId = lastRunId
             };
             return true;
         }
@@ -49,15 +63,16 @@ namespace JetHorizon.Platform
         public void Save(RunProgress progress)
         {
             PlayerPrefs.SetInt(SchemaKey, progress.SchemaVersion);
-            PlayerPrefs.SetFloat(HighScoreKey, progress.HighScore);
+            PlayerPrefs.SetString(HighScoreV2Key, progress.HighScore.ToString(CultureInfo.InvariantCulture));
             PlayerPrefs.SetFloat(DistanceKey, progress.LongestDistance);
             PlayerPrefs.SetInt(RunsKey, progress.CompletedRuns);
             PlayerPrefs.SetString(ShipKey, string.IsNullOrWhiteSpace(progress.SelectedShipId) ? "default" : progress.SelectedShipId);
+            PlayerPrefs.SetString(LastRunKey, progress.LastCompletedRunId.ToString(CultureInfo.InvariantCulture));
             PlayerPrefs.Save();
         }
     }
 
-    sealed class UnityClock : IClock
+    sealed class UnityClock : IUtcClock
     {
         public long UtcUnixMilliseconds => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
@@ -67,5 +82,59 @@ namespace JetHorizon.Platform
     sealed class SilentAudioOutput : IAudioOutput { public void Play(AudioCue cue) { } }
     sealed class SilentHapticsOutput : IHapticsOutput { public void Play(HapticCue cue) { } }
     sealed class SilentAnalyticsSink : IAnalyticsSink { public void Track(AnalyticsEvent analyticsEvent) { } }
-    sealed class SilentLeaderboardService : ILeaderboardService { public void SubmitScore(long score) { } }
+    /// <summary>
+    /// Durable Unity-side submission queue. A network publisher can drain this after
+    /// player-name/profile UI is connected without losing scores earned beforehand.
+    /// </summary>
+    sealed class PlayerPrefsLeaderboardOutbox : ILeaderboardService
+    {
+        const string QueueKey = "jh.leaderboard.pending.v1";
+        const int MaxPending = 32;
+
+        [Serializable]
+        sealed class PendingEntry
+        {
+            public string runId;
+            public string score;
+        }
+
+        [Serializable]
+        sealed class PendingQueue
+        {
+            public List<PendingEntry> entries = new List<PendingEntry>();
+        }
+
+        public void SubmitScore(LeaderboardSubmission submission)
+        {
+            PendingQueue queue = Load();
+            string runId = submission.RunId.ToString(CultureInfo.InvariantCulture);
+            for (int i = 0; i < queue.entries.Count; i++)
+                if (queue.entries[i].runId == runId) return;
+
+            queue.entries.Add(new PendingEntry
+            {
+                runId = runId,
+                score = submission.Score.ToString(CultureInfo.InvariantCulture)
+            });
+            if (queue.entries.Count > MaxPending)
+                queue.entries.RemoveRange(0, queue.entries.Count - MaxPending);
+            PlayerPrefs.SetString(QueueKey, JsonUtility.ToJson(queue));
+            PlayerPrefs.Save();
+        }
+
+        static PendingQueue Load()
+        {
+            string json = PlayerPrefs.GetString(QueueKey, string.Empty);
+            if (string.IsNullOrWhiteSpace(json)) return new PendingQueue();
+            try
+            {
+                var queue = JsonUtility.FromJson<PendingQueue>(json);
+                return queue ?? new PendingQueue();
+            }
+            catch
+            {
+                return new PendingQueue();
+            }
+        }
+    }
 }

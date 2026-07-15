@@ -10,23 +10,28 @@ namespace JetHorizon.Application
     public sealed class RunEventRouter
     {
         readonly GameServices _services;
+        readonly RunCompletionService _completion;
+
+        public RunCompletionOutcome? LastCompletion { get; private set; }
 
         public RunEventRouter(GameServices services)
         {
             _services = services ?? throw new ArgumentNullException(nameof(services));
+            _completion = new RunCompletionService(_services);
         }
 
-        public void Dispatch(SimulationEventBuffer events)
+        public void Dispatch(SimulationEventBuffer events, RunResult completedRun = null)
         {
             if (events == null) throw new ArgumentNullException(nameof(events));
-            for (int i = 0; i < events.Count; i++) Dispatch(events[i]);
+            for (int i = 0; i < events.Count; i++) Dispatch(events[i], completedRun);
         }
 
-        void Dispatch(SimulationEvent simulationEvent)
+        void Dispatch(SimulationEvent simulationEvent, RunResult completedRun)
         {
             switch (simulationEvent.Type)
             {
                 case SimulationEventType.RunStarted:
+                    LastCompletion = null;
                     _services.Audio.Play(AudioCue.RunStarted);
                     _services.Analytics.Track(new AnalyticsEvent(
                         "run_started",
@@ -57,23 +62,9 @@ namespace JetHorizon.Application
                 case SimulationEventType.PlayerDied:
                     _services.Audio.Play(AudioCue.PlayerDied);
                     _services.Haptics.Play(HapticCue.Impact);
-                    SaveRun(simulationEvent.ValueA, simulationEvent.ValueB);
+                    if (completedRun != null) LastCompletion = _completion.Complete(completedRun);
                     break;
             }
-        }
-
-        void SaveRun(float score, float distance)
-        {
-            RunProgress progress = _services.Progress.TryLoad(out var loaded)
-                ? loaded
-                : RunProgress.Empty;
-            progress.SchemaVersion = Math.Max(1, progress.SchemaVersion);
-            progress.HighScore = Math.Max(progress.HighScore, score);
-            progress.LongestDistance = Math.Max(progress.LongestDistance, distance);
-            progress.CompletedRuns++;
-            _services.Progress.Save(progress);
-            _services.Leaderboard.SubmitScore((long)Math.Floor(score));
-            _services.Analytics.Track(new AnalyticsEvent("run_finished", score, distance));
         }
     }
 }

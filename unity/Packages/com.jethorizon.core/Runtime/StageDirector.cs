@@ -119,9 +119,17 @@ namespace JetHorizon.Simulation
             if (events == null) throw new ArgumentNullException(nameof(events));
             if (commands == null) throw new ArgumentNullException(nameof(commands));
 
+            // Launch cinematics and other explicitly suspended beats keep the fixed
+            // simulation alive for presentation, but must not consume stage content.
+            if (world.ProgressionSuspended) return;
+
             RestBeat = Math.Max(0f, RestBeat - dt);
             StageDefinition stage = CurrentStage;
-            _stageElapsed += world.OverdriveActive ? dt * 1.8f : dt;
+            bool overdriveAcceleratesStage = world.OverdriveActive
+                && stage.Kind != StageKind.Rest
+                && stage.Kind != StageKind.Corridor
+                && stage.Kind != StageKind.EndlessMix;
+            _stageElapsed += overdriveAcceleratesStage ? dt * 1.8f : dt;
 
             TickSpeed(world, stage, dt, events);
 
@@ -320,7 +328,7 @@ namespace JetHorizon.Simulation
             SimulationEventBuffer events,
             StageCommandBuffer commands)
         {
-            _endlessElapsed += world.OverdriveActive ? dt * 1.8f : dt;
+            _endlessElapsed += dt;
             if (_endlessResting)
             {
                 SpawnPattern = SpawnPattern.None;
