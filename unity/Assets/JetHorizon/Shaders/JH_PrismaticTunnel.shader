@@ -4,8 +4,6 @@ Shader "JH/PrismaticTunnel"
     {
         _Opacity ("Opacity", Range(0,2)) = 0.82
         _TimeValue ("Time", Float) = 0
-        _FadeNear ("Fade Near", Float) = 10
-        _FadeFar ("Fade Far", Float) = -250
     }
     SubShader
     {
@@ -23,8 +21,6 @@ Shader "JH/PrismaticTunnel"
             CBUFFER_START(UnityPerMaterial)
                 half _Opacity;
                 float _TimeValue;
-                float _FadeNear;
-                float _FadeFar;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float2 uv : TEXCOORD0; };
@@ -71,14 +67,13 @@ Shader "JH/PrismaticTunnel"
                 float membrane = 0.38 + fresnel * 0.34 + wave * 0.10;
                 float energy = membrane + rib * 1.45 + fineRib * 0.26 + arcRail * 0.18;
 
-                float distanceFade = saturate((IN.positionWS.z - _FadeFar) / max(0.001, _FadeNear - _FadeFar));
-                distanceFade = smoothstep(0.0, 0.24, distanceFade) * smoothstep(_FadeNear, _FadeNear - 10.0, IN.positionWS.z);
-                clip(distanceFade - 0.025);
                 float3 deepMembrane = lerp(float3(0.025, 0.055, 0.14), spectrum * 0.32, 0.72);
                 float3 color = deepMembrane
                     + spectrum * (0.42 + energy * 0.88)
                     + float3(0.12, 0.40, 0.75) * fresnel;
-                color *= lerp(0.22, 1.0, distanceFade) * _Opacity;
+                // Never clip against absolute world Z. With a fixed ship and z-scroll,
+                // that plane looked exactly like the tunnel was continuously spawning.
+                color *= _Opacity;
                 return half4(color, 1.0);
             }
             ENDHLSL

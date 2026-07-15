@@ -10,10 +10,9 @@ namespace JetHorizon
     {
         public UnityEngine.Camera Cam;      // child of this pivot at local (0,0,0)
         [Min(100f)] public float GameplayFarClip = 700f;
-        [Min(0f)] public float WorldGeometryDepthMargin = 120f;
+        [Min(0f)] public float PersistentWorldDepthMargin = 120f;
 
-        public float RequiredWorldFarClip { get; private set; }
-
+        public float RequiredPersistentWorldFarClip { get; private set; }
         float _cameraRoll;
         float _cameraRollHold;
         float _shakeTime;
@@ -38,8 +37,8 @@ namespace JetHorizon
             transform.position = BasePivot(0f);
             if (Cam != null)
             {
-                RequiredWorldFarClip = Mathf.Max(Cam.nearClipPlane + 1f, GameplayFarClip);
-                Cam.farClipPlane = RequiredWorldFarClip;
+                RequiredPersistentWorldFarClip = Mathf.Max(Cam.nearClipPlane + 1f, GameplayFarClip);
+                Cam.farClipPlane = RequiredPersistentWorldFarClip;
                 Cam.transform.localPosition = Vector3.zero;
                 Cam.fieldOfView = Tuning.CamBaseFovDesktop;
                 AimAtLook();
@@ -47,11 +46,10 @@ namespace JetHorizon
         }
 
         /// <summary>
-        /// Expands the gameplay camera once to contain complete persistent world
-        /// geometry. The value never contracts during a run, so a moving far plane
-        /// cannot sweep across a canyon or tunnel and masquerade as spawning.
+        /// Keeps a complete persistent encounter inside the camera volume. This only
+        /// expands during a run: no moving camera plane can reveal geometry as it scrolls.
         /// </summary>
-        public void EnsureWorldGeometryVisible(Renderer[] renderers)
+        public void IncludePersistentWorld(Renderer[] renderers)
         {
             if (Cam == null || renderers == null || renderers.Length == 0) return;
             float farthestDepth = 0f;
@@ -68,17 +66,15 @@ namespace JetHorizon
                         (corner & 1) == 0 ? minimum.x : maximum.x,
                         (corner & 2) == 0 ? minimum.y : maximum.y,
                         (corner & 4) == 0 ? minimum.z : maximum.z);
-                    float depth = Cam.WorldToViewportPoint(point).z;
-                    if (depth > farthestDepth) farthestDepth = depth;
+                    farthestDepth = Mathf.Max(farthestDepth, Cam.WorldToViewportPoint(point).z);
                 }
             }
 
-            if (farthestDepth > 0f)
-                RequiredWorldFarClip = Mathf.Max(
-                    RequiredWorldFarClip,
-                    farthestDepth + Mathf.Max(0f, WorldGeometryDepthMargin));
-            if (Cam.farClipPlane < RequiredWorldFarClip)
-                Cam.farClipPlane = RequiredWorldFarClip;
+            if (farthestDepth <= 0f) return;
+            RequiredPersistentWorldFarClip = Mathf.Max(
+                RequiredPersistentWorldFarClip,
+                farthestDepth + PersistentWorldDepthMargin);
+            Cam.farClipPlane = Mathf.Max(Cam.farClipPlane, RequiredPersistentWorldFarClip);
         }
 
         public void OnRunStart(bool skipIntro)

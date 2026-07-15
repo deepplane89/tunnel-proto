@@ -33,9 +33,6 @@ namespace JetHorizon
         void Awake()
         {
             if (Profile == null) Profile = Resources.Load<HybridCanyonWorldProfile>("HybridCanyonWorld");
-            // Construct the complete landform before the first simulation frame. Its
-            // root moves with the encounter, but its renderer set never streams.
-            EnsureBuilt();
         }
 
         void OnDrawGizmosSelected()
@@ -60,6 +57,7 @@ namespace JetHorizon
         public void ResetSystem()
         {
             IsPresenting = false;
+            EnsureBuilt();
             if (_content != null) _content.SetActive(false);
         }
 
@@ -93,7 +91,7 @@ namespace JetHorizon
             float startZ = currentCanyon ? snapshot.EncounterStartZ : snapshot.UpcomingEncounterStartZ;
             _content.transform.localPosition = new Vector3(0f, 0f, startZ);
             SetVisible(true);
-            GameManager.I?.Camera?.EnsureWorldGeometryVisible(_worldRenderers);
+            GameManager.I?.Camera?.IncludePersistentWorld(_worldRenderers);
         }
 
         /// <summary>Editor preview seam; it does not alter scene gameplay wiring.</summary>

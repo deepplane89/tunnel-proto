@@ -86,7 +86,7 @@ namespace JetHorizon
             transform.localPosition = new Vector3(0f, 0f, startZ);
             if (_runtimeMaterial != null) _runtimeMaterial.SetFloat(TimeValueId, snapshot.Elapsed);
             SetVisible(true);
-            GameManager.I?.Camera?.EnsureWorldGeometryVisible(_worldRenderers);
+            GameManager.I?.Camera?.IncludePersistentWorld(_worldRenderers);
         }
 
         void SetVisible(bool visible)
