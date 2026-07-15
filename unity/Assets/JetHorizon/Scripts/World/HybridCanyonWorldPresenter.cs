@@ -7,8 +7,8 @@ namespace JetHorizon
 {
     /// <summary>
     /// Builds the complete crystalline canyon once, then scrolls the entire construct
-    /// against a core-owned route sample. Opaque curved shells supply the complete
-    /// corridor; optional Terrain can later add broad world mass behind those shells.
+    /// against a core-owned route sample. One opaque carved landmass supplies the
+    /// corridor; optional Terrain can later extend the world beyond that region.
     /// No TerrainCollider is active: the engine-neutral corridor remains the only lethal
     /// boundary, so presentation can never create an unvalidated or invisible collision.
     /// </summary>
@@ -180,7 +180,7 @@ namespace JetHorizon
                 ? GameManager.I.Camera.Cam.farClipPlane
                 : -1f;
             Debug.Log(
-                $"[JH CANYON PRESENTATION] completeWorld=true renderers={_rendererCount} "
+                $"[JH CANYON PRESENTATION] solidRegion=true completeWorld=true renderers={_rendererCount} "
                 + $"localZ=[{_builtMinZ:0.0},{_builtMaxZ:0.0}] rootZ={startZ:0.0} "
                 + $"cameraFar={farClip:0.0} globalFog={RenderSettings.fog} canyonFog=false "
                 + "sliceFallback=false legacyPoolActive=false");
@@ -401,7 +401,7 @@ namespace JetHorizon
             CanyonCurvedWallBuilder.Build(
                 _route,
                 settings,
-                0f,
+                thresholdDistance,
                 _plan.Length,
                 _content.transform,
                 _meshMaterial,

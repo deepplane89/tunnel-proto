@@ -51,19 +51,18 @@ namespace JetHorizon
         public float SlabCrestX = 20f;
         public float SlabBaseY = -4f;
 
-        [Header("Curved patch extrusion")]
+        [Header("Solid carved canyon region")]
         [Range(0f, 1f)] public float PathTension = .35f;
-        [Min(40f)] public float WallChunkLength = 160f;
-        [Tooltip("How much of full canyon height remains at the submerged route ends.")]
-        [Range(0f, .25f)] public float SubmergedEndHeight = .04f;
-        [Tooltip("Wall height immediately before the banks begin converging.")]
-        [Range(.05f, .5f)] public float OpenWaterBankHeight = .18f;
-        [Tooltip("Extra height for broad slab formations rising from the open water before the canyon entrance.")]
-        [Range(0f, .4f)] public float OpenWaterFormationHeight = .18f;
-        [Tooltip("Moves low open-water banks away from the flight line before they converge into the canyon.")]
-        [Min(0f)] public float OpenWaterWallRetreat = 48f;
-        [Min(0f)] public float TerrainLipEmbedDepth = 10f;
-        [Min(0f)] public float BottomSkirtDepth = 8f;
+        [Min(100f)] public float SolidLandmassHalfWidth = 210f;
+        public float SolidLandmassBaseY = -28f;
+        public float SolidLandmassOuterTopY = 34f;
+        [Range(2, 10)] public int SolidLandmassTopBands = 5;
+        [Range(0f, 12f)] public float SolidLandmassTopNoise = 4f;
+        [Range(1f, 30f)] public float SolidSightlineHeight = 8f;
+        [Tooltip("How much full canyon height remains at the final underwater exit sample.")]
+        [Range(0f, .15f)] public float ExitSubmergedHeight = .02f;
+        [Tooltip("How far the banks move away from the flight line while the exit breaks up.")]
+        [Min(0f)] public float ExitWallRetreat = 48f;
         public AnimationCurve WallHeightByProgress = AnimationCurve.Linear(0f, 1f, 1f, 1f);
         public AnimationCurve BankDegreesByProgress = AnimationCurve.Linear(0f, 0f, 1f, 0f);
         public AnimationCurve TerrainShoulderByProgress = AnimationCurve.Linear(0f, 1f, 1f, 1f);
@@ -121,7 +120,7 @@ namespace JetHorizon
         [Min(1f)] public float AuthoredPathLength = 799f;
         public List<CanyonPathAuthoringPoint> PathPoints = new List<CanyonPathAuthoringPoint>();
         public Material CanyonMaterial;
-        [Tooltip("Editor-baked mobile runtime world. When absent, gameplay creates the same optimized chunks in memory as a safe fallback.")]
+        [Tooltip("Editor-baked mobile runtime world. When absent, gameplay creates the same single solid region in memory as a safe fallback.")]
         public GameObject BakedWorldPrefab;
 
         public CanyonPathDefinition BuildCorePathDefinition()
@@ -142,7 +141,11 @@ namespace JetHorizon
 
         public void CaptureDefaultCorePath()
         {
-            EncounterPlan plan = EncounterPlanCatalog.CreateProofSequence()[1];
+            EncounterPlan[] plans = EncounterPlanCatalog.CreateProofSequence();
+            EncounterPlan plan = null;
+            for (int i = 0; i < plans.Length; i++)
+                if (plans[i].Kind == EncounterKind.CrystallineCanyon) { plan = plans[i]; break; }
+            if (plan == null) throw new InvalidOperationException("The proof sequence does not contain a crystalline canyon.");
             PathPoints = PathPoints ?? new List<CanyonPathAuthoringPoint>();
             PathPoints.Clear();
             for (int i = 0; i < plan.OpeningCount; i++)

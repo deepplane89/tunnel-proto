@@ -10,13 +10,14 @@ rendered shell itself began at a hard boundary near the horizon. Moving that fin
 shell through a fixed-camera Z-scroll world made the boundary look like geometry was
 being spawned.
 
-The replacement builds one complete environment before the encounter begins:
+The replacement builds one complete solid region before the encounter begins:
 
-1. broad faceted formations rise from open water;
-2. their submerged foundations remain continuous while the visible banks converge;
-3. the banks become a full-height canyon entrance;
-4. one seam-locked shell follows the complete curved core route;
-5. the walls retreat and sink back beneath the water at the route exit.
+1. open water provides a clean approach;
+2. one broad landmass presents a full-height carved entrance;
+3. the carved channel follows the complete curved core route;
+4. the same connected mesh supplies inner walls, plateaus, outer walls, caps and a
+   submerged foundation;
+5. the landmass sinks beneath the water at breakup so the exit opens naturally.
 
 There is no canyon row pool, renderer reveal switch, recycle boundary, world-Z clip,
 per-frame camera-bounds scan, or generic exponential-fog reveal curtain in this path.
@@ -44,22 +45,22 @@ Unity owns only how that complete route appears:
 - Hermite interpolation between core opening samples;
 - the original 5-by-6 faceted slab cross-section;
 - shared seam samples at every longitudinal boundary;
-- wall height and lateral retreat across environment phases;
+- one threshold-to-exit carved landmass;
 - opaque materials, lighting, shadows, fog and water reflection;
 - editor preview and mobile prefab baking.
 
 `HybridCanyonWorldPresenter` builds or instantiates the complete construct once and
-translates one root from the core's stable encounter origin. Chunks are draw-call and
-culling units only. They are never spawned, recycled, independently positioned, or
-used as gameplay collision.
+translates one root from the core's stable encounter origin. The canyon uses one mesh
+renderer and has no independently positioned, activated, spawned, or recycled pieces.
 
 ## Required Invariants
 
 These are architectural rules, not tuning preferences:
 
-1. Both wall shells cover distance `0` through `EncounterPlan.Length`.
-2. Neighboring chunks have identical end/start distances and share route samples.
-3. The near and far ends sink below the water; neither end is a tall raw wall edge.
+1. Exactly one solid-region renderer covers threshold through `EncounterPlan.Length`.
+2. The entrance cap contains only the surrounding landmass; the carved flight opening
+   remains open.
+3. The far end sinks below the water so the exit opens without a raw wall edge.
 4. Renderer existence and collision activation are unrelated.
 5. The whole construct has one moving root and no independently scrolling wall pieces.
 6. No `MeshCollider` or `TerrainCollider` may compete with core-owned corridor collision.
@@ -78,24 +79,23 @@ These are architectural rules, not tuning preferences:
 center, forward, right, up and half-width. The environment phase distances also define
 a presentation envelope:
 
-- At the route ends, the wall is short enough to remain beneath the water.
-- Across open water, broad height pulses create separated visible formations even
-  though their foundations remain connected below the surface.
-- During convergence, height eases to full scale and lateral retreat eases to zero.
-- Threshold and enclosed phases use the complete wall profile.
-- Breakup reverses the envelope and returns the shell beneath the water.
+- Open water exists before the solid region rather than being imitated with wall rows.
+- The threshold begins at full height and presents one physical canyon entrance.
+- Threshold and enclosed phases use the complete inner-wall profile.
+- Breakup lowers the connected landmass beneath the water to reveal the real exit.
 
-`CanyonCurvedWallBuilder` uses the source slab's foot/sweep/mid/crest profile on every
-cross-section. Longitudinal columns sample the route directly, so a turn bends the
-surface instead of yawing disconnected rectangular prefabs. Both sides are opaque,
-thick closed shells with near/far caps and bottom skirts.
+`CanyonCurvedWallBuilder` uses the source slab's foot/sweep/mid/crest profile only on
+the channel's inner walls. Longitudinal columns sample the route directly, so a turn
+bends the carved surface instead of yawing disconnected rectangular prefabs. Those
+inner walls expand into faceted plateau bands, outer walls, end caps, and one submerged
+floor in the same mesh. The original slab is visual DNA, not a construction unit.
 
 ## Mobile Strategy
 
 This architecture is suitable for mobile because world completeness does not require
 one GameObject per old Three.js slab:
 
-- approximately six large chunks per side for the current proof route;
+- one renderer and one static mesh for the current proof route;
 - shared materials;
 - no renderer creation during flight;
 - no mesh rebuilding or recycling during flight;
@@ -104,8 +104,8 @@ one GameObject per old Three.js slab:
 - one root transform update while the encounter is current or upcoming.
 
 Use `Jet Horizon > Canyon Builder (Simple) > BAKE & USE IN GAME` to persist the same
-generated chunks as a prefab. When no bake is assigned, the runtime fallback creates
-the identical complete shell in memory before showing it.
+generated region as a prefab. When no bake is assigned, the runtime fallback creates
+the identical complete landmass in memory before showing it.
 
 The Editor `C` preview keeps the canyon origin 520 units ahead. It must never teleport
 the route to the default 25-unit debug lead, because that skips the geographic approach
@@ -115,16 +115,19 @@ and makes the first formations read like close-range spawns.
 
 The Canyon Builder must reject a preview or bake when:
 
-- either side does not begin at distance zero;
-- either side does not end at the complete plan length;
-- adjacent chunk ranges contain a gap;
+- there is not exactly one solid-region mesh;
+- the landmass does not begin at the authored threshold;
+- the landmass does not reach the complete plan length;
+- an analytically blocked bend has no physical mesh intersection along the player's
+  forward sightline;
+- a legitimately straight route to the exit is incorrectly blocked by the mesh;
 - the authored route fails core capability validation;
 - a live `TerrainCollider` remains in the result.
 
 Runtime visual acceptance still requires:
 
 - no tall edge appearing at the horizon;
-- no chunk-by-chunk materialization;
+- runtime diagnostic reports `solidRegion=true` and `renderers=1`;
 - no visible gap at turns or while banking;
 - curved walls ahead naturally obscuring the sun/horizon where appropriate;
 - open-water formations that rise into a clearly announced canyon entrance;

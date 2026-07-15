@@ -191,9 +191,9 @@ namespace JetHorizon.EditorTools
                     MinimumOperationalSpeed = 50f
                 };
                 ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(config);
-                EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence(
+                EncounterPlan canyon = FindCanyon(EncounterPlanCatalog.CreateProofSequence(
                     capability.CruiseSpeed / 42f,
-                    definition)[1];
+                    definition));
                 EncounterValidationResult validation = new EncounterCapabilityValidator().Validate(canyon, capability, 0);
                 if (!validation.IsAdmissible)
                 {
@@ -214,40 +214,58 @@ namespace JetHorizon.EditorTools
                 return false;
             }
 
-            CanyonWallChunkMarker[] markers = preview.GetComponentsInChildren<CanyonWallChunkMarker>(true);
-            if (markers.Length < 4)
+            SolidCanyonRegionMarker[] markers = preview.GetComponentsInChildren<SolidCanyonRegionMarker>(true);
+            if (markers.Length != 1)
             {
-                if (showDialog) EditorUtility.DisplayDialog("Canyon check", "The curved wall chunks were not generated. Refresh the editable canyon and try again.", "OK");
+                if (showDialog) EditorUtility.DisplayDialog("Canyon check", "The canyon must contain exactly one solid carved-region mesh. Refresh the editable canyon and try again.", "OK");
                 return false;
             }
-            EncounterPlan completeCanyon = EncounterPlanCatalog.CreateProofSequence(1f, definition)[1];
-            for (int side = -1; side <= 1; side += 2)
+            EncounterPlan completeCanyon = FindCanyon(EncounterPlanCatalog.CreateProofSequence(1f, definition));
+            var route = new CanyonRouteSampler(completeCanyon, profile.Settings ?? new HybridCanyonWorldSettings());
+            SolidCanyonRegionMarker marker = markers[0];
+            if (Mathf.Abs(marker.StartDistance - route.ThresholdStartDistance) > .002f
+                || Mathf.Abs(marker.EndDistance - completeCanyon.Length) > .002f)
             {
-                var sideMarkers = new List<CanyonWallChunkMarker>();
-                for (int i = 0; i < markers.Length; i++) if (markers[i].Side == side) sideMarkers.Add(markers[i]);
-                sideMarkers.Sort((a, b) => a.StartDistance.CompareTo(b.StartDistance));
-                if (sideMarkers.Count == 0
-                    || Mathf.Abs(sideMarkers[0].StartDistance) > .002f
-                    || Mathf.Abs(sideMarkers[sideMarkers.Count - 1].EndDistance - completeCanyon.Length) > .002f)
-                {
-                    if (showDialog) EditorUtility.DisplayDialog(
-                        "Canyon check",
-                        "The wall shell does not cover the complete route from open water through canyon breakup. Refresh the canyon before baking.",
-                        "OK");
-                    return false;
-                }
-                for (int i = 0; i < sideMarkers.Count - 1; i++)
-                {
-                    float gap = Mathf.Abs(sideMarkers[i].EndDistance - sideMarkers[i + 1].StartDistance);
-                    if (gap <= .002f) continue;
-                    if (showDialog) EditorUtility.DisplayDialog("Canyon check", $"A {gap:0.000} unit wall gap was found between chunks. The canyon was not accepted.", "OK");
-                    return false;
-                }
+                if (showDialog) EditorUtility.DisplayDialog(
+                    "Canyon check",
+                    "The solid landmass does not cover the full threshold-to-exit route. Refresh the canyon before baking.",
+                    "OK");
+                return false;
+            }
+
+            MeshFilter filter = marker.GetComponent<MeshFilter>();
+            if (filter == null || filter.sharedMesh == null)
+            {
+                if (showDialog) EditorUtility.DisplayDialog("Canyon check", "The solid canyon has no mesh.", "OK");
+                return false;
+            }
+            if (!CanyonCurvedWallBuilder.ValidateSightlines(
+                    route,
+                    profile.Settings ?? new HybridCanyonWorldSettings(),
+                    filter.sharedMesh,
+                    marker.StartDistance,
+                    marker.EndDistance,
+                    out int blockedSamples,
+                    out int exitSamples,
+                    out string sightlineError))
+            {
+                if (showDialog) EditorUtility.DisplayDialog("Canyon sightline check", sightlineError, "OK");
+                return false;
             }
 
             if (showDialog)
-                EditorUtility.DisplayDialog("Canyon check", "Passed: one ordered core route, a complete open-water-to-breakup landform, continuous opaque chunk ranges, and no competing Terrain collision.", "Great");
+                EditorUtility.DisplayDialog(
+                    "Canyon check",
+                    $"Passed: one solid carved landmass, {blockedSamples} physically occluded bend views, {exitSamples} legitimate exit views, and no competing Terrain collision.",
+                    "Great");
             return true;
+        }
+
+        static EncounterPlan FindCanyon(EncounterPlan[] plans)
+        {
+            for (int i = 0; i < plans.Length; i++)
+                if (plans[i].Kind == EncounterKind.CrystallineCanyon) return plans[i];
+            throw new System.InvalidOperationException("The proof sequence does not contain a crystalline canyon.");
         }
 
         public static bool QuickBuildForMobile(HybridCanyonWorldProfile profile)

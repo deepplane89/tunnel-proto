@@ -1397,7 +1397,7 @@ namespace JetHorizon.Simulation.Tests
                 new CanyonPathKnot(100f, 0f, 28f, environmentPhase: CanyonEnvironmentPhase.Breakup, corridorBoundaryActive: false)
             });
 
-            EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence(2f, definition)[1];
+            EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence(2f, definition)[0];
 
             Assert.That(canyon.Length, Is.EqualTo(200f));
             Assert.That(canyon.OpeningCount, Is.EqualTo(4));
@@ -1448,7 +1448,7 @@ namespace JetHorizon.Simulation.Tests
         [Test]
         public void ProofLightningUsesAContinuousCargoWeaveAsItsMovementIncentive()
         {
-            EncounterPlan lightning = EncounterPlanCatalog.CreateProofSequence()[2];
+            EncounterPlan lightning = EncounterPlanCatalog.CreateProofSequence()[1];
             int cargoCount = 0;
             bool visitsLeft = false;
             bool visitsRight = false;
@@ -1664,7 +1664,7 @@ namespace JetHorizon.Simulation.Tests
 
             Assert.That(simulation.Snapshot.EncounterPlanId, Is.EqualTo("proof.crystalline-canyon"));
             Assert.That(simulation.Snapshot.ActiveCorridorFamily, Is.EqualTo(CorridorFamily.CrystallineCanyon));
-            EncounterPlan first = EncounterPlanCatalog.CreateProofSequence()[1];
+            EncounterPlan first = EncounterPlanCatalog.CreateProofSequence()[0];
             Assert.That(simulation.Snapshot.CorridorSliceCount, Is.EqualTo(first.OpeningCount),
                 "The complete canyon must exist before any part enters the visible fade band.");
             float originBefore = simulation.Snapshot.EncounterStartZ;
@@ -1679,7 +1679,7 @@ namespace JetHorizon.Simulation.Tests
                 farthestZ = System.Math.Min(farthestZ, simulation.Snapshot.GetCorridorSlice(i).Z);
             Assert.That(farthestZ, Is.LessThan(-700f));
 
-            EncounterPlan second = EncounterPlanCatalog.CreateProofSequence()[1];
+            EncounterPlan second = EncounterPlanCatalog.CreateProofSequence()[0];
             Assert.That(first.OpeningCount, Is.EqualTo(second.OpeningCount));
             for (int i = 0; i < first.OpeningCount; i++)
             {
@@ -1720,7 +1720,7 @@ namespace JetHorizon.Simulation.Tests
                 CounterSteerBoost = 3.15f * .40f
             };
             ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(config);
-            EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence(capability.CruiseSpeed / 42f)[1];
+            EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence(capability.CruiseSpeed / 42f)[0];
             EncounterValidationResult result = new EncounterCapabilityValidator().Validate(canyon, capability, 0);
 
             Assert.That(result.IsAdmissible, Is.True);
@@ -1782,7 +1782,7 @@ namespace JetHorizon.Simulation.Tests
         [Test]
         public void CrystallineCanyonOwnsACompleteEnvironmentalPhaseSequence()
         {
-            EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence()[1];
+            EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence()[0];
             var expected = new[]
             {
                 CanyonEnvironmentPhase.OpenWater,
@@ -1814,7 +1814,7 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
-        public void CanyonIsAnnouncedBeyondTheHorizonBeforeItsEncounterBegins()
+        public void CanyonIsTheFirstEncounterAndBeginsAfterADistantWaterApproach()
         {
             var simulation = new JetHorizonSimulation(new SimulationConfig
             {
@@ -1831,10 +1831,10 @@ namespace JetHorizon.Simulation.Tests
             simulation.StartRun(2026072201L);
             simulation.Step(default);
 
-            Assert.That(simulation.Snapshot.EncounterKind, Is.EqualTo(EncounterKind.MonumentalBroadWeave));
-            Assert.That(simulation.Snapshot.UpcomingEncounterKind, Is.EqualTo(EncounterKind.CrystallineCanyon));
-            Assert.That(simulation.Snapshot.UpcomingEncounterStartZ, Is.LessThan(-650f),
-                "The complete canyon must approach as distant geography rather than activate inside the visible spawn band.");
+            Assert.That(simulation.Snapshot.EncounterKind, Is.EqualTo(EncounterKind.CrystallineCanyon));
+            Assert.That(simulation.Snapshot.EncounterStartZ, Is.LessThan(-500f),
+                "The complete canyon must approach as distant geography instead of beginning at the ship.");
+            Assert.That(simulation.Snapshot.UpcomingEncounterKind, Is.EqualTo(EncounterKind.LightningCargoStorm));
         }
 
         static InputFrame InputForTick(int tick)

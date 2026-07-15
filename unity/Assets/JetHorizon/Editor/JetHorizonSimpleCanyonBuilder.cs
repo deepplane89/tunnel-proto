@@ -30,7 +30,7 @@ namespace JetHorizon.EditorTools
             GUILayout.Space(10f);
             EditorGUILayout.LabelField("JET HORIZON CANYON BUILDER", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "This builds the opaque curved canyon corridor around one validated route. Unity Terrain is an optional backing layer and is currently disabled so you can judge the corridor by itself.",
+                "This builds one solid carved canyon landmass around the validated route. It is not a chain of spawned wall pieces; real bends in the mesh decide when the horizon is blocked.",
                 MessageType.Info);
 
             _profile = (HybridCanyonWorldProfile)EditorGUILayout.ObjectField("Canyon setup", _profile, typeof(HybridCanyonWorldProfile), false);
@@ -73,9 +73,11 @@ namespace JetHorizon.EditorTools
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("SurfaceNoise"), new GUIContent("Rocky breakup"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("NoiseScale"), new GUIContent("Rock feature size"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("PathTension"), new GUIContent("Curve tightness"));
-            EditorGUILayout.PropertyField(settings.FindPropertyRelative("OpenWaterBankHeight"), new GUIContent("Approach bank height"));
-            EditorGUILayout.PropertyField(settings.FindPropertyRelative("OpenWaterFormationHeight"), new GUIContent("Water formation height"));
-            EditorGUILayout.PropertyField(settings.FindPropertyRelative("OpenWaterWallRetreat"), new GUIContent("Approach width"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("SolidLandmassHalfWidth"), new GUIContent("Landmass width"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("SolidLandmassOuterTopY"), new GUIContent("Outer plateau height"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("SolidLandmassTopNoise"), new GUIContent("Plateau faceting"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("ExitSubmergedHeight"), new GUIContent("Exit sink depth"));
+            EditorGUILayout.PropertyField(settings.FindPropertyRelative("ExitWallRetreat"), new GUIContent("Exit opening width"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("WallHeightByProgress"), new GUIContent("Wall height along route"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("BankDegreesByProgress"), new GUIContent("Canyon bank along route"));
             EditorGUILayout.PropertyField(settings.FindPropertyRelative("EntryClearance"), new GUIContent("Arch opening height"));
@@ -98,11 +100,11 @@ namespace JetHorizon.EditorTools
             }
             else
             {
-                EditorGUILayout.HelpBox("Terrain backing is off. The preview contains the complete faceted landform: submerged open-water banks, convergence, enclosed canyon and breakup.", MessageType.None);
+                EditorGUILayout.HelpBox("Terrain backing is off. The preview contains one complete solid threshold-to-exit landmass with a carved, curved channel.", MessageType.None);
             }
 
             Step("4", "Validate and put it into the game");
-            if (GUILayout.Button("CHECK CANYON FOR GAPS", GUILayout.Height(30f)))
+            if (GUILayout.Button("CHECK SOLID CANYON & SIGHTLINES", GUILayout.Height(30f)))
                 JetHorizonHybridCanyonAuthoring.ValidatePreview(_profile, true);
             GUI.backgroundColor = new Color(.35f, 1f, .65f);
             if (GUILayout.Button("BAKE & USE IN GAME", GUILayout.Height(46f)))

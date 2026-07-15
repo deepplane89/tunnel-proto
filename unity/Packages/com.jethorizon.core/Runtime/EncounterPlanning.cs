@@ -370,9 +370,9 @@ namespace JetHorizon.Simulation
                 throw new ArgumentOutOfRangeException(nameof(spacingScale));
             return new[]
             {
-                BroadWeave(spacingScale),
                 CrystallineCanyon(spacingScale, canyonPathOverride),
                 LightningStorm(spacingScale),
+                BroadWeave(spacingScale),
                 PrismaticCorridor(spacingScale)
             };
         }

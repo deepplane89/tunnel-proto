@@ -146,6 +146,7 @@ namespace JetHorizon.Simulation
         const float GateApproachSeconds = 1.5f;
         const float StructureTelegraphSeconds = 4.2f;
         const float LightningTelegraphSeconds = 1.65f;
+        const float InitialCanyonApproachDistance = 520f;
 
         readonly EncounterPlan[] _plans;
         readonly ShipCapabilityProfile _capability;
@@ -202,7 +203,9 @@ namespace JetHorizon.Simulation
             _planIndex = 0;
             _nextOpeningIndex = 0;
             _cycle = 0;
-            _planStartDistance = _launchDistance;
+            _planStartDistance = CurrentPlan.Kind == EncounterKind.CrystallineCanyon
+                ? Math.Max(_launchDistance, InitialCanyonApproachDistance)
+                : _launchDistance;
             _gateActive = false;
             _gateResolved = false;
             _gateDistance = 0f;
@@ -347,8 +350,7 @@ namespace JetHorizon.Simulation
                 * Math.Max(1f, paceBeforeEncounter);
             // The canyon is one authored construct, not a sequence of pieces that
             // materialize ahead of the ship. Publish its complete deterministic
-            // route on the first encounter tick; Unity can keep the distant portion
-            // hidden in opaque fog while building one stable mesh up front.
+            // route on the first encounter tick; Unity presents one prebuilt region.
             if (plan.Kind == EncounterKind.CrystallineCanyon)
                 lead = float.MaxValue;
 
