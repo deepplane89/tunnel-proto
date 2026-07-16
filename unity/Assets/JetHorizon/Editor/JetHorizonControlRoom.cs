@@ -122,6 +122,8 @@ namespace JetHorizon.EditorTools
                 if (BigButton("Ship Workbench", 32f)) JetHorizonWorkbench.Create(JetHorizonWorkbench.Kind.Ship, _profile);
                 if (BigButton("Powerup Workbench", 32f)) JetHorizonWorkbench.Create(JetHorizonWorkbench.Kind.Powerup, _profile);
             }
+            if (BigButton("Facet Terrain Gallery — compare the new world-surface DNA", 34f))
+                JetHorizonFacetTerrainGallery.Open();
 
             Title("Project health");
             DrawQuickStatus("Game scene", AssetDatabase.LoadAssetAtPath<SceneAsset>(_profile.GameScenePath) != null, _profile.GameScenePath);
