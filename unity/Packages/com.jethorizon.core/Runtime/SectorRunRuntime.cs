@@ -19,6 +19,7 @@ namespace JetHorizon.Simulation
         public float Z { get; }
         public float ReturnX { get; }
         public int Count { get; }
+        public float Spacing { get; }
         public RunCargoKind CargoKind { get; }
         public PowerupType Powerup { get; }
         public LightningSequenceKind LightningSequence { get; }
@@ -32,6 +33,7 @@ namespace JetHorizon.Simulation
             float z,
             float returnX = 0f,
             int count = 0,
+            float spacing = 7f,
             RunCargoKind cargoKind = RunCargoKind.Salvage,
             PowerupType powerup = PowerupType.None,
             LightningSequenceKind lightningSequence = LightningSequenceKind.Random,
@@ -44,6 +46,7 @@ namespace JetHorizon.Simulation
             Z = z;
             ReturnX = returnX;
             Count = count;
+            Spacing = spacing > 0f ? spacing : 7f;
             CargoKind = cargoKind;
             Powerup = powerup;
             LightningSequence = lightningSequence;
@@ -296,7 +299,7 @@ namespace JetHorizon.Simulation
                 RefreshSnapshot(baseCruiseSpeed);
                 return new GateRunTickResult(false, false, RunEnvironmentKind.OpenWater, 0f);
             }
-            PublishContent(runDistance, shipZ, commands);
+            PublishContent(runDistance, shipZ, baseCruiseSpeed, commands);
 
             bool decisionOpened = false;
             bool environmentActivated = false;
@@ -423,7 +426,11 @@ namespace JetHorizon.Simulation
                 throw new InvalidOperationException("Generated gate route failed capability validation.");
         }
 
-        void PublishContent(float runDistance, float shipZ, RunParcelCommandBuffer commands)
+        void PublishContent(
+            float runDistance,
+            float shipZ,
+            float baseCruiseSpeed,
+            RunParcelCommandBuffer commands)
         {
             for (int i = _nextGateIndex; i < _route.Count - 1 && i < _contentPublished.Length; i++)
             {
@@ -432,7 +439,26 @@ namespace JetHorizon.Simulation
                 if (_contentPublished[i]) continue;
                 _contentPublished[i] = true;
                 float z = shipZ - (gate.Distance - runDistance);
-                _parcelPlanner.Publish(i, Heat, gate, z, commands);
+                GateRouteNode previous = i > 0
+                    ? _route.Get(i - 1)
+                    : new GateRouteNode(
+                        gate.Id + 1000000,
+                        SpeedGateKind.Common,
+                        _route.StartDistance,
+                        0f,
+                        gate.HalfWidth);
+                float projectedSpeed = Math.Min(
+                    SoftSpeedCap,
+                    baseCruiseSpeed + _progression.EarnedSpeedBonus);
+                _parcelPlanner.Publish(
+                    i,
+                    Heat,
+                    previous,
+                    gate,
+                    z,
+                    _capability,
+                    projectedSpeed,
+                    commands);
             }
         }
 

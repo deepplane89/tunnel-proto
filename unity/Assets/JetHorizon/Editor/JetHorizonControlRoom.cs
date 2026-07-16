@@ -341,6 +341,14 @@ namespace JetHorizon.EditorTools
                 if (GUILayout.Button("Ship Workbench")) JetHorizonWorkbench.Create(JetHorizonWorkbench.Kind.Ship, _profile);
             }
             EditorGUILayout.HelpBox("When imported-model sockets are enabled, the engine-neutral Runner socket definition remains authoritative. Disable it to use the four Scene-edited fallback anchors.", MessageType.Info);
+
+            Title("Laser attachment");
+            var socketRig = ship != null ? ship.GetComponent<ShipSocketRig>() : null;
+            SelectRow("Left muzzle", socketRig != null ? socketRig.LaserMuzzleLeft : null);
+            SelectRow("Right muzzle", socketRig != null ? socketRig.LaserMuzzleRight : null);
+            EditorGUILayout.HelpBox(
+                "These model-child sockets use the exact GitHub Runner tuning: two lanes at ±0.35 world X, +0.45 Y, -2.50 Z, with 10-unit cores and 7.5-unit glows.",
+                MessageType.Info);
         }
 
         void DrawWater()

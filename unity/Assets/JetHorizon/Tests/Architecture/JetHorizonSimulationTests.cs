@@ -885,6 +885,13 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(ship.Thrusters.MiniRight.X, Is.EqualTo(0.733333f).Within(0.000001f));
             Assert.That(ship.Thrusters.MiniLeft.Y, Is.EqualTo(-0.666667f).Within(0.000001f));
             Assert.That(ship.Thrusters.MiniThrustersEnabled, Is.True);
+            Assert.That(ship.Lasers.Left.X, Is.EqualTo(-1.166667f).Within(0.000001f));
+            Assert.That(ship.Lasers.Right.X, Is.EqualTo(1.166667f).Within(0.000001f));
+            Assert.That(ship.Lasers.Left.Y, Is.EqualTo(1.5f));
+            Assert.That(ship.Lasers.Left.Z, Is.EqualTo(-8.333333f).Within(0.000001f));
+            Assert.That(ship.Lasers.CoreLength, Is.EqualTo(10f));
+            Assert.That(ship.Lasers.GlowLength, Is.EqualTo(7.5f));
+            Assert.That(ship.Lasers.FireRate, Is.EqualTo(PowerupCatalog.LaserFireRate));
         }
 
         [Test]
@@ -1002,10 +1009,16 @@ namespace JetHorizon.Simulation.Tests
             simulation.RegisterHazard(HazardSpawn.Cone(-0.35f, -10f, collisionHalfWidth: 1f));
 
             bool destroyed = false;
+            float destroyedX = 99f;
             for (int i = 0; i < 12; i++)
             {
                 simulation.Step(default);
-                destroyed |= ContainsEvent(simulation.Events, SimulationEventType.HazardDestroyed);
+                for (int e = 0; e < simulation.Events.Count; e++)
+                {
+                    if (simulation.Events[e].Type != SimulationEventType.HazardDestroyed) continue;
+                    destroyed = true;
+                    destroyedX = simulation.Events[e].ValueA;
+                }
             }
 
             Assert.That(simulation.Snapshot.LaserSeconds, Is.GreaterThan(3f));
@@ -1015,6 +1028,7 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(simulation.Snapshot.EffectiveSpeed,
                 Is.EqualTo(simulation.Snapshot.Speed * PowerupCatalog.OverdriveSpeedMultiplier).Within(0.001f));
             Assert.That(destroyed, Is.True);
+            Assert.That(destroyedX, Is.EqualTo(-.35f).Within(.001f));
         }
 
         [Test]
@@ -1234,6 +1248,15 @@ namespace JetHorizon.Simulation.Tests
             simulation.Step(default);
 
             Assert.That(simulation.Snapshot.CargoAlloy, Is.EqualTo(2));
+            bool sawCargoEvent = false;
+            for (int i = 0; i < simulation.Events.Count; i++)
+            {
+                if (simulation.Events[i].Type != SimulationEventType.CargoCollected) continue;
+                sawCargoEvent = true;
+                Assert.That((RunCargoKind)(int)simulation.Events[i].ValueA, Is.EqualTo(RunCargoKind.Alloy));
+                Assert.That(simulation.Events[i].ValueB, Is.EqualTo(CargoCatalog.Alloy.CreditValue * 2));
+            }
+            Assert.That(sawCargoEvent, Is.True);
             Assert.That(simulation.Snapshot.ExtractionAvailable, Is.True);
             Assert.That(simulation.TryExtract(out RunCargoManifest manifest), Is.True);
             Assert.That(manifest.Alloy, Is.EqualTo(2));

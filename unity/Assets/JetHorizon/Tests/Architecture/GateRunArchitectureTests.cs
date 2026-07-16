@@ -52,6 +52,41 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
+        public void CargoRoutes_CreateSafeRiskyAndCommittedLinesBeforeTheGate()
+        {
+            var config = new SimulationConfig
+            {
+                StartSpeedMultiplier = 1f,
+                MinimumOperationalSpeed = 36f
+            };
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(config);
+            var planner = new CargoRoutePlanner();
+            var previous = new GateRouteNode(1, SpeedGateKind.Common, 100f, 0f, 7.5f);
+            var gate = new GateRouteNode(2, SpeedGateKind.Common, 165f, 4f, 7.5f);
+
+            Assert.That(planner.TryCreate(
+                6, 0, previous, gate, -120f, capability, 40f, out RunParcelCommand salvage), Is.True);
+            Assert.That(planner.TryCreate(
+                6, 1, previous, gate, -120f, capability, 55f, out RunParcelCommand alloy), Is.True);
+            Assert.That(planner.TryCreate(
+                6, 4, previous, gate, -120f, capability, 90f, out RunParcelCommand prism), Is.True);
+
+            Assert.That(salvage.CargoKind, Is.EqualTo(RunCargoKind.Salvage));
+            Assert.That(alloy.CargoKind, Is.EqualTo(RunCargoKind.Alloy));
+            Assert.That(prism.CargoKind, Is.EqualTo(RunCargoKind.Prism));
+            Assert.That(salvage.Z, Is.GreaterThan(-120f));
+            Assert.That(alloy.Z, Is.GreaterThan(-120f));
+            Assert.That(prism.Z, Is.GreaterThan(-120f));
+            Assert.That(salvage.ReturnX, Is.EqualTo(gate.CenterX).Within(.001f));
+
+            float allowed = gate.HalfWidth - capability.CollisionHalfWidth;
+            Assert.That(System.Math.Abs(alloy.ReturnX - gate.CenterX), Is.LessThan(allowed));
+            Assert.That(System.Math.Abs(prism.ReturnX - gate.CenterX), Is.GreaterThan(allowed));
+            Assert.That(alloy.Count, Is.GreaterThan(salvage.Count));
+            Assert.That(prism.Count, Is.GreaterThan(alloy.Count));
+        }
+
+        [Test]
         public void GateRunSimulation_StartsSlowAndEarnsSpeedByCrossingGates()
         {
             var simulation = new JetHorizonSimulation(

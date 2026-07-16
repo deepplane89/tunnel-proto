@@ -19,11 +19,13 @@ namespace JetHorizon
             public LineRenderer Glow;
             public LineRenderer Core;
             public Transform HeadFlare;
+            public Transform Muzzle;
             public float Age;
         }
 
         const int LaserBoltPoolSize = 12;
-        const float LaserBoltLifetime = .8f;
+        const float LaserBoltLifetime = .6f;
+        const float LaserBoltSpeed = 140f;
         const int ShieldHitCount = 6;
 
         public Transform ShipRoot;
@@ -42,6 +44,8 @@ namespace JetHorizon
         Material _laserFlareMaterial;
         Texture2D _laserFlareTexture;
         Light _laserMuzzleLight;
+        ShipSocketRig _socketRig;
+        LaserSocketDefinition _laserDefinition;
         MaterialPropertyBlock _shipBlock;
         Renderer[] _shipRenderers;
         float _shieldBuild;
@@ -84,6 +88,8 @@ namespace JetHorizon
         {
             if (_built || ShipRoot == null) return;
             _built = true;
+            _socketRig = ShipRoot.GetComponent<ShipSocketRig>();
+            _laserDefinition = ShipCatalog.Runner.Lasers;
             _shipRenderers = ShipRoot.Find("ShipModel")?.GetComponentsInChildren<Renderer>(true) ?? new Renderer[0];
             BuildShield();
             BuildMagnet();
@@ -189,9 +195,16 @@ namespace JetHorizon
             if (ShipRoot == null || _bolts.Count == 0) return;
             LaserBolt bolt = AcquireLaserBolt();
             bolt.Age = 0f;
-            bolt.Root.transform.position = ShipRoot.position + new Vector3(laneOffset, 0.45f, -2.5f);
+            bolt.Muzzle = laneOffset < 0f
+                ? (_socketRig != null ? _socketRig.LaserMuzzleLeft : null)
+                : (_socketRig != null ? _socketRig.LaserMuzzleRight : null);
+            Float3 fallback = laneOffset < 0f ? _laserDefinition.Left : _laserDefinition.Right;
+            bolt.Root.transform.position = bolt.Muzzle != null
+                ? bolt.Muzzle.position
+                : ShipRoot.TransformPoint(new Vector3(fallback.X, fallback.Y, fallback.Z));
             bolt.Root.transform.rotation = Quaternion.identity;
             bolt.Root.SetActive(true);
+            if (_laserMuzzleLight != null) _laserMuzzleLight.transform.position = bolt.Root.transform.position;
             _laserMuzzleAge = 0f;
         }
 
@@ -212,17 +225,32 @@ namespace JetHorizon
                 root.layer = 8;
                 root.transform.SetParent(_laserPoolRoot, false);
                 var bolt = new LaserBolt { Root = root };
-                bolt.Aura = MakeLaserLine(root, "Plasma Aura", .34f, _laserAuraMaterial);
-                bolt.Glow = MakeLaserLine(root, "Energy Body", .16f, _laserGlowMaterial);
-                bolt.Core = MakeLaserLine(root, "White-Hot Core", .045f, _laserCoreMaterial);
-                bolt.HeadFlare = MakeLaserFlare(root);
+                bolt.Aura = MakeLaserLine(
+                    root,
+                    "Plasma Aura",
+                    .34f,
+                    _laserDefinition.CoreLength * 1.10f,
+                    _laserAuraMaterial);
+                bolt.Glow = MakeLaserLine(
+                    root,
+                    "Energy Body",
+                    .16f,
+                    _laserDefinition.GlowLength,
+                    _laserGlowMaterial);
+                bolt.Core = MakeLaserLine(
+                    root,
+                    "White-Hot Core",
+                    .045f,
+                    _laserDefinition.CoreLength,
+                    _laserCoreMaterial);
+                bolt.HeadFlare = MakeLaserFlare(root, _laserDefinition.CoreLength);
                 root.SetActive(false);
                 _bolts.Add(bolt);
             }
 
             var muzzle = new GameObject("LaserMuzzleLight");
             muzzle.transform.SetParent(ShipRoot, false);
-            muzzle.transform.localPosition = new Vector3(0f, .35f, -2.1f);
+            muzzle.transform.localPosition = Vector3.zero;
             _laserMuzzleLight = muzzle.AddComponent<Light>();
             _laserMuzzleLight.type = LightType.Point;
             _laserMuzzleLight.color = new Color(1f, .16f, .02f);
@@ -261,7 +289,12 @@ namespace JetHorizon
             return oldest;
         }
 
-        LineRenderer MakeLaserLine(GameObject root, string name, float width, Material material)
+        LineRenderer MakeLaserLine(
+            GameObject root,
+            string name,
+            float width,
+            float length,
+            Material material)
         {
             var lineObject = new GameObject(name);
             lineObject.layer = 8;
@@ -269,8 +302,8 @@ namespace JetHorizon
             var line = lineObject.AddComponent<LineRenderer>();
             line.useWorldSpace = false;
             line.positionCount = 2;
-            line.SetPosition(0, new Vector3(0f, 0f, -1.65f));
-            line.SetPosition(1, new Vector3(0f, 0f, 1.15f));
+            line.SetPosition(0, new Vector3(0f, 0f, -length * .5f));
+            line.SetPosition(1, new Vector3(0f, 0f, length * .5f));
             line.widthCurve = new AnimationCurve(
                 new Keyframe(0f, .06f), new Keyframe(.14f, 1f),
                 new Keyframe(.72f, .82f), new Keyframe(1f, 0f));
@@ -284,15 +317,15 @@ namespace JetHorizon
             return line;
         }
 
-        Transform MakeLaserFlare(GameObject root)
+        Transform MakeLaserFlare(GameObject root, float coreLength)
         {
             var flare = GameObject.CreatePrimitive(PrimitiveType.Quad);
             Destroy(flare.GetComponent<Collider>());
             flare.name = "Leading Flare";
             flare.layer = 8;
             flare.transform.SetParent(root.transform, false);
-            flare.transform.localPosition = new Vector3(0f, 0f, -1.62f);
-            flare.transform.localScale = Vector3.one * .42f;
+            flare.transform.localPosition = new Vector3(0f, 0f, -coreLength * .5f);
+            flare.transform.localScale = Vector3.one * .58f;
             var renderer = flare.GetComponent<MeshRenderer>();
             renderer.sharedMaterial = _laserFlareMaterial;
             renderer.shadowCastingMode = ShadowCastingMode.Off;
@@ -406,7 +439,10 @@ namespace JetHorizon
                 var bolt = _bolts[i];
                 if (!bolt.Root.activeSelf) continue;
                 bolt.Age += dt;
-                bolt.Root.transform.position += Vector3.back * 150f * dt;
+                Vector3 position = bolt.Root.transform.position;
+                if (bolt.Muzzle != null) position.x = bolt.Muzzle.position.x;
+                position += Vector3.back * LaserBoltSpeed * dt;
+                bolt.Root.transform.position = position;
                 float life = Mathf.Clamp01(1f - bolt.Age / LaserBoltLifetime);
                 float flareScale = (.34f + Mathf.Sin((S != null ? S.Elapsed : Time.time) * 31f + i) * .05f) * life;
                 bolt.HeadFlare.localScale = Vector3.one * Mathf.Max(.01f, flareScale);
@@ -416,6 +452,7 @@ namespace JetHorizon
                         bolt.HeadFlare.position - cam.transform.position, cam.transform.up);
                 if (bolt.Age < LaserBoltLifetime && bolt.Root.transform.position.z > -205f) continue;
                 bolt.Root.SetActive(false);
+                bolt.Muzzle = null;
             }
         }
 
@@ -450,6 +487,7 @@ namespace JetHorizon
             foreach (var bolt in _bolts)
             {
                 bolt.Age = 0f;
+                bolt.Muzzle = null;
                 if (bolt.Root != null) bolt.Root.SetActive(false);
             }
         }

@@ -45,6 +45,36 @@ namespace JetHorizon.Simulation
         }
     }
 
+    /// <summary>
+    /// Portable dual-muzzle placement and bolt tuning copied from the production
+    /// Runner configuration. Positions are ship-root-local, not importer-local guesses.
+    /// </summary>
+    public sealed class LaserSocketDefinition
+    {
+        public Float3 Left { get; }
+        public Float3 Right { get; }
+        public float CoreLength { get; }
+        public float GlowLength { get; }
+        public float FireRate { get; }
+
+        public LaserSocketDefinition(
+            Float3 left,
+            Float3 right,
+            float coreLength,
+            float glowLength,
+            float fireRate)
+        {
+            if (coreLength <= 0f) throw new ArgumentOutOfRangeException(nameof(coreLength));
+            if (glowLength <= 0f) throw new ArgumentOutOfRangeException(nameof(glowLength));
+            if (fireRate <= 0f) throw new ArgumentOutOfRangeException(nameof(fireRate));
+            Left = left;
+            Right = right;
+            CoreLength = coreLength;
+            GlowLength = glowLength;
+            FireRate = fireRate;
+        }
+    }
+
     /// <summary>Portable GLB placement plus attachment metadata for one ship hull.</summary>
     public sealed class ShipDefinition
     {
@@ -54,6 +84,7 @@ namespace JetHorizon.Simulation
         public Float3 ModelRotationRadians { get; }
         public float ModelScale { get; }
         public ThrusterSocketDefinition Thrusters { get; }
+        public LaserSocketDefinition Lasers { get; }
 
         public ShipDefinition(
             string id,
@@ -61,7 +92,8 @@ namespace JetHorizon.Simulation
             Float3 modelPosition,
             Float3 modelRotationRadians,
             float modelScale,
-            ThrusterSocketDefinition thrusters)
+            ThrusterSocketDefinition thrusters,
+            LaserSocketDefinition lasers)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Ship id is required.", nameof(id));
             if (string.IsNullOrWhiteSpace(modelKey)) throw new ArgumentException("Model key is required.", nameof(modelKey));
@@ -72,6 +104,7 @@ namespace JetHorizon.Simulation
             ModelRotationRadians = modelRotationRadians;
             ModelScale = modelScale;
             Thrusters = thrusters ?? throw new ArgumentNullException(nameof(thrusters));
+            Lasers = lasers ?? throw new ArgumentNullException(nameof(lasers));
         }
     }
 
@@ -135,7 +168,14 @@ namespace JetHorizon.Simulation
                 new Float3(-1.600000f, -0.766667f, 2.000000f),
                 new Float3( 1.600000f, -0.766667f, 2.000000f),
                 new Float3(-0.733333f, -0.666667f, 2.000000f),
-                new Float3( 0.733333f, -0.666667f, 2.000000f)));
+                new Float3( 0.733333f, -0.666667f, 2.000000f)),
+            // Source world offsets were ±.35 X, +.45 Y, -2.50 Z from a .30-scaled root.
+            new LaserSocketDefinition(
+                new Float3(-1.166667f, 1.500000f, -8.333333f),
+                new Float3( 1.166667f, 1.500000f, -8.333333f),
+                coreLength: 10.00f,
+                glowLength: 7.50f,
+                fireRate: 8.50f));
 
         public static ShipDefinition Runner => RunnerDefinition;
     }

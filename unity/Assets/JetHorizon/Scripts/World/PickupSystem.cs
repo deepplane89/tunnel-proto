@@ -37,6 +37,10 @@ namespace JetHorizon
             public bool Active;
             public int CoreId;
             public RunCargoKind Kind;
+            public bool Collecting;
+            public float CollectAge;
+            public Vector3 CollectStart;
+            public Vector3 CollectScale;
         }
 
         const int PoolSize = 100;
@@ -44,6 +48,7 @@ namespace JetHorizon
         readonly List<PowerupView> _powerups = new List<PowerupView>(10);
         readonly List<CargoView> _cargo = new List<CargoView>(18);
         readonly Dictionary<int, PickupSnapshot> _corePickups = new Dictionary<int, PickupSnapshot>(PoolSize);
+        readonly HashSet<int> _collectedCargoIds = new HashSet<int>();
         Mesh _coinMesh;
         Mesh _octahedronMesh, _torusMesh, _sphereMesh;
         Material _powerupCubeMaterial;
@@ -51,6 +56,10 @@ namespace JetHorizon
         readonly Dictionary<RunCargoKind, Material> _cargoMaterials = new Dictionary<RunCargoKind, Material>();
 
         RunSession S => GameManager.I.Session;
+
+        void OnEnable() => GameEvents.CargoCollected += OnCargoCollected;
+        void OnDisable() => GameEvents.CargoCollected -= OnCargoCollected;
+        void OnCargoCollected(int id, RunCargoKind _, int __) => _collectedCargoIds.Add(id);
 
         void Awake()
         {
@@ -201,6 +210,7 @@ namespace JetHorizon
             BuildPool();
             BuildPowerupPool();
             BuildCargoPool();
+            _collectedCargoIds.Clear();
             GameManager.I?.ClearRegisteredPickups();
             foreach (var c in _coins)
             {
@@ -220,6 +230,8 @@ namespace JetHorizon
             {
                 cargo.Active = false;
                 cargo.CoreId = 0;
+                cargo.Collecting = false;
+                cargo.CollectAge = 0f;
                 cargo.T.gameObject.SetActive(false);
             }
         }
@@ -312,8 +324,35 @@ namespace JetHorizon
             foreach (var cargo in _cargo)
             {
                 if (!cargo.Active) continue;
+                if (cargo.Collecting)
+                {
+                    cargo.CollectAge += dt;
+                    float t = Mathf.Clamp01(cargo.CollectAge / .30f);
+                    float eased = 1f - Mathf.Pow(1f - t, 3f);
+                    Transform ship = GameManager.I != null && GameManager.I.Ship != null
+                        ? GameManager.I.Ship.ShipRoot
+                        : null;
+                    Vector3 target = ship != null ? ship.position + Vector3.up * .25f : cargo.CollectStart;
+                    cargo.T.position = Vector3.Lerp(cargo.CollectStart, target, eased);
+                    cargo.T.localScale = cargo.CollectScale * Mathf.Max(.02f, 1f - eased * .92f);
+                    cargo.T.Rotate(480f * dt, 760f * dt, 350f * dt, Space.Self);
+                    if (t < 1f) continue;
+                    cargo.Active = false;
+                    cargo.Collecting = false;
+                    cargo.T.gameObject.SetActive(false);
+                    continue;
+                }
                 if (!_corePickups.TryGetValue(cargo.CoreId, out var pickup) || pickup.Kind != PickupKind.Cargo)
                 {
+                    if (_collectedCargoIds.Remove(cargo.CoreId))
+                    {
+                        cargo.Collecting = true;
+                        cargo.CollectAge = 0f;
+                        cargo.CollectStart = cargo.T.position;
+                        cargo.CollectScale = cargo.T.localScale;
+                        cargo.CoreId = 0;
+                        continue;
+                    }
                     cargo.Active = false;
                     cargo.CoreId = 0;
                     cargo.T.gameObject.SetActive(false);
@@ -404,6 +443,8 @@ namespace JetHorizon
                 view.Active = true;
                 view.CoreId = pickup.Id;
                 view.Kind = pickup.CargoKind;
+                view.Collecting = false;
+                view.CollectAge = 0f;
                 for (int i = 0; i < view.Renderers.Length; i++)
                     view.Renderers[i].sharedMaterial = _cargoMaterials[pickup.CargoKind];
                 ConfigureCargoPod(view, pickup.CargoKind);

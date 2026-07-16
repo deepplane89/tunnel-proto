@@ -13,6 +13,8 @@ namespace JetHorizon
         public Transform MainThrusterRight { get; private set; }
         public Transform MiniThrusterLeft { get; private set; }
         public Transform MiniThrusterRight { get; private set; }
+        public Transform LaserMuzzleLeft { get; private set; }
+        public Transform LaserMuzzleRight { get; private set; }
         public bool MiniThrustersEnabled { get; private set; }
 
         public void Configure(ShipDefinition definition, Transform model)
@@ -30,6 +32,8 @@ namespace JetHorizon
             MainThrusterRight = CreateSocket("Socket_Thruster_Main_R", sockets.MainRight, model);
             MiniThrusterLeft = CreateSocket("Socket_Thruster_Mini_L", sockets.MiniLeft, model);
             MiniThrusterRight = CreateSocket("Socket_Thruster_Mini_R", sockets.MiniRight, model);
+            LaserMuzzleLeft = CreateSocket("Socket_Laser_Muzzle_L", definition.Lasers.Left, model);
+            LaserMuzzleRight = CreateSocket("Socket_Laser_Muzzle_R", definition.Lasers.Right, model);
             MiniThrustersEnabled = sockets.MiniThrustersEnabled;
         }
 
@@ -51,7 +55,10 @@ namespace JetHorizon
             DestroySocket(MainThrusterRight);
             DestroySocket(MiniThrusterLeft);
             DestroySocket(MiniThrusterRight);
+            DestroySocket(LaserMuzzleLeft);
+            DestroySocket(LaserMuzzleRight);
             MainThrusterLeft = MainThrusterRight = MiniThrusterLeft = MiniThrusterRight = null;
+            LaserMuzzleLeft = LaserMuzzleRight = null;
         }
 
         static void DestroySocket(Transform socket)

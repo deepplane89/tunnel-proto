@@ -46,6 +46,7 @@ namespace JetHorizon
         public ObstacleSpawner Obstacles;
         public PickupSystem Pickups;
         public PowerupPresentationSystem PowerupPresentation;
+        public LaserDestructionPresenter LaserDestruction;
         public ShipSkinController ShipSkins;
 
         public readonly GameStateMachine State = new GameStateMachine();
@@ -195,6 +196,13 @@ namespace JetHorizon
             }
             PowerupPresentation.ShipRoot = Ship != null ? Ship.ShipRoot : null;
             PowerupPresentation.ResetSystem();
+            if (LaserDestruction == null)
+            {
+                var presenterObject = new GameObject("Laser Destruction Presentation");
+                presenterObject.transform.SetParent(transform, false);
+                LaserDestruction = presenterObject.AddComponent<LaserDestructionPresenter>();
+            }
+            LaserDestruction.ResetPresentation();
             if (ShipSkins == null)
                 ShipSkins = gameObject.GetComponent<ShipSkinController>() ?? gameObject.AddComponent<ShipSkinController>();
             ShipSkins.Initialize(Ship != null ? Ship.ShipRoot : null);
@@ -458,6 +466,12 @@ namespace JetHorizon
                     case SimulationEventType.PickupCollected:
                         GameEvents.RaiseCoinCollected();
                         break;
+                    case SimulationEventType.CargoCollected:
+                        GameEvents.RaiseCargoCollected(
+                            events[i].EntityId,
+                            (RunCargoKind)(int)events[i].ValueA,
+                            (int)events[i].ValueB);
+                        break;
                     case SimulationEventType.PowerupCollected:
                         GameEvents.RaisePowerupCollected((PowerupType)(int)events[i].ValueA);
                         break;
@@ -475,6 +489,12 @@ namespace JetHorizon
                         break;
                     case SimulationEventType.LaserFired:
                         GameEvents.RaiseLaserFired(events[i].ValueA);
+                        break;
+                    case SimulationEventType.HazardDestroyed:
+                        GameEvents.RaiseHazardDestroyed(
+                            events[i].EntityId,
+                            events[i].ValueA,
+                            events[i].ValueB);
                         break;
                     case SimulationEventType.SpeedGateCrossed:
                         GameEvents.RaiseSpeedGateCrossed(
@@ -639,6 +659,7 @@ namespace JetHorizon
             GateFeedback?.ResetSystem();
             Asteroids?.ResetSystem();
             PowerupPresentation?.ResetSystem();
+            LaserDestruction?.ResetPresentation();
             Debug.Log("[Jet Horizon] Prismatic corridor preview selected. This run is leaderboard-ineligible.");
 #endif
         }
@@ -661,6 +682,7 @@ namespace JetHorizon
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();
             PowerupPresentation?.ResetSystem();
+            LaserDestruction?.ResetPresentation();
             Debug.Log("[Jet Horizon] Curved crystalline canyon preview selected. C only jumps to the encounter; presentation comes from the active canyon profile.");
 #endif
         }
@@ -690,6 +712,7 @@ namespace JetHorizon
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();
             PowerupPresentation?.ResetSystem();
+            LaserDestruction?.ResetPresentation();
         }
 
         /// <summary>killPlayer() port — resolution order per spec/01 §4.6 (no shields yet: 1:1 minus meta).</summary>

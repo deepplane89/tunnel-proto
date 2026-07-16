@@ -856,7 +856,7 @@ namespace JetHorizon.Simulation
                     1,
                     x,
                     1.35f,
-                    command.Z - i * 7f));
+                    command.Z - i * command.Spacing));
             }
         }
 
@@ -1005,29 +1005,54 @@ namespace JetHorizon.Simulation
 
         void SpawnLaserFormation(EncounterCommand command)
         {
-            const float left = -42f;
-            const float right = 42f;
-            const float spacing = 4.2f;
-            int index = 0;
-            for (float x = left; x <= right + .01f; x += spacing, index++)
+            const int rows = 4;
+            const float bypassHalfWidth = 6.5f;
+            float bypassDirection = (command.RowIndex & 1) == 0 ? 1f : -1f;
+            float bypassCenter = Clamp(command.X + bypassDirection * 16f, -28f, 28f);
+
+            for (int row = 0; row < rows; row++)
             {
-                HazardSpawn cone = HazardSpawn.Cone(
-                    x,
-                    command.Z + (index % 3) * 2.5f,
-                    2.35f,
-                    1.25f,
-                    HazardStyle.FatCone,
-                    (command.RowIndex + index) % 3);
-                cone.Y = -2f;
-                cone.CollisionHalfDepth = _config.CollisionHalfDepth + 0.8f;
-                if (!EncounterGeometryValidator.PreservesOpening(
-                    cone,
-                    command.X,
-                    command.HalfWidth,
-                    _config.CorridorShipHalfWidth,
-                    .65f)) continue;
-                SpawnEncounterHazard(command, cone);
+                float z = command.Z - row * 8f;
+                SpawnLaserTarget(command.X - .35f, z, bypassCenter, bypassHalfWidth, row * 2);
+                SpawnLaserTarget(command.X + .35f, z - 1.4f, bypassCenter, bypassHalfWidth, row * 2 + 1);
+
+                int column = 0;
+                for (float x = -34f; x <= 34.01f; x += 4.25f, column++)
+                {
+                    if (Math.Abs(x - command.X) < 2.2f) continue;
+                    SpawnLaserTarget(
+                        x,
+                        z + ((column + row) % 3) * 1.35f,
+                        bypassCenter,
+                        bypassHalfWidth,
+                        row * 31 + column);
+                }
             }
+        }
+
+        void SpawnLaserTarget(
+            float x,
+            float z,
+            float bypassCenter,
+            float bypassHalfWidth,
+            int variant)
+        {
+            HazardSpawn cone = HazardSpawn.Cone(
+                    x,
+                    z,
+                    2.45f,
+                    1.35f,
+                    HazardStyle.FatCone,
+                    Math.Abs(variant) % 3);
+            cone.Y = -2f;
+            cone.CollisionHalfDepth = _config.CollisionHalfDepth + .8f;
+            if (!EncounterGeometryValidator.PreservesOpening(
+                cone,
+                bypassCenter,
+                bypassHalfWidth,
+                _config.CorridorShipHalfWidth,
+                .65f)) return;
+            SpawnHazard(cone);
         }
 
         void SpawnEncounterHazard(EncounterCommand command, HazardSpawn hazard)
@@ -2620,7 +2645,8 @@ namespace JetHorizon.Simulation
         void TickLaserWeapon(float dt)
         {
             _laserShotTimer += dt;
-            float interval = 1f / (PowerupCatalog.LaserFireRate * (0.85f + _config.LaserPowerMultiplier * .15f));
+            float interval = 1f / (ShipCatalog.Runner.Lasers.FireRate
+                * (0.85f + _config.LaserPowerMultiplier * .15f));
             while (_laserShotTimer >= interval)
             {
                 _laserShotTimer -= interval;
@@ -2710,7 +2736,7 @@ namespace JetHorizon.Simulation
                             Events.Add(new SimulationEvent(
                                 SimulationEventType.CargoCollected,
                                 pickup.Id,
-                                definition.Weight * pickup.CargoUnits,
+                                (float)pickup.CargoKind,
                                 definition.CreditValue * pickup.CargoUnits));
                         }
                         else

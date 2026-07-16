@@ -1117,6 +1117,13 @@ The first production architecture is now live in the Unity project:
 - `AsteroidSequenceRuntime` ports Random, Sweep, Stagger, Salvo, Pinch, and Chase intentions.
 - Source-parity lightning sequence scheduling remains in `LightningSequenceRuntime`.
 - Cargo trails, laser pickup/formation beats, isolated fat cones, lightning windows, and asteroid windows are emitted as coordinated parcel commands.
+- Cargo routes now approach their linked gate instead of spawning behind it:
+  - Salvage makes a readable detour and returns to gate center.
+  - Alloy demands a wider line and returns near the gate edge.
+  - Prism commits beyond the easy gate aperture, creating an explicit reward-versus-speed choice.
+- The first laser payoff uses a dense four-row destructible formation with exact dual-lane targets and a separately validated side bypass, so the encounter remains survivable without the pickup.
+- Runner laser content is source-locked to the production Three.js tuning: two lanes at `±0.35`, `+0.45` Y, `-2.50` Z in the reference world pose, 10-unit core length, 7.5-unit glow length, and 8.5 Hz fire rate.
+- Unity converts those reference offsets into model-child muzzle sockets and adds pooled impact plasma, trails, shock rings, light flashes, positional audio, and cargo collection pull-in without moving gameplay authority out of the core.
 - Extraction is a core-owned spatial crossing. Missing it starts the next Heat sector without resetting earned run speed.
 - Canyon and prismatic routes activate only after their transition gate is crossed.
 - Their complete Unity environments are prebuilt and moved as single world constructs; collision comes from the same core-authored route samples.

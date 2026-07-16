@@ -2,7 +2,7 @@
 
 ## Status
 
-The live migration has passed its initial vertical slice. The core is now authoritative for ship motion, progression, campaign direction, standard waves, pickups, angled-wall collision, lightning gameplay, canyon bounds, zipper/slalom patterns, L4/L5 sine corridors, and the complete structured-wall field. The Runner GLB placement and thruster attachment points are also portable content definitions rather than Unity-scene guesses.
+The live migration has passed its initial vertical slice. The core is now authoritative for ship motion, progression, campaign direction, standard waves, pickups, angled-wall collision, lightning gameplay, canyon bounds, zipper/slalom patterns, L4/L5 sine corridors, the complete structured-wall field, gate-linked cargo routes, and laser destruction decisions. The Runner GLB placement, thruster attachment points, and exact dual laser muzzle tuning are portable content definitions rather than Unity-scene guesses.
 
 The new code is split into three boundaries:
 
@@ -50,8 +50,10 @@ Platform effects are one-way: simulation events enter the application router, wh
 - portable L4/L5 row definitions with source squeeze, sine, knife-spike, exit, center-cone, delay, and jitter rules;
 - portable 6x2x2 structured-wall geometry with source cadence, alternating lean, mesh-center transform, and 20-row lifecycle;
 - core-owned lightning targeting, warning/strike phases, lifetime, and narrow hitbox;
-- portable `ShipDefinition`, `ThrusterSocketDefinition`, and `ThrusterEffectDefinition` content;
-- a Unity `ShipSocketRig` that creates model-child sockets for the current GLB at runtime;
+- portable `ShipDefinition`, `ThrusterSocketDefinition`, `LaserSocketDefinition`, and `ThrusterEffectDefinition` content;
+- source-authored safe, risky, and committed cargo routes that remain capability-bounded and arrive before their linked speed gate;
+- a Unity `ShipSocketRig` that creates model-child thruster and dual laser muzzle sockets for the current GLB at runtime;
+- core-owned dual-lane laser targeting and destruction events, with pooled Unity-only bolts, impacts, shock rings, lighting, audio, and collection pull-in;
 - reused snapshot and event buffers;
 - start, pause, reset, and deterministic replay behavior.
 
@@ -80,6 +82,8 @@ Only then should the corresponding legacy gameplay code be disabled. Presentatio
 | Legacy canyon slabs | Core collision decision from value bounds | rollback-only slab path, mesh recycling, entry/exit visuals |
 | Zipper, slalom, and sine corridors | Core scheduling, row geometry, random choices, entities, rewards | cone/coin pooling and corridor tint |
 | Runner ship and thruster tuning | Engine-neutral content | GLB loading, socket transforms, exhaust drawing |
+| Cargo route risk | Core route type, geometry, value, capacity, and collection | pooled pod drawing, pull-in, tint, and audio |
+| Laser weapon | Core fire cadence, lane targeting, and destruction | GLB muzzle sockets, bolt/impact VFX, lighting, and audio |
 | Structured-wall field | Core 3-second gate, 20-row lifecycle, 6x2x2 transforms, and entities | pooled wall presentation |
 
 ## Next checkpoints

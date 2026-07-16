@@ -7,7 +7,7 @@ namespace JetHorizon
     public sealed class JetHorizonAudioSystem : MonoBehaviour
     {
         AudioSource _oneShot;
-        float _lastSteer, _steerHold, _whooshCooldown;
+        float _lastSteer, _steerHold, _whooshCooldown, _laserImpactCooldown;
 
         void Awake()
         {
@@ -18,10 +18,12 @@ namespace JetHorizon
         {
             GameEvents.PlayerDied += Died;
             GameEvents.NearMiss += NearMiss; GameEvents.CoinCollected += Coin;
+            GameEvents.CargoCollected += Cargo;
             GameEvents.KlaxonCountdown += Klaxon;
             GameEvents.LightningStruck += Lightning; GameEvents.ShieldHit += Shield; GameEvents.ShieldBroken += ShieldBroken;
             GameEvents.PowerupActivated += Powerup;
             GameEvents.LaserFired += Laser;
+            GameEvents.HazardDestroyed += LaserImpact;
             GameEvents.SpeedGateCrossed += GateCrossed;
         }
 
@@ -29,9 +31,11 @@ namespace JetHorizon
         {
             GameEvents.PlayerDied -= Died;
             GameEvents.NearMiss -= NearMiss; GameEvents.CoinCollected -= Coin;
+            GameEvents.CargoCollected -= Cargo;
             GameEvents.KlaxonCountdown -= Klaxon; GameEvents.LightningStruck -= Lightning;
             GameEvents.ShieldHit -= Shield; GameEvents.ShieldBroken -= ShieldBroken;
             GameEvents.PowerupActivated -= Powerup; GameEvents.LaserFired -= Laser;
+            GameEvents.HazardDestroyed -= LaserImpact;
             GameEvents.SpeedGateCrossed -= GateCrossed;
         }
 
@@ -40,6 +44,7 @@ namespace JetHorizon
             if (GameManager.I == null) return;
             float dt = Mathf.Min(Time.unscaledDeltaTime, Tuning.MaxRawDt);
             _whooshCooldown = Mathf.Max(0f, _whooshCooldown - dt);
+            _laserImpactCooldown = Mathf.Max(0f, _laserImpactCooldown - dt);
             ShipFeelSignals signals = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals : default;
             float steer = signals.Steering01;
             if (Mathf.Abs(steer) > .18f)
@@ -62,10 +67,25 @@ namespace JetHorizon
 
         void NearMiss() => Play("nearmiss", .24f, Random.Range(.92f, 1.08f));
         void Coin() => Play("droplet", .22f, Random.Range(.96f, 1.06f));
+        void Cargo(int _, RunCargoKind kind, int __)
+        {
+            float pitch = kind == RunCargoKind.Salvage ? 1.02f
+                : kind == RunCargoKind.Alloy ? 1.20f : 1.42f;
+            float volume = kind == RunCargoKind.Salvage ? .25f
+                : kind == RunCargoKind.Alloy ? .34f : .46f;
+            Play("powerup-burst", volume, pitch);
+        }
         void Lightning() => Play("lightning-impact", .55f, Random.Range(.96f, 1.04f));
         void Shield(int _) => Play("shield-hit", .48f);
         void ShieldBroken() => Play("shield-expire", .40f);
         void Laser(float _) => Play("laser-beam-mg", .38f);
+        void LaserImpact(int _, float x, float __)
+        {
+            if (_laserImpactCooldown > 0f) return;
+            float pan = Mathf.Clamp(x / 32f, -.65f, .65f);
+            Play("thruster-impact", .12f, Random.Range(1.25f, 1.48f), pan);
+            _laserImpactCooldown = .07f;
+        }
 
         void GateCrossed(SpeedGateKind kind, float gain, int streak)
         {

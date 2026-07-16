@@ -19,12 +19,14 @@ namespace JetHorizon
         public static event Action<int> VibeChanged;                     // palette index
         public static event Action NearMiss;
         public static event Action CoinCollected;
+        public static event Action<int, RunCargoKind, int> CargoCollected; // id, kind, credit value
         public static event Action<PowerupType> PowerupCollected;
         public static event Action<PowerupType, float> PowerupActivated;
         public static event Action<PowerupType> PowerupExpired;
         public static event Action<int> ShieldHit;
         public static event Action ShieldBroken;
         public static event Action<float> LaserFired;
+        public static event Action<int, float, float> HazardDestroyed; // id, x, z
         public static event Action CanyonRevealed;
         public static event Action KlaxonCountdown;                      // 1.5s before a speed bump
         public static event Action LightningStruck;
@@ -39,12 +41,14 @@ namespace JetHorizon
         public static void RaiseVibeChanged(int idx)        => VibeChanged?.Invoke(idx);
         public static void RaiseNearMiss()                  => NearMiss?.Invoke();
         public static void RaiseCoinCollected()             => CoinCollected?.Invoke();
+        public static void RaiseCargoCollected(int id, RunCargoKind kind, int creditValue) => CargoCollected?.Invoke(id, kind, creditValue);
         public static void RaisePowerupCollected(PowerupType type) => PowerupCollected?.Invoke(type);
         public static void RaisePowerupActivated(PowerupType type, float duration) => PowerupActivated?.Invoke(type, duration);
         public static void RaisePowerupExpired(PowerupType type) => PowerupExpired?.Invoke(type);
         public static void RaiseShieldHit(int remaining)    => ShieldHit?.Invoke(remaining);
         public static void RaiseShieldBroken()              => ShieldBroken?.Invoke();
         public static void RaiseLaserFired(float laneOffset) => LaserFired?.Invoke(laneOffset);
+        public static void RaiseHazardDestroyed(int id, float x, float z) => HazardDestroyed?.Invoke(id, x, z);
         public static void RaiseCanyonRevealed()            => CanyonRevealed?.Invoke();
         public static void RaiseKlaxonCountdown()           => KlaxonCountdown?.Invoke();
         public static void RaiseLightningStruck()            => LightningStruck?.Invoke();
@@ -54,9 +58,9 @@ namespace JetHorizon
         public static void Reset()
         {
             PhaseChanged = null; RunStarted = null; PlayerDied = null; StageChanged = null;
-            SpeedChanged = null; SpeedGateCrossed = null; VibeChanged = null; NearMiss = null; CoinCollected = null;
+            SpeedChanged = null; SpeedGateCrossed = null; VibeChanged = null; NearMiss = null; CoinCollected = null; CargoCollected = null;
             PowerupCollected = null; PowerupActivated = null; PowerupExpired = null;
-            ShieldHit = null; ShieldBroken = null; LaserFired = null;
+            ShieldHit = null; ShieldBroken = null; LaserFired = null; HazardDestroyed = null;
             CanyonRevealed = null; KlaxonCountdown = null; LightningStruck = null;
             RunExtracted = null;
         }

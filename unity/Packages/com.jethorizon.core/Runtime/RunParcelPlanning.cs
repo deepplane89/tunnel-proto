@@ -2,7 +2,15 @@ namespace JetHorizon.Simulation
 {
     public sealed class CargoRoutePlanner
     {
-        public bool TryCreate(int gateIndex, int heat, GateRouteNode gate, float gateZ, out RunParcelCommand command)
+        public bool TryCreate(
+            int gateIndex,
+            int heat,
+            GateRouteNode previousGate,
+            GateRouteNode gate,
+            float gateZ,
+            ShipCapabilityProfile capability,
+            float projectedSpeed,
+            out RunParcelCommand command)
         {
             if (gateIndex <= 2 || gateIndex % 4 != 2)
             {
@@ -10,23 +18,59 @@ namespace JetHorizon.Simulation
                 return false;
             }
 
-            int count = 3 + (gateIndex % 4);
             float sign = ((gateIndex / 4) & 1) == 0 ? 1f : -1f;
-            float offset = heat >= 2 ? 8f : 5f;
             RunCargoKind cargo = heat >= 4 && gateIndex % 12 == 6
                 ? RunCargoKind.Prism
                 : heat >= 1 && gateIndex % 8 == 6
                     ? RunCargoKind.Alloy
                     : RunCargoKind.Salvage;
+            int count = cargo == RunCargoKind.Salvage ? 4
+                : cargo == RunCargoKind.Alloy ? 5 : 6;
+            float spacing = cargo == RunCargoKind.Prism ? 6.5f : 7f;
+            float approachDistance = spacing * (count - 1) + 10f;
+            float speed = System.Math.Max(24f, projectedSpeed);
+            float priorSpacing = System.Math.Max(1f, gate.Distance - previousGate.Distance);
+            approachDistance = System.Math.Min(approachDistance, priorSpacing * .72f);
+
+            float secondsFromPriorGate = System.Math.Max(
+                .25f,
+                (priorSpacing - approachDistance) / speed);
+            float reachableFromPrior = capability.MaximumLateralVelocity * secondsFromPriorGate * .72f
+                + capability.LateralAcceleration * secondsFromPriorGate * secondsFromPriorGate * .16f;
+            float desiredOffset = cargo == RunCargoKind.Salvage ? 5f
+                : cargo == RunCargoKind.Alloy ? 10f : 14f;
+            float desiredStart = gate.CenterX + sign * desiredOffset;
+            float startX = Clamp(
+                desiredStart,
+                previousGate.CenterX - reachableFromPrior,
+                previousGate.CenterX + reachableFromPrior);
+
+            float allowedGateOffset = System.Math.Max(
+                0f,
+                gate.HalfWidth - capability.CollisionHalfWidth);
+            float returnX = cargo == RunCargoKind.Salvage
+                ? gate.CenterX
+                : cargo == RunCargoKind.Alloy
+                    ? gate.CenterX + sign * allowedGateOffset * .72f
+                    : gate.CenterX + sign * (allowedGateOffset + 1.5f);
+
+            float trailSeconds = spacing * (count - 1) / speed;
+            float reachableReturn = capability.MaximumLateralVelocity * trailSeconds
+                + .5f * capability.LateralAcceleration * trailSeconds * trailSeconds;
+            startX = Clamp(startX, returnX - reachableReturn, returnX + reachableReturn);
             command = new RunParcelCommand(
                 RunParcelCommandType.CargoTrail,
-                gate.CenterX + sign * offset,
-                gateZ - 18f,
-                gate.CenterX,
+                startX,
+                gateZ + approachDistance,
+                returnX,
                 count,
+                spacing,
                 cargo);
             return true;
         }
+
+        static float Clamp(float value, float minimum, float maximum)
+            => value < minimum ? minimum : value > maximum ? maximum : value;
     }
 
     public static class HazardPatternCatalog
@@ -89,11 +133,22 @@ namespace JetHorizon.Simulation
         public void Publish(
             int gateIndex,
             int heat,
+            GateRouteNode previousGate,
             GateRouteNode gate,
             float gateZ,
+            ShipCapabilityProfile capability,
+            float projectedSpeed,
             RunParcelCommandBuffer commands)
         {
-            if (_cargo.TryCreate(gateIndex, heat, gate, gateZ, out RunParcelCommand cargo))
+            if (_cargo.TryCreate(
+                gateIndex,
+                heat,
+                previousGate,
+                gate,
+                gateZ,
+                capability,
+                projectedSpeed,
+                out RunParcelCommand cargo))
                 commands.Add(cargo);
 
             if (gateIndex == 13)
