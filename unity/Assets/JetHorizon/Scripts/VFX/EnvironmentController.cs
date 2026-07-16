@@ -36,6 +36,7 @@ namespace JetHorizon
         const float BloomScale = 1.65f;
         const float VignetteIntensity = 0.16f;
         const int ReflectableLayer = 8;
+        static readonly int ForceFarDepthId = Shader.PropertyToID("_ForceFarDepth");
 
         void OnEnable()
         {
@@ -212,6 +213,10 @@ namespace JetHorizon
                 _corona = coronaTransform != null ? coronaTransform.GetComponent<Renderer>() : null;
                 if (_corona != null && _corona.sharedMaterial != null)
                 {
+                    // Corona is part of the celestial disc. At ordinary world depth it
+                    // could still draw over canyon geometry behind z=-340 even after
+                    // the sun sphere itself moved to far depth.
+                    _corona.material.SetFloat(ForceFarDepthId, 1f);
                     _runtimeCorona = TextureFactory.SunCorona(1024);
                     _runtimeCorona.name = "RuntimeSunCorona";
                     _runtimeCorona.wrapMode = TextureWrapMode.Clamp;
@@ -219,6 +224,12 @@ namespace JetHorizon
                     _runtimeCorona.anisoLevel = 4;
                     _corona.material.SetTexture("_MainTex", _runtimeCorona);
                 }
+            }
+            if (HorizonSeam != null && HorizonSeam.sharedMaterial != null)
+            {
+                // Keep the additive horizon streak behind every world-space surface
+                // for the same reason as the sun and corona.
+                HorizonSeam.material.SetFloat(ForceFarDepthId, 1f);
             }
         }
 

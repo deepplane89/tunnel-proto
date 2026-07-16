@@ -5,6 +5,7 @@ Shader "JH/Additive"
     {
         _MainTex ("Texture", 2D) = "white" {}
         _Tint ("Tint", Color) = (1,1,1,1)
+        [Toggle] _ForceFarDepth ("Celestial Far Depth", Float) = 0
     }
     SubShader
     {
@@ -24,6 +25,7 @@ Shader "JH/Additive"
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
                 half4 _Tint;
+                float _ForceFarDepth;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
@@ -33,6 +35,8 @@ Shader "JH/Additive"
             {
                 Varyings OUT;
                 OUT.positionHCS = TransformObjectToHClip(IN.positionOS.xyz);
+                if (_ForceFarDepth > 0.5)
+                    OUT.positionHCS.z = UNITY_RAW_FAR_CLIP_VALUE * OUT.positionHCS.w;
                 OUT.uv = TRANSFORM_TEX(IN.uv, _MainTex);
                 return OUT;
             }

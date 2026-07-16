@@ -14,10 +14,15 @@ Shader "JH/Sun"
     }
     SubShader
     {
-        Tags { "RenderType"="Opaque" "Queue"="Geometry+100" "RenderPipeline"="UniversalPipeline" }
+        // The hero sun is celestial background, not track geometry. Render it after
+        // the skybox at far depth so every opaque world surface can occlude it even
+        // when that surface is numerically farther away than the SunGroup transform.
+        Tags { "RenderType"="Transparent" "Queue"="Transparent-100" "RenderPipeline"="UniversalPipeline" }
         Pass
         {
-            Cull Back ZWrite On
+            Cull Back
+            ZWrite Off
+            ZTest LEqual
 
             HLSLPROGRAM
             #pragma vertex vert
@@ -134,6 +139,11 @@ Shader "JH/Sun"
             {
                 Varyings OUT;
                 OUT.positionHCS = TransformObjectToHClip(IN.positionOS.xyz);
+                // Preserve the sphere's screen projection and Quilez surface normals,
+                // but put its depth on the far plane. The old world-space depth at
+                // z=-340 let the sun cover distant canyon walls until they scrolled
+                // closer, which looked exactly like those walls were spawning.
+                OUT.positionHCS.z = UNITY_RAW_FAR_CLIP_VALUE * OUT.positionHCS.w;
                 OUT.uv = IN.uv;
                 OUT.normalVS = mul((float3x3)UNITY_MATRIX_IT_MV, IN.normalOS);
                 OUT.posOS = IN.positionOS.xyz;
