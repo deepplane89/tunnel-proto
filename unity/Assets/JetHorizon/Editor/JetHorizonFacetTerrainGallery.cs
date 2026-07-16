@@ -15,6 +15,15 @@ namespace JetHorizon.EditorTools
     {
         const string RootFolder = "Assets/JetHorizon/Generated/FacetTerrainGallery";
         const string ScenePath = RootFolder + "/FacetTerrainGallery.unity";
+        internal static readonly string[] SpecimenNames =
+        {
+            "01 SOURCE PARITY — canonical Three.js slab",
+            "02 WATERLINE MONOLITH — isolated formation",
+            "03 RIDGE — variable macro silhouette",
+            "04 CURVED BANK — connected surface, no slab seams",
+            "05 CONTINUOUS CANYON — paired curved land masses",
+            "06 LOW SHELF — half-submerged terrain beat"
+        };
 
         [MenuItem("Jet Horizon/Facet Terrain Gallery", priority = 1)]
         public static void Open()
@@ -30,7 +39,7 @@ namespace JetHorizon.EditorTools
 
             Mesh parity = FacetTerrainMeshFactory.BuildThreeJsParitySlab(style, 1);
             ValidateParity(style, parity);
-            GameObject canonical = Add("01 SOURCE PARITY — canonical Three.js slab", parity, terrainMaterial, new Vector3(-145f, 0f, 45f));
+            GameObject canonical = Add(SpecimenNames[0], parity, terrainMaterial, Vector3.zero);
 
             Mesh monolith = FacetTerrainMeshFactory.BuildMass(
                 Stations(0f, 72f, 9,
@@ -38,7 +47,7 @@ namespace JetHorizon.EditorTools
                     t => Mathf.Lerp(30f, 58f, Mathf.SmoothStep(0f, 1f, Mathf.Sin(t * Mathf.PI))),
                     t => 55f + Mathf.Sin(t * Mathf.PI) * 18f,
                     t => Mathf.Lerp(.65f, 1.1f, t)), style, 11, "JH_WaterlineMonolith");
-            Add("02 WATERLINE MONOLITH — isolated formation", monolith, terrainMaterial, new Vector3(-78f, 0f, 28f));
+            Add(SpecimenNames[1], monolith, terrainMaterial, Vector3.zero);
 
             Mesh ridge = FacetTerrainMeshFactory.BuildMass(
                 Stations(0f, 130f, 16,
@@ -46,7 +55,7 @@ namespace JetHorizon.EditorTools
                     t => 24f + Mathf.Pow(Mathf.Sin(t * Mathf.PI), .65f) * 56f,
                     t => 48f + Mathf.Sin(t * Mathf.PI) * 38f,
                     t => .55f + Mathf.Sin(t * Mathf.PI) * .75f), style, 23, "JH_FacetRidge");
-            Add("03 RIDGE — variable macro silhouette", ridge, terrainMaterial, new Vector3(2f, 0f, 0f));
+            Add(SpecimenNames[2], ridge, terrainMaterial, Vector3.zero);
 
             Mesh curvedBank = FacetTerrainMeshFactory.BuildMass(
                 Stations(0f, 190f, 24,
@@ -54,7 +63,7 @@ namespace JetHorizon.EditorTools
                     t => 48f + Mathf.Sin(t * Mathf.PI * 3f + .4f) * 9f,
                     t => 70f + Mathf.Sin(t * Mathf.PI) * 22f,
                     t => .85f + Mathf.Sin(t * Mathf.PI * 2f) * .22f), style, 41, "JH_CurvedFacetBank");
-            Add("04 CURVED BANK — connected surface, no slab seams", curvedBank, terrainMaterial, new Vector3(93f, 0f, -25f));
+            Add(SpecimenNames[3], curvedBank, terrainMaterial, Vector3.zero);
 
             BuildCanyonSpecimen(style, terrainMaterial);
 
@@ -64,12 +73,12 @@ namespace JetHorizon.EditorTools
                     t => 16f + Mathf.Sin(t * Mathf.PI) * 18f,
                     t => 80f,
                     t => .35f + Mathf.Sin(t * Mathf.PI) * .45f), style, 67, "JH_LowFacetShelf");
-            Add("06 LOW SHELF — half-submerged terrain beat", lowShelf, terrainMaterial, new Vector3(-112f, -6f, -112f));
+            Add(SpecimenNames[5], lowShelf, terrainMaterial, new Vector3(0f, -6f, 0f));
 
             EditorSceneManager.SaveScene(scene, ScenePath);
-            Selection.activeGameObject = canonical;
-            SceneView.lastActiveSceneView?.FrameSelected();
-            Debug.Log("[Jet Horizon] Facet Terrain Gallery created. Compare specimen 01 against the original slab, then judge whether 02–06 preserve the same planar angular DNA at terrain scale.");
+            FacetTerrainGalleryWindow.ShowWindow();
+            SelectSpecimen(0);
+            Debug.Log("[Jet Horizon] Facet Terrain Gallery created. Use the Facet Terrain Review window to inspect one formation at a time.");
         }
 
         static void BuildCanyonSpecimen(FacetSurfaceStyle style, Material material)
@@ -90,8 +99,7 @@ namespace JetHorizon.EditorTools
                 leftMirrored.Add(new FacetMassStation(z, -center + halfWidth, height * .96f, 82f, 1f));
             }
 
-            var root = new GameObject("05 CONTINUOUS CANYON — paired curved land masses");
-            root.transform.position = new Vector3(-15f, 0f, -175f);
+            var root = new GameObject(SpecimenNames[4]);
             Mesh rightMesh = FacetTerrainMeshFactory.BuildMass(right, style, 53, "JH_CanyonRightMass");
             Mesh leftMesh = FacetTerrainMeshFactory.BuildMass(leftMirrored, style, 59, "JH_CanyonLeftMass");
             AddChild(root.transform, "Right continuous bank", rightMesh, material, Vector3.one);
@@ -162,10 +170,65 @@ namespace JetHorizon.EditorTools
 
         static Material LoadTerrainMaterial()
         {
-            Material material = AssetDatabase.LoadAssetAtPath<Material>(JetHorizonAuthoringProject.HybridCanyonMaterialPath);
-            if (material != null) return material;
-            HybridCanyonWorldProfile profile = JetHorizonAuthoringProject.LoadOrCreateHybridCanyonProfile(null);
-            return profile != null ? profile.CanyonMaterial : null;
+            const string materialPath = RootFolder + "/FacetTerrainSurface.mat";
+            const string texturePath = "Assets/JetHorizon/Generated/HybridCanyon/HybridCanyonCyanSurface.asset";
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            Shader shader = Shader.Find("JH/FacetTerrain");
+            if (shader == null) throw new InvalidOperationException("The JH/FacetTerrain shader has not imported yet.");
+            if (material == null)
+            {
+                material = new Material(shader) { name = "Facet Terrain Surface" };
+                AssetDatabase.CreateAsset(material, materialPath);
+            }
+            else if (material.shader != shader) material.shader = shader;
+
+            Texture2D surface = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
+            if (surface == null)
+            {
+                string localTexturePath = RootFolder + "/FacetTerrainCyanSurface.asset";
+                surface = AssetDatabase.LoadAssetAtPath<Texture2D>(localTexturePath);
+                if (surface == null)
+                {
+                    surface = TextureFactory.CyanSlab();
+                    surface.name = "FacetTerrainCyanSurface";
+                    surface.wrapMode = TextureWrapMode.Repeat;
+                    AssetDatabase.CreateAsset(surface, localTexturePath);
+                }
+            }
+            material.SetTexture("_Surface", surface);
+            material.SetColor("_Body", new Color(.045f, .24f, .30f, 1f));
+            material.SetFloat("_Brightness", .88f);
+            material.SetFloat("_Emission", .20f);
+            EditorUtility.SetDirty(material);
+            AssetDatabase.SaveAssets();
+            return material;
+        }
+
+        internal static void SelectSpecimen(int selectedIndex)
+        {
+            GameObject selected = null;
+            GameObject[] all = Resources.FindObjectsOfTypeAll<GameObject>();
+            for (int nameIndex = 0; nameIndex < SpecimenNames.Length; nameIndex++)
+            {
+                for (int objectIndex = 0; objectIndex < all.Length; objectIndex++)
+                {
+                    GameObject candidate = all[objectIndex];
+                    if (candidate.name != SpecimenNames[nameIndex] || !candidate.scene.IsValid()) continue;
+                    bool active = nameIndex == selectedIndex;
+                    candidate.SetActive(active);
+                    if (active) selected = candidate;
+                }
+            }
+            if (selected == null) return;
+            Selection.activeGameObject = selected;
+            Renderer[] renderers = selected.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length > 0)
+            {
+                Bounds bounds = renderers[0].bounds;
+                for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+                SceneView.lastActiveSceneView?.Frame(bounds, false);
+            }
+            SceneView.RepaintAll();
         }
 
         static void BuildLightingAndWater()
@@ -232,6 +295,39 @@ namespace JetHorizon.EditorTools
                 if (!AssetDatabase.IsValidFolder(next)) AssetDatabase.CreateFolder(current, parts[i]);
                 current = next;
             }
+        }
+    }
+
+    public sealed class FacetTerrainGalleryWindow : EditorWindow
+    {
+        int _selected;
+
+        internal static void ShowWindow()
+        {
+            FacetTerrainGalleryWindow window = GetWindow<FacetTerrainGalleryWindow>("Facet Terrain Review");
+            window.minSize = new Vector2(390f, 300f);
+            window.Show();
+        }
+
+        void OnGUI()
+        {
+            EditorGUILayout.LabelField("FACET TERRAIN REVIEW", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "Only one specimen is shown at a time. Start with the exact source slab, then compare whether each larger formation keeps the same angular surface language.",
+                MessageType.Info);
+            EditorGUILayout.Space(6f);
+            for (int i = 0; i < JetHorizonFacetTerrainGallery.SpecimenNames.Length; i++)
+            {
+                GUI.backgroundColor = i == _selected ? new Color(.35f, .9f, 1f) : Color.white;
+                if (GUILayout.Button(JetHorizonFacetTerrainGallery.SpecimenNames[i], GUILayout.Height(30f)))
+                {
+                    _selected = i;
+                    JetHorizonFacetTerrainGallery.SelectSpecimen(i);
+                }
+            }
+            GUI.backgroundColor = Color.white;
+            EditorGUILayout.Space(8f);
+            EditorGUILayout.LabelField("This gallery does not change the live game canyon.", EditorStyles.miniLabel);
         }
     }
 }

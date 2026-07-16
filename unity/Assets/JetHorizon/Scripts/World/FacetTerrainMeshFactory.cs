@@ -278,19 +278,23 @@ namespace JetHorizon
             void AddEndCap(int column, bool reverse)
             {
                 FacetMassStation station = stations[column];
-                var ring = new List<Vector3>(rows + 3);
-                for (int row = 0; row <= rows; row++) ring.Add(inner[Index(row, column)]);
-                ring.Add(new Vector3(station.InnerX + station.Depth, outerCrestY[column], station.Z));
-                ring.Add(new Vector3(station.InnerX + station.Depth, 0f, station.Z));
-                Vector3 center = Vector3.zero;
-                foreach (Vector3 point in ring) center += point;
-                center /= ring.Count;
-                for (int i = 0; i < ring.Count; i++)
+                float outerX = station.InnerX + station.Depth;
+                for (int row = 0; row < rows; row++)
                 {
-                    Vector3 a = ring[i];
-                    Vector3 b = ring[(i + 1) % ring.Count];
-                    if (reverse) writer.Triangle(center, b, a, Vector2.zero, Vector2.right, Vector2.up);
-                    else writer.Triangle(center, a, b, Vector2.zero, Vector2.right, Vector2.up);
+                    float v0 = row / (float)rows;
+                    float v1 = (row + 1f) / rows;
+                    Vector3 innerA = inner[Index(row, column)];
+                    Vector3 innerB = inner[Index(row + 1, column)];
+                    float outerY0 = Mathf.Lerp(0f, outerCrestY[column], v0);
+                    float outerY1 = Mathf.Lerp(0f, outerCrestY[column], v1);
+                    Vector3 outerA = new Vector3(outerX, outerY0, station.Z);
+                    Vector3 outerB = new Vector3(outerX, outerY1, station.Z);
+                    if (reverse)
+                        writer.Quad(outerA, innerA, outerB, innerB,
+                            new Vector2(1f, v0), new Vector2(0f, v0), new Vector2(1f, v1), new Vector2(0f, v1));
+                    else
+                        writer.Quad(innerA, outerA, innerB, outerB,
+                            new Vector2(0f, v0), new Vector2(1f, v0), new Vector2(0f, v1), new Vector2(1f, v1));
                 }
             }
 
