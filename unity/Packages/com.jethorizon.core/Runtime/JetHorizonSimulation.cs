@@ -30,6 +30,9 @@ namespace JetHorizon.Simulation
             public float RotationZRadians;
             public float RingRadius;
             public float RingTubeRadius;
+            public float VelocityX;
+            public float VelocityY;
+            public float VelocityZ;
             public float AgeSeconds;
             public float CollisionDelaySeconds;
             public float LifetimeSeconds;
@@ -75,9 +78,16 @@ namespace JetHorizon.Simulation
         readonly StageDirector _stageDirector;
         readonly ShipCapabilityProfile _shipCapability;
         readonly ProofEncounterRuntime _proofEncounters;
+        readonly SectorRunRuntime _gateRun;
+        readonly RunParcelCommandBuffer _runParcelCommands;
+        readonly EnvironmentEncounterRuntime _environmentEncounter;
         readonly EncounterCommandBuffer _encounterCommands;
         readonly LightningSequenceRuntime _lightningSequences;
         readonly LightningStrikeRequestBuffer _lightningStrikeRequests;
+        readonly AsteroidSequenceRuntime _asteroidSequences;
+        readonly AsteroidImpactRequestBuffer _asteroidImpactRequests;
+        readonly HazardPatternScheduler _hazardPatternScheduler;
+        readonly ScheduledHazardPatternRequestBuffer _scheduledHazardRequests;
         readonly int[] _laneScratch;
         readonly int[] _blockedLaneScratch;
 
@@ -149,6 +159,10 @@ namespace JetHorizon.Simulation
         LeaderboardIneligibility _leaderboardIneligibility;
         bool _automaticExtractionPending;
         RunCargoManifest _automaticExtractionManifest;
+        float _patternSafeCenterX;
+        float _patternSafeHalfWidth;
+        int _heroEncountersCompleted;
+        bool _environmentCompletionScored;
 
         public CoreGamePhase Phase { get; private set; }
         public SimulationSnapshot Snapshot { get; }
@@ -169,7 +183,9 @@ namespace JetHorizon.Simulation
             _pickups = new PickupState[_config.MaxPickups];
             _cargo = new RunCargoLedger(_config.CargoCapacity);
             _corridorSlices = new CorridorSliceState[_config.MaxCorridorSlices];
-            _stageDirector = _config.ProofEncounterMode || runDefinition == null ? null : new StageDirector(runDefinition);
+            _stageDirector = _config.ProofEncounterMode || _config.GateRunMode || runDefinition == null
+                ? null
+                : new StageDirector(runDefinition);
             _shipCapability = ShipCapabilityProfile.FromConfig(_config);
             _proofEncounters = _config.ProofEncounterMode
                 ? new ProofEncounterRuntime(
@@ -178,16 +194,32 @@ namespace JetHorizon.Simulation
                         _config.CanyonPathOverride),
                     _shipCapability)
                 : null;
+            _gateRun = _config.GateRunMode
+                ? new SectorRunRuntime(_shipCapability, _random)
+                : null;
+            _runParcelCommands = new RunParcelCommandBuffer(32);
+            _environmentEncounter = new EnvironmentEncounterRuntime(
+                EncounterPlanCatalog.CreateProofSequence(
+                    _shipCapability.CruiseSpeed / 42f,
+                    _config.CanyonPathOverride));
             // A complete canyon publishes every validated route knot in one tick.
             // Keep command capacity derived from the same fixed corridor capacity,
             // with room for cargo/power-up dressing emitted alongside those knots.
             _encounterCommands = new EncounterCommandBuffer(Math.Max(64, _config.MaxCorridorSlices + 16));
             _lightningSequences = new LightningSequenceRuntime();
             _lightningStrikeRequests = new LightningStrikeRequestBuffer(16);
+            _asteroidSequences = new AsteroidSequenceRuntime();
+            _asteroidImpactRequests = new AsteroidImpactRequestBuffer(16);
+            _hazardPatternScheduler = new HazardPatternScheduler();
+            _scheduledHazardRequests = new ScheduledHazardPatternRequestBuffer(4);
             _structuredWallField = StructuredWallFieldCatalog.Production;
             _laneScratch = new int[_config.LaneCount];
             _blockedLaneScratch = new int[_config.LaneCount];
-            Snapshot = new SimulationSnapshot(_config.MaxHazards, _config.MaxPickups, _config.MaxCorridorSlices);
+            Snapshot = new SimulationSnapshot(
+                _config.MaxHazards,
+                _config.MaxPickups,
+                _config.MaxCorridorSlices,
+                _config.MaxGates);
             Events = new SimulationEventBuffer(64);
             StageCommands = new StageCommandBuffer(16);
             ResetToTitle();
@@ -257,7 +289,7 @@ namespace JetHorizon.Simulation
             }
 
             manifest = _cargo.Snapshot(_heatLevel, HeatRewardMultiplier());
-            FinalizeRun();
+            FinalizeRun(RunCompletionReason.Extracted);
             Phase = CoreGamePhase.Extracted;
             Events.Add(new SimulationEvent(SimulationEventType.RunExtracted, 0, manifest.TotalWeight, manifest.CreditValue));
             RefreshSnapshot();
@@ -487,7 +519,19 @@ namespace JetHorizon.Simulation
             float temporaryModifier = world.OverdriveActive || OverdriveSpeedActive
                 ? OverdriveSpeedMultiplier()
                 : 1f;
-            if (_hasExternalSpeed && _stageDirector == null && _proofEncounters == null)
+            if (_gateRun != null)
+            {
+                _paceState = RunPaceModel.Resolve(new RunPaceInput(
+                    _config.BaseSpeed * _config.StartSpeedMultiplier,
+                    _config.PersistentCruiseSpeedMultiplier,
+                    1f,
+                    encounterApproachModifier,
+                    temporaryModifier,
+                    _config.MinimumOperationalSpeed,
+                    _gateRun.EarnedSpeedBonus,
+                    _gateRun.SoftSpeedCap));
+            }
+            else if (_hasExternalSpeed && _stageDirector == null && _proofEncounters == null)
             {
                 _paceState = RunPaceModel.Resolve(new RunPaceInput(
                     Math.Max(0.001f, _externalSpeed), 1f, HeatSpeedMultiplier(), 1f, temporaryModifier,
@@ -506,6 +550,7 @@ namespace JetHorizon.Simulation
             _speed = _paceState.CruiseSpeedBeforePowerup;
             _effectiveSpeed = _paceState.EffectiveSpeed;
             TickLightningSpawner(dt, world);
+            TickScheduledHazardPatterns(dt);
             TickLightningSequences(dt);
             TickZipper(dt);
             TickSlalom(dt);
@@ -553,13 +598,80 @@ namespace JetHorizon.Simulation
                         return;
                     }
                 }
+                else if (_gateRun != null)
+                {
+                    GateRunTickResult gateResult = _gateRun.Tick(
+                        _distance,
+                        _shipX,
+                        _config.ShipZ,
+                        _paceState.PersistentCruiseSpeed,
+                        _runParcelCommands,
+                        Events);
+                    _heatLevel = _gateRun.Heat;
+                    ApplyRunParcelCommands();
+                    if (gateResult.ScoreAward > 0f)
+                    {
+                        _score += gateResult.ScoreAward;
+                        Events.Add(new SimulationEvent(
+                            SimulationEventType.ScoreChanged,
+                            0,
+                            (float)_score,
+                            (float)ScoreSource.Bonus));
+                    }
+                    if (gateResult.EnvironmentActivated)
+                    {
+                        _environmentEncounter.Activate(
+                            gateResult.ActivatedEnvironment,
+                            _distance + Math.Max(24f, _effectiveSpeed * .45f));
+                        Array.Clear(_corridorSlices, 0, _corridorSlices.Length);
+                        _environmentCompletionScored = false;
+                    }
+                    _environmentEncounter.Tick(_distance, _config.ShipZ, _encounterCommands);
+                    ApplyProofEncounterCommands();
+                    if (_environmentEncounter.Plan != null
+                        && _environmentEncounter.Lifecycle == EnvironmentLifecycle.Retired)
+                    {
+                        if (!_environmentCompletionScored)
+                        {
+                            _environmentCompletionScored = true;
+                            _heroEncountersCompleted++;
+                            float heroScore = RunScoreModel.HeroEncounterCompletion(_environmentEncounter.Plan.Kind);
+                            _score += heroScore;
+                            Events.Add(new SimulationEvent(
+                                SimulationEventType.ScoreChanged,
+                                0,
+                                (float)_score,
+                                (float)ScoreSource.Bonus));
+                        }
+                        _gateRun.RetireEnvironment();
+                    }
+                    if (gateResult.ContinuedDeeper)
+                    {
+                        Events.Add(new SimulationEvent(
+                            SimulationEventType.ExtractionWindowPassed,
+                            _heatLevel,
+                            _gateRun.Snapshot.NextGateDistance,
+                            HeatRewardMultiplier()));
+                        Events.Add(new SimulationEvent(
+                            SimulationEventType.HeatChanged,
+                            _heatLevel,
+                            1f,
+                            HeatRewardMultiplier()));
+                    }
+                    if (gateResult.Extracted)
+                    {
+                        CompleteAutomaticExtraction();
+                        RefreshSnapshot();
+                        return;
+                    }
+                }
                 else
                 {
                     TickExtractionWindows();
                 }
             }
 
-            if (_config.HazardSpawningEnabled && _proofEncounters == null)
+            if (_config.HazardSpawningEnabled && _proofEncounters == null && _gateRun == null)
                 TickWorldSpawner(step, world);
 
             if (_laserSeconds > 0f)
@@ -606,6 +718,147 @@ namespace JetHorizon.Simulation
             }
         }
 
+        void ApplyRunParcelCommands()
+        {
+            for (int i = 0; i < _runParcelCommands.Count; i++)
+            {
+                RunParcelCommand command = _runParcelCommands[i];
+                switch (command.Type)
+                {
+                    case RunParcelCommandType.CargoTrail:
+                        SpawnCargoTrail(command);
+                        break;
+                    case RunParcelCommandType.Powerup:
+                        SpawnPickup(PickupSpawn.PowerupPickup(command.Powerup, command.X, 1.4f, command.Z));
+                        break;
+                    case RunParcelCommandType.LightningPattern:
+                        _hazardPatternScheduler.BeginLightning(
+                            command.LightningSequence,
+                            _heatLevel,
+                            command.SafeCenterX,
+                            command.SafeHalfWidth);
+                        break;
+                    case RunParcelCommandType.AsteroidPattern:
+                        _hazardPatternScheduler.BeginAsteroid(
+                            command.AsteroidSequence,
+                            _heatLevel,
+                            command.SafeCenterX,
+                            command.SafeHalfWidth);
+                        break;
+                    case RunParcelCommandType.FatCone:
+                        SpawnValidatedFatCone(command);
+                        break;
+                    case RunParcelCommandType.LaserFormation:
+                        SpawnLaserFormation(new EncounterCommand(
+                            EncounterCommandType.LaserFormation,
+                            EncounterKind.MonumentalBroadWeave,
+                            i,
+                            command.SafeCenterX,
+                            command.SafeHalfWidth,
+                            command.Z));
+                        break;
+                }
+            }
+        }
+
+        void TickScheduledHazardPatterns(float dt)
+        {
+            _hazardPatternScheduler.Tick(dt, _scheduledHazardRequests);
+            for (int i = 0; i < _scheduledHazardRequests.Count; i++)
+            {
+                ScheduledHazardPatternRequest request = _scheduledHazardRequests[i];
+                _patternSafeCenterX = request.SafeCenterX;
+                _patternSafeHalfWidth = request.SafeHalfWidth;
+                if (request.Family == ScheduledHazardFamily.Lightning)
+                {
+                    _lightningSequences.Begin(request.Lightning, _shipX, _random);
+                    Events.Add(new SimulationEvent(
+                        SimulationEventType.LightningStrikeTelegraphed,
+                        (int)request.Lightning,
+                        request.SafeCenterX,
+                        request.SafeHalfWidth));
+                }
+                else if (request.Family == ScheduledHazardFamily.Asteroid)
+                {
+                    SpawnAsteroidPattern(new RunParcelCommand(
+                        RunParcelCommandType.AsteroidPattern,
+                        request.SafeCenterX,
+                        _config.ShipZ,
+                        asteroidSequence: request.Asteroid,
+                        safeCenterX: request.SafeCenterX,
+                        safeHalfWidth: request.SafeHalfWidth));
+                }
+            }
+        }
+
+        void SpawnCargoTrail(RunParcelCommand command)
+        {
+            int count = Math.Max(1, command.Count);
+            for (int i = 0; i < count; i++)
+            {
+                float t = count <= 1 ? 1f : i / (float)(count - 1);
+                float smooth = t * t * (3f - 2f * t);
+                float x = command.X + (command.ReturnX - command.X) * smooth;
+                SpawnPickup(PickupSpawn.Cargo(
+                    command.CargoKind,
+                    1,
+                    x,
+                    1.35f,
+                    command.Z - i * 7f));
+            }
+        }
+
+        void SpawnValidatedFatCone(RunParcelCommand command)
+        {
+            HazardSpawn cone = HazardSpawn.Cone(
+                command.X,
+                command.Z,
+                4f,
+                2.7f,
+                HazardStyle.FatCone,
+                Math.Abs((int)command.Z) % 3);
+            cone.Y = -2f;
+            cone.CollisionHalfDepth = _config.CollisionHalfDepth + 1.2f;
+            if (EncounterGeometryValidator.PreservesOpening(
+                cone,
+                command.SafeCenterX,
+                command.SafeHalfWidth,
+                _config.CorridorShipHalfWidth,
+                .65f))
+                SpawnHazard(cone);
+        }
+
+        void SpawnAsteroidPattern(RunParcelCommand command)
+        {
+            _asteroidSequences.Build(
+                command.AsteroidSequence,
+                _shipX,
+                _shipVelocityX,
+                _random,
+                _asteroidImpactRequests);
+            for (int i = 0; i < _asteroidImpactRequests.Count; i++)
+            {
+                AsteroidImpactRequest request = _asteroidImpactRequests[i];
+                float target = ReservePatternOpening(
+                    request.TargetX,
+                    command.SafeCenterX,
+                    command.SafeHalfWidth,
+                    2.8f);
+                float radius = .8f + _random.NextFloat() * .8f;
+                int id = SpawnHazard(HazardSpawn.Asteroid(
+                    target,
+                    _config.ShipZ,
+                    radius,
+                    1.8f,
+                    request.DelaySeconds));
+                Events.Add(new SimulationEvent(
+                    SimulationEventType.AsteroidImpactTelegraphed,
+                    id,
+                    target,
+                    (float)request.Sequence));
+            }
+        }
+
         void SpawnMonumentBarrier(EncounterCommand command)
         {
             const float wallWidth = 44f;
@@ -648,6 +901,11 @@ namespace JetHorizon.Simulation
             {
                 LightningStrikeRequest request = _lightningStrikeRequests[i];
                 float targetX = request.TargetX + _shipVelocityX * travelTime * .6f;
+                targetX = ReservePatternOpening(
+                    targetX,
+                    _patternSafeCenterX,
+                    _patternSafeHalfWidth,
+                    _config.LightningCollisionHalfWidth + _config.CorridorShipHalfWidth);
                 SpawnHazard(HazardSpawn.Lightning(
                     Clamp(targetX, -40f, 40f),
                     spawnZ,
@@ -661,6 +919,14 @@ namespace JetHorizon.Simulation
                     targetX,
                     spawnZ));
             }
+        }
+
+        static float ReservePatternOpening(float targetX, float safeCenter, float safeHalfWidth, float hazardHalfWidth)
+        {
+            float protectedHalf = Math.Max(0f, safeHalfWidth - hazardHalfWidth);
+            if (Math.Abs(targetX - safeCenter) >= protectedHalf) return targetX;
+            float sign = targetX >= safeCenter ? 1f : -1f;
+            return safeCenter + sign * (safeHalfWidth + hazardHalfWidth + .5f);
         }
 
         void SpawnProofCorridorSlice(EncounterCommand command, CorridorFamily family)
@@ -729,7 +995,7 @@ namespace JetHorizon.Simulation
         {
             _automaticExtractionManifest = _cargo.Snapshot(_heatLevel, HeatRewardMultiplier());
             _automaticExtractionPending = true;
-            FinalizeRun();
+            FinalizeRun(RunCompletionReason.Extracted);
             Phase = CoreGamePhase.Extracted;
             Events.Add(new SimulationEvent(
                 SimulationEventType.RunExtracted,
@@ -909,6 +1175,13 @@ namespace JetHorizon.Simulation
             _lightningTimer = 0f;
             _lightningSequences.Reset();
             _lightningStrikeRequests.Clear();
+            _asteroidImpactRequests.Clear();
+            _hazardPatternScheduler.Reset();
+            _scheduledHazardRequests.Clear();
+            _patternSafeCenterX = 0f;
+            _patternSafeHalfWidth = 0f;
+            _heroEncountersCompleted = 0;
+            _environmentCompletionScored = false;
             _zipperActive = false;
             _zipperRowsLeft = 0;
             _zipperRowsTotal = 0;
@@ -934,6 +1207,9 @@ namespace JetHorizon.Simulation
             _structuredWallRowsDone = 0;
             _structuredWallSpawnZ = 0f;
             _proofEncounters?.Reset();
+            _gateRun?.Reset(_config.BaseSpeed * _config.StartSpeedMultiplier * _config.PersistentCruiseSpeedMultiplier);
+            _environmentEncounter.Reset();
+            _runParcelCommands.Clear();
             _encounterCommands.Clear();
             if (_stageDirector != null)
             {
@@ -1833,6 +2109,9 @@ namespace JetHorizon.Simulation
                 RotationZRadians = spawn.RotationZRadians,
                 RingRadius = spawn.RingRadius,
                 RingTubeRadius = spawn.RingTubeRadius,
+                VelocityX = spawn.VelocityX,
+                VelocityY = spawn.VelocityY,
+                VelocityZ = spawn.VelocityZ,
                 AgeSeconds = 0f,
                 CollisionDelaySeconds = spawn.CollisionDelaySeconds,
                 LifetimeSeconds = spawn.LifetimeSeconds
@@ -1855,7 +2134,16 @@ namespace JetHorizon.Simulation
                 if (!hazard.Active) continue;
 
                 hazard.AgeSeconds += _config.FixedDeltaSeconds;
-                hazard.Z += step;
+                if (hazard.Kind == HazardKind.Asteroid)
+                {
+                    hazard.X += hazard.VelocityX * _config.FixedDeltaSeconds;
+                    hazard.Y += hazard.VelocityY * _config.FixedDeltaSeconds;
+                    hazard.Z += hazard.VelocityZ * _config.FixedDeltaSeconds;
+                }
+                else
+                {
+                    hazard.Z += step;
+                }
                 if (hazard.Z > _config.DespawnZ
                     || (hazard.LifetimeSeconds > 0f && hazard.AgeSeconds >= hazard.LifetimeSeconds))
                 {
@@ -1876,6 +2164,10 @@ namespace JetHorizon.Simulation
                 else if (hazard.Kind == HazardKind.Lightning)
                     hit = hazard.AgeSeconds >= hazard.CollisionDelaySeconds
                         && dx < hazard.HalfWidth
+                        && dz < hazard.HalfDepth;
+                else if (hazard.Kind == HazardKind.Asteroid)
+                    hit = hazard.AgeSeconds >= hazard.CollisionDelaySeconds
+                        && dx < collisionX
                         && dz < hazard.HalfDepth;
                 else
                     hit = dx < collisionX && dz < hazard.HalfDepth;
@@ -1945,45 +2237,122 @@ namespace JetHorizon.Simulation
             Snapshot.CargoProjectedCreditValue = (int)Math.Round(_cargo.BaseCreditValue * HeatRewardMultiplier(), MidpointRounding.AwayFromZero);
             Snapshot.HeatLevel = _heatLevel;
             Snapshot.HeatRewardMultiplier = HeatRewardMultiplier();
-            Snapshot.HeatSpeedMultiplier = HeatSpeedMultiplier();
+            Snapshot.HeatSpeedMultiplier = _gateRun != null ? 1f : HeatSpeedMultiplier();
             Snapshot.EncounterIntensity = EncounterIntensity();
             EncounterRuntimeSnapshot encounter = _proofEncounters != null
                 ? _proofEncounters.Snapshot
                 : default;
-            Snapshot.ExtractionAvailable = _proofEncounters == null
-                && Phase == CoreGamePhase.Playing
-                && _extractionWindowOpen;
-            Snapshot.ExtractionWindowOpen = _proofEncounters == null && _extractionWindowOpen;
-            Snapshot.ExtractionWindowDistanceRemaining = _proofEncounters == null && _extractionWindowOpen
-                ? Math.Max(0f, _extractionWindowEndDistance - _distance)
-                : 0f;
-            Snapshot.NextExtractionDistance = _proofEncounters != null
-                ? encounter.ExtractionGateDistance
-                : _extractionWindowOpen
-                    ? _extractionWindowEndDistance
-                    : _nextExtractionDistance;
+            GateRunSnapshot gateRun = _gateRun != null ? _gateRun.Snapshot : default;
+            Snapshot.GateCount = _gateRun != null
+                ? _gateRun.WriteVisibleGates(
+                    _distance,
+                    _config.ShipZ,
+                    Snapshot.GateBuffer,
+                    _config.MaxGates)
+                : 0;
+            bool gateExtractionVisible = false;
+            float gateExtractionX = 0f;
+            float gateExtractionZ = 0f;
+            float gateExtractionHalfWidth = 0f;
+            for (int i = 0; i < Snapshot.GateCount; i++)
+            {
+                GateSnapshot gate = Snapshot.GetGate(i);
+                if (!gate.Active || gate.Kind != SpeedGateKind.Extraction) continue;
+                gateExtractionVisible = gate.Z >= -300f && gate.Z <= 40f;
+                gateExtractionX = gate.X;
+                gateExtractionZ = gate.Z;
+                gateExtractionHalfWidth = gate.HalfWidth;
+                break;
+            }
+            Snapshot.ExtractionAvailable = _gateRun != null
+                ? gateExtractionVisible
+                : _proofEncounters == null
+                    && Phase == CoreGamePhase.Playing
+                    && _extractionWindowOpen;
+            Snapshot.ExtractionWindowOpen = _gateRun != null
+                ? gateExtractionVisible
+                : _proofEncounters == null && _extractionWindowOpen;
+            Snapshot.ExtractionWindowDistanceRemaining = _gateRun != null
+                ? Math.Max(0f, gateRun.NextGateDistance - _distance)
+                : _proofEncounters == null && _extractionWindowOpen
+                    ? Math.Max(0f, _extractionWindowEndDistance - _distance)
+                    : 0f;
+            Snapshot.NextExtractionDistance = _gateRun != null
+                ? gateRun.NextGateDistance
+                : _proofEncounters != null
+                    ? encounter.ExtractionGateDistance
+                    : _extractionWindowOpen
+                        ? _extractionWindowEndDistance
+                        : _nextExtractionDistance;
             Snapshot.HullHitsRemaining = _hullHitsRemaining;
             Snapshot.HullHitCapacity = _config.HullHitCapacity;
             Snapshot.StageDirectorEnabled = _stageDirector != null;
-            Snapshot.CoreWorldDirectorEnabled = _stageDirector != null || _proofEncounters != null;
+            Snapshot.CoreWorldDirectorEnabled = _stageDirector != null || _proofEncounters != null || _gateRun != null;
             Snapshot.ProofEncounterMode = _proofEncounters != null;
-            Snapshot.EncounterPlanId = encounter.PlanId ?? string.Empty;
-            Snapshot.EncounterKind = encounter.Kind;
-            Snapshot.EncounterPlanIndex = encounter.PlanIndex;
-            Snapshot.EncounterCycle = encounter.Cycle;
-            Snapshot.EncounterProgress01 = encounter.Progress01;
-            Snapshot.EncounterValidationMargin = encounter.ValidationMargin;
-            Snapshot.EncounterStartZ = encounter.StartZ;
-            Snapshot.UpcomingEncounterKind = encounter.UpcomingKind;
-            Snapshot.UpcomingEncounterStartZ = encounter.UpcomingStartZ;
-            Snapshot.ExtractionGateVisible = encounter.ExtractionGateVisible;
-            Snapshot.ExtractionGateX = encounter.ExtractionGateX;
-            Snapshot.ExtractionGateHalfWidth = encounter.ExtractionGateHalfWidth;
-            Snapshot.ExtractionGateZ = encounter.ExtractionGateZ;
+            Snapshot.GateRunMode = _gateRun != null;
+            Snapshot.SectorIndex = gateRun.Sector;
+            Snapshot.GateStreak = gateRun.GateStreak;
+            Snapshot.HighestGateStreak = gateRun.HighestGateStreak;
+            Snapshot.GatesCrossed = gateRun.GatesCrossed;
+            Snapshot.GatesMissed = gateRun.GatesMissed;
+            Snapshot.GateEarnedSpeed = gateRun.EarnedSpeedBonus;
+            Snapshot.SpeedSoftCap = gateRun.SoftSpeedCap;
+            Snapshot.RunEnvironment = gateRun.Environment;
+            Snapshot.EnvironmentLifecycle = _environmentEncounter.Active
+                ? _environmentEncounter.Lifecycle
+                : gateRun.EnvironmentLifecycle;
+            if (_environmentEncounter.Active)
+            {
+                EncounterPlan activeEnvironment = _environmentEncounter.Plan;
+                Snapshot.EncounterPlanId = activeEnvironment.Id;
+                Snapshot.EncounterKind = activeEnvironment.Kind;
+                Snapshot.EncounterPlanIndex = gateRun.Sector;
+                Snapshot.EncounterCycle = gateRun.Sector;
+                Snapshot.EncounterProgress01 = Clamp01(
+                    (_distance - _environmentEncounter.StartDistance) / activeEnvironment.Length);
+                Snapshot.EncounterValidationMargin = 1f;
+                Snapshot.EncounterStartZ = _config.ShipZ - (_environmentEncounter.StartDistance - _distance);
+                Snapshot.UpcomingEncounterKind = default;
+                Snapshot.UpcomingEncounterStartZ = 0f;
+            }
+            else if (_gateRun != null
+                && _gateRun.TryGetUpcomingEnvironment(out RunEnvironmentKind upcomingEnvironment, out float upcomingStart))
+            {
+                Snapshot.EncounterPlanId = string.Empty;
+                Snapshot.EncounterKind = default;
+                Snapshot.EncounterPlanIndex = gateRun.Sector;
+                Snapshot.EncounterCycle = gateRun.Sector;
+                Snapshot.EncounterProgress01 = 0f;
+                Snapshot.EncounterValidationMargin = 1f;
+                Snapshot.EncounterStartZ = 0f;
+                Snapshot.UpcomingEncounterKind = upcomingEnvironment == RunEnvironmentKind.CrystallineCanyon
+                    ? EncounterKind.CrystallineCanyon
+                    : EncounterKind.PrismaticSineCorridor;
+                Snapshot.UpcomingEncounterStartZ = _config.ShipZ - (upcomingStart - _distance);
+            }
+            else
+            {
+                Snapshot.EncounterPlanId = encounter.PlanId ?? string.Empty;
+                Snapshot.EncounterKind = encounter.Kind;
+                Snapshot.EncounterPlanIndex = encounter.PlanIndex;
+                Snapshot.EncounterCycle = encounter.Cycle;
+                Snapshot.EncounterProgress01 = encounter.Progress01;
+                Snapshot.EncounterValidationMargin = encounter.ValidationMargin;
+                Snapshot.EncounterStartZ = encounter.StartZ;
+                Snapshot.UpcomingEncounterKind = encounter.UpcomingKind;
+                Snapshot.UpcomingEncounterStartZ = encounter.UpcomingStartZ;
+            }
+            Snapshot.ExtractionGateVisible = _gateRun != null ? gateExtractionVisible : encounter.ExtractionGateVisible;
+            Snapshot.ExtractionGateX = _gateRun != null ? gateExtractionX : encounter.ExtractionGateX;
+            Snapshot.ExtractionGateHalfWidth = _gateRun != null ? gateExtractionHalfWidth : encounter.ExtractionGateHalfWidth;
+            Snapshot.ExtractionGateZ = _gateRun != null ? gateExtractionZ : encounter.ExtractionGateZ;
             bool proofPrismatic = _proofEncounters != null
                 && encounter.Kind == EncounterKind.PrismaticSineCorridor
                 && CountCorridorSlices() > 0;
-            Snapshot.SineCorridorActive = _sineCorridorActive || proofPrismatic;
+            bool gatePrismatic = _environmentEncounter.Active
+                && _environmentEncounter.Plan.Kind == EncounterKind.PrismaticSineCorridor
+                && CountCorridorSlices() > 0;
+            Snapshot.SineCorridorActive = _sineCorridorActive || proofPrismatic || gatePrismatic;
             Snapshot.ZipperActive = _zipperActive;
             Snapshot.SlalomActive = _slalomActive;
             Snapshot.AngledWallsActive = _structuredWallsActive;
@@ -2041,6 +2410,7 @@ namespace JetHorizon.Simulation
                     hazard.RotationXRadians,
                     hazard.RotationYRadians,
                     hazard.RotationZRadians,
+                    hazard.CollisionDelaySeconds,
                     hazard.AgeSeconds,
                     hazard.AgeSeconds >= hazard.CollisionDelaySeconds));
             }
@@ -2241,6 +2611,13 @@ namespace JetHorizon.Simulation
                         if (_cargo.TryCollect(pickup.CargoKind, pickup.CargoUnits))
                         {
                             CargoDefinition definition = CargoCatalog.Get(pickup.CargoKind);
+                            float cargoScore = RunScoreModel.CargoPickupScore(pickup.CargoKind, pickup.CargoUnits);
+                            _score += cargoScore;
+                            Events.Add(new SimulationEvent(
+                                SimulationEventType.ScoreChanged,
+                                pickup.Id,
+                                (float)_score,
+                                (float)ScoreSource.Pickup));
                             Events.Add(new SimulationEvent(
                                 SimulationEventType.CargoCollected,
                                 pickup.Id,
@@ -2284,7 +2661,7 @@ namespace JetHorizon.Simulation
                 throw new ArgumentOutOfRangeException(nameof(spawn.CargoUnits));
         }
 
-        RunResult FinalizeRun()
+        RunResult FinalizeRun(RunCompletionReason completionReason = RunCompletionReason.Destroyed)
         {
             if (LatestRunResult != null) return LatestRunResult;
             if (_runId <= 0L) _runId = ++_fallbackRunId;
@@ -2293,6 +2670,8 @@ namespace JetHorizon.Simulation
             float steps = (float)Math.Floor(_distance / _config.DistanceBonusStep);
             float multiplier = Math.Max(1f, 1f + steps * _config.DistanceBonusPerStep);
             long finalScore = Math.Max(0L, (long)Math.Floor(rawScore * (double)multiplier));
+            RunCargoManifest cargo = _cargo.Snapshot(_heatLevel, HeatRewardMultiplier());
+            bool extracted = completionReason == RunCompletionReason.Extracted;
             _score = finalScore;
             LatestRunResult = new RunResult(
                 _runId,
@@ -2304,7 +2683,19 @@ namespace JetHorizon.Simulation
                 _eligibleRunTick,
                 _config.FixedDeltaSeconds,
                 _repairCount,
-                _leaderboardIneligibility);
+                _leaderboardIneligibility,
+                _gateRun?.Snapshot.GatesCrossed ?? 0,
+                _gateRun?.Snapshot.GatesMissed ?? 0,
+                _gateRun?.Snapshot.HighestGateStreak ?? 0,
+                _gateRun?.Snapshot.Sector ?? 0,
+                _gateRun?.Snapshot.Heat ?? _heatLevel,
+                _seed,
+                _gateRun != null ? "gate-run" : _proofEncounters != null ? "proof" : "legacy",
+                cargo.TotalUnits,
+                extracted ? cargo.TotalUnits : 0,
+                extracted ? 0 : cargo.TotalUnits,
+                _heroEncountersCompleted,
+                completionReason);
             Events.Add(new SimulationEvent(
                 SimulationEventType.ScoreChanged,
                 0,

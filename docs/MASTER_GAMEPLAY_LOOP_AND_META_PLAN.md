@@ -1,6 +1,6 @@
 # Jet Horizon — Master Gameplay Loop, Encounter, Clock, Score, and Meta Plan
 
-**Status:** Implementation-preparation design
+**Status:** Production-loop architecture implemented; live visual/tuning validation required
 **Primary objective:** Turn the existing ship/water/sun presentation into a simple, repeatable mobile loop built around speed gates, cargo, lightning, asteroids, canyon traversal, and occasional spectacular corridor transitions.
 
 ---
@@ -1098,6 +1098,29 @@ Unity presenters never choose the route, award speed, change cargo, or decide co
 - forwards fixed-step input/world facts;
 - dispatches snapshots/events;
 - coordinates lifecycle calls.
+
+---
+
+## 18. Implemented Production Checkpoint — July 16, 2026
+
+The first production architecture is now live in the Unity project:
+
+- `GateProgressionModel` owns additive common/surge/transition speed gains and Heat caps.
+- `GateRoutePlanner` preplans 42-gate sectors and validates them against the equipped ship capability.
+- `SectorDirector` owns only sector/Heat advancement.
+- `SectorRunRuntime` coordinates the focused route, progression, cargo, hazard, extraction, and transition collaborators.
+- `RunScoreModel` owns gate, cargo, and hero-environment skill-score values.
+- `AsteroidSequenceRuntime` ports Random, Sweep, Stagger, Salvo, Pinch, and Chase intentions.
+- Source-parity lightning sequence scheduling remains in `LightningSequenceRuntime`.
+- Cargo trails, laser pickup/formation beats, isolated fat cones, lightning windows, and asteroid windows are emitted as coordinated parcel commands.
+- Extraction is a core-owned spatial crossing. Missing it starts the next Heat sector without resetting earned run speed.
+- Canyon and prismatic routes activate only after their transition gate is crossed.
+- Their complete Unity environments are prebuilt and moved as single world constructs; collision comes from the same core-authored route samples.
+- `RunResult` now records seed/mode, gate hit/miss totals, longest streak, sector/Heat, cargo banked/lost, hero completions, clocks, and completion reason.
+- Unity now has pooled snapshot-only speed-gate and asteroid presenters.
+- The Control Room includes a Gameplay page showing live core facts and safe playtest controls.
+
+Legacy `StageDirector`, proof encounters, and legacy spawners remain available for regression/reference, but the normal Unity run now starts in `GateRunMode`; they do not choose production gates, pace, hazards, or extraction.
 
 It must not absorb gate progression, encounter generation, score rules, or garage settlement.
 

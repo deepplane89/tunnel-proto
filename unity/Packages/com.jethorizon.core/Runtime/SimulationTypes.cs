@@ -107,6 +107,12 @@ namespace JetHorizon.Simulation
         PrismaticBoundaryHit,
         TraversalGateHit,
         LightningStrikeTelegraphed,
+        AsteroidImpactTelegraphed,
+        SpeedGateCrossed,
+        SpeedGateMissed,
+        GateStreakChanged,
+        SectorChanged,
+        EnvironmentTransitionTriggered,
         PlayerDied
     }
 
@@ -157,6 +163,7 @@ namespace JetHorizon.Simulation
         Ring,
         Wall,
         Lightning,
+        Asteroid,
         Corridor
     }
 
@@ -169,6 +176,7 @@ namespace JetHorizon.Simulation
         StructuredWall,
         MonumentWall,
         Lightning,
+        Asteroid,
         CorridorCone,
         L4CorridorCone,
         L5CorridorCone
@@ -194,6 +202,10 @@ namespace JetHorizon.Simulation
         public float RotationZRadians;
         public float RingRadius;
         public float RingTubeRadius;
+        public float VelocityX;
+        public float VelocityY;
+        public float VelocityZ;
+        public bool ScrollsWithWorld;
         public bool NearMissEnabled;
         public float CollisionDelaySeconds;
         public float LifetimeSeconds;
@@ -299,7 +311,37 @@ namespace JetHorizon.Simulation
                 VisualScaleZ = 1f,
                 NearMissEnabled = false,
                 CollisionDelaySeconds = warningSeconds,
-                LifetimeSeconds = lifetimeSeconds
+                LifetimeSeconds = lifetimeSeconds,
+                ScrollsWithWorld = true
+            };
+        }
+
+        public static HazardSpawn Asteroid(
+            float targetX,
+            float targetZ,
+            float radius = 1.2f,
+            float warningSeconds = 1.8f,
+            float delaySeconds = 0f)
+        {
+            float fallSeconds = Math.Max(.2f, warningSeconds);
+            return new HazardSpawn
+            {
+                Kind = HazardKind.Asteroid,
+                Style = HazardStyle.Asteroid,
+                X = targetX,
+                Y = 42f + (42f / fallSeconds) * Math.Max(0f, delaySeconds),
+                Z = targetZ,
+                CollisionHalfWidth = radius * 2.2f,
+                CollisionHalfHeight = radius * 2.2f,
+                CollisionHalfDepth = radius * 2.2f,
+                VisualScale = radius,
+                VisualScaleY = radius,
+                VisualScaleZ = radius,
+                VelocityY = -42f / fallSeconds,
+                NearMissEnabled = false,
+                CollisionDelaySeconds = warningSeconds + Math.Max(0f, delaySeconds),
+                LifetimeSeconds = warningSeconds + Math.Max(0f, delaySeconds) + .8f,
+                ScrollsWithWorld = false
             };
         }
     }
@@ -320,6 +362,7 @@ namespace JetHorizon.Simulation
         public float RotationXRadians { get; }
         public float RotationYRadians { get; }
         public float RotationZRadians { get; }
+        public float CollisionDelaySeconds { get; }
         public float AgeSeconds { get; }
         public bool CollisionActive { get; }
 
@@ -338,6 +381,7 @@ namespace JetHorizon.Simulation
             float rotationXRadians,
             float rotationYRadians,
             float rotationZRadians,
+            float collisionDelaySeconds,
             float ageSeconds,
             bool collisionActive)
         {
@@ -355,8 +399,29 @@ namespace JetHorizon.Simulation
             RotationXRadians = rotationXRadians;
             RotationYRadians = rotationYRadians;
             RotationZRadians = rotationZRadians;
+            CollisionDelaySeconds = collisionDelaySeconds;
             AgeSeconds = ageSeconds;
             CollisionActive = collisionActive;
+        }
+    }
+
+    public readonly struct GateSnapshot
+    {
+        public int Id { get; }
+        public SpeedGateKind Kind { get; }
+        public float X { get; }
+        public float Z { get; }
+        public float HalfWidth { get; }
+        public bool Active { get; }
+
+        internal GateSnapshot(int id, SpeedGateKind kind, float x, float z, float halfWidth, bool active)
+        {
+            Id = id;
+            Kind = kind;
+            X = x;
+            Z = z;
+            HalfWidth = halfWidth;
+            Active = active;
         }
     }
 
@@ -511,6 +576,7 @@ namespace JetHorizon.Simulation
         readonly HazardSnapshot[] _hazards;
         readonly PickupSnapshot[] _pickups;
         readonly CorridorSliceSnapshot[] _corridorSlices;
+        readonly GateSnapshot[] _gates;
 
         public CoreGamePhase Phase { get; internal set; }
         public long Tick { get; internal set; }
@@ -535,6 +601,16 @@ namespace JetHorizon.Simulation
         public bool StageDirectorEnabled { get; internal set; }
         public bool CoreWorldDirectorEnabled { get; internal set; }
         public bool ProofEncounterMode { get; internal set; }
+        public bool GateRunMode { get; internal set; }
+        public int SectorIndex { get; internal set; }
+        public int GateStreak { get; internal set; }
+        public int HighestGateStreak { get; internal set; }
+        public int GatesCrossed { get; internal set; }
+        public int GatesMissed { get; internal set; }
+        public float GateEarnedSpeed { get; internal set; }
+        public float SpeedSoftCap { get; internal set; }
+        public RunEnvironmentKind RunEnvironment { get; internal set; }
+        public EnvironmentLifecycle EnvironmentLifecycle { get; internal set; }
         public string EncounterPlanId { get; internal set; }
         public EncounterKind EncounterKind { get; internal set; }
         public int EncounterPlanIndex { get; internal set; }
@@ -567,6 +643,7 @@ namespace JetHorizon.Simulation
         public float StageRamp01 { get; internal set; }
         public int HazardCount { get; internal set; }
         public int PickupCount { get; internal set; }
+        public int GateCount { get; internal set; }
         public float ShieldSeconds { get; internal set; }
         public int ShieldHits { get; internal set; }
         public float LaserSeconds { get; internal set; }
@@ -593,11 +670,12 @@ namespace JetHorizon.Simulation
         public int HullHitsRemaining { get; internal set; }
         public int HullHitCapacity { get; internal set; }
 
-        internal SimulationSnapshot(int maxHazards, int maxPickups, int maxCorridorSlices)
+        internal SimulationSnapshot(int maxHazards, int maxPickups, int maxCorridorSlices, int maxGates = 16)
         {
             _hazards = new HazardSnapshot[maxHazards];
             _pickups = new PickupSnapshot[maxPickups];
             _corridorSlices = new CorridorSliceSnapshot[maxCorridorSlices];
+            _gates = new GateSnapshot[maxGates];
         }
 
         public HazardSnapshot GetHazard(int index)
@@ -615,6 +693,14 @@ namespace JetHorizon.Simulation
         }
 
         internal void SetPickup(int index, PickupSnapshot pickup) => _pickups[index] = pickup;
+
+        public GateSnapshot GetGate(int index)
+        {
+            if (index < 0 || index >= GateCount) throw new ArgumentOutOfRangeException(nameof(index));
+            return _gates[index];
+        }
+
+        internal GateSnapshot[] GateBuffer => _gates;
 
         public CorridorSliceSnapshot GetCorridorSlice(int index)
         {

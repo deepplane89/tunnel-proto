@@ -72,6 +72,8 @@ namespace JetHorizon.Simulation
         public float EncounterApproachModifier { get; }
         public float TemporaryPowerupModifier { get; }
         public float MinimumOperationalSpeed { get; }
+        public float EarnedGateSpeed { get; }
+        public float SoftSpeedCap { get; }
 
         public RunPaceInput(
             float baseCruiseSpeed,
@@ -79,7 +81,9 @@ namespace JetHorizon.Simulation
             float depthHeatModifier,
             float encounterApproachModifier,
             float temporaryPowerupModifier,
-            float minimumOperationalSpeed = 0f)
+            float minimumOperationalSpeed = 0f,
+            float earnedGateSpeed = 0f,
+            float softSpeedCap = float.MaxValue)
         {
             BaseCruiseSpeed = Positive(baseCruiseSpeed, nameof(baseCruiseSpeed));
             PersistentCapabilityModifier = Positive(persistentCapabilityModifier, nameof(persistentCapabilityModifier));
@@ -89,6 +93,12 @@ namespace JetHorizon.Simulation
             if (float.IsNaN(minimumOperationalSpeed) || float.IsInfinity(minimumOperationalSpeed) || minimumOperationalSpeed < 0f)
                 throw new ArgumentOutOfRangeException(nameof(minimumOperationalSpeed));
             MinimumOperationalSpeed = minimumOperationalSpeed;
+            if (float.IsNaN(earnedGateSpeed) || float.IsInfinity(earnedGateSpeed) || earnedGateSpeed < 0f)
+                throw new ArgumentOutOfRangeException(nameof(earnedGateSpeed));
+            if (float.IsNaN(softSpeedCap) || softSpeedCap <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(softSpeedCap));
+            EarnedGateSpeed = earnedGateSpeed;
+            SoftSpeedCap = softSpeedCap;
         }
 
         static float Positive(float value, string name)
@@ -102,6 +112,8 @@ namespace JetHorizon.Simulation
     public readonly struct RunPaceState
     {
         public float PersistentCruiseSpeed { get; }
+        public float GateEarnedCruiseSpeed { get; }
+        public float SoftSpeedCap { get; }
         public float DepthHeatModifier { get; }
         public float EncounterApproachModifier { get; }
         public float TemporaryPowerupModifier { get; }
@@ -111,12 +123,14 @@ namespace JetHorizon.Simulation
         internal RunPaceState(RunPaceInput input)
         {
             PersistentCruiseSpeed = input.BaseCruiseSpeed * input.PersistentCapabilityModifier;
+            GateEarnedCruiseSpeed = PersistentCruiseSpeed + input.EarnedGateSpeed;
+            SoftSpeedCap = input.SoftSpeedCap;
             DepthHeatModifier = input.DepthHeatModifier;
             EncounterApproachModifier = input.EncounterApproachModifier;
             TemporaryPowerupModifier = input.TemporaryPowerupModifier;
             CruiseSpeedBeforePowerup = Math.Max(
                 input.MinimumOperationalSpeed,
-                PersistentCruiseSpeed
+                Math.Min(SoftSpeedCap, GateEarnedCruiseSpeed)
                 * DepthHeatModifier
                 * EncounterApproachModifier);
             EffectiveSpeed = CruiseSpeedBeforePowerup * TemporaryPowerupModifier;

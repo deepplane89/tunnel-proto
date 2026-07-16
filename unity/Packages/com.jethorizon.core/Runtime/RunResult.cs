@@ -11,6 +11,12 @@ namespace JetHorizon.Simulation
         DebugStart = 1 << 2
     }
 
+    public enum RunCompletionReason
+    {
+        Destroyed,
+        Extracted
+    }
+
     /// <summary>
     /// Immutable terminal result produced exactly once by a run. Platform code may
     /// persist or publish it, but cannot recalculate gameplay score.
@@ -27,6 +33,18 @@ namespace JetHorizon.Simulation
         public float FixedDeltaSeconds { get; }
         public int RepairCount { get; }
         public LeaderboardIneligibility Ineligibility { get; }
+        public int GatesCrossed { get; }
+        public int GatesMissed { get; }
+        public int HighestGateStreak { get; }
+        public int SectorReached { get; }
+        public int HeatReached { get; }
+        public uint Seed { get; }
+        public string Mode { get; }
+        public int CargoCollected { get; }
+        public int CargoBanked { get; }
+        public int CargoLost { get; }
+        public int HeroEncountersCompleted { get; }
+        public RunCompletionReason CompletionReason { get; }
 
         public double SimulationSeconds => SimulationTicks * (double)FixedDeltaSeconds;
         public double EligibleRunSeconds => EligibleRunTicks * (double)FixedDeltaSeconds;
@@ -42,7 +60,19 @@ namespace JetHorizon.Simulation
             long eligibleRunTicks,
             float fixedDeltaSeconds,
             int repairCount,
-            LeaderboardIneligibility ineligibility)
+            LeaderboardIneligibility ineligibility,
+            int gatesCrossed = 0,
+            int gatesMissed = 0,
+            int highestGateStreak = 0,
+            int sectorReached = 0,
+            int heatReached = 0,
+            uint seed = 0u,
+            string mode = "",
+            int cargoCollected = 0,
+            int cargoBanked = 0,
+            int cargoLost = 0,
+            int heroEncountersCompleted = 0,
+            RunCompletionReason completionReason = RunCompletionReason.Destroyed)
         {
             if (runId <= 0) throw new ArgumentOutOfRangeException(nameof(runId));
             if (rawScore < 0) throw new ArgumentOutOfRangeException(nameof(rawScore));
@@ -65,6 +95,18 @@ namespace JetHorizon.Simulation
             FixedDeltaSeconds = fixedDeltaSeconds;
             RepairCount = repairCount;
             Ineligibility = ineligibility;
+            GatesCrossed = Math.Max(0, gatesCrossed);
+            GatesMissed = Math.Max(0, gatesMissed);
+            HighestGateStreak = Math.Max(0, highestGateStreak);
+            SectorReached = Math.Max(0, sectorReached);
+            HeatReached = Math.Max(0, heatReached);
+            Seed = seed;
+            Mode = mode ?? string.Empty;
+            CargoCollected = Math.Max(0, cargoCollected);
+            CargoBanked = Math.Max(0, cargoBanked);
+            CargoLost = Math.Max(0, cargoLost);
+            HeroEncountersCompleted = Math.Max(0, heroEncountersCompleted);
+            CompletionReason = completionReason;
         }
     }
 }

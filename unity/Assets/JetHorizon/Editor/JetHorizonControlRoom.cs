@@ -17,7 +17,7 @@ namespace JetHorizon.EditorTools
     /// </summary>
     public sealed class JetHorizonControlRoom : EditorWindow
     {
-        static readonly string[] Tabs = { "Home", "Feel", "Camera", "Audio", "Lighting", "Sun + Sky", "Ship + Thrusters", "Water", "Canyon", "Powerups", "Performance" };
+        static readonly string[] Tabs = { "Home", "Feel", "Camera", "Audio", "Lighting", "Sun + Sky", "Ship + Thrusters", "Water", "Canyon", "Powerups", "Performance", "Gameplay" };
         JetHorizonAuthoringProfile _profile;
         JetHorizonLookPreset _preset;
         Vector2 _scroll;
@@ -63,6 +63,7 @@ namespace JetHorizon.EditorTools
                 case 8: DrawCanyon(); break;
                 case 9: DrawPowerups(); break;
                 case 10: DrawPerformance(); break;
+                case 11: DrawGameplay(); break;
             }
             EditorGUILayout.EndScrollView();
         }
@@ -137,6 +138,54 @@ namespace JetHorizon.EditorTools
             EditorGUILayout.LabelField("• Canyon baking creates combined mesh chunks before the game runs.", Wrap());
             EditorGUILayout.LabelField("• Budgets inspect renderers, materials, lights, particles, triangles, and reflections.", Wrap());
             EditorGUILayout.LabelField("• Workbenches isolate effects from the full playthrough.", Wrap());
+        }
+
+        void DrawGameplay()
+        {
+            Title("Production run");
+            EditorGUILayout.HelpBox(
+                "The engine-neutral core owns gates, speed, sectors, Heat, cargo routes, hazards, collision, extraction and score. " +
+                "This page only shows those facts and provides safe playtest shortcuts.", MessageType.Info);
+            var manager = UnityEngine.Object.FindFirstObjectByType<GameManager>(FindObjectsInactive.Include);
+            if (manager == null)
+            {
+                Missing("Open the game scene to inspect the production loop.");
+                if (GUILayout.Button("Open Game Scene", GUILayout.Height(30f))) OpenGameScene();
+                return;
+            }
+
+            var snapshot = manager.CoreSnapshot;
+            if (snapshot == null)
+            {
+                Missing("The core simulation has not been created yet.");
+                return;
+            }
+
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField("Mode", snapshot.GateRunMode ? "Gate-led production run" : snapshot.ProofEncounterMode ? "Legacy proof run" : "Legacy stage run");
+                EditorGUILayout.LabelField("Sector / Heat", $"{snapshot.SectorIndex} / {snapshot.HeatLevel}");
+                EditorGUILayout.LabelField("Speed", $"{snapshot.Speed:0.0}  (gate-earned +{snapshot.GateEarnedSpeed:0.0}, cap {snapshot.SpeedSoftCap:0.0})");
+                EditorGUILayout.LabelField("Gates", $"{snapshot.GatesCrossed} hit, {snapshot.GatesMissed} missed, streak {snapshot.GateStreak}");
+                EditorGUILayout.LabelField("Cargo", $"{snapshot.CargoWeight}/{snapshot.CargoCapacityWeight} weight, projected {snapshot.CargoProjectedCreditValue} credits");
+                EditorGUILayout.LabelField("Environment", $"{snapshot.RunEnvironment} — {snapshot.EnvironmentLifecycle}");
+                EditorGUILayout.LabelField("Clock", $"{snapshot.EligibleRunElapsed:0.0}s eligible / {snapshot.Elapsed:0.0}s simulation");
+            }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUI.enabled = EditorApplication.isPlaying && manager.Phase != GamePhase.Playing;
+                if (GUILayout.Button("Start Run", GUILayout.Height(30f))) manager.StartRun(skipIntro: true);
+                GUI.enabled = EditorApplication.isPlaying;
+                if (GUILayout.Button(manager.GodMode ? "Disable God Mode" : "Enable God Mode", GUILayout.Height(30f)))
+                    manager.ToggleGodMode();
+                GUI.enabled = true;
+            }
+            EditorGUILayout.HelpBox(
+                "Common green gates add small speed. Cyan gates surge. The off-line cyan/white structure extracts. " +
+                "Miss extraction to enter the next Heat sector; canyon and prismatic environments are activated only by their transition gates.",
+                MessageType.None);
+            Repaint();
         }
 
         void DrawLighting()

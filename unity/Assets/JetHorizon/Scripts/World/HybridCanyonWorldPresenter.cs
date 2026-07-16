@@ -68,7 +68,7 @@ namespace JetHorizon
         public void SimTick(float dt)
         {
             SimulationSnapshot snapshot = GameManager.I != null ? GameManager.I.CoreSnapshot : null;
-            if (snapshot == null || !snapshot.ProofEncounterMode)
+            if (snapshot == null || !snapshot.CoreWorldDirectorEnabled)
             {
                 SetVisible(false);
                 return;

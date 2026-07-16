@@ -66,7 +66,7 @@ namespace JetHorizon
         {
             EnsureBuilt();
             SimulationSnapshot snapshot = GameManager.I != null ? GameManager.I.CoreSnapshot : null;
-            if (_renderer == null || snapshot == null || !snapshot.ProofEncounterMode)
+            if (_renderer == null || snapshot == null || !snapshot.CoreWorldDirectorEnabled)
             {
                 SetVisible(false);
                 return;

@@ -35,6 +35,8 @@ namespace JetHorizon
         public SlalomSystem Slalom;
         public AngledWallSystem AngledWalls;
         public LightningSystem Lightning;
+        public AsteroidSystem Asteroids;
+        public SpeedGatePresenter SpeedGates;
         public PrismaticTunnelPresenter PrismaticTunnel;
         public HybridCanyonWorldPresenter HybridCanyonWorld;
         public MonumentPresenter Monuments;
@@ -99,8 +101,8 @@ namespace JetHorizon
                 HazardSpawningEnabled = true,
                 HazardSimulationEnabled = true,
                 CollisionEnabled = true,
-                StartSpeedMultiplier = 5f / 3f,
-                MinimumOperationalSpeed = 50f,
+                StartSpeedMultiplier = 1f,
+                MinimumOperationalSpeed = 36f,
                 InitialSpawnDistance = 5f,
                 SpawnIntervalDistance = 30f,
                 MaxHazards = 600,
@@ -113,7 +115,8 @@ namespace JetHorizon
                 ExtractionIntervalDistance = 520f,
                 MaximumHeat = 5,
                 PrismaticSineTunnelEnabled = true,
-                ProofEncounterMode = true,
+                ProofEncounterMode = false,
+                GateRunMode = true,
                 CanyonPathOverride = canyonProfile != null ? canyonProfile.BuildCorePathDefinition() : null,
                 PersistentCruiseSpeedMultiplier = launchProfile.SpeedMultiplier,
                 Snap = FeelProfile.Snap,
@@ -224,6 +227,20 @@ namespace JetHorizon
                 ExtractionGate.GateMaterial = AngledWalls != null ? AngledWalls.WallMaterial : null;
             }
             ExtractionGate.ResetSystem();
+            if (SpeedGates == null)
+            {
+                var presenterObject = new GameObject("Speed Gate Presentation");
+                presenterObject.transform.SetParent(transform, false);
+                SpeedGates = presenterObject.AddComponent<SpeedGatePresenter>();
+            }
+            SpeedGates.ResetSystem();
+            if (Asteroids == null)
+            {
+                var presenterObject = new GameObject("Asteroid Presentation");
+                presenterObject.transform.SetParent(transform, false);
+                Asteroids = presenterObject.AddComponent<AsteroidSystem>();
+            }
+            Asteroids.ResetSystem();
             State.TransitionTo(GamePhase.Title);
         }
 
@@ -284,12 +301,14 @@ namespace JetHorizon
             AngledWalls.SimTick(dt);                             // walls move + OBB collision
             if (_killedThisFrame) return;
             Lightning.SimTick(dt);
+            Asteroids?.SimTick(dt);
             if (_killedThisFrame) return;
 
             Obstacles.SimTick(dt);                               // 18: move + fade + collision + near-miss
             if (_killedThisFrame) return;
             Pickups.SimTick(dt);                                 // 19: coins/powerups move + magnet + collect
             PowerupPresentation?.SimTick(dt);                    // 20: snapshot/event-driven hero VFX
+            SpeedGates?.SimTick(dt);                             // snapshot-only speed/transition gate presentation
             ExtractionGate?.SimTick(dt);                         // snapshot-only spatial extraction presentation
         }
 
@@ -580,6 +599,8 @@ namespace JetHorizon
             HybridCanyonWorld?.ResetSystem();
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();
+            SpeedGates?.ResetSystem();
+            Asteroids?.ResetSystem();
             PowerupPresentation?.ResetSystem();
             Debug.Log("[Jet Horizon] Prismatic corridor preview selected. This run is leaderboard-ineligible.");
 #endif
