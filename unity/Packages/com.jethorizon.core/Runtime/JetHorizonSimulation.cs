@@ -296,6 +296,65 @@ namespace JetHorizon.Simulation
             return true;
         }
 
+        /// <summary>
+        /// Resolves the gate-run breather choice. The core owns availability, cargo
+        /// settlement facts, Heat advancement and the next deterministic sector.
+        /// </summary>
+        public bool TryResolveExtractionDecision(bool extract, out RunCargoManifest manifest)
+        {
+            Events.Clear();
+            manifest = default;
+            if (Phase != CoreGamePhase.Playing
+                || _gateRun == null
+                || !_gateRun.ExtractionDecisionOpen)
+            {
+                RefreshSnapshot();
+                return false;
+            }
+
+            if (extract)
+            {
+                if (!_gateRun.TryAcceptExtraction(Events))
+                {
+                    RefreshSnapshot();
+                    return false;
+                }
+                manifest = _cargo.Snapshot(_heatLevel, HeatRewardMultiplier());
+                FinalizeRun(RunCompletionReason.Extracted);
+                Phase = CoreGamePhase.Extracted;
+                Events.Add(new SimulationEvent(
+                    SimulationEventType.RunExtracted,
+                    0,
+                    manifest.TotalWeight,
+                    manifest.CreditValue));
+                RefreshSnapshot();
+                return true;
+            }
+
+            if (!_gateRun.TryContinueDeeper(
+                _distance,
+                _paceState.PersistentCruiseSpeed,
+                Events))
+            {
+                RefreshSnapshot();
+                return false;
+            }
+
+            _heatLevel = _gateRun.Heat;
+            Events.Add(new SimulationEvent(
+                SimulationEventType.ExtractionWindowPassed,
+                _heatLevel,
+                _gateRun.Snapshot.NextGateDistance,
+                HeatRewardMultiplier()));
+            Events.Add(new SimulationEvent(
+                SimulationEventType.HeatChanged,
+                _heatLevel,
+                1f,
+                HeatRewardMultiplier()));
+            RefreshSnapshot();
+            return true;
+        }
+
         /// <summary>Consumes the manifest produced by crossing the core-owned world-space extraction gate.</summary>
         public bool TryConsumeAutomaticExtraction(out RunCargoManifest manifest)
         {
@@ -484,6 +543,12 @@ namespace JetHorizon.Simulation
             float dt = _config.FixedDeltaSeconds;
             _tick++;
             _elapsed = (float)(_tick * (double)dt);
+            if (_gateRun != null && _gateRun.ExtractionDecisionOpen)
+            {
+                TickExtractionBreather(dt);
+                RefreshSnapshot();
+                return;
+            }
             if (!world.ProgressionSuspended) _eligibleRunTick++;
             TickPowerups(dt);
 
@@ -645,22 +710,9 @@ namespace JetHorizon.Simulation
                         }
                         _gateRun.RetireEnvironment();
                     }
-                    if (gateResult.ContinuedDeeper)
+                    if (gateResult.ExtractionDecisionOpened)
                     {
-                        Events.Add(new SimulationEvent(
-                            SimulationEventType.ExtractionWindowPassed,
-                            _heatLevel,
-                            _gateRun.Snapshot.NextGateDistance,
-                            HeatRewardMultiplier()));
-                        Events.Add(new SimulationEvent(
-                            SimulationEventType.HeatChanged,
-                            _heatLevel,
-                            1f,
-                            HeatRewardMultiplier()));
-                    }
-                    if (gateResult.Extracted)
-                    {
-                        CompleteAutomaticExtraction();
+                        EnterExtractionBreather();
                         RefreshSnapshot();
                         return;
                     }
@@ -1002,6 +1054,38 @@ namespace JetHorizon.Simulation
                 0,
                 _automaticExtractionManifest.TotalWeight,
                 _automaticExtractionManifest.CreditValue));
+        }
+
+        void EnterExtractionBreather()
+        {
+            Array.Clear(_hazards, 0, _hazards.Length);
+            Array.Clear(_pickups, 0, _pickups.Length);
+            Array.Clear(_corridorSlices, 0, _corridorSlices.Length);
+            _lightningSequences.Reset();
+            _lightningStrikeRequests.Clear();
+            _asteroidImpactRequests.Clear();
+            _hazardPatternScheduler.Reset();
+            _scheduledHazardRequests.Clear();
+            _environmentEncounter.Reset();
+            _gateRun?.RetireEnvironment();
+            _lightningFamily = CorridorFamily.None;
+            _lightningTimer = 0f;
+            _zipperActive = false;
+            _slalomActive = false;
+            _sineCorridorActive = false;
+            _structuredWallsActive = false;
+            _structuredWallsScheduling = false;
+        }
+
+        void TickExtractionBreather(float dt)
+        {
+            float settle = (float)Math.Exp(-7f * dt);
+            _shipVelocityX *= settle;
+            _bankVelocityX *= settle;
+            _bankRadians *= settle;
+            _rollRadians *= settle;
+            _tiltTimer = 0f;
+            _shipX += _shipVelocityX * dt;
         }
 
         bool ResolveCorridorCollision(WorldFrame world)
@@ -2265,15 +2349,20 @@ namespace JetHorizon.Simulation
                 break;
             }
             Snapshot.ExtractionAvailable = _gateRun != null
-                ? gateExtractionVisible
+                ? gateRun.ExtractionDecisionOpen
                 : _proofEncounters == null
                     && Phase == CoreGamePhase.Playing
                     && _extractionWindowOpen;
             Snapshot.ExtractionWindowOpen = _gateRun != null
-                ? gateExtractionVisible
+                ? gateRun.ExtractionDecisionOpen
                 : _proofEncounters == null && _extractionWindowOpen;
+            Snapshot.ExtractionDecisionOpen = _gateRun != null
+                && gateRun.ExtractionDecisionOpen
+                && Phase == CoreGamePhase.Playing;
             Snapshot.ExtractionWindowDistanceRemaining = _gateRun != null
-                ? Math.Max(0f, gateRun.NextGateDistance - _distance)
+                ? gateRun.ExtractionDecisionOpen
+                    ? 0f
+                    : Math.Max(0f, gateRun.NextGateDistance - _distance)
                 : _proofEncounters == null && _extractionWindowOpen
                     ? Math.Max(0f, _extractionWindowEndDistance - _distance)
                     : 0f;
@@ -2342,7 +2431,7 @@ namespace JetHorizon.Simulation
                 Snapshot.UpcomingEncounterKind = encounter.UpcomingKind;
                 Snapshot.UpcomingEncounterStartZ = encounter.UpcomingStartZ;
             }
-            Snapshot.ExtractionGateVisible = _gateRun != null ? gateExtractionVisible : encounter.ExtractionGateVisible;
+            Snapshot.ExtractionGateVisible = _gateRun != null ? false : encounter.ExtractionGateVisible;
             Snapshot.ExtractionGateX = _gateRun != null ? gateExtractionX : encounter.ExtractionGateX;
             Snapshot.ExtractionGateHalfWidth = _gateRun != null ? gateExtractionHalfWidth : encounter.ExtractionGateHalfWidth;
             Snapshot.ExtractionGateZ = _gateRun != null ? gateExtractionZ : encounter.ExtractionGateZ;

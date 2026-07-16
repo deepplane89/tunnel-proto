@@ -111,6 +111,7 @@ namespace JetHorizon.Simulation
         static SpeedGateKind GateKindFor(int sector, int index)
         {
             if (index == GateCount - 1) return SpeedGateKind.Extraction;
+            if (sector > 0 && index == 0) return SpeedGateKind.Surge;
             if (sector == 3 && index == 23) return SpeedGateKind.CanyonTransition;
             if (sector == 4 && index == 21) return SpeedGateKind.PrismaticTransition;
             return index > 0 && index % 9 == 0 ? SpeedGateKind.Surge : SpeedGateKind.Common;

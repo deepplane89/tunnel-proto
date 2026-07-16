@@ -82,6 +82,50 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(simulation.Snapshot.GateCount, Is.GreaterThan(0));
         }
 
+        [Test]
+        public void SectorEnd_OpensSafeExtractionDecisionAndNoContinuesDeeper()
+        {
+            JetHorizonSimulation simulation = CreateGateRunSimulation(707u);
+            AdvanceToExtractionDecision(simulation);
+
+            Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Playing));
+            Assert.That(simulation.Snapshot.ExtractionDecisionOpen, Is.True);
+            Assert.That(simulation.Snapshot.ExtractionGateVisible, Is.False);
+            Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+            Assert.That(simulation.Snapshot.PickupCount, Is.Zero);
+
+            float heldDistance = simulation.Snapshot.Distance;
+            float heldEligibleTime = simulation.Snapshot.EligibleRunElapsed;
+            for (int i = 0; i < 120; i++) simulation.Step(new InputFrame(false, true, 0));
+            Assert.That(simulation.Snapshot.Distance, Is.EqualTo(heldDistance).Within(.001f));
+            Assert.That(simulation.Snapshot.EligibleRunElapsed, Is.EqualTo(heldEligibleTime).Within(.001f));
+
+            Assert.That(simulation.TryResolveExtractionDecision(false, out _), Is.True);
+            Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Playing));
+            Assert.That(simulation.Snapshot.ExtractionDecisionOpen, Is.False);
+            Assert.That(simulation.Snapshot.SectorIndex, Is.EqualTo(1));
+            Assert.That(simulation.Snapshot.HeatLevel, Is.EqualTo(1));
+            Assert.That(simulation.Snapshot.HeatRewardMultiplier, Is.GreaterThan(1f));
+
+            var planner = new GateRoutePlanner();
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(simulation.Config);
+            GateRoutePlan next = planner.Build(1, heldDistance, 60f, capability, new DeterministicRandom(708u));
+            Assert.That(next.Get(0).Kind, Is.EqualTo(SpeedGateKind.Surge));
+        }
+
+        [Test]
+        public void SectorEnd_YesExtractsThroughCoreOwnedDecision()
+        {
+            JetHorizonSimulation simulation = CreateGateRunSimulation(808u);
+            AdvanceToExtractionDecision(simulation);
+
+            Assert.That(simulation.TryResolveExtractionDecision(true, out RunCargoManifest manifest), Is.True);
+            Assert.That(simulation.Phase, Is.EqualTo(CoreGamePhase.Extracted));
+            Assert.That(manifest.TotalWeight, Is.GreaterThanOrEqualTo(0));
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.ExtractionDecisionResolved), Is.True);
+            Assert.That(ContainsEvent(simulation.Events, SimulationEventType.RunExtracted), Is.True);
+        }
+
         [TestCase(AsteroidSequenceKind.Random, 4)]
         [TestCase(AsteroidSequenceKind.Sweep, 5)]
         [TestCase(AsteroidSequenceKind.Stagger, 5)]
@@ -178,6 +222,43 @@ namespace JetHorizon.Tests.Architecture
         sealed class FakeLeaderboard : ILeaderboardService
         {
             public void SubmitScore(LeaderboardSubmission submission) { }
+        }
+
+        static JetHorizonSimulation CreateGateRunSimulation(uint seed)
+        {
+            var simulation = new JetHorizonSimulation(
+                new SimulationConfig
+                {
+                    GateRunMode = true,
+                    ProofEncounterMode = false,
+                    StartSpeedMultiplier = 1f,
+                    MinimumOperationalSpeed = 36f,
+                    CollisionEnabled = false,
+                    HazardSpawningEnabled = true,
+                    HazardSimulationEnabled = true,
+                    PickupSimulationEnabled = true,
+                    MaxHazards = 600,
+                    MaxPickups = 128,
+                    MaxCorridorSlices = 128,
+                    MaxGates = 16
+                },
+                seed);
+            simulation.StartRun(seed);
+            return simulation;
+        }
+
+        static void AdvanceToExtractionDecision(JetHorizonSimulation simulation)
+        {
+            for (int i = 0; i < 12000 && !simulation.Snapshot.ExtractionDecisionOpen; i++)
+                simulation.Step(default);
+            Assert.That(simulation.Snapshot.ExtractionDecisionOpen, Is.True);
+        }
+
+        static bool ContainsEvent(SimulationEventBuffer events, SimulationEventType type)
+        {
+            for (int i = 0; i < events.Count; i++)
+                if (events[i].Type == type) return true;
+            return false;
         }
     }
 }

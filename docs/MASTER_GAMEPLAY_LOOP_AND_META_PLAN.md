@@ -14,7 +14,7 @@ The player should understand the run within ten seconds:
 1. Green bands make the ship faster.
 2. Gold cargo improves the persistent ship and garage.
 3. Blue-white lightning and flaming asteroids are dangerous.
-4. A large extraction gate banks the cargo.
+4. A short open-water breather asks `EXTRACT?` with `YES` and `NO`.
 5. Continuing preserves speed and increases danger and reward.
 
 The sun, water, ship, reflections, stars, canyon, and tunnel are the fantasy. The mechanics should organize attention without covering that fantasy in UI.
@@ -85,7 +85,7 @@ Each sector contains:
 3. **Risk beat:** cargo lines intertwined with a lightning or asteroid pattern.
 4. **Hero beat:** canyon, tunnel, dense laser formation, or major authored structure.
 5. **Recovery beat:** open water, broad gates, readable cargo.
-6. **Extraction opportunity:** bank cargo or stay on the main line and continue.
+6. **Extraction breather:** active threats clear, score/distance pause, and `EXTRACT? YES / NO` appears.
 
 ### 3.4 Run loop
 
@@ -129,11 +129,15 @@ Each sector contains:
 - Primary reward: a surge increase plus transition into a prebuilt environment.
 - It must be deliberately selected by the encounter composer, never produced by a generic random roll.
 
-### Extraction gate
+### Extraction breather
 
-- Presentation: visually distinct from speed gates; broad white/cyan extraction structure positioned off the continuation line.
-- Crossing banks the run cargo and ends the run successfully.
-- Ignoring it preserves current speed and enters the next Heat sector.
+- The sector endpoint is not presented as another world-space gate.
+- Active threats and pickups clear into a calm open-water cruise.
+- Score, eligible run time, distance, power-up timers, and control pause while the visual scene continues moving.
+- Unity shows only `EXTRACT?`, `YES`, and `NO` in the existing HUD style.
+- `YES` banks cargo and ends the run successfully.
+- `NO` immediately raises Heat, cargo value, encounter intensity, and the speed soft cap, then starts the next sector with a surge gate.
+- There is no countdown and no automatic choice in the first implementation.
 
 ## 4.2 Recommended speed curve
 

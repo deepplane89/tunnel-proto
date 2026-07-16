@@ -94,6 +94,8 @@ namespace JetHorizon.Simulation
         CargoRejectedForWeight,
         ExtractionWindowOpened,
         ExtractionWindowPassed,
+        ExtractionDecisionOpened,
+        ExtractionDecisionResolved,
         HeatChanged,
         RunExtracted,
         PowerupCollected,
@@ -665,6 +667,7 @@ namespace JetHorizon.Simulation
         public float EncounterIntensity { get; internal set; }
         public bool ExtractionAvailable { get; internal set; }
         public bool ExtractionWindowOpen { get; internal set; }
+        public bool ExtractionDecisionOpen { get; internal set; }
         public float ExtractionWindowDistanceRemaining { get; internal set; }
         public float NextExtractionDistance { get; internal set; }
         public int HullHitsRemaining { get; internal set; }

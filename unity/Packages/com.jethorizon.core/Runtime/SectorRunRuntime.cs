@@ -105,21 +105,18 @@ namespace JetHorizon.Simulation
 
     public readonly struct GateRunTickResult
     {
-        public bool Extracted { get; }
-        public bool ContinuedDeeper { get; }
+        public bool ExtractionDecisionOpened { get; }
         public bool EnvironmentActivated { get; }
         public RunEnvironmentKind ActivatedEnvironment { get; }
         public float ScoreAward { get; }
 
         internal GateRunTickResult(
-            bool extracted,
-            bool continuedDeeper,
+            bool extractionDecisionOpened,
             bool environmentActivated,
             RunEnvironmentKind activatedEnvironment,
             float scoreAward)
         {
-            Extracted = extracted;
-            ContinuedDeeper = continuedDeeper;
+            ExtractionDecisionOpened = extractionDecisionOpened;
             EnvironmentActivated = environmentActivated;
             ActivatedEnvironment = activatedEnvironment;
             ScoreAward = scoreAward;
@@ -139,6 +136,7 @@ namespace JetHorizon.Simulation
         public float NextGateDistance { get; }
         public RunEnvironmentKind Environment { get; }
         public EnvironmentLifecycle EnvironmentLifecycle { get; }
+        public bool ExtractionDecisionOpen { get; }
 
         internal GateRunSnapshot(
             int sector,
@@ -146,7 +144,8 @@ namespace JetHorizon.Simulation
             GateProgressionState progression,
             float nextGateDistance,
             RunEnvironmentKind environment,
-            EnvironmentLifecycle environmentLifecycle)
+            EnvironmentLifecycle environmentLifecycle,
+            bool extractionDecisionOpen)
         {
             Sector = sector;
             Heat = heat;
@@ -159,6 +158,7 @@ namespace JetHorizon.Simulation
             NextGateDistance = nextGateDistance;
             Environment = environment;
             EnvironmentLifecycle = environmentLifecycle;
+            ExtractionDecisionOpen = extractionDecisionOpen;
         }
     }
 
@@ -183,12 +183,14 @@ namespace JetHorizon.Simulation
         int _nextGateIndex;
         RunEnvironmentKind _environment;
         EnvironmentLifecycle _environmentLifecycle;
+        bool _extractionDecisionOpen;
 
         public GateRunSnapshot Snapshot { get; private set; }
         public float EarnedSpeedBonus => _progression.EarnedSpeedBonus;
         public float SoftSpeedCap => GateProgressionModel.SoftCapForHeat(_sectors.Current.Heat);
         public int Heat => _sectors.Current.Heat;
         public GateRoutePlan Route => _route;
+        public bool ExtractionDecisionOpen => _extractionDecisionOpen;
 
         public void RetireEnvironment()
         {
@@ -233,9 +235,49 @@ namespace JetHorizon.Simulation
             _nextGateIndex = 0;
             _environment = RunEnvironmentKind.OpenWater;
             _environmentLifecycle = EnvironmentLifecycle.Dormant;
+            _extractionDecisionOpen = false;
             Array.Clear(_contentPublished, 0, _contentPublished.Length);
             BuildRoute(0f, baseCruiseSpeed);
             RefreshSnapshot(baseCruiseSpeed);
+        }
+
+        public bool TryAcceptExtraction(SimulationEventBuffer events)
+        {
+            if (!_extractionDecisionOpen || events == null) return false;
+            _extractionDecisionOpen = false;
+            events.Add(new SimulationEvent(
+                SimulationEventType.ExtractionDecisionResolved,
+                _sectors.Current.Index,
+                1f,
+                _sectors.Current.Heat));
+            return true;
+        }
+
+        public bool TryContinueDeeper(
+            float runDistance,
+            float baseCruiseSpeed,
+            SimulationEventBuffer events)
+        {
+            if (!_extractionDecisionOpen || events == null) return false;
+            _extractionDecisionOpen = false;
+            _sectors.ContinueDeeper(runDistance + Math.Max(24f, baseCruiseSpeed * 1.35f));
+            Array.Clear(_contentPublished, 0, _contentPublished.Length);
+            _nextGateIndex = 0;
+            _environment = RunEnvironmentKind.OpenWater;
+            _environmentLifecycle = EnvironmentLifecycle.Dormant;
+            BuildRoute(_sectors.Current.StartDistance, baseCruiseSpeed + _progression.EarnedSpeedBonus);
+            events.Add(new SimulationEvent(
+                SimulationEventType.ExtractionDecisionResolved,
+                _sectors.Current.Index,
+                0f,
+                _sectors.Current.Heat));
+            events.Add(new SimulationEvent(
+                SimulationEventType.SectorChanged,
+                _sectors.Current.Index,
+                _sectors.Current.Heat,
+                _route.EndDistance));
+            RefreshSnapshot(baseCruiseSpeed);
+            return true;
         }
 
         public GateRunTickResult Tick(
@@ -249,10 +291,14 @@ namespace JetHorizon.Simulation
             if (commands == null) throw new ArgumentNullException(nameof(commands));
             if (events == null) throw new ArgumentNullException(nameof(events));
             commands.Clear();
+            if (_extractionDecisionOpen)
+            {
+                RefreshSnapshot(baseCruiseSpeed);
+                return new GateRunTickResult(false, false, RunEnvironmentKind.OpenWater, 0f);
+            }
             PublishContent(runDistance, shipZ, commands);
 
-            bool extracted = false;
-            bool continued = false;
+            bool decisionOpened = false;
             bool environmentActivated = false;
             RunEnvironmentKind activated = RunEnvironmentKind.OpenWater;
             float scoreAward = 0f;
@@ -260,21 +306,24 @@ namespace JetHorizon.Simulation
                 && runDistance >= _route.Get(_nextGateIndex).Distance)
             {
                 GateRouteNode gate = _route.Get(_nextGateIndex++);
+                if (gate.Kind == SpeedGateKind.Extraction)
+                {
+                    _extractionDecisionOpen = true;
+                    _environment = RunEnvironmentKind.OpenWater;
+                    _environmentLifecycle = EnvironmentLifecycle.Retired;
+                    decisionOpened = true;
+                    events.Add(new SimulationEvent(
+                        SimulationEventType.ExtractionDecisionOpened,
+                        _sectors.Current.Index,
+                        _sectors.Current.Heat,
+                        gate.Distance));
+                    break;
+                }
+
                 float allowed = Math.Max(0f, gate.HalfWidth - _capability.CollisionHalfWidth);
                 bool crossed = Math.Abs(shipX - gate.CenterX) <= allowed;
                 if (crossed)
                 {
-                    if (gate.Kind == SpeedGateKind.Extraction)
-                    {
-                        extracted = true;
-                        events.Add(new SimulationEvent(
-                            SimulationEventType.SpeedGateCrossed,
-                            gate.Id,
-                            (float)gate.Kind,
-                            0f));
-                        break;
-                    }
-
                     float gain = _progression.Cross(gate.Kind, baseCruiseSpeed, Heat);
                     events.Add(new SimulationEvent(
                         SimulationEventType.SpeedGateCrossed,
@@ -323,29 +372,13 @@ namespace JetHorizon.Simulation
                         _environment = RunEnvironmentKind.OpenWater;
                         _environmentLifecycle = EnvironmentLifecycle.Retired;
                     }
-                    if (gate.Kind == SpeedGateKind.Extraction)
-                    {
-                        _sectors.ContinueDeeper(gate.Distance + baseCruiseSpeed * .8f);
-                        Array.Clear(_contentPublished, 0, _contentPublished.Length);
-                        _nextGateIndex = 0;
-                        _environment = RunEnvironmentKind.OpenWater;
-                        _environmentLifecycle = EnvironmentLifecycle.Dormant;
-                        BuildRoute(_sectors.Current.StartDistance, baseCruiseSpeed + _progression.EarnedSpeedBonus);
-                        continued = true;
-                        events.Add(new SimulationEvent(
-                            SimulationEventType.SectorChanged,
-                            _sectors.Current.Index,
-                            _sectors.Current.Heat,
-                            _route.EndDistance));
-                        break;
-                    }
                 }
             }
 
             if (_environmentLifecycle == EnvironmentLifecycle.GateCrossedReveal)
                 _environmentLifecycle = EnvironmentLifecycle.Active;
             RefreshSnapshot(baseCruiseSpeed);
-            return new GateRunTickResult(extracted, continued, environmentActivated, activated, scoreAward);
+            return new GateRunTickResult(decisionOpened, environmentActivated, activated, scoreAward);
         }
 
         public int WriteVisibleGates(
@@ -360,6 +393,7 @@ namespace JetHorizon.Simulation
             for (int i = start; i < _route.Count && count < maximum && count < destination.Length; i++)
             {
                 GateRouteNode node = _route.Get(i);
+                if (node.Kind == SpeedGateKind.Extraction) continue;
                 float z = shipZ - (node.Distance - runDistance);
                 if (z < -900f || z > 60f) continue;
                 destination[count++] = new GateSnapshot(
@@ -414,7 +448,8 @@ namespace JetHorizon.Simulation
                 progression,
                 next,
                 _environment,
-                _environmentLifecycle);
+                _environmentLifecycle,
+                _extractionDecisionOpen);
         }
     }
 }

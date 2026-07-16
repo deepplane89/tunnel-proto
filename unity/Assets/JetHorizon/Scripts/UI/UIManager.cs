@@ -39,8 +39,6 @@ namespace JetHorizon
         CanvasGroup _garageScreen;
         Text _garageSummary;
         Text _garageStatus;
-        Button _extractButton;
-        Text _extractLabel;
         Text _cargoHud;
         Text _heatHud;
         readonly Dictionary<PowerupType, PowerupHudRow> _powerupRows = new Dictionary<PowerupType, PowerupHudRow>();
@@ -70,7 +68,7 @@ namespace JetHorizon
             BuildSkinButton();
             BuildGarageEntryButton();
             BuildGarageScreen();
-            BuildExtractButton();
+            InstallExtractionPrompt();
             BuildMetaHud();
             BuildPowerupHud();
             Show(GamePhase.Title);
@@ -228,13 +226,12 @@ namespace JetHorizon
             MakeButton(root.transform, "Back", "TITLE", new Vector2(.30f, .10f), new Vector2(240f, 66f), () => GameManager.I?.ReturnToTitle());
         }
 
-        void BuildExtractButton()
+        void InstallExtractionPrompt()
         {
-            if (HudScreen == null || _extractButton != null) return;
-            _extractButton = MakeButton(HudScreen.transform, "ExtractButton", "EXTRACT", new Vector2(.5f, .88f), new Vector2(330f, 64f),
-                () => GameManager.I?.RequestExtraction());
-            _extractLabel = _extractButton.GetComponentInChildren<Text>();
-            _extractButton.gameObject.SetActive(false);
+            if (HudScreen == null) return;
+            var presenter = GetComponent<ExtractionPromptPresenter>();
+            if (presenter == null) presenter = gameObject.AddComponent<ExtractionPromptPresenter>();
+            presenter.Initialize(HudScreen);
         }
 
         void BuildMetaHud()
@@ -569,24 +566,17 @@ namespace JetHorizon
 
                 case GamePhase.Playing:
                     UpdatePowerupHud(s);
-                    if (_extractButton != null)
+                    SimulationSnapshot snapshot = gm.CoreSnapshot;
+                    if (snapshot != null)
                     {
-                        SimulationSnapshot snapshot = gm.CoreSnapshot;
-                        bool available = snapshot != null && snapshot.ExtractionAvailable;
-                        _extractButton.gameObject.SetActive(available);
-                        if (available && _extractLabel != null)
-                            _extractLabel.text = $"EXTRACT  {snapshot.CargoProjectedCreditValue:N0} CR  •  {snapshot.ExtractionWindowDistanceRemaining:0}m";
-                        if (snapshot != null)
+                        if (_cargoHud != null)
+                            _cargoHud.text = $"CARGO  {snapshot.CargoWeight}/{snapshot.CargoCapacityWeight}  •  {snapshot.CargoProjectedCreditValue:N0} CR";
+                        if (_heatHud != null)
                         {
-                            if (_cargoHud != null)
-                                _cargoHud.text = $"CARGO  {snapshot.CargoWeight}/{snapshot.CargoCapacityWeight}  •  {snapshot.CargoProjectedCreditValue:N0} CR";
-                            if (_heatHud != null)
-                            {
-                                float distanceToWindow = Mathf.Max(0f, snapshot.NextExtractionDistance - snapshot.Distance);
-                                _heatHud.text = snapshot.ExtractionWindowOpen
-                                    ? $"HEAT {snapshot.HeatLevel}  •  EXTRACT NOW"
-                                    : $"HEAT {snapshot.HeatLevel}  •  GATE {distanceToWindow:0}m";
-                            }
+                            float distanceToWindow = Mathf.Max(0f, snapshot.NextExtractionDistance - snapshot.Distance);
+                            _heatHud.text = snapshot.ExtractionDecisionOpen
+                                ? $"HEAT {snapshot.HeatLevel}"
+                                : $"HEAT {snapshot.HeatLevel}  •  GATE {distanceToWindow:0}m";
                         }
                     }
                     _hudTimer -= Time.deltaTime;
@@ -606,7 +596,6 @@ namespace JetHorizon
                     break;
 
                 case GamePhase.Garage:
-                    if (_extractButton != null) _extractButton.gameObject.SetActive(false);
                     break;
 
                 case GamePhase.Dead:

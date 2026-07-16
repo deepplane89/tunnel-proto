@@ -531,9 +531,23 @@ namespace JetHorizon
         public bool RequestExtraction()
         {
             if (State.Phase != GamePhase.Playing || _coreSimulation == null) return false;
-            if (!_coreSimulation.TryExtract(out RunCargoManifest cargo)) return false;
+            RunCargoManifest cargo;
+            bool resolved = _coreSimulation.Snapshot.ExtractionDecisionOpen
+                ? _coreSimulation.TryResolveExtractionDecision(true, out cargo)
+                : _coreSimulation.TryExtract(out cargo);
+            if (!resolved) return false;
 
             return CompleteExtraction(cargo);
+        }
+
+        public bool DeclineExtraction()
+        {
+            if (State.Phase != GamePhase.Playing || _coreSimulation == null) return false;
+            if (!_coreSimulation.TryResolveExtractionDecision(false, out _)) return false;
+            _applicationEvents.Dispatch(_coreSimulation.Events);
+            SyncCoreSession();
+            _accumulator = 0f;
+            return true;
         }
 
         bool CompleteExtraction(RunCargoManifest cargo)
