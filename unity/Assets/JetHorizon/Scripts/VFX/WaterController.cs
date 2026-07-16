@@ -45,6 +45,11 @@ namespace JetHorizon
                 float rawDt = Mathf.Min(Time.deltaTime, Tuning.MaxRawDt);
                 _flowZ -= s.EffectiveSpeed * (s.EffectiveSpeed / Tuning.BaseSpeed) * rawDt * FlowScale;
                 WaterMaterial.SetFloat("_FlowZ", _flowZ);
+                ShipFeelSignals signals = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals : default;
+                WaterMaterial.SetFloat("_SpeedIntensity", signals.SpeedPresentation);
+                WaterMaterial.SetFloat("_GatePulse", signals.GateKick01);
+                WaterMaterial.SetFloat("_ShipX", s.ShipX);
+                WaterMaterial.SetFloat("_ShipZ", Tuning.ShipZ);
             }
         }
     }

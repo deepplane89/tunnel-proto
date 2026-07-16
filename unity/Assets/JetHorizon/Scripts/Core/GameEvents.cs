@@ -15,6 +15,7 @@ namespace JetHorizon
         public static event Action PlayerDied;
         public static event Action<int> StageChanged;                    // stage index
         public static event Action<float, float> SpeedChanged;           // (from, to) u/s
+        public static event Action<SpeedGateKind, float, int> SpeedGateCrossed; // kind, gain, streak
         public static event Action<int> VibeChanged;                     // palette index
         public static event Action NearMiss;
         public static event Action CoinCollected;
@@ -34,6 +35,7 @@ namespace JetHorizon
         public static void RaisePlayerDied()                => PlayerDied?.Invoke();
         public static void RaiseStageChanged(int idx)       => StageChanged?.Invoke(idx);
         public static void RaiseSpeedChanged(float a, float b) => SpeedChanged?.Invoke(a, b);
+        public static void RaiseSpeedGateCrossed(SpeedGateKind kind, float gain, int streak) => SpeedGateCrossed?.Invoke(kind, gain, streak);
         public static void RaiseVibeChanged(int idx)        => VibeChanged?.Invoke(idx);
         public static void RaiseNearMiss()                  => NearMiss?.Invoke();
         public static void RaiseCoinCollected()             => CoinCollected?.Invoke();
@@ -52,7 +54,7 @@ namespace JetHorizon
         public static void Reset()
         {
             PhaseChanged = null; RunStarted = null; PlayerDied = null; StageChanged = null;
-            SpeedChanged = null; VibeChanged = null; NearMiss = null; CoinCollected = null;
+            SpeedChanged = null; SpeedGateCrossed = null; VibeChanged = null; NearMiss = null; CoinCollected = null;
             PowerupCollected = null; PowerupActivated = null; PowerupExpired = null;
             ShieldHit = null; ShieldBroken = null; LaserFired = null;
             CanyonRevealed = null; KlaxonCountdown = null; LightningStruck = null;

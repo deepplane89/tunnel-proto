@@ -59,6 +59,16 @@ namespace JetHorizon.Application
                     _services.Haptics.Play(HapticCue.Light);
                     break;
 
+                case SimulationEventType.SpeedGateCrossed:
+                    SpeedGateKind gate = (SpeedGateKind)(int)simulationEvent.ValueA;
+                    _services.Haptics.Play(
+                        gate == SpeedGateKind.Common
+                            ? HapticCue.Light
+                            : gate == SpeedGateKind.Surge
+                                ? HapticCue.Warning
+                                : HapticCue.Impact);
+                    break;
+
                 case SimulationEventType.PlayerDied:
                     _services.Audio.Play(AudioCue.PlayerDied);
                     _services.Haptics.Play(HapticCue.Impact);

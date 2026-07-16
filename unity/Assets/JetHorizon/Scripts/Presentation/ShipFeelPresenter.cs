@@ -1,3 +1,4 @@
+using JetHorizon.Simulation;
 using UnityEngine;
 
 namespace JetHorizon
@@ -10,9 +11,11 @@ namespace JetHorizon
         public ShipFeelSignals Signals { get; private set; }
         public float CameraImpulse { get; private set; }
 
-        float _speed, _steer, _bank;
+        float _speed, _steer, _bank, _gateKick;
 
         void Awake() => I = this;
+        void OnEnable() => GameEvents.SpeedGateCrossed += GateCrossed;
+        void OnDisable() => GameEvents.SpeedGateCrossed -= GateCrossed;
         void OnDestroy() { if (I == this) I = null; }
 
         public void Initialize(JetHorizonFeelProfile profile) => Profile = profile;
@@ -33,13 +36,35 @@ namespace JetHorizon
             _speed = Exp(_speed, rawSpeed, 7f, dt);
             _steer = Exp(_steer, rawLateral, 12f, dt);
             _bank = Exp(_bank, rawBank, 10f, dt);
+            _gateKick = Exp(_gateKick, 0f, Mathf.Max(.01f, Profile.GateKickRecovery), dt);
             float presentationCurve = Profile.IntensityBySpeed != null
                 ? Profile.IntensityBySpeed.Evaluate(_speed)
                 : _speed;
             float presentation = Mathf.Lerp(starterPresentation, 1f, presentationCurve);
             float overdrive = session.OverdriveActive ? 1f : 0f;
-            Signals = new ShipFeelSignals(_speed, presentation, _steer, rawLateral, _bank, overdrive, rawLateral - rawBank);
+            Signals = new ShipFeelSignals(
+                _speed,
+                presentation,
+                _steer,
+                rawLateral,
+                _bank,
+                overdrive,
+                rawLateral - rawBank,
+                _gateKick);
             CameraImpulse = Mathf.MoveTowards(CameraImpulse, 0f, Profile.ImpulseRecovery * dt);
+        }
+
+        void GateCrossed(SpeedGateKind kind, float gain, int streak)
+        {
+            if (Profile == null) return;
+            float strength = kind == SpeedGateKind.Common
+                ? Profile.CommonGateStrength
+                : kind == SpeedGateKind.Surge
+                    ? Profile.SurgeGateStrength
+                    : Profile.TransitionGateStrength;
+            if (streak > 0 && streak % 5 == 0)
+                strength = Mathf.Min(1f, strength + .12f);
+            _gateKick = Mathf.Max(_gateKick, Mathf.Clamp01(strength));
         }
 
         public void AddImpulse(float amount) => CameraImpulse = Mathf.Max(CameraImpulse, Mathf.Max(0f, amount));

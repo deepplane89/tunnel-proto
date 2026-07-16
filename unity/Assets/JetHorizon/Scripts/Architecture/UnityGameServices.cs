@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using JetHorizon.Application;
 using JetHorizon.Meta;
 using UnityEngine;
@@ -15,7 +16,7 @@ namespace JetHorizon.Platform
             return new GameServices(
                 new PlayerPrefsRunProgressStore(),
                 new SilentAudioOutput(),
-                new SilentHapticsOutput(),
+                new UnityHapticsOutput(),
                 new SilentAnalyticsSink(),
                 new UnityClock(),
                 new PlayerPrefsLeaderboardOutbox());
@@ -118,10 +119,25 @@ namespace JetHorizon.Platform
         public long UtcUnixMilliseconds => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
 
-    // Presentation systems currently consume GameEvents. These intentionally remain silent
-    // until audio/haptics/leaderboard implementations are swapped in at the composition root.
+    // GameEvents still own rich Unity audio presentation. Application ports stay available
+    // for platform effects and persistence that must not reach into gameplay.
     sealed class SilentAudioOutput : IAudioOutput { public void Play(AudioCue cue) { } }
-    sealed class SilentHapticsOutput : IHapticsOutput { public void Play(HapticCue cue) { } }
+    sealed class UnityHapticsOutput : IHapticsOutput
+    {
+#if UNITY_IOS && !UNITY_EDITOR
+        [DllImport("__Internal")]
+        static extern void JH_PlayHaptic(int style);
+#endif
+
+        public void Play(HapticCue cue)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            JH_PlayHaptic(cue == HapticCue.Light ? 0 : cue == HapticCue.Warning ? 1 : 2);
+#elif UNITY_ANDROID && !UNITY_EDITOR
+            if (cue != HapticCue.Light) Handheld.Vibrate();
+#endif
+        }
+    }
     sealed class SilentAnalyticsSink : IAnalyticsSink { public void Track(AnalyticsEvent analyticsEvent) { } }
     /// <summary>
     /// Durable Unity-side submission queue. A network publisher can drain this after

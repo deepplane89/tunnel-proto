@@ -74,7 +74,13 @@ namespace JetHorizon
             var s = GameManager.I.Session;
             bool on = GameManager.I.Phase == GamePhase.Playing && !s.IntroLiftActive;
             float rawDt = Mathf.Min(Time.deltaTime, Tuning.MaxRawDt);
-            float speedFrac = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals.SpeedPresentation : Mathf.Clamp01(s.EffectiveSpeed / (Tuning.BaseSpeed * 2.5f));
+            ShipFeelSignals signals = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals : default;
+            JetHorizonFeelProfile feel = GameManager.I.FeelProfile;
+            float speedFrac = ShipFeelPresenter.I != null
+                ? signals.SpeedPresentation
+                : Mathf.Clamp01(s.EffectiveSpeed / (Tuning.BaseSpeed * 2.5f));
+            speedFrac = Mathf.Clamp01(
+                speedFrac + signals.GateKick01 * (feel != null ? feel.GateWakeBurst : .65f));
 
             // ── V-wake follows ship X, opacity with speed ──
             bool vOn = on;
@@ -98,7 +104,7 @@ namespace JetHorizon
                 _spawnTimer -= rawDt;
                 if (_spawnTimer <= 0f)
                 {
-                    _spawnTimer = SpawnInterval;
+                    _spawnTimer = Mathf.Lerp(SpawnInterval, SpawnInterval * .45f, speedFrac);
                     SpawnRing(s);
                 }
             }

@@ -22,6 +22,7 @@ namespace JetHorizon
         bool _sweeping; float _sweepT;
         float _launchTime;
         float _lookAheadX;
+        float _speedLookAheadZ;
 
         RunSession S => GameManager.I.Session;
 
@@ -31,7 +32,7 @@ namespace JetHorizon
         public void ResetSystem()
         {
             _deathOrbit = false; _sweeping = false; _shakeTime = 0f; _cameraRoll = 0f; _cameraRollHold = 0f;
-            _lastShakeOffset = Vector3.zero;
+            _lastShakeOffset = Vector3.zero; _lookAheadX = 0f; _speedLookAheadZ = 0f;
             transform.position = BasePivot(0f);
             if (Cam != null)
             {
@@ -43,7 +44,8 @@ namespace JetHorizon
                 // applying a stale scene-occlusion decision as the Z-scroll root moves.
                 Cam.useOcclusionCulling = false;
                 Cam.transform.localPosition = Vector3.zero;
-                Cam.fieldOfView = Tuning.CamBaseFovDesktop;
+                JetHorizonFeelProfile feel = GameManager.I != null ? GameManager.I.FeelProfile : null;
+                Cam.fieldOfView = feel != null ? feel.BaseFov : Tuning.CamBaseFovDesktop;
                 AimAtLook();
             }
         }
@@ -90,12 +92,22 @@ namespace JetHorizon
             var signals = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals : default;
             float lookAhead = feel != null ? signals.Lateral01 * feel.CameraLookAhead : 0f;
             _lookAheadX = Mathf.Lerp(_lookAheadX, lookAhead, 1f - Mathf.Exp(-(feel != null ? feel.CameraFollowResponse : 18f) * dt));
-            p.x = Mathf.Lerp(p.x, s.ShipX + _lookAheadX, 1f - Mathf.Exp(-(feel != null ? feel.CameraFollowResponse : 18f) * dt));
+            float lateralLag = feel != null ? signals.Lateral01 * feel.CameraLateralLag : 0f;
+            p.x = Mathf.Lerp(p.x, s.ShipX + _lookAheadX - lateralLag, 1f - Mathf.Exp(-(feel != null ? feel.CameraFollowResponse : 18f) * dt));
             float shipAlt = s.ShipY - Tuning.ShipHoverY;
-            float targetY = Tuning.CamBaseY + Tuning.CamPivotYOffset + shipAlt * Tuning.CamYFollow;
+            float targetY = Tuning.CamBaseY + Tuning.CamPivotYOffset + shipAlt * Tuning.CamYFollow
+                - (feel != null ? signals.SpeedPresentation * feel.CameraSpeedHeightDrop : 0f);
             p.y = Mathf.Lerp(p.y, targetY, Mathf.Min(1f, Tuning.CamYLerp * dt));
-            p.z = Tuning.CamPivotZ;
+            float targetZ = Tuning.CamPivotZ
+                + (feel != null ? signals.SpeedPresentation * feel.CameraSpeedPullback : 0f)
+                + (feel != null ? signals.GateKick01 * feel.GateCameraPullback : 0f);
+            p.z = Mathf.Lerp(p.z, targetZ, 1f - Mathf.Exp(-(feel != null ? feel.CameraHeightResponse : 6f) * dt));
             transform.position = p;
+            float targetLookDepth = feel != null ? signals.SpeedPresentation * feel.CameraSpeedLookAhead : 0f;
+            _speedLookAheadZ = Mathf.Lerp(
+                _speedLookAheadZ,
+                targetLookDepth,
+                1f - Mathf.Exp(-(feel != null ? feel.CameraHeightResponse : 6f) * dt));
 
             // Keep the horizon stable for ordinary corrections. It only leans after
             // the ship has sustained a strong lateral move, and never follows the
@@ -116,6 +128,7 @@ namespace JetHorizon
             float maximumDegrees = feel != null && feel.CameraRollMaximumDegrees > 0f
                 ? feel.CameraRollMaximumDegrees
                 : 2.5f;
+            maximumDegrees *= Mathf.Lerp(1f, 1.35f, signals.SpeedPresentation);
             float targetRoll = Mathf.Abs(s.RollAngle) > 0.001f
                 ? 0f
                 : Mathf.Sign(s.BankRoll) * maximumDegrees * Mathf.Deg2Rad * strength;
@@ -126,7 +139,7 @@ namespace JetHorizon
         void AimAtLook()
         {
             if (Cam == null) return;
-            Vector3 lookWorld = transform.position + Tuning.CamLookLocal;
+            Vector3 lookWorld = transform.position + Tuning.CamLookLocal + new Vector3(0f, 0f, -_speedLookAheadZ);
             Cam.transform.position = transform.position;
             Cam.transform.LookAt(lookWorld);
             Cam.transform.Rotate(0f, 0f, _cameraRoll * Mathf.Rad2Deg, Space.Self);
@@ -162,19 +175,24 @@ namespace JetHorizon
             if (phase == GamePhase.Playing && !_sweeping)
             {
                 // FOV speed kick — spec/01 §3.2
+                ShipFeelSignals signals = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals : default;
                 float speedFrac = ShipFeelPresenter.I != null
-                    ? ShipFeelPresenter.I.Signals.SpeedPresentation
+                    ? signals.SpeedPresentation
                     : Mathf.Clamp01((s.EffectiveSpeed - Tuning.BaseSpeed) / (Tuning.BaseSpeed * 1.5f));
                 var feel = GameManager.I.FeelProfile;
                 float fovCurve = feel != null && feel.FovBySpeed != null
                     ? feel.FovBySpeed.Evaluate(speedFrac)
                     : speedFrac;
                 float targetFOV = feel != null
-                    ? feel.BaseFov + feel.SpeedFovBoost * fovCurve + (s.OverdriveActive ? feel.OverdriveFovBoost : 0f)
+                    ? feel.BaseFov
+                        + feel.SpeedFovBoost * fovCurve
+                        + signals.GateKick01 * feel.GateFovKickDegrees
+                        + (s.OverdriveActive ? feel.OverdriveFovBoost : 0f)
                     : Tuning.CamBaseFovDesktop + Tuning.FovSpeedBoost * Mathf.Pow(speedFrac, Tuning.FovKickExponent);
+                if (feel != null) targetFOV = Mathf.Min(feel.MaximumFov, targetFOV);
                 bool launch = s.Elapsed - _launchTime < 0.5f;
                 float rate = launch ? 12f : (Mathf.Abs(targetFOV - Cam.fieldOfView) > 0.5f ? 5f : 3f);
-                if (feel != null) rate = feel.FovResponse;
+                if (feel != null) rate = signals.GateKick01 > .02f ? feel.GateFovResponse : feel.FovResponse;
                 Cam.fieldOfView = Mathf.Lerp(Cam.fieldOfView, targetFOV, 1f - Mathf.Exp(-rate * rawDt));
 
                 // Constant, tiny engine vibration keeps starter cruise alive without

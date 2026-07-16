@@ -22,6 +22,7 @@ namespace JetHorizon
             GameEvents.LightningStruck += Lightning; GameEvents.ShieldHit += Shield; GameEvents.ShieldBroken += ShieldBroken;
             GameEvents.PowerupActivated += Powerup;
             GameEvents.LaserFired += Laser;
+            GameEvents.SpeedGateCrossed += GateCrossed;
         }
 
         void OnDisable()
@@ -31,6 +32,7 @@ namespace JetHorizon
             GameEvents.KlaxonCountdown -= Klaxon; GameEvents.LightningStruck -= Lightning;
             GameEvents.ShieldHit -= Shield; GameEvents.ShieldBroken -= ShieldBroken;
             GameEvents.PowerupActivated -= Powerup; GameEvents.LaserFired -= Laser;
+            GameEvents.SpeedGateCrossed -= GateCrossed;
         }
 
         void Update()
@@ -64,6 +66,26 @@ namespace JetHorizon
         void Shield(int _) => Play("shield-hit", .48f);
         void ShieldBroken() => Play("shield-expire", .40f);
         void Laser(float _) => Play("laser-beam-mg", .38f);
+
+        void GateCrossed(SpeedGateKind kind, float gain, int streak)
+        {
+            float streakPitch = Mathf.Min(.24f, Mathf.Max(0, streak - 1) * .012f);
+            if (kind == SpeedGateKind.Common)
+            {
+                Play("whoosh2", .15f, 1.04f + streakPitch);
+                if (streak > 0 && streak % 5 == 0)
+                    Play("thruster-impact", .18f, 1.18f);
+                return;
+            }
+            if (kind == SpeedGateKind.Surge)
+            {
+                Play("thruster-impact", .42f, 1.02f + streakPitch * .35f);
+                Play("whoosh-release", .28f, 1.10f);
+                return;
+            }
+            Play("thruster-impact", .58f, .94f);
+            Play("powerup-burst", .45f, 1.04f);
+        }
 
         void Died()
         {

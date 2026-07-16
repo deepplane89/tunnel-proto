@@ -37,6 +37,8 @@ namespace JetHorizon
         public LightningSystem Lightning;
         public AsteroidSystem Asteroids;
         public SpeedGatePresenter SpeedGates;
+        public GateCrossingFeedbackPresenter GateFeedback;
+        public SpeedSurfaceCuePresenter SpeedSurfaceCues;
         public PrismaticTunnelPresenter PrismaticTunnel;
         public HybridCanyonWorldPresenter HybridCanyonWorld;
         public MonumentPresenter Monuments;
@@ -234,6 +236,19 @@ namespace JetHorizon
                 SpeedGates = presenterObject.AddComponent<SpeedGatePresenter>();
             }
             SpeedGates.ResetSystem();
+            if (GateFeedback == null)
+            {
+                var presenterObject = new GameObject("Gate Crossing Feedback");
+                presenterObject.transform.SetParent(transform, false);
+                GateFeedback = presenterObject.AddComponent<GateCrossingFeedbackPresenter>();
+            }
+            GateFeedback.ResetSystem();
+            if (SpeedSurfaceCues == null)
+            {
+                var presenterObject = new GameObject("Surface Speed Cues");
+                presenterObject.transform.SetParent(transform, false);
+                SpeedSurfaceCues = presenterObject.AddComponent<SpeedSurfaceCuePresenter>();
+            }
             if (Asteroids == null)
             {
                 var presenterObject = new GameObject("Asteroid Presentation");
@@ -309,6 +324,7 @@ namespace JetHorizon
             Pickups.SimTick(dt);                                 // 19: coins/powerups move + magnet + collect
             PowerupPresentation?.SimTick(dt);                    // 20: snapshot/event-driven hero VFX
             SpeedGates?.SimTick(dt);                             // snapshot-only speed/transition gate presentation
+            GateFeedback?.SimTick(dt);                           // event-driven afterimage and water pulse
             ExtractionGate?.SimTick(dt);                         // snapshot-only spatial extraction presentation
         }
 
@@ -460,6 +476,12 @@ namespace JetHorizon
                     case SimulationEventType.LaserFired:
                         GameEvents.RaiseLaserFired(events[i].ValueA);
                         break;
+                    case SimulationEventType.SpeedGateCrossed:
+                        GameEvents.RaiseSpeedGateCrossed(
+                            (SpeedGateKind)(int)events[i].ValueA,
+                            events[i].ValueB,
+                            _coreSimulation.Snapshot.GateStreak);
+                        break;
                 }
             }
         }
@@ -600,6 +622,7 @@ namespace JetHorizon
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();
             SpeedGates?.ResetSystem();
+            GateFeedback?.ResetSystem();
             Asteroids?.ResetSystem();
             PowerupPresentation?.ResetSystem();
             Debug.Log("[Jet Horizon] Prismatic corridor preview selected. This run is leaderboard-ineligible.");

@@ -225,6 +225,16 @@ namespace JetHorizon.EditorTools
             _profile.FeelProfile = (JetHorizonFeelProfile)EditorGUILayout.ObjectField("Feel profile", _profile.FeelProfile, typeof(JetHorizonFeelProfile), false);
             EditorUtility.SetDirty(_profile);
             DrawDefaultInspector(_profile.FeelProfile);
+            if (EditorApplication.isPlaying && ShipFeelPresenter.I != null)
+            {
+                ShipFeelSignals signals = ShipFeelPresenter.I.Signals;
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                {
+                    EditorGUILayout.LabelField("Live speed presentation", signals.SpeedPresentation.ToString("0.000"));
+                    EditorGUILayout.LabelField("Live gate kick", signals.GateKick01.ToString("0.000"));
+                    EditorGUILayout.LabelField("Live lateral", signals.Lateral01.ToString("0.000"));
+                }
+            }
             var manager = UnityEngine.Object.FindFirstObjectByType<GameManager>(FindObjectsInactive.Include);
             if (manager != null && manager.FeelProfile != _profile.FeelProfile)
             {
@@ -234,7 +244,10 @@ namespace JetHorizon.EditorTools
                     EditorUtility.SetDirty(manager); MarkSceneDirty();
                 }
             }
-            EditorGUILayout.HelpBox("Handling fields feed the deterministic core on run creation. Ship, camera, spring-body, speed-perception and feedback fields affect Unity presentation only.", MessageType.Info);
+            EditorGUILayout.HelpBox(
+                "Handling fields feed the deterministic core on run creation. Everything under Layered Camera, Shared Speed Perception, " +
+                "Gate Crossing Feedback, and Impact Feedback is presentation-only and can be tuned safely while playing.",
+                MessageType.Info);
         }
 
         void DrawAudio()

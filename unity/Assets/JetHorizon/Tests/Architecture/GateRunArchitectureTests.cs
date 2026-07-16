@@ -1,3 +1,4 @@
+using JetHorizon.Application;
 using JetHorizon.Simulation;
 using NUnit.Framework;
 
@@ -111,6 +112,72 @@ namespace JetHorizon.Tests.Architecture
             }
             Assert.That(emitted, Is.EqualTo(4));
             Assert.That(scheduler.ActiveFamily, Is.EqualTo(ScheduledHazardFamily.None));
+        }
+
+        [Test]
+        public void CommonGateCrossing_RoutesLightHapticThroughApplicationPort()
+        {
+            var haptics = new FakeHaptics();
+            var router = new RunEventRouter(new GameServices(
+                new FakeProgressStore(),
+                new FakeAudio(),
+                haptics,
+                new FakeAnalytics(),
+                new FakeClock(),
+                new FakeLeaderboard()));
+            var simulation = new JetHorizonSimulation(
+                new SimulationConfig
+                {
+                    GateRunMode = true,
+                    StartSpeedMultiplier = 1f,
+                    MinimumOperationalSpeed = 36f,
+                    CollisionEnabled = false,
+                    MaxHazards = 600,
+                    MaxPickups = 128,
+                    MaxCorridorSlices = 128
+                },
+                90210u);
+            simulation.StartRun(90210L);
+            router.Dispatch(simulation.Events);
+            for (int i = 0; i < 180 && simulation.Snapshot.GatesCrossed == 0; i++)
+            {
+                simulation.Step(default);
+                router.Dispatch(simulation.Events);
+            }
+            Assert.That(simulation.Snapshot.GatesCrossed, Is.GreaterThan(0));
+            Assert.That(haptics.LastCue, Is.EqualTo(HapticCue.Light));
+        }
+
+        sealed class FakeProgressStore : IRunProgressStore
+        {
+            public bool TryLoad(out RunProgress progress) { progress = RunProgress.Empty; return false; }
+            public void Save(RunProgress progress) { }
+        }
+
+        sealed class FakeAudio : IAudioOutput
+        {
+            public void Play(AudioCue cue) { }
+        }
+
+        sealed class FakeHaptics : IHapticsOutput
+        {
+            public HapticCue LastCue;
+            public void Play(HapticCue cue) => LastCue = cue;
+        }
+
+        sealed class FakeAnalytics : IAnalyticsSink
+        {
+            public void Track(AnalyticsEvent analyticsEvent) { }
+        }
+
+        sealed class FakeClock : IUtcClock
+        {
+            public long UtcUnixMilliseconds => 1L;
+        }
+
+        sealed class FakeLeaderboard : ILeaderboardService
+        {
+            public void SubmitScore(LeaderboardSubmission submission) { }
         }
     }
 }

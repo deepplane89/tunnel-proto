@@ -17,6 +17,9 @@ Shader "JH/Water"
         _ReflectionStrength ("Reflection Strength", Range(0, 2)) = 1.15
         _SunDir ("Sun Direction", Vector) = (0, 0.3, -1, 0)
         _ShipX ("Ship X", Float) = 0
+        _ShipZ ("Ship Z", Float) = 3.9
+        _SpeedIntensity ("Speed Intensity", Range(0, 1)) = 0
+        _GatePulse ("Gate Pulse", Range(0, 1)) = 0
     }
     SubShader
     {
@@ -38,7 +41,7 @@ Shader "JH/Water"
                 half4 _WaterColor, _SunColor, _SkyColor;
                 float _FlowZ, _RippleSize, _Distortion, _ReflectionStrength;
                 float4 _SunDir;
-                float _ShipX;
+                float _ShipX, _ShipZ, _SpeedIntensity, _GatePulse;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
@@ -83,6 +86,8 @@ Shader "JH/Water"
             half4 frag(Varyings IN) : SV_Target
             {
                 half3 N = SampleWaveNormal(IN.posWS.xz);
+                N.xz *= 1.0 + _SpeedIntensity * 0.16 + _GatePulse * 0.20;
+                N = normalize(N);
                 float3 V = normalize(GetCameraPositionWS() - IN.posWS);
 
                 // fresnel sky tint on the black mirror
@@ -111,6 +116,12 @@ Shader "JH/Water"
                     * saturate(0.58 + N.x * 2.4 + N.z * 1.6) * 0.32;
                 half glints = pow(waveAlignment, 150.0) * 1.65;
                 col += _SunColor.rgb * (broadPath + warmBody + glints);
+
+                // Short local energy sheen under a confirmed speed-gate crossing.
+                float2 shipDelta = IN.posWS.xz - float2(_ShipX, _ShipZ);
+                half gateSheen = exp(-dot(shipDelta, shipDelta) * .018)
+                    * _GatePulse * (.55 + .45 * fresnel);
+                col += half3(.20, .72, 1.0) * gateSheen * .32;
 
                 col = MixFog(col, IN.fogFactor);
                 return half4(col, 1);

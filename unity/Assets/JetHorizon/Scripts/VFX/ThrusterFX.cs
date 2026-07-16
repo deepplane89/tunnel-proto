@@ -342,7 +342,13 @@ namespace JetHorizon
             if (GameManager.I == null) return;
             bool on = GameManager.I.Phase == GamePhase.Playing;
             var s = GameManager.I.Session;
-            float speedFrac = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals.SpeedPresentation : Mathf.Clamp01(s.EffectiveSpeed / (Tuning.BaseSpeed * 2.5f));
+            ShipFeelSignals signals = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals : default;
+            JetHorizonFeelProfile feel = GameManager.I.FeelProfile;
+            float speedFrac = ShipFeelPresenter.I != null
+                ? signals.SpeedPresentation
+                : Mathf.Clamp01(s.EffectiveSpeed / (Tuning.BaseSpeed * 2.5f));
+            speedFrac = Mathf.Clamp01(
+                speedFrac + signals.GateKick01 * (feel != null ? feel.GateThrusterBurst : .70f));
 
             if (Preset == Style.Pylon)
             {

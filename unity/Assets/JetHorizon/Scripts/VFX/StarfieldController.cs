@@ -280,9 +280,14 @@ namespace JetHorizon
             var s = GameManager.I.Session;
             float rawDt = Mathf.Min(Time.deltaTime, Tuning.MaxRawDt);
             float step = s.EffectiveSpeed * rawDt;
-            float speedFrac = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals.SpeedPresentation : Mathf.Clamp01((s.EffectiveSpeed - Tuning.BaseSpeed) / (Tuning.BaseSpeed * 1.5f));
-            int active = Mathf.RoundToInt(Mathf.Lerp(40, StreakCount, speedFrac));
-            float len = Mathf.Lerp(1.5f, 4f, speedFrac);
+            ShipFeelSignals signals = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals : default;
+            float speedFrac = ShipFeelPresenter.I != null
+                ? signals.SpeedPresentation
+                : Mathf.Clamp01((s.EffectiveSpeed - Tuning.BaseSpeed) / (Tuning.BaseSpeed * 1.5f));
+            float streakSignal = Mathf.Clamp01(Mathf.InverseLerp(.18f, 1f, speedFrac + signals.GateKick01 * .25f));
+            streakSignal = Mathf.Pow(streakSignal, 1.35f);
+            int active = Mathf.RoundToInt(StreakCount * streakSignal);
+            float len = Mathf.Lerp(.8f, 5f, streakSignal);
             for (int i = 0; i < _streaks.Length; i++)
             {
                 var t = _streaks[i];
@@ -290,7 +295,7 @@ namespace JetHorizon
                 if (t.gameObject.activeSelf != on) t.gameObject.SetActive(on);
                 if (!on) continue;
                 var p = t.position;
-                p.z += step * 1.4f;
+                p.z += step * Mathf.Lerp(1.1f, 1.7f, streakSignal);
                 if (p.z > 40f) p = RandomStreakPos();
                 t.position = p;
                 t.localScale = new Vector3(0.05f, 0.05f, len);

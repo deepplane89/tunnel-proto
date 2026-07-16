@@ -1118,6 +1118,14 @@ The first production architecture is now live in the Unity project:
 - Their complete Unity environments are prebuilt and moved as single world constructs; collision comes from the same core-authored route samples.
 - `RunResult` now records seed/mode, gate hit/miss totals, longest streak, sector/Heat, cargo banked/lost, hero completions, clocks, and completion reason.
 - Unity now has pooled snapshot-only speed-gate and asteroid presenters.
+- Core-confirmed gate crossings now feed a presentation-only speed-feedback envelope:
+  - common, surge, transition, and extraction strengths;
+  - layered FOV/pullback/height/look-ahead camera response;
+  - gate afterimage and water pulse;
+  - thruster and wake bursts;
+  - calibrated 36–160 u/s sustained speed perception;
+  - restrained sky streaks plus a one-draw-call near-water motion field;
+  - gate-specific audio and native iOS haptics.
 - The Control Room includes a Gameplay page showing live core facts and safe playtest controls.
 
 Legacy `StageDirector`, proof encounters, and legacy spawners remain available for regression/reference, but the normal Unity run now starts in `GateRunMode`; they do not choose production gates, pace, hazards, or extraction.
