@@ -198,44 +198,72 @@ namespace JetHorizon
         {
             if (stations == null || stations.Count < 2) throw new ArgumentException("A facet mass requires at least two stations.", nameof(stations));
             style.Validate();
-            int columns = stations.Count - 1;
+            for (int i = 1; i < stations.Count; i++)
+                if (stations[i].Z <= stations[i - 1].Z)
+                    throw new ArgumentException("Facet mass stations must be ordered by increasing Z.", nameof(stations));
+
+            float startZ = stations[0].Z;
+            float endZ = stations[stations.Count - 1].Z;
+            int patchCount = Mathf.Max(1, Mathf.CeilToInt((endZ - startZ) / style.Length));
+            int columnsPerPatch = style.Columns;
+            int columns = patchCount * columnsPerPatch;
             int rows = style.Rows;
             int stride = columns + 1;
-            var rng = new SourceLcg(seed);
+            var macro = new FacetMassStation[stride];
             var inner = new Vector3[(rows + 1) * stride];
             var outerCrestY = new float[stride];
 
-            for (int row = 0; row <= rows; row++)
+            // Sparse stations control only the large silhouette. They never become
+            // visible facet columns; the source 5x6 face retains its original scale.
+            for (int column = 0; column <= columns; column++)
             {
-                float v = row / (float)rows;
-                for (int column = 0; column <= columns; column++)
+                float z = Mathf.Lerp(startZ, endZ, column / (float)columns);
+                macro[column] = SampleMacroStation(stations, z);
+            }
+
+            // Build each source-sized patch with the original row-major LCG order.
+            // The first column after patch zero reuses the preceding patch's far edge:
+            // the face remains geometrically closed without smoothing its flat facets.
+            for (int patch = 0; patch < patchCount; patch++)
+            {
+                var rng = new SourceLcg(unchecked(seed + patch));
+                for (int row = 0; row <= rows; row++)
                 {
-                    FacetMassStation station = stations[column];
-                    float scale = Mathf.Max(.05f, station.ProfileScale);
-                    float x = station.InnerX + (Profile(v, style) - style.FootX) * scale;
-                    x += (rng.Next() - .5f) * 2f * style.Displacement * scale;
-                    if (v > .8f)
-                        x += (rng.Next() - .4f) * style.Displacement * scale * (v - .8f) / .2f * 2f;
-                    x = Mathf.Round(x * style.Snap) / style.Snap;
-                    float y = v * station.Height;
-                    if (v > .85f) y += (rng.Next() - .4f) * station.Height * .18f;
-                    y = Mathf.Round(y * 1.5f) / 1.5f;
-                    inner[row * stride + column] = new Vector3(x, y, station.Z);
+                    float v = row / (float)rows;
+                    float profile = Profile(v, style);
+                    for (int localColumn = 0; localColumn <= columnsPerPatch; localColumn++)
+                    {
+                        int column = patch * columnsPerPatch + localColumn;
+                        FacetMassStation station = macro[column];
+                        float localX = profile + (rng.Next() - .5f) * 2f * style.Displacement;
+                        if (v > .8f)
+                            localX += (rng.Next() - .4f) * style.Displacement * (v - .8f) / .2f * 2f;
+                        localX = Mathf.Round(localX * style.Snap) / style.Snap;
+                        float y = v * station.Height;
+                        if (v > .85f) y += (rng.Next() - .4f) * station.Height * .18f;
+                        y = Mathf.Round(y * 1.5f) / 1.5f;
+
+                        // Consume the complete source RNG sequence above, but keep the
+                        // already-authored far edge when this is a shared patch boundary.
+                        if (patch > 0 && localColumn == 0) continue;
+                        float scale = Mathf.Max(.05f, station.ProfileScale);
+                        float x = station.InnerX + (localX - style.FootX) * scale;
+                        inner[row * stride + column] = new Vector3(x, y, station.Z);
+                    }
                 }
             }
 
-            // Unlike the parity specimen, large masses share crest endpoints. That keeps
-            // every generated formation actually closed while retaining the same variation.
+            var crestRng = new SourceLcg(unchecked(seed + 7919));
             for (int column = 0; column <= columns; column++)
-                outerCrestY[column] = stations[column].Height * (.92f + rng.Next() * .08f);
+                outerCrestY[column] = macro[column].Height * (.92f + crestRng.Next() * .08f);
 
             var writer = new TriangleWriter(name);
             int Index(int row, int column) => row * stride + column;
             for (int row = 0; row < rows; row++)
             for (int column = 0; column < columns; column++)
             {
-                float u0 = column;
-                float u1 = column + 1f;
+                float u0 = column / (float)columnsPerPatch;
+                float u1 = (column + 1f) / columnsPerPatch;
                 float v0 = row / (float)rows;
                 float v1 = (row + 1f) / rows;
                 Vector3 p00 = inner[Index(row, column)];
@@ -245,8 +273,8 @@ namespace JetHorizon
                 writer.Triangle(p00, p01, p10, new Vector2(u0, v0), new Vector2(u0, v1), new Vector2(u1, v0));
                 writer.Triangle(p10, p01, p11, new Vector2(u1, v0), new Vector2(u0, v1), new Vector2(u1, v1));
 
-                FacetMassStation a = stations[column];
-                FacetMassStation b = stations[column + 1];
+                FacetMassStation a = macro[column];
+                FacetMassStation b = macro[column + 1];
                 Vector3 o00 = new Vector3(a.InnerX + a.Depth, v0 * a.Height, a.Z);
                 Vector3 o01 = new Vector3(a.InnerX + a.Depth, v1 * a.Height, a.Z);
                 Vector3 o10 = new Vector3(b.InnerX + b.Depth, v0 * b.Height, b.Z);
@@ -257,19 +285,21 @@ namespace JetHorizon
 
             for (int column = 0; column < columns; column++)
             {
-                FacetMassStation a = stations[column];
-                FacetMassStation b = stations[column + 1];
+                FacetMassStation a = macro[column];
+                FacetMassStation b = macro[column + 1];
+                float u0 = column / (float)columnsPerPatch;
+                float u1 = (column + 1f) / columnsPerPatch;
                 Vector3 bottomA = inner[Index(0, column)];
                 Vector3 bottomB = inner[Index(0, column + 1)];
                 Vector3 outerBottomA = new Vector3(a.InnerX + a.Depth, 0f, a.Z);
                 Vector3 outerBottomB = new Vector3(b.InnerX + b.Depth, 0f, b.Z);
-                writer.Quad(bottomA, outerBottomA, bottomB, outerBottomB, new Vector2(column, 0f), new Vector2(column, 1f), new Vector2(column + 1f, 0f), new Vector2(column + 1f, 1f));
+                writer.Quad(bottomA, outerBottomA, bottomB, outerBottomB, new Vector2(u0, 0f), new Vector2(u0, 1f), new Vector2(u1, 0f), new Vector2(u1, 1f));
 
                 Vector3 crestA = inner[Index(rows, column)];
                 Vector3 crestB = inner[Index(rows, column + 1)];
                 Vector3 outerTopA = new Vector3(a.InnerX + a.Depth, outerCrestY[column], a.Z);
                 Vector3 outerTopB = new Vector3(b.InnerX + b.Depth, outerCrestY[column + 1], b.Z);
-                writer.Quad(crestA, crestB, outerTopA, outerTopB, new Vector2(column, 1f), new Vector2(column + 1f, 1f), new Vector2(column, .8f), new Vector2(column + 1f, .8f));
+                writer.Quad(crestA, crestB, outerTopA, outerTopB, new Vector2(u0, 1f), new Vector2(u1, 1f), new Vector2(u0, .8f), new Vector2(u1, .8f));
             }
 
             AddEndCap(0, false);
@@ -277,7 +307,7 @@ namespace JetHorizon
 
             void AddEndCap(int column, bool reverse)
             {
-                FacetMassStation station = stations[column];
+                FacetMassStation station = macro[column];
                 float outerX = station.InnerX + station.Depth;
                 for (int row = 0; row < rows; row++)
                 {
@@ -299,6 +329,35 @@ namespace JetHorizon
             }
 
             return writer.Build();
+        }
+
+        static FacetMassStation SampleMacroStation(IReadOnlyList<FacetMassStation> stations, float z)
+        {
+            if (z <= stations[0].Z) return stations[0];
+            int last = stations.Count - 1;
+            if (z >= stations[last].Z) return stations[last];
+            int segment = 0;
+            while (segment < last - 1 && z > stations[segment + 1].Z) segment++;
+            FacetMassStation a = stations[Mathf.Max(0, segment - 1)];
+            FacetMassStation b = stations[segment];
+            FacetMassStation c = stations[segment + 1];
+            FacetMassStation d = stations[Mathf.Min(last, segment + 2)];
+            float t = Mathf.InverseLerp(b.Z, c.Z, z);
+            return new FacetMassStation(
+                z,
+                Catmull(a.InnerX, b.InnerX, c.InnerX, d.InnerX, t),
+                Mathf.Max(4f, Catmull(a.Height, b.Height, c.Height, d.Height, t)),
+                Mathf.Max(8f, Catmull(a.Depth, b.Depth, c.Depth, d.Depth, t)),
+                Mathf.Max(.05f, Catmull(a.ProfileScale, b.ProfileScale, c.ProfileScale, d.ProfileScale, t)));
+        }
+
+        static float Catmull(float a, float b, float c, float d, float t)
+        {
+            float t2 = t * t;
+            float t3 = t2 * t;
+            return .5f * ((2f * b) + (-a + c) * t
+                + (2f * a - 5f * b + 4f * c - d) * t2
+                + (-a + 3f * b - 3f * c + d) * t3);
         }
 
         public static bool SameVertexData(Mesh a, Mesh b)
