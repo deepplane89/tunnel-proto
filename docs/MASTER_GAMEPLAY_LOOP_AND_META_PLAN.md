@@ -1124,6 +1124,8 @@ The first production architecture is now live in the Unity project:
 - The first laser payoff uses a dense three-row destructible formation with exact dual-lane targets and a separately validated side bypass, so the encounter remains survivable without the pickup while staying below the mobile hazard/event budget.
 - Runner laser content is source-locked to the production Three.js tuning: two lanes at `±0.35`, `+0.45` Y, `-2.50` Z in the reference world pose, 10-unit core length, 7.5-unit glow length, and 8.5 Hz fire rate.
 - Unity converts those reference offsets into model-child muzzle sockets and adds pooled impact plasma, trails, shock rings, light flashes, positional audio, and cargo collection pull-in without moving gameplay authority out of the core.
+- Laser-formation targets now present as pulsing overload reactors with obsidian containment fins, two rotating energy rings, and a hot faceted core instead of reusing the ordinary fat-cone silhouette.
+- Every confirmed reactor kill throws pooled plasma plus angular physical fragments. The tenth kill uses the last cached core snapshot to stagger overload bursts across the formation, so the entire target field visibly fails in sequence while the core remains the sole authority for destruction and rewards.
 - Formation targets carry an explicit engine-neutral gameplay role. Ordinary fat cones cannot accidentally award laser rewards.
 - Rapid kills build a core-owned destruction chain. Every third destruction releases milestone cargo; the sixth target upgrades that milestone to Alloy.
 - Ten destroyed targets overload the formation, remove the remaining formation geometry, award a score burst, and release two Alloy pods plus a central Prism pod.

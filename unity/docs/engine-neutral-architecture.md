@@ -84,7 +84,7 @@ Only then should the corresponding legacy gameplay code be disabled. Presentatio
 | Zipper, slalom, and sine corridors | Core scheduling, row geometry, random choices, entities, rewards | cone/coin pooling and corridor tint |
 | Runner ship and thruster tuning | Engine-neutral content | GLB loading, socket transforms, exhaust drawing |
 | Cargo route risk | Core route type, geometry, value, capacity, and collection | pooled pod drawing, pull-in, tint, and audio |
-| Laser weapon | Core fire cadence, target role, lane targeting, chain, overload, score, and cargo drops | GLB muzzle sockets, bolt/impact VFX, lighting, camera impulse, and audio |
+| Laser weapon | Core fire cadence, target role, lane targeting, chain, overload, score, and cargo drops | GLB muzzle sockets, pooled reactor presentation, bolt/impact VFX, physical fragments, staggered overload cascade, lighting, camera impulse, and audio |
 | Structured-wall field | Core 3-second gate, 20-row lifecycle, 6x2x2 transforms, and entities | pooled wall presentation |
 
 ## Next checkpoints

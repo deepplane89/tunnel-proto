@@ -14,6 +14,7 @@ namespace JetHorizon
         {
             public GameObject Root;
             public ParticleSystem Particles;
+            public ParticleSystem Debris;
             public Transform Ring;
             public MeshRenderer RingRenderer;
             public Light Light;
@@ -23,13 +24,32 @@ namespace JetHorizon
             public bool Active;
         }
 
-        const int PoolSize = 12;
-        const float Lifetime = .72f;
+        struct ScheduledBurst
+        {
+            public bool Active;
+            public float Delay;
+            public float X;
+            public float Z;
+            public float Strength;
+            public int ParticleCount;
+            public int DebrisCount;
+        }
+
+        const int PoolSize = 18;
+        const int MaxScheduledBursts = 12;
+        const int MaxCachedTargets = 32;
+        const float Lifetime = .78f;
         readonly Burst[] _pool = new Burst[PoolSize];
+        readonly ScheduledBurst[] _scheduled = new ScheduledBurst[MaxScheduledBursts];
+        readonly int[] _cachedTargetIds = new int[MaxCachedTargets];
+        readonly Vector3[] _cachedTargetPositions = new Vector3[MaxCachedTargets];
         Material _particleMaterial;
+        Material _debrisMaterial;
         Material _ringMaterial;
+        Mesh _debrisMesh;
         Texture2D _particleTexture;
         Texture2D _ringTexture;
+        int _cachedTargetCount;
         float _pendingImpactStrength = 1f;
 
         static readonly int TintId = Shader.PropertyToID("_Tint");
@@ -61,9 +81,14 @@ namespace JetHorizon
                 _particleMaterial = new Material(additive) { name = "JH_LaserDestructionParticles" };
                 _particleMaterial.SetTexture("_MainTex", _particleTexture);
                 _particleMaterial.SetColor("_Tint", new Color(1f, .18f, .015f, .9f));
+                _debrisMaterial = new Material(additive) { name = "JH_LaserDestructionDebris" };
+                _debrisMaterial.SetTexture("_MainTex", Texture2D.whiteTexture);
+                _debrisMaterial.SetColor("_Tint", new Color(1f, .095f, .008f, .92f));
                 _ringMaterial = new Material(additive) { name = "JH_LaserDestructionRing" };
                 _ringMaterial.SetTexture("_MainTex", _ringTexture);
             }
+            _debrisMesh = MeshFactory.Octahedron(1f);
+            _debrisMesh.name = "JH_LaserReactorFragment";
             for (int i = 0; i < PoolSize; i++) _pool[i] = CreateBurst(i);
         }
 
@@ -88,7 +113,7 @@ namespace JetHorizon
                 new Color(1f, .05f, .005f, .9f));
             main.gravityModifier = .32f;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.maxParticles = 48;
+            main.maxParticles = 64;
             var emission = particles.emission;
             emission.enabled = false;
             var shape = particles.shape;
@@ -125,6 +150,62 @@ namespace JetHorizon
             particleRenderer.trailMaterial = _particleMaterial;
             particleRenderer.shadowCastingMode = ShadowCastingMode.Off;
 
+            var debrisObject = new GameObject("Physical Reactor Fragments");
+            debrisObject.transform.SetParent(root.transform, false);
+            var debris = debrisObject.AddComponent<ParticleSystem>();
+            var debrisMain = debris.main;
+            debrisMain.loop = false;
+            debrisMain.playOnAwake = false;
+            debrisMain.duration = .12f;
+            debrisMain.startLifetime = new ParticleSystem.MinMaxCurve(.42f, .88f);
+            debrisMain.startSpeed = new ParticleSystem.MinMaxCurve(5.5f, 14.5f);
+            debrisMain.startSize = new ParticleSystem.MinMaxCurve(.18f, .52f);
+            debrisMain.startRotation3D = true;
+            debrisMain.startRotationX = new ParticleSystem.MinMaxCurve(-Mathf.PI, Mathf.PI);
+            debrisMain.startRotationY = new ParticleSystem.MinMaxCurve(-Mathf.PI, Mathf.PI);
+            debrisMain.startRotationZ = new ParticleSystem.MinMaxCurve(-Mathf.PI, Mathf.PI);
+            debrisMain.startColor = new ParticleSystem.MinMaxGradient(
+                new Color(1f, .92f, .52f, 1f),
+                new Color(.72f, .015f, .002f, .95f));
+            debrisMain.gravityModifier = .48f;
+            debrisMain.simulationSpace = ParticleSystemSimulationSpace.World;
+            debrisMain.maxParticles = 40;
+            var debrisEmission = debris.emission;
+            debrisEmission.enabled = false;
+            var debrisShape = debris.shape;
+            debrisShape.shapeType = ParticleSystemShapeType.Sphere;
+            debrisShape.radius = .48f;
+            var debrisRotation = debris.rotationOverLifetime;
+            debrisRotation.enabled = true;
+            debrisRotation.separateAxes = true;
+            debrisRotation.x = new ParticleSystem.MinMaxCurve(-7.5f, 7.5f);
+            debrisRotation.y = new ParticleSystem.MinMaxCurve(-9f, 9f);
+            debrisRotation.z = new ParticleSystem.MinMaxCurve(-6f, 6f);
+            var debrisColor = debris.colorOverLifetime;
+            debrisColor.enabled = true;
+            var debrisGradient = new Gradient();
+            debrisGradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(Color.white, 0f),
+                    new GradientColorKey(new Color(1f, .12f, .008f), .28f),
+                    new GradientColorKey(new Color(.11f, .008f, .004f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(1f, 0f),
+                    new GradientAlphaKey(.88f, .55f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+            debrisColor.color = debrisGradient;
+            var debrisRenderer = debris.GetComponent<ParticleSystemRenderer>();
+            debrisRenderer.renderMode = ParticleSystemRenderMode.Mesh;
+            debrisRenderer.mesh = _debrisMesh;
+            debrisRenderer.sharedMaterial = _debrisMaterial;
+            debrisRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            debrisRenderer.receiveShadows = false;
+            debrisRenderer.enableGPUInstancing = true;
+
             var ring = GameObject.CreatePrimitive(PrimitiveType.Quad);
             Destroy(ring.GetComponent<Collider>());
             ring.name = "Shock Ring";
@@ -149,6 +230,7 @@ namespace JetHorizon
             {
                 Root = root,
                 Particles = particles,
+                Debris = debris,
                 Ring = ring.transform,
                 RingRenderer = ringRenderer,
                 Light = light,
@@ -159,7 +241,14 @@ namespace JetHorizon
         void OnHazardDestroyed(int id, float x, float z)
         {
             EnsureBuilt();
-            TriggerBurst(x, z, _pendingImpactStrength, Mathf.RoundToInt(30f + _pendingImpactStrength * 4f));
+            bool reactor = IsCachedLaserTarget(id);
+            float strength = _pendingImpactStrength * (reactor ? 1.18f : 1f);
+            TriggerBurst(
+                x,
+                z,
+                strength,
+                Mathf.RoundToInt((reactor ? 38f : 30f) + strength * 4f),
+                Mathf.RoundToInt((reactor ? 18f : 10f) + strength * 3f));
             _pendingImpactStrength = 1f;
         }
 
@@ -174,19 +263,70 @@ namespace JetHorizon
         void OnLaserFormationCompleted(float x, float z)
         {
             EnsureBuilt();
-            TriggerBurst(x, z, 2.65f, 48);
-            for (int i = 0; i < 4; i++)
+            TriggerBurst(x, z, 2.9f, 64, 36);
+
+            int scheduled = 0;
+            int stride = Mathf.Max(1, Mathf.CeilToInt(_cachedTargetCount / 10f));
+            for (int i = 0; i < _cachedTargetCount && scheduled < 10; i += stride)
             {
-                float angle = i * Mathf.PI * .5f + .35f;
-                TriggerBurst(
-                    x + Mathf.Cos(angle) * 4.2f,
-                    z + Mathf.Sin(angle) * 3.2f,
-                    1.45f,
-                    32);
+                Vector3 position = _cachedTargetPositions[i];
+                ScheduleBurst(
+                    .045f + scheduled * .042f,
+                    position.x,
+                    position.z,
+                    1.38f + scheduled * .055f,
+                    34,
+                    20);
+                scheduled++;
+            }
+
+            if (scheduled == 0)
+            {
+                for (int i = 0; i < 6; i++)
+                {
+                    float angle = i * Mathf.PI / 3f + .28f;
+                    ScheduleBurst(
+                        .045f + i * .05f,
+                        x + Mathf.Cos(angle) * (3.6f + (i % 2) * 1.8f),
+                        z + Mathf.Sin(angle) * 4.6f,
+                        1.45f + i * .06f,
+                        34,
+                        20);
+                }
             }
         }
 
-        void TriggerBurst(float x, float z, float strength, int particleCount)
+        void ScheduleBurst(
+            float delay,
+            float x,
+            float z,
+            float strength,
+            int particleCount,
+            int debrisCount)
+        {
+            for (int i = 0; i < _scheduled.Length; i++)
+            {
+                if (_scheduled[i].Active) continue;
+                _scheduled[i] = new ScheduledBurst
+                {
+                    Active = true,
+                    Delay = delay,
+                    X = x,
+                    Z = z,
+                    Strength = strength,
+                    ParticleCount = particleCount,
+                    DebrisCount = debrisCount
+                };
+                return;
+            }
+        }
+
+        void TriggerBurst(
+            float x,
+            float z,
+            float strength,
+            int particleCount,
+            int debrisCount)
         {
             Burst burst = Acquire();
             burst.Active = true;
@@ -197,7 +337,9 @@ namespace JetHorizon
             burst.Ring.localScale = Vector3.one * .35f;
             burst.Light.intensity = 13f * burst.Strength;
             burst.Particles.Clear(true);
-            burst.Particles.Emit(Mathf.Clamp(particleCount, 8, 48));
+            burst.Debris.Clear(true);
+            burst.Particles.Emit(Mathf.Clamp(particleCount, 8, 64));
+            burst.Debris.Emit(Mathf.Clamp(debrisCount, 6, 40));
         }
 
         Burst Acquire()
@@ -213,6 +355,8 @@ namespace JetHorizon
         void Update()
         {
             float dt = Mathf.Min(Time.unscaledDeltaTime, Tuning.MaxRawDt);
+            CacheLaserTargets();
+            TickScheduledBursts(dt);
             for (int i = 0; i < _pool.Length; i++)
             {
                 Burst burst = _pool[i];
@@ -236,10 +380,58 @@ namespace JetHorizon
             }
         }
 
+        void TickScheduledBursts(float dt)
+        {
+            for (int i = 0; i < _scheduled.Length; i++)
+            {
+                ScheduledBurst scheduled = _scheduled[i];
+                if (!scheduled.Active) continue;
+                scheduled.Delay -= dt;
+                if (scheduled.Delay > 0f)
+                {
+                    _scheduled[i] = scheduled;
+                    continue;
+                }
+                _scheduled[i] = default;
+                TriggerBurst(
+                    scheduled.X,
+                    scheduled.Z,
+                    scheduled.Strength,
+                    scheduled.ParticleCount,
+                    scheduled.DebrisCount);
+            }
+        }
+
+        void CacheLaserTargets()
+        {
+            var snapshot = GameManager.I != null ? GameManager.I.CoreSnapshot : null;
+            if (snapshot == null) return;
+            int count = 0;
+            for (int i = 0; i < snapshot.HazardCount && count < MaxCachedTargets; i++)
+            {
+                HazardSnapshot hazard = snapshot.GetHazard(i);
+                if (hazard.Role != HazardRole.LaserFormationTarget) continue;
+                _cachedTargetIds[count] = hazard.Id;
+                _cachedTargetPositions[count] = new Vector3(hazard.X, hazard.Y, hazard.Z);
+                count++;
+            }
+            if (count > 0) _cachedTargetCount = count;
+        }
+
+        bool IsCachedLaserTarget(int id)
+        {
+            for (int i = 0; i < _cachedTargetCount; i++)
+                if (_cachedTargetIds[i] == id) return true;
+            return false;
+        }
+
         public void ResetPresentation()
         {
             EnsureBuilt();
             for (int i = 0; i < _pool.Length; i++) Release(_pool[i]);
+            for (int i = 0; i < _scheduled.Length; i++) _scheduled[i] = default;
+            _cachedTargetCount = 0;
+            _pendingImpactStrength = 1f;
         }
 
         static void Release(Burst burst)
@@ -249,6 +441,7 @@ namespace JetHorizon
             burst.Age = 0f;
             burst.Strength = 1f;
             burst.Particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            burst.Debris.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             burst.Light.intensity = 0f;
             burst.Root.SetActive(false);
         }
@@ -256,7 +449,9 @@ namespace JetHorizon
         void OnDestroy()
         {
             if (_particleMaterial != null) Destroy(_particleMaterial);
+            if (_debrisMaterial != null) Destroy(_debrisMaterial);
             if (_ringMaterial != null) Destroy(_ringMaterial);
+            if (_debrisMesh != null) Destroy(_debrisMesh);
             if (_particleTexture != null) Destroy(_particleTexture);
             if (_ringTexture != null) Destroy(_ringTexture);
         }

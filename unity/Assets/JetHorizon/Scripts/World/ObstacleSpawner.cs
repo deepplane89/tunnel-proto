@@ -25,6 +25,20 @@ namespace JetHorizon
             public MaterialPropertyBlock Mpb;
             public bool Active;
             public bool IsFatCone, SlalomScaled, IsCorridor;
+            public bool IsLaserTarget;
+            public Transform TargetRoot;
+            public Transform TargetCore;
+            public Transform TargetRingA;
+            public Transform TargetRingB;
+            public Transform TargetFinRoot;
+            public MeshRenderer TargetBodyRenderer;
+            public MeshRenderer TargetCoreRenderer;
+            public MeshRenderer TargetRingARenderer;
+            public MeshRenderer TargetRingBRenderer;
+            public MeshRenderer[] TargetFinRenderers;
+            public MaterialPropertyBlock TargetBodyProperties;
+            public MaterialPropertyBlock TargetCoreProperties;
+            public MaterialPropertyBlock TargetRingProperties;
             public int ColorType;
             public int CoreId;
         }
@@ -43,6 +57,8 @@ namespace JetHorizon
         readonly List<RingObs> _rings = new List<RingObs>(RingPoolSize);
         readonly Dictionary<int, HazardSnapshot> _coreHazards = new Dictionary<int, HazardSnapshot>(Tuning.ObstaclePoolSize + RingPoolSize);
         Mesh _coneMesh, _ringMesh;
+        Mesh _laserTargetCoreMesh, _laserTargetRingMesh;
+        Material _laserTargetCoreMaterial, _laserTargetRingMaterial;
 
         RunSession S => GameManager.I.Session;
 
@@ -57,6 +73,18 @@ namespace JetHorizon
             if (_cones.Count > 0) return;
             _coneMesh = MeshFactory.Cone(1.6f, 10.5f, 6);   // avg h ≈ 8+1.5 + 2 sink... scaled per-spawn
             _ringMesh = MeshFactory.PolygonTorus(RingR, RingTube, RingSides);
+            _laserTargetCoreMesh = MeshFactory.Octahedron(1f);
+            _laserTargetCoreMesh.name = "JH_LaserTargetCore";
+            _laserTargetRingMesh = MeshFactory.PolygonTorus(1.62f, .12f, 8, 6);
+            _laserTargetRingMesh.name = "JH_LaserTargetContainmentRing";
+            Shader additive = Shader.Find("JH/Additive");
+            if (additive != null)
+            {
+                _laserTargetCoreMaterial = new Material(additive) { name = "JH_LaserTargetCoreMat" };
+                _laserTargetCoreMaterial.SetColor(TintId, new Color(1f, .28f, .015f, .95f));
+                _laserTargetRingMaterial = new Material(additive) { name = "JH_LaserTargetRingMat" };
+                _laserTargetRingMaterial.SetColor(TintId, new Color(1f, .06f, .005f, .82f));
+            }
 
             var parent = new GameObject("ConePool").transform;
             parent.SetParent(transform, false);
@@ -138,6 +166,7 @@ namespace JetHorizon
 
                 c.Active = true;
                 c.CoreId = coreId;
+                PrepareStandardCone(c);
                 c.IsFatCone = isFat; c.SlalomScaled = scaleXZ != 1f; c.IsCorridor = isCorridor;
                 c.ColorType = colorType;
                 c.T.position = new Vector3(x, -sink, z);
@@ -159,6 +188,9 @@ namespace JetHorizon
             c.Active = false;
             c.CoreId = 0;
             c.T.localScale = Vector3.one;
+            c.R.enabled = true;
+            c.IsLaserTarget = false;
+            if (c.TargetRoot != null) c.TargetRoot.gameObject.SetActive(false);
             c.IsFatCone = c.SlalomScaled = c.IsCorridor = false;
             c.T.gameObject.SetActive(false);
         }
@@ -191,8 +223,13 @@ namespace JetHorizon
 
                 // fade-in −160 → −110
                 float fade = Mathf.Clamp01((p.z - Tuning.SpawnZ) / (Tuning.FadeInEndZ - Tuning.SpawnZ));
-                c.Mpb.SetFloat(FadeId, fade * Vibes.ConeOpacity[c.ColorType]);
-                c.R.SetPropertyBlock(c.Mpb);
+                if (c.IsLaserTarget)
+                    UpdateLaserTarget(c, fade);
+                else
+                {
+                    c.Mpb.SetFloat(FadeId, fade * Vibes.ConeOpacity[c.ColorType]);
+                    c.R.SetPropertyBlock(c.Mpb);
+                }
             }
 
             foreach (var r in _rings)
@@ -243,15 +280,18 @@ namespace JetHorizon
                 const float sink = 2f;
                 c.Active = true;
                 c.CoreId = hazard.Id;
+                c.IsLaserTarget = hazard.Role == HazardRole.LaserFormationTarget;
                 c.IsFatCone = hazard.Style == HazardStyle.FatCone
-                    || hazard.Role == HazardRole.LaserFormationTarget;
+                    || c.IsLaserTarget;
                 c.IsCorridor = hazard.Style == HazardStyle.CorridorCone
                     || hazard.Style == HazardStyle.L4CorridorCone
                     || hazard.Style == HazardStyle.L5CorridorCone;
                 c.SlalomScaled = scaleXZ != 1f;
                 c.ColorType = Mathf.Abs(hazard.VisualVariant) % Vibes.ConeColors.Length;
                 c.T.position = new Vector3(hazard.X, hazard.Y, hazard.Z);
-                c.T.localScale = new Vector3(scaleXZ, (height + sink) / 10.5f, scaleXZ);
+                c.T.localScale = c.IsLaserTarget
+                    ? Vector3.one
+                    : new Vector3(scaleXZ, (height + sink) / 10.5f, scaleXZ);
                 Color tint = hazard.Role == HazardRole.LaserFormationTarget
                     ? new Color(1f, .16f, .015f, 1f)
                     : hazard.Style == HazardStyle.L4CorridorCone
@@ -263,9 +303,159 @@ namespace JetHorizon
                 c.Mpb.SetFloat(FadeId, 0f);
                 c.Mpb.SetFloat(BandAmountId, c.IsCorridor ? 1f : 0f);
                 c.R.SetPropertyBlock(c.Mpb);
+                if (c.IsLaserTarget)
+                {
+                    EnsureLaserTargetVisual(c);
+                    c.R.enabled = false;
+                    c.TargetRoot.gameObject.SetActive(true);
+                    UpdateLaserTarget(c, 0f);
+                }
+                else
+                {
+                    PrepareStandardCone(c);
+                }
                 c.T.gameObject.SetActive(true);
                 return;
             }
+        }
+
+        void PrepareStandardCone(ConeObs c)
+        {
+            c.IsLaserTarget = false;
+            c.R.enabled = true;
+            if (c.TargetRoot != null) c.TargetRoot.gameObject.SetActive(false);
+        }
+
+        void EnsureLaserTargetVisual(ConeObs c)
+        {
+            if (c.TargetRoot != null) return;
+
+            var root = new GameObject("Overload Reactor").transform;
+            root.SetParent(c.T, false);
+            c.TargetRoot = root;
+
+            c.TargetBodyRenderer = CreateTargetPart(
+                "Obsidian Reactor Body",
+                root,
+                _laserTargetCoreMesh,
+                ConeMaterial,
+                new Vector3(0f, 3.1f, 0f),
+                new Vector3(1.22f, 1.48f, 1.22f),
+                Quaternion.identity,
+                out _);
+            c.TargetCoreRenderer = CreateTargetPart(
+                "Hot Reactor Core",
+                root,
+                _laserTargetCoreMesh,
+                _laserTargetCoreMaterial,
+                new Vector3(0f, 3.1f, 0f),
+                new Vector3(1.31f, 1.57f, 1.31f),
+                Quaternion.identity,
+                out c.TargetCore);
+            c.TargetRingARenderer = CreateTargetPart(
+                "Containment Ring A",
+                root,
+                _laserTargetRingMesh,
+                _laserTargetRingMaterial,
+                new Vector3(0f, 3.1f, 0f),
+                Vector3.one,
+                Quaternion.identity,
+                out c.TargetRingA);
+            c.TargetRingBRenderer = CreateTargetPart(
+                "Containment Ring B",
+                root,
+                _laserTargetRingMesh,
+                _laserTargetRingMaterial,
+                new Vector3(0f, 3.1f, 0f),
+                Vector3.one * .92f,
+                Quaternion.Euler(62f, 24f, 0f),
+                out c.TargetRingB);
+
+            c.TargetFinRoot = new GameObject("Containment Fins").transform;
+            c.TargetFinRoot.SetParent(root, false);
+            c.TargetFinRenderers = new MeshRenderer[4];
+            Vector3[] finPositions =
+            {
+                new Vector3(1.52f, 2.08f, 0f),
+                new Vector3(-1.52f, 2.08f, 0f),
+                new Vector3(0f, 2.08f, 1.52f),
+                new Vector3(0f, 2.08f, -1.52f)
+            };
+            for (int i = 0; i < c.TargetFinRenderers.Length; i++)
+            {
+                c.TargetFinRenderers[i] = CreateTargetPart(
+                    $"Containment Fin {i + 1}",
+                    c.TargetFinRoot,
+                    _laserTargetCoreMesh,
+                    ConeMaterial,
+                    finPositions[i],
+                    new Vector3(.25f, .92f, .25f),
+                    Quaternion.Euler(0f, i * 90f, i % 2 == 0 ? -18f : 18f),
+                    out _);
+            }
+
+            c.TargetBodyProperties = new MaterialPropertyBlock();
+            c.TargetCoreProperties = new MaterialPropertyBlock();
+            c.TargetRingProperties = new MaterialPropertyBlock();
+            root.gameObject.SetActive(false);
+        }
+
+        static MeshRenderer CreateTargetPart(
+            string name,
+            Transform parent,
+            Mesh mesh,
+            Material material,
+            Vector3 position,
+            Vector3 scale,
+            Quaternion rotation,
+            out Transform part)
+        {
+            var go = new GameObject(name);
+            part = go.transform;
+            part.SetParent(parent, false);
+            part.localPosition = position;
+            part.localRotation = rotation;
+            part.localScale = scale;
+            var filter = go.AddComponent<MeshFilter>();
+            filter.sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            return renderer;
+        }
+
+        void UpdateLaserTarget(ConeObs c, float fade)
+        {
+            if (c.TargetRoot == null) return;
+            float time = Time.unscaledTime;
+            float phase = time * 6.5f + c.CoreId * .37f;
+            float pulse = 1f + Mathf.Sin(phase) * .085f;
+            float rotation = Mathf.Repeat(time * 115f + c.CoreId * 13f, 360f);
+
+            c.TargetCore.localScale = new Vector3(1.31f, 1.57f, 1.31f) * pulse;
+            c.TargetRingA.localRotation = Quaternion.Euler(0f, 0f, rotation);
+            c.TargetRingB.localRotation = Quaternion.Euler(62f, 24f, -rotation * 1.32f);
+            c.TargetFinRoot.localRotation = Quaternion.Euler(0f, -rotation * .18f, 0f);
+
+            float visible = fade * .96f;
+            c.TargetBodyProperties.SetColor(TintId, new Color(1f, .12f, .008f, 1f));
+            c.TargetBodyProperties.SetFloat(FadeId, visible);
+            c.TargetBodyProperties.SetFloat(BandAmountId, 0f);
+            c.TargetBodyRenderer.SetPropertyBlock(c.TargetBodyProperties);
+            for (int i = 0; i < c.TargetFinRenderers.Length; i++)
+                c.TargetFinRenderers[i].SetPropertyBlock(c.TargetBodyProperties);
+
+            float heat = Mathf.Clamp01((pulse - .915f) / .17f);
+            c.TargetCoreProperties.SetColor(
+                TintId,
+                new Color(1f, Mathf.Lerp(.24f, .82f, heat), .025f, visible));
+            c.TargetCoreRenderer.SetPropertyBlock(c.TargetCoreProperties);
+            c.TargetRingProperties.SetColor(
+                TintId,
+                new Color(1f, .07f + .08f * Mathf.Sin(phase + 1.2f), .006f, visible * .88f));
+            c.TargetRingARenderer.SetPropertyBlock(c.TargetRingProperties);
+            c.TargetRingBRenderer.SetPropertyBlock(c.TargetRingProperties);
         }
 
         void AcquireCoreRing(HazardSnapshot hazard)
@@ -282,6 +472,14 @@ namespace JetHorizon
                 r.T.gameObject.SetActive(true);
                 return;
             }
+        }
+
+        void OnDestroy()
+        {
+            if (_laserTargetCoreMaterial != null) Destroy(_laserTargetCoreMaterial);
+            if (_laserTargetRingMaterial != null) Destroy(_laserTargetRingMaterial);
+            if (_laserTargetCoreMesh != null) Destroy(_laserTargetCoreMesh);
+            if (_laserTargetRingMesh != null) Destroy(_laserTargetRingMesh);
         }
     }
 }
