@@ -1,3 +1,4 @@
+using JetHorizon.Simulation;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -18,6 +19,7 @@ namespace JetHorizon
             public Light Light;
             public MaterialPropertyBlock RingProperties;
             public float Age;
+            public float Strength;
             public bool Active;
         }
 
@@ -28,12 +30,23 @@ namespace JetHorizon
         Material _ringMaterial;
         Texture2D _particleTexture;
         Texture2D _ringTexture;
+        float _pendingImpactStrength = 1f;
 
         static readonly int TintId = Shader.PropertyToID("_Tint");
 
         void Awake() => EnsureBuilt();
-        void OnEnable() => GameEvents.HazardDestroyed += OnHazardDestroyed;
-        void OnDisable() => GameEvents.HazardDestroyed -= OnHazardDestroyed;
+        void OnEnable()
+        {
+            GameEvents.HazardDestroyed += OnHazardDestroyed;
+            GameEvents.LaserChainAdvanced += OnLaserChainAdvanced;
+            GameEvents.LaserFormationCompleted += OnLaserFormationCompleted;
+        }
+        void OnDisable()
+        {
+            GameEvents.HazardDestroyed -= OnHazardDestroyed;
+            GameEvents.LaserChainAdvanced -= OnLaserChainAdvanced;
+            GameEvents.LaserFormationCompleted -= OnLaserFormationCompleted;
+        }
 
         void EnsureBuilt()
         {
@@ -146,15 +159,45 @@ namespace JetHorizon
         void OnHazardDestroyed(int id, float x, float z)
         {
             EnsureBuilt();
+            TriggerBurst(x, z, _pendingImpactStrength, Mathf.RoundToInt(30f + _pendingImpactStrength * 4f));
+            _pendingImpactStrength = 1f;
+        }
+
+        void OnLaserChainAdvanced(int chain, int destroyedTotal)
+        {
+            float milestone = destroyedTotal > 0 && destroyedTotal % LaserRewardModel.CargoMilestoneInterval == 0
+                ? .30f
+                : 0f;
+            _pendingImpactStrength = 1f + Mathf.Min(10, chain) * .055f + milestone;
+        }
+
+        void OnLaserFormationCompleted(float x, float z)
+        {
+            EnsureBuilt();
+            TriggerBurst(x, z, 2.65f, 48);
+            for (int i = 0; i < 4; i++)
+            {
+                float angle = i * Mathf.PI * .5f + .35f;
+                TriggerBurst(
+                    x + Mathf.Cos(angle) * 4.2f,
+                    z + Mathf.Sin(angle) * 3.2f,
+                    1.45f,
+                    32);
+            }
+        }
+
+        void TriggerBurst(float x, float z, float strength, int particleCount)
+        {
             Burst burst = Acquire();
             burst.Active = true;
             burst.Age = 0f;
+            burst.Strength = Mathf.Max(.6f, strength);
             burst.Root.transform.position = new Vector3(x, 1.25f, z);
             burst.Root.SetActive(true);
             burst.Ring.localScale = Vector3.one * .35f;
-            burst.Light.intensity = 13f;
+            burst.Light.intensity = 13f * burst.Strength;
             burst.Particles.Clear(true);
-            burst.Particles.Emit(34);
+            burst.Particles.Emit(Mathf.Clamp(particleCount, 8, 48));
         }
 
         Burst Acquire()
@@ -178,12 +221,16 @@ namespace JetHorizon
                 float t = Mathf.Clamp01(burst.Age / Lifetime);
                 float fade = 1f - t;
                 float eased = 1f - Mathf.Pow(1f - t, 3f);
-                burst.Ring.localScale = Vector3.one * Mathf.Lerp(.35f, 8.5f, eased);
+                burst.Ring.localScale = Vector3.one * Mathf.Lerp(.35f, 8.5f * burst.Strength, eased);
                 burst.RingProperties.SetColor(
                     TintId,
-                    new Color(1f, Mathf.Lerp(.75f, .05f, t), .015f, fade * .72f));
+                    new Color(
+                        1f,
+                        Mathf.Lerp(.82f, .05f, t),
+                        Mathf.Lerp(.12f, .015f, t),
+                        fade * Mathf.Min(.9f, .62f + burst.Strength * .08f)));
                 burst.RingRenderer.SetPropertyBlock(burst.RingProperties);
-                burst.Light.intensity = 13f * fade * fade;
+                burst.Light.intensity = 13f * burst.Strength * fade * fade;
                 if (t < 1f) continue;
                 Release(burst);
             }
@@ -200,6 +247,7 @@ namespace JetHorizon
             if (burst == null) return;
             burst.Active = false;
             burst.Age = 0f;
+            burst.Strength = 1f;
             burst.Particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             burst.Light.intensity = 0f;
             burst.Root.SetActive(false);

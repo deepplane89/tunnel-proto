@@ -12,12 +12,16 @@ namespace JetHorizon
             GameEvents.NearMiss += NearMiss; GameEvents.CoinCollected += Coin;
             GameEvents.PowerupActivated += Powerup; GameEvents.ShieldHit += Shield;
             GameEvents.LightningStruck += Lightning; GameEvents.PlayerDied += Death;
+            GameEvents.LaserChainAdvanced += LaserChain;
+            GameEvents.LaserFormationCompleted += LaserComplete;
         }
         void OnDisable()
         {
             GameEvents.NearMiss -= NearMiss; GameEvents.CoinCollected -= Coin;
             GameEvents.PowerupActivated -= Powerup; GameEvents.ShieldHit -= Shield;
             GameEvents.LightningStruck -= Lightning; GameEvents.PlayerDied -= Death;
+            GameEvents.LaserChainAdvanced -= LaserChain;
+            GameEvents.LaserFormationCompleted -= LaserComplete;
         }
         void NearMiss() => Pulse(P != null ? P.NearMissImpulse : .08f);
         void Coin() => Pulse(P != null ? P.PickupImpulse : .025f);
@@ -25,6 +29,14 @@ namespace JetHorizon
         void Shield(int _) => Pulse(P != null ? P.ShieldHitImpulse : .12f);
         void Lightning() => Pulse(P != null ? P.LightningImpulse : .18f);
         void Death() => Pulse(P != null ? P.DeathImpulse : .32f);
+        void LaserChain(int chain, int destroyedTotal)
+        {
+            float milestone = destroyedTotal > 0 && destroyedTotal % LaserRewardModel.CargoMilestoneInterval == 0
+                ? .035f
+                : 0f;
+            Pulse(.025f + Mathf.Min(10, chain) * .004f + milestone);
+        }
+        void LaserComplete(float _, float __) => Pulse(.30f);
         static void Pulse(float amount) => ShipFeelPresenter.I?.AddImpulse(amount);
     }
 }

@@ -1121,9 +1121,13 @@ The first production architecture is now live in the Unity project:
   - Salvage makes a readable detour and returns to gate center.
   - Alloy demands a wider line and returns near the gate edge.
   - Prism commits beyond the easy gate aperture, creating an explicit reward-versus-speed choice.
-- The first laser payoff uses a dense four-row destructible formation with exact dual-lane targets and a separately validated side bypass, so the encounter remains survivable without the pickup.
+- The first laser payoff uses a dense three-row destructible formation with exact dual-lane targets and a separately validated side bypass, so the encounter remains survivable without the pickup while staying below the mobile hazard/event budget.
 - Runner laser content is source-locked to the production Three.js tuning: two lanes at `±0.35`, `+0.45` Y, `-2.50` Z in the reference world pose, 10-unit core length, 7.5-unit glow length, and 8.5 Hz fire rate.
 - Unity converts those reference offsets into model-child muzzle sockets and adds pooled impact plasma, trails, shock rings, light flashes, positional audio, and cargo collection pull-in without moving gameplay authority out of the core.
+- Formation targets carry an explicit engine-neutral gameplay role. Ordinary fat cones cannot accidentally award laser rewards.
+- Rapid kills build a core-owned destruction chain. Every third destruction releases milestone cargo; the sixth target upgrades that milestone to Alloy.
+- Ten destroyed targets overload the formation, remove the remaining formation geometry, award a score burst, and release two Alloy pods plus a central Prism pod.
+- All six potential reward pods fit inside the starter 18-weight cargo bay. Their burst velocity, attraction delay, homing movement, collection, capacity rejection, and economy value are deterministic core rules; Unity only presents the burst and pull-in.
 - Extraction is a core-owned spatial crossing. Missing it starts the next Heat sector without resetting earned run speed.
 - Canyon and prismatic routes activate only after their transition gate is crossed.
 - Their complete Unity environments are prebuilt and moved as single world constructs; collision comes from the same core-authored route samples.

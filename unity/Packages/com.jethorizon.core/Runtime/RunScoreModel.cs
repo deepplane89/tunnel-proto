@@ -40,5 +40,10 @@ namespace JetHorizon.Simulation
                 default: return 1500f;
             }
         }
+
+        public static float LaserDestructionScore(int chain)
+            => 40f + Math.Min(12, Math.Max(1, chain)) * 15f;
+
+        public const float LaserFormationOverloadScore = 1500f;
     }
 }

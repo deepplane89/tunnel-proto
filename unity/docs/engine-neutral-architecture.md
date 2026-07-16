@@ -54,6 +54,7 @@ Platform effects are one-way: simulation events enter the application router, wh
 - source-authored safe, risky, and committed cargo routes that remain capability-bounded and arrive before their linked speed gate;
 - a Unity `ShipSocketRig` that creates model-child thruster and dual laser muzzle sockets for the current GLB at runtime;
 - core-owned dual-lane laser targeting and destruction events, with pooled Unity-only bolts, impacts, shock rings, lighting, audio, and collection pull-in;
+- explicit laser-formation hazard roles, deterministic destruction chains, capacity-safe milestone/final cargo rewards, and core-owned reward-pod burst/attraction movement;
 - reused snapshot and event buffers;
 - start, pause, reset, and deterministic replay behavior.
 
@@ -83,7 +84,7 @@ Only then should the corresponding legacy gameplay code be disabled. Presentatio
 | Zipper, slalom, and sine corridors | Core scheduling, row geometry, random choices, entities, rewards | cone/coin pooling and corridor tint |
 | Runner ship and thruster tuning | Engine-neutral content | GLB loading, socket transforms, exhaust drawing |
 | Cargo route risk | Core route type, geometry, value, capacity, and collection | pooled pod drawing, pull-in, tint, and audio |
-| Laser weapon | Core fire cadence, lane targeting, and destruction | GLB muzzle sockets, bolt/impact VFX, lighting, and audio |
+| Laser weapon | Core fire cadence, target role, lane targeting, chain, overload, score, and cargo drops | GLB muzzle sockets, bolt/impact VFX, lighting, camera impulse, and audio |
 | Structured-wall field | Core 3-second gate, 20-row lifecycle, 6x2x2 transforms, and entities | pooled wall presentation |
 
 ## Next checkpoints

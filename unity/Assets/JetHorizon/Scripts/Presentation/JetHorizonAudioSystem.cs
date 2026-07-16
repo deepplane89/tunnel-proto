@@ -24,6 +24,8 @@ namespace JetHorizon
             GameEvents.PowerupActivated += Powerup;
             GameEvents.LaserFired += Laser;
             GameEvents.HazardDestroyed += LaserImpact;
+            GameEvents.LaserChainAdvanced += LaserChain;
+            GameEvents.LaserFormationCompleted += LaserComplete;
             GameEvents.SpeedGateCrossed += GateCrossed;
         }
 
@@ -36,6 +38,8 @@ namespace JetHorizon
             GameEvents.ShieldHit -= Shield; GameEvents.ShieldBroken -= ShieldBroken;
             GameEvents.PowerupActivated -= Powerup; GameEvents.LaserFired -= Laser;
             GameEvents.HazardDestroyed -= LaserImpact;
+            GameEvents.LaserChainAdvanced -= LaserChain;
+            GameEvents.LaserFormationCompleted -= LaserComplete;
             GameEvents.SpeedGateCrossed -= GateCrossed;
         }
 
@@ -85,6 +89,17 @@ namespace JetHorizon
             float pan = Mathf.Clamp(x / 32f, -.65f, .65f);
             Play("thruster-impact", .12f, Random.Range(1.25f, 1.48f), pan);
             _laserImpactCooldown = .07f;
+        }
+        void LaserChain(int chain, int destroyedTotal)
+        {
+            if (destroyedTotal <= 0 || destroyedTotal % LaserRewardModel.CargoMilestoneInterval != 0) return;
+            Play("powerup-burst", .18f, 1.05f + Mathf.Min(10, chain) * .025f);
+        }
+        void LaserComplete(float _, float __)
+        {
+            Play("thruster-impact", .62f, .78f);
+            Play("powerup-burst", .58f, 1.08f, 0f, .035f);
+            Play("whoosh-release", .38f, .86f, 0f, .08f);
         }
 
         void GateCrossed(SpeedGateKind kind, float gain, int streak)

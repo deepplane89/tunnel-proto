@@ -496,6 +496,16 @@ namespace JetHorizon
                             events[i].ValueA,
                             events[i].ValueB);
                         break;
+                    case SimulationEventType.LaserChainAdvanced:
+                        GameEvents.RaiseLaserChainAdvanced(
+                            (int)events[i].ValueA,
+                            (int)events[i].ValueB);
+                        break;
+                    case SimulationEventType.LaserFormationCompleted:
+                        GameEvents.RaiseLaserFormationCompleted(
+                            events[i].ValueA,
+                            events[i].ValueB);
+                        break;
                     case SimulationEventType.SpeedGateCrossed:
                         GameEvents.RaiseSpeedGateCrossed(
                             (SpeedGateKind)(int)events[i].ValueA,

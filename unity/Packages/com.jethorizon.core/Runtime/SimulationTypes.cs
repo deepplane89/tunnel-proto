@@ -106,6 +106,8 @@ namespace JetHorizon.Simulation
         HullDamaged,
         LaserFired,
         HazardDestroyed,
+        LaserChainAdvanced,
+        LaserFormationCompleted,
         PrismaticBoundaryHit,
         TraversalGateHit,
         LightningStrikeTelegraphed,
@@ -184,11 +186,19 @@ namespace JetHorizon.Simulation
         L5CorridorCone
     }
 
+    /// <summary>Gameplay purpose carried independently from replaceable visual style.</summary>
+    public enum HazardRole
+    {
+        Standard,
+        LaserFormationTarget
+    }
+
     /// <summary>Engine-neutral hazard creation request. Visual identity is carried separately by the presenter.</summary>
     public struct HazardSpawn
     {
         public HazardKind Kind;
         public HazardStyle Style;
+        public HazardRole Role;
         public int VisualVariant;
         public float X;
         public float Y;
@@ -353,6 +363,7 @@ namespace JetHorizon.Simulation
         public int Id { get; }
         public HazardKind Kind { get; }
         public HazardStyle Style { get; }
+        public HazardRole Role { get; }
         public int VisualVariant { get; }
         public float X { get; }
         public float Y { get; }
@@ -372,6 +383,7 @@ namespace JetHorizon.Simulation
             int id,
             HazardKind kind,
             HazardStyle style,
+            HazardRole role,
             int visualVariant,
             float x,
             float y,
@@ -390,6 +402,7 @@ namespace JetHorizon.Simulation
             Id = id;
             Kind = kind;
             Style = style;
+            Role = role;
             VisualVariant = visualVariant;
             X = x;
             Y = y;
@@ -434,6 +447,12 @@ namespace JetHorizon.Simulation
         Cargo
     }
 
+    public enum PickupMotionKind
+    {
+        Route,
+        LaserReward
+    }
+
     /// <summary>Portable gameplay identity for the four production power-ups.</summary>
     public enum PowerupType
     {
@@ -449,6 +468,7 @@ namespace JetHorizon.Simulation
         public PickupKind Kind;
         public PowerupType Powerup;
         public RunCargoKind CargoKind;
+        public PickupMotionKind MotionKind;
         public int CargoUnits;
         public float X;
         public float Y;
@@ -456,6 +476,10 @@ namespace JetHorizon.Simulation
         public float ScoreValue;
         public float CollectHalfWidth;
         public float CollectHalfDepth;
+        public float VelocityX;
+        public float VelocityY;
+        public float VelocityZ;
+        public float AttractionDelaySeconds;
 
         public static PickupSpawn Coin(float x, float y, float z, float scoreValue = 75f)
         {
@@ -502,6 +526,28 @@ namespace JetHorizon.Simulation
                 CollectHalfDepth = 2.1f
             };
         }
+
+        public static PickupSpawn LaserCargo(
+            RunCargoKind kind,
+            int units,
+            float x,
+            float y,
+            float z,
+            float velocityX,
+            float velocityY,
+            float velocityZ,
+            float attractionDelaySeconds = .22f)
+        {
+            PickupSpawn spawn = Cargo(kind, units, x, y, z);
+            spawn.MotionKind = PickupMotionKind.LaserReward;
+            spawn.VelocityX = velocityX;
+            spawn.VelocityY = velocityY;
+            spawn.VelocityZ = velocityZ;
+            spawn.AttractionDelaySeconds = Math.Max(0f, attractionDelaySeconds);
+            spawn.CollectHalfWidth = 2.6f;
+            spawn.CollectHalfDepth = 2.8f;
+            return spawn;
+        }
     }
 
     public struct PickupSnapshot
@@ -510,23 +556,37 @@ namespace JetHorizon.Simulation
         public PickupKind Kind { get; }
         public PowerupType Powerup { get; }
         public RunCargoKind CargoKind { get; }
+        public PickupMotionKind MotionKind { get; }
         public int CargoUnits { get; }
         public int CargoWeight => CargoUnits * CargoCatalog.Get(CargoKind).Weight;
         public int CargoCreditValue => CargoUnits * CargoCatalog.Get(CargoKind).CreditValue;
         public float X { get; }
         public float Y { get; }
         public float Z { get; }
+        public float AgeSeconds { get; }
 
-        internal PickupSnapshot(int id, PickupKind kind, PowerupType powerup, RunCargoKind cargoKind, int cargoUnits, float x, float y, float z)
+        internal PickupSnapshot(
+            int id,
+            PickupKind kind,
+            PowerupType powerup,
+            RunCargoKind cargoKind,
+            PickupMotionKind motionKind,
+            int cargoUnits,
+            float x,
+            float y,
+            float z,
+            float ageSeconds)
         {
             Id = id;
             Kind = kind;
             Powerup = powerup;
             CargoKind = cargoKind;
+            MotionKind = motionKind;
             CargoUnits = cargoUnits;
             X = x;
             Y = y;
             Z = z;
+            AgeSeconds = ageSeconds;
         }
     }
 
@@ -649,6 +709,10 @@ namespace JetHorizon.Simulation
         public float ShieldSeconds { get; internal set; }
         public int ShieldHits { get; internal set; }
         public float LaserSeconds { get; internal set; }
+        public int LaserDestructionChain { get; internal set; }
+        public int LaserFormationDestroyed { get; internal set; }
+        public int LaserFormationRemaining { get; internal set; }
+        public bool LaserFormationOverloaded { get; internal set; }
         public float OverdriveSeconds { get; internal set; }
         public float OverdriveSpeedSeconds { get; internal set; }
         public float MagnetSeconds { get; internal set; }

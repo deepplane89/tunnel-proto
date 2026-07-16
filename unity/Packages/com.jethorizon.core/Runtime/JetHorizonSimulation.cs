@@ -15,6 +15,7 @@ namespace JetHorizon.Simulation
             public int Id;
             public HazardKind Kind;
             public HazardStyle Style;
+            public HazardRole Role;
             public int VisualVariant;
             public float X;
             public float Y;
@@ -45,6 +46,7 @@ namespace JetHorizon.Simulation
             public PickupKind Kind;
             public PowerupType Powerup;
             public RunCargoKind CargoKind;
+            public PickupMotionKind MotionKind;
             public int CargoUnits;
             public float X;
             public float Y;
@@ -52,6 +54,11 @@ namespace JetHorizon.Simulation
             public float ScoreValue;
             public float CollectHalfWidth;
             public float CollectHalfDepth;
+            public float VelocityX;
+            public float VelocityY;
+            public float VelocityZ;
+            public float AgeSeconds;
+            public float AttractionDelaySeconds;
         }
 
         struct CorridorSliceState
@@ -126,6 +133,14 @@ namespace JetHorizon.Simulation
         int _hullHitsRemaining;
         float _laserSeconds;
         float _laserShotTimer;
+        bool _laserFormationActive;
+        bool _laserFormationOverloaded;
+        int _laserFormationId;
+        int _laserFormationRemaining;
+        int _laserFormationDestroyed;
+        int _laserDestructionChain;
+        float _laserChainTimer;
+        float _laserFormationCenterX;
         float _overdriveSeconds;
         float _magnetSeconds;
         CorridorFamily _lightningFamily;
@@ -469,6 +484,8 @@ namespace JetHorizon.Simulation
             for (int i = 0; i < _hazards.Length; i++)
             {
                 if (!_hazards[i].Active || _hazards[i].Id != id) continue;
+                if (_hazards[i].Role == HazardRole.LaserFormationTarget)
+                    RetireLaserFormationTarget();
                 _hazards[i].Active = false;
                 RefreshSnapshot();
                 return true;
@@ -479,6 +496,7 @@ namespace JetHorizon.Simulation
         public void ClearHazards()
         {
             Array.Clear(_hazards, 0, _hazards.Length);
+            ResetLaserFormationState();
             RefreshSnapshot();
         }
 
@@ -508,13 +526,19 @@ namespace JetHorizon.Simulation
                 Kind = spawn.Kind,
                 Powerup = spawn.Powerup,
                 CargoKind = spawn.CargoKind,
+                MotionKind = spawn.MotionKind,
                 CargoUnits = spawn.CargoUnits,
                 X = spawn.X,
                 Y = spawn.Y,
                 Z = spawn.Z,
                 ScoreValue = spawn.ScoreValue,
                 CollectHalfWidth = spawn.CollectHalfWidth,
-                CollectHalfDepth = spawn.CollectHalfDepth
+                CollectHalfDepth = spawn.CollectHalfDepth,
+                VelocityX = spawn.VelocityX,
+                VelocityY = spawn.VelocityY,
+                VelocityZ = spawn.VelocityZ,
+                AgeSeconds = 0f,
+                AttractionDelaySeconds = spawn.AttractionDelaySeconds
             };
             return id;
         }
@@ -1005,10 +1029,11 @@ namespace JetHorizon.Simulation
 
         void SpawnLaserFormation(EncounterCommand command)
         {
-            const int rows = 4;
+            const int rows = 3;
             const float bypassHalfWidth = 6.5f;
             float bypassDirection = (command.RowIndex & 1) == 0 ? 1f : -1f;
             float bypassCenter = Clamp(command.X + bypassDirection * 16f, -28f, 28f);
+            BeginLaserFormation(command.X);
 
             for (int row = 0; row < rows; row++)
             {
@@ -1017,7 +1042,7 @@ namespace JetHorizon.Simulation
                 SpawnLaserTarget(command.X + .35f, z - 1.4f, bypassCenter, bypassHalfWidth, row * 2 + 1);
 
                 int column = 0;
-                for (float x = -34f; x <= 34.01f; x += 4.25f, column++)
+                for (float x = -33f; x <= 33.01f; x += 5.5f, column++)
                 {
                     if (Math.Abs(x - command.X) < 2.2f) continue;
                     SpawnLaserTarget(
@@ -1027,6 +1052,42 @@ namespace JetHorizon.Simulation
                         bypassHalfWidth,
                         row * 31 + column);
                 }
+            }
+        }
+
+        void BeginLaserFormation(float centerX)
+        {
+            _laserFormationActive = true;
+            _laserFormationOverloaded = false;
+            _laserFormationId = _nextEntityId++;
+            _laserFormationRemaining = 0;
+            _laserFormationDestroyed = 0;
+            _laserDestructionChain = 0;
+            _laserChainTimer = 0f;
+            _laserFormationCenterX = centerX;
+        }
+
+        void ResetLaserFormationState()
+        {
+            _laserFormationActive = false;
+            _laserFormationOverloaded = false;
+            _laserFormationId = 0;
+            _laserFormationRemaining = 0;
+            _laserFormationDestroyed = 0;
+            _laserDestructionChain = 0;
+            _laserChainTimer = 0f;
+            _laserFormationCenterX = 0f;
+        }
+
+        void RetireLaserFormationTarget()
+        {
+            if (!_laserFormationActive || _laserFormationRemaining <= 0) return;
+            _laserFormationRemaining--;
+            if (_laserFormationRemaining <= 0)
+            {
+                _laserFormationActive = false;
+                _laserDestructionChain = 0;
+                _laserChainTimer = 0f;
             }
         }
 
@@ -1046,6 +1107,7 @@ namespace JetHorizon.Simulation
                     Math.Abs(variant) % 3);
             cone.Y = -2f;
             cone.CollisionHalfDepth = _config.CollisionHalfDepth + .8f;
+            cone.Role = HazardRole.LaserFormationTarget;
             if (!EncounterGeometryValidator.PreservesOpening(
                 cone,
                 bypassCenter,
@@ -1194,6 +1256,11 @@ namespace JetHorizon.Simulation
             TickTimer(ref _overdriveSeconds, PowerupType.Overdrive, dt);
             TickTimer(ref _magnetSeconds, PowerupType.Magnet, dt);
             if (_shieldSeconds <= 0f) _shieldHits = 0;
+            if (_laserChainTimer > 0f)
+            {
+                _laserChainTimer = Math.Max(0f, _laserChainTimer - dt);
+                if (_laserChainTimer <= 0f) _laserDestructionChain = 0;
+            }
         }
 
         void TickTimer(ref float timer, PowerupType type, float dt)
@@ -1277,6 +1344,7 @@ namespace JetHorizon.Simulation
             _hullHitsRemaining = _config.HullHitCapacity;
             _laserSeconds = 0f;
             _laserShotTimer = 0f;
+            ResetLaserFormationState();
             _overdriveSeconds = 0f;
             _magnetSeconds = 0f;
             _cargo.Reset();
@@ -2203,6 +2271,7 @@ namespace JetHorizon.Simulation
                 Id = id,
                 Kind = spawn.Kind,
                 Style = spawn.Style,
+                Role = spawn.Role,
                 VisualVariant = spawn.VisualVariant,
                 X = spawn.X,
                 Y = spawn.Y,
@@ -2225,6 +2294,12 @@ namespace JetHorizon.Simulation
                 CollisionDelaySeconds = spawn.CollisionDelaySeconds,
                 LifetimeSeconds = spawn.LifetimeSeconds
             };
+            if (spawn.Role == HazardRole.LaserFormationTarget)
+            {
+                if (!_laserFormationActive)
+                    BeginLaserFormation(spawn.X);
+                _laserFormationRemaining++;
+            }
             Events.Add(new SimulationEvent(SimulationEventType.HazardSpawned, id, spawn.X, spawn.Z));
             return id;
         }
@@ -2258,6 +2333,8 @@ namespace JetHorizon.Simulation
                 {
                     hazard.Active = false;
                     _hazards[i] = hazard;
+                    if (hazard.Role == HazardRole.LaserFormationTarget)
+                        RetireLaserFormationTarget();
                     continue;
                 }
 
@@ -2284,6 +2361,8 @@ namespace JetHorizon.Simulation
                 {
                     hazard.Active = false;
                     _hazards[i] = hazard;
+                    if (hazard.Role == HazardRole.LaserFormationTarget)
+                        RetireLaserFormationTarget();
                     if (ConsumeShieldHit(hazard.Id)) continue;
                     if (ConsumeHullHit(hazard.Id)) continue;
                     FinalizeRun();
@@ -2332,6 +2411,10 @@ namespace JetHorizon.Simulation
             Snapshot.ShieldSeconds = _shieldSeconds;
             Snapshot.ShieldHits = _shieldHits;
             Snapshot.LaserSeconds = _laserSeconds;
+            Snapshot.LaserDestructionChain = _laserDestructionChain;
+            Snapshot.LaserFormationDestroyed = _laserFormationDestroyed;
+            Snapshot.LaserFormationRemaining = _laserFormationRemaining;
+            Snapshot.LaserFormationOverloaded = _laserFormationOverloaded;
             Snapshot.OverdriveSeconds = _overdriveSeconds;
             Snapshot.OverdriveSpeedSeconds = Math.Max(0f, _overdriveSeconds - PowerupCatalog.Overdrive.GraceSeconds);
             Snapshot.MagnetSeconds = _magnetSeconds;
@@ -2513,6 +2596,7 @@ namespace JetHorizon.Simulation
                     hazard.Id,
                     hazard.Kind,
                     hazard.Style,
+                    hazard.Role,
                     hazard.VisualVariant,
                     hazard.X,
                     hazard.Y,
@@ -2540,10 +2624,12 @@ namespace JetHorizon.Simulation
                     pickup.Kind,
                     pickup.Powerup,
                     pickup.CargoKind,
+                    pickup.MotionKind,
                     pickup.CargoUnits,
                     pickup.X,
                     pickup.Y,
-                    pickup.Z));
+                    pickup.Z,
+                    pickup.AgeSeconds));
             }
             Snapshot.PickupCount = pickupCount;
 
@@ -2677,9 +2763,99 @@ namespace JetHorizon.Simulation
                 destroyedId = hazard.Id;
                 hazard.Active = false;
                 _hazards[bestIndex] = hazard;
+                if (hazard.Role == HazardRole.LaserFormationTarget)
+                    RewardLaserFormationDestruction(hazard);
                 Events.Add(new SimulationEvent(SimulationEventType.HazardDestroyed, destroyedId, hazard.X, hazard.Z));
             }
             Events.Add(new SimulationEvent(SimulationEventType.LaserFired, destroyedId, laneOffset, bestZ));
+        }
+
+        void RewardLaserFormationDestruction(HazardState hazard)
+        {
+            if (!_laserFormationActive || _laserFormationOverloaded) return;
+            _laserFormationRemaining = Math.Max(0, _laserFormationRemaining - 1);
+            _laserFormationDestroyed++;
+            _laserDestructionChain = _laserChainTimer > 0f
+                ? _laserDestructionChain + 1
+                : 1;
+            _laserChainTimer = LaserRewardModel.ChainWindowSeconds;
+            Events.Add(new SimulationEvent(
+                SimulationEventType.LaserChainAdvanced,
+                hazard.Id,
+                _laserDestructionChain,
+                _laserFormationDestroyed));
+
+            float score = RunScoreModel.LaserDestructionScore(_laserDestructionChain);
+            _score += score;
+            Events.Add(new SimulationEvent(
+                SimulationEventType.ScoreChanged,
+                hazard.Id,
+                (float)_score,
+                (float)ScoreSource.Bonus));
+
+            if (LaserRewardModel.AwardsMilestoneCargo(_laserFormationDestroyed))
+            {
+                SpawnLaserRewardCargo(
+                    LaserRewardModel.MilestoneCargo(_laserFormationDestroyed),
+                    hazard.X,
+                    hazard.Z,
+                    _laserFormationDestroyed);
+            }
+
+            if (_laserFormationDestroyed >= LaserRewardModel.OverloadTargetCount)
+                CompleteLaserFormation(hazard.Z);
+        }
+
+        void CompleteLaserFormation(float burstZ)
+        {
+            if (!_laserFormationActive || _laserFormationOverloaded) return;
+            _laserFormationOverloaded = true;
+            _laserFormationActive = false;
+            for (int i = 0; i < _hazards.Length; i++)
+            {
+                HazardState target = _hazards[i];
+                if (!target.Active || target.Role != HazardRole.LaserFormationTarget) continue;
+                target.Active = false;
+                _hazards[i] = target;
+            }
+            _laserFormationRemaining = 0;
+            for (int i = 0; i < LaserRewardModel.FinalCargoCount; i++)
+            {
+                float offset = (i - 1) * 2.8f;
+                SpawnLaserRewardCargo(
+                    LaserRewardModel.FinalCargo(i),
+                    _laserFormationCenterX + offset,
+                    burstZ - 1.2f - i * .7f,
+                    20 + i);
+            }
+            _score += RunScoreModel.LaserFormationOverloadScore;
+            Events.Add(new SimulationEvent(
+                SimulationEventType.ScoreChanged,
+                _laserFormationId,
+                (float)_score,
+                (float)ScoreSource.Bonus));
+            Events.Add(new SimulationEvent(
+                SimulationEventType.LaserFormationCompleted,
+                _laserFormationId,
+                _laserFormationCenterX,
+                burstZ));
+        }
+
+        void SpawnLaserRewardCargo(RunCargoKind kind, float x, float z, int sequence)
+        {
+            double phase = sequence * 2.399963229728653;
+            float velocityX = (float)Math.Sin(phase) * 8f;
+            float velocityY = 3.5f + Math.Abs((float)Math.Cos(phase)) * 2.5f;
+            float velocityZ = (float)Math.Cos(phase) * 4f;
+            SpawnPickup(PickupSpawn.LaserCargo(
+                kind,
+                1,
+                x,
+                1.35f,
+                z,
+                velocityX,
+                velocityY,
+                velocityZ));
         }
 
         void UpdatePickups(float step)
@@ -2688,7 +2864,30 @@ namespace JetHorizon.Simulation
             {
                 PickupState pickup = _pickups[i];
                 if (!pickup.Active) continue;
-                pickup.Z += step;
+                pickup.AgeSeconds += _config.FixedDeltaSeconds;
+                if (pickup.MotionKind == PickupMotionKind.LaserReward)
+                {
+                    pickup.X += pickup.VelocityX * _config.FixedDeltaSeconds;
+                    pickup.Y += pickup.VelocityY * _config.FixedDeltaSeconds;
+                    pickup.Z += step + pickup.VelocityZ * _config.FixedDeltaSeconds;
+                    float damping = Math.Max(0f, 1f - 4.8f * _config.FixedDeltaSeconds);
+                    pickup.VelocityX *= damping;
+                    pickup.VelocityY *= damping;
+                    pickup.VelocityZ *= damping;
+                    if (pickup.AgeSeconds >= pickup.AttractionDelaySeconds)
+                    {
+                        float attractionAge = pickup.AgeSeconds - pickup.AttractionDelaySeconds;
+                        float xResponse = Math.Min(1f, _config.FixedDeltaSeconds * (3.8f + attractionAge * 1.4f));
+                        float zResponse = Math.Min(1f, _config.FixedDeltaSeconds * (2.2f + attractionAge * .8f));
+                        pickup.X = Lerp(pickup.X, _shipX, xResponse);
+                        pickup.Y = Lerp(pickup.Y, _shipY + .2f, xResponse * .65f);
+                        pickup.Z = Lerp(pickup.Z, _config.ShipZ, zResponse);
+                    }
+                }
+                else
+                {
+                    pickup.Z += step;
+                }
 
                 if (_magnetSeconds > 0f && pickup.Kind == PickupKind.Coin)
                 {

@@ -87,6 +87,27 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
+        public void LaserRewardRules_FitTheStarterCargoBayAndGuaranteeValuableFinalCargo()
+        {
+            int totalWeight = 0;
+            for (int destroyed = 1; destroyed <= LaserRewardModel.OverloadTargetCount; destroyed++)
+            {
+                if (!LaserRewardModel.AwardsMilestoneCargo(destroyed)) continue;
+                totalWeight += CargoCatalog.Get(LaserRewardModel.MilestoneCargo(destroyed)).Weight;
+            }
+            bool foundPrism = false;
+            for (int i = 0; i < LaserRewardModel.FinalCargoCount; i++)
+            {
+                RunCargoKind kind = LaserRewardModel.FinalCargo(i);
+                totalWeight += CargoCatalog.Get(kind).Weight;
+                foundPrism |= kind == RunCargoKind.Prism;
+            }
+
+            Assert.That(totalWeight, Is.LessThanOrEqualTo(new SimulationConfig().CargoCapacity));
+            Assert.That(foundPrism, Is.True);
+        }
+
+        [Test]
         public void GateRunSimulation_StartsSlowAndEarnsSpeedByCrossingGates()
         {
             var simulation = new JetHorizonSimulation(
@@ -115,6 +136,24 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(simulation.Snapshot.Speed, Is.GreaterThan(startingSpeed));
             Assert.That(simulation.Snapshot.HeatSpeedMultiplier, Is.EqualTo(1f));
             Assert.That(simulation.Snapshot.GateCount, Is.GreaterThan(0));
+        }
+
+        [Test]
+        public void LaserParcel_PublishesCapacitySafeFormationWithEnoughOverloadTargets()
+        {
+            JetHorizonSimulation simulation = CreateGateRunSimulation(606u);
+            int targets = 0;
+            for (int tick = 0; tick < 5000 && targets == 0; tick++)
+            {
+                simulation.Step(default);
+                for (int i = 0; i < simulation.Snapshot.HazardCount; i++)
+                    if (simulation.Snapshot.GetHazard(i).Role == HazardRole.LaserFormationTarget)
+                        targets++;
+            }
+
+            Assert.That(targets, Is.GreaterThanOrEqualTo(LaserRewardModel.OverloadTargetCount));
+            Assert.That(targets, Is.LessThan(50));
+            Assert.That(simulation.Events.Count, Is.LessThan(64));
         }
 
         [Test]

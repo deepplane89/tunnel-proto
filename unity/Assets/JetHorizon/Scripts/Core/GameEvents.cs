@@ -27,6 +27,8 @@ namespace JetHorizon
         public static event Action ShieldBroken;
         public static event Action<float> LaserFired;
         public static event Action<int, float, float> HazardDestroyed; // id, x, z
+        public static event Action<int, int> LaserChainAdvanced; // chain, destroyed total
+        public static event Action<float, float> LaserFormationCompleted; // x, z
         public static event Action CanyonRevealed;
         public static event Action KlaxonCountdown;                      // 1.5s before a speed bump
         public static event Action LightningStruck;
@@ -49,6 +51,8 @@ namespace JetHorizon
         public static void RaiseShieldBroken()              => ShieldBroken?.Invoke();
         public static void RaiseLaserFired(float laneOffset) => LaserFired?.Invoke(laneOffset);
         public static void RaiseHazardDestroyed(int id, float x, float z) => HazardDestroyed?.Invoke(id, x, z);
+        public static void RaiseLaserChainAdvanced(int chain, int destroyedTotal) => LaserChainAdvanced?.Invoke(chain, destroyedTotal);
+        public static void RaiseLaserFormationCompleted(float x, float z) => LaserFormationCompleted?.Invoke(x, z);
         public static void RaiseCanyonRevealed()            => CanyonRevealed?.Invoke();
         public static void RaiseKlaxonCountdown()           => KlaxonCountdown?.Invoke();
         public static void RaiseLightningStruck()            => LightningStruck?.Invoke();
@@ -61,6 +65,7 @@ namespace JetHorizon
             SpeedChanged = null; SpeedGateCrossed = null; VibeChanged = null; NearMiss = null; CoinCollected = null; CargoCollected = null;
             PowerupCollected = null; PowerupActivated = null; PowerupExpired = null;
             ShieldHit = null; ShieldBroken = null; LaserFired = null; HazardDestroyed = null;
+            LaserChainAdvanced = null; LaserFormationCompleted = null;
             CanyonRevealed = null; KlaxonCountdown = null; LightningStruck = null;
             RunExtracted = null;
         }

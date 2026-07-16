@@ -69,6 +69,15 @@ namespace JetHorizon.Application
                                 : HapticCue.Impact);
                     break;
 
+                case SimulationEventType.LaserChainAdvanced:
+                    if ((int)simulationEvent.ValueB % LaserRewardModel.CargoMilestoneInterval == 0)
+                        _services.Haptics.Play(HapticCue.Light);
+                    break;
+
+                case SimulationEventType.LaserFormationCompleted:
+                    _services.Haptics.Play(HapticCue.Impact);
+                    break;
+
                 case SimulationEventType.PlayerDied:
                     _services.Audio.Play(AudioCue.PlayerDied);
                     _services.Haptics.Play(HapticCue.Impact);

@@ -243,7 +243,8 @@ namespace JetHorizon
                 const float sink = 2f;
                 c.Active = true;
                 c.CoreId = hazard.Id;
-                c.IsFatCone = hazard.Style == HazardStyle.FatCone;
+                c.IsFatCone = hazard.Style == HazardStyle.FatCone
+                    || hazard.Role == HazardRole.LaserFormationTarget;
                 c.IsCorridor = hazard.Style == HazardStyle.CorridorCone
                     || hazard.Style == HazardStyle.L4CorridorCone
                     || hazard.Style == HazardStyle.L5CorridorCone;
@@ -251,7 +252,9 @@ namespace JetHorizon
                 c.ColorType = Mathf.Abs(hazard.VisualVariant) % Vibes.ConeColors.Length;
                 c.T.position = new Vector3(hazard.X, hazard.Y, hazard.Z);
                 c.T.localScale = new Vector3(scaleXZ, (height + sink) / 10.5f, scaleXZ);
-                Color tint = hazard.Style == HazardStyle.L4CorridorCone
+                Color tint = hazard.Role == HazardRole.LaserFormationTarget
+                    ? new Color(1f, .16f, .015f, 1f)
+                    : hazard.Style == HazardStyle.L4CorridorCone
                     ? Vibes.L4Tint
                     : hazard.Style == HazardStyle.L5CorridorCone
                         ? Vibes.L5Tint

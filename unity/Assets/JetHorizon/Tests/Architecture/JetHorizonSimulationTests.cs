@@ -1032,6 +1032,61 @@ namespace JetHorizon.Simulation.Tests
         }
 
         [Test]
+        public void LaserFormation_OverloadsAfterTenTargetsAndSpawnsCoreOwnedCargoBurst()
+        {
+            var simulation = new JetHorizonSimulation(new SimulationConfig
+            {
+                HazardSpawningEnabled = false,
+                CollisionEnabled = false,
+                MaxHazards = 64,
+                MaxPickups = 32
+            }, 106u);
+            simulation.StartRun();
+            for (int i = 0; i < LaserRewardModel.OverloadTargetCount; i++)
+            {
+                float lane = (i & 1) == 0 ? -.35f : .35f;
+                HazardSpawn target = HazardSpawn.Cone(lane, -30f - i * 5f, collisionHalfWidth: 1f);
+                target.Role = HazardRole.LaserFormationTarget;
+                simulation.RegisterHazard(target);
+            }
+            simulation.ActivatePowerup(PowerupType.Laser);
+
+            bool completed = false;
+            for (int tick = 0; tick < 120 && !completed; tick++)
+            {
+                simulation.Step(default);
+                for (int e = 0; e < simulation.Events.Count; e++)
+                    if (simulation.Events[e].Type == SimulationEventType.LaserFormationCompleted)
+                        completed = true;
+            }
+
+            Assert.That(completed, Is.True);
+            Assert.That(simulation.Snapshot.LaserFormationOverloaded, Is.True);
+            Assert.That(simulation.Snapshot.LaserFormationDestroyed,
+                Is.EqualTo(LaserRewardModel.OverloadTargetCount));
+            Assert.That(simulation.Snapshot.LaserFormationRemaining, Is.Zero);
+            Assert.That(simulation.Snapshot.PickupCount, Is.GreaterThanOrEqualTo(6));
+
+            bool foundAlloy = false;
+            bool foundPrism = false;
+            for (int i = 0; i < simulation.Snapshot.PickupCount; i++)
+            {
+                PickupSnapshot pickup = simulation.Snapshot.GetPickup(i);
+                Assert.That(pickup.Kind, Is.EqualTo(PickupKind.Cargo));
+                Assert.That(pickup.MotionKind, Is.EqualTo(PickupMotionKind.LaserReward));
+                foundAlloy |= pickup.CargoKind == RunCargoKind.Alloy;
+                foundPrism |= pickup.CargoKind == RunCargoKind.Prism;
+            }
+            Assert.That(foundAlloy, Is.True);
+            Assert.That(foundPrism, Is.True);
+
+            for (int tick = 0; tick < 360 && simulation.Snapshot.CargoUnits < 6; tick++)
+                simulation.Step(default);
+            Assert.That(simulation.Snapshot.CargoUnits, Is.EqualTo(6));
+            Assert.That(simulation.Snapshot.CargoWeight, Is.EqualTo(17));
+        }
+
+        [Test]
         public void PrismaticCorridorPublishesContinuousSlicesInsteadOfConeRows()
         {
             var run = new RunDefinition(36f, new[]

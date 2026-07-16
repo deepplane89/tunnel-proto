@@ -168,6 +168,10 @@ namespace JetHorizon.EditorTools
                 EditorGUILayout.LabelField("Speed", $"{snapshot.Speed:0.0}  (gate-earned +{snapshot.GateEarnedSpeed:0.0}, cap {snapshot.SpeedSoftCap:0.0})");
                 EditorGUILayout.LabelField("Gates", $"{snapshot.GatesCrossed} hit, {snapshot.GatesMissed} missed, streak {snapshot.GateStreak}");
                 EditorGUILayout.LabelField("Cargo", $"{snapshot.CargoWeight}/{snapshot.CargoCapacityWeight} weight, projected {snapshot.CargoProjectedCreditValue} credits");
+                EditorGUILayout.LabelField("Laser chain", $"{snapshot.LaserDestructionChain} chain, {snapshot.LaserFormationDestroyed} destroyed");
+                EditorGUILayout.LabelField("Laser formation", snapshot.LaserFormationOverloaded
+                    ? "OVERLOADED — reward cargo released"
+                    : $"{snapshot.LaserFormationRemaining} targets remaining");
                 EditorGUILayout.LabelField("Environment", $"{snapshot.RunEnvironment} — {snapshot.EnvironmentLifecycle}");
                 EditorGUILayout.LabelField("Clock", $"{snapshot.EligibleRunElapsed:0.0}s eligible / {snapshot.Elapsed:0.0}s simulation");
             }
@@ -183,6 +187,7 @@ namespace JetHorizon.EditorTools
             }
             EditorGUILayout.HelpBox(
                 "Common green gates add small speed. Cyan gates surge. The off-line cyan/white structure extracts. " +
+                "Destroy ten marked laser targets to overload the formation and release the valuable cargo burst. " +
                 "Miss extraction to enter the next Heat sector; canyon and prismatic environments are activated only by their transition gates.",
                 MessageType.None);
             Repaint();

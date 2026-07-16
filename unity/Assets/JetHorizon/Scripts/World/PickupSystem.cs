@@ -37,10 +37,12 @@ namespace JetHorizon
             public bool Active;
             public int CoreId;
             public RunCargoKind Kind;
+            public PickupMotionKind MotionKind;
             public bool Collecting;
             public float CollectAge;
             public Vector3 CollectStart;
             public Vector3 CollectScale;
+            public Vector3 BaseScale;
         }
 
         const int PoolSize = 100;
@@ -76,7 +78,7 @@ namespace JetHorizon
             _cargoMaterials[RunCargoKind.Prism] = CreateHologram(TextureFactory.Hex(0xff4dff), false);
             var parent = new GameObject("CargoPool").transform;
             parent.SetParent(transform, false);
-            for (int i = 0; i < 24; i++)
+            for (int i = 0; i < 32; i++)
             {
                 var root = new GameObject("cargo-pod");
                 root.layer = 8;
@@ -230,6 +232,7 @@ namespace JetHorizon
             {
                 cargo.Active = false;
                 cargo.CoreId = 0;
+                cargo.MotionKind = PickupMotionKind.Route;
                 cargo.Collecting = false;
                 cargo.CollectAge = 0f;
                 cargo.T.gameObject.SetActive(false);
@@ -358,8 +361,28 @@ namespace JetHorizon
                     cargo.T.gameObject.SetActive(false);
                     continue;
                 }
-                cargo.T.position = new Vector3(pickup.X, pickup.Y + Mathf.Sin(s.Elapsed * 2.6f + cargo.CoreId) * .16f, pickup.Z);
-                cargo.T.rotation = Quaternion.Euler(12f, (s.Elapsed * 1.8f + cargo.CoreId) * Mathf.Rad2Deg, 28f);
+                float rewardBob = cargo.MotionKind == PickupMotionKind.LaserReward ? .26f : .16f;
+                float rewardSpin = cargo.MotionKind == PickupMotionKind.LaserReward ? 4.8f : 1.8f;
+                cargo.T.position = new Vector3(
+                    pickup.X,
+                    pickup.Y + Mathf.Sin(s.Elapsed * 2.6f + cargo.CoreId) * rewardBob,
+                    pickup.Z);
+                cargo.T.rotation = Quaternion.Euler(
+                    cargo.MotionKind == PickupMotionKind.LaserReward ? s.Elapsed * 180f : 12f,
+                    (s.Elapsed * rewardSpin + cargo.CoreId) * Mathf.Rad2Deg,
+                    28f);
+                if (cargo.MotionKind == PickupMotionKind.LaserReward)
+                {
+                    float arrival = Mathf.Clamp01(pickup.AgeSeconds / .18f);
+                    float pulse = 1f + Mathf.Sin(pickup.AgeSeconds * 22f) * .06f * (1f - arrival);
+                    cargo.T.localScale = cargo.BaseScale
+                        * Mathf.Lerp(.38f, 1f, 1f - Mathf.Pow(1f - arrival, 3f))
+                        * pulse;
+                }
+                else
+                {
+                    cargo.T.localScale = cargo.BaseScale;
+                }
             }
         }
 
@@ -443,11 +466,13 @@ namespace JetHorizon
                 view.Active = true;
                 view.CoreId = pickup.Id;
                 view.Kind = pickup.CargoKind;
+                view.MotionKind = pickup.MotionKind;
                 view.Collecting = false;
                 view.CollectAge = 0f;
                 for (int i = 0; i < view.Renderers.Length; i++)
                     view.Renderers[i].sharedMaterial = _cargoMaterials[pickup.CargoKind];
                 ConfigureCargoPod(view, pickup.CargoKind);
+                view.BaseScale = view.T.localScale;
                 view.T.position = new Vector3(pickup.X, pickup.Y, pickup.Z);
                 view.T.gameObject.SetActive(true);
                 return;
