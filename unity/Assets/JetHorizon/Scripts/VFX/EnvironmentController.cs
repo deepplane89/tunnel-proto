@@ -115,7 +115,7 @@ namespace JetHorizon
             RenderSettings.fogDensity = FogDensity;
             RenderSettings.fogColor = v.fogColor;
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.10f, 0.11f, 0.15f);
+            RenderSettings.ambientLight = new Color(0.12f, 0.13f, 0.18f);
 
             if (SkyboxMaterial != null)
             {
@@ -257,11 +257,11 @@ namespace JetHorizon
         {
             // Preserve the source rig's direction and color, while lifting URP's dark
             // metallic midtones enough to keep the ship and hazards readable.
-            if (_keyLight != null) _keyLight.intensity = 4.0f;
-            if (_rimLight != null) _rimLight.intensity = 0.32f;
-            if (_fillLight != null) _fillLight.intensity = 0.72f;
-            if (_sunRakeR != null) _sunRakeR.intensity = 0.42f;
-            if (_sunRakeL != null) _sunRakeL.intensity = 0.28f;
+            if (_keyLight != null) _keyLight.intensity = 3.75f;
+            if (_rimLight != null) _rimLight.intensity = 0.38f;
+            if (_fillLight != null) _fillLight.intensity = 0.58f;
+            if (_sunRakeR != null) _sunRakeR.intensity = 0.48f;
+            if (_sunRakeL != null) _sunRakeL.intensity = 0.32f;
         }
 
         /// <summary>Lighting rig per spec/03 §2 — called by bootstrap at scene build.</summary>
@@ -278,13 +278,13 @@ namespace JetHorizon
                 l.color = c; l.intensity = intensity;
                 l.shadows = LightShadows.None;
             }
-            Dir("KeyLight",  Color.white,                       4.0f, new Vector3(2f, 8.8f, 8f));
-            Dir("RimLight",  TextureFactory.Hex(0x00f0ff),      0.32f, new Vector3(-3f, 6f, -8f));
-            Dir("FillLight", TextureFactory.Hex(0xff44cc),      0.72f, new Vector3(0f, -2f, 6f));
-            Dir("SunRakeR",  TextureFactory.Hex(0xff9500),      0.42f, new Vector3(2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
-            Dir("SunRakeL",  TextureFactory.Hex(0xff9500),      0.28f, new Vector3(-2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
+            Dir("KeyLight",  Color.white,                       3.75f, new Vector3(2f, 8.8f, 8f));
+            Dir("RimLight",  TextureFactory.Hex(0x00f0ff),      0.38f, new Vector3(-3f, 6f, -8f));
+            Dir("FillLight", TextureFactory.Hex(0xff44cc),      0.58f, new Vector3(0f, -2f, 6f));
+            Dir("SunRakeR",  TextureFactory.Hex(0xff9500),      0.48f, new Vector3(2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
+            Dir("SunRakeL",  TextureFactory.Hex(0xff9500),      0.32f, new Vector3(-2.5f, 1f, -18f), new Vector3(0f, 0.3f, 4.5f));
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.10f, 0.11f, 0.15f);
+            RenderSettings.ambientLight = new Color(0.12f, 0.13f, 0.18f);
         }
     }
 }

@@ -15,13 +15,16 @@ namespace JetHorizon
         sealed class LaserBolt
         {
             public GameObject Root;
+            public LineRenderer Aura;
             public LineRenderer Glow;
             public LineRenderer Core;
+            public Transform HeadFlare;
             public float Age;
         }
 
         const int LaserBoltPoolSize = 12;
         const float LaserBoltLifetime = .8f;
+        const int ShieldHitCount = 6;
 
         public Transform ShipRoot;
 
@@ -33,14 +36,19 @@ namespace JetHorizon
         Light _magnetLight;
         readonly List<LaserBolt> _bolts = new List<LaserBolt>(24);
         Transform _laserPoolRoot;
+        Material _laserAuraMaterial;
         Material _laserGlowMaterial;
         Material _laserCoreMaterial;
+        Material _laserFlareMaterial;
+        Texture2D _laserFlareTexture;
+        Light _laserMuzzleLight;
         MaterialPropertyBlock _shipBlock;
         Renderer[] _shipRenderers;
         float _shieldBuild;
         float _shieldBreak;
-        float _shieldHitAge = -1f;
-        Vector3 _shieldHitDirection = Vector3.back;
+        readonly Vector4[] _shieldHits = new Vector4[ShieldHitCount];
+        int _shieldHitIndex;
+        float _laserMuzzleAge = 99f;
         bool _built;
 
         RunSession S => GameManager.I != null ? GameManager.I.Session : null;
@@ -50,6 +58,8 @@ namespace JetHorizon
             // MaterialPropertyBlock allocates a native Unity object. Creating it in a
             // MonoBehaviour field initializer runs during serialization and is forbidden.
             _shipBlock = new MaterialPropertyBlock();
+            for (int i = 0; i < ShieldHitCount; i++)
+                _shieldHits[i] = new Vector4(0f, 1f, 0f, -999f);
         }
 
         void OnEnable()
@@ -152,7 +162,7 @@ namespace JetHorizon
             {
                 _shieldBuild = 0.8f;
                 _shieldBreak = 0f;
-                _shieldHitAge = -1f;
+                ResetShieldHits();
             }
         }
 
@@ -163,10 +173,12 @@ namespace JetHorizon
 
         void OnShieldHit(int remaining)
         {
-            _shieldHitDirection = Random.onUnitSphere;
-            _shieldHitDirection.z = -Mathf.Abs(_shieldHitDirection.z);
-            _shieldHitDirection.Normalize();
-            _shieldHitAge = 0f;
+            // Source parity: impacts deliberately rotate through six independent
+            // slots so overlapping cell flashes and traveling rings can coexist.
+            _shieldHitIndex = (_shieldHitIndex + 1) % ShieldHitCount;
+            Vector3 direction = Random.onUnitSphere.normalized;
+            _shieldHits[_shieldHitIndex] = new Vector4(direction.x, direction.y, direction.z,
+                S != null ? S.Elapsed : 0f);
         }
 
         void OnShieldBroken() => _shieldBreak = 0.6f;
@@ -178,26 +190,64 @@ namespace JetHorizon
             LaserBolt bolt = AcquireLaserBolt();
             bolt.Age = 0f;
             bolt.Root.transform.position = ShipRoot.position + new Vector3(laneOffset, 0.45f, -2.5f);
+            bolt.Root.transform.rotation = Quaternion.identity;
             bolt.Root.SetActive(true);
+            _laserMuzzleAge = 0f;
         }
 
         void BuildLaserPool()
         {
             _laserPoolRoot = new GameObject("Laser Bolt Pool").transform;
             _laserPoolRoot.SetParent(transform, false);
-            _laserGlowMaterial = CreateAdditive(new Color(1f, 0.13f, 0f, 0.35f), "JH_LaserGlowShared");
-            _laserCoreMaterial = CreateAdditive(Color.white, "JH_LaserCoreShared");
+            _laserAuraMaterial = CreateLaserMaterial(new Color(1f, .035f, .005f, .18f), 1.8f, .48f, "JH_LaserAuraShared");
+            _laserGlowMaterial = CreateLaserMaterial(new Color(1f, .12f, .015f, .58f), 3.4f, .28f, "JH_LaserGlowShared");
+            _laserCoreMaterial = CreateLaserMaterial(new Color(1f, .92f, .72f, 1f), 6.2f, .12f, "JH_LaserCoreShared");
+            _laserFlareTexture = TextureFactory.RadialSprite(64);
+            _laserFlareTexture.name = "JH_RuntimeLaserFlare";
+            _laserFlareMaterial = CreateAdditive(new Color(1f, .28f, .025f, .9f), "JH_LaserHeadFlareShared");
+            _laserFlareMaterial.SetTexture("_MainTex", _laserFlareTexture);
             for (int i = 0; i < LaserBoltPoolSize; i++)
             {
                 var root = new GameObject($"Bolt {i + 1:00}");
                 root.layer = 8;
                 root.transform.SetParent(_laserPoolRoot, false);
                 var bolt = new LaserBolt { Root = root };
-                bolt.Glow = MakeLaserLine(root, "Glow", .12f, new Color(1f, .13f, 0f, .35f), _laserGlowMaterial);
-                bolt.Core = MakeLaserLine(root, "Core", .04f, Color.white, _laserCoreMaterial);
+                bolt.Aura = MakeLaserLine(root, "Plasma Aura", .34f, _laserAuraMaterial);
+                bolt.Glow = MakeLaserLine(root, "Energy Body", .16f, _laserGlowMaterial);
+                bolt.Core = MakeLaserLine(root, "White-Hot Core", .045f, _laserCoreMaterial);
+                bolt.HeadFlare = MakeLaserFlare(root);
                 root.SetActive(false);
                 _bolts.Add(bolt);
             }
+
+            var muzzle = new GameObject("LaserMuzzleLight");
+            muzzle.transform.SetParent(ShipRoot, false);
+            muzzle.transform.localPosition = new Vector3(0f, .35f, -2.1f);
+            _laserMuzzleLight = muzzle.AddComponent<Light>();
+            _laserMuzzleLight.type = LightType.Point;
+            _laserMuzzleLight.color = new Color(1f, .16f, .02f);
+            _laserMuzzleLight.range = 7f;
+            _laserMuzzleLight.intensity = 0f;
+            _laserMuzzleLight.shadows = LightShadows.None;
+        }
+
+        Material CreateLaserMaterial(Color tint, float intensity, float softness, string name)
+        {
+            var shader = Shader.Find("JH/Laser");
+            var material = new Material(shader != null ? shader : Shader.Find("JH/Additive")) { name = name };
+            if (shader != null)
+            {
+                material.SetColor("_Tint", tint);
+                material.SetFloat("_Intensity", intensity);
+                material.SetFloat("_EdgeSoftness", softness);
+                material.SetFloat("_PulseSpeed", 18f);
+            }
+            else
+            {
+                material.SetTexture("_MainTex", Texture2D.whiteTexture);
+                material.SetColor("_Tint", tint * intensity);
+            }
+            return material;
         }
 
         LaserBolt AcquireLaserBolt()
@@ -211,7 +261,7 @@ namespace JetHorizon
             return oldest;
         }
 
-        LineRenderer MakeLaserLine(GameObject root, string name, float width, Color color, Material material)
+        LineRenderer MakeLaserLine(GameObject root, string name, float width, Material material)
         {
             var lineObject = new GameObject(name);
             lineObject.layer = 8;
@@ -219,14 +269,35 @@ namespace JetHorizon
             var line = lineObject.AddComponent<LineRenderer>();
             line.useWorldSpace = false;
             line.positionCount = 2;
-            line.SetPosition(0, new Vector3(0f, 0f, -1f));
-            line.SetPosition(1, new Vector3(0f, 0f, 1f));
-            line.startWidth = line.endWidth = width;
+            line.SetPosition(0, new Vector3(0f, 0f, -1.65f));
+            line.SetPosition(1, new Vector3(0f, 0f, 1.15f));
+            line.widthCurve = new AnimationCurve(
+                new Keyframe(0f, .06f), new Keyframe(.14f, 1f),
+                new Keyframe(.72f, .82f), new Keyframe(1f, 0f));
+            line.widthMultiplier = width;
             line.sharedMaterial = material;
-            line.startColor = line.endColor = color;
-            line.numCapVertices = 2;
+            line.startColor = line.endColor = Color.white;
+            line.numCapVertices = 4;
+            line.numCornerVertices = 2;
+            line.textureMode = LineTextureMode.Stretch;
             line.shadowCastingMode = ShadowCastingMode.Off;
             return line;
+        }
+
+        Transform MakeLaserFlare(GameObject root)
+        {
+            var flare = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Destroy(flare.GetComponent<Collider>());
+            flare.name = "Leading Flare";
+            flare.layer = 8;
+            flare.transform.SetParent(root.transform, false);
+            flare.transform.localPosition = new Vector3(0f, 0f, -1.62f);
+            flare.transform.localScale = Vector3.one * .42f;
+            var renderer = flare.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = _laserFlareMaterial;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            return flare.transform;
         }
 
         public void SimTick(float dt)
@@ -237,6 +308,7 @@ namespace JetHorizon
             UpdateMagnet();
             UpdateOverdrive();
             UpdateLaserBolts(dt);
+            UpdateLaserMuzzle(dt);
         }
 
         void UpdateShield(float dt)
@@ -270,16 +342,10 @@ namespace JetHorizon
                 _shieldLight.intensity = 1.2f + Mathf.Sin(S.Elapsed * 9f) * 0.4f;
             }
 
-            if (_shieldHitAge >= 0f)
-            {
-                _shieldHitAge += dt;
-                if (_shieldHitAge >= 1.5f) _shieldHitAge = -1f;
-            }
             _shieldMaterial.SetFloat("_TimeValue", S.Elapsed);
             _shieldMaterial.SetFloat("_Life", S.ShieldHits > 0 ? 1f : 0.25f);
             _shieldMaterial.SetFloat("_Reveal", reveal);
-            _shieldMaterial.SetVector("_HitDirection", _shieldHitDirection);
-            _shieldMaterial.SetFloat("_HitAge", _shieldHitAge);
+            _shieldMaterial.SetVectorArray("_HitData", _shieldHits);
         }
 
         void UpdateMagnet()
@@ -341,21 +407,45 @@ namespace JetHorizon
                 if (!bolt.Root.activeSelf) continue;
                 bolt.Age += dt;
                 bolt.Root.transform.position += Vector3.back * 150f * dt;
+                float life = Mathf.Clamp01(1f - bolt.Age / LaserBoltLifetime);
+                float flareScale = (.34f + Mathf.Sin((S != null ? S.Elapsed : Time.time) * 31f + i) * .05f) * life;
+                bolt.HeadFlare.localScale = Vector3.one * Mathf.Max(.01f, flareScale);
+                var cam = Camera.main;
+                if (cam != null)
+                    bolt.HeadFlare.rotation = Quaternion.LookRotation(
+                        bolt.HeadFlare.position - cam.transform.position, cam.transform.up);
                 if (bolt.Age < LaserBoltLifetime && bolt.Root.transform.position.z > -205f) continue;
                 bolt.Root.SetActive(false);
             }
+        }
+
+        void UpdateLaserMuzzle(float dt)
+        {
+            if (_laserMuzzleLight == null) return;
+            _laserMuzzleAge += dt;
+            float flash = Mathf.Exp(-_laserMuzzleAge * 24f);
+            _laserMuzzleLight.intensity = 5.5f * flash;
+        }
+
+        void ResetShieldHits()
+        {
+            _shieldHitIndex = 0;
+            for (int i = 0; i < ShieldHitCount; i++)
+                _shieldHits[i] = new Vector4(0f, 1f, 0f, -999f);
+            if (_shieldMaterial != null) _shieldMaterial.SetVectorArray("_HitData", _shieldHits);
         }
 
         public void ResetSystem()
         {
             EnsureBuilt();
             _shieldBuild = _shieldBreak = 0f;
-            _shieldHitAge = -1f;
+            ResetShieldHits();
             if (_shield != null) _shield.SetActive(false);
             if (_shieldLight != null) _shieldLight.intensity = 0f;
             if (_magnetRingA != null) _magnetRingA.gameObject.SetActive(false);
             if (_magnetRingB != null) _magnetRingB.gameObject.SetActive(false);
             if (_magnetLight != null) _magnetLight.intensity = 0f;
+            if (_laserMuzzleLight != null) _laserMuzzleLight.intensity = 0f;
             foreach (var renderer in _shipRenderers ?? new Renderer[0]) renderer.SetPropertyBlock(null);
             foreach (var bolt in _bolts)
             {
@@ -366,8 +456,12 @@ namespace JetHorizon
 
         void OnDestroy()
         {
+            if (_shieldMaterial != null) Destroy(_shieldMaterial);
+            if (_laserAuraMaterial != null) Destroy(_laserAuraMaterial);
             if (_laserGlowMaterial != null) Destroy(_laserGlowMaterial);
             if (_laserCoreMaterial != null) Destroy(_laserCoreMaterial);
+            if (_laserFlareMaterial != null) Destroy(_laserFlareMaterial);
+            if (_laserFlareTexture != null) Destroy(_laserFlareTexture);
         }
     }
 }

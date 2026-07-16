@@ -82,6 +82,20 @@ namespace JetHorizon
                 return m;
             }
 
+            Material RunnerHull(string role, int color, float metallic, float roughness)
+            {
+                var hullShader = Shader.Find("JH/ShipHull");
+                if (hullShader == null) return Std(role, color, metallic, roughness);
+                var m = new Material(hullShader) { name = $"JH_Skin_{skin}_{role}" };
+                m.SetColor("_BaseColor", TextureFactory.Hex(color));
+                m.SetColor("_AccentColor", new Color(0.08f, 0.30f, 0.72f, 1f));
+                m.SetFloat("_Metallic", metallic);
+                m.SetFloat("_Smoothness", 1f - roughness);
+                m.SetFloat("_PanelScale", 2f);
+                m.SetFloat("_PanelStrength", role == "fallback" ? .18f : .22f);
+                return m;
+            }
+
             if (holographicMaterial == null)
             {
                 holographicMaterial = new Material(Shader.Find("JH/Holographic")) { name = "JH_Skin_Ghost_Hologram" };
@@ -120,9 +134,9 @@ namespace JetHorizon
                     nozzle = Std("nozzle", 0x0a0a0a, 0.95f, 0.12f);
                     gray = Std("gray", 0x888899, 0.6f, 0.32f);
                     rocketLight = Std("rocket_light", 0x0044ff, 0.0f, 0.05f, 0x0033cc, 2.5f);
-                    rocketBase = Std("rocket_base", 0x0e1014, 0.90f, 0.30f);
+                    rocketBase = RunnerHull("rocket_base", 0x0e1014, 0.90f, 0.30f);
                     white = Std("white", 0xddeeff, 0.5f, 0.08f, 0x2255ff, 0.6f);
-                    fallback = Std("fallback", 0x141820, 0.88f, 0.25f);
+                    fallback = RunnerHull("fallback", 0x141820, 0.88f, 0.25f);
                     break;
             }
 
@@ -169,9 +183,9 @@ namespace JetHorizon
                     if (range > 0f) l.range = range;
                     l.shadows = LightShadows.None;
                 }
-                L("ShipKeyLight", LightType.Directional, Color.white, 2.2f, new Vector3(2f, 4f, -3f));
-                L("ShipFillLight", LightType.Directional, TextureFactory.Hex(0x8899bb), 0.9f, new Vector3(-2f, 1f, 2f));
-                L("ShipUnderlight", LightType.Point, TextureFactory.Hex(0xff6620), 0.65f, new Vector3(0f, -1.2f, 0f), 6f);
+                L("ShipKeyLight", LightType.Directional, Color.white, 1.8f, new Vector3(2f, 4f, -3f));
+                L("ShipFillLight", LightType.Directional, TextureFactory.Hex(0x8899bb), 0.6f, new Vector3(-2f, 1f, 2f));
+                L("ShipUnderlight", LightType.Point, TextureFactory.Hex(0xff6620), 0.48f, new Vector3(0f, -1.2f, 0f), 6f);
             }
         }
 

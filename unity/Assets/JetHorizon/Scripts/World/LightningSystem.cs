@@ -20,7 +20,7 @@ namespace JetHorizon
         const float StrikeSeconds = 0.5f;
         const float LingerSeconds = 4f;
         const float BoltVisibleSeconds = StrikeSeconds + LingerSeconds;
-        const float TunedCoreRadius = 0.45f;
+        const float TunedCoreRadius = 0.12f;
         const float TunedGlowRadius = 0.25f;
         const float SkyHeight = 55f;
         const int SegmentCount = 10;
@@ -34,7 +34,9 @@ namespace JetHorizon
             public GameObject Bolt;
             public LineRenderer Core;
             public LineRenderer Glow;
+            public LineRenderer OuterGlow;
             public MeshRenderer GroundFlash;
+            public MeshRenderer ShockRing;
             public Light FlashLight;
             public bool Struck;
             public int CrackleFrame = -1;
@@ -45,6 +47,8 @@ namespace JetHorizon
         readonly Dictionary<int, HazardSnapshot> _coreStrikes = new Dictionary<int, HazardSnapshot>(32);
         MaterialPropertyBlock _mpb;
         Material _lineMaterial;
+        Material _ringMaterial;
+        Texture2D _ringTexture;
 
         static readonly int TintId = Shader.PropertyToID("_Tint");
 
@@ -66,6 +70,8 @@ namespace JetHorizon
             ClearAll();
             while (_pool.Count > 0) DestroyPresenter(_pool.Pop());
             if (_lineMaterial != null) Destroy(_lineMaterial);
+            if (_ringMaterial != null) Destroy(_ringMaterial);
+            if (_ringTexture != null) Destroy(_ringTexture);
         }
 
         void EnsureLineMaterial()
@@ -75,13 +81,27 @@ namespace JetHorizon
             {
                 _lineMaterial = new Material(BoltMaterial) { name = "JH_LightningLine" };
                 _lineMaterial.SetTexture("_MainTex", Texture2D.whiteTexture);
-                return;
             }
-            var shader = Shader.Find("JH/Additive");
-            if (shader != null)
+            else
             {
-                _lineMaterial = new Material(shader) { name = "JH_LightningLine" };
-                _lineMaterial.SetTexture("_MainTex", Texture2D.whiteTexture);
+                var shader = Shader.Find("JH/Additive");
+                if (shader != null)
+                {
+                    _lineMaterial = new Material(shader) { name = "JH_LightningLine" };
+                    _lineMaterial.SetTexture("_MainTex", Texture2D.whiteTexture);
+                }
+            }
+            if (_ringMaterial == null)
+            {
+                var shader = Shader.Find("JH/Additive");
+                if (shader != null)
+                {
+                    _ringTexture = TextureFactory.RingSprite(96);
+                    _ringTexture.name = "JH_RuntimeLightningShockRing";
+                    _ringMaterial = new Material(shader) { name = "JH_LightningShockRing" };
+                    _ringMaterial.SetTexture("_MainTex", _ringTexture);
+                    _ringMaterial.SetColor("_Tint", Color.white);
+                }
             }
         }
 
@@ -129,6 +149,8 @@ namespace JetHorizon
                     float presentationTime = GameManager.I != null ? GameManager.I.Session.Elapsed : 0f;
                     float warningPulse = 0.24f + 0.18f * (0.5f + 0.5f * Mathf.Sin(presentationTime * 28f));
                     SetTint(strike.WarnRenderer, new Color(0.27f, 0.63f, 1f, warningPulse));
+                    float warningScale = .88f + .16f * Mathf.Abs(Mathf.Sin(presentationTime * 8f));
+                    strike.Warn.transform.localScale = Vector3.one * (WarningDiscRadius * 2f * warningScale);
                 }
                 if (strike.Bolt != null)
                 {
@@ -211,9 +233,12 @@ namespace JetHorizon
                 var reusedPoints = BuildJaggedPath(strike.CoreId * 397 ^ 17);
                 strike.Core.SetPositions(reusedPoints);
                 strike.Glow.SetPositions(reusedPoints);
-                strike.Core.enabled = strike.Glow.enabled = true;
+                strike.OuterGlow.SetPositions(reusedPoints);
+                strike.Core.enabled = strike.Glow.enabled = strike.OuterGlow.enabled = true;
                 strike.GroundFlash.enabled = true;
+                strike.ShockRing.enabled = true;
                 strike.GroundFlash.transform.localScale = Vector3.one * 11f;
+                strike.ShockRing.transform.localScale = Vector3.one * .3f;
                 strike.FlashLight.intensity = 14f;
                 return;
             }
@@ -223,10 +248,13 @@ namespace JetHorizon
             strike.Bolt = root;
 
             var points = BuildJaggedPath(strike.CoreId * 397 ^ 17);
-            // Three.js tuned TubeGeometry uses radii 0.45 core / 0.25 glow.
-            // LineRenderer consumes diameter, and its glow must surround the core.
-            strike.Glow = MakeLine(root.transform, "Glow", (TunedCoreRadius + TunedGlowRadius) * 2f, points, 0);
-            strike.Core = MakeLine(root.transform, "Core", TunedCoreRadius * 2f, points, 1);
+            // Source geometry is a 0.12-radius tube inside a 0.25-radius tube.
+            // Unity adds one broad, low-alpha bloom envelope around those exact
+            // dimensions so the bolt keeps real volume after URP tonemapping.
+            strike.OuterGlow = MakeLine(root.transform, "Atmospheric Glow", 1.25f, points, 0);
+            strike.Glow = MakeLine(root.transform, "Blue Plasma", TunedGlowRadius * 2f, points, 1);
+            strike.Core = MakeLine(root.transform, "White-Hot Core", TunedCoreRadius * 2f, points, 2);
+            SetTint(strike.OuterGlow, new Color(0.20f, 0.52f, 1f, 0.16f));
             SetTint(strike.Glow, new Color(0.53f, 0.78f, 1f, 0.50f));
             SetTint(strike.Core, new Color(1f, 1f, 1f, 1f));
 
@@ -242,6 +270,19 @@ namespace JetHorizon
             strike.GroundFlash.shadowCastingMode = ShadowCastingMode.Off;
             strike.GroundFlash.receiveShadows = false;
             SetTint(strike.GroundFlash, new Color(0.60f, 0.91f, 1f, 0.72f));
+
+            var ring = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Destroy(ring.GetComponent<Collider>());
+            ring.name = "ShockwaveRing";
+            ring.transform.SetParent(root.transform, false);
+            ring.transform.localPosition = new Vector3(0f, 0.025f, 0f);
+            ring.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            ring.transform.localScale = Vector3.one * .3f;
+            strike.ShockRing = ring.GetComponent<MeshRenderer>();
+            strike.ShockRing.sharedMaterial = _ringMaterial != null ? _ringMaterial : BoltMaterial;
+            strike.ShockRing.shadowCastingMode = ShadowCastingMode.Off;
+            strike.ShockRing.receiveShadows = false;
+            SetTint(strike.ShockRing, new Color(0.53f, 0.78f, 1f, .9f));
 
             var lightGo = new GameObject("StrikeLight");
             lightGo.transform.SetParent(root.transform, false);
@@ -301,8 +342,10 @@ namespace JetHorizon
             line.sharedMaterial = _lineMaterial != null ? _lineMaterial : BoltMaterial;
             line.positionCount = points.Length;
             line.SetPositions(points);
-            line.startWidth = width;
-            line.endWidth = width * 0.52f;
+            line.widthCurve = new AnimationCurve(
+                new Keyframe(0f, .15f), new Keyframe(.08f, 1f),
+                new Keyframe(.78f, .86f), new Keyframe(1f, .38f));
+            line.widthMultiplier = width;
             line.numCornerVertices = 3;
             line.numCapVertices = 4;
             line.textureMode = LineTextureMode.Stretch;
@@ -322,6 +365,7 @@ namespace JetHorizon
             var points = BuildJaggedPath(strike.CoreId * 397 ^ frame);
             strike.Core.SetPositions(points);
             strike.Glow.SetPositions(points);
+            strike.OuterGlow.SetPositions(points);
         }
 
         void UpdateStrikeFade(Strike strike, float age)
@@ -353,6 +397,11 @@ namespace JetHorizon
                 strike.Glow.enabled = boltVisible;
                 SetTint(strike.Glow, new Color(0.53f, 0.78f, 1f, glowFade));
             }
+            if (strike.OuterGlow != null)
+            {
+                strike.OuterGlow.enabled = boltVisible;
+                SetTint(strike.OuterGlow, new Color(0.20f, 0.52f, 1f, glowFade * .32f));
+            }
 
             float groundFade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.18f, 1.35f, age));
             if (strike.GroundFlash != null)
@@ -361,6 +410,13 @@ namespace JetHorizon
                 SetTint(strike.GroundFlash, new Color(0.60f, 0.91f, 1f, 0.72f * groundFade));
                 float ringScale = Mathf.Lerp(11f, 18f, Mathf.Clamp01(age / 1.35f));
                 strike.GroundFlash.transform.localScale = Vector3.one * ringScale;
+            }
+            float shockFade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.02f, .52f, age));
+            if (strike.ShockRing != null)
+            {
+                strike.ShockRing.enabled = shockFade > .01f;
+                SetTint(strike.ShockRing, new Color(.53f, .78f, 1f, .9f * shockFade));
+                strike.ShockRing.transform.localScale = Vector3.one * Mathf.Lerp(.3f, 22f, Mathf.Clamp01(age / .52f));
             }
             if (strike.FlashLight != null)
             {
