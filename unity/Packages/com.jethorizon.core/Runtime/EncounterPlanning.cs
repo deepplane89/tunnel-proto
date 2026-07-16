@@ -433,44 +433,58 @@ namespace JetHorizon.Simulation
                     ProofContract,
                     pathOverride.CreateOpenings(scale));
             }
-            const int count = 46;
-            const float rowSpacing = 17f;
+            // A complete, long-form canyon rather than a short obstacle corridor.
+            // Ninety core knots remain below the simulation's 96-slice proof capacity,
+            // while the Unity adapter interpolates them into one continuous mesh.
+            const int count = 90;
+            const float rowSpacing = 26f;
             const float sourceAmplitude = 120f;
-            const float sourceIntensity = .30f;
-            const float sourcePeriod = 330f;
             const float sourceRampDistance = 350f;
+            const float primaryPeriod = 560f;
+            const float phaseDriftPeriod = 920f;
+            const float secondaryPeriod = 280f;
+            float length = rowSpacing * (count + 1);
             var openings = new EncounterOpening[count];
             for (int i = 0; i < count; i++)
             {
-                // Exact exported Three.js canyon sine: amplitude 120 at .30
-                // intensity, 330 world-unit period, ramped in over the first 350u.
+                // Preserve the source's 120u sine DNA, but author a long ride with
+                // changing intensity. The slow phase drift varies turn duration and
+                // the small secondary wave prevents every reversal feeling identical.
                 float sourceDistance = rowSpacing * (i + 1);
-                float ramp = Math.Max(0f, Math.Min(1f, sourceDistance / sourceRampDistance));
-                float center = sourceAmplitude * sourceIntensity * ramp
-                    * (float)Math.Sin(sourceDistance / sourcePeriod * Math.PI * 2.0);
-                float edge = Math.Min(i / 7f, (count - 1 - i) / 7f);
-                float edgeBlend = Math.Max(0f, Math.Min(1f, edge));
-                center *= edgeBlend;
-                // Restore the authored L3 knife half-opening. Besides matching
-                // the source, 21.5u remains admissible for a fully damaged
-                // starter stabilizer without flattening the sine.
-                float halfWidth = 28f + (21.5f - 28f) * edgeBlend
-                    + (float)Math.Sin(i * .31f + .4f) * 1.1f * edgeBlend;
-                CargoRouteTier cargo = i == 13 ? CargoRouteTier.Safe
-                    : i == 28 ? CargoRouteTier.Risky
-                    : i == 39 ? CargoRouteTier.Deep
+                float progress = sourceDistance / length;
+                float ramp = Smooth01(sourceDistance / sourceRampDistance);
+                float intensity = CanyonTurnIntensity(progress);
+                double phase = sourceDistance / primaryPeriod * Math.PI * 2.0
+                    + .20 * Math.Sin(sourceDistance / phaseDriftPeriod * Math.PI * 2.0);
+                double shape = Math.Sin(phase)
+                    + .16 * Math.Sin(sourceDistance / secondaryPeriod * Math.PI * 2.0 + .8);
+                float center = sourceAmplitude * intensity * ramp * (float)(shape / 1.16);
+
+                // Stronger sections become slightly tighter while retaining enough
+                // room for the fully damaged starter ship to follow the longer,
+                // higher-amplitude route. Only the entrance eases from open water;
+                // the far path no longer flattens to zero before the physical exit.
+                float turnChallenge = Smooth01((intensity - .10f) / .42f);
+                float targetHalfWidth = 27.5f + (25f - 27.5f) * turnChallenge
+                    + (float)Math.Sin(i * .31f + .4f) * .65f;
+                float entranceBlend = Smooth01(i / 8f);
+                float halfWidth = 28f + (targetHalfWidth - 28f) * entranceBlend;
+
+                CargoRouteTier cargo = i == 18 ? CargoRouteTier.Safe
+                    : i == 43 || i == 80 ? CargoRouteTier.Risky
+                    : i == 70 ? CargoRouteTier.Deep
                     : CargoRouteTier.None;
-                CanyonEnvironmentPhase phase = i < 6
+                CanyonEnvironmentPhase environmentPhase = i < 6
                     ? CanyonEnvironmentPhase.OpenWater
-                    : i < 11
+                    : i < 12
                         ? CanyonEnvironmentPhase.Convergence
-                        : i == 11
+                        : i == 12
                             ? CanyonEnvironmentPhase.Threshold
-                            : i < 38
+                            : i < 84
                                 ? CanyonEnvironmentPhase.Enclosed
                                 : CanyonEnvironmentPhase.Breakup;
-                bool boundaryActive = i >= 11 && i < 38;
-                TraversalRequirement traversal = i == 20 || i == 32
+                bool boundaryActive = i >= 12 && i < 84;
+                TraversalRequirement traversal = i == 34 || i == 68
                     ? TraversalRequirement.KnifeEdge
                     : TraversalRequirement.None;
                 openings[i] = new EncounterOpening(
@@ -478,17 +492,39 @@ namespace JetHorizon.Simulation
                     center,
                     halfWidth,
                     cargo,
-                    environmentPhase: phase,
+                    environmentPhase: environmentPhase,
                     corridorBoundaryActive: boundaryActive,
                     traversalRequirement: traversal);
             }
             return new EncounterPlan(
                 "proof.crystalline-canyon",
                 EncounterKind.CrystallineCanyon,
-                Scale(rowSpacing * (count + 1), scale),
+                Scale(length, scale),
                 1f,
                 ProofContract,
                 openings);
+        }
+
+        static float CanyonTurnIntensity(float progress)
+        {
+            progress = Math.Max(0f, Math.Min(1f, progress));
+            if (progress < .10f) return SmoothLerp(.10f, .17f, progress / .10f);
+            if (progress < .24f) return SmoothLerp(.17f, .30f, (progress - .10f) / .14f);
+            if (progress < .38f) return SmoothLerp(.30f, .46f, (progress - .24f) / .14f);
+            if (progress < .52f) return SmoothLerp(.46f, .22f, (progress - .38f) / .14f);
+            if (progress < .66f) return SmoothLerp(.22f, .37f, (progress - .52f) / .14f);
+            if (progress < .82f) return SmoothLerp(.37f, .52f, (progress - .66f) / .16f);
+            if (progress < .93f) return SmoothLerp(.52f, .30f, (progress - .82f) / .11f);
+            return SmoothLerp(.30f, .27f, (progress - .93f) / .07f);
+        }
+
+        static float SmoothLerp(float from, float to, float t)
+            => from + (to - from) * Smooth01(t);
+
+        static float Smooth01(float t)
+        {
+            t = Math.Max(0f, Math.Min(1f, t));
+            return t * t * (3f - 2f * t);
         }
 
         static EncounterPlan PrismaticCorridor(float scale)

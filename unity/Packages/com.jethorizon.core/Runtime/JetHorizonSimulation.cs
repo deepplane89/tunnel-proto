@@ -178,7 +178,10 @@ namespace JetHorizon.Simulation
                         _config.CanyonPathOverride),
                     _shipCapability)
                 : null;
-            _encounterCommands = new EncounterCommandBuffer(64);
+            // A complete canyon publishes every validated route knot in one tick.
+            // Keep command capacity derived from the same fixed corridor capacity,
+            // with room for cargo/power-up dressing emitted alongside those knots.
+            _encounterCommands = new EncounterCommandBuffer(Math.Max(64, _config.MaxCorridorSlices + 16));
             _lightningSequences = new LightningSequenceRuntime();
             _lightningStrikeRequests = new LightningStrikeRequestBuffer(16);
             _structuredWallField = StructuredWallFieldCatalog.Production;

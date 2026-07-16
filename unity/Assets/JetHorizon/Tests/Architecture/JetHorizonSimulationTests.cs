@@ -1665,6 +1665,11 @@ namespace JetHorizon.Simulation.Tests
             Assert.That(simulation.Snapshot.EncounterPlanId, Is.EqualTo("proof.crystalline-canyon"));
             Assert.That(simulation.Snapshot.ActiveCorridorFamily, Is.EqualTo(CorridorFamily.CrystallineCanyon));
             EncounterPlan first = EncounterPlanCatalog.CreateProofSequence()[0];
+            Assert.That(first.OpeningCount, Is.EqualTo(90));
+            Assert.That(first.Length, Is.GreaterThan(2300f),
+                "The canyon should sustain a full ride instead of ending after one short wave.");
+            Assert.That(first.OpeningCount, Is.LessThanOrEqualTo(96),
+                "The complete route must still fit the proof simulation's fixed corridor capacity.");
             Assert.That(simulation.Snapshot.CorridorSliceCount, Is.EqualTo(first.OpeningCount),
                 "The complete canyon must exist before any part enters the visible fade band.");
             float originBefore = simulation.Snapshot.EncounterStartZ;
@@ -1677,7 +1682,7 @@ namespace JetHorizon.Simulation.Tests
             float farthestZ = float.MaxValue;
             for (int i = 0; i < simulation.Snapshot.CorridorSliceCount; i++)
                 farthestZ = System.Math.Min(farthestZ, simulation.Snapshot.GetCorridorSlice(i).Z);
-            Assert.That(farthestZ, Is.LessThan(-700f));
+            Assert.That(farthestZ, Is.LessThan(-2200f));
 
             EncounterPlan second = EncounterPlanCatalog.CreateProofSequence()[0];
             Assert.That(first.OpeningCount, Is.EqualTo(second.OpeningCount));
@@ -1690,13 +1695,25 @@ namespace JetHorizon.Simulation.Tests
 
             float leftExtreme = 0f;
             float rightExtreme = 0f;
+            float quietestTurnWindow = float.MaxValue;
+            float strongestTurnWindow = 0f;
             for (int i = 0; i < first.OpeningCount; i++)
             {
                 leftExtreme = System.Math.Min(leftExtreme, first.GetOpening(i).CenterX);
                 rightExtreme = System.Math.Max(rightExtreme, first.GetOpening(i).CenterX);
             }
-            Assert.That(leftExtreme, Is.LessThan(-25f), "The source canyon sine must retain its left sweep.");
-            Assert.That(rightExtreme, Is.GreaterThan(25f), "The source canyon sine must retain its right sweep.");
+            for (int start = 0; start + 14 < first.OpeningCount; start += 15)
+            {
+                float travel = 0f;
+                for (int i = start + 1; i < start + 15; i++)
+                    travel += System.Math.Abs(first.GetOpening(i).CenterX - first.GetOpening(i - 1).CenterX);
+                quietestTurnWindow = System.Math.Min(quietestTurnWindow, travel);
+                strongestTurnWindow = System.Math.Max(strongestTurnWindow, travel);
+            }
+            Assert.That(leftExtreme, Is.LessThan(-45f), "The expanded canyon must contain a strong left sweep.");
+            Assert.That(rightExtreme, Is.GreaterThan(40f), "The expanded canyon must contain a strong right sweep.");
+            Assert.That(strongestTurnWindow, Is.GreaterThan(quietestTurnWindow * 2.5f),
+                "The route needs authored calm and intense sections rather than one repeated sine strength.");
         }
 
         [Test]
@@ -1744,7 +1761,10 @@ namespace JetHorizon.Simulation.Tests
             simulation.StartRun(2026071601L);
 
             bool sawGate = false;
-            for (int tick = 0; tick < 6000 && simulation.Snapshot.HeatLevel == 0; tick++)
+            // The expanded canyon intentionally adds roughly forty seconds to the
+            // first sector. Allow the complete authored sequence to reach its gate;
+            // this test validates gate behavior, not the former short route length.
+            for (int tick = 0; tick < 9000 && simulation.Snapshot.HeatLevel == 0; tick++)
             {
                 sawGate |= simulation.Snapshot.ExtractionGateVisible;
                 simulation.Step(default);
