@@ -40,7 +40,7 @@ namespace JetHorizon
         public GateCrossingFeedbackPresenter GateFeedback;
         public SpeedSurfaceCuePresenter SpeedSurfaceCues;
         public PrismaticTunnelPresenter PrismaticTunnel;
-        public TerrainCoursePresenter TerrainCourse;
+        public TerrainWorldPresenter TerrainWorld;
         public HybridCanyonWorldPresenter HybridCanyonWorld;
         public MonumentPresenter Monuments;
         public ExtractionGatePresenter ExtractionGate;
@@ -112,8 +112,8 @@ namespace JetHorizon
                 MaxHazards = 600,
                 MaxPickups = 128,
                 MaxCorridorSlices = 96,
-                MaxTerrainFormations = 24,
-                MaxTerrainTraversalSamples = 64,
+                MaxTerrainWorldSections = 64,
+                MaxTerrainWorldFeatures = 8,
                 CargoCapacity = launchProfile.CargoCapacity,
                 HullHitCapacity = launchProfile.CollisionHitCapacity,
                 FirstExtractionDistance = 650f,
@@ -123,7 +123,7 @@ namespace JetHorizon
                 PrismaticSineTunnelEnabled = true,
                 ProofEncounterMode = false,
                 GateRunMode = false,
-                TerrainRunMode = true,
+                TerrainWorldMode = true,
                 CanyonPathOverride = canyonProfile != null ? canyonProfile.BuildCorePathDefinition() : null,
                 PersistentCruiseSpeedMultiplier = launchProfile.SpeedMultiplier,
                 Snap = FeelProfile.Snap,
@@ -218,13 +218,13 @@ namespace JetHorizon
                 PrismaticTunnel = presenterObject.AddComponent<PrismaticTunnelPresenter>();
             }
             PrismaticTunnel.ResetSystem();
-            if (TerrainCourse == null)
+            if (TerrainWorld == null)
             {
-                var presenterObject = new GameObject("Terrain Course Presentation");
+                var presenterObject = new GameObject("Terrain World Presentation");
                 presenterObject.transform.SetParent(transform, false);
-                TerrainCourse = presenterObject.AddComponent<TerrainCoursePresenter>();
+                TerrainWorld = presenterObject.AddComponent<TerrainWorldPresenter>();
             }
-            TerrainCourse.ResetSystem();
+            TerrainWorld.ResetSystem();
             if (HybridCanyonWorld == null)
             {
                 var presenterObject = new GameObject("Hybrid Canyon World Presentation");
@@ -323,9 +323,9 @@ namespace JetHorizon
                 s.RestBeat -= dt;
             if (s.PostLaunchGrace > 0f) s.PostLaunchGrace -= dt;
 
-            if (_coreSimulation?.Snapshot?.TerrainRunMode ?? false)
+            if (_coreSimulation?.Snapshot?.TerrainWorldMode ?? false)
             {
-                TerrainCourse?.SimTick(dt);                      // complete prebuilt terrain course
+                TerrainWorld?.SimTick(dt);                       // one complete continuous terrain world
                 PrismaticTunnel?.SimTick(dt);                    // retained special environment
                 Lightning?.SimTick(dt);                          // retained Three.js lightning choreography
                 if (_killedThisFrame) return;
@@ -682,7 +682,7 @@ namespace JetHorizon
             AngledWalls?.ResetSystem();
             Lightning?.ResetSystem();
             PrismaticTunnel?.ResetSystem();
-            TerrainCourse?.ResetSystem();
+            TerrainWorld?.ResetSystem();
             HybridCanyonWorld?.ResetSystem();
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();

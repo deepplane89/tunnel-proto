@@ -3,10 +3,10 @@ using NUnit.Framework;
 
 namespace JetHorizon.Tests.Architecture
 {
-    public sealed class TerrainCourseArchitectureTests
+    public sealed class TerrainWorldArchitectureTests
     {
         [Test]
-        public void ProofCourse_IsTraversableAtEveryHeatAndRetainsPrismaticBeat()
+        public void WorldTopology_IsNavigableAtEveryHeatAndCoversTheFullRun()
         {
             ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
             {
@@ -16,60 +16,64 @@ namespace JetHorizon.Tests.Architecture
 
             for (int sector = 0; sector <= 5; sector++)
             {
-                TerrainCoursePlan course = TerrainCourseCatalog.CreateProofSector(
+                TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(
                     sector,
                     sector * 4000f,
                     capability);
-                TerrainCourseValidation validation = new TerrainCourseValidator().Validate(
-                    course,
+                TerrainWorldValidation validation = new TerrainWorldValidator().Validate(
+                    world,
                     capability,
                     sector);
 
                 Assert.That(validation.IsValid, Is.True, $"sector {sector}");
-                Assert.That(course.GetBeat(0).Kind, Is.EqualTo(TerrainBeatKind.OpenWater));
-                Assert.That(course.GetBeat(6).Kind, Is.EqualTo(TerrainBeatKind.PrismaticCorridor));
-                Assert.That(course.GetBeat(7).Kind, Is.EqualTo(TerrainBeatKind.ExtractionBreather));
+                Assert.That(world.GetRegion(0).Kind, Is.EqualTo(TerrainRegionKind.OpenSea));
+                Assert.That(world.GetRegion(world.RegionCount - 1).Kind,
+                    Is.EqualTo(TerrainRegionKind.ExtractionBreather));
+                Assert.That(world.GetSection(0).Distance, Is.Zero);
+                Assert.That(world.GetSection(world.SectionCount - 1).Distance,
+                    Is.EqualTo(world.Length));
             }
         }
 
         [Test]
-        public void TerrainMode_PublishesTheCompletePersistentCourseAndNoLegacyGates()
+        public void TerrainWorld_PublishesOnePersistentTopologyAndNoLegacyGates()
         {
             JetHorizonSimulation simulation = CreateTerrainSimulation();
             SimulationSnapshot start = simulation.Snapshot;
 
-            Assert.That(start.TerrainRunMode, Is.True);
-            Assert.That(start.TerrainCourseId, Is.EqualTo("terrain-sector-00"));
-            Assert.That(start.TerrainFormationCount, Is.EqualTo(10));
-            Assert.That(start.TerrainTraversalCount, Is.EqualTo(39));
+            Assert.That(start.TerrainWorldMode, Is.True);
+            Assert.That(start.TerrainWorldId, Is.EqualTo("terrain-world-00"));
+            Assert.That(start.TerrainWorldSectionCount, Is.GreaterThan(40));
+            Assert.That(start.TerrainWorldFeatureCount, Is.EqualTo(1));
             Assert.That(start.GateCount, Is.Zero);
-            Assert.That(start.ActiveTerrainBeat, Is.EqualTo(TerrainBeatKind.OpenWater));
+            Assert.That(start.ActiveTerrainRegion, Is.EqualTo(TerrainRegionKind.OpenSea));
 
-            float firstZ = start.GetTerrainFormation(0).Z;
+            int sectionCount = start.TerrainWorldSectionCount;
+            float firstDistance = start.GetTerrainWorldSection(0).Distance;
             for (int i = 0; i < 240; i++) simulation.Step(default);
 
-            Assert.That(simulation.Snapshot.TerrainFormationCount, Is.EqualTo(10));
-            Assert.That(simulation.Snapshot.GetTerrainFormation(0).Z - firstZ,
-                Is.EqualTo(simulation.Snapshot.Distance).Within(.02f));
+            Assert.That(simulation.Snapshot.TerrainWorldSectionCount, Is.EqualTo(sectionCount));
+            Assert.That(simulation.Snapshot.GetTerrainWorldSection(0).Distance,
+                Is.EqualTo(firstDistance));
             Assert.That(simulation.Snapshot.GateCount, Is.Zero);
         }
 
         [Test]
-        public void TerrainMode_UsesAuthoredCadenceAndEarnsSpeedBeforeExtraction()
+        public void TerrainWorld_ProgressesThroughStormPrismAndExtraction()
         {
             JetHorizonSimulation simulation = CreateTerrainSimulation();
             float startingSpeed = simulation.Snapshot.Speed;
-            bool sawLightning = false;
+            bool sawStorm = false;
             bool sawPrismatic = false;
 
             for (int i = 0; i < 9000 && !simulation.Snapshot.ExtractionDecisionOpen; i++)
             {
                 simulation.Step(default);
-                sawLightning |= simulation.Snapshot.ActiveTerrainBeat == TerrainBeatKind.LightningPassage;
-                sawPrismatic |= simulation.Snapshot.ActiveTerrainBeat == TerrainBeatKind.PrismaticCorridor;
+                sawStorm |= simulation.Snapshot.ActiveTerrainRegion == TerrainRegionKind.StormChannel;
+                sawPrismatic |= simulation.Snapshot.ActiveTerrainRegion == TerrainRegionKind.PrismaticReach;
             }
 
-            Assert.That(sawLightning, Is.True);
+            Assert.That(sawStorm, Is.True);
             Assert.That(sawPrismatic, Is.True);
             Assert.That(simulation.Snapshot.ExtractionDecisionOpen, Is.True);
             Assert.That(simulation.Snapshot.GateCount, Is.Zero);
@@ -81,7 +85,7 @@ namespace JetHorizon.Tests.Architecture
         {
             var simulation = new JetHorizonSimulation(new SimulationConfig
             {
-                TerrainRunMode = true,
+                TerrainWorldMode = true,
                 GateRunMode = false,
                 ProofEncounterMode = false,
                 StartSpeedMultiplier = 1.5f,
@@ -93,8 +97,8 @@ namespace JetHorizon.Tests.Architecture
                 MaxHazards = 600,
                 MaxPickups = 128,
                 MaxCorridorSlices = 128,
-                MaxTerrainFormations = 24,
-                MaxTerrainTraversalSamples = 64
+                MaxTerrainWorldSections = 64,
+                MaxTerrainWorldFeatures = 8
             }, 16072026u);
             simulation.StartRun(16072026L);
             return simulation;
