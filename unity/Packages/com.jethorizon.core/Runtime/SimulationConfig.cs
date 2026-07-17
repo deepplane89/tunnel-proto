@@ -70,7 +70,7 @@ namespace JetHorizon.Simulation
         public int MaxCorridorSlices = 96;
         public int MaxGates = 16;
         public int MaxTerrainWorldSections = 64;
-        public int MaxTerrainWorldFeatures = 8;
+        public int MaxTerrainWorldFeatures = 16;
         public int MaxTerrainRouteSections = 48;
         public int CargoCapacity = 18;
         public int HullHitCapacity = 1;

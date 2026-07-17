@@ -39,12 +39,28 @@ namespace JetHorizon.Simulation
         LongKnifePass
     }
 
+    /// <summary>
+    /// A deliberate gameplay beat in a terrain world. Waves are authored by the
+    /// engine-neutral catalog and never inferred from Unity meshes, so pacing
+    /// cannot silently drift when the presentation changes.
+    /// </summary>
+    public enum TerrainWaveKind
+    {
+        OpenWaterSlalom,
+        CanyonRun,
+        OpenWaterReset,
+        PortalChoice,
+        TunnelRun,
+        ReleaseBasin
+    }
+
     public enum TerrainWorldFeatureKind
     {
         NaturalArch,
         WaterlineMonolith,
         WaterlineRidge,
-        WaterlineCluster
+        WaterlineCluster,
+        WaterlineSpire
     }
 
     public static class TerrainWorldFeatureRules
@@ -52,7 +68,25 @@ namespace JetHorizon.Simulation
         public static bool IsWaterFormation(TerrainWorldFeatureKind kind)
             => kind == TerrainWorldFeatureKind.WaterlineMonolith
                 || kind == TerrainWorldFeatureKind.WaterlineRidge
-                || kind == TerrainWorldFeatureKind.WaterlineCluster;
+                || kind == TerrainWorldFeatureKind.WaterlineCluster
+                || kind == TerrainWorldFeatureKind.WaterlineSpire;
+    }
+
+    public readonly struct TerrainWorldWave
+    {
+        public TerrainWaveKind Kind { get; }
+        public float StartDistance { get; }
+        public float Length { get; }
+        public float EndDistance => StartDistance + Length;
+
+        public TerrainWorldWave(TerrainWaveKind kind, float startDistance, float length)
+        {
+            if (startDistance < 0f || length <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(length));
+            Kind = kind;
+            StartDistance = startDistance;
+            Length = length;
+        }
     }
 
     /// <summary>
@@ -206,6 +240,7 @@ namespace JetHorizon.Simulation
         readonly TerrainWorldSection[] _sections;
         readonly TerrainWorldFeature[] _features;
         readonly TerrainRouteSection[] _routeSections;
+        readonly TerrainWorldWave[] _waves;
 
         public string Id { get; }
         public int Sector { get; }
@@ -217,6 +252,7 @@ namespace JetHorizon.Simulation
         public int SectionCount => _sections.Length;
         public int FeatureCount => _features.Length;
         public int RouteSectionCount => _routeSections.Length;
+        public int WaveCount => _waves.Length;
 
         public TerrainWorldPlan(
             string id,
@@ -227,7 +263,8 @@ namespace JetHorizon.Simulation
             TerrainWorldSection[] sections,
             TerrainWorldFeature[] features,
             TerrainRouteSection[] routeSections = null,
-            TerrainCourseKind course = TerrainCourseKind.ThreeHoleApproach)
+            TerrainCourseKind course = TerrainCourseKind.ThreeHoleApproach,
+            TerrainWorldWave[] waves = null)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("World id is required.", nameof(id));
             if (sector < 0 || startDistance < 0f || length <= 0f) throw new ArgumentOutOfRangeException(nameof(length));
@@ -241,6 +278,7 @@ namespace JetHorizon.Simulation
             _routeSections = routeSections == null
                 ? Array.Empty<TerrainRouteSection>()
                 : (TerrainRouteSection[])routeSections.Clone();
+            _waves = waves == null ? Array.Empty<TerrainWorldWave>() : (TerrainWorldWave[])waves.Clone();
             float previousEnd = 0f;
             for (int i = 0; i < _regions.Length; i++)
             {
@@ -263,6 +301,13 @@ namespace JetHorizon.Simulation
                 if (route.Distance > length)
                     throw new ArgumentException("Terrain route exceeds world length.", nameof(routeSections));
             }
+            float previousWaveEnd = 0f;
+            for (int i = 0; i < _waves.Length; i++)
+            {
+                if (_waves[i].StartDistance < previousWaveEnd - .01f || _waves[i].EndDistance > length + .01f)
+                    throw new ArgumentException("Terrain waves must be ordered and inside the world.", nameof(waves));
+                previousWaveEnd = _waves[i].EndDistance;
+            }
             Id = id;
             Sector = sector;
             Course = course;
@@ -284,6 +329,10 @@ namespace JetHorizon.Simulation
 
         public TerrainRouteSection GetRouteSection(int index) => index >= 0 && index < _routeSections.Length
             ? _routeSections[index]
+            : throw new ArgumentOutOfRangeException(nameof(index));
+
+        public TerrainWorldWave GetWave(int index) => index >= 0 && index < _waves.Length
+            ? _waves[index]
             : throw new ArgumentOutOfRangeException(nameof(index));
 
         public bool HasRoutePassagesAt(float distance)
@@ -481,49 +530,31 @@ namespace JetHorizon.Simulation
             const float breatherLength = 500f;
             const float breatherStart = openWaterReturnStart + openWaterReturnLength;
             float worldLength = breatherStart + breatherLength;
-            // One complete world sentence: a genuine open-water breather, a
-            // coastline approach, a monumental three-hole formation, distinct
-            // passages, a convergence basin, then water again. Layout only mirrors
-            // and lightly varies the geography; it never changes the contract.
-            TerrainWorldRegion[] regions = layout == 1
-                ? new[]
-                {
-                    new TerrainWorldRegion(1, TerrainRegionKind.OpenSea,          0f, 620f, 0f),
-                    new TerrainWorldRegion(2, TerrainRegionKind.CoastalWeave,   620f, 300f, 6f),
-                    new TerrainWorldRegion(3, TerrainRegionKind.StormChannel,   920f, 300f, 5f),
-                    new TerrainWorldRegion(4, TerrainRegionKind.NaturalArch,   1220f, 200f, 4f),
-                    new TerrainWorldRegion(5, TerrainRegionKind.RouteJunction, 1420f, 430f, 7f),
-                    new TerrainWorldRegion(6, TerrainRegionKind.CrystallineCanyon, 1850f, 1020f, 12f),
-                    new TerrainWorldRegion(7, TerrainRegionKind.ConvergenceBasin, 2870f, 320f, 7f),
-                    new TerrainWorldRegion(8, TerrainRegionKind.OpenSea, openWaterReturnStart, openWaterReturnLength, 5f),
-                    new TerrainWorldRegion(9, TerrainRegionKind.ExtractionBreather, breatherStart, breatherLength, 0f)
-                }
-                : layout == 2
-                ? new[]
-                {
-                    new TerrainWorldRegion(1, TerrainRegionKind.OpenSea,          0f, 300f, 0f),
-                    new TerrainWorldRegion(2, TerrainRegionKind.StormChannel,   300f, 240f, 5f),
-                    new TerrainWorldRegion(3, TerrainRegionKind.CoastalWeave,   540f, 680f, 6f),
-                    new TerrainWorldRegion(4, TerrainRegionKind.NaturalArch,   1220f, 200f, 4f),
-                    new TerrainWorldRegion(5, TerrainRegionKind.RouteJunction, 1420f, 430f, 7f),
-                    new TerrainWorldRegion(6, TerrainRegionKind.CrystallineCanyon, 1850f, 1020f, 12f),
-                    new TerrainWorldRegion(7, TerrainRegionKind.ConvergenceBasin, 2870f, 320f, 7f),
-                    new TerrainWorldRegion(8, TerrainRegionKind.OpenSea, openWaterReturnStart, openWaterReturnLength, 5f),
-                    new TerrainWorldRegion(9, TerrainRegionKind.ExtractionBreather, breatherStart, breatherLength, 0f)
-                }
-                : new[]
+            // A world is composed from waves, not a generic canyon loop. The
+            // player gets a normal canyon first, a reset over open water with
+            // smaller formations, then a huge wall whose three literal holes lead
+            // into the route tunnel. Lightning belongs in that reset, not inside
+            // every canyon sentence.
+            TerrainWorldRegion[] regions =
             {
-                new TerrainWorldRegion(1, TerrainRegionKind.OpenSea,          0f, 420f, 0f),
-                new TerrainWorldRegion(2, TerrainRegionKind.CoastalWeave,   420f, 500f, 6f),
-                new TerrainWorldRegion(3, TerrainRegionKind.StormChannel,   920f, 300f, 5f),
-                new TerrainWorldRegion(4, TerrainRegionKind.NaturalArch,   1220f, 200f, 4f),
-                new TerrainWorldRegion(5, TerrainRegionKind.RouteJunction, 1420f, 430f, 7f),
-                new TerrainWorldRegion(6, TerrainRegionKind.CrystallineCanyon, 1850f, 1020f, 12f),
-                new TerrainWorldRegion(7, TerrainRegionKind.ConvergenceBasin, 2870f, 320f, 7f),
-                new TerrainWorldRegion(8, TerrainRegionKind.OpenSea,
-                    openWaterReturnStart, openWaterReturnLength, 5f),
-                new TerrainWorldRegion(9, TerrainRegionKind.ExtractionBreather,
-                    breatherStart, breatherLength, 0f)
+                new TerrainWorldRegion(1, TerrainRegionKind.OpenSea,             0f, 400f, 0f),
+                new TerrainWorldRegion(2, TerrainRegionKind.CrystallineCanyon, 400f, 620f, 7f),
+                new TerrainWorldRegion(3, TerrainRegionKind.OpenSea,          1020f, 260f, 3f),
+                new TerrainWorldRegion(4, TerrainRegionKind.StormChannel,    1280f, 140f, 4f),
+                new TerrainWorldRegion(5, TerrainRegionKind.RouteJunction,   1420f, 430f, 9f),
+                new TerrainWorldRegion(6, TerrainRegionKind.CrystallineCanyon,1850f, 1020f, 12f),
+                new TerrainWorldRegion(7, TerrainRegionKind.ConvergenceBasin,2870f, 320f, 6f),
+                new TerrainWorldRegion(8, TerrainRegionKind.OpenSea, openWaterReturnStart, openWaterReturnLength, 4f),
+                new TerrainWorldRegion(9, TerrainRegionKind.ExtractionBreather, breatherStart, breatherLength, 0f)
+            };
+            TerrainWorldWave[] waves =
+            {
+                new TerrainWorldWave(TerrainWaveKind.OpenWaterSlalom, 0f, 400f),
+                new TerrainWorldWave(TerrainWaveKind.CanyonRun, 400f, 620f),
+                new TerrainWorldWave(TerrainWaveKind.OpenWaterReset, 1020f, 260f),
+                new TerrainWorldWave(TerrainWaveKind.PortalChoice, 1280f, 570f),
+                new TerrainWorldWave(TerrainWaveKind.TunnelRun, 1850f, 1020f),
+                new TerrainWorldWave(TerrainWaveKind.ReleaseBasin, 2870f, 320f)
             };
             var sections = new List<TerrainWorldSection>(48);
             int id = 1000;
@@ -600,18 +631,21 @@ namespace JetHorizon.Simulation
 
             Shore(   0f, TerrainRegionKind.OpenSea,       -150f, 150f, 10f, 11f, 180f);
             Shore( 220f, TerrainRegionKind.OpenSea,       -145f, 140f, 11f, 12f, 180f);
-            Shore( 420f, TerrainRegionKind.CoastalWeave,  -132f, 130f, 16f, 18f, 175f);
-            Shore( 540f, TerrainRegionKind.CoastalWeave,   -98f, 100f, 26f, 29f, 170f);
-            Shore( 680f, TerrainRegionKind.CoastalWeave,   -84f,  92f, 35f, 38f, 165f);
-            Shore( 820f, TerrainRegionKind.CoastalWeave,   -88f,  86f, 42f, 39f, 160f);
-            Shore( 920f, TerrainRegionKind.StormChannel,   -96f,  94f, 45f, 48f, 160f);
-            Shore(1080f, TerrainRegionKind.StormChannel,   -90f,  92f, 51f, 48f, 155f);
-            Shore(1220f, TerrainRegionKind.NaturalArch,    -96f,  96f, 61f, 64f, 150f);
-            Shore(1320f, TerrainRegionKind.NaturalArch,   -102f, 100f, 70f, 68f, 150f);
-            Shore(1420f, TerrainRegionKind.RouteJunction, -104f, 104f, 78f, 76f, 150f);
-            Shore(1540f, TerrainRegionKind.RouteJunction,  -98f,  98f, 84f, 82f, 150f);
-            Shore(1660f, TerrainRegionKind.RouteJunction,  -94f,  94f, 88f, 86f, 150f);
-
+            // The first canyon is a normal, connected geological corridor. It is
+            // intentionally not the portal wall, so the player gets a readable
+            // terrain run before being asked to choose a hole in a solid mass.
+            Shore( 400f, TerrainRegionKind.CrystallineCanyon, -126f, 128f, 24f, 27f, 175f);
+            Shore( 520f, TerrainRegionKind.CrystallineCanyon,  -92f,  98f, 42f, 45f, 168f);
+            Shore( 660f, TerrainRegionKind.CrystallineCanyon,  -78f,  88f, 54f, 50f, 160f);
+            Shore( 820f, TerrainRegionKind.CrystallineCanyon,  -82f,  84f, 58f, 56f, 158f);
+            Shore(1020f, TerrainRegionKind.OpenSea,       -126f, 130f, 25f, 27f, 170f);
+            Shore(1140f, TerrainRegionKind.OpenSea,       -148f, 150f, 14f, 15f, 180f);
+            Shore(1280f, TerrainRegionKind.StormChannel,  -150f, 150f, 12f, 13f, 180f);
+            // This is the leading face of a solid portal wall. Route sections
+            // below cut the only three usable openings through it.
+            Shore(1420f, TerrainRegionKind.RouteJunction, -104f, 104f, 82f, 80f, 150f);
+            Shore(1540f, TerrainRegionKind.RouteJunction,  -98f,  98f, 88f, 86f, 150f);
+            Shore(1660f, TerrainRegionKind.RouteJunction,  -94f,  94f, 90f, 88f, 150f);
             // The outer shoreline stays broad while the route sections below carve
             // holes through the inside of this landmass. That is the difference
             // between a canyon that exists in the world and props placed on water.
@@ -687,13 +721,13 @@ namespace JetHorizon.Simulation
             };
             float[] outerHalves =
             {
-                52f, 31f, 27f, 24f, 22f, 21f,
-                21f, 22f, 24f, 31f, 52f
+                18f, 19f, 21f, 22f, 21f, 20f,
+                20f, 21f, 22f, 24f, 30f
             };
             float[] knifeHalves =
             {
-                36f, 24f, 17f, 12f, 9.5f, 9.5f,
-                9.5f, 9.5f, 12f, 24f, 36f
+                21f, 17f, 14f, 11f, 9.5f, 9.5f,
+                9.5f, 9.5f, 11f, 16f, 24f
             };
             float[] knifeCeilings =
             {
@@ -771,21 +805,7 @@ namespace JetHorizon.Simulation
             AddRoute(TerrainRouteKind.KnifeEdgeTunnel, knifeCenters, knifeHalves, knifeCeilings);
             AddRoute(TerrainRouteKind.CargoChannel, cargoCenters, outerHalves, new float[routeDistances.Length]);
 
-            var features = new List<TerrainWorldFeature>(8)
-            {
-                new TerrainWorldFeature(
-                    500,
-                    TerrainWorldFeatureKind.NaturalArch,
-                    1360f,
-                    -8f * mirror,
-                    32f,
-                    74f,
-                    18f,
-                    // Presentation currently places the crown above the ship. Do not
-                    // attach an abstract roll-only collision plane to visible open air.
-                    TraversalRequirement.None,
-                    401 + sector * 47)
-            };
+            var features = new List<TerrainWorldFeature>(16);
 
             void SampleAuthoredShore(float distance, out float left, out float right)
             {
@@ -808,75 +828,78 @@ namespace JetHorizon.Simulation
             }
 
             // Formation cadence is authored in seconds, then converted to world
-            // distance using this sector's actual maximum speed. Side-attached
-            // masses overlap the shoreline and alternate their inner tips around
-            // the route, producing readable terrain weaves instead of loose props.
+            // distance using this sector's actual maximum speed. These are small
+            // waterline reefs and spires, not a few giant props: each formation is
+            // visibly close enough to establish speed, while its offset leaves a
+            // broad mathematically-valid route around it.
             float[] beatSeconds = layout == 0
-                ? new[] { 1.80f, 2.90f, 4.00f, 5.15f, 6.25f, 7.40f, 8.55f }
+                ? new[] { 1.45f, 2.35f, 3.20f, 4.05f, 4.95f, 5.85f, 6.80f, 7.75f, 8.75f, 9.70f }
                 : layout == 1
-                ? new[] { 1.90f, 3.00f, 4.15f, 5.20f, 6.35f, 7.45f, 8.55f }
-                : new[] { 2.00f, 3.10f, 4.20f, 5.30f, 6.35f, 7.40f, 8.55f };
+                ? new[] { 1.55f, 2.45f, 3.35f, 4.20f, 5.05f, 5.95f, 6.90f, 7.90f, 8.85f, 9.80f }
+                : new[] { 1.50f, 2.40f, 3.28f, 4.18f, 5.10f, 6.00f, 6.95f, 7.88f, 8.82f, 9.78f };
             int[] authoredSides = layout == 0
-                ? new[] { 1, -1, 1, 0, -1, 1, -1 }
+                ? new[] { 1, -1, 1, -1, 0, 1, -1, 1, -1, 0 }
                 : layout == 1
-                ? new[] { -1, 1, 0, 1, -1, -1, 1 }
-                : new[] { 0, 1, -1, 1, 1, -1, 0 };
+                ? new[] { -1, 1, -1, 1, 0, -1, 1, -1, 1, 0 }
+                : new[] { 1, -1, 1, 0, -1, 1, -1, 1, 0, -1 };
             TerrainWorldFeatureKind[] kinds = layout == 0
                 ? new[]
                 {
+                    TerrainWorldFeatureKind.WaterlineSpire,
+                    TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineSpire,
                     TerrainWorldFeatureKind.WaterlineRidge,
                     TerrainWorldFeatureKind.WaterlineCluster,
-                    TerrainWorldFeatureKind.WaterlineMonolith,
+                    TerrainWorldFeatureKind.WaterlineSpire,
                     TerrainWorldFeatureKind.WaterlineCluster,
                     TerrainWorldFeatureKind.WaterlineRidge,
-                    TerrainWorldFeatureKind.WaterlineCluster,
-                    TerrainWorldFeatureKind.WaterlineRidge
+                    TerrainWorldFeatureKind.WaterlineSpire,
+                    TerrainWorldFeatureKind.WaterlineCluster
                 }
                 : layout == 1
                 ? new[]
                 {
                     TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineSpire,
                     TerrainWorldFeatureKind.WaterlineRidge,
-                    TerrainWorldFeatureKind.WaterlineMonolith,
-                    TerrainWorldFeatureKind.WaterlineRidge,
+                    TerrainWorldFeatureKind.WaterlineSpire,
                     TerrainWorldFeatureKind.WaterlineCluster,
-                    TerrainWorldFeatureKind.WaterlineMonolith,
+                    TerrainWorldFeatureKind.WaterlineRidge,
+                    TerrainWorldFeatureKind.WaterlineSpire,
+                    TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineSpire,
                     TerrainWorldFeatureKind.WaterlineRidge
                 }
                 : new[]
                 {
-                    TerrainWorldFeatureKind.WaterlineMonolith,
-                    TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineSpire,
                     TerrainWorldFeatureKind.WaterlineRidge,
                     TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineSpire,
+                    TerrainWorldFeatureKind.WaterlineCluster,
                     TerrainWorldFeatureKind.WaterlineRidge,
-                    TerrainWorldFeatureKind.WaterlineMonolith,
-                    TerrainWorldFeatureKind.WaterlineCluster
+                    TerrainWorldFeatureKind.WaterlineSpire,
+                    TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineRidge,
+                    TerrainWorldFeatureKind.WaterlineSpire
                 };
             for (int beat = 0; beat < beatSeconds.Length; beat++)
             {
                 float distance = beatSeconds[beat] * designSpeed;
-                if (distance > 1400f) continue;
+                if (distance > 1250f) continue;
                 SampleAuthoredShore(distance, out float leftShore, out float rightShore);
                 float waterCenter = (leftShore + rightShore) * .5f;
                 int side = authoredSides[beat] * (mirror > 0f ? 1 : -1);
                 float center;
-                float halfWidth;
+                float halfWidth = 5.5f + (beat % 3) * 1.1f;
+                float halfWater = (rightShore - leftShore) * .5f;
                 if (side == 0)
                 {
-                    center = waterCenter;
-                    halfWidth = 7.5f + (beat % 3);
+                    center = waterCenter + ((beat & 1) == 0 ? -1f : 1f) * (halfWater * .24f);
                 }
                 else
                 {
-                    // Leave a deliberate central transit lane through open-water
-                    // formations. The mass remains shoreline-connected, but it no
-                    // longer asks a high-speed ship to cross an entire channel in
-                    // one one-second cadence beat.
-                    float innerTip = waterCenter + side * 18f;
-                    float outerEdge = side > 0 ? rightShore + 8f : leftShore - 8f;
-                    center = (innerTip + outerEdge) * .5f;
-                    halfWidth = Math.Abs(outerEdge - innerTip) * .5f;
+                    center = waterCenter + side * Math.Max(14f, halfWater - halfWidth - 7f);
                 }
                 features.Add(new TerrainWorldFeature(
                     501 + beat,
@@ -884,8 +907,8 @@ namespace JetHorizon.Simulation
                     distance,
                     center,
                     halfWidth,
-                    34f + (beat % 3) * 7f,
-                    10f + (beat % 2) * 2f,
+                    18f + (beat % 4) * 5f,
+                    5.5f + (beat % 2) * 1.25f,
                     TraversalRequirement.None,
                     601 + layout * 400 + beat * 101 + sector * 67));
             }
@@ -899,7 +922,8 @@ namespace JetHorizon.Simulation
                 sections.ToArray(),
                 features.ToArray(),
                 routeSections.ToArray(),
-                course);
+                course,
+                waves);
             // Dense envelope validation is intentionally an authoring/test gate,
             // not work performed inside the live simulation tick. The generator
             // constructs from the same limits, while TerrainWorldArchitectureTests

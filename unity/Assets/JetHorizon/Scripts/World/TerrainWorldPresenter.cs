@@ -291,6 +291,19 @@ namespace JetHorizon
 
         void BuildWaterlineFormation(BuiltWorld world, TerrainWorldFeatureSnapshot feature)
         {
+            if (feature.Kind == TerrainWorldFeatureKind.WaterlineSpire)
+            {
+                // Small grouped facets make open-water navigation feel dense and
+                // fast without reverting to the old huge square boulders. Their
+                // one core collision footprint remains the authority.
+                AddWaterlineSlab(world, feature, "Spire core",
+                    feature.CenterX - feature.HalfWidth * .12f, feature.HalfWidth * .54f,
+                    feature.Height, feature.CollisionHalfDepth, feature.Seed);
+                AddWaterlineSlab(world, feature, "Spire shard",
+                    feature.CenterX + feature.HalfWidth * .38f, feature.HalfWidth * .32f,
+                    feature.Height * .62f, feature.CollisionHalfDepth * .72f, feature.Seed + 29);
+                return;
+            }
             if (feature.Kind == TerrainWorldFeatureKind.WaterlineMonolith)
             {
                 AddWaterlineSlab(
@@ -380,9 +393,9 @@ namespace JetHorizon
             // Match the original canyon slab language: dark crystal body with a
             // substantial cyan edge contribution. This stays opaque and faceted,
             // but no longer collapses into near-black between sun highlights.
-            _material.SetColor("_Body", new Color(.025f, .27f, .34f, 1f));
-            _material.SetFloat("_Brightness", .98f);
-            _material.SetFloat("_Emission", .34f);
+            _material.SetColor("_Body", new Color(.018f, .31f, .39f, 1f));
+            _material.SetFloat("_Brightness", 1.08f);
+            _material.SetFloat("_Emission", .48f);
         }
 
         void AddMesh(
