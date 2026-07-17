@@ -68,7 +68,7 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
-        public void ConsecutiveWorlds_UseDifferentCourseSentencesAndRouteGeometry()
+        public void ConsecutiveWorlds_RepeatOnlyRockProofWithDifferentRouteGeometry()
         {
             ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
             {
@@ -79,35 +79,42 @@ namespace JetHorizon.Tests.Architecture
             TerrainWorldPlan second = TerrainWorldCatalog.CreateProofWorld(1, first.Length, capability);
             TerrainWorldPlan third = TerrainWorldCatalog.CreateProofWorld(2, first.Length + second.Length, capability);
 
-            Assert.That(first.Course, Is.EqualTo(TerrainCourseKind.ThreeHoleApproach));
-            Assert.That(second.Course, Is.EqualTo(TerrainCourseKind.InvertedKnifeRun));
-            Assert.That(third.Course, Is.EqualTo(TerrainCourseKind.BasinSwitchback));
-            Assert.That(first.GetParcel(3).Kind, Is.EqualTo(WorldParcelKind.CrystallineCanyon));
-            Assert.That(second.GetParcel(3).Kind, Is.EqualTo(WorldParcelKind.OpenWaterLightning));
-            Assert.That(third.GetParcel(3).Kind, Is.EqualTo(WorldParcelKind.RoutePortal));
             Assert.That(first.Parcels.Id, Is.Not.EqualTo(second.Parcels.Id));
-            Assert.That(second.GetParcel(5).VariantId, Is.Not.EqualTo(third.GetParcel(5).VariantId));
+            Assert.That(first.GetParcel(1).Kind, Is.EqualTo(WorldParcelKind.OpenWaterFormation));
+            Assert.That(second.GetParcel(1).Kind, Is.EqualTo(WorldParcelKind.OpenWaterFormation));
+            Assert.That(third.GetParcel(1).Kind, Is.EqualTo(WorldParcelKind.OpenWaterFormation));
+            Assert.That(first.GetParcel(1).VariantId, Is.Not.EqualTo(second.GetParcel(1).VariantId));
+            for (int worldIndex = 0; worldIndex < 3; worldIndex++)
+            {
+                TerrainWorldPlan world = worldIndex == 0 ? first : worldIndex == 1 ? second : third;
+                for (int parcelIndex = 0; parcelIndex < world.ParcelCount; parcelIndex++)
+                    Assert.That(world.GetParcel(parcelIndex).Kind,
+                        Is.EqualTo(WorldParcelKind.OpenWaterBreather)
+                            .Or.EqualTo(WorldParcelKind.OpenWaterFormation));
+            }
         }
 
         [Test]
-        public void CourseCatalog_RotatesSixAuthoredArchetypesBeforeChangingCircuit()
+        public void ProofCatalog_NeverActivatesAnotherObstacleFamily()
         {
             ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
             {
                 StartSpeedMultiplier = 3f,
                 MinimumOperationalSpeed = 100f
             });
-            var observed = new System.Collections.Generic.HashSet<TerrainCourseKind>();
             for (int sector = 0; sector < 6; sector++)
-                observed.Add(TerrainWorldCatalog.CreateProofWorld(sector, sector * 4120f, capability).Course);
-
-            Assert.That(observed.Count, Is.EqualTo(6));
-            var selector = new DeterministicWorldParcelSelector();
-            Assert.That(selector.Select(5).Signature, Is.Not.EqualTo(selector.Select(6).Signature));
+            {
+                TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(sector, sector * 1600f, capability);
+                Assert.That(world.ParcelCount, Is.EqualTo(3));
+                Assert.That(world.GetParcel(0).Kind, Is.EqualTo(WorldParcelKind.OpenWaterBreather));
+                Assert.That(world.GetParcel(1).Kind, Is.EqualTo(WorldParcelKind.OpenWaterFormation));
+                Assert.That(world.GetParcel(2).Kind, Is.EqualTo(WorldParcelKind.OpenWaterBreather));
+                Assert.That(world.RouteSectionCount, Is.Zero);
+            }
         }
 
         [Test]
-        public void WorldWaveSentence_ResetsBeforeItsPortalAndUsesARealTunnelChoice()
+        public void WorldWaveSentence_IsOnlyWaterRockWater()
         {
             ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
             {
@@ -116,25 +123,16 @@ namespace JetHorizon.Tests.Architecture
             });
             TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(0, 0f, capability);
 
-            Assert.That(world.WaveCount, Is.EqualTo(7));
+            Assert.That(world.WaveCount, Is.EqualTo(3));
             Assert.That(world.GetWave(0).Kind, Is.EqualTo(TerrainWaveKind.OpenWaterBreather));
             Assert.That(world.GetWave(1).Kind, Is.EqualTo(TerrainWaveKind.OpenWaterFormation));
             Assert.That(world.GetWave(2).Kind, Is.EqualTo(TerrainWaveKind.OpenWaterBreather));
-            Assert.That(world.GetWave(3).Kind, Is.EqualTo(TerrainWaveKind.CrystallineCanyon));
-            Assert.That(world.GetWave(4).Kind, Is.EqualTo(TerrainWaveKind.OpenWaterBreather));
-            Assert.That(world.GetWave(3).EndDistance,
-                Is.LessThanOrEqualTo(world.GetWave(5).StartDistance));
-            WorldParcelPlan portal = world.GetParcel(5);
-            float portalMid = portal.LocalStartDistance + portal.Length * .5f;
-            Assert.That(world.TryGetRoutePassage(TerrainRouteKind.SafeCanyon, portalMid,
-                out float safeLeft, out float safeRight, out _), Is.True);
-            Assert.That(world.TryGetRoutePassage(TerrainRouteKind.KnifeEdgeTunnel, portalMid,
-                out float knifeLeft, out float knifeRight, out _), Is.True);
-            Assert.That(knifeLeft - safeRight, Is.GreaterThan(8f));
+            Assert.That(world.GetWave(0).EndDistance, Is.EqualTo(world.GetWave(1).StartDistance).Within(.01f));
+            Assert.That(world.GetWave(1).EndDistance, Is.EqualTo(world.GetWave(2).StartDistance).Within(.01f));
         }
 
         [Test]
-        public void L3KnifeTunnel_UsesTheCanonicalLongSineRatherThanRandomWander()
+        public void RockProof_HasNoCanyonPortalOrCorridorTopology()
         {
             ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
             {
@@ -142,20 +140,13 @@ namespace JetHorizon.Tests.Architecture
                 MinimumOperationalSpeed = 100f
             });
             TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(0, 0f, capability);
-            WorldParcelPlan portal = world.GetParcel(5);
-            world.TryGetRoutePassage(TerrainRouteKind.KnifeEdgeTunnel, portal.LocalStartDistance + portal.Length * .08f,
-                out float entryLeft, out float entryRight, out _);
-            world.TryGetRoutePassage(TerrainRouteKind.KnifeEdgeTunnel, portal.LocalStartDistance + portal.Length * .50f,
-                out float bendLeft, out float bendRight, out float bendCeiling);
-            world.TryGetRoutePassage(TerrainRouteKind.KnifeEdgeTunnel, portal.LocalStartDistance + portal.Length * .92f,
-                out float returnLeft, out float returnRight, out _);
-
-            float entryCenter = (entryLeft + entryRight) * .5f;
-            float bendCenter = (bendLeft + bendRight) * .5f;
-            float returnCenter = (returnLeft + returnRight) * .5f;
-            Assert.That(bendRight - bendLeft, Is.LessThan(entryRight - entryLeft));
-            Assert.That(bendRight - bendLeft, Is.LessThan(returnRight - returnLeft));
-            Assert.That(bendCeiling, Is.GreaterThan(20f));
+            Assert.That(world.RouteSectionCount, Is.Zero);
+            for (int i = 0; i < world.ParcelCount; i++)
+            {
+                WorldParcelPlan parcel = world.GetParcel(i);
+                Assert.That(parcel.Envelope, Is.EqualTo(WorldEnvelopeKind.None));
+                Assert.That(parcel.Threats.Kind, Is.EqualTo(WorldThreatKind.None));
+            }
         }
 
         [Test]
@@ -166,10 +157,10 @@ namespace JetHorizon.Tests.Architecture
 
             Assert.That(start.TerrainWorldMode, Is.True);
             Assert.That(start.TerrainWorldId, Is.EqualTo("terrain-world-00"));
-            Assert.That(start.TerrainWorldSectionCount, Is.GreaterThan(12));
+            Assert.That(start.TerrainWorldSectionCount, Is.GreaterThanOrEqualTo(8));
             Assert.That(start.TerrainWorldFeatureCount, Is.GreaterThanOrEqualTo(8));
-            Assert.That(start.TerrainRouteSectionCount, Is.EqualTo(24));
-            Assert.That(start.WorldParcelCount, Is.EqualTo(7));
+            Assert.That(start.TerrainRouteSectionCount, Is.Zero);
+            Assert.That(start.WorldParcelCount, Is.EqualTo(3));
             Assert.That(start.GateCount, Is.Zero);
             Assert.That(start.ActiveTerrainRegion, Is.EqualTo(TerrainRegionKind.OpenSea));
 
@@ -184,11 +175,11 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
-        public void TerrainWorld_ProgressesThroughStormOpenWaterAndAutomaticBreather()
+        public void TerrainWorld_ProgressesThroughOnlyRocksAndAutomaticBreathers()
         {
             JetHorizonSimulation simulation = CreateTerrainSimulation();
             float startingSpeed = simulation.Snapshot.Speed;
-            bool sawStorm = false;
+            bool sawFormation = false;
             bool sawReturnToOpenWater = false;
             bool sawBreather = false;
             string firstWorld = simulation.Snapshot.TerrainWorldId;
@@ -196,15 +187,20 @@ namespace JetHorizon.Tests.Architecture
             for (int i = 0; i < 18000 && simulation.Snapshot.TerrainWorldId != "terrain-world-02"; i++)
             {
                 simulation.Step(default);
-                sawStorm |= simulation.Snapshot.ActiveTerrainRegion == TerrainRegionKind.StormChannel;
+                sawFormation |= simulation.Snapshot.ActiveWorldParcelKind == WorldParcelKind.OpenWaterFormation;
                 sawReturnToOpenWater |= simulation.Snapshot.ActiveWorldParcelKind == WorldParcelKind.OpenWaterBreather;
                 sawBreather |= simulation.Snapshot.ActiveTerrainRegion == TerrainRegionKind.ExtractionBreather;
+                Assert.That(simulation.Snapshot.ActiveWorldParcelKind,
+                    Is.EqualTo(WorldParcelKind.OpenWaterBreather)
+                        .Or.EqualTo(WorldParcelKind.OpenWaterFormation));
+                for (int hazardIndex = 0; hazardIndex < simulation.Snapshot.HazardCount; hazardIndex++)
+                    Assert.That(simulation.Snapshot.GetHazard(hazardIndex).Kind, Is.Not.EqualTo(HazardKind.Lightning));
                 Assert.That(simulation.Snapshot.ExtractionDecisionOpen, Is.False);
                 Assert.That(simulation.Snapshot.CorridorSliceCount, Is.Zero);
                 Assert.That(simulation.Snapshot.SineCorridorActive, Is.False);
             }
 
-            Assert.That(sawStorm, Is.True);
+            Assert.That(sawFormation, Is.True);
             Assert.That(sawReturnToOpenWater, Is.True);
             Assert.That(sawBreather, Is.True);
             Assert.That(simulation.Snapshot.TerrainWorldId, Is.EqualTo("terrain-world-02"));
@@ -227,8 +223,8 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(simulation.Snapshot.QueuedTerrainWorldId, Is.EqualTo("terrain-world-01"));
             Assert.That(simulation.Snapshot.QueuedTerrainWorldStartDistance,
                 Is.EqualTo(currentWorldEnd).Within(.01f));
-            Assert.That(simulation.Snapshot.QueuedTerrainWorldSectionCount, Is.GreaterThan(12));
-            Assert.That(simulation.Snapshot.QueuedWorldParcelCount, Is.EqualTo(7));
+            Assert.That(simulation.Snapshot.QueuedTerrainWorldSectionCount, Is.GreaterThanOrEqualTo(8));
+            Assert.That(simulation.Snapshot.QueuedWorldParcelCount, Is.EqualTo(3));
             while (simulation.Snapshot.ActiveTerrainRegion != TerrainRegionKind.ExtractionBreather)
                 simulation.Step(default);
             Assert.That(simulation.Snapshot.ExtractionDecisionOpen, Is.False);
@@ -244,30 +240,16 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
-        public void StormChannel_UsesGithubShipRelativeRandomLoopAtStrongFrequency()
+        public void RockOnlyProof_NeverSpawnsLightning()
         {
             JetHorizonSimulation simulation = CreateTerrainSimulation();
-            while (simulation.Snapshot.ActiveTerrainRegion != TerrainRegionKind.StormChannel)
-                simulation.Step(default);
-
-            int maximumConcurrentLightning = 0;
-            for (int frame = 0; frame < 75; frame++)
+            for (int frame = 0; frame < 5000; frame++)
             {
                 simulation.Step(default);
-                int lightning = 0;
-                for (int i = 0; i < simulation.Snapshot.HazardCount; i++)
-                {
-                    HazardSnapshot hazard = simulation.Snapshot.GetHazard(i);
-                    if (hazard.Kind != HazardKind.Lightning) continue;
-                    lightning++;
-                    Assert.That(System.Math.Abs(hazard.X), Is.LessThanOrEqualTo(1.51f));
-                }
-                maximumConcurrentLightning = System.Math.Max(maximumConcurrentLightning, lightning);
+                Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+                Assert.That(simulation.Snapshot.CorridorSliceCount, Is.Zero);
+                Assert.That(simulation.Snapshot.SineCorridorActive, Is.False);
             }
-
-            // Source PRE_T4A runs at one strike every .3 seconds. Over this
-            // 1.25-second sample it must clearly exceed the old tiny burst cadence.
-            Assert.That(maximumConcurrentLightning, Is.GreaterThanOrEqualTo(3));
         }
 
         [Test]
@@ -307,46 +289,17 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
-        public void RouteJunction_ProvidesThreePhysicalPassagesAndBlocksTheTerrainBetweenThem()
+        public void RockOnlyProof_NeverBuildsRouteJunctionCollision()
         {
             ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
             {
                 StartSpeedMultiplier = 3f,
                 MinimumOperationalSpeed = 100f
             });
-            var runtime = new TerrainWorldRuntime(capability);
-            TerrainWorldPlan world = runtime.World;
-            WorldParcelPlan portal = world.GetParcel(5);
-            float distance = portal.LocalStartDistance + portal.Length * .5f;
-            Assert.That(world.TryGetRoutePassage(TerrainRouteKind.SafeCanyon, distance, out _, out float safeRight, out _), Is.True);
-            Assert.That(world.TryGetRoutePassage(TerrainRouteKind.KnifeEdgeTunnel, distance, out float knifeLeft, out float knifeRight, out float ceiling), Is.True);
-            Assert.That(world.TryGetRoutePassage(TerrainRouteKind.CargoChannel, distance, out float cargoLeft, out _, out _), Is.True);
-            Assert.That(knifeRight - knifeLeft, Is.LessThan(22f));
-            Assert.That(ceiling, Is.GreaterThan(20f));
-            Assert.That(knifeLeft - safeRight, Is.GreaterThan(4f));
-            Assert.That(cargoLeft - knifeRight, Is.GreaterThan(4f));
-
-            var eventOwner = new JetHorizonSimulation(new SimulationConfig
-            {
-                StartSpeedMultiplier = 3f,
-                MinimumOperationalSpeed = 100f
-            }, 91u);
-            TerrainWorldTickResult safe = runtime.Tick(
-                distance,
-                (knifeLeft + knifeRight) * .5f,
-                0f,
-                (float)(System.Math.PI * .5),
-                false,
-                eventOwner.Events);
-            TerrainWorldTickResult blocked = runtime.Tick(
-                distance,
-                (safeRight + knifeLeft) * .5f,
-                0f,
-                (float)(System.Math.PI * .5),
-                false,
-                eventOwner.Events);
-            Assert.That(safe.CollisionEntered, Is.False);
-            Assert.That(blocked.CollisionEntered, Is.True);
+            TerrainWorldPlan world = new TerrainWorldRuntime(capability).World;
+            Assert.That(world.RouteSectionCount, Is.Zero);
+            Assert.That(world.TryGetRoutePassage(TerrainRouteKind.SafeCanyon, world.Length * .5f,
+                out _, out _, out _), Is.False);
         }
 
         [Test]
@@ -369,6 +322,8 @@ namespace JetHorizon.Tests.Architecture
             {
                 float slowSpacing = slow.GetRow(row).Distance - slow.GetRow(row - 1).Distance;
                 float fastSpacing = fast.GetRow(row).Distance - fast.GetRow(row - 1).Distance;
+                float fastScale = RandomConeFormationPlanner.PaceDistanceScale(
+                    TerrainWorldPaceRules.MaximumSpeedForHeat(5));
                 if (slow.GetRow(row).RowInBurst == 0)
                     Assert.That(slowSpacing, Is.EqualTo(RandomConeFormationPlanner.InterBurstSpacing).Within(.001f));
                 else
@@ -376,11 +331,12 @@ namespace JetHorizon.Tests.Architecture
                         Is.InRange(
                             RandomConeFormationPlanner.NominalInBurstSpacing - 5f,
                             RandomConeFormationPlanner.NominalInBurstSpacing + 5f));
-                Assert.That(fastSpacing, Is.EqualTo(slowSpacing).Within(.001f));
+                Assert.That(fastSpacing, Is.EqualTo(slowSpacing * fastScale).Within(.01f));
                 slowSeconds += slowSpacing / TerrainWorldPaceRules.MaximumSpeedForHeat(0);
                 fastSeconds += fastSpacing / TerrainWorldPaceRules.MaximumSpeedForHeat(5);
             }
-            Assert.That(fastSeconds, Is.LessThan(slowSeconds * .75f));
+            Assert.That(fastSeconds, Is.LessThan(slowSeconds * .9f));
+            Assert.That(fastSeconds, Is.GreaterThan(slowSeconds * .75f));
         }
 
         [Test]

@@ -109,7 +109,8 @@ namespace JetHorizon.Simulation
         public const int RowsPerBurst = 3;
         public const int AuthoredRowCount = BurstCount * RowsPerBurst;
         public const float SourceSpawnDistance = 160f;
-        public const float NominalInBurstSpacing = 48f;
+        public const float ReferenceForwardSpeed = 128f;
+        public const float NominalInBurstSpacing = 64f;
         public const float InterBurstSpacing = 180f;
 
         const float InitialLeadDistance = 30f;
@@ -143,7 +144,8 @@ namespace JetHorizon.Simulation
             var valuablePoints = new CargoWaveRoutePoint[AuthoredRowCount];
             var laneScratch = new int[LaneCount];
             float localStart = startDistance - worldStartDistance;
-            float rowDistance = localStart + InitialLeadDistance;
+            float paceScale = PaceDistanceScale(forwardSpeed);
+            float rowDistance = localStart + InitialLeadDistance * paceScale;
 
             for (int rowIndex = 0; rowIndex < AuthoredRowCount; rowIndex++)
             {
@@ -154,7 +156,7 @@ namespace JetHorizon.Simulation
                     float spacing = rowInBurst == 0
                         ? InterBurstSpacing
                         : NominalInBurstSpacing + (random.NextFloat() - .5f) * 10f;
-                    rowDistance += spacing;
+                    rowDistance += spacing * paceScale;
                 }
 
                 int safeGapStart = SlalomGapStarts[rowIndex];
@@ -236,7 +238,7 @@ namespace JetHorizon.Simulation
                 }
             }
 
-            float length = rowDistance - localStart + ExitClearDistance;
+            float length = rowDistance - localStart + ExitClearDistance * paceScale;
             var routes = new[]
             {
                 new WorldParcelRoutePlan("random-cones.safe", CargoWaveRouteRole.Safe, safePoints),
@@ -250,6 +252,9 @@ namespace JetHorizon.Simulation
                 features.ToArray(),
                 routes);
         }
+
+        public static float PaceDistanceScale(float forwardSpeed)
+            => .5f + .5f * Math.Max(1f, forwardSpeed / ReferenceForwardSpeed);
 
         static void ShuffleLanes(DeterministicRandom random, int[] lanes)
         {

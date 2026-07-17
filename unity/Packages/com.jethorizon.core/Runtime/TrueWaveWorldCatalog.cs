@@ -10,10 +10,9 @@ namespace JetHorizon.Simulation
     /// </summary>
     public static class TrueWaveWorldCatalog
     {
-        const float InitialWaterLength = 340f;
-        const float BreatherLength = 430f;
-        const float MajorLength = 960f;
-        const float FinalBreatherLength = 520f;
+        public const float FirstRunOpeningSeconds = 2f;
+        public const float HandoffWaterSeconds = .1f;
+        public const float EmptyWaterBetweenFormationsSeconds = 2.5f;
         static readonly IWorldParcelSelector Selector = new DeterministicWorldParcelSelector();
 
         public static TerrainWorldPlan Create(
@@ -27,13 +26,21 @@ namespace JetHorizon.Simulation
             int seed = 1709 + sector * 7919;
             WorldParcelSelection selection = Selector.Select(sector);
             int formationVariant = selection.FormationVariant;
-            WorldParcelKind firstMajor = selection.FirstMajor;
-            WorldParcelKind secondMajor = selection.SecondMajor;
-            var parcels = new List<WorldParcelPlan>(7);
+            var parcels = new List<WorldParcelPlan>(3);
             float cursor = worldStartDistance;
+            float openingSeconds = sector == 0
+                ? FirstRunOpeningSeconds
+                : HandoffWaterSeconds;
+            float openingLength = speed * openingSeconds;
+            float closingLength = speed * EmptyWaterBetweenFormationsSeconds;
 
-            parcels.Add(CreateBreather("opening-water", cursor, InitialWaterLength, worldStartDistance, capability, seed));
-            cursor += InitialWaterLength;
+            // Proof-slice catalog: until the rock weave feels excellent, no canyon,
+            // lightning, portal, corridor or other obstacle family is scheduled.
+            // The release parcel creates 2.5 seconds of genuinely empty water.
+            // Later worlds retain only a tiny handoff parcel so the seam does not
+            // accidentally double the intended recovery time.
+            parcels.Add(CreateBreather("opening-water", cursor, openingLength, worldStartDistance, capability, seed));
+            cursor += openingLength;
             WorldParcelPlan formation = CreateFormation(
                 cursor,
                 worldStartDistance,
@@ -43,16 +50,8 @@ namespace JetHorizon.Simulation
                 formationVariant);
             parcels.Add(formation);
             cursor += formation.Length;
-            parcels.Add(CreateBreather("formation-release", cursor, BreatherLength, worldStartDistance, capability, seed + 201));
-            cursor += BreatherLength;
-            parcels.Add(CreateMajor(firstMajor, cursor, MajorLength, worldStartDistance, capability, speed, seed + 307, selection.FirstVariant));
-            cursor += MajorLength;
-            parcels.Add(CreateBreather("mid-run-water", cursor, BreatherLength, worldStartDistance, capability, seed + 401));
-            cursor += BreatherLength;
-            parcels.Add(CreateMajor(secondMajor, cursor, MajorLength, worldStartDistance, capability, speed, seed + 503, selection.SecondVariant));
-            cursor += MajorLength;
-            parcels.Add(CreateBreather("long-water-settlement", cursor, FinalBreatherLength, worldStartDistance, capability, seed + 607));
-            cursor += FinalBreatherLength;
+            parcels.Add(CreateBreather("formation-release", cursor, closingLength, worldStartDistance, capability, seed + 201));
+            cursor += closingLength;
 
             var sequence = new WorldParcelSequencePlan(
                 $"parcel-sentence-{sector:00}",
@@ -110,6 +109,8 @@ namespace JetHorizon.Simulation
                 if (parcel.ShoreSectionCount == 0)
                 {
                     AddTransportSection(localStart, RegionFor(parcel, false));
+                    AddTransportSection(localStart + parcel.Length / 3f, RegionFor(parcel, false));
+                    AddTransportSection(localStart + parcel.Length * 2f / 3f, RegionFor(parcel, false));
                     AddTransportSection(parcel.LocalEndDistance, RegionFor(parcel, i == parcels.Count - 1));
                 }
                 else

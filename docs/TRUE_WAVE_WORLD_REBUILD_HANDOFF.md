@@ -14,6 +14,29 @@ adding cargo, or slightly varying the same continuous canyon.
 
 ## Implementation status — July 17, 2026
 
+### Current proof-slice lock: small rocks only
+
+The playable `TrueWaveWorldCatalog` now schedules exactly three parcels:
+
+```text
+empty orientation water -> small-rock formation -> empty recovery water
+```
+
+No canyon, lightning, route portal, prismatic corridor, tunnel, or legacy
+hazard wave is selected or activated in terrain-world mode. Those builders may
+remain dormant for later work, but architecture tests fail if any non-rock
+obstacle parcel, hazard, route mass, corridor slice, or lightning strike enters
+the proof sequence.
+
+The pacing is authored around meaningful steering decisions and tested at every
+supported speed. The nine-row rock pattern lasts about 6.6 seconds at 128 speed
+and about 5.5 seconds at 188 speed. Rows inside a local cluster arrive about
+0.4-to-0.5 seconds apart; each left/right reversal receives about 1.2-to-1.4
+seconds. After the complete pattern, 2.5 seconds of completely empty water
+passes before the next formation. The first run also keeps a two-second
+orientation lead. Later world seams use only a 0.1-second transport handoff so
+they do not accidentally double the intended breather.
+
 The finite-wave rebuild described below is now implemented on
 `codex/engine-neutral-core-v1` in these rollback checkpoints:
 
@@ -34,26 +57,26 @@ The open-water formation correction now uses
 production random-cone generator. It preserves the 21-lane Fisher-Yates
 shuffle, five blockers per row, adjacent guaranteed opening, three-lane
 anti-bunch rule, and 160-unit spawn preview. The finite-wave extrapolation is
-three bursts of three rows: rows sit about 48 units apart inside a burst and
+three bursts of three rows: rows sit about 64 units apart inside a burst and
 bursts sit 180 units apart. Their safe openings move left-right-left (mirrored
 on alternate variants), every row blocks the neutral lane, and one extra guard
 lane on both sides of the safe opening accounts for the geological groups being
 wider than the source cones. The result is 45 faceted rock groups over roughly
-750 units, or about 5.9 seconds at 128 speed and 4.0 seconds at 188 speed.
+845 units at launch pace. Partial speed scaling keeps the pattern near 6.6
+seconds at 128 speed and 5.5 seconds at 188 speed without making high speed
+feel normalized or slow.
 
 The formation uses the existing coin pickup only: seven coins run through each
 of the nine safe openings for 63 coins total. Each short coin trail announces
 and rewards the required line. Formation renderers dither from the horizon over
 70 units through a renderer-local property; the shared material defaults to
 fully opaque and bypasses that branch for canyon and other terrain. Canyon and
-lightning generation were not changed in this correction.
+lightning builders were not changed; they are dormant and unscheduled.
 
-The implementation now starts over empty water, builds complete parcel roots,
-reveals them from the horizon, retains prior geometry until rear cull, inserts
-empty-water breathers between every major wave, and attaches cargo to the
-validated parcel routes. `Envelope=None` creates neither shore mesh nor shore
-collision. Canyon, route-wall, knife, lightning, and prismatic families are
-selected by the core rather than Unity.
+The implementation starts over empty water, reveals one complete rock formation
+from the horizon, retains it until rear cull, then runs a completely empty-water
+recovery before the next rock formation. `Envelope=None` creates neither shore
+mesh nor shore collision. No other obstacle family is eligible in this proof.
 
 Automated verification completed:
 
@@ -64,19 +87,21 @@ Automated verification completed:
   runner, including dense coin trails, neutral-line rejection, safe-opening
   clearance, burst spacing, and speed-dependent arrival;
 - a 10,000-seed formation audit retained five blockers in every row;
-- deterministic smoke run passed six authored world sentences;
-- smoke collision checks passed for empty water, canyon shore, and portal mass.
+- deterministic multi-world smoke run activated only rock formations and empty
+  water, with zero legacy hazards or corridor slices;
+- smoke collision checks passed for empty water and physical rock groups.
 
-The broader standalone core run passed 118 of 119 tests. The one remaining
+The broader standalone core run passed 119 of 120 tests. The one remaining
 failure is the pre-existing legacy test
 `PrismaticCollisionUsesTheSameCoreSamplePublishedToTheRenderer`; it also fails
 when run by itself and does not enter terrain-world mode or exercise the new
 parcel path. Keep it visible, but do not treat it as a true-wave regression.
 
 The Unity editor was already open during implementation, so a second batchmode
-EditMode runner could not acquire the project. Before calling the visual rebuild
-fully accepted, run the tests from the open editor and perform the seven Play
-Mode captures in section 15. Do not treat compilation alone as visual approval.
+EditMode runner could not acquire the project. Before calling this proof fully
+accepted, run the tests from the open editor and capture the rock-only approach,
+active slalom, pass-behind, and empty-water recovery. Do not treat compilation
+alone as visual approval.
 
 ---
 

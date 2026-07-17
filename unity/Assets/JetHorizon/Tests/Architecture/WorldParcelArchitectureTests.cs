@@ -58,7 +58,7 @@ namespace JetHorizon.Tests.Architecture
                 340f, 0f, speed, Capability, 1810, 0);
 
             Assert.That(plan.RowCount, Is.EqualTo(RandomConeFormationPlanner.AuthoredRowCount));
-            Assert.That(plan.Length, Is.InRange(700f, 780f));
+            Assert.That(plan.Length, Is.InRange(815f, 880f));
             Assert.That(plan.RevealDistance, Is.EqualTo(RandomConeFormationPlanner.SourceSpawnDistance));
             for (int rowIndex = 0; rowIndex < plan.RowCount; rowIndex++)
             {
@@ -152,6 +152,25 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
+        public void RockProof_UsesAReadableBurstAndARealEmptyWaterBreatherAtEveryPace()
+        {
+            for (int heat = 0; heat <= 5; heat++)
+            {
+                float speed = TerrainWorldPaceRules.MaximumSpeedForHeat(heat);
+                TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(heat, heat * 5000f, Capability);
+                WorldParcelPlan formation = world.GetParcel(1);
+                WorldParcelPlan release = world.GetParcel(2);
+
+                Assert.That(formation.Length / speed, Is.InRange(5.4f, 6.9f), "rock pattern seconds at heat " + heat);
+                Assert.That(release.Length / speed,
+                    Is.EqualTo(TrueWaveWorldCatalog.EmptyWaterBetweenFormationsSeconds).Within(.01f));
+                Assert.That(release.FeatureCount, Is.Zero);
+                Assert.That(release.Threats.Kind, Is.EqualTo(WorldThreatKind.None));
+                Assert.That(release.Cargo.CollectibleCount, Is.Zero);
+            }
+        }
+
+        [Test]
         public void FormationWave_ValuableRouteRequiresARealDetour()
         {
             WorldParcelPlan formation = TerrainWorldCatalog.CreateProofWorld(0, 0f, Capability).GetParcel(1);
@@ -215,20 +234,15 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
-        public void CanyonParcel_HasConnectedEntryInteriorAndExit()
+        public void ProofCatalog_ContainsNoCanyonParcel()
         {
             TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(0, 0f, Capability);
-            WorldParcelPlan canyon = Find(world.Parcels, WorldParcelKind.CrystallineCanyon);
-
-            Assert.That(canyon.Envelope, Is.EqualTo(WorldEnvelopeKind.CanyonShoreline));
-            Assert.That(canyon.ShoreSectionCount, Is.GreaterThanOrEqualTo(8));
-            Assert.That(canyon.GetShoreSection(0).Distance, Is.EqualTo(canyon.LocalStartDistance).Within(.01f));
-            Assert.That(canyon.GetShoreSection(canyon.ShoreSectionCount - 1).Distance,
-                Is.EqualTo(canyon.LocalEndDistance).Within(.01f));
+            for (int i = 0; i < world.ParcelCount; i++)
+                Assert.That(world.GetParcel(i).Kind, Is.Not.EqualTo(WorldParcelKind.CrystallineCanyon));
         }
 
         [Test]
-        public void OpenWaterAndCanyon_CollisionFollowsThePhysicalEnvelope()
+        public void OpenWaterHasNoInheritedShoreAndRockRemainsPhysical()
         {
             var runtime = new TerrainWorldRuntime(Capability);
             var eventOwner = new JetHorizonSimulation(new SimulationConfig
@@ -238,7 +252,7 @@ namespace JetHorizon.Tests.Architecture
                 TerrainWorldMode = true
             }, 77u);
             WorldParcelPlan opening = runtime.World.GetParcel(0);
-            WorldParcelPlan canyon = Find(runtime.World.Parcels, WorldParcelKind.CrystallineCanyon);
+            TerrainWorldFeature rock = runtime.World.GetFeature(0);
 
             TerrainWorldTickResult water = runtime.Tick(
                 opening.StartDistance + opening.Length * .5f,
@@ -250,50 +264,34 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(water.CollisionEntered, Is.False, "open water must not inherit transport shores");
 
             TerrainWorldTickResult wall = runtime.Tick(
-                canyon.StartDistance + canyon.Length * .5f,
-                140f,
+                rock.Distance,
+                rock.CenterX,
                 0f,
                 1f,
                 false,
                 eventOwner.Events);
-            Assert.That(wall.CollisionEntered, Is.True, "canyon shoreline must remain physical");
+            Assert.That(wall.CollisionEntered, Is.True, "rock formation must remain physical");
         }
 
         [Test]
-        public void RoutePortal_HasMultipleContinuousOpeningsAndNoDeadEnds()
+        public void ProofCatalog_ContainsNoRoutePortal()
         {
             TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(0, 0f, Capability);
-            WorldParcelPlan portal = Find(world.Parcels, WorldParcelKind.RoutePortal);
-
-            Assert.That(portal.Envelope, Is.EqualTo(WorldEnvelopeKind.RouteMass));
-            Assert.That(portal.RouteSectionCount, Is.GreaterThanOrEqualTo(18));
-            Assert.That(portal.TryGetRoute(CargoWaveRouteRole.Safe, out WorldParcelRoutePlan safe), Is.True);
-            Assert.That(portal.TryGetRoute(CargoWaveRouteRole.Valuable, out WorldParcelRoutePlan valuable), Is.True);
-            Assert.That(portal.TryGetRoute(CargoWaveRouteRole.Hero, out WorldParcelRoutePlan hero), Is.True);
-            Assert.That(safe.PointCount, Is.EqualTo(valuable.PointCount));
-            Assert.That(hero.PointCount, Is.EqualTo(safe.PointCount));
+            Assert.That(world.RouteSectionCount, Is.Zero);
+            for (int i = 0; i < world.ParcelCount; i++)
+                Assert.That(world.GetParcel(i).Kind, Is.Not.EqualTo(WorldParcelKind.RoutePortal));
         }
 
         [Test]
-        public void RoutePortal_BlocksMassBetweenItsAuthoredOpenings()
+        public void EveryActiveObstacleParcelIsTheSmallRockFormation()
         {
-            var runtime = new TerrainWorldRuntime(Capability);
-            var eventOwner = new JetHorizonSimulation(new SimulationConfig
+            for (int sector = 0; sector < 12; sector++)
             {
-                StartSpeedMultiplier = 3f,
-                MinimumOperationalSpeed = 100f,
-                TerrainWorldMode = true
-            }, 91u);
-            WorldParcelPlan portal = Find(runtime.World.Parcels, WorldParcelKind.RoutePortal);
-            float distance = portal.StartDistance + portal.Length * .5f;
-
-            TerrainWorldTickResult passage = runtime.Tick(
-                distance, -52f, 0f, 1f, false, eventOwner.Events);
-            Assert.That(passage.CollisionEntered, Is.False);
-
-            TerrainWorldTickResult mass = runtime.Tick(
-                distance, 27f, 0f, 1f, false, eventOwner.Events);
-            Assert.That(mass.CollisionEntered, Is.True);
+                TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(sector, sector * 1800f, Capability);
+                for (int i = 0; i < world.ParcelCount; i++)
+                    if (!world.GetParcel(i).IsBreather)
+                        Assert.That(world.GetParcel(i).Kind, Is.EqualTo(WorldParcelKind.OpenWaterFormation));
+            }
         }
 
         [Test]
@@ -324,32 +322,28 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
-        public void Composer_ProducesMeaningfullyDifferentRunSentences()
+        public void ConsecutiveRockProofsChangeFormationVariantOnly()
         {
             WorldParcelSequencePlan a = TerrainWorldCatalog.CreateProofWorld(0, 0f, Capability).Parcels;
             WorldParcelSequencePlan b = TerrainWorldCatalog.CreateProofWorld(1, a.EndDistance, Capability).Parcels;
 
-            Assert.That(a.GetParcel(3).Kind, Is.Not.EqualTo(b.GetParcel(3).Kind));
-            Assert.That(a.GetParcel(5).VariantId, Is.Not.EqualTo(b.GetParcel(5).VariantId));
+            Assert.That(a.ParcelCount, Is.EqualTo(3));
+            Assert.That(b.ParcelCount, Is.EqualTo(3));
+            Assert.That(a.GetParcel(1).Kind, Is.EqualTo(WorldParcelKind.OpenWaterFormation));
+            Assert.That(b.GetParcel(1).Kind, Is.EqualTo(WorldParcelKind.OpenWaterFormation));
+            Assert.That(a.GetParcel(1).VariantId, Is.Not.EqualTo(b.GetParcel(1).VariantId));
         }
 
         [Test]
-        public void Composer_HeroFamilyHasCooldownAndEverySentenceChangesFamily()
+        public void EverySectorKeepsOtherFamiliesDormant()
         {
-            var selector = new DeterministicWorldParcelSelector();
-            int lastHeroSector = -99;
-            string priorSignature = string.Empty;
             for (int sector = 0; sector < 18; sector++)
             {
-                WorldParcelSelection selection = selector.Select(sector);
-                Assert.That(selection.FirstMajor, Is.Not.EqualTo(selection.SecondMajor));
-                Assert.That(selection.Signature, Is.Not.EqualTo(priorSignature));
-                priorSignature = selection.Signature;
-                bool hero = selection.FirstMajor == WorldParcelKind.PrismaticCorridor
-                    || selection.SecondMajor == WorldParcelKind.PrismaticCorridor;
-                if (!hero) continue;
-                Assert.That(sector - lastHeroSector, Is.GreaterThanOrEqualTo(5));
-                lastHeroSector = sector;
+                TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(sector, sector * 1800f, Capability);
+                Assert.That(world.ParcelCount, Is.EqualTo(3));
+                Assert.That(world.GetParcel(1).Kind, Is.EqualTo(WorldParcelKind.OpenWaterFormation));
+                Assert.That(world.GetParcel(0).IsBreather, Is.True);
+                Assert.That(world.GetParcel(2).IsBreather, Is.True);
             }
         }
 
@@ -359,7 +353,6 @@ namespace JetHorizon.Tests.Architecture
             WorldParcelSequencePlan sequence = TerrainWorldCatalog.CreateProofWorld(0, 0f, Capability).Parcels;
             WorldParcelPlan formation = sequence.GetParcel(1);
             WorldParcelPlan water = sequence.GetParcel(2);
-            WorldParcelPlan canyon = sequence.GetParcel(3);
             var runtime = new WorldParcelRuntime();
 
             runtime.Reset(sequence, formation.StartDistance + formation.Length * .5f);
@@ -372,13 +365,7 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(runtime.Snapshot.Active, Is.SameAs(water));
             Assert.That(runtime.Snapshot.Active.Envelope, Is.EqualTo(WorldEnvelopeKind.None));
 
-            runtime.Sync(canyon.StartDistance - canyon.RevealDistance + 1f);
-            Assert.That(runtime.Snapshot.Next, Is.SameAs(canyon));
-            Assert.That(runtime.Snapshot.NextLifecycle, Is.EqualTo(WorldParcelLifecycle.HorizonReveal));
-
-            runtime.Sync(canyon.StartDistance + 1f);
-            Assert.That(runtime.Snapshot.Active, Is.SameAs(canyon));
-            Assert.That(runtime.Snapshot.ActiveLifecycle, Is.EqualTo(WorldParcelLifecycle.Active));
+            Assert.That(runtime.Snapshot.Next, Is.Null);
         }
 
         static WorldParcelPlan Find(WorldParcelSequencePlan sequence, WorldParcelKind kind)

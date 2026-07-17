@@ -6,7 +6,7 @@ namespace JetHorizon.Tests.Architecture
     public sealed class CargoFirstWaveArchitectureTests
     {
         [Test]
-        public void Catalog_ProducesValidatedFiniteLootRoutesForEveryCourse()
+        public void Catalog_ProducesValidatedCoinRoutesForEverySupportedPace()
         {
             ShipCapabilityProfile capability = CreateCapability();
             float worldStart = 0f;
@@ -55,7 +55,7 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(runtime.CargoWaveState.Lifecycle, Is.EqualTo(CargoWaveLifecycle.Rest));
 
             runtime.Tick(
-                runtime.World.EndDistance - 1790f,
+                runtime.World.EndDistance - 100f,
                 0f,
                 0f,
                 (float)(System.Math.PI * .5),
@@ -90,9 +90,9 @@ namespace JetHorizon.Tests.Architecture
                 MaxTerrainRouteSections = 48
             }, 17072026u);
             simulation.StartRun(17072026L);
-            // The source cone generator enters at a fixed 160-unit preview, so the
-            // formation begins its reveal at distance 180 (340 - 160).
-            while (simulation.Snapshot.Distance < 190f) simulation.Step(default);
+            // The first run has two seconds of orientation water. With the source
+            // 160-unit preview, the formation enters horizon reveal at distance 96.
+            while (simulation.Snapshot.Distance < 110f) simulation.Step(default);
 
             Assert.That(simulation.Snapshot.CargoWaveId, Is.Not.Empty);
             Assert.That(simulation.Snapshot.CargoWaveLifecycle,
