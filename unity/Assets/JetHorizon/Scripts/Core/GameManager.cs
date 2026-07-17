@@ -541,6 +541,16 @@ namespace JetHorizon
                             events[i].ValueB,
                             _coreSimulation.Snapshot.GateStreak);
                         break;
+                    case SimulationEventType.CargoWaveChanged:
+                        GameEvents.RaiseCargoWaveChanged(
+                            events[i].EntityId,
+                            (TerrainWaveKind)(int)events[i].ValueA);
+                        break;
+                    case SimulationEventType.CargoWaveLifecycleChanged:
+                        GameEvents.RaiseCargoWaveLifecycleChanged(
+                            (TerrainWaveKind)(int)events[i].ValueA,
+                            (CargoWaveLifecycle)(int)events[i].ValueB);
+                        break;
                 }
             }
         }

@@ -29,6 +29,8 @@ namespace JetHorizon
         public static event Action<int, float, float> HazardDestroyed; // id, x, z
         public static event Action<int, int> LaserChainAdvanced; // chain, destroyed total
         public static event Action<float, float> LaserFormationCompleted; // x, z
+        public static event Action<int, TerrainWaveKind> CargoWaveChanged; // sector, kind
+        public static event Action<TerrainWaveKind, CargoWaveLifecycle> CargoWaveLifecycleChanged;
         public static event Action CanyonRevealed;
         public static event Action KlaxonCountdown;                      // 1.5s before a speed bump
         public static event Action LightningStruck;
@@ -53,6 +55,9 @@ namespace JetHorizon
         public static void RaiseHazardDestroyed(int id, float x, float z) => HazardDestroyed?.Invoke(id, x, z);
         public static void RaiseLaserChainAdvanced(int chain, int destroyedTotal) => LaserChainAdvanced?.Invoke(chain, destroyedTotal);
         public static void RaiseLaserFormationCompleted(float x, float z) => LaserFormationCompleted?.Invoke(x, z);
+        public static void RaiseCargoWaveChanged(int sector, TerrainWaveKind kind) => CargoWaveChanged?.Invoke(sector, kind);
+        public static void RaiseCargoWaveLifecycleChanged(TerrainWaveKind kind, CargoWaveLifecycle lifecycle)
+            => CargoWaveLifecycleChanged?.Invoke(kind, lifecycle);
         public static void RaiseCanyonRevealed()            => CanyonRevealed?.Invoke();
         public static void RaiseKlaxonCountdown()           => KlaxonCountdown?.Invoke();
         public static void RaiseLightningStruck()            => LightningStruck?.Invoke();
@@ -66,6 +71,7 @@ namespace JetHorizon
             PowerupCollected = null; PowerupActivated = null; PowerupExpired = null;
             ShieldHit = null; ShieldBroken = null; LaserFired = null; HazardDestroyed = null;
             LaserChainAdvanced = null; LaserFormationCompleted = null;
+            CargoWaveChanged = null; CargoWaveLifecycleChanged = null;
             CanyonRevealed = null; KlaxonCountdown = null; LightningStruck = null;
             RunExtracted = null;
         }

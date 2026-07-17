@@ -26,6 +26,7 @@ namespace JetHorizon.Simulation
             if (worldStartDistance < 0f) throw new ArgumentOutOfRangeException(nameof(worldStartDistance));
             float speed = TerrainWorldPaceRules.MaximumSpeedForHeat(Math.Min(5, sector));
             int seed = 1709 + sector * 7919;
+            float formationLength = Math.Max(FormationLength, speed * 6.6f);
             WorldParcelSelection selection = Selector.Select(sector);
             int formationVariant = selection.FormationVariant;
             WorldParcelKind firstMajor = selection.FirstMajor;
@@ -35,8 +36,8 @@ namespace JetHorizon.Simulation
 
             parcels.Add(CreateBreather("opening-water", cursor, InitialWaterLength, worldStartDistance, capability, seed));
             cursor += InitialWaterLength;
-            parcels.Add(CreateFormation(cursor, FormationLength, worldStartDistance, capability, speed, seed + 101, formationVariant));
-            cursor += FormationLength;
+            parcels.Add(CreateFormation(cursor, formationLength, worldStartDistance, capability, speed, seed + 101, formationVariant));
+            cursor += formationLength;
             parcels.Add(CreateBreather("formation-release", cursor, BreatherLength, worldStartDistance, capability, seed + 201));
             cursor += BreatherLength;
             parcels.Add(CreateMajor(firstMajor, cursor, MajorLength, worldStartDistance, capability, speed, seed + 307, selection.FirstVariant));
@@ -88,7 +89,11 @@ namespace JetHorizon.Simulation
             for (int i = 0; i < parcels.Count; i++)
             {
                 WorldParcelPlan parcel = parcels[i];
-                float localStart = parcel.LocalStartDistance;
+                // Accumulate region starts locally instead of subtracting two large
+                // absolute floats. That keeps strict non-overlap stable in deep runs.
+                float localStart = regions.Count == 0
+                    ? 0f
+                    : regions[regions.Count - 1].EndDistance;
                 regions.Add(new TerrainWorldRegion(
                     i + 1,
                     RegionFor(parcel, i == parcels.Count - 1),
@@ -424,12 +429,12 @@ namespace JetHorizon.Simulation
                     => routeSections.Add(new TerrainRouteSection(
                         routeKind, distance, center - half, center + half, ceiling));
             }
-            WorldParcelRoutePlan safe = CurvedRoute(id + ".safe", CargoWaveRouteRole.Safe,
-                start, length, variant, -52f, 11f);
-            WorldParcelRoutePlan valuable = CurvedRoute(id + ".valuable", CargoWaveRouteRole.Valuable,
-                start, length, variant, 52f, 9f);
-            WorldParcelRoutePlan hero = CurvedRoute(id + ".hero", CargoWaveRouteRole.Hero,
-                start, length, variant, 0f, 7f);
+            WorldParcelRoutePlan safe = MassRoute(id + ".safe", CargoWaveRouteRole.Safe,
+                start, length, variant, TerrainRouteKind.SafeCanyon, 11f);
+            WorldParcelRoutePlan valuable = MassRoute(id + ".valuable", CargoWaveRouteRole.Valuable,
+                start, length, variant, TerrainRouteKind.CargoChannel, 9f);
+            WorldParcelRoutePlan hero = MassRoute(id + ".hero", CargoWaveRouteRole.Hero,
+                start, length, variant, TerrainRouteKind.KnifeEdgeTunnel, 7f);
             WorldParcelRoutePlan[] parcelRoutes = { safe, valuable, hero };
             TerrainWaveKind wave = kind == WorldParcelKind.PrismaticCorridor
                 ? TerrainWaveKind.PrismaticCorridor
@@ -486,6 +491,31 @@ namespace JetHorizon.Simulation
                     + variant * .31f) * 10f;
                 points[i] = new CargoWaveRoutePoint(
                     role, start + length * t, offset + curve, halfWidth);
+            }
+            return new WorldParcelRoutePlan(id, role, points);
+        }
+
+        static WorldParcelRoutePlan MassRoute(
+            string id,
+            CargoWaveRouteRole role,
+            float start,
+            float length,
+            int variant,
+            TerrainRouteKind kind,
+            float halfWidth)
+        {
+            var points = new CargoWaveRoutePoint[5];
+            for (int i = 0; i < points.Length; i++)
+            {
+                float t = .12f + i * .19f;
+                float sway = (float)Math.Sin(t * Math.PI * 1.35f + variant * .31f) * 9f;
+                float center = kind == TerrainRouteKind.SafeCanyon
+                    ? -52f + sway
+                    : kind == TerrainRouteKind.CargoChannel
+                        ? 52f - sway * .45f
+                        : sway * .60f;
+                points[i] = new CargoWaveRoutePoint(
+                    role, start + length * t, center, halfWidth);
             }
             return new WorldParcelRoutePlan(id, role, points);
         }

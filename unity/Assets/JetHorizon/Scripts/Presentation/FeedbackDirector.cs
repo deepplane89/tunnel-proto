@@ -14,6 +14,7 @@ namespace JetHorizon
             GameEvents.LightningStruck += Lightning; GameEvents.PlayerDied += Death;
             GameEvents.LaserChainAdvanced += LaserChain;
             GameEvents.LaserFormationCompleted += LaserComplete;
+            GameEvents.CargoWaveLifecycleChanged += WaveLifecycle;
         }
         void OnDisable()
         {
@@ -22,6 +23,7 @@ namespace JetHorizon
             GameEvents.LightningStruck -= Lightning; GameEvents.PlayerDied -= Death;
             GameEvents.LaserChainAdvanced -= LaserChain;
             GameEvents.LaserFormationCompleted -= LaserComplete;
+            GameEvents.CargoWaveLifecycleChanged -= WaveLifecycle;
         }
         void NearMiss() => Pulse(P != null ? P.NearMissImpulse : .08f);
         void Coin() => Pulse(P != null ? P.PickupImpulse : .025f);
@@ -37,6 +39,14 @@ namespace JetHorizon
             Pulse(.025f + Mathf.Min(10, chain) * .004f + milestone);
         }
         void LaserComplete(float _, float __) => Pulse(.30f);
+        void WaveLifecycle(TerrainWaveKind kind, CargoWaveLifecycle lifecycle)
+        {
+            if (lifecycle == CargoWaveLifecycle.HorizonReveal)
+                Pulse(kind == TerrainWaveKind.PrismaticCorridor ? .055f : .025f);
+            else if (lifecycle == CargoWaveLifecycle.Active
+                && kind != TerrainWaveKind.OpenWaterBreather)
+                Pulse(.018f);
+        }
         static void Pulse(float amount) => ShipFeelPresenter.I?.AddImpulse(amount);
     }
 }

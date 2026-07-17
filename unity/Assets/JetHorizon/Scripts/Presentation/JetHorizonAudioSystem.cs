@@ -27,6 +27,8 @@ namespace JetHorizon
             GameEvents.LaserChainAdvanced += LaserChain;
             GameEvents.LaserFormationCompleted += LaserComplete;
             GameEvents.SpeedGateCrossed += GateCrossed;
+            GameEvents.CargoWaveChanged += WaveChanged;
+            GameEvents.CargoWaveLifecycleChanged += WaveLifecycleChanged;
         }
 
         void OnDisable()
@@ -41,6 +43,8 @@ namespace JetHorizon
             GameEvents.LaserChainAdvanced -= LaserChain;
             GameEvents.LaserFormationCompleted -= LaserComplete;
             GameEvents.SpeedGateCrossed -= GateCrossed;
+            GameEvents.CargoWaveChanged -= WaveChanged;
+            GameEvents.CargoWaveLifecycleChanged -= WaveLifecycleChanged;
         }
 
         void Update()
@@ -120,6 +124,30 @@ namespace JetHorizon
             }
             Play("thruster-impact", .58f, .94f);
             Play("powerup-burst", .45f, 1.04f);
+        }
+
+        void WaveChanged(int _, TerrainWaveKind kind)
+        {
+            if (kind == TerrainWaveKind.OpenWaterBreather)
+                Play("whoosh-release", .14f, .78f);
+            else if (kind == TerrainWaveKind.OpenWaterFormation)
+                Play("whoosh2", .18f, .92f);
+            else if (kind == TerrainWaveKind.OpenWaterLightning)
+                Play("whoosh2", .20f, .72f);
+            else if (kind == TerrainWaveKind.CrystallineCanyon
+                || kind == TerrainWaveKind.RoutePortal)
+                Play("whoosh-release", .24f, .68f);
+            else if (kind == TerrainWaveKind.PrismaticCorridor)
+                Play("powerup-burst", .22f, .82f);
+        }
+
+        void WaveLifecycleChanged(TerrainWaveKind kind, CargoWaveLifecycle lifecycle)
+        {
+            if (lifecycle != CargoWaveLifecycle.HorizonReveal) return;
+            float pitch = kind == TerrainWaveKind.OpenWaterLightning ? .72f
+                : kind == TerrainWaveKind.PrismaticCorridor ? 1.18f
+                : .88f;
+            Play("whoosh2", .12f, pitch);
         }
 
         void Died()

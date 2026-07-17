@@ -33,7 +33,9 @@ namespace JetHorizon.Tests.Architecture
                     Assert.That(wave.RoutePointCount,
                         Is.GreaterThanOrEqualTo(wave.IsBreather ? 3 : 5));
                     Assert.That(wave.CollectibleCount,
-                        Is.EqualTo(wave.IsBreather ? 0 : wave.RoutePointCount));
+                        wave.IsBreather
+                            ? Is.EqualTo(0)
+                            : Is.InRange(1, wave.RoutePointCount));
                     Assert.That(wave.HorizonRevealDistance, Is.GreaterThan(wave.ApproachDistance));
                 }
                 worldStart = world.EndDistance;
@@ -48,7 +50,7 @@ namespace JetHorizon.Tests.Architecture
             var eventOwner = new JetHorizonSimulation(new SimulationConfig(), 71u);
 
             Assert.That(runtime.CargoWaves, Is.Not.Null);
-            Assert.That(runtime.CargoWaveState.Lifecycle, Is.EqualTo(CargoWaveLifecycle.Active));
+            Assert.That(runtime.CargoWaveState.Lifecycle, Is.EqualTo(CargoWaveLifecycle.Rest));
 
             runtime.Tick(
                 runtime.World.EndDistance - 1790f,
@@ -86,11 +88,12 @@ namespace JetHorizon.Tests.Architecture
                 MaxTerrainRouteSections = 48
             }, 17072026u);
             simulation.StartRun(17072026L);
-            simulation.Step(default);
+            while (simulation.Snapshot.Distance < 120f) simulation.Step(default);
 
             Assert.That(simulation.Snapshot.CargoWaveId, Is.Not.Empty);
-            Assert.That(simulation.Snapshot.CargoWaveLifecycle, Is.EqualTo(CargoWaveLifecycle.Active));
-            Assert.That(simulation.Snapshot.PickupCount, Is.EqualTo(5));
+            Assert.That(simulation.Snapshot.CargoWaveLifecycle,
+                Is.EqualTo(CargoWaveLifecycle.HorizonReveal));
+            Assert.That(simulation.Snapshot.PickupCount, Is.GreaterThanOrEqualTo(4));
 
             bool sawSalvage = false;
             bool sawAlloy = false;

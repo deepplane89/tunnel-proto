@@ -298,12 +298,30 @@ namespace JetHorizon.Simulation
             float routeHalfWidth)
         {
             float localDistance = absoluteDistance - world.StartDistance;
+            bool routeMass = true;
+            if (world.ParcelCount > 0)
+            {
+                int parcelIndex = world.Parcels.FindParcelIndex(absoluteDistance);
+                WorldParcelPlan parcel = world.GetParcel(parcelIndex);
+                if (parcel.Envelope == WorldEnvelopeKind.None
+                    || parcel.Envelope == WorldEnvelopeKind.DistantBanks)
+                {
+                    return routeHalfWidth > capability.CollisionHalfWidth + .35f
+                        && centerX - routeHalfWidth - capability.CollisionHalfWidth >= -150f
+                        && centerX + routeHalfWidth + capability.CollisionHalfWidth <= 150f;
+                }
+                routeMass = parcel.Envelope == WorldEnvelopeKind.RouteMass
+                    || parcel.Envelope == WorldEnvelopeKind.PrismaticShell;
+            }
             TerrainRouteKind routeKind = role == CargoWaveRouteRole.Safe
                 ? TerrainRouteKind.SafeCanyon
                 : role == CargoWaveRouteRole.Valuable
                     ? TerrainRouteKind.CargoChannel
                     : TerrainRouteKind.KnifeEdgeTunnel;
-            if (world.TryGetRoutePassage(routeKind, localDistance, out float left, out float right, out _))
+            float left;
+            float right;
+            if (routeMass
+                && world.TryGetRoutePassage(routeKind, localDistance, out left, out right, out _))
                 return centerX - routeHalfWidth - capability.CollisionHalfWidth >= left - .01f
                     && centerX + routeHalfWidth + capability.CollisionHalfWidth <= right + .01f;
 
@@ -560,6 +578,20 @@ namespace JetHorizon.Simulation
             for (int i = 0; i < sequence.WaveCount; i++)
             {
                 CargoWavePlan wave = sequence.GetWave(i);
+                if (wave.IsBreather
+                    && runDistance >= wave.StartDistance
+                    && runDistance <= wave.EndDistance
+                    && i + 1 < sequence.WaveCount)
+                {
+                    CargoWavePlan next = sequence.GetWave(i + 1);
+                    if (runDistance >= next.StartDistance - next.HorizonRevealDistance)
+                    {
+                        CargoWaveLifecycle reveal = runDistance < next.StartDistance - next.ApproachDistance
+                            ? CargoWaveLifecycle.HorizonReveal
+                            : CargoWaveLifecycle.Approach;
+                        return new CargoWaveRuntimeState(next, reveal, 0f);
+                    }
+                }
                 if (runDistance < wave.StartDistance - wave.HorizonRevealDistance)
                     return new CargoWaveRuntimeState(wave, CargoWaveLifecycle.FullyBuilt, 0f);
                 if (runDistance < wave.StartDistance - wave.ApproachDistance)
