@@ -6,9 +6,8 @@ using UnityEngine.Rendering;
 namespace JetHorizon
 {
     /// <summary>
-    /// Builds the complete world as two continuous landmasses. Shoreline topology
-    /// comes from the engine-neutral snapshot; Unity owns only mesh and material work.
-    /// No terrain piece is spawned, pooled or revealed at an encounter boundary.
+    /// Builds complete finite parcel roots from the core-authored sentence. Envelope=None
+    /// deliberately creates no shoreline mesh or collision-bearing presentation.
     /// </summary>
     public sealed class TerrainWorldPresenter : MonoBehaviour, ISimSystem
     {
@@ -18,6 +17,19 @@ namespace JetHorizon
             public float StartDistance;
             public Transform Root;
             public readonly List<Mesh> Meshes = new List<Mesh>(4);
+            public readonly List<BuiltParcel> Parcels = new List<BuiltParcel>(8);
+            public Transform ContentRoot;
+        }
+
+        sealed class BuiltParcel
+        {
+            public string Id;
+            public WorldEnvelopeKind Envelope;
+            public float LocalStartDistance;
+            public float Length;
+            public float RevealDistance;
+            public float RearCullDistance;
+            public Transform Root;
         }
 
         const int ReflectableLayer = 8;
@@ -29,6 +41,7 @@ namespace JetHorizon
 
         public string BuiltWorldId => _current?.Id ?? string.Empty;
         public int BuiltMeshCount => _current?.Meshes.Count ?? 0;
+        public int BuiltParcelCount => _current?.Parcels.Count ?? 0;
 
         public void ResetSystem()
         {
@@ -72,6 +85,8 @@ namespace JetHorizon
 
             PositionWorld(_current, snapshot);
             PositionWorld(_queued, snapshot);
+            UpdateParcelVisibility(_current, snapshot.Distance);
+            UpdateParcelVisibility(_queued, snapshot.Distance);
         }
 
         BuiltWorld BuildWorld(SimulationSnapshot snapshot, bool queued)
@@ -87,7 +102,10 @@ namespace JetHorizon
             int routeSectionCount = queued
                 ? snapshot.QueuedTerrainRouteSectionCount
                 : snapshot.TerrainRouteSectionCount;
-            if (string.IsNullOrEmpty(id) || sectionCount < 2) return null;
+            int parcelCount = queued
+                ? snapshot.QueuedWorldParcelCount
+                : snapshot.WorldParcelCount;
+            if (string.IsNullOrEmpty(id) || (sectionCount < 2 && parcelCount == 0)) return null;
 
             var built = new BuiltWorld
             {
@@ -99,6 +117,19 @@ namespace JetHorizon
             };
             built.Root.gameObject.layer = ReflectableLayer;
             built.Root.SetParent(transform, false);
+
+            if (parcelCount > 0)
+            {
+                BuildParcels(
+                    built,
+                    snapshot,
+                    queued,
+                    parcelCount,
+                    sectionCount,
+                    featureCount,
+                    routeSectionCount);
+                return built;
+            }
 
             var rightShore = new List<FacetMassStation>(sectionCount);
             var leftShoreMirrored = new List<FacetMassStation>(sectionCount);
@@ -168,6 +199,125 @@ namespace JetHorizon
                     BuildWaterlineFormation(built, feature);
             }
             return built;
+        }
+
+        void BuildParcels(
+            BuiltWorld world,
+            SimulationSnapshot snapshot,
+            bool queued,
+            int parcelCount,
+            int sectionCount,
+            int featureCount,
+            int routeSectionCount)
+        {
+            for (int parcelIndex = 0; parcelIndex < parcelCount; parcelIndex++)
+            {
+                WorldParcelSnapshot parcel = queued
+                    ? snapshot.GetQueuedWorldParcel(parcelIndex)
+                    : snapshot.GetWorldParcel(parcelIndex);
+                var builtParcel = new BuiltParcel
+                {
+                    Id = parcel.Id,
+                    Envelope = parcel.Envelope,
+                    LocalStartDistance = parcel.LocalStartDistance,
+                    Length = parcel.Length,
+                    RevealDistance = parcel.RevealDistance,
+                    RearCullDistance = parcel.RearCullDistance,
+                    Root = new GameObject(
+                        $"WorldParcel {parcelIndex:00} {parcel.Kind} [{parcel.Envelope}]").transform
+                };
+                builtParcel.Root.gameObject.layer = ReflectableLayer;
+                builtParcel.Root.SetParent(world.Root, false);
+                world.Parcels.Add(builtParcel);
+                world.ContentRoot = builtParcel.Root;
+
+                if (parcel.Envelope != WorldEnvelopeKind.None
+                    && parcel.Envelope != WorldEnvelopeKind.DistantBanks)
+                {
+                    var parcelSections = new List<TerrainWorldSectionSnapshot>(12);
+                    for (int i = 0; i < sectionCount; i++)
+                    {
+                        TerrainWorldSectionSnapshot section = queued
+                            ? snapshot.GetQueuedTerrainWorldSection(i)
+                            : snapshot.GetTerrainWorldSection(i);
+                        if (section.Distance < parcel.LocalStartDistance - .01f
+                            || section.Distance > parcel.EndDistance + .01f)
+                            continue;
+                        parcelSections.Add(section);
+                    }
+                    BuildParcelEnvelope(world, parcelSections, parcelIndex);
+                }
+
+                if (parcel.Envelope == WorldEnvelopeKind.RouteMass
+                    || parcel.Envelope == WorldEnvelopeKind.PrismaticShell)
+                {
+                    var parcelRoutes = new List<TerrainRouteSectionSnapshot>(24);
+                    for (int i = 0; i < routeSectionCount; i++)
+                    {
+                        TerrainRouteSectionSnapshot route = queued
+                            ? snapshot.GetQueuedTerrainRouteSection(i)
+                            : snapshot.GetTerrainRouteSection(i);
+                        if (route.Distance < parcel.LocalStartDistance - .01f
+                            || route.Distance > parcel.EndDistance + .01f)
+                            continue;
+                        parcelRoutes.Add(route);
+                    }
+                    if (parcelRoutes.Count > 0) BuildRouteJunction(world, parcelRoutes);
+                }
+
+                for (int i = 0; i < featureCount; i++)
+                {
+                    TerrainWorldFeatureSnapshot feature = queued
+                        ? snapshot.GetQueuedTerrainWorldFeature(i)
+                        : snapshot.GetTerrainWorldFeature(i);
+                    if (feature.Distance < parcel.LocalStartDistance - .01f
+                        || feature.Distance > parcel.EndDistance + .01f)
+                        continue;
+                    if (feature.Kind == TerrainWorldFeatureKind.NaturalArch)
+                        BuildNaturalArch(world, feature);
+                    else if (TerrainWorldFeatureRules.IsWaterFormation(feature.Kind))
+                        BuildWaterlineFormation(world, feature);
+                }
+                builtParcel.Root.gameObject.SetActive(false);
+            }
+            world.ContentRoot = null;
+        }
+
+        void BuildParcelEnvelope(
+            BuiltWorld world,
+            List<TerrainWorldSectionSnapshot> sections,
+            int parcelIndex)
+        {
+            if (sections.Count < 2) return;
+            var rightShore = new List<FacetMassStation>(sections.Count);
+            var leftShoreMirrored = new List<FacetMassStation>(sections.Count);
+            for (int i = sections.Count - 1; i >= 0; i--)
+            {
+                TerrainWorldSectionSnapshot section = sections[i];
+                float localZ = -section.Distance;
+                rightShore.Add(new FacetMassStation(
+                    localZ, section.RightShoreX, section.RightHeight, section.RightDepth, 1f));
+                leftShoreMirrored.Add(new FacetMassStation(
+                    localZ, -section.LeftShoreX, section.LeftHeight, section.LeftDepth, 1f));
+            }
+            AddMesh(
+                world,
+                "Right finite terrain",
+                FacetTerrainMeshFactory.BuildMass(
+                    rightShore,
+                    FacetSurfaceStyle.ThreeJsSource,
+                    3101 + parcelIndex * 101,
+                    "JH_ParcelRight_" + parcelIndex),
+                new Vector3(0f, -5f, 0f), Quaternion.identity, Vector3.one);
+            AddMesh(
+                world,
+                "Left finite terrain",
+                FacetTerrainMeshFactory.BuildMass(
+                    leftShoreMirrored,
+                    FacetSurfaceStyle.ThreeJsSource,
+                    3151 + parcelIndex * 101,
+                    "JH_ParcelLeft_" + parcelIndex),
+                new Vector3(0f, -5f, 0f), Quaternion.identity, new Vector3(-1f, 1f, 1f));
         }
 
         void BuildRouteJunction(BuiltWorld world, List<TerrainRouteSectionSnapshot> routeSections)
@@ -430,7 +580,7 @@ namespace JetHorizon
             world.Meshes.Add(mesh);
             var child = new GameObject(name);
             child.layer = ReflectableLayer;
-            child.transform.SetParent(world.Root, false);
+            child.transform.SetParent(world.ContentRoot != null ? world.ContentRoot : world.Root, false);
             child.transform.localPosition = position;
             child.transform.localRotation = rotation;
             child.transform.localScale = scale;
@@ -454,6 +604,20 @@ namespace JetHorizon
                 0f,
                 0f,
                 snapshot.ShipZ + snapshot.Distance - world.StartDistance);
+        }
+
+        static void UpdateParcelVisibility(BuiltWorld world, float runDistance)
+        {
+            if (world == null) return;
+            for (int i = 0; i < world.Parcels.Count; i++)
+            {
+                BuiltParcel parcel = world.Parcels[i];
+                if (parcel.Root == null) continue;
+                float absoluteStart = world.StartDistance + parcel.LocalStartDistance;
+                bool visible = runDistance >= absoluteStart - parcel.RevealDistance
+                    && runDistance <= absoluteStart + parcel.Length + parcel.RearCullDistance;
+                parcel.Root.gameObject.SetActive(visible);
+            }
         }
 
         static void ClearWorld(ref BuiltWorld world)

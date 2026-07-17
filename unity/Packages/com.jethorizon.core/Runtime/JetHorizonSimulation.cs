@@ -2574,6 +2574,14 @@ namespace JetHorizon.Simulation
                     _config.ShipZ,
                     Snapshot.TerrainRouteSectionBuffer)
                 : 0;
+            Snapshot.WorldParcelCount = _terrainWorld != null
+                ? _terrainWorld.WriteParcels(Snapshot.WorldParcelBuffer)
+                : 0;
+            Snapshot.ActiveWorldParcelId = _terrainWorld?.ParcelState.Active?.Id ?? string.Empty;
+            Snapshot.ActiveWorldParcelKind = _terrainWorld?.ParcelState.Active?.Kind ?? default;
+            Snapshot.ActiveWorldParcelLifecycle = _terrainWorld != null
+                ? _terrainWorld.ParcelState.ActiveLifecycle
+                : WorldParcelLifecycle.None;
             TerrainWorldPlan queuedTerrainWorld = _terrainWorld?.QueuedWorld;
             Snapshot.QueuedTerrainWorldId = queuedTerrainWorld?.Id ?? string.Empty;
             Snapshot.QueuedTerrainWorldStartDistance = queuedTerrainWorld?.StartDistance ?? 0f;
@@ -2595,6 +2603,9 @@ namespace JetHorizon.Simulation
                     _distance,
                     _config.ShipZ,
                     Snapshot.QueuedTerrainRouteSectionBuffer)
+                : 0;
+            Snapshot.QueuedWorldParcelCount = _terrainWorld != null
+                ? _terrainWorld.WriteQueuedParcels(Snapshot.QueuedWorldParcelBuffer)
                 : 0;
             bool gateExtractionVisible = false;
             float gateExtractionX = 0f;

@@ -649,6 +649,8 @@ namespace JetHorizon.Simulation
         readonly TerrainWorldSectionSnapshot[] _queuedTerrainWorldSections;
         readonly TerrainWorldFeatureSnapshot[] _queuedTerrainWorldFeatures;
         readonly TerrainRouteSectionSnapshot[] _queuedTerrainRouteSections;
+        readonly WorldParcelSnapshot[] _worldParcels;
+        readonly WorldParcelSnapshot[] _queuedWorldParcels;
 
         public CoreGamePhase Phase { get; internal set; }
         public long Tick { get; internal set; }
@@ -732,12 +734,17 @@ namespace JetHorizon.Simulation
         public int TerrainWorldSectionCount { get; internal set; }
         public int TerrainWorldFeatureCount { get; internal set; }
         public int TerrainRouteSectionCount { get; internal set; }
+        public int WorldParcelCount { get; internal set; }
+        public string ActiveWorldParcelId { get; internal set; }
+        public WorldParcelKind ActiveWorldParcelKind { get; internal set; }
+        public WorldParcelLifecycle ActiveWorldParcelLifecycle { get; internal set; }
         public string QueuedTerrainWorldId { get; internal set; }
         public float QueuedTerrainWorldStartDistance { get; internal set; }
         public float QueuedTerrainWorldLength { get; internal set; }
         public int QueuedTerrainWorldSectionCount { get; internal set; }
         public int QueuedTerrainWorldFeatureCount { get; internal set; }
         public int QueuedTerrainRouteSectionCount { get; internal set; }
+        public int QueuedWorldParcelCount { get; internal set; }
         public float ShieldSeconds { get; internal set; }
         public int ShieldHits { get; internal set; }
         public float LaserSeconds { get; internal set; }
@@ -776,7 +783,8 @@ namespace JetHorizon.Simulation
             int maxGates = 16,
             int maxTerrainWorldSections = 64,
             int maxTerrainWorldFeatures = 8,
-            int maxTerrainRouteSections = 48)
+            int maxTerrainRouteSections = 48,
+            int maxWorldParcels = 16)
         {
             _hazards = new HazardSnapshot[maxHazards];
             _pickups = new PickupSnapshot[maxPickups];
@@ -788,6 +796,8 @@ namespace JetHorizon.Simulation
             _queuedTerrainWorldSections = new TerrainWorldSectionSnapshot[maxTerrainWorldSections];
             _queuedTerrainWorldFeatures = new TerrainWorldFeatureSnapshot[maxTerrainWorldFeatures];
             _queuedTerrainRouteSections = new TerrainRouteSectionSnapshot[maxTerrainRouteSections];
+            _worldParcels = new WorldParcelSnapshot[maxWorldParcels];
+            _queuedWorldParcels = new WorldParcelSnapshot[maxWorldParcels];
         }
 
         public HazardSnapshot GetHazard(int index)
@@ -861,6 +871,22 @@ namespace JetHorizon.Simulation
         }
 
         internal TerrainRouteSectionSnapshot[] QueuedTerrainRouteSectionBuffer => _queuedTerrainRouteSections;
+
+        public WorldParcelSnapshot GetWorldParcel(int index)
+        {
+            if (index < 0 || index >= WorldParcelCount) throw new ArgumentOutOfRangeException(nameof(index));
+            return _worldParcels[index];
+        }
+
+        internal WorldParcelSnapshot[] WorldParcelBuffer => _worldParcels;
+
+        public WorldParcelSnapshot GetQueuedWorldParcel(int index)
+        {
+            if (index < 0 || index >= QueuedWorldParcelCount) throw new ArgumentOutOfRangeException(nameof(index));
+            return _queuedWorldParcels[index];
+        }
+
+        internal WorldParcelSnapshot[] QueuedWorldParcelBuffer => _queuedWorldParcels;
 
         public CorridorSliceSnapshot GetCorridorSlice(int index)
         {

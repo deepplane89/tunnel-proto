@@ -2,6 +2,33 @@ using System;
 
 namespace JetHorizon.Simulation
 {
+    public readonly struct WorldParcelSnapshot
+    {
+        public string Id { get; }
+        public string VariantId { get; }
+        public WorldParcelKind Kind { get; }
+        public WorldEnvelopeKind Envelope { get; }
+        public WorldFormationArchetype Formation { get; }
+        public float LocalStartDistance { get; }
+        public float Length { get; }
+        public float RevealDistance { get; }
+        public float RearCullDistance { get; }
+        public float EndDistance => LocalStartDistance + Length;
+
+        internal WorldParcelSnapshot(WorldParcelPlan source)
+        {
+            Id = source?.Id ?? string.Empty;
+            VariantId = source?.VariantId ?? string.Empty;
+            Kind = source?.Kind ?? default;
+            Envelope = source?.Envelope ?? default;
+            Formation = source?.Formation ?? default;
+            LocalStartDistance = source?.LocalStartDistance ?? 0f;
+            Length = source?.Length ?? 0f;
+            RevealDistance = source?.RevealDistance ?? 0f;
+            RearCullDistance = source?.RearCullDistance ?? 0f;
+        }
+    }
+
     public readonly struct TerrainWorldSectionSnapshot
     {
         public int Id { get; }
@@ -179,6 +206,7 @@ namespace JetHorizon.Simulation
 
         readonly ShipCapabilityProfile _capability;
         readonly CargoWaveRuntime _cargoWaves;
+        readonly WorldParcelRuntime _parcels;
         TerrainWorldPlan _world;
         TerrainWorldPlan _queuedWorld;
         bool _continueQueued;
@@ -194,6 +222,7 @@ namespace JetHorizon.Simulation
         public CargoWaveSequencePlan CargoWaves => _cargoWaves.Current;
         public CargoWaveSequencePlan QueuedCargoWaves => _cargoWaves.Queued;
         public CargoWaveRuntimeState CargoWaveState => _cargoWaves.Snapshot;
+        public WorldParcelRuntimeState ParcelState => _parcels.Snapshot;
         public TerrainWorldState Snapshot => _snapshot;
         public float EarnedSpeedBonus => _earnedSpeedBonus;
         public float SoftSpeedCap => TerrainWorldPaceRules.MaximumSpeedForHeat(_heat);
@@ -206,6 +235,7 @@ namespace JetHorizon.Simulation
         {
             _capability = capability;
             _cargoWaves = new CargoWaveRuntime(capability);
+            _parcels = new WorldParcelRuntime();
             Reset();
         }
 
@@ -220,6 +250,7 @@ namespace JetHorizon.Simulation
             _continueQueued = false;
             _world = TerrainWorldCatalog.CreateProofWorld(0, 0f, _capability);
             _cargoWaves.Reset(_world);
+            _parcels.Reset(_world.Parcels, 0f);
             Refresh(0f);
         }
 
@@ -273,6 +304,7 @@ namespace JetHorizon.Simulation
                 _continueQueued = false;
                 _activeRegionIndex = 0;
                 _activeCollisionId = 0;
+                _parcels.Reset(_world.Parcels, runDistance);
                 events.Add(new SimulationEvent(
                     SimulationEventType.SectorChanged,
                     _world.Sector,
@@ -292,6 +324,7 @@ namespace JetHorizon.Simulation
                 _continueQueued = true;
             }
             _cargoWaves.Sync(_world, _queuedWorld, runDistance);
+            _parcels.Sync(runDistance);
             float localDistance = runDistance - _world.StartDistance;
             int nextRegion = FindRegion(localDistance);
             bool regionChanged = nextRegion != _activeRegionIndex;
@@ -438,6 +471,16 @@ namespace JetHorizon.Simulation
             return count;
         }
 
+        public int WriteParcels(WorldParcelSnapshot[] destination)
+        {
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+            if (_world?.Parcels == null) return 0;
+            int count = Math.Min(destination.Length, _world.ParcelCount);
+            for (int i = 0; i < count; i++)
+                destination[i] = new WorldParcelSnapshot(_world.GetParcel(i));
+            return count;
+        }
+
         public int WriteQueuedSections(
             float runDistance,
             float shipZ,
@@ -489,6 +532,16 @@ namespace JetHorizon.Simulation
             return count;
         }
 
+        public int WriteQueuedParcels(WorldParcelSnapshot[] destination)
+        {
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+            if (_queuedWorld?.Parcels == null) return 0;
+            int count = Math.Min(destination.Length, _queuedWorld.ParcelCount);
+            for (int i = 0; i < count; i++)
+                destination[i] = new WorldParcelSnapshot(_queuedWorld.GetParcel(i));
+            return count;
+        }
+
         int FindRegion(float localDistance)
         {
             if (localDistance <= 0f) return 0;
@@ -505,12 +558,16 @@ namespace JetHorizon.Simulation
             out int collisionId,
             out float collisionCenterX)
         {
+            WorldEnvelopeKind envelope = ActiveEnvelope(localDistance);
+            bool hasCollisionEnvelope = envelope == WorldEnvelopeKind.CanyonShoreline
+                || envelope == WorldEnvelopeKind.RouteMass
+                || envelope == WorldEnvelopeKind.PrismaticShell;
             SampleShore(localDistance, out float leftShore, out float rightShore);
             float rollFraction = Math.Min(1f, Math.Abs(rollRadians) / Math.Max(.001f, rollMaximumRadians));
             float bodyHalfWidth = _capability.CollisionHalfWidth * .65f;
             float shipHalfWidth = _capability.CollisionHalfWidth
                 + (bodyHalfWidth - _capability.CollisionHalfWidth) * rollFraction;
-            if (_world.HasRoutePassagesAt(localDistance))
+            if (hasCollisionEnvelope && _world.HasRoutePassagesAt(localDistance))
             {
                 if (!ContainsShip(TerrainRouteKind.SafeCanyon)
                     && !ContainsShip(TerrainRouteKind.KnifeEdgeTunnel)
@@ -540,7 +597,9 @@ namespace JetHorizon.Simulation
             // occur in water immediately before the visible face reaches the ship.
             float leftCollision = leftShore - ShoreCollisionVisualInset;
             float rightCollision = rightShore + ShoreCollisionVisualInset;
-            if (shipX - shipHalfWidth <= leftCollision || shipX + shipHalfWidth >= rightCollision)
+            if (hasCollisionEnvelope
+                && (shipX - shipHalfWidth <= leftCollision
+                    || shipX + shipHalfWidth >= rightCollision))
             {
                 collisionId = 700000 + Math.Max(0, FindSection(localDistance));
                 collisionCenterX = (leftShore + rightShore) * .5f;
@@ -565,6 +624,14 @@ namespace JetHorizon.Simulation
             collisionId = 0;
             collisionCenterX = 0f;
             return false;
+        }
+
+        WorldEnvelopeKind ActiveEnvelope(float localDistance)
+        {
+            if (_world?.Parcels == null) return WorldEnvelopeKind.CanyonShoreline;
+            float absoluteDistance = _world.StartDistance + Math.Max(0f, localDistance);
+            int parcelIndex = _world.Parcels.FindParcelIndex(absoluteDistance);
+            return _world.GetParcel(parcelIndex).Envelope;
         }
 
         void SampleShore(float localDistance, out float leftShore, out float rightShore)
