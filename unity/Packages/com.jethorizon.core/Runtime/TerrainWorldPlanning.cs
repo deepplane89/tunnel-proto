@@ -379,7 +379,9 @@ namespace JetHorizon.Simulation
                     14f,
                     68f,
                     18f,
-                    TraversalRequirement.KnifeEdge,
+                    // Presentation currently places the crown above the ship. Do not
+                    // attach an abstract roll-only collision plane to visible open air.
+                    TraversalRequirement.None,
                     401 + sector * 47)
             };
 

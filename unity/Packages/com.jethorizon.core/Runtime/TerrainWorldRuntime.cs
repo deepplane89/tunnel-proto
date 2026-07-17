@@ -147,8 +147,12 @@ namespace JetHorizon.Simulation
     /// </summary>
     public sealed class TerrainWorldRuntime
     {
+        const float ShoreCollisionVisualInset = 2f;
+
         readonly ShipCapabilityProfile _capability;
         TerrainWorldPlan _world;
+        TerrainWorldPlan _queuedWorld;
+        bool _continueQueued;
         int _activeRegionIndex;
         int _heat;
         float _earnedSpeedBonus;
@@ -178,6 +182,8 @@ namespace JetHorizon.Simulation
             _activeRegionIndex = 0;
             _extractionDecisionOpen = false;
             _activeCollisionId = 0;
+            _queuedWorld = null;
+            _continueQueued = false;
             _world = TerrainWorldCatalog.CreateProofWorld(0, 0f, _capability);
             Refresh(0f);
         }
@@ -200,22 +206,16 @@ namespace JetHorizon.Simulation
             if (!_extractionDecisionOpen || events == null) return false;
             _extractionDecisionOpen = false;
             _heat = Math.Min(5, _heat + 1);
-            _activeRegionIndex = 0;
-            _activeCollisionId = 0;
-            _world = TerrainWorldCatalog.CreateProofWorld(
+            _queuedWorld = TerrainWorldCatalog.CreateProofWorld(
                 _world.Sector + 1,
-                runDistance + 120f,
+                _world.EndDistance,
                 _capability);
+            _continueQueued = true;
             events.Add(new SimulationEvent(
                 SimulationEventType.ExtractionDecisionResolved,
-                _world.Sector,
+                _queuedWorld.Sector,
                 0f,
                 _heat));
-            events.Add(new SimulationEvent(
-                SimulationEventType.SectorChanged,
-                _world.Sector,
-                _heat,
-                _world.EndDistance));
             Refresh(runDistance);
             return true;
         }
@@ -229,6 +229,19 @@ namespace JetHorizon.Simulation
             SimulationEventBuffer events)
         {
             if (events == null) throw new ArgumentNullException(nameof(events));
+            if (_continueQueued && runDistance >= _world.EndDistance)
+            {
+                _world = _queuedWorld;
+                _queuedWorld = null;
+                _continueQueued = false;
+                _activeRegionIndex = 0;
+                _activeCollisionId = 0;
+                events.Add(new SimulationEvent(
+                    SimulationEventType.SectorChanged,
+                    _world.Sector,
+                    _heat,
+                    _world.EndDistance));
+            }
             float localDistance = runDistance - _world.StartDistance;
             int nextRegion = FindRegion(localDistance);
             bool regionChanged = nextRegion != _activeRegionIndex;
@@ -294,9 +307,11 @@ namespace JetHorizon.Simulation
                 collisionCenter);
         }
 
-        public bool TryGetUpcomingPrismatic(out float absoluteStartDistance)
+        public bool TryGetUpcomingPrismatic(float runDistance, out float absoluteStartDistance)
         {
-            return TryGetRegionStart(TerrainRegionKind.PrismaticReach, out absoluteStartDistance);
+            if (!TryGetRegionStart(TerrainRegionKind.PrismaticReach, out absoluteStartDistance))
+                return false;
+            return absoluteStartDistance > runDistance;
         }
 
         public bool TryGetRegionStart(TerrainRegionKind kind, out float absoluteStartDistance)
@@ -373,23 +388,16 @@ namespace JetHorizon.Simulation
             float bodyHalfWidth = _capability.CollisionHalfWidth * .65f;
             float shipHalfWidth = _capability.CollisionHalfWidth
                 + (bodyHalfWidth - _capability.CollisionHalfWidth) * rollFraction;
-            if (shipX - shipHalfWidth <= leftShore || shipX + shipHalfWidth >= rightShore)
+            // The presentation's source-parity face has seeded facet displacement.
+            // Move gameplay collision slightly into the land so a collision can never
+            // occur in water immediately before the visible face reaches the ship.
+            float leftCollision = leftShore - ShoreCollisionVisualInset;
+            float rightCollision = rightShore + ShoreCollisionVisualInset;
+            if (shipX - shipHalfWidth <= leftCollision || shipX + shipHalfWidth >= rightCollision)
             {
                 collisionId = 700000 + Math.Max(0, FindSection(localDistance));
                 collisionCenterX = (leftShore + rightShore) * .5f;
                 return true;
-            }
-
-            for (int i = 0; i < _world.FeatureCount; i++)
-            {
-                TerrainWorldFeature feature = _world.GetFeature(i);
-                if (Math.Abs(localDistance - feature.Distance) > feature.CollisionHalfDepth) continue;
-                if (feature.Requirement == TraversalRequirement.KnifeEdge && rollFraction < .72f)
-                {
-                    collisionId = feature.Id;
-                    collisionCenterX = feature.CenterX;
-                    return true;
-                }
             }
             collisionId = 0;
             collisionCenterX = 0f;

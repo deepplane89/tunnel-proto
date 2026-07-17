@@ -2662,7 +2662,7 @@ namespace JetHorizon.Simulation
                 Snapshot.UpcomingEncounterStartZ = 0f;
             }
             else if (_terrainWorld != null
-                && _terrainWorld.TryGetUpcomingPrismatic(out float terrainPrismaticStart))
+                && _terrainWorld.TryGetUpcomingPrismatic(_distance, out float terrainPrismaticStart))
             {
                 Snapshot.EncounterPlanId = string.Empty;
                 Snapshot.EncounterKind = default;

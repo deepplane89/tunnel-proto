@@ -73,15 +73,16 @@ namespace JetHorizon
             }
 
             bool current = snapshot.EncounterKind == EncounterKind.PrismaticSineCorridor;
-            bool upcoming = snapshot.UpcomingEncounterKind == EncounterKind.PrismaticSineCorridor;
-            if (!current && !upcoming)
+            // Never draw a complete future tunnel on the horizon. The terrain-world
+            // transition owns its reveal; the membrane exists only while that region
+            // is active, not for the entire minute-long approach.
+            if (!current)
             {
                 SetVisible(false);
                 return;
             }
 
-            float startZ = current ? snapshot.EncounterStartZ : snapshot.UpcomingEncounterStartZ;
-            transform.localPosition = new Vector3(0f, 0f, startZ);
+            transform.localPosition = new Vector3(0f, 0f, snapshot.EncounterStartZ);
             if (_runtimeMaterial != null) _runtimeMaterial.SetFloat(TimeValueId, snapshot.Elapsed);
             SetVisible(true);
         }

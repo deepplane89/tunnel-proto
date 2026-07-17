@@ -10,8 +10,8 @@ namespace JetHorizon.Tests.Architecture
         {
             ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
             {
-                StartSpeedMultiplier = 1.5f,
-                MinimumOperationalSpeed = 50f
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f
             });
 
             for (int sector = 0; sector <= 5; sector++)
@@ -32,7 +32,36 @@ namespace JetHorizon.Tests.Architecture
                 Assert.That(world.GetSection(0).Distance, Is.Zero);
                 Assert.That(world.GetSection(world.SectionCount - 1).Distance,
                     Is.EqualTo(world.Length));
+                Assert.That(world.GetFeature(0).Requirement, Is.EqualTo(TraversalRequirement.None));
             }
+        }
+
+        [Test]
+        public void NaturalArch_DoesNotCreateAnInvisibleRollOnlyCollisionPlane()
+        {
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
+            {
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f
+            });
+            var runtime = new TerrainWorldRuntime(capability);
+            TerrainWorldFeature feature = runtime.World.GetFeature(0);
+            var eventOwner = new JetHorizonSimulation(new SimulationConfig
+            {
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f
+            }, 49u);
+            SimulationEventBuffer events = eventOwner.Events;
+
+            TerrainWorldTickResult result = runtime.Tick(
+                feature.Distance,
+                feature.CenterX,
+                0f,
+                (float)(System.Math.PI * .5),
+                false,
+                events);
+
+            Assert.That(result.CollisionEntered, Is.False);
         }
 
         [Test]
@@ -81,6 +110,27 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(simulation.Snapshot.Speed, Is.GreaterThan(startingSpeed));
         }
 
+        [Test]
+        public void ContinueDeeper_KeepsCurrentWorldUntilItsOpenWaterSeam()
+        {
+            JetHorizonSimulation simulation = CreateTerrainSimulation();
+            while (!simulation.Snapshot.ExtractionDecisionOpen) simulation.Step(default);
+
+            string currentWorld = simulation.Snapshot.TerrainWorldId;
+            float currentWorldEnd = simulation.Snapshot.TerrainWorldStartDistance
+                + simulation.Snapshot.TerrainWorldLength;
+            Assert.That(simulation.TryResolveExtractionDecision(false, out _), Is.True);
+            Assert.That(simulation.Snapshot.TerrainWorldId, Is.EqualTo(currentWorld));
+
+            simulation.Step(default);
+            Assert.That(simulation.Snapshot.TerrainWorldId, Is.EqualTo(currentWorld));
+            while (simulation.Snapshot.TerrainWorldId == currentWorld) simulation.Step(default);
+
+            Assert.That(simulation.Snapshot.Distance, Is.GreaterThanOrEqualTo(currentWorldEnd));
+            Assert.That(simulation.Snapshot.TerrainWorldId, Is.EqualTo("terrain-world-01"));
+            Assert.That(simulation.Snapshot.ActiveTerrainRegion, Is.EqualTo(TerrainRegionKind.OpenSea));
+        }
+
         static JetHorizonSimulation CreateTerrainSimulation()
         {
             var simulation = new JetHorizonSimulation(new SimulationConfig
@@ -88,8 +138,8 @@ namespace JetHorizon.Tests.Architecture
                 TerrainWorldMode = true,
                 GateRunMode = false,
                 ProofEncounterMode = false,
-                StartSpeedMultiplier = 1.5f,
-                MinimumOperationalSpeed = 50f,
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f,
                 CollisionEnabled = false,
                 HazardSpawningEnabled = true,
                 HazardSimulationEnabled = true,
