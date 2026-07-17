@@ -54,7 +54,7 @@ namespace JetHorizon.Simulation.Tests
         {
             var config = new SimulationConfig();
 
-            Assert.That(config.Acceleration, Is.EqualTo(38.4375f).Within(0.0001f));
+            Assert.That(config.Acceleration, Is.EqualTo(48.046875f).Within(0.0001f));
             Assert.That(config.Deceleration, Is.EqualTo(0.4925f).Within(0.0001f));
             Assert.That(config.MaxLateralVelocity, Is.EqualTo(16.3125f).Within(0.0001f));
             Assert.That(config.RollSpeed, Is.EqualTo((1.2f + 0.5625f * 2.3f) * (float)System.Math.PI).Within(0.0001f));

@@ -104,29 +104,65 @@ namespace JetHorizon
                 TerrainWorldFeatureSnapshot feature = snapshot.GetTerrainWorldFeature(i);
                 if (feature.Kind == TerrainWorldFeatureKind.NaturalArch)
                     BuildNaturalArch(feature);
-                else if (feature.Kind == TerrainWorldFeatureKind.WaterlineMass)
-                    BuildWaterlineMass(feature);
+                else if (TerrainWorldFeatureRules.IsWaterFormation(feature.Kind))
+                    BuildWaterlineFormation(feature);
             }
         }
 
-        void BuildWaterlineMass(TerrainWorldFeatureSnapshot feature)
+        void BuildWaterlineFormation(TerrainWorldFeatureSnapshot feature)
         {
-            Mesh mass = FacetTerrainMeshFactory.BuildBoulder(
-                FacetSurfaceStyle.ThreeJsSource,
-                feature.Seed,
-                feature.HalfWidth,
-                feature.Height,
-                circumferencePatches: 6,
-                submergedDepth: 7f,
-                plateauRadiusFraction: .40f,
-                name: "JH_WaterlineMass_" + feature.Id);
+            if (feature.Kind == TerrainWorldFeatureKind.WaterlineMonolith)
+            {
+                AddWaterlineSlab(
+                    feature, "Monolith", feature.CenterX, feature.HalfWidth,
+                    feature.Height, feature.CollisionHalfDepth, feature.Seed);
+                return;
+            }
+            if (feature.Kind == TerrainWorldFeatureKind.WaterlineRidge)
+            {
+                float width = feature.HalfWidth * .58f;
+                AddWaterlineSlab(feature, "Ridge left",
+                    feature.CenterX - feature.HalfWidth * .42f, width,
+                    feature.Height * .72f, feature.CollisionHalfDepth, feature.Seed);
+                AddWaterlineSlab(feature, "Ridge crest",
+                    feature.CenterX, width,
+                    feature.Height, feature.CollisionHalfDepth, feature.Seed + 11);
+                AddWaterlineSlab(feature, "Ridge right",
+                    feature.CenterX + feature.HalfWidth * .42f, width,
+                    feature.Height * .80f, feature.CollisionHalfDepth, feature.Seed + 23);
+                return;
+            }
+
+            float clusterWidth = feature.HalfWidth * .72f;
+            AddWaterlineSlab(feature, "Cluster primary",
+                feature.CenterX - feature.HalfWidth * .28f, clusterWidth,
+                feature.Height, feature.CollisionHalfDepth, feature.Seed);
+            AddWaterlineSlab(feature, "Cluster shoulder",
+                feature.CenterX + feature.HalfWidth * .30f, clusterWidth,
+                feature.Height * .68f, feature.CollisionHalfDepth * .88f, feature.Seed + 17);
+        }
+
+        void AddWaterlineSlab(
+            TerrainWorldFeatureSnapshot feature,
+            string label,
+            float centerX,
+            float halfWidth,
+            float height,
+            float halfDepth,
+            int seed)
+        {
+            FacetSurfaceStyle style = FacetSurfaceStyle.ThreeJsSource;
+            Mesh mass = FacetTerrainMeshFactory.BuildThreeJsParitySlab(style, seed);
             AddMesh(
                 _world,
-                "Submerged open-water formation " + feature.Id,
+                label + " " + feature.Id,
                 mass,
-                new Vector3(feature.CenterX, 0f, -feature.Distance),
-                Quaternion.identity,
-                Vector3.one);
+                new Vector3(centerX - halfWidth, -7f, -feature.Distance + halfDepth),
+                Quaternion.Euler(0f, 90f, 0f),
+                new Vector3(
+                    halfDepth * 2f / style.Depth,
+                    height / style.Height,
+                    halfWidth * 2f / style.Length));
         }
 
         void BuildNaturalArch(TerrainWorldFeatureSnapshot feature)

@@ -404,7 +404,7 @@ namespace JetHorizon.Simulation
             for (int i = 0; i < _world.FeatureCount; i++)
             {
                 TerrainWorldFeature feature = _world.GetFeature(i);
-                if (feature.Kind != TerrainWorldFeatureKind.WaterlineMass) continue;
+                if (!TerrainWorldFeatureRules.IsWaterFormation(feature.Kind)) continue;
                 // Match the visible boulder's rounded waterline footprint. A small
                 // inset keeps collision inside the faceted silhouette instead of in
                 // apparently empty water between its widest triangles.

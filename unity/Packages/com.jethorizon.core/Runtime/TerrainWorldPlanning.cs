@@ -17,7 +17,17 @@ namespace JetHorizon.Simulation
     public enum TerrainWorldFeatureKind
     {
         NaturalArch,
-        WaterlineMass
+        WaterlineMonolith,
+        WaterlineRidge,
+        WaterlineCluster
+    }
+
+    public static class TerrainWorldFeatureRules
+    {
+        public static bool IsWaterFormation(TerrainWorldFeatureKind kind)
+            => kind == TerrainWorldFeatureKind.WaterlineMonolith
+                || kind == TerrainWorldFeatureKind.WaterlineRidge
+                || kind == TerrainWorldFeatureKind.WaterlineCluster;
     }
 
     /// <summary>
@@ -282,7 +292,7 @@ namespace JetHorizon.Simulation
             for (int i = 0; topologyValid && i < world.FeatureCount; i++)
             {
                 TerrainWorldFeature feature = world.GetFeature(i);
-                if (feature.Kind != TerrainWorldFeatureKind.WaterlineMass) continue;
+                if (!TerrainWorldFeatureRules.IsWaterFormation(feature.Kind)) continue;
                 SampleShore(world, feature.Distance, out float leftShore, out float rightShore);
                 float leftPassage = feature.CenterX - feature.HalfWidth - leftShore;
                 float rightPassage = rightShore - feature.CenterX - feature.HalfWidth;
@@ -325,6 +335,7 @@ namespace JetHorizon.Simulation
         {
             int heat = Math.Max(0, Math.Min(5, sector));
             float mirror = (sector & 1) == 0 ? 1f : -1f;
+            int layout = sector % 3;
             const float openWaterReturnStart = 2980f;
             const float openWaterReturnLength = 640f;
             const float breatherLength = 500f;
@@ -388,10 +399,19 @@ namespace JetHorizon.Simulation
             {
                 float t = i / 22f;
                 float distance = 1880f + t * 1100f;
-                float center = ((float)Math.Sin(t * Math.PI * 2.65) * 18f
-                    + (float)Math.Sin(t * Math.PI * 5.4 + .35) * 3.5f) * mirror;
-                float halfWidth = 25f + (float)Math.Sin(t * Math.PI * 3.1 + .6) * 3f;
-                float heightWave = (float)Math.Sin(t * Math.PI * 2.2 + .4) * 7f;
+                float primaryFrequency = layout == 0 ? 2.65f : layout == 1 ? 3.25f : 2.05f;
+                float primaryAmplitude = layout == 0 ? 18f : layout == 1 ? 14f : 22f;
+                float primaryPhase = layout == 0 ? 0f : layout == 1 ? .55f : -.35f;
+                float secondaryFrequency = layout == 0 ? 5.4f : layout == 1 ? 7.1f : 4.6f;
+                float secondaryAmplitude = layout == 0 ? 3.5f : layout == 1 ? 5f : 4.5f;
+                float center = ((float)Math.Sin(t * Math.PI * primaryFrequency + primaryPhase)
+                        * primaryAmplitude
+                    + (float)Math.Sin(t * Math.PI * secondaryFrequency + .35f + layout * .32f)
+                        * secondaryAmplitude) * mirror;
+                float baseHalfWidth = layout == 0 ? 25f : layout == 1 ? 27f : 24.5f;
+                float halfWidth = baseHalfWidth
+                    + (float)Math.Sin(t * Math.PI * (3.1f + layout * .45f) + .6f) * 3f;
+                float heightWave = (float)Math.Sin(t * Math.PI * (2.2f + layout * .3f) + .4f) * 7f;
                 sections.Add(new TerrainWorldSection(
                     id++,
                     TerrainRegionKind.CrystallineCanyon,
@@ -423,7 +443,7 @@ namespace JetHorizon.Simulation
             Shore(worldLength, TerrainRegionKind.ExtractionBreather,
                 -150f, 150f, 10f, 11f, 180f);
 
-            var features = new[]
+            var features = new List<TerrainWorldFeature>(5)
             {
                 new TerrainWorldFeature(
                     500,
@@ -436,28 +456,48 @@ namespace JetHorizon.Simulation
                     // Presentation currently places the crown above the ship. Do not
                     // attach an abstract roll-only collision plane to visible open air.
                     TraversalRequirement.None,
-                    401 + sector * 47),
-                // These masses are part of the water topology: large, submerged
-                // geological formations with deliberately generous side routes.
-                // Their alternating placement makes the open sea itself playable
-                // without turning it into a row of prop obstacles.
-                new TerrainWorldFeature(
-                    501, TerrainWorldFeatureKind.WaterlineMass,
-                    300f, 42f * mirror, 9f, 31f, 9f,
-                    TraversalRequirement.None, 601 + sector * 53),
-                new TerrainWorldFeature(
-                    502, TerrainWorldFeatureKind.WaterlineMass,
-                    390f, -34f * mirror, 10f, 38f, 10f,
-                    TraversalRequirement.None, 701 + sector * 59),
-                new TerrainWorldFeature(
-                    503, TerrainWorldFeatureKind.WaterlineMass,
-                    1100f, 20f * mirror, 12f, 44f, 12f,
-                    TraversalRequirement.None, 809 + sector * 61),
-                new TerrainWorldFeature(
-                    504, TerrainWorldFeatureKind.WaterlineMass,
-                    1310f, -28f * mirror, 11f, 36f, 11f,
-                    TraversalRequirement.None, 907 + sector * 67)
+                    401 + sector * 47)
             };
+
+            void Formation(
+                int id,
+                TerrainWorldFeatureKind kind,
+                float distance,
+                float center,
+                float halfWidth,
+                float height,
+                float halfDepth,
+                int seed)
+            {
+                features.Add(new TerrainWorldFeature(
+                    id, kind, distance, center * mirror, halfWidth, height, halfDepth,
+                    TraversalRequirement.None, seed + sector * 67));
+            }
+
+            // Three authored terrain rhythms repeat only after three complete worlds.
+            // The feature kind is core data; Unity merely presents the requested
+            // source-faceted monolith, ridge or connected cluster.
+            if (layout == 0)
+            {
+                Formation(501, TerrainWorldFeatureKind.WaterlineRidge,    300f,  42f,  9f, 31f,  9f, 601);
+                Formation(502, TerrainWorldFeatureKind.WaterlineMonolith, 390f, -34f, 10f, 38f, 10f, 701);
+                Formation(503, TerrainWorldFeatureKind.WaterlineCluster, 1100f,  20f, 12f, 44f, 12f, 809);
+                Formation(504, TerrainWorldFeatureKind.WaterlineRidge,   1310f, -28f, 11f, 36f, 11f, 907);
+            }
+            else if (layout == 1)
+            {
+                Formation(501, TerrainWorldFeatureKind.WaterlineCluster,  320f, -42f, 10f, 35f, 10f, 1009);
+                Formation(502, TerrainWorldFeatureKind.WaterlineRidge,    610f,  28f, 11f, 32f, 10f, 1103);
+                Formation(503, TerrainWorldFeatureKind.WaterlineMonolith,1040f,  -4f, 13f, 48f, 13f, 1201);
+                Formation(504, TerrainWorldFeatureKind.WaterlineCluster, 1380f,  34f, 10f, 39f, 10f, 1301);
+            }
+            else
+            {
+                Formation(501, TerrainWorldFeatureKind.WaterlineMonolith, 360f,   0f, 14f, 52f, 13f, 1409);
+                Formation(502, TerrainWorldFeatureKind.WaterlineCluster,  760f,  30f, 11f, 34f, 10f, 1511);
+                Formation(503, TerrainWorldFeatureKind.WaterlineRidge,   1150f, -30f, 12f, 31f, 11f, 1601);
+                Formation(504, TerrainWorldFeatureKind.WaterlineMonolith,1460f,  30f, 10f, 43f, 10f, 1709);
+            }
 
             var world = new TerrainWorldPlan(
                 $"terrain-world-{sector:00}",
@@ -466,7 +506,7 @@ namespace JetHorizon.Simulation
                 worldLength,
                 regions,
                 sections.ToArray(),
-                features);
+                features.ToArray());
             TerrainWorldValidation validation = new TerrainWorldValidator().Validate(world, capability, heat);
             if (!validation.IsValid)
                 throw new InvalidOperationException(

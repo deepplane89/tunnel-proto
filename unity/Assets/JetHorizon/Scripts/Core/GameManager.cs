@@ -23,6 +23,7 @@ namespace JetHorizon
     /// </summary>
     public sealed class GameManager : MonoBehaviour
     {
+        const float LateralAccelerationBoost = 1.25f;
         public static GameManager I { get; private set; }
 
         [Header("Systems (wired by bootstrap, ticked in this order)")]
@@ -127,8 +128,12 @@ namespace JetHorizon
                 CanyonPathOverride = canyonProfile != null ? canyonProfile.BuildCorePathDefinition() : null,
                 PersistentCruiseSpeedMultiplier = launchProfile.SpeedMultiplier,
                 Snap = FeelProfile.Snap,
-                AccelBase = FeelProfile.AccelBase * launchProfile.AccelerationMultiplier,
-                AccelSnap = FeelProfile.AccelSnap * launchProfile.AccelerationMultiplier,
+                // Preserve the authored response curve and garage scaling while
+                // making initial steering reach useful lateral velocity 25% sooner.
+                AccelBase = FeelProfile.AccelBase * LateralAccelerationBoost
+                    * launchProfile.AccelerationMultiplier,
+                AccelSnap = FeelProfile.AccelSnap * LateralAccelerationBoost
+                    * launchProfile.AccelerationMultiplier,
                 HandlingDrift = launchProfile.HandlingDrift,
                 MaxVelBase = FeelProfile.MaxVelocityBase * launchProfile.LateralSpeedMultiplier,
                 MaxVelSnap = FeelProfile.MaxVelocitySnap * launchProfile.LateralSpeedMultiplier,

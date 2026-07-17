@@ -65,6 +65,28 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
+        public void ConsecutiveWorlds_UseDifferentFormationAndCanyonLayouts()
+        {
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
+            {
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f
+            });
+            TerrainWorldPlan first = TerrainWorldCatalog.CreateProofWorld(0, 0f, capability);
+            TerrainWorldPlan second = TerrainWorldCatalog.CreateProofWorld(1, first.Length, capability);
+            TerrainWorldPlan third = TerrainWorldCatalog.CreateProofWorld(2, first.Length + second.Length, capability);
+
+            Assert.That(first.GetFeature(1).Kind, Is.Not.EqualTo(second.GetFeature(1).Kind));
+            Assert.That(second.GetFeature(1).Kind, Is.Not.EqualTo(third.GetFeature(1).Kind));
+            Assert.That(first.GetFeature(1).Distance, Is.Not.EqualTo(second.GetFeature(1).Distance));
+            Assert.That(second.GetFeature(1).Distance, Is.Not.EqualTo(third.GetFeature(1).Distance));
+            Assert.That(System.Math.Abs(first.GetSection(30).WaterCenterX),
+                Is.Not.EqualTo(System.Math.Abs(second.GetSection(30).WaterCenterX)).Within(.01f));
+            Assert.That(System.Math.Abs(second.GetSection(30).WaterCenterX),
+                Is.Not.EqualTo(System.Math.Abs(third.GetSection(30).WaterCenterX)).Within(.01f));
+        }
+
+        [Test]
         public void TerrainWorld_PublishesOnePersistentTopologyAndNoLegacyGates()
         {
             JetHorizonSimulation simulation = CreateTerrainSimulation();
@@ -140,7 +162,7 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
-        public void OpenWaterMasses_HaveVisibleFootprintCollisionAndLeaveAWideRoute()
+        public void OpenWaterFormations_HaveVisibleFootprintCollisionAndLeaveAWideRoute()
         {
             ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
             {
@@ -170,7 +192,7 @@ namespace JetHorizon.Tests.Architecture
                 false,
                 eventOwner.Events);
 
-            Assert.That(mass.Kind, Is.EqualTo(TerrainWorldFeatureKind.WaterlineMass));
+            Assert.That(TerrainWorldFeatureRules.IsWaterFormation(mass.Kind), Is.True);
             Assert.That(hit.CollisionEntered, Is.True);
             Assert.That(safe.CollisionEntered, Is.False);
         }

@@ -21,13 +21,13 @@ namespace JetHorizon
 
         // ── Lateral physics (prod, locked across levels) ───────
         public const float Snap             = 0.5625f;
-        public const float AccelBase        = 22f;
-        public const float AccelSnap        = 52f;
+        public const float AccelBase        = 27.5f;
+        public const float AccelSnap        = 65f;
         public const float MaxVelBase       = 9f;
         public const float MaxVelSnap       = 13f;
         public const float DecelBasePct     = 0.02f;
         public const float CounterSteerBoost= 3f;
-        // Derived (drift = 1.0): ACCEL = (22 + .5625*52) * 0.75 = 38.44
+        // Derived (drift = 1.0): ACCEL = (27.5 + .5625*65) * 0.75 = 48.05
         public static float Accel   => (AccelBase + Snap * AccelSnap) * 0.75f;
         public static float Decel   => (10f + Snap * 26f) * DecelBasePct;      // 0.4925 /s
         public static float MaxVel  => MaxVelBase + Snap * MaxVelSnap;         // 16.31 u/s

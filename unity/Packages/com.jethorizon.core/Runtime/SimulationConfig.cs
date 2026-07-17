@@ -19,8 +19,8 @@ namespace JetHorizon.Simulation
         public float ShipPreLaunchY = 0.38f;
 
         public float Snap = 0.5625f;
-        public float AccelBase = 22f;
-        public float AccelSnap = 52f;
+        public float AccelBase = 27.5f;
+        public float AccelSnap = 65f;
         public float HandlingDrift = 1f;
         public float MaxVelBase = 9f;
         public float MaxVelSnap = 13f;
