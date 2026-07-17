@@ -59,12 +59,30 @@ shuffle, five blockers per row, adjacent guaranteed opening, three-lane
 anti-bunch rule, and 160-unit spawn preview. The finite-wave extrapolation is
 three bursts of three rows: rows sit about 64 units apart inside a burst and
 bursts sit 180 units apart. Their safe openings move left-right-left (mirrored
-on alternate variants), every row blocks the neutral lane, and one extra guard
-lane on both sides of the safe opening accounts for the geological groups being
-wider than the source cones. The result is 45 faceted rock groups over roughly
-845 units at launch pace. Partial speed scaling keeps the pattern near 6.6
-seconds at 128 speed and 5.5 seconds at 188 speed without making high speed
-feel normalized or slow.
+on alternate variants), and one extra guard lane on both sides of the safe
+opening accounts for the geological groups being wider than the source cones.
+The result is 45 faceted rock groups over roughly 845 units at launch pace.
+Partial speed scaling keeps the pattern near 6.6 seconds at 128 speed and 5.5
+seconds at 188 speed without making high speed feel normalized or slow.
+
+The original GitHub generator's important anti-camping behavior is not merely
+the shuffled opening: every newly spawned row is recentered on predicted ship X
+(`shipX + shipVelX * travelTime * 0.85`). A finite formation cannot fairly move
+after it has appeared, so this port uses a deterministic sequence of lateral
+anti-camping anchors across all nine rows. At construction time it samples the
+whole playable interval from X=-32 through X=32 every 0.25 units, using the same
+collision inset as the terrain runtime, and rejects the plan if any stationary
+X can clear the entire formation. The authored slalom opening is validated
+separately so anti-camping never replaces reachability.
+
+`ObstacleAlgorithmBank` is the searchable code-level index for the obstacle
+algorithms found in the GitHub source: random and fat cones, angled walls,
+lethal rings, slalom and zipper gates, five lightning patterns, L3/L4/L5
+corridors, both lightning-canyon variants, and five asteroid patterns. Each
+entry records its source symbol, targeting model, pattern rule, anti-camping
+rule, and intended core owner. The bank is metadata only: adding an entry does
+not schedule it, and only `RandomConeRows` is marked active in this rock proof.
+`TrueWaveWorldCatalog` remains the sole gameplay eligibility authority.
 
 The formation uses the existing coin pickup only: seven coins run through each
 of the nine safe openings for 63 coins total. Each short coin trail announces
@@ -84,14 +102,14 @@ Automated verification completed:
 - Unity presentation assembly compiled with zero warnings/errors;
 - architecture-test assembly compiled with zero warnings/errors;
 - all new parcel, terrain, cargo, and gate assertions passed in the standalone
-  runner, including dense coin trails, neutral-line rejection, safe-opening
-  clearance, burst spacing, and speed-dependent arrival;
+  runner, including dense coin trails, full-width stationary-line rejection,
+  safe-opening clearance, burst spacing, and speed-dependent arrival;
 - a 10,000-seed formation audit retained five blockers in every row;
 - deterministic multi-world smoke run activated only rock formations and empty
   water, with zero legacy hazards or corridor slices;
 - smoke collision checks passed for empty water and physical rock groups.
 
-The broader standalone core run passed 119 of 120 tests. The one remaining
+The broader standalone core run passed 121 of 122 tests. The one remaining
 failure is the pre-existing legacy test
 `PrismaticCollisionUsesTheSameCoreSamplePublishedToTheRenderer`; it also fails
 when run by itself and does not enter terrain-world mode or exercise the new

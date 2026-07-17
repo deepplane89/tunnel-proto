@@ -16,6 +16,7 @@ namespace JetHorizon.Simulation
         public float Distance { get; }
         public int BurstIndex { get; }
         public int RowInBurst { get; }
+        public int AntiCampingTargetLane { get; }
         public int SafeGapStartLane { get; }
         public int ValuableGapStartLane { get; }
         public float SafeCenterX { get; }
@@ -26,6 +27,7 @@ namespace JetHorizon.Simulation
             float distance,
             int burstIndex,
             int rowInBurst,
+            int antiCampingTargetLane,
             int safeGapStartLane,
             int valuableGapStartLane,
             float safeCenterX,
@@ -35,6 +37,7 @@ namespace JetHorizon.Simulation
             Distance = distance;
             BurstIndex = burstIndex;
             RowInBurst = rowInBurst;
+            AntiCampingTargetLane = antiCampingTargetLane;
             SafeGapStartLane = safeGapStartLane;
             ValuableGapStartLane = valuableGapStartLane;
             SafeCenterX = safeCenterX;
@@ -88,6 +91,18 @@ namespace JetHorizon.Simulation
             ? _routes[index]
             : throw new ArgumentOutOfRangeException(nameof(index));
 
+        public bool RejectsStationaryHold(float x, float shipHalfWidth)
+        {
+            if (shipHalfWidth <= 0f) throw new ArgumentOutOfRangeException(nameof(shipHalfWidth));
+            for (int i = 0; i < _features.Length; i++)
+                if (Math.Abs(_features[i].CenterX - x) <= Math.Max(
+                    .1f,
+                    _features[i].HalfWidth + shipHalfWidth
+                        - RandomConeFormationPlanner.CollisionVisualInset))
+                    return true;
+            return false;
+        }
+
         internal TerrainWorldFeature[] CopyFeatures() => (TerrainWorldFeature[])_features.Clone();
         internal WorldParcelRoutePlan[] CopyRoutes() => (WorldParcelRoutePlan[])_routes.Clone();
     }
@@ -112,10 +127,17 @@ namespace JetHorizon.Simulation
         public const float ReferenceForwardSpeed = 128f;
         public const float NominalInBurstSpacing = 64f;
         public const float InterBurstSpacing = 180f;
+        public const float StationaryHoldMinimumX = -32f;
+        public const float StationaryHoldMaximumX = 32f;
+        public const float CollisionVisualInset = 1.25f;
 
         const float InitialLeadDistance = 30f;
         const float ExitClearDistance = 72f;
         static readonly int[] SlalomGapStarts = { 5, 6, 7, 12, 13, 14, 7, 6, 5 };
+        // The GitHub generator defeats camping by rebuilding every lane around
+        // predicted ship X. A prebuilt finite wave cannot chase after reveal, so
+        // these anchors provide the equivalent guarantee across the whole field.
+        static readonly int[] AntiCampingTargetLanes = { 12, 15, 18, 0, 3, 6, 20, 9, 10 };
         static readonly TerrainWorldFeatureKind[] Silhouettes =
         {
             TerrainWorldFeatureKind.WaterlineSpire,
@@ -161,6 +183,9 @@ namespace JetHorizon.Simulation
 
                 int safeGapStart = SlalomGapStarts[rowIndex];
                 if ((variant & 1) != 0) safeGapStart = LaneCount - 2 - safeGapStart;
+                int antiCampingTargetLane = AntiCampingTargetLanes[rowIndex];
+                if ((variant & 1) != 0)
+                    antiCampingTargetLane = LaneCount - 1 - antiCampingTargetLane;
                 int direction = safeGapStart < (LaneCount - 2) / 2 ? -1 : 1;
                 int valuableGapStart = Math.Max(
                     0,
@@ -168,10 +193,7 @@ namespace JetHorizon.Simulation
                 ShuffleLanes(random, laneScratch);
                 int targetCount = MaximumBlockersPerRow;
                 var blocked = new List<int>(MaximumBlockersPerRow);
-                // A center blocker is mandatory. The endless source only guaranteed
-                // an opening; a finite slalom must also prove that holding neutral
-                // cannot accidentally clear every row.
-                blocked.Add((LaneCount - 1) / 2);
+                blocked.Add(antiCampingTargetLane);
                 for (int i = 0; i < laneScratch.Length && blocked.Count < targetCount; i++)
                 {
                     int lane = laneScratch[i];
@@ -199,6 +221,7 @@ namespace JetHorizon.Simulation
                     rowDistance,
                     burstIndex,
                     rowInBurst,
+                    antiCampingTargetLane,
                     safeGapStart,
                     valuableGapStart,
                     safeCenter,
@@ -221,7 +244,7 @@ namespace JetHorizon.Simulation
                     int lane = blocked[blockedIndex];
                     float x = LaneCenterX(lane) + (random.NextFloat() - .5f) * .6f;
                     float zJitter = (random.NextFloat() - .5f) * 6f;
-                    float halfWidth = 2.8f + random.NextFloat() * .8f;
+                    float halfWidth = 5.2f + random.NextFloat() * .6f;
                     float halfDepth = 3.4f + random.NextFloat() * 1.8f;
                     float height = 9f + random.NextFloat() * 9f;
                     int silhouetteIndex = (variant * 3 + rowIndex + blockedIndex) % Silhouettes.Length;
@@ -239,6 +262,23 @@ namespace JetHorizon.Simulation
             }
 
             float length = rowDistance - localStart + ExitClearDistance * paceScale;
+            for (float x = StationaryHoldMinimumX; x <= StationaryHoldMaximumX + .01f; x += .25f)
+            {
+                bool rejected = false;
+                for (int featureIndex = 0; featureIndex < features.Count; featureIndex++)
+                    if (Math.Abs(features[featureIndex].CenterX - x)
+                        <= Math.Max(
+                            .1f,
+                            features[featureIndex].HalfWidth + capability.CollisionHalfWidth
+                                - CollisionVisualInset))
+                    {
+                        rejected = true;
+                        break;
+                    }
+                if (!rejected)
+                    throw new InvalidOperationException(
+                        "Random-cone formation leaves a stationary hold at X=" + x.ToString("0.00") + ".");
+            }
             var routes = new[]
             {
                 new WorldParcelRoutePlan("random-cones.safe", CargoWaveRouteRole.Safe, safePoints),

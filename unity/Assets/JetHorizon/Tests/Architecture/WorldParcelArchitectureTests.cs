@@ -67,11 +67,11 @@ namespace JetHorizon.Tests.Architecture
                 Assert.That(row.RowInBurst, Is.EqualTo(rowIndex % RandomConeFormationPlanner.RowsPerBurst));
                 Assert.That(row.BlockedCount,
                     Is.EqualTo(RandomConeFormationPlanner.MaximumBlockersPerRow));
-                bool centerIsBlocked = false;
+                bool antiCampingTargetIsBlocked = false;
                 for (int i = 0; i < row.BlockedCount; i++)
                 {
                     int lane = row.GetBlockedLane(i);
-                    centerIsBlocked |= lane == (RandomConeFormationPlanner.LaneCount - 1) / 2;
+                    antiCampingTargetIsBlocked |= lane == row.AntiCampingTargetLane;
                     Assert.That(lane, Is.Not.EqualTo(row.SafeGapStartLane));
                     Assert.That(lane, Is.Not.EqualTo(row.SafeGapStartLane + 1));
                     Assert.That(lane, Is.Not.EqualTo(row.ValuableGapStartLane));
@@ -80,7 +80,8 @@ namespace JetHorizon.Tests.Architecture
                         Assert.That(Math.Abs(lane - row.GetBlockedLane(j)),
                             Is.GreaterThanOrEqualTo(RandomConeFormationPlanner.MinimumLaneGap));
                 }
-                Assert.That(centerIsBlocked, Is.True, "neutral must fail on row " + rowIndex);
+                Assert.That(antiCampingTargetIsBlocked, Is.True,
+                    "anti-camping target must be present on row " + rowIndex);
 
                 for (int featureIndex = 0; featureIndex < plan.FeatureCount; featureIndex++)
                 {
@@ -96,6 +97,57 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(plan.GetRow(0).SafeCenterX, Is.LessThan(0f));
             Assert.That(plan.GetRow(3).SafeCenterX, Is.GreaterThan(0f));
             Assert.That(plan.GetRow(6).SafeCenterX, Is.LessThan(0f));
+        }
+
+        [Test]
+        public void RandomConeFormation_RejectsEveryStationaryHoldAcrossThePlayableWidth()
+        {
+            for (int variant = 0; variant < 4; variant++)
+            {
+                RandomConeFormationPlan plan = new RandomConeFormationPlanner().Create(
+                    340f,
+                    0f,
+                    TerrainWorldPaceRules.MaximumSpeedForHeat(variant),
+                    Capability,
+                    1810 + variant * 97,
+                    variant);
+                for (float x = RandomConeFormationPlanner.StationaryHoldMinimumX;
+                    x <= RandomConeFormationPlanner.StationaryHoldMaximumX + .01f;
+                    x += .25f)
+                {
+                    Assert.That(plan.RejectsStationaryHold(x, Capability.CollisionHalfWidth),
+                        Is.True,
+                        "variant " + variant + " leaves stationary X=" + x.ToString("0.00"));
+                }
+            }
+        }
+
+        [Test]
+        public void ObstacleAlgorithmBank_IndexesGithubPatternsWithoutActivatingThem()
+        {
+            Assert.That(ObstacleAlgorithmBank.Count, Is.GreaterThanOrEqualTo(20));
+            var ids = new System.Collections.Generic.HashSet<ObstacleAlgorithmId>();
+            int active = 0;
+            for (int i = 0; i < ObstacleAlgorithmBank.Count; i++)
+            {
+                ObstacleAlgorithmDescriptor algorithm = ObstacleAlgorithmBank.Get(i);
+                Assert.That(ids.Add(algorithm.Id), Is.True, "duplicate " + algorithm.Id);
+                Assert.That(algorithm.SourceFile, Does.StartWith("src/"));
+                Assert.That(algorithm.PatternRule, Is.Not.Empty);
+                Assert.That(algorithm.AntiCampingRule, Is.Not.Empty);
+                if (algorithm.ActiveInRockProof) active++;
+            }
+
+            ObstacleAlgorithmDescriptor randomCones = ObstacleAlgorithmBank.Get(
+                ObstacleAlgorithmId.RandomConeRows);
+            Assert.That(randomCones.Targeting, Is.EqualTo(ObstacleTargetingMode.ShipRelativePredicted));
+            Assert.That(randomCones.CoreOwner, Is.EqualTo("RandomConeFormationPlanner"));
+            Assert.That(active, Is.EqualTo(1));
+            Assert.That(randomCones.ActiveInRockProof, Is.True);
+            Assert.That(ObstacleAlgorithmBank.Get(ObstacleAlgorithmId.LightningPinch).ActiveInRockProof,
+                Is.False);
+            Assert.That(ObstacleAlgorithmBank.Get(ObstacleAlgorithmId.ZipperAlternatingGates).ActiveInRockProof,
+                Is.False);
         }
 
         [Test]
