@@ -66,6 +66,30 @@ namespace JetHorizon.Simulation
         }
     }
 
+    public readonly struct TerrainRouteSectionSnapshot
+    {
+        public TerrainRouteKind Kind { get; }
+        public float Distance { get; }
+        public float Z { get; }
+        public float LeftX { get; }
+        public float RightX { get; }
+        public float CeilingHeight { get; }
+
+        internal TerrainRouteSectionSnapshot(
+            TerrainRouteSection source,
+            float worldStartDistance,
+            float runDistance,
+            float shipZ)
+        {
+            Kind = source.Kind;
+            Distance = source.Distance;
+            Z = shipZ - ((worldStartDistance + source.Distance) - runDistance);
+            LeftX = source.LeftX;
+            RightX = source.RightX;
+            CeilingHeight = source.CeilingHeight;
+        }
+    }
+
     public readonly struct TerrainWorldState
     {
         public string WorldId { get; }
@@ -386,6 +410,22 @@ namespace JetHorizon.Simulation
             return count;
         }
 
+        public int WriteRouteSections(
+            float runDistance,
+            float shipZ,
+            TerrainRouteSectionSnapshot[] destination)
+        {
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+            int count = Math.Min(destination.Length, _world.RouteSectionCount);
+            for (int i = 0; i < count; i++)
+                destination[i] = new TerrainRouteSectionSnapshot(
+                    _world.GetRouteSection(i),
+                    _world.StartDistance,
+                    runDistance,
+                    shipZ);
+            return count;
+        }
+
         public int WriteQueuedSections(
             float runDistance,
             float shipZ,
@@ -420,6 +460,23 @@ namespace JetHorizon.Simulation
             return count;
         }
 
+        public int WriteQueuedRouteSections(
+            float runDistance,
+            float shipZ,
+            TerrainRouteSectionSnapshot[] destination)
+        {
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+            if (_queuedWorld == null) return 0;
+            int count = Math.Min(destination.Length, _queuedWorld.RouteSectionCount);
+            for (int i = 0; i < count; i++)
+                destination[i] = new TerrainRouteSectionSnapshot(
+                    _queuedWorld.GetRouteSection(i),
+                    _queuedWorld.StartDistance,
+                    runDistance,
+                    shipZ);
+            return count;
+        }
+
         int FindRegion(float localDistance)
         {
             if (localDistance <= 0f) return 0;
@@ -441,6 +498,31 @@ namespace JetHorizon.Simulation
             float bodyHalfWidth = _capability.CollisionHalfWidth * .65f;
             float shipHalfWidth = _capability.CollisionHalfWidth
                 + (bodyHalfWidth - _capability.CollisionHalfWidth) * rollFraction;
+            if (_world.HasRoutePassagesAt(localDistance))
+            {
+                if (!ContainsShip(TerrainRouteKind.SafeCanyon)
+                    && !ContainsShip(TerrainRouteKind.KnifeEdgeTunnel)
+                    && !ContainsShip(TerrainRouteKind.CargoChannel))
+                {
+                    collisionId = 720000 + Math.Max(0, FindSection(localDistance));
+                    collisionCenterX = shipX;
+                    return true;
+                }
+                collisionId = 0;
+                collisionCenterX = 0f;
+                return false;
+
+                bool ContainsShip(TerrainRouteKind kind)
+                {
+                    if (!_world.TryGetRoutePassage(kind, localDistance, out float left, out float right, out _))
+                        return false;
+                    // Route walls use the same visual inset convention as the outer
+                    // shoreline: collision occurs inside the terrain silhouette,
+                    // never in apparently empty water before the faceted wall.
+                    return shipX - shipHalfWidth > left - ShoreCollisionVisualInset
+                        && shipX + shipHalfWidth < right + ShoreCollisionVisualInset;
+                }
+            }
             // The presentation's source-parity face has seeded facet displacement.
             // Move gameplay collision slightly into the land so a collision can never
             // occur in water immediately before the visible face reaches the ship.

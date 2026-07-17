@@ -240,7 +240,8 @@ namespace JetHorizon.Simulation
                 _config.MaxCorridorSlices,
                 _config.MaxGates,
                 _config.MaxTerrainWorldSections,
-                _config.MaxTerrainWorldFeatures);
+                _config.MaxTerrainWorldFeatures,
+                _config.MaxTerrainRouteSections);
             Events = new SimulationEventBuffer(64);
             StageCommands = new StageCommandBuffer(16);
             ResetToTitle();
@@ -2564,6 +2565,12 @@ namespace JetHorizon.Simulation
                     _config.ShipZ,
                     Snapshot.TerrainWorldFeatureBuffer)
                 : 0;
+            Snapshot.TerrainRouteSectionCount = _terrainWorld != null
+                ? _terrainWorld.WriteRouteSections(
+                    _distance,
+                    _config.ShipZ,
+                    Snapshot.TerrainRouteSectionBuffer)
+                : 0;
             TerrainWorldPlan queuedTerrainWorld = _terrainWorld?.QueuedWorld;
             Snapshot.QueuedTerrainWorldId = queuedTerrainWorld?.Id ?? string.Empty;
             Snapshot.QueuedTerrainWorldStartDistance = queuedTerrainWorld?.StartDistance ?? 0f;
@@ -2579,6 +2586,12 @@ namespace JetHorizon.Simulation
                     _distance,
                     _config.ShipZ,
                     Snapshot.QueuedTerrainWorldFeatureBuffer)
+                : 0;
+            Snapshot.QueuedTerrainRouteSectionCount = _terrainWorld != null
+                ? _terrainWorld.WriteQueuedRouteSections(
+                    _distance,
+                    _config.ShipZ,
+                    Snapshot.QueuedTerrainRouteSectionBuffer)
                 : 0;
             bool gateExtractionVisible = false;
             float gateExtractionX = 0f;

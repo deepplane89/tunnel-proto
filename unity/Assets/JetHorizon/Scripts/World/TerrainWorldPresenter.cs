@@ -83,6 +83,9 @@ namespace JetHorizon
             int featureCount = queued
                 ? snapshot.QueuedTerrainWorldFeatureCount
                 : snapshot.TerrainWorldFeatureCount;
+            int routeSectionCount = queued
+                ? snapshot.QueuedTerrainRouteSectionCount
+                : snapshot.TerrainRouteSectionCount;
             if (string.IsNullOrEmpty(id) || sectionCount < 2) return null;
 
             var built = new BuiltWorld
@@ -143,6 +146,16 @@ namespace JetHorizon
                 Quaternion.identity,
                 new Vector3(-1f, 1f, 1f));
 
+            if (routeSectionCount > 0)
+            {
+                var routeSections = new List<TerrainRouteSectionSnapshot>(routeSectionCount);
+                for (int i = 0; i < routeSectionCount; i++)
+                    routeSections.Add(queued
+                        ? snapshot.GetQueuedTerrainRouteSection(i)
+                        : snapshot.GetTerrainRouteSection(i));
+                BuildRouteJunction(built, routeSections);
+            }
+
             for (int i = 0; i < featureCount; i++)
             {
                 TerrainWorldFeatureSnapshot feature = queued
@@ -154,6 +167,99 @@ namespace JetHorizon
                     BuildWaterlineFormation(built, feature);
             }
             return built;
+        }
+
+        void BuildRouteJunction(BuiltWorld world, List<TerrainRouteSectionSnapshot> routeSections)
+        {
+            var safe = new List<TerrainRouteSectionSnapshot>();
+            var knife = new List<TerrainRouteSectionSnapshot>();
+            var cargo = new List<TerrainRouteSectionSnapshot>();
+            for (int i = 0; i < routeSections.Count; i++)
+            {
+                TerrainRouteSectionSnapshot section = routeSections[i];
+                if (section.Kind == TerrainRouteKind.SafeCanyon) safe.Add(section);
+                else if (section.Kind == TerrainRouteKind.KnifeEdgeTunnel) knife.Add(section);
+                else if (section.Kind == TerrainRouteKind.CargoChannel) cargo.Add(section);
+            }
+            if (safe.Count < 2 || knife.Count != safe.Count || cargo.Count != safe.Count) return;
+
+            var ordered = new List<List<TerrainRouteSectionSnapshot>> { safe, knife, cargo };
+            ordered.Sort((a, b) =>
+            {
+                float aCenter = (a[0].LeftX + a[0].RightX) * .5f;
+                float bCenter = (b[0].LeftX + b[0].RightX) * .5f;
+                return aCenter.CompareTo(bCenter);
+            });
+
+            // Two geological dividers fill the spaces between the three core-owned
+            // passages. Both exposed sides receive the source faceted face, so this
+            // reads as one monumental wall with holes rather than obstacle props.
+            BuildDivider(world, ordered[0], ordered[1], "Route divider A", 1801);
+            BuildDivider(world, ordered[1], ordered[2], "Route divider B", 1907);
+            BuildKnifeEdgeCrowns(world, knife);
+        }
+
+        void BuildDivider(
+            BuiltWorld world,
+            List<TerrainRouteSectionSnapshot> leftRoute,
+            List<TerrainRouteSectionSnapshot> rightRoute,
+            string label,
+            int seed)
+        {
+            var leftFace = new List<FacetMassStation>(leftRoute.Count);
+            var rightFaceMirrored = new List<FacetMassStation>(leftRoute.Count);
+            for (int i = leftRoute.Count - 1; i >= 0; i--)
+            {
+                TerrainRouteSectionSnapshot left = leftRoute[i];
+                TerrainRouteSectionSnapshot right = rightRoute[i];
+                float innerLeft = left.RightX;
+                float innerRight = right.LeftX;
+                // Passage overlap at the entrance/exit becomes a tiny buried seam;
+                // once the routes separate, this grows into one continuous terrain
+                // mass. It avoids a visible hard pop at the first opening.
+                float depth = Mathf.Max(2f, innerRight - innerLeft);
+                float height = 84f;
+                float z = -left.Distance;
+                leftFace.Add(new FacetMassStation(z, innerLeft, height, depth));
+                rightFaceMirrored.Add(new FacetMassStation(z, -innerRight, height, depth));
+            }
+            FacetSurfaceStyle style = FacetSurfaceStyle.ThreeJsSource;
+            AddMesh(
+                world,
+                label + " left face",
+                FacetTerrainMeshFactory.BuildMass(leftFace, style, seed, "JH_" + label + "Left"),
+                new Vector3(0f, -5f, 0f),
+                Quaternion.identity,
+                Vector3.one);
+            AddMesh(
+                world,
+                label + " right face",
+                FacetTerrainMeshFactory.BuildMass(rightFaceMirrored, style, seed + 47, "JH_" + label + "Right"),
+                new Vector3(0f, -5f, 0f),
+                Quaternion.identity,
+                new Vector3(-1f, 1f, 1f));
+        }
+
+        void BuildKnifeEdgeCrowns(BuiltWorld world, List<TerrainRouteSectionSnapshot> knife)
+        {
+            FacetSurfaceStyle style = FacetSurfaceStyle.ThreeJsSource;
+            for (int i = 1; i < knife.Count - 1; i++)
+            {
+                TerrainRouteSectionSnapshot section = knife[i];
+                if (section.CeilingHeight <= 0f || (i & 1) == 0) continue;
+                float span = section.RightX - section.LeftX + 10f;
+                Mesh crown = FacetTerrainMeshFactory.BuildThreeJsParitySlab(style, 2101 + i * 31);
+                AddMesh(
+                    world,
+                    "Knife-edge tunnel crown " + i,
+                    crown,
+                    new Vector3(
+                        (section.LeftX + section.RightX) * .5f - span * .5f,
+                        section.CeilingHeight - 6f,
+                        -section.Distance),
+                    Quaternion.Euler(0f, 90f, 0f),
+                    new Vector3(.52f, .30f, span / style.Length));
+            }
         }
 
         void BuildWaterlineFormation(BuiltWorld world, TerrainWorldFeatureSnapshot feature)

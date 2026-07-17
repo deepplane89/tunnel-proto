@@ -115,6 +115,7 @@ namespace JetHorizon
                 MaxCorridorSlices = 96,
                 MaxTerrainWorldSections = 64,
                 MaxTerrainWorldFeatures = 8,
+                MaxTerrainRouteSections = 48,
                 CargoCapacity = launchProfile.CargoCapacity,
                 HullHitCapacity = launchProfile.CollisionHitCapacity,
                 FirstExtractionDistance = 650f,

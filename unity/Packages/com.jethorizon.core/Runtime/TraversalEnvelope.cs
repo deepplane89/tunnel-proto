@@ -346,6 +346,32 @@ namespace JetHorizon.Simulation
             float shipHalfWidth,
             out float clearance)
         {
+            if (world.HasRoutePassagesAt(distance))
+            {
+                bool insideAnyPassage = false;
+                float bestClearance = -1f;
+                TryRoute(TerrainRouteKind.SafeCanyon);
+                TryRoute(TerrainRouteKind.KnifeEdgeTunnel);
+                TryRoute(TerrainRouteKind.CargoChannel);
+                if (!insideAnyPassage)
+                {
+                    clearance = -1f;
+                    return false;
+                }
+                clearance = bestClearance;
+                return true;
+
+                void TryRoute(TerrainRouteKind kind)
+                {
+                    if (!world.TryGetRoutePassage(kind, distance, out float routeLeft, out float routeRight, out _))
+                        return;
+                    float left = routeLeft + shipHalfWidth + TraversalEnvelopeRules.SafetyMargin;
+                    float right = routeRight - shipHalfWidth - TraversalEnvelopeRules.SafetyMargin;
+                    if (shipX < left || shipX > right) return;
+                    insideAnyPassage = true;
+                    bestClearance = Math.Max(bestClearance, Math.Min(shipX - left, right - shipX));
+                }
+            }
             SampleShore(world, distance, out float leftShore, out float rightShore);
             float left = leftShore + shipHalfWidth + TraversalEnvelopeRules.SafetyMargin;
             float right = rightShore - shipHalfWidth - TraversalEnvelopeRules.SafetyMargin;

@@ -643,8 +643,10 @@ namespace JetHorizon.Simulation
         readonly GateSnapshot[] _gates;
         readonly TerrainWorldSectionSnapshot[] _terrainWorldSections;
         readonly TerrainWorldFeatureSnapshot[] _terrainWorldFeatures;
+        readonly TerrainRouteSectionSnapshot[] _terrainRouteSections;
         readonly TerrainWorldSectionSnapshot[] _queuedTerrainWorldSections;
         readonly TerrainWorldFeatureSnapshot[] _queuedTerrainWorldFeatures;
+        readonly TerrainRouteSectionSnapshot[] _queuedTerrainRouteSections;
 
         public CoreGamePhase Phase { get; internal set; }
         public long Tick { get; internal set; }
@@ -721,11 +723,13 @@ namespace JetHorizon.Simulation
         public int GateCount { get; internal set; }
         public int TerrainWorldSectionCount { get; internal set; }
         public int TerrainWorldFeatureCount { get; internal set; }
+        public int TerrainRouteSectionCount { get; internal set; }
         public string QueuedTerrainWorldId { get; internal set; }
         public float QueuedTerrainWorldStartDistance { get; internal set; }
         public float QueuedTerrainWorldLength { get; internal set; }
         public int QueuedTerrainWorldSectionCount { get; internal set; }
         public int QueuedTerrainWorldFeatureCount { get; internal set; }
+        public int QueuedTerrainRouteSectionCount { get; internal set; }
         public float ShieldSeconds { get; internal set; }
         public int ShieldHits { get; internal set; }
         public float LaserSeconds { get; internal set; }
@@ -763,7 +767,8 @@ namespace JetHorizon.Simulation
             int maxCorridorSlices,
             int maxGates = 16,
             int maxTerrainWorldSections = 64,
-            int maxTerrainWorldFeatures = 8)
+            int maxTerrainWorldFeatures = 8,
+            int maxTerrainRouteSections = 48)
         {
             _hazards = new HazardSnapshot[maxHazards];
             _pickups = new PickupSnapshot[maxPickups];
@@ -771,8 +776,10 @@ namespace JetHorizon.Simulation
             _gates = new GateSnapshot[maxGates];
             _terrainWorldSections = new TerrainWorldSectionSnapshot[maxTerrainWorldSections];
             _terrainWorldFeatures = new TerrainWorldFeatureSnapshot[maxTerrainWorldFeatures];
+            _terrainRouteSections = new TerrainRouteSectionSnapshot[maxTerrainRouteSections];
             _queuedTerrainWorldSections = new TerrainWorldSectionSnapshot[maxTerrainWorldSections];
             _queuedTerrainWorldFeatures = new TerrainWorldFeatureSnapshot[maxTerrainWorldFeatures];
+            _queuedTerrainRouteSections = new TerrainRouteSectionSnapshot[maxTerrainRouteSections];
         }
 
         public HazardSnapshot GetHazard(int index)
@@ -815,6 +822,14 @@ namespace JetHorizon.Simulation
 
         internal TerrainWorldFeatureSnapshot[] TerrainWorldFeatureBuffer => _terrainWorldFeatures;
 
+        public TerrainRouteSectionSnapshot GetTerrainRouteSection(int index)
+        {
+            if (index < 0 || index >= TerrainRouteSectionCount) throw new ArgumentOutOfRangeException(nameof(index));
+            return _terrainRouteSections[index];
+        }
+
+        internal TerrainRouteSectionSnapshot[] TerrainRouteSectionBuffer => _terrainRouteSections;
+
         public TerrainWorldSectionSnapshot GetQueuedTerrainWorldSection(int index)
         {
             if (index < 0 || index >= QueuedTerrainWorldSectionCount) throw new ArgumentOutOfRangeException(nameof(index));
@@ -830,6 +845,14 @@ namespace JetHorizon.Simulation
         }
 
         internal TerrainWorldFeatureSnapshot[] QueuedTerrainWorldFeatureBuffer => _queuedTerrainWorldFeatures;
+
+        public TerrainRouteSectionSnapshot GetQueuedTerrainRouteSection(int index)
+        {
+            if (index < 0 || index >= QueuedTerrainRouteSectionCount) throw new ArgumentOutOfRangeException(nameof(index));
+            return _queuedTerrainRouteSections[index];
+        }
+
+        internal TerrainRouteSectionSnapshot[] QueuedTerrainRouteSectionBuffer => _queuedTerrainRouteSections;
 
         public CorridorSliceSnapshot GetCorridorSlice(int index)
         {

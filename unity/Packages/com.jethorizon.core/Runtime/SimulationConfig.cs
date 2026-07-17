@@ -71,6 +71,7 @@ namespace JetHorizon.Simulation
         public int MaxGates = 16;
         public int MaxTerrainWorldSections = 64;
         public int MaxTerrainWorldFeatures = 8;
+        public int MaxTerrainRouteSections = 48;
         public int CargoCapacity = 18;
         public int HullHitCapacity = 1;
         public float FirstExtractionDistance = 650f;
@@ -126,6 +127,7 @@ namespace JetHorizon.Simulation
             if (MaxGates < 8) throw new InvalidOperationException("MaxGates must be at least eight.");
             if (MaxTerrainWorldSections < 16) throw new InvalidOperationException("MaxTerrainWorldSections must be at least sixteen.");
             if (MaxTerrainWorldFeatures < 1) throw new InvalidOperationException("MaxTerrainWorldFeatures must be positive.");
+            if (MaxTerrainRouteSections < 6) throw new InvalidOperationException("MaxTerrainRouteSections must allow at least two sections per route.");
             if (CargoCapacity <= 0) throw new InvalidOperationException("CargoCapacity must be positive.");
             if (HullHitCapacity <= 0) throw new InvalidOperationException("HullHitCapacity must be positive.");
             if (FirstExtractionDistance <= 0f) throw new InvalidOperationException("FirstExtractionDistance must be positive.");
