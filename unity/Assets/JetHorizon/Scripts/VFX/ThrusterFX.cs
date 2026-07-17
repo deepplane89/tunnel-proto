@@ -157,7 +157,7 @@ namespace JetHorizon
             _thrusterLight = lightGo.AddComponent<Light>();
             _thrusterLight.type = LightType.Point;
             _thrusterLight.color = Color.Lerp(_color, Color.white, 0.18f);
-            _thrusterLight.range = 5.5f;
+            _thrusterLight.range = 7.5f;
             _thrusterLight.intensity = 0f;
             _thrusterLight.shadows = LightShadows.None;
             _thrusterLight.renderMode = LightRenderMode.ForcePixel;
@@ -434,7 +434,7 @@ namespace JetHorizon
             {
                 _thrusterLight.transform.localPosition = Vector3.Lerp(nozzleL, nozzleR, 0.5f) + new Vector3(0f, 0.08f, 0.12f);
                 _thrusterLight.color = Color.Lerp(_color, Color.white, 0.18f);
-                _thrusterLight.intensity = Mathf.Lerp(1.2f, 2.2f, speedFrac) * pulseWave;
+                _thrusterLight.intensity = Mathf.Lerp(1.8f, 3.4f, speedFrac) * pulseWave;
             }
         }
 

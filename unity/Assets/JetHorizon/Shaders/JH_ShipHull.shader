@@ -84,7 +84,10 @@ Shader "JH/ShipHull"
 
                 float3 viewDirection = normalize(GetCameraPositionWS() - IN.positionWS);
                 Light mainLight = GetMainLight();
-                half3 color = albedo * half3(0.16, 0.18, 0.24);
+                // Keep the dark metal body, but retain enough cool ambient response
+                // that the hull does not disappear whenever it turns away from the
+                // sun. Direct lights still provide the main silhouette definition.
+                half3 color = albedo * half3(0.23, 0.28, 0.38);
                 color += EvaluateLight(mainLight, n, viewDirection, albedo, panel);
                 #if defined(_ADDITIONAL_LIGHTS)
                     uint lightCount = GetAdditionalLightsCount();
@@ -92,8 +95,8 @@ Shader "JH/ShipHull"
                         color += EvaluateLight(GetAdditionalLight(i, IN.positionWS), n, viewDirection, albedo, panel);
                 #endif
                 float fresnel = pow(1.0 - saturate(dot(n, viewDirection)), 4.0);
-                color += _AccentColor.rgb * fresnel * 0.16;
-                color += _AccentColor.rgb * panel * _PanelStrength * 0.10;
+                color += _AccentColor.rgb * fresnel * 0.30;
+                color += _AccentColor.rgb * panel * _PanelStrength * 0.18;
                 return half4(color, 1.0);
             }
             ENDHLSL

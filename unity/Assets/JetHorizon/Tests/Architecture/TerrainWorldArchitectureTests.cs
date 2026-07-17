@@ -99,6 +99,24 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
+        public void CourseCatalog_RotatesSixAuthoredArchetypesBeforeChangingCircuit()
+        {
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
+            {
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f
+            });
+            var observed = new System.Collections.Generic.HashSet<TerrainCourseKind>();
+            for (int sector = 0; sector < 6; sector++)
+                observed.Add(TerrainWorldCatalog.CreateProofWorld(sector, sector * 4120f, capability).Course);
+
+            Assert.That(observed.Count, Is.EqualTo(6));
+            TerrainWorldPlan firstCircuitEnd = TerrainWorldCatalog.CreateProofWorld(5, 0f, capability);
+            TerrainWorldPlan nextCircuitStart = TerrainWorldCatalog.CreateProofWorld(6, firstCircuitEnd.Length, capability);
+            Assert.That(nextCircuitStart.Course, Is.Not.EqualTo(TerrainCourseKind.ThreeHoleApproach));
+        }
+
+        [Test]
         public void TerrainWorld_PublishesOnePersistentTopologyAndNoLegacyGates()
         {
             JetHorizonSimulation simulation = CreateTerrainSimulation();

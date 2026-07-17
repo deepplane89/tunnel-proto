@@ -33,7 +33,10 @@ namespace JetHorizon.Simulation
     {
         ThreeHoleApproach,
         InvertedKnifeRun,
-        BasinSwitchback
+        BasinSwitchback,
+        StormFrontFork,
+        OuterRimSlalom,
+        LongKnifePass
     }
 
     public enum TerrainWorldFeatureKind
@@ -466,8 +469,12 @@ namespace JetHorizon.Simulation
         {
             int heat = Math.Max(0, Math.Min(5, sector));
             float mirror = (sector & 1) == 0 ? 1f : -1f;
-            int layout = sector % 3;
-            TerrainCourseKind course = (TerrainCourseKind)layout;
+            // Six authored course archetypes rotate with a changing offset each
+            // circuit. There is no one-world loop hidden behind new random seeds.
+            int courseCircuit = Math.Max(0, sector) / 6;
+            int courseIndex = (Math.Max(0, sector) + courseCircuit * 2) % 6;
+            int layout = courseIndex % 3;
+            TerrainCourseKind course = (TerrainCourseKind)courseIndex;
             float designSpeed = TerrainWorldPaceRules.MaximumSpeedForHeat(heat);
             const float openWaterReturnStart = 3190f;
             const float openWaterReturnLength = 430f;
@@ -626,6 +633,15 @@ namespace JetHorizon.Simulation
                     86f + heightWave, 89f - heightWave * .55f, 155f);
             }
 
+            // A true release basin: walls fall away before the open-water region,
+            // so a route exit reads as daylight and horizon returning, not another
+            // arbitrary gap between scrolling canyon pieces.
+            Shore(3000f, TerrainRegionKind.ConvergenceBasin,
+                -118f, 120f, 45f, 47f, 165f);
+            Shore(3100f, TerrainRegionKind.ConvergenceBasin,
+                -138f, 140f, 24f, 27f, 175f);
+            Shore(openWaterReturnStart, TerrainRegionKind.OpenSea,
+                -148f, 150f, 12f, 14f, 180f);
             for (int i = 1; i <= 4; i++)
             {
                 float t = i / 5f;
@@ -705,6 +721,36 @@ namespace JetHorizon.Simulation
                     knifeCenters[i] -= switchback;
                     safeCenters[i] += switchback * .70f;
                     cargoCenters[i] -= switchback * .90f;
+                }
+            }
+            if (courseIndex == 3)
+            {
+                for (int i = 0; i < routeDistances.Length; i++)
+                {
+                    float stormSway = (float)Math.Sin(i * .52f + .45f) * 5f;
+                    safeCenters[i] += stormSway;
+                    cargoCenters[i] += stormSway * .45f;
+                    knifeCenters[i] += stormSway * .35f;
+                }
+            }
+            else if (courseIndex == 4)
+            {
+                for (int i = 0; i < routeDistances.Length; i++)
+                {
+                    float t = i / (float)(routeDistances.Length - 1);
+                    float rimArc = (float)Math.Sin(t * Math.PI) * 9f;
+                    safeCenters[i] -= rimArc;
+                    cargoCenters[i] -= rimArc * .35f;
+                    knifeCenters[i] += rimArc * .30f;
+                }
+            }
+            else if (courseIndex == 5)
+            {
+                for (int i = 0; i < routeDistances.Length; i++)
+                {
+                    float t = i / (float)(routeDistances.Length - 1);
+                    knifeCenters[i] += (float)Math.Sin(t * Math.PI * 1.1f) * 5f;
+                    knifeCeilings[i] = Math.Min(48f, knifeCeilings[i] + 4f * (float)Math.Sin(t * Math.PI));
                 }
             }
             var routeSections = new List<TerrainRouteSection>(routeDistances.Length * 3);

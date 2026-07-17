@@ -196,7 +196,34 @@ namespace JetHorizon
             // reads as one monumental wall with holes rather than obstacle props.
             BuildDivider(world, ordered[0], ordered[1], "Route divider A", 1801);
             BuildDivider(world, ordered[1], ordered[2], "Route divider B", 1907);
+            BuildJunctionPortalCrowns(world, ordered);
             BuildKnifeEdgeCrowns(world, knife);
+        }
+
+        void BuildJunctionPortalCrowns(
+            BuiltWorld world,
+            List<List<TerrainRouteSectionSnapshot>> orderedRoutes)
+        {
+            // At the third station the route mouths have separated enough to read
+            // individually. These crowns complete the enormous front wall around
+            // each opening; their height is presentation-only, while the route
+            // graph remains the authority for the actual passage boundaries.
+            const int mouthIndex = 2;
+            FacetSurfaceStyle style = FacetSurfaceStyle.ThreeJsSource;
+            for (int i = 0; i < orderedRoutes.Count; i++)
+            {
+                TerrainRouteSectionSnapshot mouth = orderedRoutes[i][mouthIndex];
+                float span = mouth.RightX - mouth.LeftX + 9f;
+                float center = (mouth.LeftX + mouth.RightX) * .5f;
+                Mesh crown = FacetTerrainMeshFactory.BuildThreeJsParitySlab(style, 2011 + i * 41);
+                AddMesh(
+                    world,
+                    "Junction portal crown " + mouth.Kind,
+                    crown,
+                    new Vector3(center - span * .5f, 56f, -mouth.Distance),
+                    Quaternion.Euler(0f, 90f, 0f),
+                    new Vector3(.62f, .40f, span / style.Length));
+            }
         }
 
         void BuildDivider(
@@ -350,9 +377,12 @@ namespace JetHorizon
             _surface.name = "JH_ContinuousTerrainSurface";
             _surface.wrapMode = TextureWrapMode.Repeat;
             _material.SetTexture("_Surface", _surface);
-            _material.SetColor("_Body", new Color(.045f, .24f, .30f, 1f));
-            _material.SetFloat("_Brightness", .80f);
-            _material.SetFloat("_Emission", .14f);
+            // Match the original canyon slab language: dark crystal body with a
+            // substantial cyan edge contribution. This stays opaque and faceted,
+            // but no longer collapses into near-black between sun highlights.
+            _material.SetColor("_Body", new Color(.025f, .27f, .34f, 1f));
+            _material.SetFloat("_Brightness", .98f);
+            _material.SetFloat("_Emission", .34f);
         }
 
         void AddMesh(
