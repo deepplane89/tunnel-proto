@@ -136,6 +136,38 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
+        public void OpenWaterAndCanyon_CollisionFollowsThePhysicalEnvelope()
+        {
+            var runtime = new TerrainWorldRuntime(Capability);
+            var eventOwner = new JetHorizonSimulation(new SimulationConfig
+            {
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f,
+                TerrainWorldMode = true
+            }, 77u);
+            WorldParcelPlan opening = runtime.World.GetParcel(0);
+            WorldParcelPlan canyon = Find(runtime.World.Parcels, WorldParcelKind.CrystallineCanyon);
+
+            TerrainWorldTickResult water = runtime.Tick(
+                opening.StartDistance + opening.Length * .5f,
+                149f,
+                0f,
+                1f,
+                false,
+                eventOwner.Events);
+            Assert.That(water.CollisionEntered, Is.False, "open water must not inherit transport shores");
+
+            TerrainWorldTickResult wall = runtime.Tick(
+                canyon.StartDistance + canyon.Length * .5f,
+                140f,
+                0f,
+                1f,
+                false,
+                eventOwner.Events);
+            Assert.That(wall.CollisionEntered, Is.True, "canyon shoreline must remain physical");
+        }
+
+        [Test]
         public void RoutePortal_HasMultipleContinuousOpeningsAndNoDeadEnds()
         {
             TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(0, 0f, Capability);
@@ -148,6 +180,28 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(portal.TryGetRoute(CargoWaveRouteRole.Hero, out WorldParcelRoutePlan hero), Is.True);
             Assert.That(safe.PointCount, Is.EqualTo(valuable.PointCount));
             Assert.That(hero.PointCount, Is.EqualTo(safe.PointCount));
+        }
+
+        [Test]
+        public void RoutePortal_BlocksMassBetweenItsAuthoredOpenings()
+        {
+            var runtime = new TerrainWorldRuntime(Capability);
+            var eventOwner = new JetHorizonSimulation(new SimulationConfig
+            {
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f,
+                TerrainWorldMode = true
+            }, 91u);
+            WorldParcelPlan portal = Find(runtime.World.Parcels, WorldParcelKind.RoutePortal);
+            float distance = portal.StartDistance + portal.Length * .5f;
+
+            TerrainWorldTickResult passage = runtime.Tick(
+                distance, -52f, 0f, 1f, false, eventOwner.Events);
+            Assert.That(passage.CollisionEntered, Is.False);
+
+            TerrainWorldTickResult mass = runtime.Tick(
+                distance, 27f, 0f, 1f, false, eventOwner.Events);
+            Assert.That(mass.CollisionEntered, Is.True);
         }
 
         [Test]

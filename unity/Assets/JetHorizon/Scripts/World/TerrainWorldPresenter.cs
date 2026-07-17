@@ -355,27 +355,32 @@ namespace JetHorizon
             BuiltWorld world,
             List<List<TerrainRouteSectionSnapshot>> orderedRoutes)
         {
-            // At the third station the route mouths have separated enough to read
-            // individually. These crowns complete the enormous front wall around
-            // each opening; their height is presentation-only, while the route
-            // graph remains the authority for the actual passage boundaries.
-            const int mouthIndex = 2;
-            for (int i = 0; i < orderedRoutes.Count; i++)
+            // Build both the entrance and exit mouths. The route graph remains
+            // authoritative; these crowns make the finite mass read as a complete
+            // landmark that opens back into water rather than an endless tunnel.
+            int[] mouthIndices = { 2, orderedRoutes[0].Count - 3 };
+            for (int mouth = 0; mouth < mouthIndices.Length; mouth++)
             {
-                TerrainRouteSectionSnapshot mouth = orderedRoutes[i][mouthIndex];
-                FacetSurfaceStyle style = mouth.Kind == TerrainRouteKind.KnifeEdgeTunnel
-                    ? FacetSurfaceStyle.L3KnifeSource
-                    : FacetSurfaceStyle.ThreeJsSource;
-                float span = mouth.RightX - mouth.LeftX + 9f;
-                float center = (mouth.LeftX + mouth.RightX) * .5f;
-                Mesh crown = FacetTerrainMeshFactory.BuildThreeJsParitySlab(style, 2011 + i * 41);
-                AddMesh(
-                    world,
-                    "Junction portal crown " + mouth.Kind,
-                    crown,
-                    new Vector3(center - span * .5f, 56f, -mouth.Distance),
-                    Quaternion.Euler(0f, 90f, 0f),
-                    new Vector3(.62f, .40f, span / style.Length));
+                int mouthIndex = Mathf.Clamp(mouthIndices[mouth], 1, orderedRoutes[0].Count - 2);
+                for (int i = 0; i < orderedRoutes.Count; i++)
+                {
+                    TerrainRouteSectionSnapshot section = orderedRoutes[i][mouthIndex];
+                    FacetSurfaceStyle style = section.Kind == TerrainRouteKind.KnifeEdgeTunnel
+                        ? FacetSurfaceStyle.L3KnifeSource
+                        : FacetSurfaceStyle.ThreeJsSource;
+                    float span = section.RightX - section.LeftX + 9f;
+                    float center = (section.LeftX + section.RightX) * .5f;
+                    Mesh crown = FacetTerrainMeshFactory.BuildThreeJsParitySlab(
+                        style,
+                        2011 + mouth * 173 + i * 41);
+                    AddMesh(
+                        world,
+                        (mouth == 0 ? "Entrance" : "Exit") + " portal crown " + section.Kind,
+                        crown,
+                        new Vector3(center - span * .5f, 56f, -section.Distance),
+                        Quaternion.Euler(0f, 90f, 0f),
+                        new Vector3(.62f, .40f, span / style.Length));
+                }
             }
         }
 
