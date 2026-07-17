@@ -120,7 +120,7 @@ namespace JetHorizon
                 ExtractionWindowLengthDistance = 220f,
                 ExtractionIntervalDistance = 520f,
                 MaximumHeat = 5,
-                PrismaticSineTunnelEnabled = true,
+                PrismaticSineTunnelEnabled = false,
                 ProofEncounterMode = false,
                 GateRunMode = false,
                 TerrainWorldMode = true,

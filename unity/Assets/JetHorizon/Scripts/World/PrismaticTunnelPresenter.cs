@@ -68,27 +68,9 @@ namespace JetHorizon
 
         public void SimTick(float dt)
         {
-            SimulationSnapshot snapshot = GameManager.I != null ? GameManager.I.CoreSnapshot : null;
-            bool active = snapshot != null
-                && snapshot.CoreWorldDirectorEnabled
-                && snapshot.EncounterKind == EncounterKind.PrismaticSineCorridor
-                && (!snapshot.TerrainWorldMode
-                    || snapshot.ActiveTerrainRegion == TerrainRegionKind.PrismaticReach);
-            if (!active)
-            {
-                HardHideAndRelease();
-                return;
-            }
-            EnsureBuilt();
-            if (_renderer == null || _mesh == null)
-            {
-                HardHideAndRelease();
-                return;
-            }
-
-            transform.localPosition = new Vector3(0f, 0f, snapshot.EncounterStartZ);
-            if (_runtimeMaterial != null) _runtimeMaterial.SetFloat(TimeValueId, snapshot.Elapsed);
-            SetVisible(true);
+            // Deliberately disabled. Destroy any mesh or material left by an editor
+            // hot reload so nothing remains in the scene to glint on the horizon.
+            HardHideAndRelease();
         }
 
         void SetVisible(bool visible)

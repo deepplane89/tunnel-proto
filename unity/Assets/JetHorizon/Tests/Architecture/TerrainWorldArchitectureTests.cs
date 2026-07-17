@@ -88,12 +88,12 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
-        public void TerrainWorld_ProgressesThroughStormPrismAndAutomaticBreather()
+        public void TerrainWorld_ProgressesThroughStormOpenWaterAndAutomaticBreather()
         {
             JetHorizonSimulation simulation = CreateTerrainSimulation();
             float startingSpeed = simulation.Snapshot.Speed;
             bool sawStorm = false;
-            bool sawPrismatic = false;
+            bool sawReturnToOpenWater = false;
             bool sawBreather = false;
             string firstWorld = simulation.Snapshot.TerrainWorldId;
 
@@ -101,13 +101,16 @@ namespace JetHorizon.Tests.Architecture
             {
                 simulation.Step(default);
                 sawStorm |= simulation.Snapshot.ActiveTerrainRegion == TerrainRegionKind.StormChannel;
-                sawPrismatic |= simulation.Snapshot.ActiveTerrainRegion == TerrainRegionKind.PrismaticReach;
+                sawReturnToOpenWater |= simulation.Snapshot.Distance >= 2980f
+                    && simulation.Snapshot.ActiveTerrainRegion == TerrainRegionKind.OpenSea;
                 sawBreather |= simulation.Snapshot.ActiveTerrainRegion == TerrainRegionKind.ExtractionBreather;
                 Assert.That(simulation.Snapshot.ExtractionDecisionOpen, Is.False);
+                Assert.That(simulation.Snapshot.CorridorSliceCount, Is.Zero);
+                Assert.That(simulation.Snapshot.SineCorridorActive, Is.False);
             }
 
             Assert.That(sawStorm, Is.True);
-            Assert.That(sawPrismatic, Is.True);
+            Assert.That(sawReturnToOpenWater, Is.True);
             Assert.That(sawBreather, Is.True);
             Assert.That(simulation.Snapshot.TerrainWorldId, Is.EqualTo("terrain-world-01"));
             Assert.That(simulation.Snapshot.GateCount, Is.Zero);

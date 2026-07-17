@@ -325,21 +325,10 @@ namespace JetHorizon.Simulation
         {
             int heat = Math.Max(0, Math.Min(5, sector));
             float mirror = (sector & 1) == 0 ? 1f : -1f;
-            float spacingScale = capability.CruiseSpeed / 42f;
-            EncounterPlan[] encounterPlans = EncounterPlanCatalog.CreateProofSequence(spacingScale);
-            float prismaticLength = 0f;
-            for (int i = 0; i < encounterPlans.Length; i++)
-            {
-                if (encounterPlans[i].Kind != EncounterKind.PrismaticSineCorridor) continue;
-                prismaticLength = encounterPlans[i].Length;
-                break;
-            }
-            if (prismaticLength <= 0f)
-                throw new InvalidOperationException("The terrain world requires a prismatic encounter plan.");
-            const float prismaticStart = 2980f;
-            const float postPrismaticClearance = 140f;
+            const float openWaterReturnStart = 2980f;
+            const float openWaterReturnLength = 640f;
             const float breatherLength = 500f;
-            float breatherStart = prismaticStart + prismaticLength + postPrismaticClearance;
+            const float breatherStart = openWaterReturnStart + openWaterReturnLength;
             float worldLength = breatherStart + breatherLength;
             var regions = new[]
             {
@@ -348,8 +337,8 @@ namespace JetHorizon.Simulation
                 new TerrainWorldRegion(3, TerrainRegionKind.StormChannel,      1200f,  420f, 6f),
                 new TerrainWorldRegion(4, TerrainRegionKind.NaturalArch,       1620f,  260f, 5f),
                 new TerrainWorldRegion(5, TerrainRegionKind.CrystallineCanyon, 1880f, 1100f, 11f),
-                new TerrainWorldRegion(6, TerrainRegionKind.PrismaticReach, prismaticStart,
-                    breatherStart - prismaticStart, 7f),
+                new TerrainWorldRegion(6, TerrainRegionKind.OpenSea,
+                    openWaterReturnStart, openWaterReturnLength, 7f),
                 new TerrainWorldRegion(7, TerrainRegionKind.ExtractionBreather,
                     breatherStart, breatherLength, 0f)
             };
@@ -415,13 +404,13 @@ namespace JetHorizon.Simulation
                     175f));
             }
 
-            for (int i = 1; i <= 8; i++)
+            for (int i = 1; i <= 4; i++)
             {
-                float t = i / 9f;
-                float distance = prismaticStart + (breatherStart - prismaticStart) * t;
-                float center = (float)Math.Sin(t * Math.PI * 2.15 + .25f) * 4f;
-                float halfWidth = 42f + t * 14f;
-                Shore(distance, TerrainRegionKind.PrismaticReach,
+                float t = i / 5f;
+                float distance = openWaterReturnStart + openWaterReturnLength * t;
+                float center = (float)Math.Sin(t * Math.PI * 1.4 + .25f) * 4f;
+                float halfWidth = 48f + t * 20f;
+                Shore(distance, TerrainRegionKind.OpenSea,
                     center - halfWidth, center + halfWidth,
                     35f - t * 10f, 37f - t * 10f, 160f + t * 5f);
             }
