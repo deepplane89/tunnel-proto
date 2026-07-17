@@ -23,6 +23,7 @@ Shader "JH/StableCanyon"
             #pragma vertex vert
             #pragma fragment frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             struct Attributes
             {
@@ -79,10 +80,28 @@ Shader "JH/StableCanyon"
                 // Derivatives keep every generated triangle visually flat without
                 // splitting the seam-locked vertices that make the route watertight.
                 float3 geometricNormal = normalize(cross(ddy(input.positionWS), ddx(input.positionWS)));
-                float facet = 0.67 + 0.33 * abs(dot(
+                float3 viewDirection = SafeNormalize(GetWorldSpaceViewDir(input.positionWS));
+                // Generated terrain is intentionally double-sided. Orient the
+                // derivative normal toward the viewer so either wall receives
+                // the same crisp, low-poly light response.
+                if (dot(geometricNormal, viewDirection) < 0.0)
+                    geometricNormal = -geometricNormal;
+
+                Light keyLight = GetMainLight();
+                float lightFacing = saturate(dot(geometricNormal, keyLight.direction));
+                float3 halfDirection = SafeNormalize(keyLight.direction + viewDirection);
+                // Cyan faces are polished ice; dark plates are glossier obsidian.
+                float gloss = lerp(34.0, 62.0, darkBand);
+                float highlight = pow(saturate(dot(geometricNormal, halfDirection)), gloss);
+                float rim = pow(1.0 - saturate(dot(geometricNormal, viewDirection)), 4.0);
+                float facet = 0.84 + 0.16 * abs(dot(
                     geometricNormal,
                     normalize(float3(0.62, 0.45, 0.65))));
-                half3 crystal = lerp(body, surface, 0.72) * (_Brightness * facet) * input.color.rgb;
+                half3 baseCrystal = lerp(body, surface, 0.72) * input.color.rgb;
+                half3 direct = baseCrystal * (0.26 + lightFacing * keyLight.color * 0.90);
+                half3 specular = keyLight.color * highlight * lerp(0.30, 0.68, darkBand);
+                half3 edgeLight = lerp(half3(0.02, 0.14, 0.20), half3(0.18, 0.015, 0.26), darkBand) * rim;
+                half3 crystal = (direct + specular + edgeLight) * (_Brightness * facet);
                 half emissiveDetail = saturate((max(surface.r, max(surface.g, surface.b)) - 0.06) * 1.6);
                 crystal += surface * _Emission * lerp(0.25, 1.0, emissiveDetail);
                 // Global exponential fog is intentionally excluded here. In the

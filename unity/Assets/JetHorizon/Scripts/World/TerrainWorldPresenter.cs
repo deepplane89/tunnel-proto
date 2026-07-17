@@ -24,7 +24,8 @@ namespace JetHorizon
         BuiltWorld _current;
         BuiltWorld _queued;
         Material _material;
-        Texture2D _surface;
+        Texture2D _cyanSurface;
+        Texture2D _darkSurface;
 
         public string BuiltWorldId => _current?.Id ?? string.Empty;
         public int BuiltMeshCount => _current?.Meshes.Count ?? 0;
@@ -392,19 +393,30 @@ namespace JetHorizon
         void EnsureMaterial()
         {
             if (_material != null) return;
-            Shader shader = Shader.Find("JH/FacetTerrain");
+            // The original canyon is not a single cyan material. It deliberately
+            // alternates cool crystalline faces with almost-black panels carrying
+            // magenta fracture lines. Using the two-surface canyon shader here
+            // restores that slab identity while the mesh remains a watertight,
+            // persistent world landform.
+            Shader shader = Shader.Find("JH/StableCanyon");
             if (shader == null) return;
             _material = new Material(shader) { name = "JH_ContinuousTerrainWorld" };
-            _surface = TextureFactory.CyanSlab();
-            _surface.name = "JH_ContinuousTerrainSurface";
-            _surface.wrapMode = TextureWrapMode.Repeat;
-            _material.SetTexture("_Surface", _surface);
-            // Match the original canyon slab language: dark crystal body with a
-            // substantial cyan edge contribution. This stays opaque and faceted,
-            // but no longer collapses into near-black between sun highlights.
-            _material.SetColor("_Body", new Color(.018f, .31f, .39f, 1f));
-            _material.SetFloat("_Brightness", 1.08f);
-            _material.SetFloat("_Emission", .48f);
+            _cyanSurface = TextureFactory.CyanSlab();
+            _cyanSurface.name = "JH_ContinuousTerrainCyanSurface";
+            _cyanSurface.wrapMode = TextureWrapMode.Repeat;
+            _darkSurface = TextureFactory.DarkSlab();
+            _darkSurface.name = "JH_ContinuousTerrainDarkSurface";
+            _darkSurface.wrapMode = TextureWrapMode.Repeat;
+            _material.SetTexture("_CyanSurface", _cyanSurface);
+            _material.SetTexture("_DarkSurface", _darkSurface);
+
+            // These match the original material family: icy cyan faces balanced
+            // by deep violet-black plates, with enough emission to retain the
+            // graphic canyon read under the sun without turning the world neon.
+            _material.SetColor("_CyanBody", new Color(.018f, .27f, .34f, 1f));
+            _material.SetColor("_DarkBody", new Color(.035f, .012f, .070f, 1f));
+            _material.SetFloat("_Brightness", .98f);
+            _material.SetFloat("_Emission", .54f);
         }
 
         void AddMesh(
@@ -467,7 +479,8 @@ namespace JetHorizon
             ClearWorld(ref _current);
             ClearWorld(ref _queued);
             if (_material != null) Destroy(_material);
-            if (_surface != null) Destroy(_surface);
+            if (_cyanSurface != null) Destroy(_cyanSurface);
+            if (_darkSurface != null) Destroy(_darkSurface);
         }
     }
 }
