@@ -40,6 +40,7 @@ namespace JetHorizon
         public GateCrossingFeedbackPresenter GateFeedback;
         public SpeedSurfaceCuePresenter SpeedSurfaceCues;
         public PrismaticTunnelPresenter PrismaticTunnel;
+        public TerrainCoursePresenter TerrainCourse;
         public HybridCanyonWorldPresenter HybridCanyonWorld;
         public MonumentPresenter Monuments;
         public ExtractionGatePresenter ExtractionGate;
@@ -104,13 +105,15 @@ namespace JetHorizon
                 HazardSpawningEnabled = true,
                 HazardSimulationEnabled = true,
                 CollisionEnabled = true,
-                StartSpeedMultiplier = 1f,
-                MinimumOperationalSpeed = 36f,
+                StartSpeedMultiplier = 1.5f,
+                MinimumOperationalSpeed = 50f,
                 InitialSpawnDistance = 5f,
                 SpawnIntervalDistance = 30f,
                 MaxHazards = 600,
                 MaxPickups = 128,
                 MaxCorridorSlices = 96,
+                MaxTerrainFormations = 24,
+                MaxTerrainTraversalSamples = 64,
                 CargoCapacity = launchProfile.CargoCapacity,
                 HullHitCapacity = launchProfile.CollisionHitCapacity,
                 FirstExtractionDistance = 650f,
@@ -119,7 +122,8 @@ namespace JetHorizon
                 MaximumHeat = 5,
                 PrismaticSineTunnelEnabled = true,
                 ProofEncounterMode = false,
-                GateRunMode = true,
+                GateRunMode = false,
+                TerrainRunMode = true,
                 CanyonPathOverride = canyonProfile != null ? canyonProfile.BuildCorePathDefinition() : null,
                 PersistentCruiseSpeedMultiplier = launchProfile.SpeedMultiplier,
                 Snap = FeelProfile.Snap,
@@ -214,6 +218,13 @@ namespace JetHorizon
                 PrismaticTunnel = presenterObject.AddComponent<PrismaticTunnelPresenter>();
             }
             PrismaticTunnel.ResetSystem();
+            if (TerrainCourse == null)
+            {
+                var presenterObject = new GameObject("Terrain Course Presentation");
+                presenterObject.transform.SetParent(transform, false);
+                TerrainCourse = presenterObject.AddComponent<TerrainCoursePresenter>();
+            }
+            TerrainCourse.ResetSystem();
             if (HybridCanyonWorld == null)
             {
                 var presenterObject = new GameObject("Hybrid Canyon World Presentation");
@@ -237,13 +248,7 @@ namespace JetHorizon
                 ExtractionGate.GateMaterial = AngledWalls != null ? AngledWalls.WallMaterial : null;
             }
             ExtractionGate.ResetSystem();
-            if (SpeedGates == null)
-            {
-                var presenterObject = new GameObject("Speed Gate Presentation");
-                presenterObject.transform.SetParent(transform, false);
-                SpeedGates = presenterObject.AddComponent<SpeedGatePresenter>();
-            }
-            SpeedGates.ResetSystem();
+            SpeedGates?.ResetSystem();
             if (GateFeedback == null)
             {
                 var presenterObject = new GameObject("Gate Crossing Feedback");
@@ -310,10 +315,25 @@ namespace JetHorizon
             if (_killedThisFrame) return;
             Camera.SimTick(dt);                                  // 5: pivot follow (fixed part)
 
+            // Session timers are gameplay state, not legacy-world presentation.
+            // Tick them before either world path branches so terrain mode cannot
+            // accidentally leave launch grace or invulnerability enabled forever.
             if (s.InvincibleTimer > 0f) s.InvincibleTimer = Mathf.Max(0f, s.InvincibleTimer - dt);
             if (!(_coreSimulation?.Snapshot.CoreWorldDirectorEnabled ?? false) && s.RestBeat > 0f)
                 s.RestBeat -= dt;
             if (s.PostLaunchGrace > 0f) s.PostLaunchGrace -= dt;
+
+            if (_coreSimulation?.Snapshot?.TerrainRunMode ?? false)
+            {
+                TerrainCourse?.SimTick(dt);                      // complete prebuilt terrain course
+                PrismaticTunnel?.SimTick(dt);                    // retained special environment
+                Lightning?.SimTick(dt);                          // retained Three.js lightning choreography
+                if (_killedThisFrame) return;
+                Pickups?.SimTick(dt);                            // power-up infrastructure remains available
+                PowerupPresentation?.SimTick(dt);
+                ExtractionGate?.SimTick(dt);
+                return;
+            }
 
             Waves.SimTick(dt);                                   // 16: DR sequencer
             Canyon.SimTick(dt);                                  // 16: canyon slabs + collision
@@ -662,6 +682,7 @@ namespace JetHorizon
             AngledWalls?.ResetSystem();
             Lightning?.ResetSystem();
             PrismaticTunnel?.ResetSystem();
+            TerrainCourse?.ResetSystem();
             HybridCanyonWorld?.ResetSystem();
             Monuments?.ResetSystem();
             ExtractionGate?.ResetSystem();

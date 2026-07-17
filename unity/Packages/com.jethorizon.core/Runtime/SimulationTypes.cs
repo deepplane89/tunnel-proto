@@ -117,6 +117,8 @@ namespace JetHorizon.Simulation
         GateStreakChanged,
         SectorChanged,
         EnvironmentTransitionTriggered,
+        TerrainBeatChanged,
+        TerrainCollision,
         PlayerDied
     }
 
@@ -639,6 +641,8 @@ namespace JetHorizon.Simulation
         readonly PickupSnapshot[] _pickups;
         readonly CorridorSliceSnapshot[] _corridorSlices;
         readonly GateSnapshot[] _gates;
+        readonly TerrainFormationSnapshot[] _terrainFormations;
+        readonly TerrainTraversalSnapshot[] _terrainTraversal;
 
         public CoreGamePhase Phase { get; internal set; }
         public long Tick { get; internal set; }
@@ -664,6 +668,13 @@ namespace JetHorizon.Simulation
         public bool CoreWorldDirectorEnabled { get; internal set; }
         public bool ProofEncounterMode { get; internal set; }
         public bool GateRunMode { get; internal set; }
+        public bool TerrainRunMode { get; internal set; }
+        public string TerrainCourseId { get; internal set; }
+        public TerrainBeatKind ActiveTerrainBeat { get; internal set; }
+        public int ActiveTerrainBeatIndex { get; internal set; }
+        public float TerrainBeatProgress01 { get; internal set; }
+        public float TerrainCourseStartDistance { get; internal set; }
+        public float TerrainCourseLength { get; internal set; }
         public int SectorIndex { get; internal set; }
         public int GateStreak { get; internal set; }
         public int HighestGateStreak { get; internal set; }
@@ -706,6 +717,8 @@ namespace JetHorizon.Simulation
         public int HazardCount { get; internal set; }
         public int PickupCount { get; internal set; }
         public int GateCount { get; internal set; }
+        public int TerrainFormationCount { get; internal set; }
+        public int TerrainTraversalCount { get; internal set; }
         public float ShieldSeconds { get; internal set; }
         public int ShieldHits { get; internal set; }
         public float LaserSeconds { get; internal set; }
@@ -737,12 +750,20 @@ namespace JetHorizon.Simulation
         public int HullHitsRemaining { get; internal set; }
         public int HullHitCapacity { get; internal set; }
 
-        internal SimulationSnapshot(int maxHazards, int maxPickups, int maxCorridorSlices, int maxGates = 16)
+        internal SimulationSnapshot(
+            int maxHazards,
+            int maxPickups,
+            int maxCorridorSlices,
+            int maxGates = 16,
+            int maxTerrainFormations = 24,
+            int maxTerrainTraversalSamples = 64)
         {
             _hazards = new HazardSnapshot[maxHazards];
             _pickups = new PickupSnapshot[maxPickups];
             _corridorSlices = new CorridorSliceSnapshot[maxCorridorSlices];
             _gates = new GateSnapshot[maxGates];
+            _terrainFormations = new TerrainFormationSnapshot[maxTerrainFormations];
+            _terrainTraversal = new TerrainTraversalSnapshot[maxTerrainTraversalSamples];
         }
 
         public HazardSnapshot GetHazard(int index)
@@ -768,6 +789,22 @@ namespace JetHorizon.Simulation
         }
 
         internal GateSnapshot[] GateBuffer => _gates;
+
+        public TerrainFormationSnapshot GetTerrainFormation(int index)
+        {
+            if (index < 0 || index >= TerrainFormationCount) throw new ArgumentOutOfRangeException(nameof(index));
+            return _terrainFormations[index];
+        }
+
+        internal TerrainFormationSnapshot[] TerrainFormationBuffer => _terrainFormations;
+
+        public TerrainTraversalSnapshot GetTerrainTraversal(int index)
+        {
+            if (index < 0 || index >= TerrainTraversalCount) throw new ArgumentOutOfRangeException(nameof(index));
+            return _terrainTraversal[index];
+        }
+
+        internal TerrainTraversalSnapshot[] TerrainTraversalBuffer => _terrainTraversal;
 
         public CorridorSliceSnapshot GetCorridorSlice(int index)
         {

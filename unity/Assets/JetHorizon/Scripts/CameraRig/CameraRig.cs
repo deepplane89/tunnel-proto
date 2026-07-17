@@ -8,7 +8,12 @@ namespace JetHorizon
     /// </summary>
     public sealed class CameraRig : MonoBehaviour, ISimSystem
     {
-        public const float CompleteWorldFarClip = 2600f;
+        // The terrain course is authored as one physical sector. Keep its distant
+        // silhouette inside the camera volume so later masses do not reveal
+        // themselves by crossing a short far-clip plane as the world scrolls.
+        public const float CompleteWorldFarClip = 5000f;
+        public const float MaximumGameplayFovDelta = 10f;
+        public const float MaximumSpeedPullback = .75f;
 
         public UnityEngine.Camera Cam;      // child of this pivot at local (0,0,0)
         float _cameraRoll;
@@ -53,7 +58,12 @@ namespace JetHorizon
         public void OnRunStart(bool skipIntro)
         {
             _launchTime = S.Elapsed;
-            if (Cam != null) Cam.fieldOfView = Tuning.CamBaseFovDesktop + 15f;  // launch snap-in
+            if (Cam != null)
+            {
+                JetHorizonFeelProfile feel = GameManager.I != null ? GameManager.I.FeelProfile : null;
+                float baseFov = feel != null ? feel.BaseFov : Tuning.CamBaseFovDesktop;
+                Cam.fieldOfView = baseFov + 8f;
+            }
         }
 
         public void PlayRetrySweep() { _sweeping = true; _sweepT = 0f; }
@@ -98,8 +108,9 @@ namespace JetHorizon
             float targetY = Tuning.CamBaseY + Tuning.CamPivotYOffset + shipAlt * Tuning.CamYFollow
                 - (feel != null ? signals.SpeedPresentation * feel.CameraSpeedHeightDrop : 0f);
             p.y = Mathf.Lerp(p.y, targetY, Mathf.Min(1f, Tuning.CamYLerp * dt));
+            float speedPullback = feel != null ? Mathf.Min(feel.CameraSpeedPullback, MaximumSpeedPullback) : 0f;
             float targetZ = Tuning.CamPivotZ
-                + (feel != null ? signals.SpeedPresentation * feel.CameraSpeedPullback : 0f)
+                + signals.SpeedPresentation * speedPullback
                 + (feel != null ? signals.GateKick01 * feel.GateCameraPullback : 0f);
             p.z = Mathf.Lerp(p.z, targetZ, 1f - Mathf.Exp(-(feel != null ? feel.CameraHeightResponse : 6f) * dt));
             transform.position = p;
@@ -189,7 +200,11 @@ namespace JetHorizon
                         + signals.GateKick01 * feel.GateFovKickDegrees
                         + (s.OverdriveActive ? feel.OverdriveFovBoost : 0f)
                     : Tuning.CamBaseFovDesktop + Tuning.FovSpeedBoost * Mathf.Pow(speedFrac, Tuning.FovKickExponent);
-                if (feel != null) targetFOV = Mathf.Min(feel.MaximumFov, targetFOV);
+                float baseFov = feel != null ? feel.BaseFov : Tuning.CamBaseFovDesktop;
+                float authoredMaximum = feel != null && feel.MaximumFov > 0f
+                    ? feel.MaximumFov
+                    : baseFov + MaximumGameplayFovDelta;
+                targetFOV = Mathf.Min(targetFOV, authoredMaximum, baseFov + MaximumGameplayFovDelta);
                 bool launch = s.Elapsed - _launchTime < 0.5f;
                 float rate = launch ? 12f : (Mathf.Abs(targetFOV - Cam.fieldOfView) > 0.5f ? 5f : 3f);
                 if (feel != null) rate = signals.GateKick01 > .02f ? feel.GateFovResponse : feel.FovResponse;

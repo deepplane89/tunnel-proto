@@ -69,6 +69,8 @@ namespace JetHorizon.Simulation
         public int MaxPickups = 128;
         public int MaxCorridorSlices = 96;
         public int MaxGates = 16;
+        public int MaxTerrainFormations = 24;
+        public int MaxTerrainTraversalSamples = 64;
         public int CargoCapacity = 18;
         public int HullHitCapacity = 1;
         public float FirstExtractionDistance = 650f;
@@ -86,6 +88,7 @@ namespace JetHorizon.Simulation
         public bool PrismaticSineTunnelEnabled;
         public bool ProofEncounterMode;
         public bool GateRunMode;
+        public bool TerrainRunMode;
         public CanyonPathDefinition CanyonPathOverride;
         public float PrismaticTunnelSpawnZ = -260f;
         public float PrismaticTunnelRowSpacing = 7f;
@@ -121,6 +124,8 @@ namespace JetHorizon.Simulation
             if (MaxPickups <= 0) throw new InvalidOperationException("MaxPickups must be positive.");
             if (MaxCorridorSlices <= 2) throw new InvalidOperationException("MaxCorridorSlices must be greater than two.");
             if (MaxGates < 8) throw new InvalidOperationException("MaxGates must be at least eight.");
+            if (MaxTerrainFormations < 8) throw new InvalidOperationException("MaxTerrainFormations must be at least eight.");
+            if (MaxTerrainTraversalSamples < 16) throw new InvalidOperationException("MaxTerrainTraversalSamples must be at least sixteen.");
             if (CargoCapacity <= 0) throw new InvalidOperationException("CargoCapacity must be positive.");
             if (HullHitCapacity <= 0) throw new InvalidOperationException("HullHitCapacity must be positive.");
             if (FirstExtractionDistance <= 0f) throw new InvalidOperationException("FirstExtractionDistance must be positive.");

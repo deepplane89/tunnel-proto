@@ -85,6 +85,7 @@ namespace JetHorizon.Simulation
         readonly StageDirector _stageDirector;
         readonly ShipCapabilityProfile _shipCapability;
         readonly ProofEncounterRuntime _proofEncounters;
+        readonly TerrainCourseRuntime _terrainRun;
         readonly SectorRunRuntime _gateRun;
         readonly RunParcelCommandBuffer _runParcelCommands;
         readonly EnvironmentEncounterRuntime _environmentEncounter;
@@ -198,7 +199,7 @@ namespace JetHorizon.Simulation
             _pickups = new PickupState[_config.MaxPickups];
             _cargo = new RunCargoLedger(_config.CargoCapacity);
             _corridorSlices = new CorridorSliceState[_config.MaxCorridorSlices];
-            _stageDirector = _config.ProofEncounterMode || _config.GateRunMode || runDefinition == null
+            _stageDirector = _config.ProofEncounterMode || _config.GateRunMode || _config.TerrainRunMode || runDefinition == null
                 ? null
                 : new StageDirector(runDefinition);
             _shipCapability = ShipCapabilityProfile.FromConfig(_config);
@@ -211,6 +212,9 @@ namespace JetHorizon.Simulation
                 : null;
             _gateRun = _config.GateRunMode
                 ? new SectorRunRuntime(_shipCapability, _random)
+                : null;
+            _terrainRun = _config.TerrainRunMode
+                ? new TerrainCourseRuntime(_shipCapability)
                 : null;
             _runParcelCommands = new RunParcelCommandBuffer(32);
             _environmentEncounter = new EnvironmentEncounterRuntime(
@@ -234,7 +238,9 @@ namespace JetHorizon.Simulation
                 _config.MaxHazards,
                 _config.MaxPickups,
                 _config.MaxCorridorSlices,
-                _config.MaxGates);
+                _config.MaxGates,
+                _config.MaxTerrainFormations,
+                _config.MaxTerrainTraversalSamples);
             Events = new SimulationEventBuffer(64);
             StageCommands = new StageCommandBuffer(16);
             ResetToTitle();
@@ -311,17 +317,15 @@ namespace JetHorizon.Simulation
             return true;
         }
 
-        /// <summary>
-        /// Resolves the gate-run breather choice. The core owns availability, cargo
-        /// settlement facts, Heat advancement and the next deterministic sector.
-        /// </summary>
+        /// <summary>Resolves the terrain-run breather choice and next deterministic sector.</summary>
         public bool TryResolveExtractionDecision(bool extract, out RunCargoManifest manifest)
         {
             Events.Clear();
             manifest = default;
-            if (Phase != CoreGamePhase.Playing
-                || _gateRun == null
-                || !_gateRun.ExtractionDecisionOpen)
+            bool decisionOpen = _terrainRun != null
+                ? _terrainRun.ExtractionDecisionOpen
+                : _gateRun != null && _gateRun.ExtractionDecisionOpen;
+            if (Phase != CoreGamePhase.Playing || !decisionOpen)
             {
                 RefreshSnapshot();
                 return false;
@@ -329,7 +333,10 @@ namespace JetHorizon.Simulation
 
             if (extract)
             {
-                if (!_gateRun.TryAcceptExtraction(Events))
+                bool accepted = _terrainRun != null
+                    ? _terrainRun.TryAcceptExtraction(Events)
+                    : _gateRun.TryAcceptExtraction(Events);
+                if (!accepted)
                 {
                     RefreshSnapshot();
                     return false;
@@ -346,20 +353,26 @@ namespace JetHorizon.Simulation
                 return true;
             }
 
-            if (!_gateRun.TryContinueDeeper(
-                _distance,
-                _paceState.PersistentCruiseSpeed,
-                Events))
+            bool continued = _terrainRun != null
+                ? _terrainRun.TryContinueDeeper(_distance, Events)
+                : _gateRun.TryContinueDeeper(
+                    _distance,
+                    _paceState.PersistentCruiseSpeed,
+                    Events);
+            if (!continued)
             {
                 RefreshSnapshot();
                 return false;
             }
 
-            _heatLevel = _gateRun.Heat;
+            _heatLevel = _terrainRun != null ? _terrainRun.Heat : _gateRun.Heat;
+            float nextDecision = _terrainRun != null
+                ? _terrainRun.Snapshot.ExtractionDistance
+                : _gateRun.Snapshot.NextGateDistance;
             Events.Add(new SimulationEvent(
                 SimulationEventType.ExtractionWindowPassed,
                 _heatLevel,
-                _gateRun.Snapshot.NextGateDistance,
+                nextDecision,
                 HeatRewardMultiplier()));
             Events.Add(new SimulationEvent(
                 SimulationEventType.HeatChanged,
@@ -431,7 +444,31 @@ namespace JetHorizon.Simulation
         /// </summary>
         public bool DebugJumpToProofEncounter(EncounterKind kind)
         {
-            if (Phase != CoreGamePhase.Playing || _proofEncounters == null) return false;
+            if (Phase != CoreGamePhase.Playing) return false;
+            if (_terrainRun != null)
+            {
+                TerrainBeatKind beat = kind == EncounterKind.PrismaticSineCorridor
+                    ? TerrainBeatKind.PrismaticCorridor
+                    : kind == EncounterKind.CrystallineCanyon
+                        ? TerrainBeatKind.CrystallineCanyon
+                        : default;
+                if ((kind != EncounterKind.PrismaticSineCorridor && kind != EncounterKind.CrystallineCanyon)
+                    || !_terrainRun.TryGetBeatStart(beat, out float beatStart))
+                    return false;
+                _distance = Math.Max(_terrainRun.Course.StartDistance, beatStart - 70f);
+                Array.Clear(_hazards, 0, _hazards.Length);
+                Array.Clear(_pickups, 0, _pickups.Length);
+                Array.Clear(_corridorSlices, 0, _corridorSlices.Length);
+                _environmentEncounter.Reset();
+                _shipX = 0f;
+                _shipVelocityX = 0f;
+                _bankVelocityX = 0f;
+                _bankRadians = 0f;
+                _leaderboardIneligibility |= LeaderboardIneligibility.DebugStart;
+                RefreshSnapshot();
+                return true;
+            }
+            if (_proofEncounters == null) return false;
             float previewLeadDistance = kind == EncounterKind.CrystallineCanyon ? 520f : 25f;
             if (!_proofEncounters.JumpTo(kind, _distance, _config.ShipZ, previewLeadDistance)) return false;
 
@@ -567,7 +604,8 @@ namespace JetHorizon.Simulation
             float dt = _config.FixedDeltaSeconds;
             _tick++;
             _elapsed = (float)(_tick * (double)dt);
-            if (_gateRun != null && _gateRun.ExtractionDecisionOpen)
+            if ((_terrainRun != null && _terrainRun.ExtractionDecisionOpen)
+                || (_gateRun != null && _gateRun.ExtractionDecisionOpen))
             {
                 TickExtractionBreather(dt);
                 RefreshSnapshot();
@@ -608,7 +646,19 @@ namespace JetHorizon.Simulation
             float temporaryModifier = world.OverdriveActive || OverdriveSpeedActive
                 ? OverdriveSpeedMultiplier()
                 : 1f;
-            if (_gateRun != null)
+            if (_terrainRun != null)
+            {
+                _paceState = RunPaceModel.Resolve(new RunPaceInput(
+                    _config.BaseSpeed * _config.StartSpeedMultiplier,
+                    _config.PersistentCruiseSpeedMultiplier,
+                    1f,
+                    encounterApproachModifier,
+                    temporaryModifier,
+                    _config.MinimumOperationalSpeed,
+                    _terrainRun.EarnedSpeedBonus,
+                    _terrainRun.SoftSpeedCap));
+            }
+            else if (_gateRun != null)
             {
                 _paceState = RunPaceModel.Resolve(new RunPaceInput(
                     _config.BaseSpeed * _config.StartSpeedMultiplier,
@@ -687,6 +737,65 @@ namespace JetHorizon.Simulation
                         return;
                     }
                 }
+                else if (_terrainRun != null)
+                {
+                    TerrainCourseTickResult terrainResult = _terrainRun.Tick(
+                        _distance,
+                        _shipX,
+                        _rollRadians,
+                        _config.RollMaxRadians,
+                        !_config.CollisionEnabled || world.CollisionSuppressed || _overdriveSeconds > 0f,
+                        Events);
+                    _heatLevel = _terrainRun.Heat;
+                    if (terrainResult.CollisionEntered)
+                    {
+                        Events.Add(new SimulationEvent(
+                            SimulationEventType.TerrainCollision,
+                            terrainResult.CollisionEntityId,
+                            terrainResult.CollisionCenterX,
+                            (float)terrainResult.Beat));
+                        if (!ConsumeShieldHit(terrainResult.CollisionEntityId)
+                            && !ConsumeHullHit(terrainResult.CollisionEntityId))
+                        {
+                            FinalizeRun();
+                            Phase = CoreGamePhase.Dead;
+                            Events.Add(new SimulationEvent(
+                                SimulationEventType.PlayerDied,
+                                terrainResult.CollisionEntityId,
+                                (float)_score,
+                                _distance));
+                            RefreshSnapshot();
+                            return;
+                        }
+                    }
+                    if (terrainResult.BeginLightning)
+                    {
+                        _terrainRun.GetActiveSafeWindow(out float safeCenter, out float safeHalfWidth);
+                        _hazardPatternScheduler.BeginLightning(
+                            LightningSequenceKind.Random,
+                            Math.Min(_config.MaximumHeat, _heatLevel + 2),
+                            safeCenter,
+                            Math.Max(7f, safeHalfWidth * .62f));
+                    }
+                    if (terrainResult.BeginPrismatic)
+                    {
+                        _environmentEncounter.Activate(
+                            RunEnvironmentKind.PrismaticCorridor,
+                            _terrainRun.CurrentBeatStartDistance);
+                        Array.Clear(_corridorSlices, 0, _corridorSlices.Length);
+                    }
+                    if (_environmentEncounter.Active)
+                    {
+                        _environmentEncounter.Tick(_distance, _config.ShipZ, _encounterCommands);
+                        ApplyProofEncounterCommands();
+                    }
+                    if (terrainResult.ExtractionDecisionOpened)
+                    {
+                        EnterExtractionBreather();
+                        RefreshSnapshot();
+                        return;
+                    }
+                }
                 else if (_gateRun != null)
                 {
                     GateRunTickResult gateResult = _gateRun.Tick(
@@ -747,7 +856,7 @@ namespace JetHorizon.Simulation
                 }
             }
 
-            if (_config.HazardSpawningEnabled && _proofEncounters == null && _gateRun == null)
+            if (_config.HazardSpawningEnabled && _proofEncounters == null && _terrainRun == null && _gateRun == null)
                 TickWorldSpawner(step, world);
 
             if (_laserSeconds > 0f)
@@ -1384,6 +1493,7 @@ namespace JetHorizon.Simulation
             _structuredWallRowsDone = 0;
             _structuredWallSpawnZ = 0f;
             _proofEncounters?.Reset();
+            _terrainRun?.Reset();
             _gateRun?.Reset(_config.BaseSpeed * _config.StartSpeedMultiplier * _config.PersistentCruiseSpeedMultiplier);
             _environmentEncounter.Reset();
             _runParcelCommands.Clear();
@@ -2429,18 +2539,31 @@ namespace JetHorizon.Simulation
             Snapshot.CargoProjectedCreditValue = (int)Math.Round(_cargo.BaseCreditValue * HeatRewardMultiplier(), MidpointRounding.AwayFromZero);
             Snapshot.HeatLevel = _heatLevel;
             Snapshot.HeatRewardMultiplier = HeatRewardMultiplier();
-            Snapshot.HeatSpeedMultiplier = _gateRun != null ? 1f : HeatSpeedMultiplier();
+            Snapshot.HeatSpeedMultiplier = _terrainRun != null || _gateRun != null ? 1f : HeatSpeedMultiplier();
             Snapshot.EncounterIntensity = EncounterIntensity();
             EncounterRuntimeSnapshot encounter = _proofEncounters != null
                 ? _proofEncounters.Snapshot
                 : default;
+            TerrainRunState terrainRun = _terrainRun != null ? _terrainRun.Snapshot : default;
             GateRunSnapshot gateRun = _gateRun != null ? _gateRun.Snapshot : default;
-            Snapshot.GateCount = _gateRun != null
+            Snapshot.GateCount = _terrainRun == null && _gateRun != null
                 ? _gateRun.WriteVisibleGates(
                     _distance,
                     _config.ShipZ,
                     Snapshot.GateBuffer,
                     _config.MaxGates)
+                : 0;
+            Snapshot.TerrainFormationCount = _terrainRun != null
+                ? _terrainRun.WriteFormations(
+                    _distance,
+                    _config.ShipZ,
+                    Snapshot.TerrainFormationBuffer)
+                : 0;
+            Snapshot.TerrainTraversalCount = _terrainRun != null
+                ? _terrainRun.WriteTraversal(
+                    _distance,
+                    _config.ShipZ,
+                    Snapshot.TerrainTraversalBuffer)
                 : 0;
             bool gateExtractionVisible = false;
             float gateExtractionX = 0f;
@@ -2456,25 +2579,36 @@ namespace JetHorizon.Simulation
                 gateExtractionHalfWidth = gate.HalfWidth;
                 break;
             }
-            Snapshot.ExtractionAvailable = _gateRun != null
+            Snapshot.ExtractionAvailable = _terrainRun != null
+                ? terrainRun.ExtractionDecisionOpen
+                : _gateRun != null
                 ? gateRun.ExtractionDecisionOpen
                 : _proofEncounters == null
                     && Phase == CoreGamePhase.Playing
                     && _extractionWindowOpen;
-            Snapshot.ExtractionWindowOpen = _gateRun != null
+            Snapshot.ExtractionWindowOpen = _terrainRun != null
+                ? terrainRun.ExtractionDecisionOpen
+                : _gateRun != null
                 ? gateRun.ExtractionDecisionOpen
                 : _proofEncounters == null && _extractionWindowOpen;
-            Snapshot.ExtractionDecisionOpen = _gateRun != null
-                && gateRun.ExtractionDecisionOpen
-                && Phase == CoreGamePhase.Playing;
-            Snapshot.ExtractionWindowDistanceRemaining = _gateRun != null
+            Snapshot.ExtractionDecisionOpen = Phase == CoreGamePhase.Playing
+                && (_terrainRun != null
+                    ? terrainRun.ExtractionDecisionOpen
+                    : _gateRun != null && gateRun.ExtractionDecisionOpen);
+            Snapshot.ExtractionWindowDistanceRemaining = _terrainRun != null
+                ? terrainRun.ExtractionDecisionOpen
+                    ? 0f
+                    : Math.Max(0f, terrainRun.ExtractionDistance - _distance)
+                : _gateRun != null
                 ? gateRun.ExtractionDecisionOpen
                     ? 0f
                     : Math.Max(0f, gateRun.NextGateDistance - _distance)
                 : _proofEncounters == null && _extractionWindowOpen
                     ? Math.Max(0f, _extractionWindowEndDistance - _distance)
                     : 0f;
-            Snapshot.NextExtractionDistance = _gateRun != null
+            Snapshot.NextExtractionDistance = _terrainRun != null
+                ? terrainRun.ExtractionDistance
+                : _gateRun != null
                 ? gateRun.NextGateDistance
                 : _proofEncounters != null
                     ? encounter.ExtractionGateDistance
@@ -2484,33 +2618,61 @@ namespace JetHorizon.Simulation
             Snapshot.HullHitsRemaining = _hullHitsRemaining;
             Snapshot.HullHitCapacity = _config.HullHitCapacity;
             Snapshot.StageDirectorEnabled = _stageDirector != null;
-            Snapshot.CoreWorldDirectorEnabled = _stageDirector != null || _proofEncounters != null || _gateRun != null;
+            Snapshot.CoreWorldDirectorEnabled = _stageDirector != null || _proofEncounters != null || _terrainRun != null || _gateRun != null;
             Snapshot.ProofEncounterMode = _proofEncounters != null;
             Snapshot.GateRunMode = _gateRun != null;
-            Snapshot.SectorIndex = gateRun.Sector;
-            Snapshot.GateStreak = gateRun.GateStreak;
-            Snapshot.HighestGateStreak = gateRun.HighestGateStreak;
-            Snapshot.GatesCrossed = gateRun.GatesCrossed;
-            Snapshot.GatesMissed = gateRun.GatesMissed;
-            Snapshot.GateEarnedSpeed = gateRun.EarnedSpeedBonus;
-            Snapshot.SpeedSoftCap = gateRun.SoftSpeedCap;
-            Snapshot.RunEnvironment = gateRun.Environment;
+            Snapshot.TerrainRunMode = _terrainRun != null;
+            Snapshot.TerrainCourseId = terrainRun.CourseId ?? string.Empty;
+            Snapshot.ActiveTerrainBeat = terrainRun.ActiveBeat;
+            Snapshot.ActiveTerrainBeatIndex = terrainRun.ActiveBeatIndex;
+            Snapshot.TerrainBeatProgress01 = terrainRun.BeatProgress01;
+            Snapshot.TerrainCourseStartDistance = terrainRun.CourseStartDistance;
+            Snapshot.TerrainCourseLength = terrainRun.CourseLength;
+            Snapshot.SectorIndex = _terrainRun != null ? terrainRun.Sector : gateRun.Sector;
+            Snapshot.GateStreak = _terrainRun != null ? 0 : gateRun.GateStreak;
+            Snapshot.HighestGateStreak = _terrainRun != null ? 0 : gateRun.HighestGateStreak;
+            Snapshot.GatesCrossed = _terrainRun != null ? 0 : gateRun.GatesCrossed;
+            Snapshot.GatesMissed = _terrainRun != null ? 0 : gateRun.GatesMissed;
+            Snapshot.GateEarnedSpeed = _terrainRun != null ? terrainRun.EarnedSpeedBonus : gateRun.EarnedSpeedBonus;
+            Snapshot.SpeedSoftCap = _terrainRun != null ? terrainRun.SoftSpeedCap : gateRun.SoftSpeedCap;
+            Snapshot.RunEnvironment = _terrainRun != null
+                ? terrainRun.ActiveBeat == TerrainBeatKind.CrystallineCanyon
+                    ? RunEnvironmentKind.CrystallineCanyon
+                    : terrainRun.ActiveBeat == TerrainBeatKind.PrismaticCorridor
+                        ? RunEnvironmentKind.PrismaticCorridor
+                        : RunEnvironmentKind.OpenWater
+                : gateRun.Environment;
             Snapshot.EnvironmentLifecycle = _environmentEncounter.Active
                 ? _environmentEncounter.Lifecycle
-                : gateRun.EnvironmentLifecycle;
+                : _terrainRun != null
+                    ? EnvironmentLifecycle.Active
+                    : gateRun.EnvironmentLifecycle;
             if (_environmentEncounter.Active)
             {
                 EncounterPlan activeEnvironment = _environmentEncounter.Plan;
                 Snapshot.EncounterPlanId = activeEnvironment.Id;
                 Snapshot.EncounterKind = activeEnvironment.Kind;
-                Snapshot.EncounterPlanIndex = gateRun.Sector;
-                Snapshot.EncounterCycle = gateRun.Sector;
+                Snapshot.EncounterPlanIndex = _terrainRun != null ? terrainRun.Sector : gateRun.Sector;
+                Snapshot.EncounterCycle = _terrainRun != null ? terrainRun.Sector : gateRun.Sector;
                 Snapshot.EncounterProgress01 = Clamp01(
                     (_distance - _environmentEncounter.StartDistance) / activeEnvironment.Length);
                 Snapshot.EncounterValidationMargin = 1f;
                 Snapshot.EncounterStartZ = _config.ShipZ - (_environmentEncounter.StartDistance - _distance);
                 Snapshot.UpcomingEncounterKind = default;
                 Snapshot.UpcomingEncounterStartZ = 0f;
+            }
+            else if (_terrainRun != null
+                && _terrainRun.TryGetUpcomingPrismatic(out float terrainPrismaticStart))
+            {
+                Snapshot.EncounterPlanId = string.Empty;
+                Snapshot.EncounterKind = default;
+                Snapshot.EncounterPlanIndex = terrainRun.Sector;
+                Snapshot.EncounterCycle = terrainRun.Sector;
+                Snapshot.EncounterProgress01 = 0f;
+                Snapshot.EncounterValidationMargin = 1f;
+                Snapshot.EncounterStartZ = 0f;
+                Snapshot.UpcomingEncounterKind = EncounterKind.PrismaticSineCorridor;
+                Snapshot.UpcomingEncounterStartZ = _config.ShipZ - (terrainPrismaticStart - _distance);
             }
             else if (_gateRun != null
                 && _gateRun.TryGetUpcomingEnvironment(out RunEnvironmentKind upcomingEnvironment, out float upcomingStart))
@@ -2539,10 +2701,10 @@ namespace JetHorizon.Simulation
                 Snapshot.UpcomingEncounterKind = encounter.UpcomingKind;
                 Snapshot.UpcomingEncounterStartZ = encounter.UpcomingStartZ;
             }
-            Snapshot.ExtractionGateVisible = _gateRun != null ? false : encounter.ExtractionGateVisible;
-            Snapshot.ExtractionGateX = _gateRun != null ? gateExtractionX : encounter.ExtractionGateX;
-            Snapshot.ExtractionGateHalfWidth = _gateRun != null ? gateExtractionHalfWidth : encounter.ExtractionGateHalfWidth;
-            Snapshot.ExtractionGateZ = _gateRun != null ? gateExtractionZ : encounter.ExtractionGateZ;
+            Snapshot.ExtractionGateVisible = _terrainRun != null || _gateRun != null ? false : encounter.ExtractionGateVisible;
+            Snapshot.ExtractionGateX = _terrainRun != null ? 0f : _gateRun != null ? gateExtractionX : encounter.ExtractionGateX;
+            Snapshot.ExtractionGateHalfWidth = _terrainRun != null ? 0f : _gateRun != null ? gateExtractionHalfWidth : encounter.ExtractionGateHalfWidth;
+            Snapshot.ExtractionGateZ = _terrainRun != null ? 0f : _gateRun != null ? gateExtractionZ : encounter.ExtractionGateZ;
             bool proofPrismatic = _proofEncounters != null
                 && encounter.Kind == EncounterKind.PrismaticSineCorridor
                 && CountCorridorSlices() > 0;
@@ -3001,10 +3163,10 @@ namespace JetHorizon.Simulation
                 _gateRun?.Snapshot.GatesCrossed ?? 0,
                 _gateRun?.Snapshot.GatesMissed ?? 0,
                 _gateRun?.Snapshot.HighestGateStreak ?? 0,
-                _gateRun?.Snapshot.Sector ?? 0,
-                _gateRun?.Snapshot.Heat ?? _heatLevel,
+                _terrainRun?.Snapshot.Sector ?? _gateRun?.Snapshot.Sector ?? 0,
+                _terrainRun?.Snapshot.Heat ?? _gateRun?.Snapshot.Heat ?? _heatLevel,
                 _seed,
-                _gateRun != null ? "gate-run" : _proofEncounters != null ? "proof" : "legacy",
+                _terrainRun != null ? "terrain-course" : _gateRun != null ? "gate-run" : _proofEncounters != null ? "proof" : "legacy",
                 cargo.TotalUnits,
                 extracted ? cargo.TotalUnits : 0,
                 extracted ? 0 : cargo.TotalUnits,
