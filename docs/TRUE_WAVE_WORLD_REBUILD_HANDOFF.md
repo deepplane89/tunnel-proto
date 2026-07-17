@@ -29,6 +29,16 @@ events through the existing audio and ship-feel presenters, keeps upcoming
 waves readable while the current breather is active, and validates cargo
 against the physical envelope of its owning parcel.
 
+The open-water formation correction now uses
+`RandomConeFormationPlanner`, a deterministic engine-neutral port of the
+production random-cone generator. It preserves the 21-lane Fisher-Yates
+shuffle, four-to-five blockers per row, adjacent guaranteed opening,
+three-lane anti-bunch rule, 26-to-32-unit cadence with source jitter, and the
+160-unit spawn preview. The blockers render as small faceted crystalline
+groups rather than cones. Spatial cadence is intentionally not multiplied by
+forward speed, so higher speed produces faster on-screen arrival instead of
+normalizing the wave back to the same slow timing.
+
 The implementation now starts over empty water, builds complete parcel roots,
 reveals them from the horizon, retains prior geometry until rear cull, inserts
 empty-water breathers between every major wave, and attaches cargo to the
@@ -41,12 +51,12 @@ Automated verification completed:
 - engine-neutral core compiled with zero warnings/errors;
 - Unity presentation assembly compiled with zero warnings/errors;
 - architecture-test assembly compiled with zero warnings/errors;
-- all 43 parcel, terrain, cargo, and gate architecture tests passed in the
+- all 45 parcel, terrain, cargo, and gate architecture tests passed in the
   standalone runner;
 - deterministic smoke run passed six authored world sentences;
 - smoke collision checks passed for empty water, canyon shore, and portal mass.
 
-The broader standalone core run passed 115 of 116 tests. The one remaining
+The broader standalone core run passed 117 of 118 tests. The one remaining
 failure is the pre-existing legacy test
 `PrismaticCollisionUsesTheSameCoreSamplePublishedToTheRenderer`; it also fails
 when run by itself and does not enter terrain-world mode or exercise the new

@@ -36,13 +36,72 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(formation.Kind, Is.EqualTo(WorldParcelKind.OpenWaterFormation));
             Assert.That(formation.Envelope, Is.EqualTo(WorldEnvelopeKind.None));
             Assert.That(formation.ShoreSectionCount, Is.Zero);
-            Assert.That(formation.FeatureCount, Is.GreaterThanOrEqualTo(8));
+            Assert.That(formation.FeatureCount,
+                Is.InRange(
+                    RandomConeFormationPlanner.AuthoredRowCount
+                        * RandomConeFormationPlanner.MinimumBlockersPerRow,
+                    RandomConeFormationPlanner.AuthoredRowCount
+                        * RandomConeFormationPlanner.MaximumBlockersPerRow));
             for (int i = 0; i < formation.FeatureCount; i++)
             {
                 TerrainWorldFeature feature = formation.GetFeature(i);
                 Assert.That(feature.Distance, Is.InRange(formation.LocalStartDistance, formation.LocalEndDistance));
                 Assert.That(TerrainWorldFeatureRules.IsWaterFormation(feature.Kind), Is.True);
             }
+        }
+
+        [Test]
+        public void RandomConeFormation_PortsSourceShuffleDensityGapAndAntiBunchRules()
+        {
+            float speed = TerrainWorldPaceRules.MaximumSpeedForHeat(0);
+            RandomConeFormationPlan plan = new RandomConeFormationPlanner().Create(
+                340f, 0f, speed, Capability, 1810, 0);
+
+            Assert.That(plan.RowCount, Is.EqualTo(RandomConeFormationPlanner.AuthoredRowCount));
+            Assert.That(plan.Length, Is.LessThan(330f));
+            Assert.That(plan.RevealDistance, Is.EqualTo(RandomConeFormationPlanner.SourceSpawnDistance));
+            for (int rowIndex = 0; rowIndex < plan.RowCount; rowIndex++)
+            {
+                RandomConeFormationRow row = plan.GetRow(rowIndex);
+                Assert.That(row.BlockedCount,
+                    Is.InRange(
+                        RandomConeFormationPlanner.MinimumBlockersPerRow,
+                        RandomConeFormationPlanner.MaximumBlockersPerRow));
+                for (int i = 0; i < row.BlockedCount; i++)
+                {
+                    int lane = row.GetBlockedLane(i);
+                    Assert.That(lane, Is.Not.EqualTo(row.SafeGapStartLane));
+                    Assert.That(lane, Is.Not.EqualTo(row.SafeGapStartLane + 1));
+                    Assert.That(lane, Is.Not.EqualTo(row.ValuableGapStartLane));
+                    Assert.That(lane, Is.Not.EqualTo(row.ValuableGapStartLane + 1));
+                    for (int j = i + 1; j < row.BlockedCount; j++)
+                        Assert.That(Math.Abs(lane - row.GetBlockedLane(j)),
+                            Is.GreaterThanOrEqualTo(RandomConeFormationPlanner.MinimumLaneGap));
+                }
+            }
+        }
+
+        [Test]
+        public void RandomConeFormation_IsDeterministicAndArrivesAtTheSourcePreviewDistance()
+        {
+            float speed = TerrainWorldPaceRules.MaximumSpeedForHeat(0);
+            var planner = new RandomConeFormationPlanner();
+            RandomConeFormationPlan a = planner.Create(340f, 0f, speed, Capability, 1810, 2);
+            RandomConeFormationPlan b = planner.Create(340f, 0f, speed, Capability, 1810, 2);
+
+            Assert.That(a.FeatureCount, Is.EqualTo(b.FeatureCount));
+            for (int i = 0; i < a.FeatureCount; i++)
+            {
+                TerrainWorldFeature first = a.GetFeature(i);
+                TerrainWorldFeature second = b.GetFeature(i);
+                Assert.That(first.Kind, Is.EqualTo(second.Kind));
+                Assert.That(first.Distance, Is.EqualTo(second.Distance).Within(.001f));
+                Assert.That(first.CenterX, Is.EqualTo(second.CenterX).Within(.001f));
+            }
+            float firstRockDistance = float.MaxValue;
+            for (int i = 0; i < a.FeatureCount; i++)
+                firstRockDistance = Math.Min(firstRockDistance, a.GetFeature(i).Distance - 340f);
+            Assert.That(a.RevealDistance + firstRockDistance, Is.InRange(175f, 190f));
         }
 
         [Test]

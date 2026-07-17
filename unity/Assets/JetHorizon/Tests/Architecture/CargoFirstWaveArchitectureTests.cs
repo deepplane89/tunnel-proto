@@ -84,11 +84,13 @@ namespace JetHorizon.Tests.Architecture
                 MaxPickups = 128,
                 MaxCorridorSlices = 128,
                 MaxTerrainWorldSections = 64,
-                MaxTerrainWorldFeatures = 16,
+                MaxTerrainWorldFeatures = 48,
                 MaxTerrainRouteSections = 48
             }, 17072026u);
             simulation.StartRun(17072026L);
-            while (simulation.Snapshot.Distance < 120f) simulation.Step(default);
+            // The source cone generator enters at a fixed 160-unit preview, so the
+            // formation begins its reveal at distance 180 (340 - 160).
+            while (simulation.Snapshot.Distance < 190f) simulation.Step(default);
 
             Assert.That(simulation.Snapshot.CargoWaveId, Is.Not.Empty);
             Assert.That(simulation.Snapshot.CargoWaveLifecycle,

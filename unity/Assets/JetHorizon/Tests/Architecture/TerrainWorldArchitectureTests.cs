@@ -350,33 +350,31 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
-        public void FormationCadence_IsAuthoredInTimeAcrossSectorSpeeds()
+        public void FormationCadence_UsesSourceDistanceRhythmSoHigherSpeedFeelsFaster()
         {
             ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
             {
                 StartSpeedMultiplier = 3f,
                 MinimumOperationalSpeed = 100f
             });
-            for (int sector = 0; sector <= 5; sector++)
+            var planner = new RandomConeFormationPlanner();
+            RandomConeFormationPlan slow = planner.Create(
+                340f, 0f, TerrainWorldPaceRules.MaximumSpeedForHeat(0), capability, 1810, 0);
+            RandomConeFormationPlan fast = planner.Create(
+                340f, 0f, TerrainWorldPaceRules.MaximumSpeedForHeat(5), capability, 1810, 0);
+
+            float slowSeconds = 0f;
+            float fastSeconds = 0f;
+            for (int row = 1; row < slow.RowCount; row++)
             {
-                TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(sector, sector * 4120f, capability);
-                float speed = TerrainWorldPaceRules.MaximumSpeedForHeat(sector);
-                float previousDistance = -1f;
-                int formationCount = 0;
-                for (int i = 0; i < world.FeatureCount; i++)
-                {
-                    TerrainWorldFeature feature = world.GetFeature(i);
-                    if (!TerrainWorldFeatureRules.IsWaterFormation(feature.Kind)) continue;
-                    if (previousDistance >= 0f)
-                    {
-                        float seconds = (feature.Distance - previousDistance) / speed;
-                        Assert.That(seconds, Is.InRange(.59f, .85f), $"sector {sector}, beat {i}");
-                    }
-                    previousDistance = feature.Distance;
-                    formationCount++;
-                }
-                Assert.That(formationCount, Is.GreaterThanOrEqualTo(6), $"sector {sector}");
+                float slowSpacing = slow.GetRow(row).Distance - slow.GetRow(row - 1).Distance;
+                float fastSpacing = fast.GetRow(row).Distance - fast.GetRow(row - 1).Distance;
+                Assert.That(slowSpacing, Is.InRange(21f, 37f), "source 26-32 spacing plus ±5 jitter");
+                Assert.That(fastSpacing, Is.EqualTo(slowSpacing).Within(.001f));
+                slowSeconds += slowSpacing / TerrainWorldPaceRules.MaximumSpeedForHeat(0);
+                fastSeconds += fastSpacing / TerrainWorldPaceRules.MaximumSpeedForHeat(5);
             }
+            Assert.That(fastSeconds, Is.LessThan(slowSeconds * .75f));
         }
 
         [Test]
@@ -418,7 +416,7 @@ namespace JetHorizon.Tests.Architecture
                 MaxPickups = 128,
                 MaxCorridorSlices = 128,
                 MaxTerrainWorldSections = 64,
-                MaxTerrainWorldFeatures = 16,
+                MaxTerrainWorldFeatures = 48,
                 MaxTerrainRouteSections = 48
             }, 16072026u);
             simulation.StartRun(16072026L);

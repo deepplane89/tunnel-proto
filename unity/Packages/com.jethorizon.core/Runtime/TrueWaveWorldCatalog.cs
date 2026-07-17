@@ -11,7 +11,6 @@ namespace JetHorizon.Simulation
     public static class TrueWaveWorldCatalog
     {
         const float InitialWaterLength = 340f;
-        const float FormationLength = 820f;
         const float BreatherLength = 430f;
         const float MajorLength = 960f;
         const float FinalBreatherLength = 520f;
@@ -26,7 +25,6 @@ namespace JetHorizon.Simulation
             if (worldStartDistance < 0f) throw new ArgumentOutOfRangeException(nameof(worldStartDistance));
             float speed = TerrainWorldPaceRules.MaximumSpeedForHeat(Math.Min(5, sector));
             int seed = 1709 + sector * 7919;
-            float formationLength = Math.Max(FormationLength, speed * 6.6f);
             WorldParcelSelection selection = Selector.Select(sector);
             int formationVariant = selection.FormationVariant;
             WorldParcelKind firstMajor = selection.FirstMajor;
@@ -36,8 +34,15 @@ namespace JetHorizon.Simulation
 
             parcels.Add(CreateBreather("opening-water", cursor, InitialWaterLength, worldStartDistance, capability, seed));
             cursor += InitialWaterLength;
-            parcels.Add(CreateFormation(cursor, formationLength, worldStartDistance, capability, speed, seed + 101, formationVariant));
-            cursor += formationLength;
+            WorldParcelPlan formation = CreateFormation(
+                cursor,
+                worldStartDistance,
+                capability,
+                speed,
+                seed + 101,
+                formationVariant);
+            parcels.Add(formation);
+            cursor += formation.Length;
             parcels.Add(CreateBreather("formation-release", cursor, BreatherLength, worldStartDistance, capability, seed + 201));
             cursor += BreatherLength;
             parcels.Add(CreateMajor(firstMajor, cursor, MajorLength, worldStartDistance, capability, speed, seed + 307, selection.FirstVariant));
@@ -222,64 +227,25 @@ namespace JetHorizon.Simulation
 
         static WorldParcelPlan CreateFormation(
             float start,
-            float length,
             float worldStart,
             ShipCapabilityProfile capability,
             float speed,
             int seed,
             int variant)
         {
-            string variantId = "formation-" + variant;
-            float localStart = start - worldStart;
-            int[] sides = variant == 0
-                ? new[] { 1, -1, 1, -1, 1, -1, 1, -1 }
-                : variant == 1
-                    ? new[] { -1, -1, 1, -1, 1, 1, -1, 1 }
-                    : variant == 2
-                        ? new[] { 1, 0, -1, 1, -1, 0, 1, -1 }
-                        : new[] { -1, 1, 1, -1, 0, 1, -1, -1 };
-            TerrainWorldFeatureKind[] silhouettes =
-            {
-                TerrainWorldFeatureKind.WaterlineSpire,
-                TerrainWorldFeatureKind.WaterlineSplitPair,
-                TerrainWorldFeatureKind.WaterlineRidge,
-                TerrainWorldFeatureKind.WaterlineSteppedChain,
-                TerrainWorldFeatureKind.WaterlineAsymmetricGroup,
-                TerrainWorldFeatureKind.WaterlineSplitPair,
-                TerrainWorldFeatureKind.WaterlineSpire,
-                TerrainWorldFeatureKind.WaterlineCluster
-            };
-            var features = new TerrainWorldFeature[sides.Length];
-            for (int i = 0; i < features.Length; i++)
-            {
-                float authoredSeconds = 1.0f + i * .68f + (i % 2) * .08f;
-                float distance = Math.Min(localStart + length - 85f, localStart + authoredSeconds * speed);
-                float halfWidth = 7f + (i % 3) * 1.8f;
-                float x = sides[i] == 0
-                    ? ((i & 1) == 0 ? -18f : 18f)
-                    : sides[i] * (34f + (i % 2) * 11f);
-                features[i] = new TerrainWorldFeature(
-                    5000 + variant * 100 + i,
-                    silhouettes[(i + variant) % silhouettes.Length],
-                    distance,
-                    x,
-                    halfWidth,
-                    19f + (i % 4) * 6f,
-                    7f + (i % 2) * 1.4f,
-                    TraversalRequirement.None,
-                    seed + i * 101);
-            }
-
-            float safeA = sides[1] >= 0 ? -11f : 11f;
-            float safeB = sides[4] >= 0 ? -11f : 11f;
-            WorldParcelRoutePlan safe = Route(variantId + ".safe", CargoWaveRouteRole.Safe,
-                start, length, safeA, safeB, -safeB * .35f, 11f);
-            WorldParcelRoutePlan valuable = Route(variantId + ".valuable", CargoWaveRouteRole.Valuable,
-                start, length, -safeA * 2.3f, -safeB * 2.3f, safeB * 2.0f, 8f);
-            WorldParcelRoutePlan[] routes = { safe, valuable };
+            string variantId = "random-cone-formation-" + variant;
+            RandomConeFormationPlan plan = new RandomConeFormationPlanner().Create(
+                start,
+                worldStart,
+                speed,
+                capability,
+                seed,
+                variant);
+            WorldParcelRoutePlan[] routes = plan.CopyRoutes();
             CargoWaveCollectible[] collectibles = Collectibles(routes, seed * 10, false);
             CargoWavePlan cargo = Cargo(variantId + ".cargo", TerrainWaveKind.OpenWaterFormation,
-                start, length, capability, routes, collectibles);
+                start, plan.Length, capability, routes, collectibles,
+                plan.RevealDistance, plan.ApproachDistance);
             WorldFormationArchetype archetype = (WorldFormationArchetype)(1 + variant % 8);
             return new WorldParcelPlan(
                 variantId,
@@ -289,10 +255,10 @@ namespace JetHorizon.Simulation
                 archetype,
                 worldStart,
                 start,
-                length,
-                Reveal(capability), Approach(capability), RearCull(capability),
+                plan.Length,
+                plan.RevealDistance, plan.ApproachDistance, RearCull(capability),
                 Array.Empty<TerrainWorldSection>(),
-                features,
+                plan.CopyFeatures(),
                 Array.Empty<TerrainRouteSection>(),
                 routes,
                 new WorldThreatPlan(WorldThreatKind.None, 0, seed),
@@ -527,7 +493,9 @@ namespace JetHorizon.Simulation
             float length,
             ShipCapabilityProfile capability,
             WorldParcelRoutePlan[] routes,
-            CargoWaveCollectible[] collectibles)
+            CargoWaveCollectible[] collectibles,
+            float revealDistance = 0f,
+            float approachDistance = 0f)
         {
             var points = new List<CargoWaveRoutePoint>(16);
             for (int routeIndex = 0; routeIndex < routes.Length; routeIndex++)
@@ -535,7 +503,9 @@ namespace JetHorizon.Simulation
                     points.Add(routes[routeIndex].GetPoint(pointIndex));
             return new CargoWavePlan(
                 id, kind, start, length,
-                Reveal(capability), Approach(capability), RearCull(capability),
+                revealDistance > 0f ? revealDistance : Reveal(capability),
+                approachDistance > 0f ? approachDistance : Approach(capability),
+                RearCull(capability),
                 0f, points.ToArray(), collectibles);
         }
 
