@@ -23,6 +23,8 @@ namespace JetHorizon
         public float SweepX;
         public float MidX;
         public float CrestX;
+        [Range(.05f, .65f)] public float PlateauShoulderFraction;
+        [Range(0f, .08f)] public float PlateauUndulation;
 
         public static FacetSurfaceStyle ThreeJsSource => new FacetSurfaceStyle
         {
@@ -36,7 +38,9 @@ namespace JetHorizon
             FootX = 9f,
             SweepX = 4f,
             MidX = 17f,
-            CrestX = 20f
+            CrestX = 20f,
+            PlateauShoulderFraction = .20f,
+            PlateauUndulation = .012f
         };
 
         public void Validate()
@@ -48,6 +52,8 @@ namespace JetHorizon
             Rows = Mathf.Max(2, Rows);
             Displacement = Mathf.Max(0f, Displacement);
             Snap = Mathf.Max(.0001f, Snap);
+            PlateauShoulderFraction = Mathf.Clamp(PlateauShoulderFraction, .05f, .65f);
+            PlateauUndulation = Mathf.Clamp(PlateauUndulation, 0f, .08f);
         }
     }
 
@@ -211,7 +217,7 @@ namespace JetHorizon
             int stride = columns + 1;
             var macro = new FacetMassStation[stride];
             var inner = new Vector3[(rows + 1) * stride];
-            var outerCrestY = new float[stride];
+            var plateauY = new float[stride];
 
             // Sparse stations control only the large silhouette. They never become
             // visible facet columns; the source 5x6 face retains its original scale.
@@ -253,9 +259,12 @@ namespace JetHorizon
                 }
             }
 
-            var crestRng = new SourceLcg(unchecked(seed + 7919));
             for (int column = 0; column <= columns; column++)
-                outerCrestY[column] = macro[column].Height * (.92f + crestRng.Next() * .08f);
+            {
+                float progress = column / (float)columns;
+                float slowVariation = Mathf.Sin(progress * Mathf.PI * 2f + seed * .017f) * style.PlateauUndulation;
+                plateauY[column] = macro[column].Height * (1.01f + slowVariation);
+            }
 
             var writer = new TriangleWriter(name);
             int Index(int row, int column) => row * stride + column;
@@ -275,10 +284,10 @@ namespace JetHorizon
 
                 FacetMassStation a = macro[column];
                 FacetMassStation b = macro[column + 1];
-                Vector3 o00 = new Vector3(a.InnerX + a.Depth, v0 * a.Height, a.Z);
-                Vector3 o01 = new Vector3(a.InnerX + a.Depth, v1 * a.Height, a.Z);
-                Vector3 o10 = new Vector3(b.InnerX + b.Depth, v0 * b.Height, b.Z);
-                Vector3 o11 = new Vector3(b.InnerX + b.Depth, v1 * b.Height, b.Z);
+                Vector3 o00 = new Vector3(a.InnerX + a.Depth, v0 * plateauY[column], a.Z);
+                Vector3 o01 = new Vector3(a.InnerX + a.Depth, v1 * plateauY[column], a.Z);
+                Vector3 o10 = new Vector3(b.InnerX + b.Depth, v0 * plateauY[column + 1], b.Z);
+                Vector3 o11 = new Vector3(b.InnerX + b.Depth, v1 * plateauY[column + 1], b.Z);
                 writer.Triangle(o00, o10, o01, new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u0, v1));
                 writer.Triangle(o10, o11, o01, new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1));
             }
@@ -297,9 +306,20 @@ namespace JetHorizon
 
                 Vector3 crestA = inner[Index(rows, column)];
                 Vector3 crestB = inner[Index(rows, column + 1)];
-                Vector3 outerTopA = new Vector3(a.InnerX + a.Depth, outerCrestY[column], a.Z);
-                Vector3 outerTopB = new Vector3(b.InnerX + b.Depth, outerCrestY[column + 1], b.Z);
-                writer.Quad(crestA, crestB, outerTopA, outerTopB, new Vector2(u0, 1f), new Vector2(u1, 1f), new Vector2(u0, .8f), new Vector2(u1, .8f));
+                Vector3 outerTopA = new Vector3(a.InnerX + a.Depth, plateauY[column], a.Z);
+                Vector3 outerTopB = new Vector3(b.InnerX + b.Depth, plateauY[column + 1], b.Z);
+                Vector3 shoulderA = new Vector3(
+                    Mathf.Lerp(crestA.x, outerTopA.x, style.PlateauShoulderFraction),
+                    plateauY[column], a.Z);
+                Vector3 shoulderB = new Vector3(
+                    Mathf.Lerp(crestB.x, outerTopB.x, style.PlateauShoulderFraction),
+                    plateauY[column + 1], b.Z);
+                // Short angular shoulder; the remaining majority of the roof is a
+                // broad plateau rather than one long slope to the hidden outer wall.
+                writer.Quad(crestA, crestB, shoulderA, shoulderB,
+                    new Vector2(u0, 1f), new Vector2(u1, 1f), new Vector2(u0, .88f), new Vector2(u1, .88f));
+                writer.Quad(shoulderA, shoulderB, outerTopA, outerTopB,
+                    new Vector2(u0, .88f), new Vector2(u1, .88f), new Vector2(u0, .72f), new Vector2(u1, .72f));
             }
 
             AddEndCap(0, false);
@@ -315,8 +335,8 @@ namespace JetHorizon
                     float v1 = (row + 1f) / rows;
                     Vector3 innerA = inner[Index(row, column)];
                     Vector3 innerB = inner[Index(row + 1, column)];
-                    float outerY0 = Mathf.Lerp(0f, outerCrestY[column], v0);
-                    float outerY1 = Mathf.Lerp(0f, outerCrestY[column], v1);
+                    float outerY0 = Mathf.Lerp(0f, plateauY[column], v0);
+                    float outerY1 = Mathf.Lerp(0f, plateauY[column], v1);
                     Vector3 outerA = new Vector3(outerX, outerY0, station.Z);
                     Vector3 outerB = new Vector3(outerX, outerY1, station.Z);
                     if (reverse)

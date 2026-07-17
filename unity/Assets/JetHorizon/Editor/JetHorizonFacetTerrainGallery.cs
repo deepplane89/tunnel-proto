@@ -18,9 +18,9 @@ namespace JetHorizon.EditorTools
         internal static readonly string[] SpecimenNames =
         {
             "01 SOURCE PARITY — canonical Three.js slab",
-            "02 WATERLINE MONOLITH — isolated formation",
-            "03 RIDGE — variable macro silhouette",
-            "04 CURVED BANK — connected surface, no slab seams",
+            "02 MONOLITH — compact towering formation",
+            "03 KNIFE RIDGE — long low-to-high formation",
+            "04 NATURAL GATE — pillars and overhead bridge",
             "05 CONTINUOUS CANYON — paired curved land masses",
             "06 LOW SHELF — half-submerged terrain beat"
         };
@@ -42,42 +42,36 @@ namespace JetHorizon.EditorTools
             GameObject canonical = Add(SpecimenNames[0], parity, terrainMaterial, Vector3.zero);
 
             Mesh monolith = FacetTerrainMeshFactory.BuildMass(
-                Stations(0f, 72f, 9,
-                    t => Mathf.Sin(t * Mathf.PI * 1.3f) * 3f,
-                    t => Mathf.Lerp(30f, 58f, Mathf.SmoothStep(0f, 1f, Mathf.Sin(t * Mathf.PI))),
-                    t => 55f + Mathf.Sin(t * Mathf.PI) * 18f,
-                    t => Mathf.Lerp(.65f, 1.1f, t)), style, 11, "JH_WaterlineMonolith");
+                Stations(0f, 56f, 7,
+                    t => Mathf.Sin(t * Mathf.PI * 1.4f) * 2f,
+                    t => 62f + Mathf.Pow(Mathf.Sin(t * Mathf.PI), .7f) * 42f,
+                    t => 62f + Mathf.Sin(t * Mathf.PI) * 15f,
+                    t => 1.05f + Mathf.Sin(t * Mathf.PI) * .32f), style, 11, "JH_WaterlineMonolith");
             Add(SpecimenNames[1], monolith, terrainMaterial, Vector3.zero);
 
             Mesh ridge = FacetTerrainMeshFactory.BuildMass(
-                Stations(0f, 130f, 16,
-                    t => Mathf.Sin(t * Mathf.PI * 2f) * 7f,
-                    t => 24f + Mathf.Pow(Mathf.Sin(t * Mathf.PI), .65f) * 56f,
-                    t => 48f + Mathf.Sin(t * Mathf.PI) * 38f,
-                    t => .55f + Mathf.Sin(t * Mathf.PI) * .75f), style, 23, "JH_FacetRidge");
+                Stations(0f, 220f, 20,
+                    t => Mathf.Sin(t * Mathf.PI * 1.25f) * 14f,
+                    t => 14f + Mathf.Pow(Mathf.Sin(t * Mathf.PI), .55f) * 70f,
+                    t => 34f + Mathf.Sin(t * Mathf.PI) * 36f,
+                    t => .32f + Mathf.Sin(t * Mathf.PI) * .58f), style, 23, "JH_FacetKnifeRidge");
             Add(SpecimenNames[2], ridge, terrainMaterial, Vector3.zero);
 
-            Mesh curvedBank = FacetTerrainMeshFactory.BuildMass(
-                Stations(0f, 190f, 24,
-                    t => Mathf.Sin(t * Mathf.PI * 1.7f) * 24f,
-                    t => 48f + Mathf.Sin(t * Mathf.PI * 3f + .4f) * 9f,
-                    t => 70f + Mathf.Sin(t * Mathf.PI) * 22f,
-                    t => .85f + Mathf.Sin(t * Mathf.PI * 2f) * .22f), style, 41, "JH_CurvedFacetBank");
-            Add(SpecimenNames[3], curvedBank, terrainMaterial, Vector3.zero);
+            BuildNaturalGateSpecimen(style, terrainMaterial);
 
             BuildCanyonSpecimen(style, terrainMaterial);
 
             Mesh lowShelf = FacetTerrainMeshFactory.BuildMass(
-                Stations(0f, 118f, 14,
-                    t => Mathf.Sin(t * Mathf.PI * 2.4f) * 12f,
-                    t => 16f + Mathf.Sin(t * Mathf.PI) * 18f,
-                    t => 80f,
-                    t => .35f + Mathf.Sin(t * Mathf.PI) * .45f), style, 67, "JH_LowFacetShelf");
-            Add(SpecimenNames[5], lowShelf, terrainMaterial, new Vector3(0f, -6f, 0f));
+                Stations(0f, 180f, 16,
+                    t => Mathf.Sin(t * Mathf.PI * 2.1f) * 18f,
+                    t => 10f + Mathf.Sin(t * Mathf.PI) * 15f,
+                    t => 105f + Mathf.Sin(t * Mathf.PI) * 25f,
+                    t => .18f + Mathf.Sin(t * Mathf.PI) * .20f), style, 67, "JH_LowFacetShelf");
+            Add(SpecimenNames[5], lowShelf, terrainMaterial, new Vector3(0f, -8f, 0f));
 
+            SelectSpecimen(0, false);
             EditorSceneManager.SaveScene(scene, ScenePath);
-            FacetTerrainGalleryWindow.ShowWindow();
-            SelectSpecimen(0);
+            FacetTerrainGalleryWindow.ShowWindow(0);
             Debug.Log("[Jet Horizon] Facet Terrain Gallery created. Use the Facet Terrain Review window to inspect one formation at a time.");
         }
 
@@ -104,6 +98,26 @@ namespace JetHorizon.EditorTools
             Mesh leftMesh = FacetTerrainMeshFactory.BuildMass(leftMirrored, style, 59, "JH_CanyonLeftMass");
             AddChild(root.transform, "Right continuous bank", rightMesh, material, Vector3.one);
             AddChild(root.transform, "Left continuous bank", leftMesh, material, new Vector3(-1f, 1f, 1f));
+        }
+
+        static void BuildNaturalGateSpecimen(FacetSurfaceStyle style, Material material)
+        {
+            var root = new GameObject(SpecimenNames[3]);
+            List<FacetMassStation> pillarStations = Stations(0f, 64f, 8,
+                t => 30f + Mathf.Sin(t * Mathf.PI) * 2.5f,
+                t => 66f + Mathf.Sin(t * Mathf.PI) * 10f,
+                t => 86f,
+                t => .9f + Mathf.Sin(t * Mathf.PI) * .16f);
+            Mesh right = FacetTerrainMeshFactory.BuildMass(pillarStations, style, 41, "JH_NaturalGateRightPillar");
+            Mesh left = FacetTerrainMeshFactory.BuildMass(pillarStations, style, 43, "JH_NaturalGateLeftPillar");
+            AddChild(root.transform, "Right gate pillar", right, material, Vector3.one);
+            AddChild(root.transform, "Left gate pillar", left, material, new Vector3(-1f, 1f, 1f));
+
+            // The overhead bridge uses the same source face, rotated so its 20-unit
+            // patch spans the opening rather than introducing a generic cube.
+            Mesh bridge = FacetTerrainMeshFactory.BuildThreeJsParitySlab(style, 47);
+            AddChild(root.transform, "Facet bridge", bridge, material,
+                new Vector3(-32f, 58f, 60f), Quaternion.Euler(0f, 90f, 0f), new Vector3(.72f, .34f, 3.2f));
         }
 
         static List<FacetMassStation> Stations(
@@ -138,10 +152,22 @@ namespace JetHorizon.EditorTools
         }
 
         static void AddChild(Transform parent, string name, Mesh source, Material material, Vector3 scale)
+            => AddChild(parent, name, source, material, Vector3.zero, Quaternion.identity, scale);
+
+        static void AddChild(
+            Transform parent,
+            string name,
+            Mesh source,
+            Material material,
+            Vector3 position,
+            Quaternion rotation,
+            Vector3 scale)
         {
             Mesh mesh = SaveMesh(source, Sanitize(name));
             GameObject child = new GameObject(name);
             child.transform.SetParent(parent, false);
+            child.transform.localPosition = position;
+            child.transform.localRotation = rotation;
             child.transform.localScale = scale;
             child.AddComponent<MeshFilter>().sharedMesh = mesh;
             child.AddComponent<MeshRenderer>().sharedMaterial = material;
@@ -204,16 +230,20 @@ namespace JetHorizon.EditorTools
             return material;
         }
 
-        internal static void SelectSpecimen(int selectedIndex)
+        internal static void SelectSpecimen(int selectedIndex, bool saveScene = true)
         {
+            selectedIndex = Mathf.Clamp(selectedIndex, 0, SpecimenNames.Length - 1);
             GameObject selected = null;
             GameObject[] all = Resources.FindObjectsOfTypeAll<GameObject>();
+            Scene activeScene = SceneManager.GetActiveScene();
             for (int nameIndex = 0; nameIndex < SpecimenNames.Length; nameIndex++)
             {
                 for (int objectIndex = 0; objectIndex < all.Length; objectIndex++)
                 {
                     GameObject candidate = all[objectIndex];
-                    if (candidate.name != SpecimenNames[nameIndex] || !candidate.scene.IsValid()) continue;
+                    if (candidate.name != SpecimenNames[nameIndex]
+                        || candidate.scene != activeScene
+                        || candidate.transform.parent != null) continue;
                     bool active = nameIndex == selectedIndex;
                     candidate.SetActive(active);
                     if (active) selected = candidate;
@@ -228,6 +258,9 @@ namespace JetHorizon.EditorTools
                 for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
                 SceneView.lastActiveSceneView?.Frame(bounds, false);
             }
+            SessionState.SetInt("JH.FacetTerrainGallery.Selected", selectedIndex);
+            EditorSceneManager.MarkSceneDirty(activeScene);
+            if (saveScene && !string.IsNullOrEmpty(activeScene.path)) EditorSceneManager.SaveScene(activeScene);
             SceneView.RepaintAll();
         }
 
@@ -302,11 +335,19 @@ namespace JetHorizon.EditorTools
     {
         int _selected;
 
-        internal static void ShowWindow()
+        internal static void ShowWindow(int selected = -1)
         {
             FacetTerrainGalleryWindow window = GetWindow<FacetTerrainGalleryWindow>("Facet Terrain Review");
             window.minSize = new Vector2(390f, 300f);
+            window._selected = selected >= 0
+                ? selected
+                : SessionState.GetInt("JH.FacetTerrainGallery.Selected", 0);
             window.Show();
+        }
+
+        void OnEnable()
+        {
+            _selected = SessionState.GetInt("JH.FacetTerrainGallery.Selected", 0);
         }
 
         void OnGUI()
