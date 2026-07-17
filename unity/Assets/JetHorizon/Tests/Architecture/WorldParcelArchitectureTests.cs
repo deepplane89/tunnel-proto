@@ -58,18 +58,20 @@ namespace JetHorizon.Tests.Architecture
                 340f, 0f, speed, Capability, 1810, 0);
 
             Assert.That(plan.RowCount, Is.EqualTo(RandomConeFormationPlanner.AuthoredRowCount));
-            Assert.That(plan.Length, Is.LessThan(330f));
+            Assert.That(plan.Length, Is.InRange(700f, 780f));
             Assert.That(plan.RevealDistance, Is.EqualTo(RandomConeFormationPlanner.SourceSpawnDistance));
             for (int rowIndex = 0; rowIndex < plan.RowCount; rowIndex++)
             {
                 RandomConeFormationRow row = plan.GetRow(rowIndex);
+                Assert.That(row.BurstIndex, Is.EqualTo(rowIndex / RandomConeFormationPlanner.RowsPerBurst));
+                Assert.That(row.RowInBurst, Is.EqualTo(rowIndex % RandomConeFormationPlanner.RowsPerBurst));
                 Assert.That(row.BlockedCount,
-                    Is.InRange(
-                        RandomConeFormationPlanner.MinimumBlockersPerRow,
-                        RandomConeFormationPlanner.MaximumBlockersPerRow));
+                    Is.EqualTo(RandomConeFormationPlanner.MaximumBlockersPerRow));
+                bool centerIsBlocked = false;
                 for (int i = 0; i < row.BlockedCount; i++)
                 {
                     int lane = row.GetBlockedLane(i);
+                    centerIsBlocked |= lane == (RandomConeFormationPlanner.LaneCount - 1) / 2;
                     Assert.That(lane, Is.Not.EqualTo(row.SafeGapStartLane));
                     Assert.That(lane, Is.Not.EqualTo(row.SafeGapStartLane + 1));
                     Assert.That(lane, Is.Not.EqualTo(row.ValuableGapStartLane));
@@ -78,7 +80,22 @@ namespace JetHorizon.Tests.Architecture
                         Assert.That(Math.Abs(lane - row.GetBlockedLane(j)),
                             Is.GreaterThanOrEqualTo(RandomConeFormationPlanner.MinimumLaneGap));
                 }
+                Assert.That(centerIsBlocked, Is.True, "neutral must fail on row " + rowIndex);
+
+                for (int featureIndex = 0; featureIndex < plan.FeatureCount; featureIndex++)
+                {
+                    TerrainWorldFeature feature = plan.GetFeature(featureIndex);
+                    if (Math.Abs(feature.Distance - row.Distance) > 4f) continue;
+                    Assert.That(
+                        Math.Abs(feature.CenterX - row.SafeCenterX),
+                        Is.GreaterThan(feature.HalfWidth + Capability.CollisionHalfWidth),
+                        "safe route clips formation row " + rowIndex);
+                }
             }
+
+            Assert.That(plan.GetRow(0).SafeCenterX, Is.LessThan(0f));
+            Assert.That(plan.GetRow(3).SafeCenterX, Is.GreaterThan(0f));
+            Assert.That(plan.GetRow(6).SafeCenterX, Is.LessThan(0f));
         }
 
         [Test]
@@ -101,7 +118,23 @@ namespace JetHorizon.Tests.Architecture
             float firstRockDistance = float.MaxValue;
             for (int i = 0; i < a.FeatureCount; i++)
                 firstRockDistance = Math.Min(firstRockDistance, a.GetFeature(i).Distance - 340f);
-            Assert.That(a.RevealDistance + firstRockDistance, Is.InRange(175f, 190f));
+            Assert.That(a.RevealDistance + firstRockDistance, Is.InRange(185f, 195f));
+        }
+
+        [Test]
+        public void FormationWave_UsesDenseCoinTrailsThroughEverySafeOpening()
+        {
+            WorldParcelPlan formation = TerrainWorldCatalog.CreateProofWorld(0, 0f, Capability).GetParcel(1);
+
+            Assert.That(formation.Cargo.CollectibleCount,
+                Is.EqualTo(RandomConeFormationPlanner.AuthoredRowCount * 7));
+            for (int i = 0; i < formation.Cargo.CollectibleCount; i++)
+            {
+                CargoWaveCollectible coin = formation.Cargo.GetCollectible(i);
+                Assert.That(coin.Family, Is.EqualTo(CargoCollectibleFamily.CreditCache));
+                Assert.That(coin.RouteRole, Is.EqualTo(CargoWaveRouteRole.Safe));
+                Assert.That(coin.Units, Is.EqualTo(1));
+            }
         }
 
         [Test]

@@ -32,12 +32,21 @@ against the physical envelope of its owning parcel.
 The open-water formation correction now uses
 `RandomConeFormationPlanner`, a deterministic engine-neutral port of the
 production random-cone generator. It preserves the 21-lane Fisher-Yates
-shuffle, four-to-five blockers per row, adjacent guaranteed opening,
-three-lane anti-bunch rule, 26-to-32-unit cadence with source jitter, and the
-160-unit spawn preview. The blockers render as small faceted crystalline
-groups rather than cones. Spatial cadence is intentionally not multiplied by
-forward speed, so higher speed produces faster on-screen arrival instead of
-normalizing the wave back to the same slow timing.
+shuffle, five blockers per row, adjacent guaranteed opening, three-lane
+anti-bunch rule, and 160-unit spawn preview. The finite-wave extrapolation is
+three bursts of three rows: rows sit about 48 units apart inside a burst and
+bursts sit 180 units apart. Their safe openings move left-right-left (mirrored
+on alternate variants), every row blocks the neutral lane, and one extra guard
+lane on both sides of the safe opening accounts for the geological groups being
+wider than the source cones. The result is 45 faceted rock groups over roughly
+750 units, or about 5.9 seconds at 128 speed and 4.0 seconds at 188 speed.
+
+The formation uses the existing coin pickup only: seven coins run through each
+of the nine safe openings for 63 coins total. Each short coin trail announces
+and rewards the required line. Formation renderers dither from the horizon over
+70 units through a renderer-local property; the shared material defaults to
+fully opaque and bypasses that branch for canyon and other terrain. Canyon and
+lightning generation were not changed in this correction.
 
 The implementation now starts over empty water, builds complete parcel roots,
 reveals them from the horizon, retains prior geometry until rear cull, inserts
@@ -51,12 +60,14 @@ Automated verification completed:
 - engine-neutral core compiled with zero warnings/errors;
 - Unity presentation assembly compiled with zero warnings/errors;
 - architecture-test assembly compiled with zero warnings/errors;
-- all 45 parcel, terrain, cargo, and gate architecture tests passed in the
-  standalone runner;
+- all new parcel, terrain, cargo, and gate assertions passed in the standalone
+  runner, including dense coin trails, neutral-line rejection, safe-opening
+  clearance, burst spacing, and speed-dependent arrival;
+- a 10,000-seed formation audit retained five blockers in every row;
 - deterministic smoke run passed six authored world sentences;
 - smoke collision checks passed for empty water, canyon shore, and portal mass.
 
-The broader standalone core run passed 117 of 118 tests. The one remaining
+The broader standalone core run passed 118 of 119 tests. The one remaining
 failure is the pre-existing legacy test
 `PrismaticCollisionUsesTheSameCoreSamplePublishedToTheRenderer`; it also fails
 when run by itself and does not enter terrain-world mode or exercise the new

@@ -35,7 +35,9 @@ namespace JetHorizon.Tests.Architecture
                     Assert.That(wave.CollectibleCount,
                         wave.IsBreather
                             ? Is.EqualTo(0)
-                            : Is.InRange(1, wave.RoutePointCount));
+                            : wave.Kind == TerrainWaveKind.OpenWaterFormation
+                                ? Is.EqualTo(RandomConeFormationPlanner.AuthoredRowCount * 7)
+                                : Is.InRange(1, wave.RoutePointCount));
                     Assert.That(wave.HorizonRevealDistance, Is.GreaterThan(wave.ApproachDistance));
                 }
                 worldStart = world.EndDistance;
@@ -97,16 +99,13 @@ namespace JetHorizon.Tests.Architecture
                 Is.EqualTo(CargoWaveLifecycle.HorizonReveal));
             Assert.That(simulation.Snapshot.PickupCount, Is.GreaterThanOrEqualTo(4));
 
-            bool sawSalvage = false;
-            bool sawAlloy = false;
+            int coins = 0;
             for (int i = 0; i < simulation.Snapshot.PickupCount; i++)
             {
                 PickupSnapshot pickup = simulation.Snapshot.GetPickup(i);
-                sawSalvage |= pickup.Kind == PickupKind.Cargo && pickup.CargoKind == RunCargoKind.Salvage;
-                sawAlloy |= pickup.Kind == PickupKind.Cargo && pickup.CargoKind == RunCargoKind.Alloy;
+                if (pickup.Kind == PickupKind.Coin) coins++;
             }
-            Assert.That(sawSalvage, Is.True);
-            Assert.That(sawAlloy, Is.True);
+            Assert.That(coins, Is.EqualTo(RandomConeFormationPlanner.AuthoredRowCount * 7));
         }
 
         static ShipCapabilityProfile CreateCapability()

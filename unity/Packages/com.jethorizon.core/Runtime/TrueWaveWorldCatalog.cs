@@ -242,7 +242,7 @@ namespace JetHorizon.Simulation
                 seed,
                 variant);
             WorldParcelRoutePlan[] routes = plan.CopyRoutes();
-            CargoWaveCollectible[] collectibles = Collectibles(routes, seed * 10, false);
+            CargoWaveCollectible[] collectibles = FormationCoins(routes, seed * 100);
             CargoWavePlan cargo = Cargo(variantId + ".cargo", TerrainWaveKind.OpenWaterFormation,
                 start, plan.Length, capability, routes, collectibles,
                 plan.RevealDistance, plan.ApproachDistance);
@@ -263,6 +263,41 @@ namespace JetHorizon.Simulation
                 routes,
                 new WorldThreatPlan(WorldThreatKind.None, 0, seed),
                 cargo);
+        }
+
+        static CargoWaveCollectible[] FormationCoins(
+            WorldParcelRoutePlan[] routes,
+            int firstId)
+        {
+            const int coinsPerOpening = 7;
+            const float trailLength = 36f;
+            var result = new List<CargoWaveCollectible>(
+                RandomConeFormationPlanner.AuthoredRowCount * coinsPerOpening);
+            int id = Math.Abs(firstId) + 1;
+            for (int routeIndex = 0; routeIndex < routes.Length; routeIndex++)
+            {
+                WorldParcelRoutePlan route = routes[routeIndex];
+                if (route.Role != CargoWaveRouteRole.Safe) continue;
+                for (int pointIndex = 0; pointIndex < route.PointCount; pointIndex++)
+                {
+                    CargoWaveRoutePoint point = route.GetPoint(pointIndex);
+                    for (int coinIndex = 0; coinIndex < coinsPerOpening; coinIndex++)
+                    {
+                        float t = coinIndex / (float)(coinsPerOpening - 1);
+                        result.Add(new CargoWaveCollectible(
+                            id++,
+                            CargoCollectibleFamily.CreditCache,
+                            CargoWaveRouteRole.Safe,
+                            RunCargoKind.Salvage,
+                            PowerupType.None,
+                            1,
+                            point.Distance + (t - .5f) * trailLength,
+                            point.CenterX,
+                            1.2f));
+                    }
+                }
+            }
+            return result.ToArray();
         }
 
         static WorldParcelPlan CreateMajor(

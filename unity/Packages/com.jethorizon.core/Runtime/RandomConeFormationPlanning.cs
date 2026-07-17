@@ -14,6 +14,8 @@ namespace JetHorizon.Simulation
         readonly int[] _blockedLanes;
 
         public float Distance { get; }
+        public int BurstIndex { get; }
+        public int RowInBurst { get; }
         public int SafeGapStartLane { get; }
         public int ValuableGapStartLane { get; }
         public float SafeCenterX { get; }
@@ -22,6 +24,8 @@ namespace JetHorizon.Simulation
 
         internal RandomConeFormationRow(
             float distance,
+            int burstIndex,
+            int rowInBurst,
             int safeGapStartLane,
             int valuableGapStartLane,
             float safeCenterX,
@@ -29,6 +33,8 @@ namespace JetHorizon.Simulation
             int[] blockedLanes)
         {
             Distance = distance;
+            BurstIndex = burstIndex;
+            RowInBurst = rowInBurst;
             SafeGapStartLane = safeGapStartLane;
             ValuableGapStartLane = valuableGapStartLane;
             SafeCenterX = safeCenterX;
@@ -88,8 +94,9 @@ namespace JetHorizon.Simulation
 
     /// <summary>
     /// Deterministic engine-neutral port of the old random-cone row algorithm.
-    /// World spacing intentionally remains 26-32 units plus source jitter: unlike
-    /// time-normalized spacing, higher forward speed therefore looks and feels faster.
+    /// The source lane shuffle and anti-bunch rules are arranged into three finite
+    /// bursts. Each burst holds a readable opening on one side, the next burst moves
+    /// it across the water, and the third returns it, forcing a real slalom.
     /// </summary>
     public sealed class RandomConeFormationPlanner
     {
@@ -98,11 +105,16 @@ namespace JetHorizon.Simulation
         public const int MinimumLaneGap = 3;
         public const int MinimumBlockersPerRow = 4;
         public const int MaximumBlockersPerRow = 5;
-        public const int AuthoredRowCount = 7;
+        public const int BurstCount = 3;
+        public const int RowsPerBurst = 3;
+        public const int AuthoredRowCount = BurstCount * RowsPerBurst;
         public const float SourceSpawnDistance = 160f;
+        public const float NominalInBurstSpacing = 48f;
+        public const float InterBurstSpacing = 180f;
 
-        const float InitialLeadDistance = 22f;
-        const float ExitClearDistance = 48f;
+        const float InitialLeadDistance = 30f;
+        const float ExitClearDistance = 72f;
+        static readonly int[] SlalomGapStarts = { 5, 6, 7, 12, 13, 14, 7, 6, 5 };
         static readonly TerrainWorldFeatureKind[] Silhouettes =
         {
             TerrainWorldFeatureKind.WaterlineSpire,
@@ -132,37 +144,41 @@ namespace JetHorizon.Simulation
             var laneScratch = new int[LaneCount];
             float localStart = startDistance - worldStartDistance;
             float rowDistance = localStart + InitialLeadDistance;
-            int safeGapStart = 9 + ((variant & 1) == 0 ? 0 : 1);
 
             for (int rowIndex = 0; rowIndex < AuthoredRowCount; rowIndex++)
             {
+                int burstIndex = rowIndex / RowsPerBurst;
+                int rowInBurst = rowIndex % RowsPerBurst;
                 if (rowIndex > 0)
                 {
-                    float ramp = rowIndex / (float)(AuthoredRowCount - 1);
-                    float sourceSpacing = 32f - 6f * ramp;
-                    rowDistance += sourceSpacing + (random.NextFloat() - .5f) * 10f;
-
-                    // The source picked a new random two-lane gap every row. Keep that
-                    // rhythm, but constrain its random walk to the ship's validated
-                    // movement envelope so the authored opening is actually usable.
-                    int laneStep = random.NextInt(-1, 2);
-                    float seconds = sourceSpacing / forwardSpeed;
-                    float available = capability.MaximumLateralVelocity * seconds
-                        + .5f * capability.LateralAcceleration * seconds * seconds;
-                    if (available < LaneWidth * .85f) laneStep = 0;
-                    safeGapStart = Math.Max(5, Math.Min(14, safeGapStart + laneStep));
+                    float spacing = rowInBurst == 0
+                        ? InterBurstSpacing
+                        : NominalInBurstSpacing + (random.NextFloat() - .5f) * 10f;
+                    rowDistance += spacing;
                 }
 
-                int valuableGapStart = safeGapStart <= 9
-                    ? Math.Min(LaneCount - 2, safeGapStart + 6)
-                    : Math.Max(0, safeGapStart - 6);
+                int safeGapStart = SlalomGapStarts[rowIndex];
+                if ((variant & 1) != 0) safeGapStart = LaneCount - 2 - safeGapStart;
+                int direction = safeGapStart < (LaneCount - 2) / 2 ? -1 : 1;
+                int valuableGapStart = Math.Max(
+                    0,
+                    Math.Min(LaneCount - 2, safeGapStart + direction * 4));
                 ShuffleLanes(random, laneScratch);
-                int targetCount = MinimumBlockersPerRow + random.NextInt(0, 2);
+                int targetCount = MaximumBlockersPerRow;
                 var blocked = new List<int>(MaximumBlockersPerRow);
+                // A center blocker is mandatory. The endless source only guaranteed
+                // an opening; a finite slalom must also prove that holding neutral
+                // cannot accidentally clear every row.
+                blocked.Add((LaneCount - 1) / 2);
                 for (int i = 0; i < laneScratch.Length && blocked.Count < targetCount; i++)
                 {
                     int lane = laneScratch[i];
-                    if (InsideGap(lane, safeGapStart) || InsideGap(lane, valuableGapStart)) continue;
+                    // The original cone radius fit tightly beside its two-lane gap.
+                    // These geological silhouettes are wider, so reserve one guard
+                    // lane on either edge of the safe opening before shuffling the
+                    // remaining source lanes.
+                    if (InsideSafeClearance(lane, safeGapStart)
+                        || InsideGap(lane, valuableGapStart)) continue;
                     bool clashes = false;
                     for (int blockedIndex = 0; blockedIndex < blocked.Count; blockedIndex++)
                         if (Math.Abs(blocked[blockedIndex] - lane) < MinimumLaneGap)
@@ -172,11 +188,15 @@ namespace JetHorizon.Simulation
                         }
                     if (!clashes) blocked.Add(lane);
                 }
+                if (blocked.Count != targetCount)
+                    throw new InvalidOperationException("Random-cone row could not place its full blocker density.");
 
                 float safeCenter = GapCenterX(safeGapStart);
                 float valuableCenter = GapCenterX(valuableGapStart);
                 rows[rowIndex] = new RandomConeFormationRow(
                     rowDistance,
+                    burstIndex,
+                    rowInBurst,
                     safeGapStart,
                     valuableGapStart,
                     safeCenter,
@@ -198,10 +218,10 @@ namespace JetHorizon.Simulation
                 {
                     int lane = blocked[blockedIndex];
                     float x = LaneCenterX(lane) + (random.NextFloat() - .5f) * .6f;
-                    float zJitter = (random.NextFloat() - .5f) * 8f;
-                    float halfWidth = 2.05f + random.NextFloat() * .55f;
-                    float halfDepth = 2.8f + random.NextFloat() * 1.35f;
-                    float height = 10f + random.NextFloat() * 8f;
+                    float zJitter = (random.NextFloat() - .5f) * 6f;
+                    float halfWidth = 2.8f + random.NextFloat() * .8f;
+                    float halfDepth = 3.4f + random.NextFloat() * 1.8f;
+                    float height = 9f + random.NextFloat() * 9f;
                     int silhouetteIndex = (variant * 3 + rowIndex + blockedIndex) % Silhouettes.Length;
                     features.Add(new TerrainWorldFeature(
                         500000 + (variant & 15) * 10000 + rowIndex * 100 + blockedIndex,
@@ -243,6 +263,8 @@ namespace JetHorizon.Simulation
             }
         }
 
+        static bool InsideSafeClearance(int lane, int gapStart)
+            => lane >= gapStart - 1 && lane <= gapStart + 2;
         static bool InsideGap(int lane, int gapStart) => lane == gapStart || lane == gapStart + 1;
         static float LaneCenterX(int lane) => (lane - (LaneCount - 1) * .5f) * LaneWidth;
         static float GapCenterX(int gapStart) => (gapStart + .5f - (LaneCount - 1) * .5f) * LaneWidth;

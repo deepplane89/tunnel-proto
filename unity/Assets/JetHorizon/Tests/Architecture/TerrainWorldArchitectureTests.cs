@@ -34,7 +34,7 @@ namespace JetHorizon.Tests.Architecture
                     Is.EqualTo(TerrainRegionKind.ExtractionBreather));
                 Assert.That(world.GetSection(0).Distance, Is.Zero);
                 Assert.That(world.GetSection(world.SectionCount - 1).Distance,
-                    Is.EqualTo(world.Length));
+                    Is.EqualTo(world.Length).Within(.01f));
                 Assert.That(world.GetFeature(0).Requirement, Is.EqualTo(TraversalRequirement.None));
             }
         }
@@ -369,7 +369,13 @@ namespace JetHorizon.Tests.Architecture
             {
                 float slowSpacing = slow.GetRow(row).Distance - slow.GetRow(row - 1).Distance;
                 float fastSpacing = fast.GetRow(row).Distance - fast.GetRow(row - 1).Distance;
-                Assert.That(slowSpacing, Is.InRange(21f, 37f), "source 26-32 spacing plus ±5 jitter");
+                if (slow.GetRow(row).RowInBurst == 0)
+                    Assert.That(slowSpacing, Is.EqualTo(RandomConeFormationPlanner.InterBurstSpacing).Within(.001f));
+                else
+                    Assert.That(slowSpacing,
+                        Is.InRange(
+                            RandomConeFormationPlanner.NominalInBurstSpacing - 5f,
+                            RandomConeFormationPlanner.NominalInBurstSpacing + 5f));
                 Assert.That(fastSpacing, Is.EqualTo(slowSpacing).Within(.001f));
                 slowSeconds += slowSpacing / TerrainWorldPaceRules.MaximumSpeedForHeat(0);
                 fastSeconds += fastSpacing / TerrainWorldPaceRules.MaximumSpeedForHeat(5);

@@ -19,25 +19,31 @@ namespace JetHorizon
             public readonly List<Mesh> Meshes = new List<Mesh>(4);
             public readonly List<BuiltParcel> Parcels = new List<BuiltParcel>(8);
             public Transform ContentRoot;
+            public BuiltParcel ContentParcel;
         }
 
         sealed class BuiltParcel
         {
             public string Id;
+            public WorldParcelKind Kind;
             public WorldEnvelopeKind Envelope;
             public float LocalStartDistance;
             public float Length;
             public float RevealDistance;
             public float RearCullDistance;
             public Transform Root;
+            public readonly List<MeshRenderer> Renderers = new List<MeshRenderer>(16);
         }
 
         const int ReflectableLayer = 8;
+        const float FormationFadeDistance = 70f;
+        static readonly int ParcelFadeId = Shader.PropertyToID("_ParcelFade");
         BuiltWorld _current;
         BuiltWorld _queued;
         Material _material;
         Texture2D _cyanSurface;
         Texture2D _darkSurface;
+        readonly MaterialPropertyBlock _parcelProperties = new MaterialPropertyBlock();
 
         public string BuiltWorldId => _current?.Id ?? string.Empty;
         public int BuiltMeshCount => _current?.Meshes.Count ?? 0;
@@ -218,6 +224,7 @@ namespace JetHorizon
                 var builtParcel = new BuiltParcel
                 {
                     Id = parcel.Id,
+                    Kind = parcel.Kind,
                     Envelope = parcel.Envelope,
                     LocalStartDistance = parcel.LocalStartDistance,
                     Length = parcel.Length,
@@ -230,6 +237,7 @@ namespace JetHorizon
                 builtParcel.Root.SetParent(world.Root, false);
                 world.Parcels.Add(builtParcel);
                 world.ContentRoot = builtParcel.Root;
+                world.ContentParcel = builtParcel;
 
                 if (parcel.Envelope != WorldEnvelopeKind.None
                     && parcel.Envelope != WorldEnvelopeKind.DistantBanks)
@@ -281,6 +289,7 @@ namespace JetHorizon
                 builtParcel.Root.gameObject.SetActive(false);
             }
             world.ContentRoot = null;
+            world.ContentParcel = null;
         }
 
         void BuildParcelEnvelope(
@@ -631,6 +640,7 @@ namespace JetHorizon
             renderer.sharedMaterial = _material;
             renderer.shadowCastingMode = ShadowCastingMode.On;
             renderer.receiveShadows = true;
+            if (world.ContentParcel != null) world.ContentParcel.Renderers.Add(renderer);
         }
 
         static void SetActive(BuiltWorld world, bool active)
@@ -648,7 +658,7 @@ namespace JetHorizon
                 snapshot.ShipZ + snapshot.Distance - world.StartDistance);
         }
 
-        static void UpdateParcelVisibility(BuiltWorld world, float runDistance)
+        void UpdateParcelVisibility(BuiltWorld world, float runDistance)
         {
             if (world == null) return;
             for (int i = 0; i < world.Parcels.Count; i++)
@@ -659,6 +669,23 @@ namespace JetHorizon
                 bool visible = runDistance >= absoluteStart - parcel.RevealDistance
                     && runDistance <= absoluteStart + parcel.Length + parcel.RearCullDistance;
                 parcel.Root.gameObject.SetActive(visible);
+                if (!visible || parcel.Kind != WorldParcelKind.OpenWaterFormation) continue;
+
+                float fade = Mathf.SmoothStep(
+                    0f,
+                    1f,
+                    Mathf.InverseLerp(
+                        absoluteStart - parcel.RevealDistance,
+                        absoluteStart - parcel.RevealDistance + FormationFadeDistance,
+                        runDistance));
+                for (int rendererIndex = 0; rendererIndex < parcel.Renderers.Count; rendererIndex++)
+                {
+                    MeshRenderer renderer = parcel.Renderers[rendererIndex];
+                    if (renderer == null) continue;
+                    _parcelProperties.Clear();
+                    _parcelProperties.SetFloat(ParcelFadeId, fade);
+                    renderer.SetPropertyBlock(_parcelProperties);
+                }
             }
         }
 

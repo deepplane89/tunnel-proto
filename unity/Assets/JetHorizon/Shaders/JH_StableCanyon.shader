@@ -8,6 +8,7 @@ Shader "JH/StableCanyon"
         _DarkBody ("Dark Body", Color) = (0.10, 0.06, 0.16, 1)
         _Brightness ("Brightness", Range(0, 1)) = 0.72
         _Emission ("Emission", Range(0, 2)) = 0.28
+        _ParcelFade ("Parcel Fade", Range(0, 1)) = 1
     }
     SubShader
     {
@@ -45,6 +46,7 @@ Shader "JH/StableCanyon"
                 half4 _DarkBody;
                 float _Brightness;
                 float _Emission;
+                float _ParcelFade;
             CBUFFER_END
 
             TEXTURE2D(_CyanSurface);
@@ -65,6 +67,17 @@ Shader "JH/StableCanyon"
 
             half4 frag(Varyings input) : SV_Target
             {
+                // Formation parcels receive a per-renderer fade. The material
+                // default remains one, so persistent canyon geometry is unchanged.
+                if (_ParcelFade < 0.999)
+                {
+                    float2 fadePixel = floor(input.positionCS.xy);
+                    float fadeNoise = frac(52.9829189 * frac(dot(
+                        fadePixel,
+                        float2(0.06711056, 0.00583715))));
+                    clip(_ParcelFade - fadeNoise - 0.001);
+                }
+
                 // The canyon is a persistent landform, not a streamed obstacle row.
                 // Distance dithering made its far chunks visibly materialize as the
                 // player advanced. Let camera fog and real geometry provide depth;
