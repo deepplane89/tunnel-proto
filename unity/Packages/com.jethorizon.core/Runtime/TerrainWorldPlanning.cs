@@ -335,6 +335,36 @@ namespace JetHorizon.Simulation
             ? _waves[index]
             : throw new ArgumentOutOfRangeException(nameof(index));
 
+        /// <summary>
+        /// Samples the physical water passage from the authored shoreline. Cargo
+        /// planning and terrain validation use this same topology; no host engine
+        /// may invent a separate lane from the rendered mesh.
+        /// </summary>
+        public bool TrySampleWater(float distance, out float leftShoreX, out float rightShoreX)
+        {
+            if (distance < 0f || distance > Length || _sections.Length == 0)
+            {
+                leftShoreX = rightShoreX = 0f;
+                return false;
+            }
+            int index = 0;
+            while (index < _sections.Length - 1 && distance >= _sections[index + 1].Distance)
+                index++;
+            TerrainWorldSection a = _sections[index];
+            if (index >= _sections.Length - 1)
+            {
+                leftShoreX = a.LeftShoreX;
+                rightShoreX = a.RightShoreX;
+                return true;
+            }
+            TerrainWorldSection b = _sections[index + 1];
+            float t = Math.Max(0f, Math.Min(1f,
+                (distance - a.Distance) / Math.Max(.001f, b.Distance - a.Distance)));
+            leftShoreX = a.LeftShoreX + (b.LeftShoreX - a.LeftShoreX) * t;
+            rightShoreX = a.RightShoreX + (b.RightShoreX - a.RightShoreX) * t;
+            return true;
+        }
+
         public bool HasRoutePassagesAt(float distance)
         {
             for (int i = 0; i < _routeSections.Length; i++)

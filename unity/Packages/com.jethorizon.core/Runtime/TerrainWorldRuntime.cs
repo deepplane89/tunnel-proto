@@ -104,6 +104,7 @@ namespace JetHorizon.Simulation
         public float SoftSpeedCap { get; }
         public bool ExtractionDecisionOpen { get; }
         public float ExtractionDistance { get; }
+        public CargoWaveRuntimeState CargoWave { get; }
 
         internal TerrainWorldState(
             TerrainWorldPlan world,
@@ -112,7 +113,8 @@ namespace JetHorizon.Simulation
             float regionProgress01,
             float earnedSpeedBonus,
             float softSpeedCap,
-            bool extractionDecisionOpen)
+            bool extractionDecisionOpen,
+            CargoWaveRuntimeState cargoWave)
         {
             WorldId = world?.Id ?? string.Empty;
             Sector = world?.Sector ?? 0;
@@ -130,6 +132,7 @@ namespace JetHorizon.Simulation
             ExtractionDistance = world == null
                 ? 0f
                 : world.StartDistance + world.GetRegion(world.RegionCount - 1).StartDistance;
+            CargoWave = cargoWave;
         }
     }
 
@@ -175,6 +178,7 @@ namespace JetHorizon.Simulation
         const float NextWorldPreloadDistance = 1800f;
 
         readonly ShipCapabilityProfile _capability;
+        readonly CargoWaveRuntime _cargoWaves;
         TerrainWorldPlan _world;
         TerrainWorldPlan _queuedWorld;
         bool _continueQueued;
@@ -187,6 +191,9 @@ namespace JetHorizon.Simulation
 
         public TerrainWorldPlan World => _world;
         public TerrainWorldPlan QueuedWorld => _queuedWorld;
+        public CargoWaveSequencePlan CargoWaves => _cargoWaves.Current;
+        public CargoWaveSequencePlan QueuedCargoWaves => _cargoWaves.Queued;
+        public CargoWaveRuntimeState CargoWaveState => _cargoWaves.Snapshot;
         public TerrainWorldState Snapshot => _snapshot;
         public float EarnedSpeedBonus => _earnedSpeedBonus;
         public float SoftSpeedCap => TerrainWorldPaceRules.MaximumSpeedForHeat(_heat);
@@ -198,6 +205,7 @@ namespace JetHorizon.Simulation
         public TerrainWorldRuntime(ShipCapabilityProfile capability)
         {
             _capability = capability;
+            _cargoWaves = new CargoWaveRuntime(capability);
             Reset();
         }
 
@@ -211,6 +219,7 @@ namespace JetHorizon.Simulation
             _queuedWorld = null;
             _continueQueued = false;
             _world = TerrainWorldCatalog.CreateProofWorld(0, 0f, _capability);
+            _cargoWaves.Reset(_world);
             Refresh(0f);
         }
 
@@ -223,6 +232,7 @@ namespace JetHorizon.Simulation
                 _world.Sector,
                 1f,
                 _heat));
+            _cargoWaves.Sync(_world, _queuedWorld, _world.EndDistance);
             Refresh(_world.EndDistance);
             return true;
         }
@@ -242,6 +252,7 @@ namespace JetHorizon.Simulation
                 _queuedWorld.Sector,
                 0f,
                 _heat));
+            _cargoWaves.Sync(_world, _queuedWorld, runDistance);
             Refresh(runDistance);
             return true;
         }
@@ -280,6 +291,7 @@ namespace JetHorizon.Simulation
                     _capability);
                 _continueQueued = true;
             }
+            _cargoWaves.Sync(_world, _queuedWorld, runDistance);
             float localDistance = runDistance - _world.StartDistance;
             int nextRegion = FindRegion(localDistance);
             bool regionChanged = nextRegion != _activeRegionIndex;
@@ -593,7 +605,8 @@ namespace JetHorizon.Simulation
                 progress,
                 _earnedSpeedBonus,
                 SoftSpeedCap,
-                _extractionDecisionOpen);
+                _extractionDecisionOpen,
+                _cargoWaves.Snapshot);
         }
     }
 }

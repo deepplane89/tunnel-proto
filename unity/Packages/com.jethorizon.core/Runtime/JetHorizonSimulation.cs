@@ -6,7 +6,7 @@ namespace JetHorizon.Simulation
     /// First engine-neutral vertical slice: fixed-step ship movement, roll-aware collision,
     /// deterministic standard-hazard spawning, scoring, near misses, and death.
     /// </summary>
-    public sealed class JetHorizonSimulation
+    public sealed partial class JetHorizonSimulation
     {
         struct HazardState
         {
@@ -860,6 +860,8 @@ namespace JetHorizon.Simulation
             if (_config.PickupSimulationEnabled && Phase == CoreGamePhase.Playing)
                 UpdatePickups(step);
 
+            SyncCargoFirstWavePickups();
+
             RefreshSnapshot();
         }
 
@@ -1486,6 +1488,7 @@ namespace JetHorizon.Simulation
             _structuredWallSpawnZ = 0f;
             _proofEncounters?.Reset();
             _terrainWorld?.Reset();
+            ResetCargoFirstWavePickups();
             _gateRun?.Reset(_config.BaseSpeed * _config.StartSpeedMultiplier * _config.PersistentCruiseSpeedMultiplier);
             _environmentEncounter.Reset();
             _runParcelCommands.Clear();
@@ -2654,6 +2657,12 @@ namespace JetHorizon.Simulation
             Snapshot.TerrainRegionProgress01 = terrainWorld.RegionProgress01;
             Snapshot.TerrainWorldStartDistance = terrainWorld.WorldStartDistance;
             Snapshot.TerrainWorldLength = terrainWorld.WorldLength;
+            Snapshot.CargoWaveId = terrainWorld.CargoWave.WaveId ?? string.Empty;
+            Snapshot.CargoWaveKind = terrainWorld.CargoWave.Kind;
+            Snapshot.CargoWaveLifecycle = terrainWorld.CargoWave.Lifecycle;
+            Snapshot.CargoWaveStartDistance = terrainWorld.CargoWave.StartDistance;
+            Snapshot.CargoWaveEndDistance = terrainWorld.CargoWave.EndDistance;
+            Snapshot.CargoWaveProgress01 = terrainWorld.CargoWave.Progress01;
             Snapshot.SectorIndex = _terrainWorld != null ? terrainWorld.Sector : gateRun.Sector;
             Snapshot.GateStreak = _terrainWorld != null ? 0 : gateRun.GateStreak;
             Snapshot.HighestGateStreak = _terrainWorld != null ? 0 : gateRun.HighestGateStreak;

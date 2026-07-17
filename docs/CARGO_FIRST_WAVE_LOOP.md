@@ -1,7 +1,10 @@
 # Jet Horizon — Cargo-First Wave Loop
 
-**Status:** Proposed gameplay direction. No gameplay code is implied by this
-document.
+**Status:** First engine-neutral architecture slice implemented on July 17,
+2026. The route planner, finite-wave lifecycle, capability validation,
+core-owned pickup placement, current/queued world handoff, breathers, snapshots,
+and presenter events are live. Content and presentation work listed under
+"Still intentionally pending" remains to be built and playtested.
 
 **Purpose:** Make the water / sun / ship / terrain fantasy into a simple mobile
 game where the player actively chooses richer, harder collection lines while
@@ -318,7 +321,8 @@ Unity presenters
   terrain, lightning, pickup identity, laser burst, HUD, garage and audio
 ```
 
-Core contracts needed before implementation:
+Core contract target (implemented names differ where an existing core contract
+already covered the responsibility):
 
 - `CollectibleDefinition`: id, family, value, weight/capacity cost, rarity,
   upgrade uses.
@@ -333,6 +337,37 @@ Core contracts needed before implementation:
 
 The wave planner validates the routes first. Unity never decides that an item is
 collectible because it happens to look reachable on screen.
+
+### Implemented code map
+
+- `CargoFirstWavePlanning.cs` owns collectible families, safe / valuable / hero
+  route points, immutable finite wave plans, complete world sequences,
+  validation, lifecycle state, and deterministic catalog adaptation.
+- `TerrainWorldRuntime` owns the active and fully planned queued cargo-wave
+  sequences alongside the persistent terrain worlds. Unity does not select the
+  next reward line.
+- `JetHorizonSimulation.CargoWaves.cs` materializes only validated core pickup
+  commands. The normal pickup simulation remains authoritative for collection,
+  capacity rejection, score, and the unsecured run manifest.
+- `SimulationSnapshot` publishes wave id, kind, lifecycle, distances, and
+  progress. `CargoWaveChanged` and `CargoWaveLifecycleChanged` are the narrow
+  presentation seams for future audio, HUD, horizon treatment, and haptics.
+- Open-water reset and release-basin waves are actual `Rest` lifecycle beats
+  with no reward trail. A following landmark cannot reveal until the authored
+  breather has begun.
+- The current and queued plans are created before reveal. Pickup views continue
+  to use Unity's existing pool, so reveal activates prepared presentation rather
+  than constructing gameplay content on the horizon.
+
+### Still intentionally pending
+
+- Power cells currently settle through the existing Alloy cargo column until
+  the persistent economy receives a dedicated resource migration.
+- Per-wave outcome summaries and deterministic end-of-run settlement receipts.
+- The destroyable laser formation and its compact reward burst.
+- Manual extraction UI and settlement; it remains disabled while the wave proof
+  is being tuned.
+- Final cargo models, horizon fades, wave-specific audio, haptics, and garage UI.
 
 ---
 

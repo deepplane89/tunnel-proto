@@ -92,6 +92,8 @@ namespace JetHorizon.Simulation
         PickupCollected,
         CargoCollected,
         CargoRejectedForWeight,
+        CargoWaveChanged,
+        CargoWaveLifecycleChanged,
         ExtractionWindowOpened,
         ExtractionWindowPassed,
         ExtractionDecisionOpened,
@@ -679,6 +681,12 @@ namespace JetHorizon.Simulation
         public float TerrainRegionProgress01 { get; internal set; }
         public float TerrainWorldStartDistance { get; internal set; }
         public float TerrainWorldLength { get; internal set; }
+        public string CargoWaveId { get; internal set; }
+        public TerrainWaveKind CargoWaveKind { get; internal set; }
+        public CargoWaveLifecycle CargoWaveLifecycle { get; internal set; }
+        public float CargoWaveStartDistance { get; internal set; }
+        public float CargoWaveEndDistance { get; internal set; }
+        public float CargoWaveProgress01 { get; internal set; }
         public int SectorIndex { get; internal set; }
         public int GateStreak { get; internal set; }
         public int HighestGateStreak { get; internal set; }
