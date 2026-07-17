@@ -643,6 +643,8 @@ namespace JetHorizon.Simulation
         readonly GateSnapshot[] _gates;
         readonly TerrainWorldSectionSnapshot[] _terrainWorldSections;
         readonly TerrainWorldFeatureSnapshot[] _terrainWorldFeatures;
+        readonly TerrainWorldSectionSnapshot[] _queuedTerrainWorldSections;
+        readonly TerrainWorldFeatureSnapshot[] _queuedTerrainWorldFeatures;
 
         public CoreGamePhase Phase { get; internal set; }
         public long Tick { get; internal set; }
@@ -719,6 +721,11 @@ namespace JetHorizon.Simulation
         public int GateCount { get; internal set; }
         public int TerrainWorldSectionCount { get; internal set; }
         public int TerrainWorldFeatureCount { get; internal set; }
+        public string QueuedTerrainWorldId { get; internal set; }
+        public float QueuedTerrainWorldStartDistance { get; internal set; }
+        public float QueuedTerrainWorldLength { get; internal set; }
+        public int QueuedTerrainWorldSectionCount { get; internal set; }
+        public int QueuedTerrainWorldFeatureCount { get; internal set; }
         public float ShieldSeconds { get; internal set; }
         public int ShieldHits { get; internal set; }
         public float LaserSeconds { get; internal set; }
@@ -764,6 +771,8 @@ namespace JetHorizon.Simulation
             _gates = new GateSnapshot[maxGates];
             _terrainWorldSections = new TerrainWorldSectionSnapshot[maxTerrainWorldSections];
             _terrainWorldFeatures = new TerrainWorldFeatureSnapshot[maxTerrainWorldFeatures];
+            _queuedTerrainWorldSections = new TerrainWorldSectionSnapshot[maxTerrainWorldSections];
+            _queuedTerrainWorldFeatures = new TerrainWorldFeatureSnapshot[maxTerrainWorldFeatures];
         }
 
         public HazardSnapshot GetHazard(int index)
@@ -805,6 +814,22 @@ namespace JetHorizon.Simulation
         }
 
         internal TerrainWorldFeatureSnapshot[] TerrainWorldFeatureBuffer => _terrainWorldFeatures;
+
+        public TerrainWorldSectionSnapshot GetQueuedTerrainWorldSection(int index)
+        {
+            if (index < 0 || index >= QueuedTerrainWorldSectionCount) throw new ArgumentOutOfRangeException(nameof(index));
+            return _queuedTerrainWorldSections[index];
+        }
+
+        internal TerrainWorldSectionSnapshot[] QueuedTerrainWorldSectionBuffer => _queuedTerrainWorldSections;
+
+        public TerrainWorldFeatureSnapshot GetQueuedTerrainWorldFeature(int index)
+        {
+            if (index < 0 || index >= QueuedTerrainWorldFeatureCount) throw new ArgumentOutOfRangeException(nameof(index));
+            return _queuedTerrainWorldFeatures[index];
+        }
+
+        internal TerrainWorldFeatureSnapshot[] QueuedTerrainWorldFeatureBuffer => _queuedTerrainWorldFeatures;
 
         public CorridorSliceSnapshot GetCorridorSlice(int index)
         {

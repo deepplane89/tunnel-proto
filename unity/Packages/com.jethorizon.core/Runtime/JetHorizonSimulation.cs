@@ -765,12 +765,9 @@ namespace JetHorizon.Simulation
                     }
                     if (terrainResult.BeginLightning)
                     {
-                        _terrainWorld.GetActiveSafeWindow(out float safeCenter, out float safeHalfWidth);
-                        _hazardPatternScheduler.BeginLightning(
-                            LightningSequenceKind.Random,
-                            Math.Min(_config.MaximumHeat, _heatLevel + 2),
-                            safeCenter,
-                            Math.Max(7f, safeHalfWidth * .62f));
+                        // Terrain lightning is driven continuously by
+                        // TickLightningSpawner using the approved Three.js loop.
+                        // Do not layer a second short scheduler burst over it.
                     }
                     if (terrainResult.BeginPrismatic)
                     {
@@ -1894,6 +1891,14 @@ namespace JetHorizon.Simulation
         void TickLightningSpawner(float dt, WorldFrame world)
         {
             CorridorFamily family = CorridorFamily.None;
+            if (_terrainWorld != null
+                && _terrainWorld.Snapshot.ActiveRegion == TerrainRegionKind.StormChannel)
+            {
+                // Exact PRE_T4A GitHub gameplay sequence: RANDOM loop every .3 s,
+                // centered on live ship X with the source's velocity lead applied
+                // in SpawnPredictedLightningStrike.
+                family = CorridorFamily.PreT4A;
+            }
             if (_stageDirector != null
                 && _stageDirector.CurrentStage.Kind == StageKind.Corridor
                 && world.CanyonActive
@@ -2558,6 +2563,22 @@ namespace JetHorizon.Simulation
                     _distance,
                     _config.ShipZ,
                     Snapshot.TerrainWorldFeatureBuffer)
+                : 0;
+            TerrainWorldPlan queuedTerrainWorld = _terrainWorld?.QueuedWorld;
+            Snapshot.QueuedTerrainWorldId = queuedTerrainWorld?.Id ?? string.Empty;
+            Snapshot.QueuedTerrainWorldStartDistance = queuedTerrainWorld?.StartDistance ?? 0f;
+            Snapshot.QueuedTerrainWorldLength = queuedTerrainWorld?.Length ?? 0f;
+            Snapshot.QueuedTerrainWorldSectionCount = _terrainWorld != null
+                ? _terrainWorld.WriteQueuedSections(
+                    _distance,
+                    _config.ShipZ,
+                    Snapshot.QueuedTerrainWorldSectionBuffer)
+                : 0;
+            Snapshot.QueuedTerrainWorldFeatureCount = _terrainWorld != null
+                ? _terrainWorld.WriteQueuedFeatures(
+                    _distance,
+                    _config.ShipZ,
+                    Snapshot.QueuedTerrainWorldFeatureBuffer)
                 : 0;
             bool gateExtractionVisible = false;
             float gateExtractionX = 0f;

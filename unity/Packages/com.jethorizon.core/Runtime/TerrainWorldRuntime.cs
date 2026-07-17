@@ -148,6 +148,7 @@ namespace JetHorizon.Simulation
     public sealed class TerrainWorldRuntime
     {
         const float ShoreCollisionVisualInset = 2f;
+        const float NextWorldPreloadDistance = 1800f;
 
         readonly ShipCapabilityProfile _capability;
         TerrainWorldPlan _world;
@@ -161,6 +162,7 @@ namespace JetHorizon.Simulation
         TerrainWorldState _snapshot;
 
         public TerrainWorldPlan World => _world;
+        public TerrainWorldPlan QueuedWorld => _queuedWorld;
         public TerrainWorldState Snapshot => _snapshot;
         public float EarnedSpeedBonus => _earnedSpeedBonus;
         public float SoftSpeedCap => 128f + _heat * 12f;
@@ -242,6 +244,18 @@ namespace JetHorizon.Simulation
                     _heat,
                     _world.EndDistance));
             }
+            // Presentation needs the next complete landmass well before the seam.
+            // Queueing is core state, not a Unity guess, and does not change the
+            // active collision world until the existing end-distance handoff.
+            if (!_continueQueued
+                && runDistance >= _world.EndDistance - NextWorldPreloadDistance)
+            {
+                _queuedWorld = TerrainWorldCatalog.CreateProofWorld(
+                    _world.Sector + 1,
+                    _world.EndDistance,
+                    _capability);
+                _continueQueued = true;
+            }
             float localDistance = runDistance - _world.StartDistance;
             int nextRegion = FindRegion(localDistance);
             bool regionChanged = nextRegion != _activeRegionIndex;
@@ -269,11 +283,14 @@ namespace JetHorizon.Simulation
                     // development. The authored open-water region is a real breather;
                     // queue the next world without pausing or deleting presentation.
                     _heat = Math.Min(5, _heat + 1);
-                    _queuedWorld = TerrainWorldCatalog.CreateProofWorld(
-                        _world.Sector + 1,
-                        _world.EndDistance,
-                        _capability);
-                    _continueQueued = true;
+                    if (_queuedWorld == null)
+                    {
+                        _queuedWorld = TerrainWorldCatalog.CreateProofWorld(
+                            _world.Sector + 1,
+                            _world.EndDistance,
+                            _capability);
+                        _continueQueued = true;
+                    }
                 }
             }
 
@@ -364,6 +381,40 @@ namespace JetHorizon.Simulation
                 destination[i] = new TerrainWorldFeatureSnapshot(
                     _world.GetFeature(i),
                     _world.StartDistance,
+                    runDistance,
+                    shipZ);
+            return count;
+        }
+
+        public int WriteQueuedSections(
+            float runDistance,
+            float shipZ,
+            TerrainWorldSectionSnapshot[] destination)
+        {
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+            if (_queuedWorld == null) return 0;
+            int count = Math.Min(destination.Length, _queuedWorld.SectionCount);
+            for (int i = 0; i < count; i++)
+                destination[i] = new TerrainWorldSectionSnapshot(
+                    _queuedWorld.GetSection(i),
+                    _queuedWorld.StartDistance,
+                    runDistance,
+                    shipZ);
+            return count;
+        }
+
+        public int WriteQueuedFeatures(
+            float runDistance,
+            float shipZ,
+            TerrainWorldFeatureSnapshot[] destination)
+        {
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+            if (_queuedWorld == null) return 0;
+            int count = Math.Min(destination.Length, _queuedWorld.FeatureCount);
+            for (int i = 0; i < count; i++)
+                destination[i] = new TerrainWorldFeatureSnapshot(
+                    _queuedWorld.GetFeature(i),
+                    _queuedWorld.StartDistance,
                     runDistance,
                     shipZ);
             return count;

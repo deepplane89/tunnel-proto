@@ -12,19 +12,27 @@ namespace JetHorizon
     /// </summary>
     public sealed class TerrainWorldPresenter : MonoBehaviour, ISimSystem
     {
-        readonly List<Mesh> _meshes = new List<Mesh>(4);
-        Transform _world;
+        sealed class BuiltWorld
+        {
+            public string Id;
+            public float StartDistance;
+            public Transform Root;
+            public readonly List<Mesh> Meshes = new List<Mesh>(4);
+        }
+
+        const int ReflectableLayer = 8;
+        BuiltWorld _current;
+        BuiltWorld _queued;
         Material _material;
         Texture2D _surface;
-        string _worldId;
 
-        public string BuiltWorldId => _worldId ?? string.Empty;
-        public int BuiltMeshCount => _meshes.Count;
+        public string BuiltWorldId => _current?.Id ?? string.Empty;
+        public int BuiltMeshCount => _current?.Meshes.Count ?? 0;
 
         public void ResetSystem()
         {
-            ClearWorld();
-            _worldId = null;
+            ClearWorld(ref _current);
+            ClearWorld(ref _queued);
         }
 
         public void SimTick(float dt)
@@ -32,32 +40,69 @@ namespace JetHorizon
             SimulationSnapshot snapshot = GameManager.I != null ? GameManager.I.CoreSnapshot : null;
             if (snapshot == null || !snapshot.TerrainWorldMode)
             {
-                if (_world != null) _world.gameObject.SetActive(false);
+                SetActive(_current, false);
+                SetActive(_queued, false);
                 return;
             }
-            if (_world == null || _worldId != snapshot.TerrainWorldId)
-                BuildWorld(snapshot);
-            if (_world == null) return;
-            _world.gameObject.SetActive(true);
-            _world.position = new Vector3(
-                0f,
-                0f,
-                snapshot.ShipZ + snapshot.Distance - snapshot.TerrainWorldStartDistance);
+
+            if (_current == null || _current.Id != snapshot.TerrainWorldId)
+            {
+                if (_queued != null && _queued.Id == snapshot.TerrainWorldId)
+                {
+                    ClearWorld(ref _current);
+                    _current = _queued;
+                    _queued = null;
+                }
+                else
+                {
+                    ClearWorld(ref _current);
+                    _current = BuildWorld(snapshot, false);
+                }
+            }
+
+            string queuedId = snapshot.QueuedTerrainWorldId ?? string.Empty;
+            if (!string.IsNullOrEmpty(queuedId)
+                && queuedId != snapshot.TerrainWorldId
+                && (_queued == null || _queued.Id != queuedId))
+            {
+                ClearWorld(ref _queued);
+                _queued = BuildWorld(snapshot, true);
+            }
+
+            PositionWorld(_current, snapshot);
+            PositionWorld(_queued, snapshot);
         }
 
-        void BuildWorld(SimulationSnapshot snapshot)
+        BuiltWorld BuildWorld(SimulationSnapshot snapshot, bool queued)
         {
-            ClearWorld();
             EnsureMaterial();
-            _worldId = snapshot.TerrainWorldId;
-            _world = new GameObject("Persistent Terrain World " + _worldId).transform;
-            _world.SetParent(transform, false);
+            string id = queued ? snapshot.QueuedTerrainWorldId : snapshot.TerrainWorldId;
+            int sectionCount = queued
+                ? snapshot.QueuedTerrainWorldSectionCount
+                : snapshot.TerrainWorldSectionCount;
+            int featureCount = queued
+                ? snapshot.QueuedTerrainWorldFeatureCount
+                : snapshot.TerrainWorldFeatureCount;
+            if (string.IsNullOrEmpty(id) || sectionCount < 2) return null;
 
-            var rightShore = new List<FacetMassStation>(snapshot.TerrainWorldSectionCount);
-            var leftShoreMirrored = new List<FacetMassStation>(snapshot.TerrainWorldSectionCount);
-            for (int i = snapshot.TerrainWorldSectionCount - 1; i >= 0; i--)
+            var built = new BuiltWorld
             {
-                TerrainWorldSectionSnapshot section = snapshot.GetTerrainWorldSection(i);
+                Id = id,
+                StartDistance = queued
+                    ? snapshot.QueuedTerrainWorldStartDistance
+                    : snapshot.TerrainWorldStartDistance,
+                Root = new GameObject("Persistent Terrain World " + id).transform
+            };
+            built.Root.gameObject.layer = ReflectableLayer;
+            built.Root.SetParent(transform, false);
+
+            var rightShore = new List<FacetMassStation>(sectionCount);
+            var leftShoreMirrored = new List<FacetMassStation>(sectionCount);
+            for (int i = sectionCount - 1; i >= 0; i--)
+            {
+                TerrainWorldSectionSnapshot section = queued
+                    ? snapshot.GetQueuedTerrainWorldSection(i)
+                    : snapshot.GetTerrainWorldSection(i);
                 float localZ = -section.Distance;
                 rightShore.Add(new FacetMassStation(
                     localZ,
@@ -72,7 +117,6 @@ namespace JetHorizon
                     section.LeftDepth,
                     1f));
             }
-            if (rightShore.Count < 2) return;
 
             Mesh rightMesh = FacetTerrainMeshFactory.BuildMass(
                 rightShore,
@@ -85,64 +129,68 @@ namespace JetHorizon
                 977,
                 "JH_CompleteWorldLeftShore");
             AddMesh(
-                _world,
+                built,
                 "Right continuous terrain",
                 rightMesh,
                 new Vector3(0f, -5f, 0f),
                 Quaternion.identity,
                 Vector3.one);
             AddMesh(
-                _world,
+                built,
                 "Left continuous terrain",
                 leftMesh,
                 new Vector3(0f, -5f, 0f),
                 Quaternion.identity,
                 new Vector3(-1f, 1f, 1f));
 
-            for (int i = 0; i < snapshot.TerrainWorldFeatureCount; i++)
+            for (int i = 0; i < featureCount; i++)
             {
-                TerrainWorldFeatureSnapshot feature = snapshot.GetTerrainWorldFeature(i);
+                TerrainWorldFeatureSnapshot feature = queued
+                    ? snapshot.GetQueuedTerrainWorldFeature(i)
+                    : snapshot.GetTerrainWorldFeature(i);
                 if (feature.Kind == TerrainWorldFeatureKind.NaturalArch)
-                    BuildNaturalArch(feature);
+                    BuildNaturalArch(built, feature);
                 else if (TerrainWorldFeatureRules.IsWaterFormation(feature.Kind))
-                    BuildWaterlineFormation(feature);
+                    BuildWaterlineFormation(built, feature);
             }
+            return built;
         }
 
-        void BuildWaterlineFormation(TerrainWorldFeatureSnapshot feature)
+        void BuildWaterlineFormation(BuiltWorld world, TerrainWorldFeatureSnapshot feature)
         {
             if (feature.Kind == TerrainWorldFeatureKind.WaterlineMonolith)
             {
                 AddWaterlineSlab(
-                    feature, "Monolith", feature.CenterX, feature.HalfWidth,
+                    world, feature, "Monolith", feature.CenterX, feature.HalfWidth,
                     feature.Height, feature.CollisionHalfDepth, feature.Seed);
                 return;
             }
             if (feature.Kind == TerrainWorldFeatureKind.WaterlineRidge)
             {
                 float width = feature.HalfWidth * .58f;
-                AddWaterlineSlab(feature, "Ridge left",
+                AddWaterlineSlab(world, feature, "Ridge left",
                     feature.CenterX - feature.HalfWidth * .42f, width,
                     feature.Height * .72f, feature.CollisionHalfDepth, feature.Seed);
-                AddWaterlineSlab(feature, "Ridge crest",
+                AddWaterlineSlab(world, feature, "Ridge crest",
                     feature.CenterX, width,
                     feature.Height, feature.CollisionHalfDepth, feature.Seed + 11);
-                AddWaterlineSlab(feature, "Ridge right",
+                AddWaterlineSlab(world, feature, "Ridge right",
                     feature.CenterX + feature.HalfWidth * .42f, width,
                     feature.Height * .80f, feature.CollisionHalfDepth, feature.Seed + 23);
                 return;
             }
 
             float clusterWidth = feature.HalfWidth * .72f;
-            AddWaterlineSlab(feature, "Cluster primary",
+            AddWaterlineSlab(world, feature, "Cluster primary",
                 feature.CenterX - feature.HalfWidth * .28f, clusterWidth,
                 feature.Height, feature.CollisionHalfDepth, feature.Seed);
-            AddWaterlineSlab(feature, "Cluster shoulder",
+            AddWaterlineSlab(world, feature, "Cluster shoulder",
                 feature.CenterX + feature.HalfWidth * .30f, clusterWidth,
                 feature.Height * .68f, feature.CollisionHalfDepth * .88f, feature.Seed + 17);
         }
 
         void AddWaterlineSlab(
+            BuiltWorld world,
             TerrainWorldFeatureSnapshot feature,
             string label,
             float centerX,
@@ -154,7 +202,7 @@ namespace JetHorizon
             FacetSurfaceStyle style = FacetSurfaceStyle.ThreeJsSource;
             Mesh mass = FacetTerrainMeshFactory.BuildThreeJsParitySlab(style, seed);
             AddMesh(
-                _world,
+                world,
                 label + " " + feature.Id,
                 mass,
                 new Vector3(centerX - halfWidth, -7f, -feature.Distance + halfDepth),
@@ -165,7 +213,7 @@ namespace JetHorizon
                     halfWidth * 2f / style.Length));
         }
 
-        void BuildNaturalArch(TerrainWorldFeatureSnapshot feature)
+        void BuildNaturalArch(BuiltWorld world, TerrainWorldFeatureSnapshot feature)
         {
             // The supporting cliffs are the continuous shore meshes. This is only
             // their connecting crown, so the arch reads as one geological structure
@@ -175,7 +223,7 @@ namespace JetHorizon
                 feature.Seed);
             float span = feature.HalfWidth * 2f + 9f;
             AddMesh(
-                _world,
+                world,
                 "Natural arch crown",
                 crown,
                 new Vector3(
@@ -202,16 +250,17 @@ namespace JetHorizon
         }
 
         void AddMesh(
-            Transform parent,
+            BuiltWorld world,
             string name,
             Mesh mesh,
             Vector3 position,
             Quaternion rotation,
             Vector3 scale)
         {
-            _meshes.Add(mesh);
+            world.Meshes.Add(mesh);
             var child = new GameObject(name);
-            child.transform.SetParent(parent, false);
+            child.layer = ReflectableLayer;
+            child.transform.SetParent(world.Root, false);
             child.transform.localPosition = position;
             child.transform.localRotation = rotation;
             child.transform.localScale = scale;
@@ -222,26 +271,43 @@ namespace JetHorizon
             renderer.receiveShadows = true;
         }
 
-        void ClearWorld()
+        static void SetActive(BuiltWorld world, bool active)
         {
-            if (_world != null)
+            if (world?.Root != null) world.Root.gameObject.SetActive(active);
+        }
+
+        static void PositionWorld(BuiltWorld world, SimulationSnapshot snapshot)
+        {
+            if (world?.Root == null) return;
+            world.Root.gameObject.SetActive(true);
+            world.Root.position = new Vector3(
+                0f,
+                0f,
+                snapshot.ShipZ + snapshot.Distance - world.StartDistance);
+        }
+
+        static void ClearWorld(ref BuiltWorld world)
+        {
+            if (world == null) return;
+            if (world.Root != null)
             {
-                if (UnityEngine.Application.isPlaying) Destroy(_world.gameObject);
-                else DestroyImmediate(_world.gameObject);
-                _world = null;
+                if (UnityEngine.Application.isPlaying) Destroy(world.Root.gameObject);
+                else DestroyImmediate(world.Root.gameObject);
             }
-            for (int i = 0; i < _meshes.Count; i++)
+            for (int i = 0; i < world.Meshes.Count; i++)
             {
-                if (_meshes[i] == null) continue;
-                if (UnityEngine.Application.isPlaying) Destroy(_meshes[i]);
-                else DestroyImmediate(_meshes[i]);
+                if (world.Meshes[i] == null) continue;
+                if (UnityEngine.Application.isPlaying) Destroy(world.Meshes[i]);
+                else DestroyImmediate(world.Meshes[i]);
             }
-            _meshes.Clear();
+            world.Meshes.Clear();
+            world = null;
         }
 
         void OnDestroy()
         {
-            ClearWorld();
+            ClearWorld(ref _current);
+            ClearWorld(ref _queued);
             if (_material != null) Destroy(_material);
             if (_surface != null) Destroy(_surface);
         }

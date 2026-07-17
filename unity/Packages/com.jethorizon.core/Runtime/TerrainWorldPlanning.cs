@@ -341,36 +341,105 @@ namespace JetHorizon.Simulation
             const float breatherLength = 500f;
             const float breatherStart = openWaterReturnStart + openWaterReturnLength;
             float worldLength = breatherStart + breatherLength;
-            var regions = new[]
+            TerrainWorldRegion[] regions;
+            if (layout == 1)
             {
-                new TerrainWorldRegion(1, TerrainRegionKind.OpenSea,              0f,  220f, 0f),
-                new TerrainWorldRegion(2, TerrainRegionKind.CoastalWeave,       220f,  980f, 8f),
-                new TerrainWorldRegion(3, TerrainRegionKind.StormChannel,      1200f,  420f, 6f),
-                new TerrainWorldRegion(4, TerrainRegionKind.NaturalArch,       1620f,  260f, 5f),
-                new TerrainWorldRegion(5, TerrainRegionKind.CrystallineCanyon, 1880f, 1100f, 11f),
-                new TerrainWorldRegion(6, TerrainRegionKind.OpenSea,
-                    openWaterReturnStart, openWaterReturnLength, 7f),
-                new TerrainWorldRegion(7, TerrainRegionKind.ExtractionBreather,
-                    breatherStart, breatherLength, 0f)
-            };
+                // The storm arrives immediately after open water, then releases
+                // into a long geological weave. This is a different encounter
+                // sentence, not the same sentence with different prop seeds.
+                regions = new[]
+                {
+                    new TerrainWorldRegion(1, TerrainRegionKind.OpenSea,              0f, 220f, 0f),
+                    new TerrainWorldRegion(2, TerrainRegionKind.StormChannel,       220f, 440f, 6f),
+                    new TerrainWorldRegion(3, TerrainRegionKind.CoastalWeave,       660f, 960f, 8f),
+                    new TerrainWorldRegion(4, TerrainRegionKind.NaturalArch,       1620f, 260f, 5f),
+                    new TerrainWorldRegion(5, TerrainRegionKind.CrystallineCanyon, 1880f, 1100f, 11f),
+                    new TerrainWorldRegion(6, TerrainRegionKind.OpenSea,
+                        openWaterReturnStart, openWaterReturnLength, 7f),
+                    new TerrainWorldRegion(7, TerrainRegionKind.ExtractionBreather,
+                        breatherStart, breatherLength, 0f)
+                };
+            }
+            else if (layout == 2)
+            {
+                // A shorter opening weave is interrupted by a mid-field storm,
+                // followed by a second terrain push before the arch and canyon.
+                regions = new[]
+                {
+                    new TerrainWorldRegion(1, TerrainRegionKind.OpenSea,              0f, 220f, 0f),
+                    new TerrainWorldRegion(2, TerrainRegionKind.CoastalWeave,       220f, 500f, 5f),
+                    new TerrainWorldRegion(3, TerrainRegionKind.StormChannel,       720f, 420f, 6f),
+                    new TerrainWorldRegion(4, TerrainRegionKind.CoastalWeave,      1140f, 480f, 5f),
+                    new TerrainWorldRegion(5, TerrainRegionKind.NaturalArch,       1620f, 260f, 5f),
+                    new TerrainWorldRegion(6, TerrainRegionKind.CrystallineCanyon, 1880f, 1100f, 11f),
+                    new TerrainWorldRegion(7, TerrainRegionKind.OpenSea,
+                        openWaterReturnStart, openWaterReturnLength, 7f),
+                    new TerrainWorldRegion(8, TerrainRegionKind.ExtractionBreather,
+                        breatherStart, breatherLength, 0f)
+                };
+            }
+            else
+            {
+                regions = new[]
+                {
+                    new TerrainWorldRegion(1, TerrainRegionKind.OpenSea,              0f, 220f, 0f),
+                    new TerrainWorldRegion(2, TerrainRegionKind.CoastalWeave,       220f, 980f, 8f),
+                    new TerrainWorldRegion(3, TerrainRegionKind.StormChannel,      1200f, 420f, 6f),
+                    new TerrainWorldRegion(4, TerrainRegionKind.NaturalArch,       1620f, 260f, 5f),
+                    new TerrainWorldRegion(5, TerrainRegionKind.CrystallineCanyon, 1880f, 1100f, 11f),
+                    new TerrainWorldRegion(6, TerrainRegionKind.OpenSea,
+                        openWaterReturnStart, openWaterReturnLength, 7f),
+                    new TerrainWorldRegion(7, TerrainRegionKind.ExtractionBreather,
+                        breatherStart, breatherLength, 0f)
+                };
+            }
             var sections = new List<TerrainWorldSection>(48);
             int id = 1000;
 
+            TerrainRegionKind RegionAt(float distance)
+            {
+                for (int regionIndex = 0; regionIndex < regions.Length; regionIndex++)
+                    if (distance < regions[regionIndex].EndDistance + .01f)
+                        return regions[regionIndex].Kind;
+                return regions[regions.Length - 1].Kind;
+            }
+
             void Shore(
                 float distance,
-                TerrainRegionKind region,
+                TerrainRegionKind _,
                 float left,
                 float right,
                 float leftHeight,
                 float rightHeight,
                 float depth = 150f)
             {
+                if (distance >= 220f && distance < 1620f)
+                {
+                    float center = (left + right) * .5f;
+                    float halfWidth = (right - left) * .5f;
+                    if (layout == 1)
+                    {
+                        center += (float)Math.Sin(distance * .0071f + .4f) * 11f;
+                        halfWidth += (float)Math.Sin(distance * .0049f + 1.1f) * 4f;
+                        leftHeight *= .88f;
+                        rightHeight *= 1.12f;
+                    }
+                    else if (layout == 2)
+                    {
+                        center += (float)Math.Sin(distance * .0048f - .7f) * 15f;
+                        halfWidth += (float)Math.Sin(distance * .0082f - .2f) * 5f;
+                        leftHeight *= 1.15f;
+                        rightHeight *= .86f;
+                    }
+                    left = center - Math.Max(22f, halfWidth);
+                    right = center + Math.Max(22f, halfWidth);
+                }
                 float worldLeft = mirror > 0f ? left : -right;
                 float worldRight = mirror > 0f ? right : -left;
                 float worldLeftHeight = mirror > 0f ? leftHeight : rightHeight;
                 float worldRightHeight = mirror > 0f ? rightHeight : leftHeight;
                 sections.Add(new TerrainWorldSection(
-                    id++, region, distance, worldLeft, worldRight,
+                    id++, RegionAt(distance), distance, worldLeft, worldRight,
                     worldLeftHeight, worldRightHeight, depth, depth));
             }
 

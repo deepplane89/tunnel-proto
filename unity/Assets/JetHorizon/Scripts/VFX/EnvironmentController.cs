@@ -42,6 +42,10 @@ namespace JetHorizon
         {
             GameEvents.VibeChanged += OnVibeChanged;
             CachePresentationRig();
+            // This legacy additive quad is the broad horizontal flare the player
+            // was seeing as "god rays" on the horizon. The hero sun, corona and
+            // real water reflection already provide the intended horizon light.
+            if (HorizonSeam != null) HorizonSeam.enabled = false;
             _current = _target = Vibes.Get(0);
             Apply(_current);
         }
@@ -87,7 +91,7 @@ namespace JetHorizon
             // during steering roll, retry sweeps and the death camera orbit.
             if (_corona != null)
                 _corona.transform.LookAt(cam.transform.position, cam.transform.up);
-            if (HorizonSeam != null)
+            if (HorizonSeam != null && HorizonSeam.enabled)
                 HorizonSeam.transform.LookAt(cam.transform.position, cam.transform.up);
         }
 
@@ -143,7 +147,7 @@ namespace JetHorizon
                 WaterMaterial.SetColor("_SkyColor", v.skyBot);
                 WaterMaterial.SetColor("_SunColor", Color.Lerp(Color.black, v.sunColor, 0.72f));
             }
-            if (HorizonSeam != null)
+            if (HorizonSeam != null && HorizonSeam.enabled)
                 HorizonSeam.material.SetColor("_Tint", new Color(
                     Mathf.Min(1f, v.sunColor.r + 0.15f), Mathf.Min(1f, v.sunColor.g + 0.05f), v.sunColor.b, 1f));
             if (_corona != null)
@@ -225,7 +229,7 @@ namespace JetHorizon
                     _corona.material.SetTexture("_MainTex", _runtimeCorona);
                 }
             }
-            if (HorizonSeam != null && HorizonSeam.sharedMaterial != null)
+            if (HorizonSeam != null && HorizonSeam.enabled && HorizonSeam.sharedMaterial != null)
             {
                 // Keep the additive horizon streak behind every world-space surface
                 // for the same reason as the sun and corona.

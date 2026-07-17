@@ -80,6 +80,9 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(second.GetFeature(1).Kind, Is.Not.EqualTo(third.GetFeature(1).Kind));
             Assert.That(first.GetFeature(1).Distance, Is.Not.EqualTo(second.GetFeature(1).Distance));
             Assert.That(second.GetFeature(1).Distance, Is.Not.EqualTo(third.GetFeature(1).Distance));
+            Assert.That(first.GetRegion(1).Kind, Is.EqualTo(TerrainRegionKind.CoastalWeave));
+            Assert.That(second.GetRegion(1).Kind, Is.EqualTo(TerrainRegionKind.StormChannel));
+            Assert.That(third.RegionCount, Is.GreaterThan(first.RegionCount));
             Assert.That(System.Math.Abs(first.GetSection(30).WaterCenterX),
                 Is.Not.EqualTo(System.Math.Abs(second.GetSection(30).WaterCenterX)).Within(.01f));
             Assert.That(System.Math.Abs(second.GetSection(30).WaterCenterX),
@@ -147,6 +150,14 @@ namespace JetHorizon.Tests.Architecture
             string currentWorld = simulation.Snapshot.TerrainWorldId;
             float currentWorldEnd = simulation.Snapshot.TerrainWorldStartDistance
                 + simulation.Snapshot.TerrainWorldLength;
+            while (string.IsNullOrEmpty(simulation.Snapshot.QueuedTerrainWorldId))
+                simulation.Step(default);
+            Assert.That(simulation.Snapshot.ActiveTerrainRegion,
+                Is.Not.EqualTo(TerrainRegionKind.ExtractionBreather));
+            Assert.That(simulation.Snapshot.QueuedTerrainWorldId, Is.EqualTo("terrain-world-01"));
+            Assert.That(simulation.Snapshot.QueuedTerrainWorldStartDistance,
+                Is.EqualTo(currentWorldEnd).Within(.01f));
+            Assert.That(simulation.Snapshot.QueuedTerrainWorldSectionCount, Is.GreaterThan(40));
             while (simulation.Snapshot.ActiveTerrainRegion != TerrainRegionKind.ExtractionBreather)
                 simulation.Step(default);
             Assert.That(simulation.Snapshot.ExtractionDecisionOpen, Is.False);
@@ -159,6 +170,33 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(simulation.Snapshot.Distance, Is.GreaterThanOrEqualTo(currentWorldEnd));
             Assert.That(simulation.Snapshot.TerrainWorldId, Is.EqualTo("terrain-world-01"));
             Assert.That(simulation.Snapshot.ActiveTerrainRegion, Is.EqualTo(TerrainRegionKind.OpenSea));
+        }
+
+        [Test]
+        public void StormChannel_UsesGithubShipRelativeRandomLoopAtStrongFrequency()
+        {
+            JetHorizonSimulation simulation = CreateTerrainSimulation();
+            while (simulation.Snapshot.ActiveTerrainRegion != TerrainRegionKind.StormChannel)
+                simulation.Step(default);
+
+            int maximumConcurrentLightning = 0;
+            for (int frame = 0; frame < 75; frame++)
+            {
+                simulation.Step(default);
+                int lightning = 0;
+                for (int i = 0; i < simulation.Snapshot.HazardCount; i++)
+                {
+                    HazardSnapshot hazard = simulation.Snapshot.GetHazard(i);
+                    if (hazard.Kind != HazardKind.Lightning) continue;
+                    lightning++;
+                    Assert.That(System.Math.Abs(hazard.X), Is.LessThanOrEqualTo(1.51f));
+                }
+                maximumConcurrentLightning = System.Math.Max(maximumConcurrentLightning, lightning);
+            }
+
+            // Source PRE_T4A runs at one strike every .3 seconds. Over this
+            // 1.25-second sample it must clearly exceed the old tiny burst cadence.
+            Assert.That(maximumConcurrentLightning, Is.GreaterThanOrEqualTo(3));
         }
 
         [Test]
