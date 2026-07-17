@@ -51,7 +51,13 @@ namespace JetHorizon.Simulation
         OpenWaterReset,
         PortalChoice,
         L3KnifeSineTunnel,
-        ReleaseBasin
+        ReleaseBasin,
+        OpenWaterFormation,
+        OpenWaterLightning,
+        OpenWaterBreather,
+        CrystallineCanyon,
+        RoutePortal,
+        PrismaticCorridor
     }
 
     public enum TerrainWorldFeatureKind
@@ -241,6 +247,7 @@ namespace JetHorizon.Simulation
         readonly TerrainWorldFeature[] _features;
         readonly TerrainRouteSection[] _routeSections;
         readonly TerrainWorldWave[] _waves;
+        readonly WorldParcelSequencePlan _parcels;
 
         public string Id { get; }
         public int Sector { get; }
@@ -253,6 +260,8 @@ namespace JetHorizon.Simulation
         public int FeatureCount => _features.Length;
         public int RouteSectionCount => _routeSections.Length;
         public int WaveCount => _waves.Length;
+        public WorldParcelSequencePlan Parcels => _parcels;
+        public int ParcelCount => _parcels?.ParcelCount ?? 0;
 
         public TerrainWorldPlan(
             string id,
@@ -264,7 +273,8 @@ namespace JetHorizon.Simulation
             TerrainWorldFeature[] features,
             TerrainRouteSection[] routeSections = null,
             TerrainCourseKind course = TerrainCourseKind.ThreeHoleApproach,
-            TerrainWorldWave[] waves = null)
+            TerrainWorldWave[] waves = null,
+            WorldParcelSequencePlan parcels = null)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("World id is required.", nameof(id));
             if (sector < 0 || startDistance < 0f || length <= 0f) throw new ArgumentOutOfRangeException(nameof(length));
@@ -279,6 +289,7 @@ namespace JetHorizon.Simulation
                 ? Array.Empty<TerrainRouteSection>()
                 : (TerrainRouteSection[])routeSections.Clone();
             _waves = waves == null ? Array.Empty<TerrainWorldWave>() : (TerrainWorldWave[])waves.Clone();
+            _parcels = parcels;
             float previousEnd = 0f;
             for (int i = 0; i < _regions.Length; i++)
             {
@@ -334,6 +345,10 @@ namespace JetHorizon.Simulation
         public TerrainWorldWave GetWave(int index) => index >= 0 && index < _waves.Length
             ? _waves[index]
             : throw new ArgumentOutOfRangeException(nameof(index));
+
+        public WorldParcelPlan GetParcel(int index) => _parcels != null
+            ? _parcels.GetParcel(index)
+            : throw new InvalidOperationException("This terrain world has no finite parcel sentence.");
 
         /// <summary>
         /// Samples the physical water passage from the authored shoreline. Cargo
@@ -542,6 +557,12 @@ namespace JetHorizon.Simulation
     public static class TerrainWorldCatalog
     {
         public static TerrainWorldPlan CreateProofWorld(
+            int sector,
+            float startDistance,
+            ShipCapabilityProfile capability)
+            => TrueWaveWorldCatalog.Create(sector, startDistance, capability);
+
+        internal static TerrainWorldPlan CreateLegacyProofWorld(
             int sector,
             float startDistance,
             ShipCapabilityProfile capability)

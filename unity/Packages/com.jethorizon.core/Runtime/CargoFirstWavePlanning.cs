@@ -120,7 +120,8 @@ namespace JetHorizon.Simulation
         public float RearCullDistance { get; }
         public float RecoveryDistance { get; }
         public bool IsBreather => Kind == TerrainWaveKind.OpenWaterReset
-            || Kind == TerrainWaveKind.ReleaseBasin;
+            || Kind == TerrainWaveKind.ReleaseBasin
+            || Kind == TerrainWaveKind.OpenWaterBreather;
         public int RoutePointCount => _routePoints.Length;
         public int CollectibleCount => _collectibles.Length;
 
@@ -323,6 +324,18 @@ namespace JetHorizon.Simulation
             ShipCapabilityProfile capability)
         {
             if (world == null) throw new ArgumentNullException(nameof(world));
+            if (world.ParcelCount > 0)
+            {
+                var parcelWaves = new CargoWavePlan[world.ParcelCount];
+                for (int i = 0; i < parcelWaves.Length; i++)
+                    parcelWaves[i] = world.GetParcel(i).Cargo
+                        ?? throw new InvalidOperationException("Every parcel must publish its cargo contract.");
+                return new CargoWaveSequencePlan(
+                    world.Id,
+                    world.StartDistance,
+                    world.EndDistance,
+                    parcelWaves);
+            }
             var waves = new CargoWavePlan[world.WaveCount];
             int collectibleId = world.Sector * 10000 + 1;
             for (int i = 0; i < world.WaveCount; i++)
