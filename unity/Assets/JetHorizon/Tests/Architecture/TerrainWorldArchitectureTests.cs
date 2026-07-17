@@ -73,7 +73,7 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(start.TerrainWorldMode, Is.True);
             Assert.That(start.TerrainWorldId, Is.EqualTo("terrain-world-00"));
             Assert.That(start.TerrainWorldSectionCount, Is.GreaterThan(40));
-            Assert.That(start.TerrainWorldFeatureCount, Is.EqualTo(1));
+            Assert.That(start.TerrainWorldFeatureCount, Is.EqualTo(5));
             Assert.That(start.GateCount, Is.Zero);
             Assert.That(start.ActiveTerrainRegion, Is.EqualTo(TerrainRegionKind.OpenSea));
 
@@ -88,47 +88,88 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
-        public void TerrainWorld_ProgressesThroughStormPrismAndExtraction()
+        public void TerrainWorld_ProgressesThroughStormPrismAndAutomaticBreather()
         {
             JetHorizonSimulation simulation = CreateTerrainSimulation();
             float startingSpeed = simulation.Snapshot.Speed;
             bool sawStorm = false;
             bool sawPrismatic = false;
+            bool sawBreather = false;
+            string firstWorld = simulation.Snapshot.TerrainWorldId;
 
-            for (int i = 0; i < 9000 && !simulation.Snapshot.ExtractionDecisionOpen; i++)
+            for (int i = 0; i < 9000 && simulation.Snapshot.TerrainWorldId == firstWorld; i++)
             {
                 simulation.Step(default);
                 sawStorm |= simulation.Snapshot.ActiveTerrainRegion == TerrainRegionKind.StormChannel;
                 sawPrismatic |= simulation.Snapshot.ActiveTerrainRegion == TerrainRegionKind.PrismaticReach;
+                sawBreather |= simulation.Snapshot.ActiveTerrainRegion == TerrainRegionKind.ExtractionBreather;
+                Assert.That(simulation.Snapshot.ExtractionDecisionOpen, Is.False);
             }
 
             Assert.That(sawStorm, Is.True);
             Assert.That(sawPrismatic, Is.True);
-            Assert.That(simulation.Snapshot.ExtractionDecisionOpen, Is.True);
+            Assert.That(sawBreather, Is.True);
+            Assert.That(simulation.Snapshot.TerrainWorldId, Is.EqualTo("terrain-world-01"));
             Assert.That(simulation.Snapshot.GateCount, Is.Zero);
             Assert.That(simulation.Snapshot.GateEarnedSpeed, Is.GreaterThan(0f));
             Assert.That(simulation.Snapshot.Speed, Is.GreaterThan(startingSpeed));
         }
 
         [Test]
-        public void ContinueDeeper_KeepsCurrentWorldUntilItsOpenWaterSeam()
+        public void AutomaticBreather_KeepsCurrentWorldUntilItsOpenWaterSeam()
         {
             JetHorizonSimulation simulation = CreateTerrainSimulation();
-            while (!simulation.Snapshot.ExtractionDecisionOpen) simulation.Step(default);
-
             string currentWorld = simulation.Snapshot.TerrainWorldId;
             float currentWorldEnd = simulation.Snapshot.TerrainWorldStartDistance
                 + simulation.Snapshot.TerrainWorldLength;
-            Assert.That(simulation.TryResolveExtractionDecision(false, out _), Is.True);
-            Assert.That(simulation.Snapshot.TerrainWorldId, Is.EqualTo(currentWorld));
-
-            simulation.Step(default);
-            Assert.That(simulation.Snapshot.TerrainWorldId, Is.EqualTo(currentWorld));
+            while (simulation.Snapshot.ActiveTerrainRegion != TerrainRegionKind.ExtractionBreather)
+                simulation.Step(default);
+            Assert.That(simulation.Snapshot.ExtractionDecisionOpen, Is.False);
+            Assert.That(simulation.Snapshot.HazardCount, Is.Zero);
+            Assert.That(simulation.Snapshot.PickupCount, Is.Zero);
+            Assert.That(simulation.Snapshot.CorridorSliceCount, Is.Zero);
+            Assert.That(simulation.TryResolveExtractionDecision(false, out _), Is.False);
             while (simulation.Snapshot.TerrainWorldId == currentWorld) simulation.Step(default);
 
             Assert.That(simulation.Snapshot.Distance, Is.GreaterThanOrEqualTo(currentWorldEnd));
             Assert.That(simulation.Snapshot.TerrainWorldId, Is.EqualTo("terrain-world-01"));
             Assert.That(simulation.Snapshot.ActiveTerrainRegion, Is.EqualTo(TerrainRegionKind.OpenSea));
+        }
+
+        [Test]
+        public void OpenWaterMasses_HaveVisibleFootprintCollisionAndLeaveAWideRoute()
+        {
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
+            {
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f
+            });
+            var runtime = new TerrainWorldRuntime(capability);
+            var eventOwner = new JetHorizonSimulation(new SimulationConfig
+            {
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f
+            }, 67u);
+            TerrainWorldFeature mass = runtime.World.GetFeature(1);
+
+            TerrainWorldTickResult hit = runtime.Tick(
+                mass.Distance,
+                mass.CenterX,
+                0f,
+                (float)(System.Math.PI * .5),
+                false,
+                eventOwner.Events);
+            TerrainWorldTickResult safe = runtime.Tick(
+                mass.Distance,
+                -40f,
+                0f,
+                (float)(System.Math.PI * .5),
+                false,
+                eventOwner.Events);
+
+            Assert.That(mass.Kind, Is.EqualTo(TerrainWorldFeatureKind.WaterlineMass));
+            Assert.That(hit.CollisionEntered, Is.True);
+            Assert.That(safe.CollisionEntered, Is.False);
         }
 
         static JetHorizonSimulation CreateTerrainSimulation()

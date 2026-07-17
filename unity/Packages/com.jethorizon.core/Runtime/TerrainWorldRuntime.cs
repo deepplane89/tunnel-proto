@@ -265,13 +265,15 @@ namespace JetHorizon.Simulation
                     _earnedSpeedBonus));
                 if (active.Kind == TerrainRegionKind.ExtractionBreather)
                 {
-                    _extractionDecisionOpen = true;
-                    extractionOpened = true;
-                    events.Add(new SimulationEvent(
-                        SimulationEventType.ExtractionDecisionOpened,
-                        _world.Sector,
-                        _heat,
-                        _world.StartDistance + active.StartDistance));
+                    // Extraction UI is intentionally disabled during gameplay-loop
+                    // development. The authored open-water region is a real breather;
+                    // queue the next world without pausing or deleting presentation.
+                    _heat = Math.Min(5, _heat + 1);
+                    _queuedWorld = TerrainWorldCatalog.CreateProofWorld(
+                        _world.Sector + 1,
+                        _world.EndDistance,
+                        _capability);
+                    _continueQueued = true;
                 }
             }
 
@@ -397,6 +399,22 @@ namespace JetHorizon.Simulation
             {
                 collisionId = 700000 + Math.Max(0, FindSection(localDistance));
                 collisionCenterX = (leftShore + rightShore) * .5f;
+                return true;
+            }
+            for (int i = 0; i < _world.FeatureCount; i++)
+            {
+                TerrainWorldFeature feature = _world.GetFeature(i);
+                if (feature.Kind != TerrainWorldFeatureKind.WaterlineMass) continue;
+                // Match the visible boulder's rounded waterline footprint. A small
+                // inset keeps collision inside the faceted silhouette instead of in
+                // apparently empty water between its widest triangles.
+                float radiusX = Math.Max(.1f, feature.HalfWidth + shipHalfWidth - 1.25f);
+                float radiusZ = Math.Max(.1f, feature.CollisionHalfDepth + shipHalfWidth - 1.25f);
+                float x = (shipX - feature.CenterX) / radiusX;
+                float z = (localDistance - feature.Distance) / radiusZ;
+                if (x * x + z * z > 1f) continue;
+                collisionId = 710000 + feature.Id;
+                collisionCenterX = feature.CenterX;
                 return true;
             }
             collisionId = 0;

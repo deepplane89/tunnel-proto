@@ -16,7 +16,8 @@ namespace JetHorizon.Simulation
 
     public enum TerrainWorldFeatureKind
     {
-        NaturalArch
+        NaturalArch,
+        WaterlineMass
     }
 
     /// <summary>
@@ -277,7 +278,41 @@ namespace JetHorizon.Simulation
                     break;
                 }
             }
+            float requiredFormationPassage = capability.CollisionHalfWidth * 2f + 4f;
+            for (int i = 0; topologyValid && i < world.FeatureCount; i++)
+            {
+                TerrainWorldFeature feature = world.GetFeature(i);
+                if (feature.Kind != TerrainWorldFeatureKind.WaterlineMass) continue;
+                SampleShore(world, feature.Distance, out float leftShore, out float rightShore);
+                float leftPassage = feature.CenterX - feature.HalfWidth - leftShore;
+                float rightPassage = rightShore - feature.CenterX - feature.HalfWidth;
+                topologyValid = Math.Max(leftPassage, rightPassage) >= requiredFormationPassage;
+            }
             return new TerrainWorldValidation(navigation, regionsValid, topologyValid);
+        }
+
+        static void SampleShore(
+            TerrainWorldPlan world,
+            float distance,
+            out float leftShore,
+            out float rightShore)
+        {
+            int index = 0;
+            while (index < world.SectionCount - 1
+                && distance >= world.GetSection(index + 1).Distance)
+                index++;
+            TerrainWorldSection a = world.GetSection(index);
+            if (index >= world.SectionCount - 1)
+            {
+                leftShore = a.LeftShoreX;
+                rightShore = a.RightShoreX;
+                return;
+            }
+            TerrainWorldSection b = world.GetSection(index + 1);
+            float t = Math.Max(0f, Math.Min(1f,
+                (distance - a.Distance) / Math.Max(.001f, b.Distance - a.Distance)));
+            leftShore = a.LeftShoreX + (b.LeftShoreX - a.LeftShoreX) * t;
+            rightShore = a.RightShoreX + (b.RightShoreX - a.RightShoreX) * t;
         }
     }
 
@@ -290,6 +325,22 @@ namespace JetHorizon.Simulation
         {
             int heat = Math.Max(0, Math.Min(5, sector));
             float mirror = (sector & 1) == 0 ? 1f : -1f;
+            float spacingScale = capability.CruiseSpeed / 42f;
+            EncounterPlan[] encounterPlans = EncounterPlanCatalog.CreateProofSequence(spacingScale);
+            float prismaticLength = 0f;
+            for (int i = 0; i < encounterPlans.Length; i++)
+            {
+                if (encounterPlans[i].Kind != EncounterKind.PrismaticSineCorridor) continue;
+                prismaticLength = encounterPlans[i].Length;
+                break;
+            }
+            if (prismaticLength <= 0f)
+                throw new InvalidOperationException("The terrain world requires a prismatic encounter plan.");
+            const float prismaticStart = 2980f;
+            const float postPrismaticClearance = 140f;
+            const float breatherLength = 500f;
+            float breatherStart = prismaticStart + prismaticLength + postPrismaticClearance;
+            float worldLength = breatherStart + breatherLength;
             var regions = new[]
             {
                 new TerrainWorldRegion(1, TerrainRegionKind.OpenSea,              0f,  220f, 0f),
@@ -297,8 +348,10 @@ namespace JetHorizon.Simulation
                 new TerrainWorldRegion(3, TerrainRegionKind.StormChannel,      1200f,  420f, 6f),
                 new TerrainWorldRegion(4, TerrainRegionKind.NaturalArch,       1620f,  260f, 5f),
                 new TerrainWorldRegion(5, TerrainRegionKind.CrystallineCanyon, 1880f, 1100f, 11f),
-                new TerrainWorldRegion(6, TerrainRegionKind.PrismaticReach,    2980f,  520f, 7f),
-                new TerrainWorldRegion(7, TerrainRegionKind.ExtractionBreather,3500f,  260f, 0f)
+                new TerrainWorldRegion(6, TerrainRegionKind.PrismaticReach, prismaticStart,
+                    breatherStart - prismaticStart, 7f),
+                new TerrainWorldRegion(7, TerrainRegionKind.ExtractionBreather,
+                    breatherStart, breatherLength, 0f)
             };
             var sections = new List<TerrainWorldSection>(48);
             int id = 1000;
@@ -362,12 +415,24 @@ namespace JetHorizon.Simulation
                     175f));
             }
 
-            Shore(3060f, TerrainRegionKind.PrismaticReach,       -42f,  42f, 34f, 36f, 160f);
-            Shore(3190f, TerrainRegionKind.PrismaticReach,       -38f,  44f, 29f, 33f, 160f);
-            Shore(3340f, TerrainRegionKind.PrismaticReach,       -46f,  40f, 31f, 28f, 160f);
-            Shore(3500f, TerrainRegionKind.ExtractionBreather,   -72f,  74f, 22f, 24f, 165f);
-            Shore(3620f, TerrainRegionKind.ExtractionBreather,  -118f, 122f, 15f, 17f, 175f);
-            Shore(3760f, TerrainRegionKind.ExtractionBreather,  -150f, 150f, 10f, 11f, 180f);
+            for (int i = 1; i <= 8; i++)
+            {
+                float t = i / 9f;
+                float distance = prismaticStart + (breatherStart - prismaticStart) * t;
+                float center = (float)Math.Sin(t * Math.PI * 2.15 + .25f) * 4f;
+                float halfWidth = 42f + t * 14f;
+                Shore(distance, TerrainRegionKind.PrismaticReach,
+                    center - halfWidth, center + halfWidth,
+                    35f - t * 10f, 37f - t * 10f, 160f + t * 5f);
+            }
+            Shore(breatherStart, TerrainRegionKind.ExtractionBreather,
+                -82f, 84f, 21f, 23f, 170f);
+            Shore(breatherStart + 160f, TerrainRegionKind.ExtractionBreather,
+                -122f, 126f, 15f, 17f, 175f);
+            Shore(breatherStart + 340f, TerrainRegionKind.ExtractionBreather,
+                -150f, 150f, 10f, 11f, 180f);
+            Shore(worldLength, TerrainRegionKind.ExtractionBreather,
+                -150f, 150f, 10f, 11f, 180f);
 
             var features = new[]
             {
@@ -382,14 +447,34 @@ namespace JetHorizon.Simulation
                     // Presentation currently places the crown above the ship. Do not
                     // attach an abstract roll-only collision plane to visible open air.
                     TraversalRequirement.None,
-                    401 + sector * 47)
+                    401 + sector * 47),
+                // These masses are part of the water topology: large, submerged
+                // geological formations with deliberately generous side routes.
+                // Their alternating placement makes the open sea itself playable
+                // without turning it into a row of prop obstacles.
+                new TerrainWorldFeature(
+                    501, TerrainWorldFeatureKind.WaterlineMass,
+                    300f, 42f * mirror, 9f, 31f, 9f,
+                    TraversalRequirement.None, 601 + sector * 53),
+                new TerrainWorldFeature(
+                    502, TerrainWorldFeatureKind.WaterlineMass,
+                    390f, -34f * mirror, 10f, 38f, 10f,
+                    TraversalRequirement.None, 701 + sector * 59),
+                new TerrainWorldFeature(
+                    503, TerrainWorldFeatureKind.WaterlineMass,
+                    1100f, 20f * mirror, 12f, 44f, 12f,
+                    TraversalRequirement.None, 809 + sector * 61),
+                new TerrainWorldFeature(
+                    504, TerrainWorldFeatureKind.WaterlineMass,
+                    1310f, -28f * mirror, 11f, 36f, 11f,
+                    TraversalRequirement.None, 907 + sector * 67)
             };
 
             var world = new TerrainWorldPlan(
                 $"terrain-world-{sector:00}",
                 sector,
                 startDistance,
-                3760f,
+                worldLength,
                 regions,
                 sections.ToArray(),
                 features);

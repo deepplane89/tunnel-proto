@@ -322,9 +322,11 @@ namespace JetHorizon.Simulation
         {
             Events.Clear();
             manifest = default;
-            bool decisionOpen = _terrainWorld != null
-                ? _terrainWorld.ExtractionDecisionOpen
-                : _gateRun != null && _gateRun.ExtractionDecisionOpen;
+            // Terrain-world runs currently use automatic open-water breathers.
+            // Extraction decisions remain available only to the legacy gate run.
+            bool decisionOpen = _terrainWorld == null
+                && _gateRun != null
+                && _gateRun.ExtractionDecisionOpen;
             if (Phase != CoreGamePhase.Playing || !decisionOpen)
             {
                 RefreshSnapshot();
@@ -333,9 +335,7 @@ namespace JetHorizon.Simulation
 
             if (extract)
             {
-                bool accepted = _terrainWorld != null
-                    ? _terrainWorld.TryAcceptExtraction(Events)
-                    : _gateRun.TryAcceptExtraction(Events);
+                bool accepted = _gateRun.TryAcceptExtraction(Events);
                 if (!accepted)
                 {
                     RefreshSnapshot();
@@ -353,9 +353,7 @@ namespace JetHorizon.Simulation
                 return true;
             }
 
-            bool continued = _terrainWorld != null
-                ? _terrainWorld.TryContinueDeeper(_distance, Events)
-                : _gateRun.TryContinueDeeper(
+            bool continued = _gateRun.TryContinueDeeper(
                     _distance,
                     _paceState.PersistentCruiseSpeed,
                     Events);
@@ -365,10 +363,8 @@ namespace JetHorizon.Simulation
                 return false;
             }
 
-            _heatLevel = _terrainWorld != null ? _terrainWorld.Heat : _gateRun.Heat;
-            float nextDecision = _terrainWorld != null
-                ? _terrainWorld.Snapshot.ExtractionDistance
-                : _gateRun.Snapshot.NextGateDistance;
+            _heatLevel = _gateRun.Heat;
+            float nextDecision = _gateRun.Snapshot.NextGateDistance;
             Events.Add(new SimulationEvent(
                 SimulationEventType.ExtractionWindowPassed,
                 _heatLevel,
@@ -604,8 +600,7 @@ namespace JetHorizon.Simulation
             float dt = _config.FixedDeltaSeconds;
             _tick++;
             _elapsed = (float)(_tick * (double)dt);
-            if ((_terrainWorld != null && _terrainWorld.ExtractionDecisionOpen)
-                || (_gateRun != null && _gateRun.ExtractionDecisionOpen))
+            if (_gateRun != null && _gateRun.ExtractionDecisionOpen)
             {
                 TickExtractionBreather(dt);
                 RefreshSnapshot();
@@ -791,7 +786,6 @@ namespace JetHorizon.Simulation
                     }
                     if (terrainResult.ExtractionDecisionOpened)
                     {
-                        EnterExtractionBreather();
                         RefreshSnapshot();
                         return;
                     }
@@ -2580,25 +2574,23 @@ namespace JetHorizon.Simulation
                 break;
             }
             Snapshot.ExtractionAvailable = _terrainWorld != null
-                ? terrainWorld.ExtractionDecisionOpen
+                ? false
                 : _gateRun != null
                 ? gateRun.ExtractionDecisionOpen
                 : _proofEncounters == null
                     && Phase == CoreGamePhase.Playing
                     && _extractionWindowOpen;
             Snapshot.ExtractionWindowOpen = _terrainWorld != null
-                ? terrainWorld.ExtractionDecisionOpen
+                ? false
                 : _gateRun != null
                 ? gateRun.ExtractionDecisionOpen
                 : _proofEncounters == null && _extractionWindowOpen;
             Snapshot.ExtractionDecisionOpen = Phase == CoreGamePhase.Playing
                 && (_terrainWorld != null
-                    ? terrainWorld.ExtractionDecisionOpen
+                    ? false
                     : _gateRun != null && gateRun.ExtractionDecisionOpen);
             Snapshot.ExtractionWindowDistanceRemaining = _terrainWorld != null
-                ? terrainWorld.ExtractionDecisionOpen
-                    ? 0f
-                    : Math.Max(0f, terrainWorld.ExtractionDistance - _distance)
+                ? 0f
                 : _gateRun != null
                 ? gateRun.ExtractionDecisionOpen
                     ? 0f
@@ -2607,7 +2599,7 @@ namespace JetHorizon.Simulation
                     ? Math.Max(0f, _extractionWindowEndDistance - _distance)
                     : 0f;
             Snapshot.NextExtractionDistance = _terrainWorld != null
-                ? terrainWorld.ExtractionDistance
+                ? 0f
                 : _gateRun != null
                 ? gateRun.NextGateDistance
                 : _proofEncounters != null

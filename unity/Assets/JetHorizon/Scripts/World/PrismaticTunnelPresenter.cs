@@ -20,6 +20,7 @@ namespace JetHorizon
         public float MaximumArchHeight = 22f;
 
         Mesh _mesh;
+        MeshFilter _filter;
         MeshRenderer _renderer;
         Material _runtimeMaterial;
         EncounterPlan _plan;
@@ -28,7 +29,12 @@ namespace JetHorizon
         public bool IsPresenting { get; private set; }
         public int BuiltCrossSectionCount { get; private set; }
 
-        void Awake() => EnsureBuilt();
+        void Awake()
+        {
+            _filter = GetComponent<MeshFilter>();
+            _renderer = GetComponent<MeshRenderer>();
+            HardHideAndRelease();
+        }
 
         void EnsureBuilt()
         {
@@ -37,9 +43,9 @@ namespace JetHorizon
             if (_plan == null) return;
 
             _mesh = BuildCompleteMesh(_plan);
-            var filter = GetComponent<MeshFilter>() ?? gameObject.AddComponent<MeshFilter>();
+            _filter = GetComponent<MeshFilter>() ?? gameObject.AddComponent<MeshFilter>();
             _renderer = GetComponent<MeshRenderer>() ?? gameObject.AddComponent<MeshRenderer>();
-            filter.sharedMesh = _mesh;
+            _filter.sharedMesh = _mesh;
             _renderer.shadowCastingMode = ShadowCastingMode.Off;
             _renderer.receiveShadows = false;
             gameObject.layer = 8;
@@ -56,29 +62,27 @@ namespace JetHorizon
 
         public void ResetSystem()
         {
-            EnsureBuilt();
-            IsPresenting = false;
-            if (_renderer != null) _renderer.enabled = false;
+            HardHideAndRelease();
             transform.localPosition = Vector3.zero;
         }
 
         public void SimTick(float dt)
         {
-            EnsureBuilt();
             SimulationSnapshot snapshot = GameManager.I != null ? GameManager.I.CoreSnapshot : null;
-            if (_renderer == null || snapshot == null || !snapshot.CoreWorldDirectorEnabled)
+            bool active = snapshot != null
+                && snapshot.CoreWorldDirectorEnabled
+                && snapshot.EncounterKind == EncounterKind.PrismaticSineCorridor
+                && (!snapshot.TerrainWorldMode
+                    || snapshot.ActiveTerrainRegion == TerrainRegionKind.PrismaticReach);
+            if (!active)
             {
-                SetVisible(false);
+                HardHideAndRelease();
                 return;
             }
-
-            bool current = snapshot.EncounterKind == EncounterKind.PrismaticSineCorridor;
-            // Never draw a complete future tunnel on the horizon. The terrain-world
-            // transition owns its reveal; the membrane exists only while that region
-            // is active, not for the entire minute-long approach.
-            if (!current)
+            EnsureBuilt();
+            if (_renderer == null || _mesh == null)
             {
-                SetVisible(false);
+                HardHideAndRelease();
                 return;
             }
 
@@ -91,6 +95,33 @@ namespace JetHorizon
         {
             IsPresenting = visible;
             if (_renderer != null) _renderer.enabled = visible;
+        }
+
+        void HardHideAndRelease()
+        {
+            IsPresenting = false;
+            if (_renderer == null) _renderer = GetComponent<MeshRenderer>();
+            if (_filter == null) _filter = GetComponent<MeshFilter>();
+            if (_renderer != null)
+            {
+                _renderer.enabled = false;
+                _renderer.sharedMaterial = null;
+            }
+            if (_filter != null) _filter.sharedMesh = null;
+            if (_mesh != null)
+            {
+                if (UnityEngine.Application.isPlaying) Destroy(_mesh);
+                else DestroyImmediate(_mesh);
+                _mesh = null;
+            }
+            if (_runtimeMaterial != null)
+            {
+                if (UnityEngine.Application.isPlaying) Destroy(_runtimeMaterial);
+                else DestroyImmediate(_runtimeMaterial);
+                _runtimeMaterial = null;
+            }
+            _plan = null;
+            BuiltCrossSectionCount = 0;
         }
 
         EncounterPlan FindPlan()
@@ -185,8 +216,7 @@ namespace JetHorizon
 
         void OnDestroy()
         {
-            if (_mesh != null) Destroy(_mesh);
-            if (_runtimeMaterial != null) Destroy(_runtimeMaterial);
+            HardHideAndRelease();
         }
     }
 }

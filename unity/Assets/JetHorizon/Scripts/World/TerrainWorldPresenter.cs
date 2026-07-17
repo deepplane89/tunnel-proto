@@ -104,7 +104,29 @@ namespace JetHorizon
                 TerrainWorldFeatureSnapshot feature = snapshot.GetTerrainWorldFeature(i);
                 if (feature.Kind == TerrainWorldFeatureKind.NaturalArch)
                     BuildNaturalArch(feature);
+                else if (feature.Kind == TerrainWorldFeatureKind.WaterlineMass)
+                    BuildWaterlineMass(feature);
             }
+        }
+
+        void BuildWaterlineMass(TerrainWorldFeatureSnapshot feature)
+        {
+            Mesh mass = FacetTerrainMeshFactory.BuildBoulder(
+                FacetSurfaceStyle.ThreeJsSource,
+                feature.Seed,
+                feature.HalfWidth,
+                feature.Height,
+                circumferencePatches: 6,
+                submergedDepth: 7f,
+                plateauRadiusFraction: .40f,
+                name: "JH_WaterlineMass_" + feature.Id);
+            AddMesh(
+                _world,
+                "Submerged open-water formation " + feature.Id,
+                mass,
+                new Vector3(feature.CenterX, 0f, -feature.Distance),
+                Quaternion.identity,
+                Vector3.one);
         }
 
         void BuildNaturalArch(TerrainWorldFeatureSnapshot feature)
