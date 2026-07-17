@@ -195,6 +195,9 @@ namespace JetHorizon
                 // The deterministic core already owns handling and bank. Keep this
                 // optional presentation layer installed, but pause it while feel is retuned.
                 organicMotion.enabled = false;
+                var shipLighting = Ship.ShipRoot.GetComponent<ShipLightingPresenter>()
+                    ?? Ship.ShipRoot.gameObject.AddComponent<ShipLightingPresenter>();
+                shipLighting.Initialize(Ship.ShipRoot);
             }
             if (gameObject.GetComponent<FeedbackDirector>() == null) gameObject.AddComponent<FeedbackDirector>();
             if (gameObject.GetComponent<JetHorizonAudioSystem>() == null) gameObject.AddComponent<JetHorizonAudioSystem>();

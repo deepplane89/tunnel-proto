@@ -168,27 +168,15 @@ namespace JetHorizon
                 else Object.DestroyImmediate(oldMaterial);
             }
 
-            // Ship-local lighting follows the ship so its silhouette stays legible
-            // against both dark water and the bright sun reflection: warm key,
-            // cyan rim/fill, and a small engine underlight.
+            // Lighting is intentionally owned by ShipLightingPresenter. Directional
+            // lights parented to the ship banked with the hull, making its light read
+            // as glued to the model rather than coming from the water-and-sun world.
             var shipRoot = model.transform.parent;
-            if (shipRoot != null && shipRoot.Find("ShipKeyLight") == null)
+            if (shipRoot != null)
             {
-                void L(string name, LightType type, Color c, float intensity, Vector3 pos, float range = 0f)
-                {
-                    var go = new GameObject(name);
-                    go.transform.SetParent(shipRoot, false);
-                    go.transform.localPosition = pos;
-                    if (type == LightType.Directional) go.transform.LookAt(shipRoot.position);
-                    var l = go.AddComponent<Light>();
-                    l.type = type; l.color = c; l.intensity = intensity;
-                    if (range > 0f) l.range = range;
-                    l.shadows = LightShadows.None;
-                }
-                L("ShipKeyLight", LightType.Directional, TextureFactory.Hex(0xffe2bb), 2.35f, new Vector3(2.5f, 4f, -3f));
-                L("ShipFillLight", LightType.Directional, TextureFactory.Hex(0x73cfff), 1.10f, new Vector3(-2.5f, 1.5f, 2.5f));
-                L("ShipCyanRimLight", LightType.Point, TextureFactory.Hex(0x16dfff), 1.15f, new Vector3(0f, 1.0f, 2.6f), 8f);
-                L("ShipUnderlight", LightType.Point, TextureFactory.Hex(0xff7a26), 0.80f, new Vector3(0f, -1.2f, 0f), 7f);
+                var lighting = shipRoot.GetComponent<ShipLightingPresenter>()
+                    ?? shipRoot.gameObject.AddComponent<ShipLightingPresenter>();
+                lighting.Initialize(shipRoot);
             }
         }
 
