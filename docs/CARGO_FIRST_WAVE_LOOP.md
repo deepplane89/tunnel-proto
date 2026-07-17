@@ -242,25 +242,28 @@ must not make old content suddenly unfair.
 
 ---
 
-## 6. Banking and risk: keep it simple in the proof build
+## 6. Banking and risk: extraction is a rest decision, not the game
 
-The old popup-style extraction prompt is not part of the immediate wave proof.
-It interrupted hazards and made the world disappear around the player.
+The primary game is collecting valuable things while flying through great waves.
+Extraction is a secondary push-your-luck decision that only appears after that
+core flight is already satisfying.
 
-For the first playable cargo-first loop:
+1. Every collected item enters an unsecured **run manifest**.
+2. At selected genuine open-water rests, the player may **extract**: leave the
+   run and bank the manifest.
+3. Choosing to continue keeps the manifest, offers richer upcoming wave tables,
+   and leaves all unsecured value at risk.
+4. A crash before extraction loses the unsecured manifest; a completed
+   extraction settles it into salvage, power cells, prisms, and credits.
 
-1. A run consists of a short ordered set of waves.
-2. Cleared waves deposit their collected goods into a **run manifest**.
-3. At a natural calm-water sector end, the manifest settles automatically.
-4. A crash before settlement loses the unsecured manifest.
+The choice is never shown in a hazard, in a canyon, or immediately after an
+object pops in. The player has cleared a wave, watched it recede behind them,
+and reaches a real water breather before the option is available.
 
-Once the basic loop is fun, an optional continue/extract choice can return only
-at a genuine open-water breather, never as a surprise modal. It should be a
-single quiet question with a visible manifest preview—not the thing that makes
-the flight interesting.
-
-This preserves useful push-your-luck later without blocking the core question
-we need to answer now: “Are the waves themselves compelling enough to replay?”
+For the first playable wave proof, settlement may remain automatic at the end
+of the short sequence so we can validate that the waves themselves are fun.
+When added, extraction should be a single quiet rest-state choice with a small
+manifest preview—not a pop-up that steals attention from the flight.
 
 ---
 
