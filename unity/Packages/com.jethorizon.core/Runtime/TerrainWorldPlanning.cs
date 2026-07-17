@@ -50,7 +50,7 @@ namespace JetHorizon.Simulation
         CanyonRun,
         OpenWaterReset,
         PortalChoice,
-        TunnelRun,
+        L3KnifeSineTunnel,
         ReleaseBasin
     }
 
@@ -553,7 +553,7 @@ namespace JetHorizon.Simulation
                 new TerrainWorldWave(TerrainWaveKind.CanyonRun, 400f, 620f),
                 new TerrainWorldWave(TerrainWaveKind.OpenWaterReset, 1020f, 260f),
                 new TerrainWorldWave(TerrainWaveKind.PortalChoice, 1280f, 570f),
-                new TerrainWorldWave(TerrainWaveKind.TunnelRun, 1850f, 1020f),
+                new TerrainWorldWave(TerrainWaveKind.L3KnifeSineTunnel, 1850f, 1020f),
                 new TerrainWorldWave(TerrainWaveKind.ReleaseBasin, 2870f, 320f)
             };
             var sections = new List<TerrainWorldSection>(48);
@@ -734,6 +734,24 @@ namespace JetHorizon.Simulation
                 0f, 0f, 26f, 35f, 41f, 43f,
                 43f, 41f, 35f, 26f, 0f
             };
+            // Canonical L3 knife-sine path. The source corridor begins with a
+            // readable straight/squeeze, then grows from a 10-unit sway toward a
+            // 36-unit long bend. This is purposefully one broad sine sentence,
+            // not per-section random wander. The generic outer routes remain
+            // available, while the center route is the roll-width tunnel payoff.
+            for (int i = 0; i < routeDistances.Length; i++)
+            {
+                float travel = Math.Max(0f, routeDistances[i] - 1800f);
+                float progress = Math.Max(0f, Math.Min(1f, travel / 1070f));
+                if (progress <= 0f)
+                {
+                    knifeCenters[i] = 0f;
+                    continue;
+                }
+                float amplitude = 10f + (36f - 10f) * progress * progress;
+                float phase = progress * (float)Math.PI * 1.18f;
+                knifeCenters[i] = amplitude * (float)Math.Sin(phase);
+            }
             // Courses are authored variations, not seed noise. The opening rhythm
             // above changes by course; here the same connected formation offers a
             // different steering sentence and a different knife-side commitment.

@@ -209,10 +209,12 @@ namespace JetHorizon
             // each opening; their height is presentation-only, while the route
             // graph remains the authority for the actual passage boundaries.
             const int mouthIndex = 2;
-            FacetSurfaceStyle style = FacetSurfaceStyle.ThreeJsSource;
             for (int i = 0; i < orderedRoutes.Count; i++)
             {
                 TerrainRouteSectionSnapshot mouth = orderedRoutes[i][mouthIndex];
+                FacetSurfaceStyle style = mouth.Kind == TerrainRouteKind.KnifeEdgeTunnel
+                    ? FacetSurfaceStyle.L3KnifeSource
+                    : FacetSurfaceStyle.ThreeJsSource;
                 float span = mouth.RightX - mouth.LeftX + 9f;
                 float center = (mouth.LeftX + mouth.RightX) * .5f;
                 Mesh crown = FacetTerrainMeshFactory.BuildThreeJsParitySlab(style, 2011 + i * 41);
@@ -250,7 +252,10 @@ namespace JetHorizon
                 leftFace.Add(new FacetMassStation(z, innerLeft, height, depth));
                 rightFaceMirrored.Add(new FacetMassStation(z, -innerRight, height, depth));
             }
-            FacetSurfaceStyle style = FacetSurfaceStyle.ThreeJsSource;
+            FacetSurfaceStyle style = leftRoute[0].Kind == TerrainRouteKind.KnifeEdgeTunnel
+                || rightRoute[0].Kind == TerrainRouteKind.KnifeEdgeTunnel
+                ? FacetSurfaceStyle.L3KnifeSource
+                : FacetSurfaceStyle.ThreeJsSource;
             AddMesh(
                 world,
                 label + " left face",
@@ -269,11 +274,15 @@ namespace JetHorizon
 
         void BuildKnifeEdgeCrowns(BuiltWorld world, List<TerrainRouteSectionSnapshot> knife)
         {
-            FacetSurfaceStyle style = FacetSurfaceStyle.ThreeJsSource;
+            // Source L3 is a continuous knife tunnel, not a few decorative
+            // arches. Overlapping 40-unit source slabs form one opaque faceted
+            // canopy along the core-owned sine route; only its entrance/exit are
+            // left open so it reads as a genuine tunnel in the world.
+            FacetSurfaceStyle style = FacetSurfaceStyle.L3KnifeSource;
             for (int i = 1; i < knife.Count - 1; i++)
             {
                 TerrainRouteSectionSnapshot section = knife[i];
-                if (section.CeilingHeight <= 0f || (i & 1) == 0) continue;
+                if (section.CeilingHeight <= 0f) continue;
                 float span = section.RightX - section.LeftX + 10f;
                 Mesh crown = FacetTerrainMeshFactory.BuildThreeJsParitySlab(style, 2101 + i * 31);
                 AddMesh(
@@ -285,7 +294,7 @@ namespace JetHorizon
                         section.CeilingHeight - 6f,
                         -section.Distance),
                     Quaternion.Euler(0f, 90f, 0f),
-                    new Vector3(.52f, .30f, span / style.Length));
+                    new Vector3(2.15f, .30f, span / style.Length));
             }
         }
 

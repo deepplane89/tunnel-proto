@@ -131,7 +131,7 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(world.GetWave(1).Kind, Is.EqualTo(TerrainWaveKind.CanyonRun));
             Assert.That(world.GetWave(2).Kind, Is.EqualTo(TerrainWaveKind.OpenWaterReset));
             Assert.That(world.GetWave(3).Kind, Is.EqualTo(TerrainWaveKind.PortalChoice));
-            Assert.That(world.GetWave(4).Kind, Is.EqualTo(TerrainWaveKind.TunnelRun));
+            Assert.That(world.GetWave(4).Kind, Is.EqualTo(TerrainWaveKind.L3KnifeSineTunnel));
             Assert.That(world.GetWave(1).EndDistance,
                 Is.LessThan(world.GetWave(3).StartDistance));
             Assert.That(world.TryGetRoutePassage(TerrainRouteKind.SafeCanyon, 1540f,
@@ -139,6 +139,31 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(world.TryGetRoutePassage(TerrainRouteKind.KnifeEdgeTunnel, 1540f,
                 out float knifeLeft, out float knifeRight, out _), Is.True);
             Assert.That(knifeLeft - safeRight, Is.GreaterThan(8f));
+        }
+
+        [Test]
+        public void L3KnifeTunnel_UsesTheCanonicalLongSineRatherThanRandomWander()
+        {
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
+            {
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f
+            });
+            TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(0, 0f, capability);
+            world.TryGetRoutePassage(TerrainRouteKind.KnifeEdgeTunnel, 1800f,
+                out float entryLeft, out float entryRight, out _);
+            world.TryGetRoutePassage(TerrainRouteKind.KnifeEdgeTunnel, 2280f,
+                out float bendLeft, out float bendRight, out float bendCeiling);
+            world.TryGetRoutePassage(TerrainRouteKind.KnifeEdgeTunnel, 2760f,
+                out float returnLeft, out float returnRight, out _);
+
+            float entryCenter = (entryLeft + entryRight) * .5f;
+            float bendCenter = (bendLeft + bendRight) * .5f;
+            float returnCenter = (returnLeft + returnRight) * .5f;
+            Assert.That(System.Math.Abs(entryCenter), Is.LessThan(.1f));
+            Assert.That(bendCenter, Is.GreaterThan(10f));
+            Assert.That(returnCenter, Is.LessThan(0f));
+            Assert.That(bendCeiling, Is.GreaterThan(35f));
         }
 
         [Test]

@@ -43,6 +43,29 @@ namespace JetHorizon
             PlateauUndulation = .012f
         };
 
+        /// <summary>
+        /// Canonical source geometry for the L3 knife canyon. This is deliberately
+        /// separate from the general terrain style: the wall face rises from the
+        /// 26/20 foot-and-sweep profile into a tight crest, matching the original
+        /// knife-edge tunnel rather than treating it as a scaled open-water slab.
+        /// </summary>
+        public static FacetSurfaceStyle L3KnifeSource => new FacetSurfaceStyle
+        {
+            Height = 55f,
+            Length = 40f,
+            Depth = 60f,
+            Columns = 5,
+            Rows = 6,
+            Displacement = 2f,
+            Snap = 1.25f,
+            FootX = 26f,
+            SweepX = 20f,
+            MidX = 0f,
+            CrestX = 0f,
+            PlateauShoulderFraction = .16f,
+            PlateauUndulation = .01f
+        };
+
         public void Validate()
         {
             Height = Mathf.Max(.1f, Height);
