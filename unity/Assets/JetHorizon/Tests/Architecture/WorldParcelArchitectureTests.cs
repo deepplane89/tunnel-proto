@@ -242,6 +242,26 @@ namespace JetHorizon.Tests.Architecture
         }
 
         [Test]
+        public void Composer_HeroFamilyHasCooldownAndEverySentenceChangesFamily()
+        {
+            var selector = new DeterministicWorldParcelSelector();
+            int lastHeroSector = -99;
+            string priorSignature = string.Empty;
+            for (int sector = 0; sector < 18; sector++)
+            {
+                WorldParcelSelection selection = selector.Select(sector);
+                Assert.That(selection.FirstMajor, Is.Not.EqualTo(selection.SecondMajor));
+                Assert.That(selection.Signature, Is.Not.EqualTo(priorSignature));
+                priorSignature = selection.Signature;
+                bool hero = selection.FirstMajor == WorldParcelKind.PrismaticCorridor
+                    || selection.SecondMajor == WorldParcelKind.PrismaticCorridor;
+                if (!hero) continue;
+                Assert.That(sector - lastHeroSector, Is.GreaterThanOrEqualTo(5));
+                lastHeroSector = sector;
+            }
+        }
+
+        [Test]
         public void RuntimeTrace_IsWaveThenBehindThenEmptyWaterThenRevealThenWave()
         {
             WorldParcelSequencePlan sequence = TerrainWorldCatalog.CreateProofWorld(0, 0f, Capability).Parcels;

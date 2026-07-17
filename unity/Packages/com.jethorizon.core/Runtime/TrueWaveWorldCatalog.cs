@@ -15,6 +15,7 @@ namespace JetHorizon.Simulation
         const float BreatherLength = 430f;
         const float MajorLength = 960f;
         const float FinalBreatherLength = 520f;
+        static readonly IWorldParcelSelector Selector = new DeterministicWorldParcelSelector();
 
         public static TerrainWorldPlan Create(
             int sector,
@@ -25,9 +26,10 @@ namespace JetHorizon.Simulation
             if (worldStartDistance < 0f) throw new ArgumentOutOfRangeException(nameof(worldStartDistance));
             float speed = TerrainWorldPaceRules.MaximumSpeedForHeat(Math.Min(5, sector));
             int seed = 1709 + sector * 7919;
-            int formationVariant = sector % 4;
-            WorldParcelKind firstMajor = MajorKind(sector, 0);
-            WorldParcelKind secondMajor = MajorKind(sector, 1);
+            WorldParcelSelection selection = Selector.Select(sector);
+            int formationVariant = selection.FormationVariant;
+            WorldParcelKind firstMajor = selection.FirstMajor;
+            WorldParcelKind secondMajor = selection.SecondMajor;
             var parcels = new List<WorldParcelPlan>(7);
             float cursor = worldStartDistance;
 
@@ -37,11 +39,11 @@ namespace JetHorizon.Simulation
             cursor += FormationLength;
             parcels.Add(CreateBreather("formation-release", cursor, BreatherLength, worldStartDistance, capability, seed + 201));
             cursor += BreatherLength;
-            parcels.Add(CreateMajor(firstMajor, cursor, MajorLength, worldStartDistance, capability, speed, seed + 307, sector));
+            parcels.Add(CreateMajor(firstMajor, cursor, MajorLength, worldStartDistance, capability, speed, seed + 307, selection.FirstVariant));
             cursor += MajorLength;
             parcels.Add(CreateBreather("mid-run-water", cursor, BreatherLength, worldStartDistance, capability, seed + 401));
             cursor += BreatherLength;
-            parcels.Add(CreateMajor(secondMajor, cursor, MajorLength, worldStartDistance, capability, speed, seed + 503, sector + 3));
+            parcels.Add(CreateMajor(secondMajor, cursor, MajorLength, worldStartDistance, capability, speed, seed + 503, selection.SecondVariant));
             cursor += MajorLength;
             parcels.Add(CreateBreather("long-water-settlement", cursor, FinalBreatherLength, worldStartDistance, capability, seed + 607));
             cursor += FinalBreatherLength;
@@ -141,20 +143,6 @@ namespace JetHorizon.Simulation
                     -150f, 150f, 10f, 11f, 180f, 180f));
                 lastSectionDistance = distance;
             }
-        }
-
-        static WorldParcelKind MajorKind(int sector, int slot)
-        {
-            WorldParcelKind[][] sentences =
-            {
-                new[] { WorldParcelKind.CrystallineCanyon, WorldParcelKind.RoutePortal },
-                new[] { WorldParcelKind.OpenWaterLightning, WorldParcelKind.CrystallineCanyon },
-                new[] { WorldParcelKind.RoutePortal, WorldParcelKind.PrismaticCorridor },
-                new[] { WorldParcelKind.CrystallineCanyon, WorldParcelKind.OpenWaterLightning },
-                new[] { WorldParcelKind.KnifeEdgeTunnel, WorldParcelKind.CrystallineCanyon },
-                new[] { WorldParcelKind.OpenWaterLightning, WorldParcelKind.RoutePortal }
-            };
-            return sentences[sector % sentences.Length][slot];
         }
 
         static TerrainRegionKind RegionFor(WorldParcelPlan parcel, bool final)
