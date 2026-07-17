@@ -351,6 +351,117 @@ namespace JetHorizon
             return writer.Build();
         }
 
+        /// <summary>
+        /// Builds a closed waterline boulder. The source grid density, seeded snap,
+        /// diagonal faces and flat normals wrap around every exposed side rather than
+        /// treating the object as another one-sided canyon bank.
+        /// </summary>
+        public static Mesh BuildBoulder(
+            FacetSurfaceStyle style,
+            int seed,
+            float radius,
+            float height,
+            int circumferencePatches = 6,
+            float submergedDepth = 7f,
+            float plateauRadiusFraction = .38f,
+            string name = "JH_FacetBoulder")
+        {
+            style.Validate();
+            radius = Mathf.Max(3f, radius);
+            height = Mathf.Max(6f, height);
+            submergedDepth = Mathf.Clamp(submergedDepth, 0f, height * .45f);
+            plateauRadiusFraction = Mathf.Clamp(plateauRadiusFraction, .2f, .65f);
+            circumferencePatches = Mathf.Max(3, circumferencePatches);
+            int rows = style.Rows;
+            int columnsPerPatch = style.Columns;
+            int columns = circumferencePatches * columnsPerPatch;
+            int stride = columns + 1;
+            var surface = new Vector3[(rows + 1) * stride];
+
+            for (int patch = 0; patch < circumferencePatches; patch++)
+            {
+                var rng = new SourceLcg(unchecked(seed + patch));
+                for (int row = 0; row <= rows; row++)
+                {
+                    float v = row / (float)rows;
+                    float sourceProfile = Profile(v, style);
+                    for (int localColumn = 0; localColumn <= columnsPerPatch; localColumn++)
+                    {
+                        int column = patch * columnsPerPatch + localColumn;
+                        float sourceX = sourceProfile + (rng.Next() - .5f) * 2f * style.Displacement;
+                        if (v > .8f)
+                            sourceX += (rng.Next() - .4f) * style.Displacement * (v - .8f) / .2f * 2f;
+                        sourceX = Mathf.Round(sourceX * style.Snap) / style.Snap;
+                        float radialNoise = (sourceX - sourceProfile) * radius / Mathf.Max(18f, style.Depth);
+                        float ringRadius = BoulderRadius(v, radius, plateauRadiusFraction) + radialNoise;
+                        if (row == rows) ringRadius = radius * plateauRadiusFraction;
+                        float y = Mathf.Round((v * height - submergedDepth) * 1.5f) / 1.5f;
+
+                        // Keep every patch closed to its neighbour and weld the final
+                        // circumference column back to the first after consuming RNG.
+                        if (column == columns)
+                        {
+                            surface[row * stride + column] = surface[row * stride];
+                            continue;
+                        }
+                        if (patch > 0 && localColumn == 0) continue;
+                        float angle = column / (float)columns * Mathf.PI * 2f;
+                        surface[row * stride + column] = new Vector3(
+                            Mathf.Cos(angle) * ringRadius,
+                            y,
+                            Mathf.Sin(angle) * ringRadius);
+                    }
+                }
+            }
+
+            var writer = new TriangleWriter(name);
+            int Index(int row, int column) => row * stride + column;
+            for (int row = 0; row < rows; row++)
+            for (int column = 0; column < columns; column++)
+            {
+                float u0 = column / (float)columnsPerPatch;
+                float u1 = (column + 1f) / columnsPerPatch;
+                float v0 = row / (float)rows;
+                float v1 = (row + 1f) / rows;
+                Vector3 p00 = surface[Index(row, column)];
+                Vector3 p01 = surface[Index(row + 1, column)];
+                Vector3 p10 = surface[Index(row, column + 1)];
+                Vector3 p11 = surface[Index(row + 1, column + 1)];
+                writer.Triangle(p00, p01, p10, new Vector2(u0, v0), new Vector2(u0, v1), new Vector2(u1, v0));
+                writer.Triangle(p10, p01, p11, new Vector2(u1, v0), new Vector2(u0, v1), new Vector2(u1, v1));
+            }
+
+            float topY = surface[Index(rows, 0)].y;
+            float plateauRadius = radius * plateauRadiusFraction;
+            float innerPlateauRadius = plateauRadius * .42f;
+            Vector3 topCenter = new Vector3(0f, topY, 0f);
+            Vector3 bottomCenter = new Vector3(0f, surface[Index(0, 0)].y, 0f);
+            for (int column = 0; column < columns; column++)
+            {
+                float angle0 = column / (float)columns * Mathf.PI * 2f;
+                float angle1 = (column + 1f) / columns * Mathf.PI * 2f;
+                Vector3 outerA = surface[Index(rows, column)];
+                Vector3 outerB = surface[Index(rows, column + 1)];
+                Vector3 innerA = new Vector3(Mathf.Cos(angle0) * innerPlateauRadius, topY, Mathf.Sin(angle0) * innerPlateauRadius);
+                Vector3 innerB = new Vector3(Mathf.Cos(angle1) * innerPlateauRadius, topY, Mathf.Sin(angle1) * innerPlateauRadius);
+                writer.Quad(outerA, innerA, outerB, innerB, new Vector2(0f, 1f), new Vector2(0f, .5f), new Vector2(1f, 1f), new Vector2(1f, .5f));
+                writer.Triangle(innerA, topCenter, innerB, new Vector2(0f, .5f), new Vector2(.5f, 0f), new Vector2(1f, .5f));
+
+                Vector3 bottomA = surface[Index(0, column)];
+                Vector3 bottomB = surface[Index(0, column + 1)];
+                writer.Triangle(bottomA, bottomB, bottomCenter, Vector2.zero, Vector2.right, new Vector2(.5f, .5f));
+            }
+            return writer.Build();
+        }
+
+        static float BoulderRadius(float v, float radius, float plateauRadiusFraction)
+        {
+            if (v < .12f) return Mathf.Lerp(radius * .72f, radius * .88f, v / .12f);
+            if (v < .45f) return Mathf.Lerp(radius * .88f, radius, (v - .12f) / .33f);
+            if (v < .74f) return Mathf.Lerp(radius, radius * .92f, (v - .45f) / .29f);
+            return Mathf.Lerp(radius * .92f, radius * plateauRadiusFraction, (v - .74f) / .26f);
+        }
+
         static FacetMassStation SampleMacroStation(IReadOnlyList<FacetMassStation> stations, float z)
         {
             if (z <= stations[0].Z) return stations[0];

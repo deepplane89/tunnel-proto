@@ -18,11 +18,12 @@ namespace JetHorizon.EditorTools
         internal static readonly string[] SpecimenNames =
         {
             "01 SOURCE PARITY — canonical Three.js slab",
-            "02 MONOLITH — compact towering formation",
-            "03 KNIFE RIDGE — long low-to-high formation",
-            "04 NATURAL GATE — pillars and overhead bridge",
-            "05 CONTINUOUS CANYON — paired curved land masses",
-            "06 LOW SHELF — half-submerged terrain beat"
+            "02 LOW BANK — mirrored-canyon candidate",
+            "03 BOULDER SLALOM — closed waterline monoliths",
+            "04 KNIFE RIDGE — long low-to-high formation",
+            "05 NATURAL GATE — pillars and overhead bridge",
+            "06 CONTINUOUS CANYON — paired curved land masses",
+            "07 LOW SHELF — half-submerged terrain beat"
         };
 
         [MenuItem("Jet Horizon/Facet Terrain Gallery", priority = 1)]
@@ -41,13 +42,15 @@ namespace JetHorizon.EditorTools
             ValidateParity(style, parity);
             GameObject canonical = Add(SpecimenNames[0], parity, terrainMaterial, Vector3.zero);
 
-            Mesh monolith = FacetTerrainMeshFactory.BuildMass(
+            Mesh lowBank = FacetTerrainMeshFactory.BuildMass(
                 Stations(0f, 56f, 7,
                     t => Mathf.Sin(t * Mathf.PI * 1.4f) * 2f,
                     t => 62f + Mathf.Pow(Mathf.Sin(t * Mathf.PI), .7f) * 42f,
                     t => 62f + Mathf.Sin(t * Mathf.PI) * 15f,
-                    t => 1.05f + Mathf.Sin(t * Mathf.PI) * .32f), style, 11, "JH_WaterlineMonolith");
-            Add(SpecimenNames[1], monolith, terrainMaterial, Vector3.zero);
+                    t => 1.05f + Mathf.Sin(t * Mathf.PI) * .32f), style, 11, "JH_LowFacetBank");
+            Add(SpecimenNames[1], lowBank, terrainMaterial, Vector3.zero);
+
+            BuildBoulderSlalomSpecimen(style, terrainMaterial);
 
             Mesh ridge = FacetTerrainMeshFactory.BuildMass(
                 Stations(0f, 220f, 20,
@@ -55,7 +58,7 @@ namespace JetHorizon.EditorTools
                     t => 14f + Mathf.Pow(Mathf.Sin(t * Mathf.PI), .55f) * 70f,
                     t => 34f + Mathf.Sin(t * Mathf.PI) * 36f,
                     t => .32f + Mathf.Sin(t * Mathf.PI) * .58f), style, 23, "JH_FacetKnifeRidge");
-            Add(SpecimenNames[2], ridge, terrainMaterial, Vector3.zero);
+            Add(SpecimenNames[3], ridge, terrainMaterial, Vector3.zero);
 
             BuildNaturalGateSpecimen(style, terrainMaterial);
 
@@ -67,7 +70,7 @@ namespace JetHorizon.EditorTools
                     t => 10f + Mathf.Sin(t * Mathf.PI) * 15f,
                     t => 105f + Mathf.Sin(t * Mathf.PI) * 25f,
                     t => .18f + Mathf.Sin(t * Mathf.PI) * .20f), style, 67, "JH_LowFacetShelf");
-            Add(SpecimenNames[5], lowShelf, terrainMaterial, new Vector3(0f, -8f, 0f));
+            Add(SpecimenNames[6], lowShelf, terrainMaterial, new Vector3(0f, -8f, 0f));
 
             SelectSpecimen(0, false);
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -93,7 +96,7 @@ namespace JetHorizon.EditorTools
                 leftMirrored.Add(new FacetMassStation(z, -center + halfWidth, height * .96f, 82f, 1f));
             }
 
-            var root = new GameObject(SpecimenNames[4]);
+            var root = new GameObject(SpecimenNames[5]);
             Mesh rightMesh = FacetTerrainMeshFactory.BuildMass(right, style, 53, "JH_CanyonRightMass");
             Mesh leftMesh = FacetTerrainMeshFactory.BuildMass(leftMirrored, style, 59, "JH_CanyonLeftMass");
             AddChild(root.transform, "Right continuous bank", rightMesh, material, Vector3.one);
@@ -102,7 +105,7 @@ namespace JetHorizon.EditorTools
 
         static void BuildNaturalGateSpecimen(FacetSurfaceStyle style, Material material)
         {
-            var root = new GameObject(SpecimenNames[3]);
+            var root = new GameObject(SpecimenNames[4]);
             List<FacetMassStation> pillarStations = Stations(0f, 64f, 8,
                 t => 30f + Mathf.Sin(t * Mathf.PI) * 2.5f,
                 t => 66f + Mathf.Sin(t * Mathf.PI) * 10f,
@@ -118,6 +121,28 @@ namespace JetHorizon.EditorTools
             Mesh bridge = FacetTerrainMeshFactory.BuildThreeJsParitySlab(style, 47);
             AddChild(root.transform, "Facet bridge", bridge, material,
                 new Vector3(-32f, 58f, 60f), Quaternion.Euler(0f, 90f, 0f), new Vector3(.72f, .34f, 3.2f));
+        }
+
+        static void BuildBoulderSlalomSpecimen(FacetSurfaceStyle style, Material material)
+        {
+            var root = new GameObject(SpecimenNames[2]);
+            var placements = new[]
+            {
+                (x: -38f, z:   0f, radius: 24f, height: 43f, seed: 101),
+                (x:  35f, z:  82f, radius: 30f, height: 54f, seed: 107),
+                (x: -31f, z: 178f, radius: 27f, height: 48f, seed: 113),
+                (x:  41f, z: 286f, radius: 34f, height: 61f, seed: 127),
+                (x: -34f, z: 405f, radius: 28f, height: 50f, seed: 131)
+            };
+            for (int i = 0; i < placements.Length; i++)
+            {
+                var p = placements[i];
+                Mesh boulder = FacetTerrainMeshFactory.BuildBoulder(
+                    style, p.seed, p.radius, p.height, 6, p.height * .17f, .38f,
+                    $"JH_SlalomBoulder_{i + 1:00}");
+                AddChild(root.transform, $"Boulder {i + 1:00}", boulder, material,
+                    new Vector3(p.x, 0f, p.z), Quaternion.Euler(0f, p.seed % 37, 0f), Vector3.one);
+            }
         }
 
         static List<FacetMassStation> Stations(
@@ -338,7 +363,7 @@ namespace JetHorizon.EditorTools
         internal static void ShowWindow(int selected = -1)
         {
             FacetTerrainGalleryWindow window = GetWindow<FacetTerrainGalleryWindow>("Facet Terrain Review");
-            window.minSize = new Vector2(390f, 300f);
+            window.minSize = new Vector2(390f, 340f);
             window._selected = selected >= 0
                 ? selected
                 : SessionState.GetInt("JH.FacetTerrainGallery.Selected", 0);
