@@ -165,7 +165,7 @@ namespace JetHorizon.Simulation
         public TerrainWorldPlan QueuedWorld => _queuedWorld;
         public TerrainWorldState Snapshot => _snapshot;
         public float EarnedSpeedBonus => _earnedSpeedBonus;
-        public float SoftSpeedCap => 128f + _heat * 12f;
+        public float SoftSpeedCap => TerrainWorldPaceRules.MaximumSpeedForHeat(_heat);
         public int Heat => _heat;
         public bool ExtractionDecisionOpen => _extractionDecisionOpen;
         public float CurrentRegionStartDistance => _world.StartDistance

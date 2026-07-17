@@ -214,16 +214,22 @@ namespace JetHorizon.Simulation
     public readonly struct TerrainWorldValidation
     {
         public EncounterValidationResult Navigation { get; }
+        public TraversalEnvelopeResult Traversal { get; }
         public bool RegionCoverageValid { get; }
         public bool TopologyValid { get; }
-        public bool IsValid => Navigation.IsAdmissible && RegionCoverageValid && TopologyValid;
+        public bool IsValid => Navigation.Reachable
+            && Traversal.IsAdmissible
+            && RegionCoverageValid
+            && TopologyValid;
 
         public TerrainWorldValidation(
             EncounterValidationResult navigation,
+            TraversalEnvelopeResult traversal,
             bool regionCoverageValid,
             bool topologyValid)
         {
             Navigation = navigation;
+            Traversal = traversal;
             RegionCoverageValid = regionCoverageValid;
             TopologyValid = topologyValid;
         }
@@ -241,6 +247,8 @@ namespace JetHorizon.Simulation
             int heat)
         {
             if (world == null) throw new ArgumentNullException(nameof(world));
+            float maximumForwardSpeed = TerrainWorldPaceRules.MaximumSpeedForHeat(heat);
+            ShipCapabilityProfile maximumSpeedCapability = capability.AtCruiseSpeed(maximumForwardSpeed);
             // The first section anchors the world's starting cross-section at
             // distance zero. Navigation validation begins at the next authored
             // section so the validator has real travel time before its first target.
@@ -274,8 +282,12 @@ namespace JetHorizon.Simulation
                 derivedWater);
             EncounterValidationResult navigation = new EncounterCapabilityValidator().Validate(
                 navigationPlan,
-                capability,
+                maximumSpeedCapability,
                 heat);
+            TraversalEnvelopeResult traversal = new TraversalEnvelopeValidator().Validate(
+                world,
+                capability,
+                maximumForwardSpeed);
             bool regionsValid = world.GetRegion(0).Kind == TerrainRegionKind.OpenSea
                 && world.GetRegion(world.RegionCount - 1).Kind == TerrainRegionKind.ExtractionBreather;
             bool topologyValid = true;
@@ -298,7 +310,7 @@ namespace JetHorizon.Simulation
                 float rightPassage = rightShore - feature.CenterX - feature.HalfWidth;
                 topologyValid = Math.Max(leftPassage, rightPassage) >= requiredFormationPassage;
             }
-            return new TerrainWorldValidation(navigation, regionsValid, topologyValid);
+            return new TerrainWorldValidation(navigation, traversal, regionsValid, topologyValid);
         }
 
         static void SampleShore(
@@ -336,6 +348,7 @@ namespace JetHorizon.Simulation
             int heat = Math.Max(0, Math.Min(5, sector));
             float mirror = (sector & 1) == 0 ? 1f : -1f;
             int layout = sector % 3;
+            float designSpeed = TerrainWorldPaceRules.MaximumSpeedForHeat(heat);
             const float openWaterReturnStart = 2980f;
             const float openWaterReturnLength = 640f;
             const float breatherLength = 500f;
@@ -395,6 +408,11 @@ namespace JetHorizon.Simulation
             }
             var sections = new List<TerrainWorldSection>(48);
             int id = 1000;
+            float comfortableSlope = TraversalEnvelopeRules.ComfortableSlope(capability, designSpeed);
+            float comfortableCurvature = TraversalEnvelopeRules.ComfortableCurvature(capability, designSpeed);
+            float previousAuthoredCenter = 0f;
+            float previousAuthoredDistance = 0f;
+            float previousAuthoredSlope = 0f;
 
             TerrainRegionKind RegionAt(float distance)
             {
@@ -436,6 +454,24 @@ namespace JetHorizon.Simulation
                 }
                 float worldLeft = mirror > 0f ? left : -right;
                 float worldRight = mirror > 0f ? right : -left;
+                float desiredCenter = (worldLeft + worldRight) * .5f;
+                float authoredHalfWidth = (worldRight - worldLeft) * .5f;
+                if (distance > previousAuthoredDistance)
+                {
+                    float dz = distance - previousAuthoredDistance;
+                    float desiredSlope = (desiredCenter - previousAuthoredCenter) / dz;
+                    desiredSlope = Math.Max(-comfortableSlope, Math.Min(comfortableSlope, desiredSlope));
+                    float maximumSlopeChange = comfortableCurvature * dz;
+                    float slope = Math.Max(
+                        previousAuthoredSlope - maximumSlopeChange,
+                        Math.Min(previousAuthoredSlope + maximumSlopeChange, desiredSlope));
+                    desiredCenter = previousAuthoredCenter + slope * dz;
+                    previousAuthoredSlope = slope;
+                }
+                previousAuthoredCenter = desiredCenter;
+                previousAuthoredDistance = distance;
+                worldLeft = desiredCenter - authoredHalfWidth;
+                worldRight = desiredCenter + authoredHalfWidth;
                 float worldLeftHeight = mirror > 0f ? leftHeight : rightHeight;
                 float worldRightHeight = mirror > 0f ? rightHeight : leftHeight;
                 sections.Add(new TerrainWorldSection(
@@ -464,6 +500,9 @@ namespace JetHorizon.Simulation
             Shore(1760f, TerrainRegionKind.NaturalArch,          -22f,   6f, 68f, 64f);
             Shore(1840f, TerrainRegionKind.NaturalArch,          -34f,  20f, 61f, 58f);
 
+            float previousCanyonCenter = sections[sections.Count - 1].WaterCenterX;
+            float previousCanyonDistance = sections[sections.Count - 1].Distance;
+            float previousCanyonSlope = 0f;
             for (int i = 0; i <= 22; i++)
             {
                 float t = i / 22f;
@@ -473,10 +512,25 @@ namespace JetHorizon.Simulation
                 float primaryPhase = layout == 0 ? 0f : layout == 1 ? .55f : -.35f;
                 float secondaryFrequency = layout == 0 ? 5.4f : layout == 1 ? 7.1f : 4.6f;
                 float secondaryAmplitude = layout == 0 ? 3.5f : layout == 1 ? 5f : 4.5f;
-                float center = ((float)Math.Sin(t * Math.PI * primaryFrequency + primaryPhase)
+                float desiredCenter = ((float)Math.Sin(t * Math.PI * primaryFrequency + primaryPhase)
                         * primaryAmplitude
                     + (float)Math.Sin(t * Math.PI * secondaryFrequency + .35f + layout * .32f)
                         * secondaryAmplitude) * mirror;
+                // Return toward open water before the final cross-section. The
+                // curve is then rate-limited by the same velocity and acceleration
+                // envelope used by admission, so higher-speed sectors become longer,
+                // broader turns rather than physically impossible lateral snaps.
+                float exitT = Math.Max(0f, Math.Min(1f, (t - .70f) / .30f));
+                exitT = exitT * exitT * (3f - 2f * exitT);
+                desiredCenter *= 1f - exitT;
+                float dz = Math.Max(.001f, distance - previousCanyonDistance);
+                float desiredSlope = (desiredCenter - previousCanyonCenter) / dz;
+                desiredSlope = Math.Max(-comfortableSlope, Math.Min(comfortableSlope, desiredSlope));
+                float maximumSlopeChange = comfortableCurvature * dz;
+                float slope = Math.Max(
+                    previousCanyonSlope - maximumSlopeChange,
+                    Math.Min(previousCanyonSlope + maximumSlopeChange, desiredSlope));
+                float center = previousCanyonCenter + slope * dz;
                 float baseHalfWidth = layout == 0 ? 25f : layout == 1 ? 27f : 24.5f;
                 float halfWidth = baseHalfWidth
                     + (float)Math.Sin(t * Math.PI * (3.1f + layout * .45f) + .6f) * 3f;
@@ -491,7 +545,13 @@ namespace JetHorizon.Simulation
                     67f - heightWave * .65f,
                     175f,
                     175f));
+                previousCanyonCenter = center;
+                previousCanyonDistance = distance;
+                previousCanyonSlope = slope;
             }
+            previousAuthoredCenter = previousCanyonCenter;
+            previousAuthoredDistance = previousCanyonDistance;
+            previousAuthoredSlope = previousCanyonSlope;
 
             for (int i = 1; i <= 4; i++)
             {
@@ -512,7 +572,7 @@ namespace JetHorizon.Simulation
             Shore(worldLength, TerrainRegionKind.ExtractionBreather,
                 -150f, 150f, 10f, 11f, 180f);
 
-            var features = new List<TerrainWorldFeature>(5)
+            var features = new List<TerrainWorldFeature>(8)
             {
                 new TerrainWorldFeature(
                     500,
@@ -528,44 +588,103 @@ namespace JetHorizon.Simulation
                     401 + sector * 47)
             };
 
-            void Formation(
-                int id,
-                TerrainWorldFeatureKind kind,
-                float distance,
-                float center,
-                float halfWidth,
-                float height,
-                float halfDepth,
-                int seed)
+            void SampleAuthoredShore(float distance, out float left, out float right)
             {
-                features.Add(new TerrainWorldFeature(
-                    id, kind, distance, center * mirror, halfWidth, height, halfDepth,
-                    TraversalRequirement.None, seed + sector * 67));
+                int sectionIndex = 0;
+                while (sectionIndex < sections.Count - 1
+                    && distance >= sections[sectionIndex + 1].Distance)
+                    sectionIndex++;
+                TerrainWorldSection a = sections[sectionIndex];
+                if (sectionIndex >= sections.Count - 1)
+                {
+                    left = a.LeftShoreX;
+                    right = a.RightShoreX;
+                    return;
+                }
+                TerrainWorldSection b = sections[sectionIndex + 1];
+                float sectionT = Math.Max(0f, Math.Min(1f,
+                    (distance - a.Distance) / Math.Max(.001f, b.Distance - a.Distance)));
+                left = a.LeftShoreX + (b.LeftShoreX - a.LeftShoreX) * sectionT;
+                right = a.RightShoreX + (b.RightShoreX - a.RightShoreX) * sectionT;
             }
 
-            // Three authored terrain rhythms repeat only after three complete worlds.
-            // The feature kind is core data; Unity merely presents the requested
-            // source-faceted monolith, ridge or connected cluster.
-            if (layout == 0)
+            // Formation cadence is authored in seconds, then converted to world
+            // distance using this sector's actual maximum speed. Side-attached
+            // masses overlap the shoreline and alternate their inner tips around
+            // the route, producing readable terrain weaves instead of loose props.
+            float[] beatSeconds = layout == 0
+                ? new[] { 1.80f, 2.90f, 4.00f, 5.15f, 6.25f, 7.40f, 8.55f }
+                : layout == 1
+                ? new[] { 1.90f, 3.00f, 4.15f, 5.20f, 6.35f, 7.45f, 8.55f }
+                : new[] { 2.00f, 3.10f, 4.20f, 5.30f, 6.35f, 7.40f, 8.55f };
+            int[] authoredSides = layout == 0
+                ? new[] { 1, -1, 1, 0, -1, 1, -1 }
+                : layout == 1
+                ? new[] { -1, 1, 0, 1, -1, -1, 1 }
+                : new[] { 0, 1, -1, 1, 1, -1, 0 };
+            TerrainWorldFeatureKind[] kinds = layout == 0
+                ? new[]
+                {
+                    TerrainWorldFeatureKind.WaterlineRidge,
+                    TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineMonolith,
+                    TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineRidge,
+                    TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineRidge
+                }
+                : layout == 1
+                ? new[]
+                {
+                    TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineRidge,
+                    TerrainWorldFeatureKind.WaterlineMonolith,
+                    TerrainWorldFeatureKind.WaterlineRidge,
+                    TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineMonolith,
+                    TerrainWorldFeatureKind.WaterlineRidge
+                }
+                : new[]
+                {
+                    TerrainWorldFeatureKind.WaterlineMonolith,
+                    TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineRidge,
+                    TerrainWorldFeatureKind.WaterlineCluster,
+                    TerrainWorldFeatureKind.WaterlineRidge,
+                    TerrainWorldFeatureKind.WaterlineMonolith,
+                    TerrainWorldFeatureKind.WaterlineCluster
+                };
+            for (int beat = 0; beat < beatSeconds.Length; beat++)
             {
-                Formation(501, TerrainWorldFeatureKind.WaterlineRidge,    300f,  42f,  9f, 31f,  9f, 601);
-                Formation(502, TerrainWorldFeatureKind.WaterlineMonolith, 390f, -34f, 10f, 38f, 10f, 701);
-                Formation(503, TerrainWorldFeatureKind.WaterlineCluster, 1100f,  20f, 12f, 44f, 12f, 809);
-                Formation(504, TerrainWorldFeatureKind.WaterlineRidge,   1310f, -28f, 11f, 36f, 11f, 907);
-            }
-            else if (layout == 1)
-            {
-                Formation(501, TerrainWorldFeatureKind.WaterlineCluster,  320f, -42f, 10f, 35f, 10f, 1009);
-                Formation(502, TerrainWorldFeatureKind.WaterlineRidge,    610f,  28f, 11f, 32f, 10f, 1103);
-                Formation(503, TerrainWorldFeatureKind.WaterlineMonolith,1040f,  -4f, 13f, 48f, 13f, 1201);
-                Formation(504, TerrainWorldFeatureKind.WaterlineCluster, 1380f,  34f, 10f, 39f, 10f, 1301);
-            }
-            else
-            {
-                Formation(501, TerrainWorldFeatureKind.WaterlineMonolith, 360f,   0f, 14f, 52f, 13f, 1409);
-                Formation(502, TerrainWorldFeatureKind.WaterlineCluster,  760f,  30f, 11f, 34f, 10f, 1511);
-                Formation(503, TerrainWorldFeatureKind.WaterlineRidge,   1150f, -30f, 12f, 31f, 11f, 1601);
-                Formation(504, TerrainWorldFeatureKind.WaterlineMonolith,1460f,  30f, 10f, 43f, 10f, 1709);
+                float distance = beatSeconds[beat] * designSpeed;
+                if (distance > 1540f) continue;
+                SampleAuthoredShore(distance, out float leftShore, out float rightShore);
+                float waterCenter = (leftShore + rightShore) * .5f;
+                int side = authoredSides[beat] * (mirror > 0f ? 1 : -1);
+                float center;
+                float halfWidth;
+                if (side == 0)
+                {
+                    center = waterCenter;
+                    halfWidth = 7.5f + (beat % 3);
+                }
+                else
+                {
+                    float innerTip = waterCenter - side * .5f;
+                    float outerEdge = side > 0 ? rightShore + 8f : leftShore - 8f;
+                    center = (innerTip + outerEdge) * .5f;
+                    halfWidth = Math.Abs(outerEdge - innerTip) * .5f;
+                }
+                features.Add(new TerrainWorldFeature(
+                    501 + beat,
+                    kinds[beat],
+                    distance,
+                    center,
+                    halfWidth,
+                    34f + (beat % 3) * 7f,
+                    10f + (beat % 2) * 2f,
+                    TraversalRequirement.None,
+                    601 + layout * 400 + beat * 101 + sector * 67));
             }
 
             var world = new TerrainWorldPlan(
@@ -576,16 +695,11 @@ namespace JetHorizon.Simulation
                 regions,
                 sections.ToArray(),
                 features.ToArray());
-            TerrainWorldValidation validation = new TerrainWorldValidator().Validate(world, capability, heat);
-            if (!validation.IsValid)
-                throw new InvalidOperationException(
-                    $"Terrain world is not navigable: {world.Id}; "
-                    + $"reachable={validation.Navigation.Reachable}, "
-                    + $"neutral={validation.Navigation.RejectsNeutral}, "
-                    + $"left={validation.Navigation.RejectsConstantLeft}, "
-                    + $"right={validation.Navigation.RejectsConstantRight}, "
-                    + $"margin={validation.Navigation.FeasibilityMargin:0.###}, "
-                    + $"regions={validation.RegionCoverageValid}, topology={validation.TopologyValid}");
+            // Dense envelope validation is intentionally an authoring/test gate,
+            // not work performed inside the live simulation tick. The generator
+            // constructs from the same limits, while TerrainWorldArchitectureTests
+            // prove every speed/heat template before shipping. This avoids a route
+            // search hitch when the next deterministic world is preloaded on mobile.
             return world;
         }
     }

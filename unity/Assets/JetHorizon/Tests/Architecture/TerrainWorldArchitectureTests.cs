@@ -26,6 +26,13 @@ namespace JetHorizon.Tests.Architecture
                     sector);
 
                 Assert.That(validation.IsValid, Is.True, $"sector {sector}");
+                Assert.That(validation.Traversal.Reachable, Is.True, $"sector {sector} reachable");
+                Assert.That(validation.Traversal.Comfortable, Is.True, $"sector {sector} comfortable");
+                Assert.That(validation.Traversal.RejectsNeutral, Is.True, $"sector {sector} neutral");
+                Assert.That(validation.Traversal.RejectsConstantLeft, Is.True, $"sector {sector} left");
+                Assert.That(validation.Traversal.RejectsConstantRight, Is.True, $"sector {sector} right");
+                Assert.That(validation.Traversal.ForwardSpeed,
+                    Is.EqualTo(TerrainWorldPaceRules.MaximumSpeedForHeat(sector)).Within(.01f));
                 Assert.That(world.GetRegion(0).Kind, Is.EqualTo(TerrainRegionKind.OpenSea));
                 Assert.That(world.GetRegion(world.RegionCount - 1).Kind,
                     Is.EqualTo(TerrainRegionKind.ExtractionBreather));
@@ -98,7 +105,7 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(start.TerrainWorldMode, Is.True);
             Assert.That(start.TerrainWorldId, Is.EqualTo("terrain-world-00"));
             Assert.That(start.TerrainWorldSectionCount, Is.GreaterThan(40));
-            Assert.That(start.TerrainWorldFeatureCount, Is.EqualTo(5));
+            Assert.That(start.TerrainWorldFeatureCount, Is.EqualTo(8));
             Assert.That(start.GateCount, Is.Zero);
             Assert.That(start.ActiveTerrainRegion, Is.EqualTo(TerrainRegionKind.OpenSea));
 
@@ -233,6 +240,58 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(TerrainWorldFeatureRules.IsWaterFormation(mass.Kind), Is.True);
             Assert.That(hit.CollisionEntered, Is.True);
             Assert.That(safe.CollisionEntered, Is.False);
+        }
+
+        [Test]
+        public void FormationCadence_IsAuthoredInTimeAcrossSectorSpeeds()
+        {
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
+            {
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f
+            });
+            for (int sector = 0; sector <= 5; sector++)
+            {
+                TerrainWorldPlan world = TerrainWorldCatalog.CreateProofWorld(sector, sector * 4120f, capability);
+                float speed = TerrainWorldPaceRules.MaximumSpeedForHeat(sector);
+                float previousDistance = -1f;
+                int formationCount = 0;
+                for (int i = 0; i < world.FeatureCount; i++)
+                {
+                    TerrainWorldFeature feature = world.GetFeature(i);
+                    if (!TerrainWorldFeatureRules.IsWaterFormation(feature.Kind)) continue;
+                    if (previousDistance >= 0f)
+                    {
+                        float seconds = (feature.Distance - previousDistance) / speed;
+                        Assert.That(seconds, Is.InRange(.95f, 1.20f), $"sector {sector}, beat {i}");
+                    }
+                    previousDistance = feature.Distance;
+                    formationCount++;
+                }
+                Assert.That(formationCount, Is.GreaterThanOrEqualTo(6), $"sector {sector}");
+            }
+        }
+
+        [Test]
+        public void TraversalMath_ConvertsHandlingAndReactionIntoForwardWarningDistance()
+        {
+            ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(new SimulationConfig
+            {
+                StartSpeedMultiplier = 3f,
+                MinimumOperationalSpeed = 100f
+            });
+            float shortReach = TraversalEnvelopeRules.ReachFromRest(
+                .5f,
+                capability.LateralAcceleration,
+                capability.MaximumLateralVelocity);
+            float warningDistance = TraversalEnvelopeRules.RequiredForwardDistanceFromRest(
+                10f,
+                140f,
+                capability);
+
+            Assert.That(shortReach, Is.EqualTo(5.39f).Within(.1f));
+            Assert.That(warningDistance, Is.GreaterThan(165f));
+            Assert.That(warningDistance, Is.LessThan(185f));
         }
 
         static JetHorizonSimulation CreateTerrainSimulation()

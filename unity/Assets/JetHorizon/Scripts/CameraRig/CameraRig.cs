@@ -14,6 +14,7 @@ namespace JetHorizon
         public const float CompleteWorldFarClip = 5000f;
         public const float MaximumGameplayFovDelta = 10f;
         public const float MaximumSpeedPullback = .75f;
+        public const float MaximumGameplayLateralFollowResponse = 12f;
 
         public UnityEngine.Camera Cam;      // child of this pivot at local (0,0,0)
         float _cameraRoll;
@@ -100,10 +101,16 @@ namespace JetHorizon
             Vector3 p = transform.position;
             var feel = GameManager.I.FeelProfile;
             var signals = ShipFeelPresenter.I != null ? ShipFeelPresenter.I.Signals : default;
+            // At the old serialized response of 18 the camera erased most of the
+            // ship's screen-space dodge. Retain a small, bounded follow delay so
+            // fast lateral commits read clearly without adding more FOV distortion.
+            float lateralFollowResponse = feel != null
+                ? Mathf.Min(feel.CameraFollowResponse, MaximumGameplayLateralFollowResponse)
+                : MaximumGameplayLateralFollowResponse;
             float lookAhead = feel != null ? signals.Lateral01 * feel.CameraLookAhead : 0f;
-            _lookAheadX = Mathf.Lerp(_lookAheadX, lookAhead, 1f - Mathf.Exp(-(feel != null ? feel.CameraFollowResponse : 18f) * dt));
+            _lookAheadX = Mathf.Lerp(_lookAheadX, lookAhead, 1f - Mathf.Exp(-lateralFollowResponse * dt));
             float lateralLag = feel != null ? signals.Lateral01 * feel.CameraLateralLag : 0f;
-            p.x = Mathf.Lerp(p.x, s.ShipX + _lookAheadX - lateralLag, 1f - Mathf.Exp(-(feel != null ? feel.CameraFollowResponse : 18f) * dt));
+            p.x = Mathf.Lerp(p.x, s.ShipX + _lookAheadX - lateralLag, 1f - Mathf.Exp(-lateralFollowResponse * dt));
             float shipAlt = s.ShipY - Tuning.ShipHoverY;
             float targetY = Tuning.CamBaseY + Tuning.CamPivotYOffset + shipAlt * Tuning.CamYFollow
                 - (feel != null ? signals.SpeedPresentation * feel.CameraSpeedHeightDrop : 0f);
