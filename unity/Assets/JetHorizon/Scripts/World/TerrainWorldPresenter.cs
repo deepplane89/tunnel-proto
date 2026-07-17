@@ -451,6 +451,43 @@ namespace JetHorizon
 
         void BuildWaterlineFormation(BuiltWorld world, TerrainWorldFeatureSnapshot feature)
         {
+            if (feature.Kind == TerrainWorldFeatureKind.WaterlineSplitPair)
+            {
+                AddWaterlineSlab(world, feature, "Split shard left",
+                    feature.CenterX - feature.HalfWidth * .55f, feature.HalfWidth * .42f,
+                    feature.Height, feature.CollisionHalfDepth * .92f, feature.Seed);
+                AddWaterlineSlab(world, feature, "Split shard right",
+                    feature.CenterX + feature.HalfWidth * .58f, feature.HalfWidth * .35f,
+                    feature.Height * .78f, feature.CollisionHalfDepth * .76f, feature.Seed + 37);
+                return;
+            }
+            if (feature.Kind == TerrainWorldFeatureKind.WaterlineSteppedChain)
+            {
+                for (int i = 0; i < 4; i++)
+                {
+                    float t = i / 3f;
+                    AddWaterlineSlab(world, feature, "Stepped chain " + i,
+                        feature.CenterX + Mathf.Lerp(-feature.HalfWidth * .62f, feature.HalfWidth * .62f, t),
+                        feature.HalfWidth * .28f,
+                        feature.Height * Mathf.Lerp(.45f, 1f, i == 2 ? 1f : t),
+                        feature.CollisionHalfDepth * Mathf.Lerp(.62f, .88f, t),
+                        feature.Seed + i * 31);
+                }
+                return;
+            }
+            if (feature.Kind == TerrainWorldFeatureKind.WaterlineAsymmetricGroup)
+            {
+                AddWaterlineSlab(world, feature, "Asymmetric mass",
+                    feature.CenterX - feature.HalfWidth * .22f, feature.HalfWidth * .74f,
+                    feature.Height, feature.CollisionHalfDepth, feature.Seed);
+                AddWaterlineSlab(world, feature, "Asymmetric shoulder",
+                    feature.CenterX + feature.HalfWidth * .56f, feature.HalfWidth * .31f,
+                    feature.Height * .58f, feature.CollisionHalfDepth * .70f, feature.Seed + 43);
+                AddWaterlineSlab(world, feature, "Asymmetric tooth",
+                    feature.CenterX - feature.HalfWidth * .72f, feature.HalfWidth * .22f,
+                    feature.Height * .72f, feature.CollisionHalfDepth * .54f, feature.Seed + 79);
+                return;
+            }
             if (feature.Kind == TerrainWorldFeatureKind.WaterlineSpire)
             {
                 // Small grouped facets make open-water navigation feel dense and

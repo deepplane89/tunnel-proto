@@ -66,7 +66,10 @@ namespace JetHorizon.Simulation
         WaterlineMonolith,
         WaterlineRidge,
         WaterlineCluster,
-        WaterlineSpire
+        WaterlineSpire,
+        WaterlineSplitPair,
+        WaterlineSteppedChain,
+        WaterlineAsymmetricGroup
     }
 
     public static class TerrainWorldFeatureRules
@@ -75,7 +78,10 @@ namespace JetHorizon.Simulation
             => kind == TerrainWorldFeatureKind.WaterlineMonolith
                 || kind == TerrainWorldFeatureKind.WaterlineRidge
                 || kind == TerrainWorldFeatureKind.WaterlineCluster
-                || kind == TerrainWorldFeatureKind.WaterlineSpire;
+                || kind == TerrainWorldFeatureKind.WaterlineSpire
+                || kind == TerrainWorldFeatureKind.WaterlineSplitPair
+                || kind == TerrainWorldFeatureKind.WaterlineSteppedChain
+                || kind == TerrainWorldFeatureKind.WaterlineAsymmetricGroup;
     }
 
     public readonly struct TerrainWorldWave

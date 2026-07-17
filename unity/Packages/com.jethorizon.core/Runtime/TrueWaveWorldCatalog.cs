@@ -248,11 +248,11 @@ namespace JetHorizon.Simulation
             TerrainWorldFeatureKind[] silhouettes =
             {
                 TerrainWorldFeatureKind.WaterlineSpire,
-                TerrainWorldFeatureKind.WaterlineCluster,
+                TerrainWorldFeatureKind.WaterlineSplitPair,
                 TerrainWorldFeatureKind.WaterlineRidge,
-                TerrainWorldFeatureKind.WaterlineSpire,
-                TerrainWorldFeatureKind.WaterlineCluster,
-                TerrainWorldFeatureKind.WaterlineRidge,
+                TerrainWorldFeatureKind.WaterlineSteppedChain,
+                TerrainWorldFeatureKind.WaterlineAsymmetricGroup,
+                TerrainWorldFeatureKind.WaterlineSplitPair,
                 TerrainWorldFeatureKind.WaterlineSpire,
                 TerrainWorldFeatureKind.WaterlineCluster
             };
