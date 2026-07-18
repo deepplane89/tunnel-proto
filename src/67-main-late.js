@@ -187,7 +187,6 @@ function startGame() {
   state.phase          = 'playing';
   shipGroup.visible    = true;
   _killExplosion();
-  if (typeof _checkpointBeamsStop === 'function') _checkpointBeamsStop();
   // Clean up terrain walls if active
   _destroyTerrainWalls();
   // Clean up canyon if active
@@ -1314,10 +1313,9 @@ let DR2_RUN_BANDS = _drGetRunBands();
 // Current ladder: 1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3
 // ─────────────────────────────────────────────────────────────────────────
 const DR_SEQUENCE = [
-  // Checkpoint-beam prototype: an endless clean slalom with no other waves.
-  // Keep the later sequence intact below so it can be restored after this
-  // core interaction has been playtested.
-  { name: 'S1_CHECKPOINT_BEAMS', type: 'checkpoint_beams', speed: 1.5, vibeIdx: 0, physTier: 1 },
+  // Stage 1 — random cones (ramp 5→9 cones over 30s)
+  // physTier promoted 0→1 to match warmer 1.5x cold-start speed.
+  { name: 'S1_CONES',         type: 'random_cones',  duration: 30, speed: 1.5,  density: 'ramp', vibeIdx: 0, physTier: 1 },
   // Canyon A (placeholder = CC1 mild). physTier promoted 0→1 to match speed.
   { name: 'CA_CANYON',        type: 'corridor', family: 'PRE_T4B_CANYON', speed: 1.8, vibeIdx: 0, physTier: 1 },
   { name: 'CA_REST',          type: 'rest', duration: 3, speed: 1.8, vibeIdx: 1, physTier: 1 },
@@ -1645,13 +1643,7 @@ function _drSequencerTick(dt) {
   const _seqDt = state.invincibleSpeedActive ? dt * 1.8 : dt;
   state.seqStageElapsed += _seqDt;
 
-  if (tp === 'checkpoint_beams') {
-    // The beam system owns this prototype stage. Suppress every legacy hazard
-    // spawner so the slalom can be judged on its own.
-    state._seqSpawnMode = 'none';
-    state._seqConeDensity = 'normal';
-  }
-  else if (tp === 'random_cones') {
+  if (tp === 'random_cones') {
     // Density control: sparse | dense | normal | ramp.
     // 'ramp' = linear interpolation 5→9 cones over the stage duration (set by
     // spawnObstacles() reading state._seqRampT01). Used by S1_CONES.
@@ -5667,7 +5659,6 @@ function update(dt) {
     if (state.deathRunRestBeat > 0) state.deathRunRestBeat -= dt;
     _drSequencerTick(dt);
   }
-  _checkpointBeamsUpdate(dt, effectiveSpeed);
   // Legacy wave director removed (2026-04-29).
   // Replaced by DR_SEQUENCE / _drSequencerTick above.
 
@@ -6621,3 +6612,4 @@ const _fpsEl = document.getElementById('fps-overlay');
     _fpsFrames = 0; _fpsLastTime = performance.now();
   });
 })();
+
