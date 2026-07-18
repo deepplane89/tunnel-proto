@@ -902,6 +902,11 @@ namespace JetHorizon.Simulation
             for (int i = 0; i < _runParcelCommands.Count; i++)
             {
                 RunParcelCommand command = _runParcelCommands[i];
+                // Checkpoint-only runs keep satisfying collectible trails while
+                // suppressing every scheduled obstacle and power-up family.
+                if (!_config.HazardSpawningEnabled
+                    && command.Type != RunParcelCommandType.CargoTrail)
+                    continue;
                 switch (command.Type)
                 {
                     case RunParcelCommandType.CargoTrail:

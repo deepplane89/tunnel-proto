@@ -59,6 +59,8 @@ namespace JetHorizon.Simulation
     public sealed class GateRoutePlanner
     {
         const int GateCount = 42;
+        const float CheckpointHitRadius = 4.25f;
+        static readonly float[] CheckpointPattern = { 0f, -9f, 9f, -11f, 11f, -9f, 9f };
 
         public GateRoutePlan Build(
             int sector,
@@ -75,11 +77,10 @@ namespace JetHorizon.Simulation
 
             for (int i = 0; i < GateCount; i++)
             {
-                float cadence = i < 3
-                    ? .55f + random.NextFloat() * .15f
-                    : .70f + random.NextFloat() * .35f;
-                if (i == GateCount - 1) cadence = 1.25f;
-                distance += Math.Max(20f, speed * cadence);
+                // Author the route in reaction time, not raw metres. Faster ships see
+                // the same readable rhythm with proportionally more world distance.
+                float cadence = i == 0 ? 1.45f : 1.55f;
+                distance += Math.Max(48f, speed * cadence);
 
                 SpeedGateKind kind = GateKindFor(sector, i);
                 float target = RouteTarget(sector, i);
@@ -88,9 +89,9 @@ namespace JetHorizon.Simulation
                     + capability.LateralAcceleration * seconds * seconds * .16f;
                 center += Clamp(target - center, -reachable, reachable);
                 center = Clamp(center, -32f, 32f);
-                float halfWidth = kind == SpeedGateKind.Extraction ? 9.5f
-                    : kind == SpeedGateKind.Common ? 7.5f
-                    : 8.5f;
+                float halfWidth = kind == SpeedGateKind.Extraction
+                    ? 9.5f
+                    : CheckpointHitRadius + capability.CollisionHalfWidth;
                 if (kind == SpeedGateKind.Extraction)
                     center = (sector & 1) == 0 ? -18f : 18f;
 
@@ -119,12 +120,7 @@ namespace JetHorizon.Simulation
 
         static float RouteTarget(int sector, int index)
         {
-            float amplitude = 5f + Math.Min(16f, sector * 2.5f + index * .12f);
-            double phase = index * (.48 + sector * .025);
-            float wave = (float)Math.Sin(phase) * amplitude;
-            if (index > 12 && index % 11 == 0)
-                wave += ((index / 11) & 1) == 0 ? 8f : -8f;
-            return wave;
+            return CheckpointPattern[(index + sector) % CheckpointPattern.Length];
         }
 
         static float Clamp(float value, float minimum, float maximum)

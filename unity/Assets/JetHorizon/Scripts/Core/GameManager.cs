@@ -103,7 +103,7 @@ namespace JetHorizon
                 // The core owns live ship, progression, stages, random wave decisions,
                 // registered hazards, and coin-pattern decisions. Unity presents snapshots.
                 ProgressionEnabled = true,
-                HazardSpawningEnabled = true,
+                HazardSpawningEnabled = false,
                 HazardSimulationEnabled = true,
                 CollisionEnabled = true,
                 StartSpeedMultiplier = 3f,
@@ -124,8 +124,8 @@ namespace JetHorizon
                 MaximumHeat = 5,
                 PrismaticSineTunnelEnabled = false,
                 ProofEncounterMode = false,
-                GateRunMode = false,
-                TerrainWorldMode = true,
+                GateRunMode = true,
+                TerrainWorldMode = false,
                 CanyonPathOverride = canyonProfile != null ? canyonProfile.BuildCorePathDefinition() : null,
                 PersistentCruiseSpeedMultiplier = launchProfile.SpeedMultiplier,
                 Snap = FeelProfile.Snap,
@@ -257,7 +257,13 @@ namespace JetHorizon
                 ExtractionGate.GateMaterial = AngledWalls != null ? AngledWalls.WallMaterial : null;
             }
             ExtractionGate.ResetSystem();
-            SpeedGates?.ResetSystem();
+            if (SpeedGates == null)
+            {
+                var presenterObject = new GameObject("Checkpoint Beam Presentation");
+                presenterObject.transform.SetParent(transform, false);
+                SpeedGates = presenterObject.AddComponent<SpeedGatePresenter>();
+            }
+            SpeedGates.ResetSystem();
             if (GateFeedback == null)
             {
                 var presenterObject = new GameObject("Gate Crossing Feedback");
