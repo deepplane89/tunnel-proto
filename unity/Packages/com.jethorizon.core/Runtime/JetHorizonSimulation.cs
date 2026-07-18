@@ -902,10 +902,13 @@ namespace JetHorizon.Simulation
             for (int i = 0; i < _runParcelCommands.Count; i++)
             {
                 RunParcelCommand command = _runParcelCommands[i];
-                // Checkpoint-only runs keep satisfying collectible trails while
-                // suppressing every scheduled obstacle and power-up family.
+                // Checkpoint-only runs keep satisfying collectible trails and the
+                // explicitly enabled lightning layer while suppressing every other
+                // scheduled obstacle and power-up family.
                 if (!_config.HazardSpawningEnabled
-                    && command.Type != RunParcelCommandType.CargoTrail)
+                    && command.Type != RunParcelCommandType.CargoTrail
+                    && (!_config.CheckpointLightningEnabled
+                        || command.Type != RunParcelCommandType.LightningPattern))
                     continue;
                 switch (command.Type)
                 {

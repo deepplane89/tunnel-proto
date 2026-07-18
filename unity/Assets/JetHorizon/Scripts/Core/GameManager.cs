@@ -126,6 +126,7 @@ namespace JetHorizon
                 ProofEncounterMode = false,
                 GateRunMode = true,
                 TerrainWorldMode = false,
+                CheckpointLightningEnabled = true,
                 CanyonPathOverride = canyonProfile != null ? canyonProfile.BuildCorePathDefinition() : null,
                 PersistentCruiseSpeedMultiplier = launchProfile.SpeedMultiplier,
                 Snap = FeelProfile.Snap,
