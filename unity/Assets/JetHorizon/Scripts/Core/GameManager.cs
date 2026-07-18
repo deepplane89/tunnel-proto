@@ -264,13 +264,22 @@ namespace JetHorizon
                 SpeedGates = presenterObject.AddComponent<SpeedGatePresenter>();
             }
             SpeedGates.ResetSystem();
-            if (GateFeedback == null)
+            SimulationConfig liveConfig = _coreSimulation != null ? _coreSimulation.Config : null;
+            bool checkpointBeamProof = liveConfig != null
+                && liveConfig.GateRunMode
+                && !liveConfig.HazardSpawningEnabled;
+            if (GateFeedback != null)
             {
-                var presenterObject = new GameObject("Gate Crossing Feedback");
-                presenterObject.transform.SetParent(transform, false);
-                GateFeedback = presenterObject.AddComponent<GateCrossingFeedbackPresenter>();
+                GateFeedback.ResetSystem();
+                GateFeedback.enabled = !checkpointBeamProof;
             }
-            GateFeedback.ResetSystem();
+            else if (!checkpointBeamProof)
+            {
+                var feedbackObject = new GameObject("Gate Crossing Feedback");
+                feedbackObject.transform.SetParent(transform, false);
+                GateFeedback = feedbackObject.AddComponent<GateCrossingFeedbackPresenter>();
+                GateFeedback.ResetSystem();
+            }
             if (SpeedSurfaceCues == null)
             {
                 var presenterObject = new GameObject("Surface Speed Cues");

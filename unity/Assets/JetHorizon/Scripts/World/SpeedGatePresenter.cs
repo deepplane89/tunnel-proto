@@ -16,6 +16,7 @@ namespace JetHorizon
             public int Id;
             public SpeedGateKind Kind;
             public float HitRemaining;
+            public float Reveal;
             public Transform Root;
             public Transform Core;
             public Transform Outer;
@@ -56,6 +57,7 @@ namespace JetHorizon
         static readonly int TintId = Shader.PropertyToID("_Tint");
         static readonly int OpacityId = Shader.PropertyToID("_Opacity");
         static readonly int DistanceFadeId = Shader.PropertyToID("_DistanceFade");
+        static readonly int RevealId = Shader.PropertyToID("_Reveal");
 
         void Awake() => EnsurePool();
         void OnEnable() => GameEvents.SpeedGateCrossed += GateCrossed;
@@ -257,6 +259,7 @@ namespace JetHorizon
                     Release(view);
                     continue;
                 }
+                view.Reveal = Mathf.Min(1f, view.Reveal + dt / .82f);
                 SetFact(view, fact);
                 Present(view, snapshot, false);
                 _facts.Remove(view.Id);
@@ -267,6 +270,7 @@ namespace JetHorizon
                 GateView view = Acquire();
                 if (view == null) break;
                 view.Id = pair.Key;
+                view.Reveal = 0f;
                 SetFact(view, pair.Value);
                 Present(view, snapshot, false);
             }
@@ -289,6 +293,7 @@ namespace JetHorizon
             if (nearest == null) return;
             nearest.Kind = kind;
             nearest.HitRemaining = HitDuration;
+            nearest.Reveal = 1f;
             nearest.Pulse.gameObject.SetActive(true);
         }
 
@@ -308,16 +313,18 @@ namespace JetHorizon
             float outerOpacity = hit ? .34f : .16f;
             float discOpacity = hit ? .34f : .12f;
             float ringOpacity = hit ? 1f : .78f;
+            float reveal = hit ? 1f : view.Reveal;
+            float waterArrival = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.78f, 1f, reveal));
 
             view.Root.gameObject.SetActive(true);
             float verticalPulse = 1f + Mathf.Sin((elapsed + view.Id * .37f) * 1.7f) * .008f;
             view.Core.localScale = new Vector3(1f, verticalPulse, 1f);
             view.Outer.localScale = new Vector3(1f, verticalPulse, 1f);
 
-            SetBeam(view.CoreRenderer, view.CoreProperties, tint, coreOpacity, distanceFade);
-            SetBeam(view.OuterRenderer, view.OuterProperties, tint, outerOpacity, distanceFade);
-            SetAdditive(view.DiscRenderer, view.DiscProperties, tint, discOpacity * distanceFade);
-            SetAdditive(view.RingRenderer, view.RingProperties, tint, ringOpacity * distanceFade);
+            SetBeam(view.CoreRenderer, view.CoreProperties, tint, coreOpacity, distanceFade, reveal);
+            SetBeam(view.OuterRenderer, view.OuterProperties, tint, outerOpacity, distanceFade, reveal);
+            SetAdditive(view.DiscRenderer, view.DiscProperties, tint, discOpacity * distanceFade * waterArrival);
+            SetAdditive(view.RingRenderer, view.RingProperties, tint, ringOpacity * distanceFade * waterArrival);
 
             if (hit)
             {
@@ -340,11 +347,13 @@ namespace JetHorizon
             MaterialPropertyBlock properties,
             Color tint,
             float opacity,
-            float distanceFade)
+            float distanceFade,
+            float reveal)
         {
             properties.SetColor(TintId, tint);
             properties.SetFloat(OpacityId, opacity);
             properties.SetFloat(DistanceFadeId, distanceFade);
+            properties.SetFloat(RevealId, reveal);
             renderer.SetPropertyBlock(properties);
         }
 
@@ -370,6 +379,7 @@ namespace JetHorizon
         {
             view.Id = 0;
             view.HitRemaining = 0f;
+            view.Reveal = 0f;
             view.Root.gameObject.SetActive(false);
             view.Pulse.gameObject.SetActive(false);
         }

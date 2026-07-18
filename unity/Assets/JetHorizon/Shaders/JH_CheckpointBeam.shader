@@ -5,6 +5,7 @@ Shader "JH/CheckpointBeam"
         _Tint ("Tint", Color) = (0.141, 0.847, 1, 1)
         _Opacity ("Opacity", Range(0,1)) = 0.72
         _DistanceFade ("Distance Fade", Range(0,1)) = 1
+        _Reveal ("Sky To Water Reveal", Range(0,1)) = 1
     }
     SubShader
     {
@@ -36,6 +37,7 @@ Shader "JH/CheckpointBeam"
                 half4 _Tint;
                 half _Opacity;
                 half _DistanceFade;
+                half _Reveal;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -50,10 +52,14 @@ Shader "JH/CheckpointBeam"
             {
                 half baseFade = smoothstep(0.0h, 0.035h, input.uv.y);
                 half skyFade = 1.0h - 0.72h * smoothstep(0.70h, 1.0h, input.uv.y);
-                half bands = 0.84h + 0.16h * sin(input.uv.y * 180.0h - _Time.y * 5.0h);
+                half bands = 0.78h + 0.22h * sin(input.uv.y * 180.0h + _Time.y * 5.0h);
                 half shimmer = 0.92h + 0.08h * sin(_Time.y * 3.0h + input.uv.y * 23.0h);
-                half alpha = _Opacity * _DistanceFade * baseFade * skyFade * bands;
-                half3 color = _Tint.rgb * (1.05h + 0.38h * shimmer);
+                half revealEdge = 1.0h - _Reveal;
+                half revealMask = smoothstep(revealEdge - 0.018h, revealEdge + 0.018h, input.uv.y);
+                half leadingEdge = 1.0h - smoothstep(0.0h, 0.028h, abs(input.uv.y - revealEdge));
+                half alpha = _Opacity * _DistanceFade * baseFade * skyFade
+                    * (bands * revealMask + leadingEdge * 0.72h);
+                half3 color = _Tint.rgb * (1.05h + 0.38h * shimmer + leadingEdge * 1.15h);
                 return half4(color, alpha);
             }
             ENDHLSL
