@@ -59,6 +59,8 @@ namespace JetHorizon.Simulation
     public sealed class GateRoutePlanner
     {
         const int GateCount = 42;
+        const int CheckpointCanyonGateIndex = 9;
+        const float CheckpointCanyonReserveSeconds = 17.5f;
         const float CheckpointHitRadius = 4.25f;
         static readonly float[] CheckpointPattern = { 0f, -9f, 9f, -11f, 11f, -9f, 9f };
         static readonly float[] CheckpointCadenceSeconds = { .88f, .94f, .90f, .98f, .86f, .93f, .96f };
@@ -68,7 +70,8 @@ namespace JetHorizon.Simulation
             float startDistance,
             float projectedStartSpeed,
             ShipCapabilityProfile capability,
-            DeterministicRandom random)
+            DeterministicRandom random,
+            bool checkpointCanyonSequenceEnabled = false)
         {
             if (random == null) throw new ArgumentNullException(nameof(random));
             float speed = Math.Max(30f, projectedStartSpeed);
@@ -83,12 +86,17 @@ namespace JetHorizon.Simulation
                 // Keep the distant opening readable, then use a denser varied rhythm.
                 // At the Unity proof speed this produces roughly the same world-space
                 // density as the lower-speed Three.js prototype instead of long empty gaps.
+                bool followsCanyon = checkpointCanyonSequenceEnabled
+                    && i > 0
+                    && GateKindFor(sector, i - 1, true) == SpeedGateKind.CanyonTransition;
                 float cadence = i == 0
                     ? 3.20f
-                    : CheckpointCadenceSeconds[(i - 1 + sector) % CheckpointCadenceSeconds.Length];
+                    : followsCanyon
+                        ? CheckpointCanyonReserveSeconds
+                        : CheckpointCadenceSeconds[(i - 1 + sector) % CheckpointCadenceSeconds.Length];
                 distance += Math.Max(48f, speed * cadence);
 
-                SpeedGateKind kind = GateKindFor(sector, i);
+                SpeedGateKind kind = GateKindFor(sector, i, checkpointCanyonSequenceEnabled);
                 float target = RouteTarget(sector, i);
                 float seconds = Math.Max(.45f, (distance - (i == 0 ? startDistance : nodes[i - 1].Distance)) / speed);
                 float reachable = capability.MaximumLateralVelocity * seconds * .72f
@@ -115,10 +123,12 @@ namespace JetHorizon.Simulation
             return new GateRoutePlan(sector, startDistance, nodes);
         }
 
-        static SpeedGateKind GateKindFor(int sector, int index)
+        static SpeedGateKind GateKindFor(int sector, int index, bool checkpointCanyonSequenceEnabled)
         {
             if (index == GateCount - 1) return SpeedGateKind.Extraction;
             if (sector > 0 && index == 0) return SpeedGateKind.Surge;
+            if (checkpointCanyonSequenceEnabled && index == CheckpointCanyonGateIndex)
+                return SpeedGateKind.CanyonTransition;
             if (sector == 3 && index == 23) return SpeedGateKind.CanyonTransition;
             if (sector == 4 && index == 21) return SpeedGateKind.PrismaticTransition;
             return index > 0 && index % 9 == 0 ? SpeedGateKind.Surge : SpeedGateKind.Common;

@@ -97,7 +97,6 @@ namespace JetHorizon
         {
             ShipLaunchProfile launchProfile = GarageDomainService.CreateLaunchProfile(Garage.Current);
             var runDefinition = _sequenceAsset.ToCoreDefinition();
-            HybridCanyonWorldProfile canyonProfile = Resources.Load<HybridCanyonWorldProfile>("HybridCanyonWorld");
             var config = new SimulationConfig
             {
                 // The core owns live ship, progression, stages, random wave decisions,
@@ -126,8 +125,9 @@ namespace JetHorizon
                 ProofEncounterMode = false,
                 GateRunMode = true,
                 TerrainWorldMode = false,
-                CheckpointLightningEnabled = true,
-                CanyonPathOverride = canyonProfile != null ? canyonProfile.BuildCorePathDefinition() : null,
+                CheckpointLightningEnabled = false,
+                CheckpointCanyonSequenceEnabled = true,
+                CanyonPathOverride = CheckpointCanyonPathCatalog.CreateStraightLightningCorridor(),
                 PersistentCruiseSpeedMultiplier = launchProfile.SpeedMultiplier,
                 Snap = FeelProfile.Snap,
                 // Preserve the authored response curve and garage scaling while
@@ -156,11 +156,11 @@ namespace JetHorizon
                 ShipCapabilityProfile capability = ShipCapabilityProfile.FromConfig(config);
                 EncounterPlan canyon = EncounterPlanCatalog.CreateProofSequence(
                     capability.CruiseSpeed / 42f,
-                    config.CanyonPathOverride)[1];
+                    config.CanyonPathOverride)[0];
                 EncounterValidationResult validation = new EncounterCapabilityValidator().Validate(canyon, capability, 0);
                 if (!validation.IsAdmissible)
                 {
-                    Debug.LogError("[JetHorizon] The edited canyon route is not admissible for this ship. Gameplay is using the validated default route until the Canyon Builder check passes.", canyonProfile);
+                    Debug.LogError("[JetHorizon] The checkpoint lightning corridor is not admissible for this ship. Gameplay is using the validated default route.", this);
                     config.CanyonPathOverride = null;
                 }
             }

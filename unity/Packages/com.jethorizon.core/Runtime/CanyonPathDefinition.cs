@@ -91,4 +91,35 @@ namespace JetHorizon.Simulation
             return openings;
         }
     }
+
+    /// <summary>
+    /// Small authored paths used by the checkpoint gameplay proof. These are kept in
+    /// the engine-neutral package so route timing, collision and every presenter use
+    /// the same corridor rather than independently approximating its shape.
+    /// </summary>
+    public static class CheckpointCanyonPathCatalog
+    {
+        public static CanyonPathDefinition CreateStraightLightningCorridor()
+        {
+            return new CanyonPathDefinition(
+                560f,
+                new[]
+                {
+                    new CanyonPathKnot( 40f, 0f, 36f, environmentPhase: CanyonEnvironmentPhase.OpenWater, corridorBoundaryActive: false),
+                    new CanyonPathKnot( 80f, 0f, 34f, environmentPhase: CanyonEnvironmentPhase.OpenWater, corridorBoundaryActive: false),
+                    new CanyonPathKnot(120f, 0f, 31f, environmentPhase: CanyonEnvironmentPhase.Convergence, corridorBoundaryActive: false),
+                    new CanyonPathKnot(160f, 0f, 28f, environmentPhase: CanyonEnvironmentPhase.Convergence, corridorBoundaryActive: false),
+                    new CanyonPathKnot(200f, 0f, 24f, environmentPhase: CanyonEnvironmentPhase.Threshold),
+                    new CanyonPathKnot(240f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(280f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(320f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(360f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(400f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(440f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(480f, 0f, 23f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(520f, 0f, 29f, environmentPhase: CanyonEnvironmentPhase.Breakup, corridorBoundaryActive: false),
+                    new CanyonPathKnot(560f, 0f, 36f, environmentPhase: CanyonEnvironmentPhase.Breakup, corridorBoundaryActive: false)
+                });
+        }
+    }
 }

@@ -211,7 +211,10 @@ namespace JetHorizon.Simulation
                     _shipCapability)
                 : null;
             _gateRun = _config.GateRunMode
-                ? new SectorRunRuntime(_shipCapability, _random)
+                ? new SectorRunRuntime(
+                    _shipCapability,
+                    _random,
+                    _config.CheckpointCanyonSequenceEnabled)
                 : null;
             _terrainWorld = _config.TerrainWorldMode
                 ? new TerrainWorldRuntime(_shipCapability)
@@ -810,9 +813,13 @@ namespace JetHorizon.Simulation
                     }
                     if (gateResult.EnvironmentActivated)
                     {
+                        float environmentLead = _config.CheckpointCanyonSequenceEnabled
+                            && gateResult.ActivatedEnvironment == RunEnvironmentKind.CrystallineCanyon
+                                ? 24f
+                                : Math.Max(24f, _effectiveSpeed * .45f);
                         _environmentEncounter.Activate(
                             gateResult.ActivatedEnvironment,
-                            _distance + Math.Max(24f, _effectiveSpeed * .45f));
+                            _distance + environmentLead);
                         Array.Clear(_corridorSlices, 0, _corridorSlices.Length);
                         _environmentCompletionScored = false;
                     }
@@ -1903,6 +1910,18 @@ namespace JetHorizon.Simulation
         void TickLightningSpawner(float dt, WorldFrame world)
         {
             CorridorFamily family = CorridorFamily.None;
+            bool checkpointCanyon = _config.CheckpointCanyonSequenceEnabled
+                && _environmentEncounter.Active
+                && _environmentEncounter.Plan != null
+                && _environmentEncounter.Plan.Kind == EncounterKind.CrystallineCanyon
+                && _environmentEncounter.Lifecycle == EnvironmentLifecycle.Active;
+            if (checkpointCanyon)
+            {
+                float progress = (_distance - _environmentEncounter.StartDistance)
+                    / Math.Max(1f, _environmentEncounter.Plan.Length);
+                if (progress >= .34f && progress <= .90f)
+                    family = CorridorFamily.PreT4B;
+            }
             if (_terrainWorld != null
                 && _terrainWorld.Snapshot.ActiveRegion == TerrainRegionKind.StormChannel)
             {
@@ -1933,7 +1952,9 @@ namespace JetHorizon.Simulation
                 _lightningTimer = 0f;
             }
 
-            float frequency = family == CorridorFamily.PreT4A ? 0.3f : 2f;
+            float frequency = checkpointCanyon
+                ? 1.15f
+                : family == CorridorFamily.PreT4A ? 0.3f : 2f;
             _lightningTimer += dt;
             while (_lightningTimer >= frequency)
             {
@@ -2125,7 +2146,11 @@ namespace JetHorizon.Simulation
 
         bool ResolvePrismaticCorridorCollision(WorldFrame world)
         {
-            if (!_config.PrismaticSineTunnelEnabled
+            bool checkpointCanyonCollision = _config.CheckpointCanyonSequenceEnabled
+                && _environmentEncounter.Active
+                && _environmentEncounter.Plan != null
+                && _environmentEncounter.Plan.Kind == EncounterKind.CrystallineCanyon;
+            if ((!_config.PrismaticSineTunnelEnabled && !checkpointCanyonCollision)
                 || !_config.CollisionEnabled
                 || world.CollisionSuppressed)
                 return false;
@@ -2557,7 +2582,9 @@ namespace JetHorizon.Simulation
                 : default;
             TerrainWorldState terrainWorld = _terrainWorld != null ? _terrainWorld.Snapshot : default;
             GateRunSnapshot gateRun = _gateRun != null ? _gateRun.Snapshot : default;
-            Snapshot.GateCount = _terrainWorld == null && _gateRun != null
+            Snapshot.GateCount = _terrainWorld == null
+                && _gateRun != null
+                && !_environmentEncounter.Active
                 ? _gateRun.WriteVisibleGates(
                     _distance,
                     _config.ShipZ,

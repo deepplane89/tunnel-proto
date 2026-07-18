@@ -32,6 +32,10 @@ namespace JetHorizon
         float _builtMinZ;
         float _builtMaxZ;
         bool _reportedPresentation;
+        Renderer[] _renderers;
+        readonly MaterialPropertyBlock _fadeProperties = new MaterialPropertyBlock();
+
+        static readonly int ParcelFadeId = Shader.PropertyToID("_ParcelFade");
 
         void Awake()
         {
@@ -94,6 +98,11 @@ namespace JetHorizon
             // making a stationary canyon visibly jump even though its route was valid.
             float startZ = currentCanyon ? snapshot.EncounterStartZ : snapshot.UpcomingEncounterStartZ;
             _content.transform.localPosition = new Vector3(0f, 0f, startZ);
+            float nearestWorldZ = startZ + _builtMaxZ;
+            float horizonReveal = currentCanyon
+                ? 1f
+                : Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-980f, -560f, nearestWorldZ));
+            ApplyHorizonReveal(horizonReveal);
             SetVisible(true);
             ReportPresentationOnce(startZ);
         }
@@ -158,17 +167,33 @@ namespace JetHorizon
         {
             if (_content == null) return;
             _content.SetActive(true);
-            Renderer[] renderers = _content.GetComponentsInChildren<Renderer>(true);
-            _rendererCount = renderers.Length;
+            _renderers = _content.GetComponentsInChildren<Renderer>(true);
+            _rendererCount = _renderers.Length;
             _builtMinZ = float.PositiveInfinity;
             _builtMaxZ = float.NegativeInfinity;
-            for (int i = 0; i < renderers.Length; i++)
+            for (int i = 0; i < _renderers.Length; i++)
             {
-                if (renderers[i] == null) continue;
-                _builtMinZ = Mathf.Min(_builtMinZ, renderers[i].bounds.min.z);
-                _builtMaxZ = Mathf.Max(_builtMaxZ, renderers[i].bounds.max.z);
+                if (_renderers[i] == null) continue;
+                _builtMinZ = Mathf.Min(_builtMinZ, _renderers[i].bounds.min.z);
+                _builtMaxZ = Mathf.Max(_builtMaxZ, _renderers[i].bounds.max.z);
             }
             _content.SetActive(false);
+        }
+
+        void ApplyHorizonReveal(float reveal)
+        {
+            if (_renderers == null) return;
+            reveal = Mathf.Clamp01(reveal);
+            for (int i = 0; i < _renderers.Length; i++)
+            {
+                Renderer renderer = _renderers[i];
+                if (renderer == null || renderer.sharedMaterial == null
+                    || !renderer.sharedMaterial.HasProperty(ParcelFadeId))
+                    continue;
+                renderer.GetPropertyBlock(_fadeProperties);
+                _fadeProperties.SetFloat(ParcelFadeId, reveal);
+                renderer.SetPropertyBlock(_fadeProperties);
+            }
         }
 
         void ReportPresentationOnce(float startZ)
@@ -1003,6 +1028,7 @@ namespace JetHorizon
             }
             _ownedAssets.Clear();
             _meshMaterial = null;
+            _renderers = null;
             _plan = null;
             _route = null;
             _terrainAuthoringPreview = false;

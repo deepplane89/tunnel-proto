@@ -91,6 +91,7 @@ namespace JetHorizon.Simulation
         public bool GateRunMode;
         public bool TerrainWorldMode;
         public bool CheckpointLightningEnabled;
+        public bool CheckpointCanyonSequenceEnabled;
         public CanyonPathDefinition CanyonPathOverride;
         public float PrismaticTunnelSpawnZ = -260f;
         public float PrismaticTunnelRowSpacing = 7f;

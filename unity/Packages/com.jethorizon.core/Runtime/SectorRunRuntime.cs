@@ -181,6 +181,7 @@ namespace JetHorizon.Simulation
         readonly GateRouteValidator _routeValidator = new GateRouteValidator();
         readonly RunParcelPlanner _parcelPlanner = new RunParcelPlanner();
         readonly bool[] _contentPublished = new bool[64];
+        readonly bool _checkpointCanyonSequenceEnabled;
 
         GateRoutePlan _route;
         int _nextGateIndex;
@@ -224,10 +225,14 @@ namespace JetHorizon.Simulation
             return false;
         }
 
-        public SectorRunRuntime(ShipCapabilityProfile capability, DeterministicRandom random)
+        public SectorRunRuntime(
+            ShipCapabilityProfile capability,
+            DeterministicRandom random,
+            bool checkpointCanyonSequenceEnabled = false)
         {
             _capability = capability;
             _random = random ?? throw new ArgumentNullException(nameof(random));
+            _checkpointCanyonSequenceEnabled = checkpointCanyonSequenceEnabled;
             Reset(capability.CruiseSpeed);
         }
 
@@ -372,8 +377,24 @@ namespace JetHorizon.Simulation
                     if (gate.Kind == SpeedGateKind.CanyonTransition
                         || gate.Kind == SpeedGateKind.PrismaticTransition)
                     {
-                        _environment = RunEnvironmentKind.OpenWater;
-                        _environmentLifecycle = EnvironmentLifecycle.Retired;
+                        if (_checkpointCanyonSequenceEnabled
+                            && gate.Kind == SpeedGateKind.CanyonTransition)
+                        {
+                            activated = RunEnvironmentKind.CrystallineCanyon;
+                            _environment = activated;
+                            _environmentLifecycle = EnvironmentLifecycle.GateCrossedReveal;
+                            environmentActivated = true;
+                            events.Add(new SimulationEvent(
+                                SimulationEventType.EnvironmentTransitionTriggered,
+                                gate.Id,
+                                (float)activated,
+                                gate.Distance));
+                        }
+                        else
+                        {
+                            _environment = RunEnvironmentKind.OpenWater;
+                            _environmentLifecycle = EnvironmentLifecycle.Retired;
+                        }
                     }
                 }
             }
@@ -417,7 +438,8 @@ namespace JetHorizon.Simulation
                 startDistance,
                 projectedSpeed,
                 _capability.AtCruiseSpeed(Math.Max(24f, projectedSpeed)),
-                _random);
+                _random,
+                _checkpointCanyonSequenceEnabled);
             GateRouteValidation validation = _routeValidator.Validate(
                 _route,
                 _capability.AtCruiseSpeed(Math.Max(24f, projectedSpeed)),
