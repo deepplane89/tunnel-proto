@@ -197,6 +197,7 @@ function togglePause() {
 
 function returnToTitle() {
   state.phase = 'title';
+  if (typeof _checkpointBeamsStop === 'function') _checkpointBeamsStop();
   // Belt-and-suspenders: bank-water hiss should already be zeroed in onDeath,
   // but any path that reaches title without going through death (e.g. pause
   // → exit) skips that. Hard-zero again here.
@@ -1207,4 +1208,3 @@ function playTitleClose() {
   } catch(_){}
 }
 window.playTitleClose = playTitleClose;
-
