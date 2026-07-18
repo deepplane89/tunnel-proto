@@ -17,6 +17,9 @@ namespace JetHorizon
             public SpeedGateKind Kind;
             public float HitRemaining;
             public float Reveal;
+            public float RevealElapsed;
+            public float RevealDelay;
+            public float RevealDuration;
             public Transform Root;
             public Transform Core;
             public Transform Outer;
@@ -39,10 +42,10 @@ namespace JetHorizon
         const int PoolSize = 16;
         const float BeamHeight = 170f;
         const float TargetRadius = 4.25f;
-        const float HitDuration = .72f;
+        const float HitDuration = .78f;
 
         static readonly Color PendingColor = new Color(36f / 255f, 216f / 255f, 1f, 1f);
-        static readonly Color HitColor = new Color(1f, 59f / 255f, 213f / 255f, 1f);
+        static readonly Color HitColor = new Color(46f / 255f, 1f, 91f / 255f, 1f);
 
         readonly List<GateView> _views = new List<GateView>(PoolSize);
         readonly Dictionary<int, GateSnapshot> _facts = new Dictionary<int, GateSnapshot>(PoolSize);
@@ -259,7 +262,16 @@ namespace JetHorizon
                     Release(view);
                     continue;
                 }
-                view.Reveal = Mathf.Min(1f, view.Reveal + dt / .82f);
+                view.RevealElapsed += dt;
+                float naturalReveal = Mathf.InverseLerp(
+                    view.RevealDelay,
+                    view.RevealDelay + view.RevealDuration,
+                    view.RevealElapsed);
+                float secondsToArrival = Mathf.Max(0f,
+                    (Tuning.ShipZ - fact.Z) / Mathf.Max(1f, speed));
+                float arrivalReveal = 1f - Mathf.Clamp01(
+                    (secondsToArrival - .28f) / Mathf.Max(.1f, view.RevealDuration));
+                view.Reveal = Mathf.Max(view.Reveal, Mathf.Max(naturalReveal, arrivalReveal));
                 SetFact(view, fact);
                 Present(view, snapshot, false);
                 _facts.Remove(view.Id);
@@ -270,7 +282,7 @@ namespace JetHorizon
                 GateView view = Acquire();
                 if (view == null) break;
                 view.Id = pair.Key;
-                view.Reveal = 0f;
+                BeginReveal(view);
                 SetFact(view, pair.Value);
                 Present(view, snapshot, false);
             }
@@ -303,16 +315,42 @@ namespace JetHorizon
             view.Root.position = new Vector3(gate.X, 0f, gate.Z);
         }
 
+        static void BeginReveal(GateView view)
+        {
+            view.Reveal = 0f;
+            view.RevealElapsed = 0f;
+            view.RevealDelay = .18f + Hash01(view.Id, 17) * 1.05f;
+            view.RevealDuration = 2.8f + Hash01(view.Id, 43) * 1.8f;
+        }
+
+        static float Hash01(int id, int salt)
+        {
+            unchecked
+            {
+                uint value = (uint)id * 747796405u + (uint)salt * 2891336453u;
+                value = (value ^ (value >> 16)) * 2246822519u;
+                value ^= value >> 13;
+                return (value & 0x00ffffffu) / 16777215f;
+            }
+        }
+
         static void Present(GateView view, SimulationSnapshot snapshot, bool hit)
         {
             float elapsed = snapshot != null ? snapshot.Elapsed : Time.unscaledTime;
-            float distanceFade = Mathf.SmoothStep(0f, 1f,
-                Mathf.InverseLerp(-760f, -170f, view.Root.position.z));
-            Color tint = hit ? HitColor : PendingColor;
-            float coreOpacity = hit ? 1f : .72f;
-            float outerOpacity = hit ? .34f : .16f;
-            float discOpacity = hit ? .34f : .12f;
-            float ringOpacity = hit ? 1f : .78f;
+            float horizonApproach = Mathf.SmoothStep(0f, 1f,
+                Mathf.InverseLerp(-900f, -430f, view.Root.position.z));
+            float distanceFade = Mathf.Lerp(.68f, 1f, horizonApproach);
+            float hitAge = hit ? HitDuration - view.HitRemaining : 0f;
+            float blink = hit
+                ? .18f + .82f * Mathf.Pow(.5f + .5f * Mathf.Cos(hitAge * Mathf.PI * 8f), 3f)
+                : 1f;
+            Color tint = hit
+                ? Color.Lerp(HitColor, Color.white, (1f - blink) * .16f)
+                : PendingColor;
+            float coreOpacity = (hit ? 1f : .72f) * blink;
+            float outerOpacity = (hit ? .34f : .16f) * blink;
+            float discOpacity = (hit ? .34f : .12f) * blink;
+            float ringOpacity = (hit ? 1f : .78f) * blink;
             float reveal = hit ? 1f : view.Reveal;
             float waterArrival = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.78f, 1f, reveal));
 
@@ -331,7 +369,8 @@ namespace JetHorizon
                 float hitT = 1f - Mathf.Clamp01(view.HitRemaining / HitDuration);
                 view.Pulse.gameObject.SetActive(true);
                 view.Pulse.localScale = Vector3.one * TargetRadius * 2f * (1f + hitT * 2.8f);
-                SetAdditive(view.PulseRenderer, view.PulseProperties, HitColor, (1f - hitT) * distanceFade);
+                SetAdditive(view.PulseRenderer, view.PulseProperties, HitColor,
+                    (1f - hitT) * distanceFade * blink);
             }
             else
             {
@@ -339,7 +378,7 @@ namespace JetHorizon
             }
 
             view.Light.color = tint;
-            view.Light.intensity = distanceFade * (hit ? 6f : 2f);
+            view.Light.intensity = distanceFade * (hit ? 7f * blink : 2f);
         }
 
         static void SetBeam(
@@ -380,6 +419,9 @@ namespace JetHorizon
             view.Id = 0;
             view.HitRemaining = 0f;
             view.Reveal = 0f;
+            view.RevealElapsed = 0f;
+            view.RevealDelay = 0f;
+            view.RevealDuration = 0f;
             view.Root.gameObject.SetActive(false);
             view.Pulse.gameObject.SetActive(false);
         }

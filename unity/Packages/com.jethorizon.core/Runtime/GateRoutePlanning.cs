@@ -79,7 +79,9 @@ namespace JetHorizon.Simulation
             {
                 // Author the route in reaction time, not raw metres. Faster ships see
                 // the same readable rhythm with proportionally more world distance.
-                float cadence = i == 0 ? 1.45f : 1.55f;
+                // Give the opening signal enough distant screen time to visibly
+                // descend from the sky before the first steering commitment.
+                float cadence = i == 0 ? 3.40f : 1.55f;
                 distance += Math.Max(48f, speed * cadence);
 
                 SpeedGateKind kind = GateKindFor(sector, i);
