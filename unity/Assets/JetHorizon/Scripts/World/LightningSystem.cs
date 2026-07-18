@@ -20,8 +20,9 @@ namespace JetHorizon
         const float StrikeSeconds = 0.5f;
         const float LingerSeconds = 4f;
         const float BoltVisibleSeconds = StrikeSeconds + LingerSeconds;
-        const float TunedCoreRadius = 0.12f;
-        const float TunedGlowRadius = 0.25f;
+        const float TunedCoreRadius = 0.20f;
+        const float TunedGlowRadius = 0.40f;
+        const float TunedOuterGlowWidth = 1.80f;
         const float SkyHeight = 55f;
         const int SegmentCount = 10;
         const float Jaggedness = 1.9f;
@@ -248,10 +249,10 @@ namespace JetHorizon
             strike.Bolt = root;
 
             var points = BuildJaggedPath(strike.CoreId * 397 ^ 17);
-            // Source geometry is a 0.12-radius tube inside a 0.25-radius tube.
-            // Unity adds one broad, low-alpha bloom envelope around those exact
-            // dimensions so the bolt keeps real volume after URP tonemapping.
-            strike.OuterGlow = MakeLine(root.transform, "Atmospheric Glow", 1.25f, points, 0);
+            // The checkpoint proof needs lightning to read as a heavy physical threat,
+            // not another navigation beam. Keep the jagged source path but give its
+            // white core and blue plasma substantially more screen-space weight.
+            strike.OuterGlow = MakeLine(root.transform, "Atmospheric Glow", TunedOuterGlowWidth, points, 0);
             strike.Glow = MakeLine(root.transform, "Blue Plasma", TunedGlowRadius * 2f, points, 1);
             strike.Core = MakeLine(root.transform, "White-Hot Core", TunedCoreRadius * 2f, points, 2);
             SetTint(strike.OuterGlow, new Color(0.20f, 0.52f, 1f, 0.16f));

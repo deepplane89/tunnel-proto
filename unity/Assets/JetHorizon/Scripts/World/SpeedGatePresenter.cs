@@ -44,8 +44,8 @@ namespace JetHorizon
         const float TargetRadius = 4.25f;
         const float HitDuration = .78f;
 
-        static readonly Color PendingColor = new Color(36f / 255f, 216f / 255f, 1f, 1f);
-        static readonly Color HitColor = new Color(46f / 255f, 1f, 91f / 255f, 1f);
+        static readonly Color PendingColor = new Color(34f / 255f, 232f / 255f, 109f / 255f, 1f);
+        static readonly Color HitColor = new Color(184f / 255f, 1f, 60f / 255f, 1f);
 
         readonly List<GateView> _views = new List<GateView>(PoolSize);
         readonly Dictionary<int, GateSnapshot> _facts = new Dictionary<int, GateSnapshot>(PoolSize);

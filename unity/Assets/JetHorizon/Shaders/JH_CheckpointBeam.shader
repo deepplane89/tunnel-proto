@@ -2,7 +2,7 @@ Shader "JH/CheckpointBeam"
 {
     Properties
     {
-        _Tint ("Tint", Color) = (0.141, 0.847, 1, 1)
+        _Tint ("Tint", Color) = (0.133, 0.910, 0.427, 1)
         _Opacity ("Opacity", Range(0,1)) = 0.72
         _DistanceFade ("Distance Fade", Range(0,1)) = 1
         _Reveal ("Sky To Water Reveal", Range(0,1)) = 1
