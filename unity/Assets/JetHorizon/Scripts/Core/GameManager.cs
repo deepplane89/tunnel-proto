@@ -114,7 +114,7 @@ namespace JetHorizon
                 MaxPickups = 128,
                 MaxCorridorSlices = 96,
                 MaxTerrainWorldSections = 64,
-                MaxTerrainWorldFeatures = 48,
+                MaxTerrainWorldFeatures = 128,
                 MaxTerrainRouteSections = 48,
                 CargoCapacity = launchProfile.CargoCapacity,
                 HullHitCapacity = launchProfile.CollisionHitCapacity,

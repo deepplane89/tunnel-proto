@@ -37,11 +37,9 @@ namespace JetHorizon.Tests.Architecture
             Assert.That(formation.Envelope, Is.EqualTo(WorldEnvelopeKind.None));
             Assert.That(formation.ShoreSectionCount, Is.Zero);
             Assert.That(formation.FeatureCount,
-                Is.InRange(
+                Is.EqualTo(
                     RandomConeFormationPlanner.AuthoredRowCount
-                        * RandomConeFormationPlanner.MinimumBlockersPerRow,
-                    RandomConeFormationPlanner.AuthoredRowCount
-                        * RandomConeFormationPlanner.MaximumBlockersPerRow));
+                        * RandomConeFormationPlanner.FeatureCountPerRow));
             for (int i = 0; i < formation.FeatureCount; i++)
             {
                 TerrainWorldFeature feature = formation.GetFeature(i);
@@ -120,6 +118,60 @@ namespace JetHorizon.Tests.Architecture
                         "variant " + variant + " leaves stationary X=" + x.ToString("0.00"));
                 }
             }
+        }
+
+        [Test]
+        public void RandomConeFormation_BuildsCollidableArchipelagoShelvesAcrossTheVisibleWidth()
+        {
+            RandomConeFormationPlan plan = new RandomConeFormationPlanner().Create(
+                340f,
+                0f,
+                TerrainWorldPaceRules.MaximumSpeedForHeat(0),
+                Capability,
+                1919,
+                0);
+            int shelfCount = 0;
+            for (int rowIndex = 0; rowIndex < plan.RowCount; rowIndex++)
+            {
+                RandomConeFormationRow row = plan.GetRow(rowIndex);
+                int leftCount = 0;
+                int rightCount = 0;
+                float leftOuterEdge = 0f;
+                float leftInnerEdge = float.MinValue;
+                float rightInnerEdge = float.MaxValue;
+                float rightOuterEdge = 0f;
+                for (int featureIndex = 0; featureIndex < plan.FeatureCount; featureIndex++)
+                {
+                    TerrainWorldFeature feature = plan.GetFeature(featureIndex);
+                    if (feature.Kind != TerrainWorldFeatureKind.WaterlineArchipelagoShelf
+                        || Math.Abs(feature.Distance - row.Distance) > 5f) continue;
+                    shelfCount++;
+                    if (feature.CenterX < 0f)
+                    {
+                        leftCount++;
+                        leftOuterEdge = Math.Min(leftOuterEdge, feature.CenterX - feature.HalfWidth);
+                        leftInnerEdge = Math.Max(leftInnerEdge, feature.CenterX + feature.HalfWidth);
+                    }
+                    else
+                    {
+                        rightCount++;
+                        rightInnerEdge = Math.Min(rightInnerEdge, feature.CenterX - feature.HalfWidth);
+                        rightOuterEdge = Math.Max(rightOuterEdge, feature.CenterX + feature.HalfWidth);
+                    }
+                }
+
+                Assert.That(leftCount, Is.EqualTo(RandomConeFormationPlanner.OuterShelfClustersPerSide));
+                Assert.That(rightCount, Is.EqualTo(RandomConeFormationPlanner.OuterShelfClustersPerSide));
+                Assert.That(leftOuterEdge, Is.LessThanOrEqualTo(-73f));
+                Assert.That(rightOuterEdge, Is.GreaterThanOrEqualTo(73f));
+                Assert.That(leftInnerEdge, Is.GreaterThanOrEqualTo(-32f));
+                Assert.That(rightInnerEdge, Is.LessThanOrEqualTo(32f));
+            }
+
+            Assert.That(shelfCount,
+                Is.EqualTo(
+                    RandomConeFormationPlanner.AuthoredRowCount
+                        * RandomConeFormationPlanner.OuterShelfFeatureCountPerRow));
         }
 
         [Test]

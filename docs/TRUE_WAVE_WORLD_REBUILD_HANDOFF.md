@@ -61,16 +61,23 @@ three bursts of three rows: rows sit about 64 units apart inside a burst and
 bursts sit 180 units apart. Their safe openings move left-right-left (mirrored
 on alternate variants), and one extra guard lane on both sides of the safe
 opening accounts for the geological groups being wider than the source cones.
-The result is 45 faceted rock groups over roughly 845 units at launch pace.
-Partial speed scaling keeps the pattern near 6.6 seconds at 128 speed and 5.5
-seconds at 188 speed without making high speed feel normalized or slow.
+Those 45 gameplay seeds are now composed inside a full-width archipelago: each
+row also owns two irregular collidable island shelves on each side, reaching
+past X=-73 and X=73. The shelves are finite row clusters, not continuous shore
+terrain, so they fill the view and prevent side bypass without turning the wave
+back into a canyon. Each shelf renders as five independently seeded rock masses
+with restrained proportions rather than one terrain mesh stretched sideways.
+The complete formation contains 81 physical features over roughly 845 units at
+launch pace. Partial speed scaling keeps the pattern near 6.6 seconds at 128
+speed and 5.5 seconds at 188 speed without making high speed feel normalized or
+slow.
 
 The original GitHub generator's important anti-camping behavior is not merely
 the shuffled opening: every newly spawned row is recentered on predicted ship X
 (`shipX + shipVelX * travelTime * 0.85`). A finite formation cannot fairly move
 after it has appeared, so this port uses a deterministic sequence of lateral
 anti-camping anchors across all nine rows. At construction time it samples the
-whole playable interval from X=-32 through X=32 every 0.25 units, using the same
+whole encounter interval from X=-72 through X=72 every 0.25 units, using the same
 collision inset as the terrain runtime, and rejects the plan if any stationary
 X can clear the entire formation. The authored slalom opening is validated
 separately so anti-camping never replaces reachability.
@@ -103,13 +110,14 @@ Automated verification completed:
 - architecture-test assembly compiled with zero warnings/errors;
 - all new parcel, terrain, cargo, and gate assertions passed in the standalone
   runner, including dense coin trails, full-width stationary-line rejection,
-  safe-opening clearance, burst spacing, and speed-dependent arrival;
+  collidable side shelves, safe-opening clearance, burst spacing, and
+  speed-dependent arrival;
 - a 10,000-seed formation audit retained five blockers in every row;
 - deterministic multi-world smoke run activated only rock formations and empty
   water, with zero legacy hazards or corridor slices;
 - smoke collision checks passed for empty water and physical rock groups.
 
-The broader standalone core run passed 121 of 122 tests. The one remaining
+The broader standalone core run passed 122 of 123 tests. The one remaining
 failure is the pre-existing legacy test
 `PrismaticCollisionUsesTheSameCoreSamplePublishedToTheRenderer`; it also fails
 when run by itself and does not enter terrain-world mode or exercise the new

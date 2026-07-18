@@ -123,17 +123,21 @@ namespace JetHorizon.Simulation
         public const int BurstCount = 3;
         public const int RowsPerBurst = 3;
         public const int AuthoredRowCount = BurstCount * RowsPerBurst;
+        public const int OuterShelfClustersPerSide = 2;
+        public const int OuterShelfFeatureCountPerRow = OuterShelfClustersPerSide * 2;
+        public const int FeatureCountPerRow = MaximumBlockersPerRow + OuterShelfFeatureCountPerRow;
         public const float SourceSpawnDistance = 160f;
         public const float ReferenceForwardSpeed = 128f;
         public const float NominalInBurstSpacing = 64f;
         public const float InterBurstSpacing = 180f;
-        public const float StationaryHoldMinimumX = -32f;
-        public const float StationaryHoldMaximumX = 32f;
+        public const float StationaryHoldMinimumX = -72f;
+        public const float StationaryHoldMaximumX = 72f;
         public const float CollisionVisualInset = 1.25f;
 
         const float InitialLeadDistance = 30f;
         const float ExitClearDistance = 72f;
         static readonly int[] SlalomGapStarts = { 5, 6, 7, 12, 13, 14, 7, 6, 5 };
+        static readonly float[] OuterShelfCenters = { 42.5f, 62f };
         // The GitHub generator defeats camping by rebuilding every lane around
         // predicted ship X. A prebuilt finite wave cannot chase after reveal, so
         // these anchors provide the equivalent guarantee across the whole field.
@@ -161,7 +165,7 @@ namespace JetHorizon.Simulation
 
             var random = new DeterministicRandom(unchecked((uint)seed));
             var rows = new RandomConeFormationRow[AuthoredRowCount];
-            var features = new List<TerrainWorldFeature>(AuthoredRowCount * MaximumBlockersPerRow);
+            var features = new List<TerrainWorldFeature>(AuthoredRowCount * FeatureCountPerRow);
             var safePoints = new CargoWaveRoutePoint[AuthoredRowCount];
             var valuablePoints = new CargoWaveRoutePoint[AuthoredRowCount];
             var laneScratch = new int[LaneCount];
@@ -258,6 +262,37 @@ namespace JetHorizon.Simulation
                         halfDepth,
                         TraversalRequirement.None,
                         seed + rowIndex * 101 + blockedIndex * 17));
+                }
+
+                // The source generator keeps rebuilding its whole lane field around
+                // predicted ship X. This finite wave cannot move after reveal, so
+                // irregular island shelves close the visually empty and exploitable
+                // outer water without creating a continuous canyon between rows.
+                for (int sideIndex = 0; sideIndex < 2; sideIndex++)
+                {
+                    float side = sideIndex == 0 ? -1f : 1f;
+                    float sideDepthJitter = (random.NextFloat() - .5f) * 5f;
+                    for (int shelfIndex = 0; shelfIndex < OuterShelfClustersPerSide; shelfIndex++)
+                    {
+                        float centerJitter = (random.NextFloat() - .5f) * 1f;
+                        float x = side * (OuterShelfCenters[shelfIndex] + centerJitter);
+                        float halfWidth = 11.5f + random.NextFloat() * .8f;
+                        float heightScale = shelfIndex == 0 ? 1f : .76f;
+                        float height = (11f + random.NextFloat() * 8f) * heightScale;
+                        float halfDepth = 5.8f + random.NextFloat() * 2.4f;
+                        float depthLayer = shelfIndex == 0 ? -1.8f : 1.8f;
+                        int shelfOrdinal = sideIndex * OuterShelfClustersPerSide + shelfIndex;
+                        features.Add(new TerrainWorldFeature(
+                            500000 + (variant & 15) * 10000 + rowIndex * 100 + 50 + shelfOrdinal,
+                            TerrainWorldFeatureKind.WaterlineArchipelagoShelf,
+                            rowDistance + sideDepthJitter + depthLayer,
+                            x,
+                            halfWidth,
+                            height,
+                            halfDepth,
+                            TraversalRequirement.None,
+                            seed + rowIndex * 131 + shelfOrdinal * 43 + 7001));
+                    }
                 }
             }
 

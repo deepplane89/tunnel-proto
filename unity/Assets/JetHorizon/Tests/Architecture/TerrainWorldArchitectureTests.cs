@@ -267,6 +267,18 @@ namespace JetHorizon.Tests.Architecture
                 MinimumOperationalSpeed = 100f
             }, 67u);
             TerrainWorldFeature mass = runtime.World.GetFeature(1);
+            TerrainWorldFeature shelf = default;
+            for (int i = 0; i < runtime.World.FeatureCount; i++)
+            {
+                TerrainWorldFeature candidate = runtime.World.GetFeature(i);
+                if (candidate.Kind != TerrainWorldFeatureKind.WaterlineArchipelagoShelf) continue;
+                shelf = candidate;
+                break;
+            }
+            Assert.That(runtime.World.GetParcel(1).TryGetRoute(
+                CargoWaveRouteRole.Safe,
+                out WorldParcelRoutePlan safeRoute), Is.True);
+            CargoWaveRoutePoint safePoint = safeRoute.GetPoint(0);
 
             TerrainWorldTickResult hit = runtime.Tick(
                 mass.Distance,
@@ -275,9 +287,16 @@ namespace JetHorizon.Tests.Architecture
                 (float)(System.Math.PI * .5),
                 false,
                 eventOwner.Events);
-            TerrainWorldTickResult safe = runtime.Tick(
-                mass.Distance,
-                mass.CenterX > 0f ? -60f : 60f,
+            TerrainWorldTickResult shelfHit = new TerrainWorldRuntime(capability).Tick(
+                shelf.Distance,
+                shelf.CenterX,
+                0f,
+                (float)(System.Math.PI * .5),
+                false,
+                eventOwner.Events);
+            TerrainWorldTickResult safe = new TerrainWorldRuntime(capability).Tick(
+                safePoint.Distance,
+                safePoint.CenterX,
                 0f,
                 (float)(System.Math.PI * .5),
                 false,
@@ -285,6 +304,7 @@ namespace JetHorizon.Tests.Architecture
 
             Assert.That(TerrainWorldFeatureRules.IsWaterFormation(mass.Kind), Is.True);
             Assert.That(hit.CollisionEntered, Is.True);
+            Assert.That(shelfHit.CollisionEntered, Is.True);
             Assert.That(safe.CollisionEntered, Is.False);
         }
 
@@ -378,7 +398,7 @@ namespace JetHorizon.Tests.Architecture
                 MaxPickups = 128,
                 MaxCorridorSlices = 128,
                 MaxTerrainWorldSections = 64,
-                MaxTerrainWorldFeatures = 48,
+                MaxTerrainWorldFeatures = 128,
                 MaxTerrainRouteSections = 48
             }, 16072026u);
             simulation.StartRun(16072026L);

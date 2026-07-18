@@ -465,6 +465,11 @@ namespace JetHorizon
 
         void BuildWaterlineFormation(BuiltWorld world, TerrainWorldFeatureSnapshot feature)
         {
+            if (feature.Kind == TerrainWorldFeatureKind.WaterlineArchipelagoShelf)
+            {
+                BuildArchipelagoShelf(world, feature);
+                return;
+            }
             if (feature.Kind == TerrainWorldFeatureKind.WaterlineSplitPair)
             {
                 AddWaterlineSlab(world, feature, "Split shard left",
@@ -473,6 +478,9 @@ namespace JetHorizon
                 AddWaterlineSlab(world, feature, "Split shard right",
                     feature.CenterX + feature.HalfWidth * .58f, feature.HalfWidth * .35f,
                     feature.Height * .78f, feature.CollisionHalfDepth * .76f, feature.Seed + 37);
+                AddWaterlineSlab(world, feature, "Split low tooth",
+                    feature.CenterX + feature.HalfWidth * .04f, feature.HalfWidth * .20f,
+                    feature.Height * .38f, feature.CollisionHalfDepth * .58f, feature.Seed + 71);
                 return;
             }
             if (feature.Kind == TerrainWorldFeatureKind.WaterlineSteppedChain)
@@ -513,6 +521,12 @@ namespace JetHorizon
                 AddWaterlineSlab(world, feature, "Spire shard",
                     feature.CenterX + feature.HalfWidth * .38f, feature.HalfWidth * .32f,
                     feature.Height * .62f, feature.CollisionHalfDepth * .72f, feature.Seed + 29);
+                AddWaterlineSlab(world, feature, "Spire left fragment",
+                    feature.CenterX - feature.HalfWidth * .59f, feature.HalfWidth * .18f,
+                    feature.Height * .43f, feature.CollisionHalfDepth * .55f, feature.Seed + 61);
+                AddWaterlineSlab(world, feature, "Spire right fragment",
+                    feature.CenterX + feature.HalfWidth * .69f, feature.HalfWidth * .15f,
+                    feature.Height * .34f, feature.CollisionHalfDepth * .48f, feature.Seed + 97);
                 return;
             }
             if (feature.Kind == TerrainWorldFeatureKind.WaterlineMonolith)
@@ -544,6 +558,52 @@ namespace JetHorizon
             AddWaterlineSlab(world, feature, "Cluster shoulder",
                 feature.CenterX + feature.HalfWidth * .30f, clusterWidth,
                 feature.Height * .68f, feature.CollisionHalfDepth * .88f, feature.Seed + 17);
+            AddWaterlineSlab(world, feature, "Cluster left tooth",
+                feature.CenterX - feature.HalfWidth * .72f, feature.HalfWidth * .16f,
+                feature.Height * .42f, feature.CollisionHalfDepth * .56f, feature.Seed + 53);
+            AddWaterlineSlab(world, feature, "Cluster right tooth",
+                feature.CenterX + feature.HalfWidth * .74f, feature.HalfWidth * .14f,
+                feature.Height * .35f, feature.CollisionHalfDepth * .48f, feature.Seed + 89);
+        }
+
+        void BuildArchipelagoShelf(BuiltWorld world, TerrainWorldFeatureSnapshot feature)
+        {
+            const int pieceCount = 5;
+            for (int i = 0; i < pieceCount; i++)
+            {
+                float t = i / (pieceCount - 1f);
+                float centerNoise = Seed01(feature.Seed + i * 47) - .5f;
+                float widthNoise = Seed01(feature.Seed + i * 47 + 13);
+                float heightNoise = Seed01(feature.Seed + i * 47 + 29);
+                float depthNoise = Seed01(feature.Seed + i * 47 + 37);
+                float centerX = feature.CenterX
+                    + Mathf.Lerp(-feature.HalfWidth * .72f, feature.HalfWidth * .72f, t)
+                    + centerNoise * feature.HalfWidth * .10f;
+                float pieceHalfWidth = feature.HalfWidth * Mathf.Lerp(.19f, .27f, widthNoise);
+                float crown = 1f - Mathf.Abs(t * 2f - 1f);
+                float height = feature.Height * Mathf.Lerp(.38f, .76f + crown * .20f, heightNoise);
+                float halfDepth = feature.CollisionHalfDepth * Mathf.Lerp(.56f, .90f, depthNoise);
+                AddWaterlineSlab(
+                    world,
+                    feature,
+                    "Archipelago shelf " + i,
+                    centerX,
+                    pieceHalfWidth,
+                    height,
+                    halfDepth,
+                    feature.Seed + i * 101);
+            }
+        }
+
+        static float Seed01(int seed)
+        {
+            uint value = unchecked((uint)seed);
+            value ^= value >> 16;
+            value *= 0x7feb352d;
+            value ^= value >> 15;
+            value *= 0x846ca68b;
+            value ^= value >> 16;
+            return (value & 0x00ffffffu) / 16777215f;
         }
 
         void AddWaterlineSlab(

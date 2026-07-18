@@ -86,7 +86,7 @@ namespace JetHorizon.Tests.Architecture
                 MaxPickups = 128,
                 MaxCorridorSlices = 128,
                 MaxTerrainWorldSections = 64,
-                MaxTerrainWorldFeatures = 48,
+                MaxTerrainWorldFeatures = 128,
                 MaxTerrainRouteSections = 48
             }, 17072026u);
             simulation.StartRun(17072026L);
