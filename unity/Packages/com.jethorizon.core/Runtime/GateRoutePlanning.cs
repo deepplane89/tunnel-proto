@@ -61,6 +61,7 @@ namespace JetHorizon.Simulation
         const int GateCount = 42;
         const float CheckpointHitRadius = 4.25f;
         static readonly float[] CheckpointPattern = { 0f, -9f, 9f, -11f, 11f, -9f, 9f };
+        static readonly float[] CheckpointCadenceSeconds = { .88f, .94f, .90f, .98f, .86f, .93f, .96f };
 
         public GateRoutePlan Build(
             int sector,
@@ -79,9 +80,12 @@ namespace JetHorizon.Simulation
             {
                 // Author the route in reaction time, not raw metres. Faster ships see
                 // the same readable rhythm with proportionally more world distance.
-                // Give the opening signal enough distant screen time to visibly
-                // descend from the sky before the first steering commitment.
-                float cadence = i == 0 ? 3.40f : 1.55f;
+                // Keep the distant opening readable, then use a denser varied rhythm.
+                // At the Unity proof speed this produces roughly the same world-space
+                // density as the lower-speed Three.js prototype instead of long empty gaps.
+                float cadence = i == 0
+                    ? 3.20f
+                    : CheckpointCadenceSeconds[(i - 1 + sector) % CheckpointCadenceSeconds.Length];
                 distance += Math.Max(48f, speed * cadence);
 
                 SpeedGateKind kind = GateKindFor(sector, i);
