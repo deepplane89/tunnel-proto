@@ -60,10 +60,10 @@ namespace JetHorizon.Simulation
     {
         const int GateCount = 42;
         const int CheckpointCanyonGateIndex = 9;
-        const float CheckpointCanyonReserveSeconds = 17.5f;
+        const float CheckpointCanyonReserveSeconds = 14.2f;
         const float CheckpointHitRadius = 4.25f;
         static readonly float[] CheckpointPattern = { 0f, -9f, 9f, -11f, 11f, -9f, 9f };
-        static readonly float[] CheckpointCadenceSeconds = { .88f, .94f, .90f, .98f, .86f, .93f, .96f };
+        static readonly float[] CheckpointCadenceSeconds = { .80f, .86f, .82f, .90f, .78f, .85f, .88f };
 
         public GateRoutePlan Build(
             int sector,

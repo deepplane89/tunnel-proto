@@ -2146,11 +2146,10 @@ namespace JetHorizon.Simulation
 
         bool ResolvePrismaticCorridorCollision(WorldFrame world)
         {
-            bool checkpointCanyonCollision = _config.CheckpointCanyonSequenceEnabled
-                && _environmentEncounter.Active
-                && _environmentEncounter.Plan != null
-                && _environmentEncounter.Plan.Kind == EncounterKind.CrystallineCanyon;
-            if ((!_config.PrismaticSineTunnelEnabled && !checkpointCanyonCollision)
+            // The current checkpoint canyon mesh and core aperture are not yet close
+            // enough to make wall contact readable. Lightning remains fully lethal;
+            // defer canyon-wall damage until the rendered boundary is verified.
+            if (!_config.PrismaticSineTunnelEnabled
                 || !_config.CollisionEnabled
                 || world.CollisionSuppressed)
                 return false;

@@ -99,26 +99,28 @@ namespace JetHorizon.Simulation
     /// </summary>
     public static class CheckpointCanyonPathCatalog
     {
-        public static CanyonPathDefinition CreateStraightLightningCorridor()
+        public static CanyonPathDefinition CreateCompactLightningCorridor()
         {
             return new CanyonPathDefinition(
-                560f,
+                440f,
                 new[]
                 {
-                    new CanyonPathKnot( 40f, 0f, 36f, environmentPhase: CanyonEnvironmentPhase.OpenWater, corridorBoundaryActive: false),
-                    new CanyonPathKnot( 80f, 0f, 34f, environmentPhase: CanyonEnvironmentPhase.OpenWater, corridorBoundaryActive: false),
-                    new CanyonPathKnot(120f, 0f, 31f, environmentPhase: CanyonEnvironmentPhase.Convergence, corridorBoundaryActive: false),
-                    new CanyonPathKnot(160f, 0f, 28f, environmentPhase: CanyonEnvironmentPhase.Convergence, corridorBoundaryActive: false),
-                    new CanyonPathKnot(200f, 0f, 24f, environmentPhase: CanyonEnvironmentPhase.Threshold),
-                    new CanyonPathKnot(240f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
-                    new CanyonPathKnot(280f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
-                    new CanyonPathKnot(320f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
-                    new CanyonPathKnot(360f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
-                    new CanyonPathKnot(400f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
-                    new CanyonPathKnot(440f, 0f, 22f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
-                    new CanyonPathKnot(480f, 0f, 23f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
-                    new CanyonPathKnot(520f, 0f, 29f, environmentPhase: CanyonEnvironmentPhase.Breakup, corridorBoundaryActive: false),
-                    new CanyonPathKnot(560f, 0f, 36f, environmentPhase: CanyonEnvironmentPhase.Breakup, corridorBoundaryActive: false)
+                    new CanyonPathKnot( 28f,   0f, 36f, environmentPhase: CanyonEnvironmentPhase.OpenWater, corridorBoundaryActive: false),
+                    new CanyonPathKnot( 56f,   0f, 34f, environmentPhase: CanyonEnvironmentPhase.OpenWater, corridorBoundaryActive: false),
+                    new CanyonPathKnot( 84f,  -4f, 30f, environmentPhase: CanyonEnvironmentPhase.Convergence, corridorBoundaryActive: false),
+                    new CanyonPathKnot(112f, -11f, 26f, environmentPhase: CanyonEnvironmentPhase.Convergence, corridorBoundaryActive: false),
+                    new CanyonPathKnot(140f, -17f, 21f, environmentPhase: CanyonEnvironmentPhase.Threshold),
+                    new CanyonPathKnot(168f, -16f, 19f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(196f,  -8f, 19f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(224f,   4f, 19f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(252f,  16f, 19f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(280f,  18f, 19f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(308f,  10f, 19f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(336f,  -3f, 19f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(364f, -15f, 19f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(392f, -18f, 20f, environmentPhase: CanyonEnvironmentPhase.Enclosed),
+                    new CanyonPathKnot(420f,  -8f, 28f, environmentPhase: CanyonEnvironmentPhase.Breakup, corridorBoundaryActive: false),
+                    new CanyonPathKnot(440f,   0f, 36f, environmentPhase: CanyonEnvironmentPhase.Breakup, corridorBoundaryActive: false)
                 });
         }
     }

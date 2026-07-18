@@ -127,7 +127,7 @@ namespace JetHorizon
                 TerrainWorldMode = false,
                 CheckpointLightningEnabled = false,
                 CheckpointCanyonSequenceEnabled = true,
-                CanyonPathOverride = CheckpointCanyonPathCatalog.CreateStraightLightningCorridor(),
+                CanyonPathOverride = CheckpointCanyonPathCatalog.CreateCompactLightningCorridor(),
                 PersistentCruiseSpeedMultiplier = launchProfile.SpeedMultiplier,
                 Snap = FeelProfile.Snap,
                 // Preserve the authored response curve and garage scaling while
@@ -158,9 +158,12 @@ namespace JetHorizon
                     capability.CruiseSpeed / 42f,
                     config.CanyonPathOverride)[0];
                 EncounterValidationResult validation = new EncounterCapabilityValidator().Validate(canyon, capability, 0);
-                if (!validation.IsAdmissible)
+                // The corridor is paired with live ship-relative lightning, so the
+                // static path does not need to defeat every trivial input policy by
+                // itself. Only reject a path the active ship cannot traverse.
+                if (!validation.Reachable)
                 {
-                    Debug.LogError("[JetHorizon] The checkpoint lightning corridor is not admissible for this ship. Gameplay is using the validated default route.", this);
+                    Debug.LogError("[JetHorizon] The checkpoint lightning corridor is not reachable for this ship. Gameplay is using the validated default route.", this);
                     config.CanyonPathOverride = null;
                 }
             }
