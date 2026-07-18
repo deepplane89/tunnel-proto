@@ -33,7 +33,7 @@ namespace JetHorizon
         float _builtMaxZ;
         bool _reportedPresentation;
         Renderer[] _renderers;
-        readonly MaterialPropertyBlock _fadeProperties = new MaterialPropertyBlock();
+        MaterialPropertyBlock _fadeProperties;
 
         static readonly int ParcelFadeId = Shader.PropertyToID("_ParcelFade");
 
@@ -183,6 +183,10 @@ namespace JetHorizon
         void ApplyHorizonReveal(float reveal)
         {
             if (_renderers == null) return;
+            // Unity can preserve the presenter across a domain reload without running
+            // a newly added field initializer. Recreate this transient render state on
+            // demand so one hot reload cannot abort the simulation-system tick order.
+            if (_fadeProperties == null) _fadeProperties = new MaterialPropertyBlock();
             reveal = Mathf.Clamp01(reveal);
             for (int i = 0; i < _renderers.Length; i++)
             {
